@@ -216,7 +216,7 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
         }
         other => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
-            format!("{}({})", other, args_s.join(", "))
+            format!("{}({})", escape_wgsl_ident(other), args_s.join(", "))
         }
     }
 }

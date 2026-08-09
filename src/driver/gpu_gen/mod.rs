@@ -38,7 +38,8 @@ pub fn collect_gpu_shaders(
             diagnostics.file_path = Some(path.to_string());
         }
         if has_compute_attr(&func.attributes) {
-            out.kernels.push(compute::emit_kernel(func, diagnostics));
+            out.kernels
+                .push(compute::emit_kernel(func, program, diagnostics));
         } else if has_vertex_attr(&func.attributes) {
             out.shaders
                 .push(vertex::emit_vertex(func, program, diagnostics));

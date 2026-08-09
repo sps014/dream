@@ -81,6 +81,29 @@ fn emit_stmt(
             ));
         }
         StatementNode::Declaration(name, ty, init, _) => {
+            // WGSL forbids `var _` / `let _`; use a phony assignment instead.
+            if name.text == "_" {
+                if let ExpressionNode::IncDec {
+                    prefix,
+                    is_inc,
+                    target,
+                    ..
+                } = init
+                {
+                    let place = emit_expr(target, ctx);
+                    let op = if *is_inc { "+" } else { "-" };
+                    if *prefix {
+                        out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
+                        out.push_str(&format!("{}{} = {};\n", p, "_", place));
+                    } else {
+                        out.push_str(&format!("{}{} = {};\n", p, "_", place));
+                        out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
+                    }
+                    return;
+                }
+                out.push_str(&format!("{}{} = {};\n", p, "_", emit_expr(init, ctx)));
+                return;
+            }
             if let ExpressionNode::IncDec {
                 prefix,
                 is_inc,

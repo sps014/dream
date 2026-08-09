@@ -13,12 +13,12 @@ struct VsOut {
 
 @vertex
 fun reserved_vs(v: Vertex): VsOut {
-    // `target` / `input` are WGSL reserved keywords; emitter must escape them.
+    // `target` / `auto` are WGSL reserved keywords; emitter must escape them.
     let target = GpuVec2.of(v.pos.x, v.pos.y);
-    let input = GpuVec4.of(v.color.x, v.color.y, v.color.z, v.color.w);
+    let auto = GpuVec4.of(v.color.x, v.color.y, v.color.z, v.color.w);
     let o = VsOut();
     o.position = GpuVec4.of(target.x, target.y, 0.0, 1.0);
-    o.color = input;
+    o.color = auto;
     return o;
 }
 

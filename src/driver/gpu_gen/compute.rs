@@ -2,6 +2,9 @@
 
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
+use super::layout::{
+    build_struct_field_tys, emit_value_struct_wgsl, find_struct,
+};
 use super::stmt::emit_stmts;
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
@@ -11,6 +14,7 @@ use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
 use dream_syntax::nodes::statement::StatementNode;
 use dream_syntax::nodes::types::Type;
+use dream_syntax::nodes::ProgramNode;
 use indexmap::{IndexMap, IndexSet};
 use std::cell::RefCell;
 
@@ -55,7 +59,11 @@ fn collect_workgroup_names(stmts: &[StatementNode<'_>], out: &mut Vec<String>) {
     }
 }
 
-pub(super) fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuKernelInfo {
+pub(super) fn emit_kernel(
+    func: &FunctionNode<'_>,
+    program: &ProgramNode<'_>,
+    diagnostics: &mut DiagnosticBag,
+) -> GpuKernelInfo {
     let name = func.name.text.clone();
     let entry = format!("dream_{}", name);
     let workgroup = compute_workgroup_size(&func.attributes);
@@ -66,6 +74,16 @@ pub(super) fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticB
     let mut header = String::new();
     let mut uniform_fields = String::new();
     let mut has_uniform = false;
+
+    let value_structs = collect_value_struct_names(func, program);
+    for sname in &value_structs {
+        if let Some(decl) = find_struct(program, sname) {
+            match emit_value_struct_wgsl(decl) {
+                Ok(s) => header.push_str(&s),
+                Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+            }
+        }
+    }
 
     for param in &func.parameters {
         let pname = param.name.text.clone();
@@ -84,7 +102,7 @@ pub(super) fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticB
                 let elem_ty = if atomic {
                     format!("atomic<{elem}>")
                 } else {
-                    elem.clone()
+                    escape_wgsl_ident(&elem)
                 };
                 let wgsl_name = format!("{entry}_{pname}");
                 header.push_str(&format!(
@@ -184,7 +202,7 @@ pub(super) fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticB
 
     let mut workgroup_names = Vec::new();
     collect_workgroup_names(func.body, &mut workgroup_names);
-    let struct_fields = IndexMap::new();
+    let struct_fields = build_struct_field_tys(program);
     let ctx = EmitCtx {
         prefix: &entry,
         bindings: &bindings,
@@ -289,6 +307,37 @@ fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
             ty: dream_ty_to_wgsl(other),
         },
     }
+}
+
+fn is_builtin_gpu_type(name: &str) -> bool {
+    matches!(
+        name,
+        "GpuBuffer"
+            | "GpuTexture"
+            | "GpuSampler"
+            | "GpuVec2"
+            | "GpuVec3"
+            | "GpuVec4"
+            | "GpuId3"
+    )
+}
+
+/// User value structs referenced as `GpuBuffer<T>` element types (need WGSL `struct` decls).
+fn collect_value_struct_names(func: &FunctionNode<'_>, program: &ProgramNode<'_>) -> IndexSet<String> {
+    let mut names = IndexSet::new();
+    for param in &func.parameters {
+        if let Type::Struct(tok, Some(args)) = &param.type_ {
+            if tok.text == "GpuBuffer" {
+                if let Some(Type::Struct(inner, None)) = args.first() {
+                    if !is_builtin_gpu_type(&inner.text) && find_struct(program, &inner.text).is_some()
+                    {
+                        names.insert(inner.text.clone());
+                    }
+                }
+            }
+        }
+    }
+    names
 }
 
 /// Buffer names passed to `Gpu.atomic_*` helpers — those storage bindings become `atomic<T>`.

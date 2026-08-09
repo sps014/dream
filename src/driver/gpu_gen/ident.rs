@@ -21,8 +21,8 @@ mod tests {
     #[test]
     fn reserved_keyword_gets_suffix() {
         assert_eq!(escape_wgsl_ident("target"), "target_");
-        assert_eq!(escape_wgsl_ident("input"), "input_");
-        assert_eq!(escape_wgsl_ident("output"), "output_");
+        assert_eq!(escape_wgsl_ident("auto"), "auto_");
+        assert_eq!(escape_wgsl_ident("class"), "class_");
     }
 
     #[test]

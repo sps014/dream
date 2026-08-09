@@ -195,6 +195,25 @@ pub(super) fn emit_interface_struct_wgsl(
     Ok(s)
 }
 
+/// Plain value struct for compute storage buffers (no `@location` / `@builtin`).
+pub(super) fn emit_value_struct_wgsl(decl: &StructDeclarationNode<'_>) -> Result<String, String> {
+    let sname = escape_wgsl_ident(&decl.name.text);
+    let mut s = format!("struct {sname} {{\n");
+    for field in &decl.fields {
+        let fname = escape_wgsl_ident(&field.name.text);
+        let Some(wgsl_ty) = dream_ty_to_wgsl_vec(&field.field_type) else {
+            return Err(format!(
+                "field '{}' has unsupported shader type '{}'",
+                field.name.text,
+                field.field_type.get_type()
+            ));
+        };
+        s.push_str(&format!("  {fname}: {wgsl_ty},\n"));
+    }
+    s.push_str("}\n");
+    Ok(s)
+}
+
 pub(super) fn has_position_gpuvec4(decl: &StructDeclarationNode<'_>) -> bool {
     decl.fields.iter().any(|f| {
         f.name.text == "position"

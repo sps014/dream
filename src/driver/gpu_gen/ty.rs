@@ -1,6 +1,5 @@
-//! Dream → WGSL type mapping and best-effort expression type inference.
-
 use super::context::EmitCtx;
+use super::ident::escape_wgsl_ident;
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::types::Type;
 use dream_syntax::token::token_kind::TokenKind;
@@ -18,7 +17,7 @@ pub(super) fn dream_ty_to_wgsl(ty: &Type) -> String {
             "GpuVec2" => "vec2<f32>".into(),
             "GpuVec3" => "vec3<f32>".into(),
             "GpuVec4" => "vec4<f32>".into(),
-            other => other.to_string(),
+            other => escape_wgsl_ident(other),
         },
         Type::Array(inner) => format!("array<{}>", dream_ty_to_wgsl(inner)),
         _ => "i32".into(),
@@ -172,7 +171,7 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                     _ => "vec4<f32>".into(),
                 },
                 // Zero-arg `StructName()` constructor → WGSL struct type.
-                other if args.is_empty() => other.to_string(),
+                other if args.is_empty() => escape_wgsl_ident(other),
                 _ => "i32".into(),
             }
         }

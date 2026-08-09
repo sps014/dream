@@ -1,0 +1,25 @@
+import system;
+import system.testing;
+
+fun main(): void {
+    Test.run("eq_passes", () => {
+        Assert.eq(1 + 1, 2);
+    });
+
+    Test.run("ne_passes", () => {
+        Assert.ne(1, 2);
+    });
+
+    Test.run("bool_passes", () => {
+        Assert.is_true(1 < 2);
+        Assert.is_false(2 < 1);
+    });
+
+    Test.run("approx_passes", () => {
+        Assert.approx(0.1d + 0.2d, 0.3d, 0.0001d);
+    });
+
+    Test.run("eq_str_passes", () => {
+        Assert.eq_str("hello", "hello");
+    });
+}

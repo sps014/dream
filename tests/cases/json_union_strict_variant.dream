@@ -1,0 +1,32 @@
+// `Json.deserialize<T>` reports an unknown discriminated-union `"type"` tag as `Err(ParseError)`
+// instead of silently falling back to the first variant.
+import system;
+import system.json;
+
+@json
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+}
+
+fun main(): void {
+    let c = Shape.Circle(7);
+    let s = Json.serialize(c);
+    System.println(s);
+    switch (Json.deserialize<Shape>(s)) {
+        Ok(v) => System.println("ok:" + v.to_string()),
+        Err(e) => System.println("err:" + e.message()),
+    }
+
+    let bad = "{\"type\":\"Triangle\"}";
+    switch (Json.deserialize<Shape>(bad)) {
+        Ok(v) => System.println("ok:" + v.to_string()),
+        Err(e) => System.println("err:" + e.message()),
+    }
+
+    let missing = "{}";
+    switch (Json.deserialize<Shape>(missing)) {
+        Ok(v) => System.println("ok:" + v.to_string()),
+        Err(e) => System.println("err:" + e.code() + ":" + e.message()),
+    }
+}

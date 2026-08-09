@@ -60,6 +60,20 @@ Same field components interpreted as local wall-clock time on the host. Use when
 let local = DateTime.of_local(2026, 7, 2, 9, 30, 0, 0);
 ```
 
+#### `DateTime.now_in(zone: TimeZone): DateTime` / `DateTime.of_zoned(..., zone: TimeZone): DateTime`
+
+Same as `now()` / `of(...)`, but resolved against an explicit [`TimeZone`](#timezone) rather than the host's local zone or UTC. Use for "what time is it in Tokyo" or "9:30 AM in New York" regardless of where the program runs.
+
+```dream
+switch (TimeZone.of("Asia/Tokyo")) {
+    Ok(tokyo) => {
+        let now = DateTime.now_in(tokyo);
+        let meeting = DateTime.of_zoned(2026, 7, 2, 9, 30, 0, 0, tokyo);
+    },
+    Err(e) => System.println(e.message()),
+}
+```
+
 #### `DateTime(epoch_millis, offset_minutes)`
 
 Low-level constructor from raw epoch millis and a fixed offset in minutes. Rarely needed — prefer `of` / `of_local` unless reconstructing from stored parts.
@@ -143,6 +157,17 @@ Re-resolves the host's local offset for this instant (DST-correct). Call after a
 System.println(dt.to_local().to_iso8601());
 ```
 
+#### `to_zone(zone: TimeZone): DateTime`
+
+Re-resolves `zone`'s offset for this instant (DST-correct for that zone's rules). Use to display or compare the same instant across multiple named timezones.
+
+```dream
+switch (TimeZone.of("Europe/London")) {
+    Ok(london) => System.println(dt.to_zone(london).to_iso8601()),
+    Err(e) => System.println(e.message()),
+}
+```
+
 ## Arithmetic
 
 Each takes a `long` and returns a new `DateTime` with the same `offset_minutes`. Call `.to_local()` afterwards if you need a DST-correct offset after crossing a boundary.
@@ -202,6 +227,41 @@ let parsed = DateTime.parse_iso8601("2026-07-02T10:35:00.250Z");
 System.println(parsed.unwrap_or(DateTime.from_epoch_millis(0L)).to_iso8601());
 ```
 
+## `TimeZone`
+
+An IANA timezone identifier (e.g. `"America/New_York"`, `"Europe/London"`), resolving UTC offsets from the host's timezone database — including historical DST rules, unlike a plain fixed offset. Pass one to `DateTime.now_in`/`of_zoned`/`to_zone`.
+
+#### `TimeZone.of(name: string): Result<TimeZone, ParseError>`
+
+Resolves `name` as an IANA zone identifier, or an error if the host's timezone database doesn't recognize it.
+
+```dream
+switch (TimeZone.of("America/New_York")) {
+    Ok(ny) => System.println(ny.name()),
+    Err(e) => System.println(e.message()),
+}
+```
+
+#### `TimeZone.utc(): TimeZone`
+
+The UTC zone (offset `0` at every instant). Equivalent to `DateTime.to_utc()`'s zone.
+
+#### `TimeZone.local(): TimeZone`
+
+The host's configured local timezone (e.g. read from `/etc/localtime` on native, `Intl` in Node/the browser), or `utc()` if it can't be determined.
+
+```dream
+System.println(TimeZone.local().name());
+```
+
+#### `.name(): string`
+
+The IANA zone identifier this value was constructed with.
+
+#### `.offset_minutes_at(epoch_millis: long): int`
+
+This zone's UTC offset in minutes at `epoch_millis`, accounting for DST rules in effect at that instant. Falls back to `0` if the zone is no longer recognized by the host. `DateTime.now_in`/`of_zoned`/`to_zone` call this for you — most code won't need it directly.
+
 ## `Time`
 
 #### `await Time.delay(ms: int): void`
@@ -248,7 +308,7 @@ sw.reset();
 
 ## Platform notes
 
-| Runtime | Wall clock | Local timezone |
-| --- | --- | --- |
-| Native (`dream run`) | OS system clock | OS timezone database (DST-aware) |
-| Node.js / browser | `Date.now()` | `Date.getTimezoneOffset()` |
+| Runtime | Wall clock | Local timezone | IANA zones (`TimeZone.of`) |
+| --- | --- | --- | --- |
+| Native (`dream run`) | OS system clock | OS timezone database (DST-aware) | `chrono-tz` (IANA database), local name via `iana-time-zone` |
+| Node.js / browser | `Date.now()` | `Date.getTimezoneOffset()` | `Intl.DateTimeFormat` |

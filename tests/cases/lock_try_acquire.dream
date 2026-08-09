@@ -1,0 +1,22 @@
+// try_acquire / try_acquire_for on Lock and Semaphore (single-threaded).
+
+import system;
+
+fun main(): void {
+    let lock1 = Lock();
+    System.println(lock1.try_acquire());
+    System.println(lock1.try_acquire()); // reentrant
+    lock1.release();
+    lock1.release();
+    System.println(lock1.try_acquire_for(0));
+    lock1.release();
+
+    let sem = Semaphore(1);
+    System.println(sem.try_acquire());
+    System.println(sem.try_acquire()); // no permits left
+    System.println(sem.try_acquire_for(1)); // still none; times out
+    sem.release();
+    System.println(sem.try_acquire_for(100));
+    sem.release();
+    System.println("ok");
+}

@@ -19,6 +19,7 @@ mod gpu;
 mod http;
 mod math;
 mod memory;
+mod net;
 mod process;
 mod shared_memory;
 mod text;
@@ -35,6 +36,7 @@ pub use memory::{
     read_string_from_memory, shared_bytes, shared_bytes_mut, write_bytes_to_memory,
     write_string_to_memory,
 };
+pub use net::link_net_functions;
 pub use process::link_process_functions;
 pub use text::link_text_functions;
 pub use shared_memory::{shared_memory_for, threaded_wasm_config};
@@ -63,6 +65,7 @@ mod contract_tests {
         include_str!("file.rs"),
         include_str!("gpu.rs"),
         include_str!("http.rs"),
+        include_str!("net.rs"),
         include_str!("process.rs"),
         include_str!("text.rs"),
         include_str!("worker.rs"),

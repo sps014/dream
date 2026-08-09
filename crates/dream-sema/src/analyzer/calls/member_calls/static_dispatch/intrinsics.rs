@@ -428,20 +428,89 @@ impl<'a> Analyzer<'a> {
                 && ok_local.is_some()
                 && err_local.is_some();
 
-            // Ok(v) => Result.Ok(T.from_json(v))
+            // Unions with a `@json` derive additionally emit `__json_check_variant` (see
+            // `JsonGenerator.expand_union`), which reports an unknown discriminant tag as
+            // `Err(ParseError)` instead of `from_json`'s lenient fallback-to-first-variant (kept
+            // lenient there so nested/array/tuple/type-param composition never has to thread a
+            // `Result` through a constructor-argument expression). Only the top-level
+            // `Json.deserialize<T>` entry point gets this strict check.
+            let is_union = self.union_table.contains_key(t_type.get_type().as_str());
+
+            // Ok(v) => Result.Ok(T.from_json(v)), or for unions, first validate the variant tag.
             self.hir_open_block();
             if let Some(local) = ok_local {
                 let ty_id = self.type_ctx.lower(&json_value);
                 let read = HExpr::new(ty_id, HExprKind::Var(Binding::Local(local)));
-                self.hir_set_call(
-                    &method_fn(&struct_name, "from_json"),
-                    vec![Some(read)],
-                    &t_type,
-                );
-                let from_json = self.hir_take();
-                self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
-                let wrapped = self.hir_take();
-                self.hir_assign_local_id(result_temp.unwrap_or(dream_hir::LocalId(0)), wrapped);
+                if is_union {
+                    self.hir_set_call(
+                        &method_fn(&struct_name, "__json_check_variant"),
+                        vec![Some(read)],
+                        &parse_result_ty,
+                    );
+                    let check_hir = self.hir_take();
+                    let inner_ok_local = self.hir_alloc_local("__json_variant_ok", &json_value);
+                    let inner_err_local = self.hir_alloc_local("__json_variant_err", &parse_err);
+                    if check_hir.is_some() && inner_ok_local.is_some() && inner_err_local.is_some()
+                    {
+                        self.hir_open_block();
+                        if let Some(inner_local) = inner_ok_local {
+                            let ty_id = self.type_ctx.lower(&json_value);
+                            let read2 = HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
+                            self.hir_set_call(
+                                &method_fn(&struct_name, "from_json"),
+                                vec![Some(read2)],
+                                &t_type,
+                            );
+                            let from_json = self.hir_take();
+                            self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
+                            let wrapped = self.hir_take();
+                            self.hir_assign_local_id(
+                                result_temp.unwrap_or(dream_hir::LocalId(0)),
+                                wrapped,
+                            );
+                        }
+                        let inner_ok_body = self.hir_close_block();
+                        let inner_ok_arm = self.hir_variant_arm(
+                            parse_def,
+                            ok_disc,
+                            vec![inner_ok_local.unwrap_or(dream_hir::LocalId(0))],
+                            inner_ok_body,
+                        );
+
+                        self.hir_open_block();
+                        if let Some(inner_local) = inner_err_local {
+                            let ty_id = self.type_ctx.lower(&parse_err);
+                            let read2 = HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
+                            self.hir_set_union_new(result_def, err_disc, vec![Some(read2)], &result_ty);
+                            let wrapped = self.hir_take();
+                            self.hir_assign_local_id(
+                                result_temp.unwrap_or(dream_hir::LocalId(0)),
+                                wrapped,
+                            );
+                        }
+                        let inner_err_body = self.hir_close_block();
+                        let inner_err_arm = self.hir_variant_arm(
+                            parse_def,
+                            err_disc,
+                            vec![inner_err_local.unwrap_or(dream_hir::LocalId(0))],
+                            inner_err_body,
+                        );
+
+                        self.hir_switch(check_hir, vec![inner_ok_arm, inner_err_arm], vec![], true);
+                    } else {
+                        ok = false;
+                    }
+                } else {
+                    self.hir_set_call(
+                        &method_fn(&struct_name, "from_json"),
+                        vec![Some(read)],
+                        &t_type,
+                    );
+                    let from_json = self.hir_take();
+                    self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
+                    let wrapped = self.hir_take();
+                    self.hir_assign_local_id(result_temp.unwrap_or(dream_hir::LocalId(0)), wrapped);
+                }
             } else {
                 ok = false;
             }

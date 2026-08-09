@@ -1,0 +1,48 @@
+module system.net;
+
+// Raw-socket (`TcpClient`/`WebSocket`) transport failure, implementing `Error`.
+public class NetError : Error {
+    _code: string;
+    _message: string;
+
+    // Creates an error with a machine code and message.
+    public constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    // Human-readable description.
+    public fun message(): string {
+        return this._message;
+    }
+
+    // Stable machine code (`ECONNECT`, `EIO`, `ECLOSED`, `EPROTOCOL`, `EUNSUPPORTED`).
+    public fun code(): string {
+        return this._code;
+    }
+
+    // The connection could not be established (DNS, refused, timeout, TLS, ...).
+    public static fun connect_failed(message: string): NetError {
+        return NetError("ECONNECT", message);
+    }
+
+    // A read/write against an open connection failed.
+    public static fun io(message: string): NetError {
+        return NetError("EIO", message);
+    }
+
+    // The operation was attempted after the connection was already closed.
+    public static fun closed(message: string): NetError {
+        return NetError("ECLOSED", message);
+    }
+
+    // The peer sent malformed/unexpected protocol data.
+    public static fun protocol(message: string): NetError {
+        return NetError("EPROTOCOL", message);
+    }
+
+    // Not available on the current host (e.g. raw TCP in the browser, `wss://` natively).
+    public static fun unsupported(message: string): NetError {
+        return NetError("EUNSUPPORTED", message);
+    }
+}

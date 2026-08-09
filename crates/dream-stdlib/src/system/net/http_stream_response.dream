@@ -1,0 +1,118 @@
+module system.net;
+
+// A streaming HTTP response body opened by `HttpClient.get_stream`/`request_stream`. The status
+// line and headers are already available (from the initial request); `read_chunk` pulls the body
+// incrementally instead of buffering it all up front, so large downloads don't need to fit in
+// memory at once.
+public class HttpStreamResponse {
+    head: HttpResponse;
+    handle: int;
+    cancel_token: Option<CancellationToken>;
+    closed: bool;
+
+    @js("Dream", "httpReadChunk")
+    static extern async fun host_read_chunk(handle: int, max_bytes: int): char[];
+
+    @js("Dream", "httpCloseStream")
+    static extern fun host_close_stream(handle: int): bool;
+
+    public constructor(head: HttpResponse, handle: int, cancel_token: Option<CancellationToken>) {
+        this.head = head;
+        this.handle = handle;
+        this.cancel_token = cancel_token;
+        this.closed = false;
+    }
+
+    // The HTTP status code.
+    public fun status(): int {
+        return this.head.status();
+    }
+
+    // True for a 2xx status.
+    public fun ok(): bool {
+        return this.head.ok();
+    }
+
+    // The value of response header `name`.
+    public fun header(name: string): string {
+        return this.head.header(name);
+    }
+
+    // Reads up to `max_bytes` of the body. `Ok(None)` marks end-of-stream; the actual chunk size
+    // is host-determined and may be smaller than `max_bytes` even before EOF.
+    public async fun read_chunk(max_bytes: int): Result<Option<byte[]>, HttpError> {
+        let eof: Option<byte[]> = Option.None;
+        if (this.closed) {
+            return Result.Ok(eof);
+        }
+        switch (this.cancel_token) {
+            Some(tok) => {
+                if (tok.is_cancelled()) {
+                    this.close();
+                    return Result.Err(HttpError.transport("cancelled"));
+                }
+            },
+            None => { },
+        }
+        let wire = await HttpStreamResponse.host_read_chunk(this.handle, max_bytes);
+        let reader = NetWireReader(wire);
+        let tag = reader.read_line();
+        if (tag == "data") {
+            return Result.Ok(Option.Some(reader.read_remaining_bytes()));
+        }
+        if (tag == "eof") {
+            this.closed = true;
+            return Result.Ok(eof);
+        }
+        this.closed = true;
+        return Result.Err(HttpError.transport(reader.read_remaining_text()));
+    }
+
+    // Reads and concatenates every remaining chunk into one `byte[]`.
+    public async fun read_all(): Result<byte[], HttpError> {
+        let sb = List<byte>();
+        let going = true;
+        let error: Option<HttpError> = Option.None;
+        while (going) {
+            let chunk = await this.read_chunk(65536);
+            switch (chunk) {
+                Ok(opt) => {
+                    switch (opt) {
+                        Some(bytes) => {
+                            let i = 0;
+                            while (i < bytes.length) {
+                                sb.push(bytes[i]);
+                                i = i + 1;
+                            }
+                        },
+                        None => { going = false; },
+                    }
+                },
+                Err(e) => {
+                    error = Option.Some(e);
+                    going = false;
+                },
+            }
+        }
+        switch (error) {
+            Some(e) => { return Result.Err(e); },
+            None => { },
+        }
+        let out = Buffer.alloc<byte>(sb.length);
+        let i = 0;
+        while (i < sb.length) {
+            out[i] = sb.get(i).unwrap_or((byte)0);
+            i = i + 1;
+        }
+        return Result.Ok(out);
+    }
+
+    // Closes the stream early (e.g. after reading only the headers, or on cancellation). Safe to
+    // call more than once.
+    public fun close(): void {
+        if (this.closed == false) {
+            this.closed = true;
+            HttpStreamResponse.host_close_stream(this.handle);
+        }
+    }
+}

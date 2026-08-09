@@ -11,6 +11,9 @@ public class GenField {
     public property_name: string;
     public option_inner: string;
     public is_type_param: bool;
+    // Value type of a `Map<string, V>` field (empty when not a map); the key type is required to
+    // be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).
+    public map_value_inner: string;
 
     // Builds a field snapshot from SemanticModel data.
     public constructor(
@@ -19,7 +22,8 @@ public class GenField {
         json_ignore: bool,
         property_name: string,
         option_inner: string,
-        is_type_param: bool
+        is_type_param: bool,
+        map_value_inner: string
     ) {
         this.name = name;
         this.type_name = type_name;
@@ -27,6 +31,7 @@ public class GenField {
         this.property_name = property_name;
         this.option_inner = option_inner;
         this.is_type_param = is_type_param;
+        this.map_value_inner = map_value_inner;
     }
 
     // Convenience factory matching the constructor arguments.
@@ -36,9 +41,10 @@ public class GenField {
         json_ignore: bool,
         property_name: string,
         option_inner: string,
-        is_type_param: bool
+        is_type_param: bool,
+        map_value_inner: string
     ): GenField {
-        return GenField(name, type_name, json_ignore, property_name, option_inner, is_type_param);
+        return GenField(name, type_name, json_ignore, property_name, option_inner, is_type_param, map_value_inner);
     }
 
     // JSON object key: `@json_property` override, else the Dream field name.

@@ -88,7 +88,8 @@
 ;; Releases one level of the reentrant lock word at `$addr`, acquired via `$__lock_acquire`: at
 ;; depth 1 (the outermost acquire), clears the word to `0` (free); otherwise just decrements
 ;; `depth`. Undefined (a caller bug, not guarded here — matches C# `Monitor`/`lock`'s own contract)
-;; if called by a thread that does not currently hold the lock.
+;; if called by a thread that does not currently hold the lock. Outermost release notifies one
+;; waiter so `$__lock_try_acquire_for` can wake before its timeout.
 (func $__lock_release (param $addr i32)
     (local $cur i32)
     local.get $addr
@@ -104,6 +105,10 @@
             local.get $addr
             i32.const 0
             i32.atomic.store
+            local.get $addr
+            i32.const 1
+            memory.atomic.notify
+            drop
         )
         (else
             local.get $addr
@@ -111,6 +116,109 @@
             i32.atomic.rmw.sub
             drop
         )
+    )
+)
+
+;; One-shot acquire: returns 1 on success (including reentrant bump), 0 if another thread holds it.
+(func $__lock_try_acquire (param $addr i32) (result i32)
+    (local $tid i32)
+    (local $cur i32)
+    call $__thread_id
+    local.set $tid
+    local.get $addr
+    i32.atomic.load
+    local.set $cur
+    local.get $cur
+    i32.eqz
+    (if (result i32)
+        (then
+            local.get $addr
+            i32.const 0
+            local.get $tid
+            i32.const 16
+            i32.shl
+            i32.const 1
+            i32.or
+            i32.atomic.rmw.cmpxchg
+            i32.eqz
+        )
+        (else
+            local.get $cur
+            i32.const 16
+            i32.shr_u
+            local.get $tid
+            i32.eq
+            (if (result i32)
+                (then
+                    local.get $addr
+                    i32.const 1
+                    i32.atomic.rmw.add
+                    drop
+                    i32.const 1
+                )
+                (else
+                    i32.const 0
+                )
+            )
+        )
+    )
+)
+
+;; Best-effort timed acquire: retries until success or `memory.atomic.wait32` reports timeout.
+;; `timeout_ms <= 0` is a single try. Remaining wait time is not shrunk across spurious wakes.
+(func $__lock_try_acquire_for (param $addr i32) (param $timeout_ms i32) (result i32)
+    (local $cur i32)
+    (local $timeout_ns i64)
+    (local $wait_res i32)
+    (local $ok i32)
+    local.get $timeout_ms
+    i32.const 0
+    i32.le_s
+    (if
+        (then
+            local.get $addr
+            call $__lock_try_acquire
+            return
+        )
+    )
+    local.get $timeout_ms
+    i64.extend_i32_s
+    i64.const 1000000
+    i64.mul
+    local.set $timeout_ns
+    (block $done (result i32)
+        (loop $retry
+            local.get $addr
+            call $__lock_try_acquire
+            local.set $ok
+            local.get $ok
+            (if
+                (then
+                    local.get $ok
+                    br $done
+                )
+            )
+            local.get $addr
+            i32.atomic.load
+            local.set $cur
+            local.get $addr
+            local.get $cur
+            local.get $timeout_ns
+            memory.atomic.wait32
+            local.set $wait_res
+            local.get $wait_res
+            i32.const 2
+            i32.eq
+            (if
+                (then
+                    local.get $addr
+                    call $__lock_try_acquire
+                    br $done
+                )
+            )
+            br $retry
+        )
+        i32.const 0
     )
 )
 
@@ -140,6 +248,15 @@
 (func $shared_lock_release (param $lock i32)
     local.get $lock
     call $__lock_release
+)
+(func $shared_lock_try_acquire (param $lock i32) (result i32)
+    local.get $lock
+    call $__lock_try_acquire
+)
+(func $shared_lock_try_acquire_for (param $lock i32) (param $timeout_ms i32) (result i32)
+    local.get $lock
+    local.get $timeout_ms
+    call $__lock_try_acquire_for
 )
 
 ;; `Semaphore.acquire()`/`Semaphore.release()`: a classic counting semaphore, independent of the
@@ -178,4 +295,87 @@
     i32.const 1
     i32.atomic.rmw.add
     drop
+    local.get $sem
+    i32.const 1
+    memory.atomic.notify
+    drop
+)
+(func $shared_semaphore_try_acquire (param $sem i32) (result i32)
+    (local $cur i32)
+    local.get $sem
+    i32.atomic.load
+    local.set $cur
+    local.get $cur
+    i32.const 0
+    i32.gt_s
+    (if (result i32)
+        (then
+            local.get $sem
+            local.get $cur
+            local.get $cur
+            i32.const 1
+            i32.sub
+            i32.atomic.rmw.cmpxchg
+            local.get $cur
+            i32.eq
+        )
+        (else
+            i32.const 0
+        )
+    )
+)
+(func $shared_semaphore_try_acquire_for (param $sem i32) (param $timeout_ms i32) (result i32)
+    (local $cur i32)
+    (local $timeout_ns i64)
+    (local $wait_res i32)
+    (local $ok i32)
+    local.get $timeout_ms
+    i32.const 0
+    i32.le_s
+    (if
+        (then
+            local.get $sem
+            call $shared_semaphore_try_acquire
+            return
+        )
+    )
+    local.get $timeout_ms
+    i64.extend_i32_s
+    i64.const 1000000
+    i64.mul
+    local.set $timeout_ns
+    (block $done (result i32)
+        (loop $retry
+            local.get $sem
+            call $shared_semaphore_try_acquire
+            local.set $ok
+            local.get $ok
+            (if
+                (then
+                    local.get $ok
+                    br $done
+                )
+            )
+            local.get $sem
+            i32.atomic.load
+            local.set $cur
+            local.get $sem
+            local.get $cur
+            local.get $timeout_ns
+            memory.atomic.wait32
+            local.set $wait_res
+            local.get $wait_res
+            i32.const 2
+            i32.eq
+            (if
+                (then
+                    local.get $sem
+                    call $shared_semaphore_try_acquire
+                    br $done
+                )
+            )
+            br $retry
+        )
+        i32.const 0
+    )
 )

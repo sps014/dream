@@ -1,0 +1,38 @@
+module system.crypto;
+
+// Cryptographic operation failure implementing `Error` (currently `AesGcm`/`AesGcmKey`).
+public class CryptoError : Error {
+    _code: string;
+    _message: string;
+
+    // Creates an error with a machine code and message.
+    public constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    // Human-readable description.
+    public fun message(): string {
+        return this._message;
+    }
+
+    // Stable machine code (`EINVAL_KEY`, `EINVAL_NONCE`, `EDECRYPT`, …).
+    public fun code(): string {
+        return this._code;
+    }
+
+    // Key material has the wrong length or shape.
+    public static fun invalid_key(message: string): CryptoError {
+        return CryptoError("EINVAL_KEY", message);
+    }
+
+    // Nonce/IV has the wrong length.
+    public static fun invalid_nonce(message: string): CryptoError {
+        return CryptoError("EINVAL_NONCE", message);
+    }
+
+    // Decryption failed: authentication tag mismatch, truncated ciphertext, or tampering.
+    public static fun decrypt_failed(message: string): CryptoError {
+        return CryptoError("EDECRYPT", message);
+    }
+}

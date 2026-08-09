@@ -33,7 +33,7 @@ fun main(): void {
 - `Json.deserialize<T>(text): Result<T, ParseError>` — parse and reconstruct a `T`.
 - `Json.from_value<T>(value): T` — reconstruct from an already-parsed `JsonValue` (no parse step).
 
-Field types may be primitives, `string`, other `@json` classes, arrays of those, positional **tuples** of supported element types (serialized as JSON arrays), and `Option<string>`, `Option<@json class>`, or `Option<T[]>` of a supported element type. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
+Field types may be primitives, `string`, other `@json` classes, arrays of those, positional **tuples** of supported element types (serialized as JSON arrays), `Map<string, V>` of a supported value type `V` (serialized as a JSON object keyed by the map's string keys), and (for classes) `Option<T>` where `T` is `string`, `int`, `double`, `float`, `bool`, another `@json` class/union, or `T[]` of a supported element. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
 
 ```dream
 @json
@@ -74,16 +74,32 @@ class User {
 
 ### Optional fields
 
-An `Option<T>` field maps to JSON `null`. On serialize, `None` is written as `null`; on deserialize, a JSON `null` *or* a missing key produces `None`. `T` may be `string`, another `@json` class/union, or an array of a supported element type:
+An `Option<T>` field maps to JSON `null`. On serialize, `None` is written as `null`; on deserialize, a JSON `null` *or* a missing key produces `None`. `T` may be `string`, `int`, `double`, `float`, `bool`, another `@json` class/union, or an array of a supported element type:
 
 ```dream
 @json
 class Profile {
     name: string;
     nickname: Option<string>;
+    age: Option<int>;
     address: Option<Address>;
     tags: Option<string[]>;
 }
+```
+
+### Map fields
+
+A `Map<string, V>` field serializes as a JSON object keyed by the map's (string) keys, with `V` any supported field type:
+
+```dream
+@json
+class Scoreboard {
+    scores: Map<string, int>;
+}
+
+let s = Scoreboard(Map<string, int>());
+s.scores.set("ada", 100);
+System.println(Json.serialize(s));   // {"scores":{"ada":100}}
 ```
 
 ### Unions
@@ -102,10 +118,19 @@ let back = Json.deserialize<Shape>(text).unwrap_or(Shape.Empty);  // Ok(Shape.Re
 System.println(Json.serialize(Shape.Empty));           // {"type":"Empty"}
 ```
 
-On deserialize, an unrecognized `"type"` falls back to the first variant. `@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
+On `Json.deserialize<T>(text)` (the top-level entry point), an unrecognized `"type"` is reported as `Err(ParseError)` rather than silently defaulting to the first variant:
+
+```dream
+switch (Json.deserialize<Shape>("{\"type\":\"Triangle\"}")) {
+    Ok(v) => System.println(v.to_string()),
+    Err(e) => System.println(e.message()),  // unknown variant 'Triangle' for union 'Shape'
+}
+```
+
+`@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
 
 !!! note "v1 limits"
-    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, arrays of those (classes and unions), and (for classes) `Option<string>` / `Option<@json class>` / `Option<T[]>` of a supported element. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error.
+    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, arrays of those (classes and unions), `Map<string, V>` of a supported value type, and (for classes) `Option<T>` of `string` / `int` / `double` / `float` / `bool` / `@json class` / `T[]`. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error. The strict unknown-`"type"` check above only applies to `Json.deserialize<T>`'s own return value — a union nested *inside* another `@json` type (a class field, array element, tuple slot, or generic type-parameter payload) still falls back to its first variant on an unrecognized tag, since propagating the error through an arbitrarily nested constructor-argument expression isn't supported yet.
 
 ## The `JsonValue` model
 

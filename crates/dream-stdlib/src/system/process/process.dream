@@ -1,0 +1,66 @@
+module system.process;
+
+// Runs and controls child processes (native only — the browser host reports
+// `ProcessError.unsupported` for every operation; Node supports both `run` and `spawn`).
+public class Process {
+    @js("Dream", "processRun")
+    static extern async fun host_run(cmd: string, args: string, cwd: string): char[];
+
+    @js("Dream", "processSpawn")
+    static extern async fun host_spawn(cmd: string, args: string, cwd: string): char[];
+
+    // Joins `args` with '\n', the wire format the host functions split on.
+    static fun join_args(args: string[]): string {
+        let sb = StringBuilder();
+        let i = 0;
+        while (i < args.length) {
+            if (i > 0) {
+                sb.append_char('\n');
+            }
+            sb.append(args[i]);
+            i = i + 1;
+        }
+        return sb.to_string();
+    }
+
+    // Runs `cmd` with `args` in the current working directory, waits for it to exit, and
+    // captures stdout/stderr in full.
+    public static async fun run(cmd: string, args: string[]): Result<ProcessOutput, ProcessError> {
+        return await Process.run_in(cmd, args, "");
+    }
+
+    // Same as `run`, but launches the process with `cwd` as its working directory (an empty
+    // string keeps the caller's current working directory).
+    public static async fun run_in(cmd: string, args: string[], cwd: string): Result<ProcessOutput, ProcessError> {
+        let raw = await Process.host_run(cmd, Process.join_args(args), cwd);
+        let reader = ProcessWireReader(raw);
+        let exit_code = int.parse(reader.read_line()).unwrap_or(0 - 2);
+        if (exit_code == (0 - 1)) {
+            let message = Encoding.utf8_decode(reader.read_remaining_bytes());
+            return Result.Err(ProcessError.spawn_failed(message));
+        }
+        let stdout_len = int.parse(reader.read_line()).unwrap_or(0);
+        let stdout_bytes = reader.read_bytes(stdout_len);
+        let stderr_bytes = reader.read_remaining_bytes();
+        let output = ProcessOutput(exit_code, Encoding.utf8_decode(stdout_bytes), Encoding.utf8_decode(stderr_bytes));
+        return Result.Ok(output);
+    }
+
+    // Spawns `cmd` with `args` in the current working directory, returning a handle for
+    // interactive stdin/stdout/stderr access and lifecycle control.
+    public static async fun spawn(cmd: string, args: string[]): Result<ChildProcess, ProcessError> {
+        return await Process.spawn_in(cmd, args, "");
+    }
+
+    // Same as `spawn`, but launches the process with `cwd` as its working directory.
+    public static async fun spawn_in(cmd: string, args: string[], cwd: string): Result<ChildProcess, ProcessError> {
+        let raw = await Process.host_spawn(cmd, Process.join_args(args), cwd);
+        let reader = ProcessWireReader(raw);
+        let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
+        if (handle < 0) {
+            let message = Encoding.utf8_decode(reader.read_remaining_bytes());
+            return Result.Err(ProcessError.spawn_failed(message));
+        }
+        return Result.Ok(ChildProcess(handle));
+    }
+}

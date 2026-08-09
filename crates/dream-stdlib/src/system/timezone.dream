@@ -1,0 +1,63 @@
+module system;
+
+// An IANA timezone identifier (e.g. `"America/New_York"`, `"Europe/London"`), resolving UTC
+// offsets from the host's timezone database — including historical DST rules, unlike a plain
+// fixed offset. Use with `DateTime.now_in`/`DateTime.of_zoned`/`DateTime.to_zone`.
+public struct TimeZone {
+    @js("Dream", "dateZoneOffsetMinutes")
+    static extern fun host_zone_offset_minutes(zone_name: string, epoch_millis: long): int;
+
+    @js("Dream", "dateLocalZoneName")
+    static extern fun host_local_zone_name(): string;
+
+    // Sentinel `host_zone_offset_minutes` returns for a name the host doesn't recognize. Real
+    // UTC offsets are always within [-720, 840], so this can never collide with a real one.
+    static fun unknown_offset(): int {
+        return 0 - 999999;
+    }
+
+    _name: string;
+
+    public constructor(name: string) {
+        this._name = name;
+    }
+
+    // The IANA zone identifier (e.g. `"America/New_York"`).
+    public fun name(): string {
+        return this._name;
+    }
+
+    // The UTC zone (offset `0` at every instant).
+    public static fun utc(): TimeZone {
+        return TimeZone("UTC");
+    }
+
+    // The host's configured local timezone, or `utc()` if it can't be determined.
+    public static fun local(): TimeZone {
+        let name = TimeZone.host_local_zone_name();
+        if (name.is_empty()) {
+            return TimeZone.utc();
+        }
+        return TimeZone(name);
+    }
+
+    // Resolves `name` as an IANA zone identifier (e.g. `"Asia/Kolkata"`), or an error if the host's
+    // timezone database doesn't recognize it.
+    public static fun of(name: string): Result<TimeZone, ParseError> {
+        let offset = TimeZone.host_zone_offset_minutes(name, 0L);
+        if (offset == TimeZone.unknown_offset()) {
+            return Result.Err(ParseError.invalid("unknown IANA time zone: " + name));
+        }
+        return Result.Ok(TimeZone(name));
+    }
+
+    // This zone's UTC offset in minutes at `epoch_millis` (accounting for DST rules in effect at
+    // that instant). Falls back to `0` if the zone is no longer recognized by the host.
+    public fun offset_minutes_at(epoch_millis: long): int {
+        let offset = TimeZone.host_zone_offset_minutes(this._name, epoch_millis);
+        if (offset == TimeZone.unknown_offset()) {
+            return 0;
+        }
+        return offset;
+    }
+}

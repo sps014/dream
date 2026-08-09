@@ -7,6 +7,7 @@
  *   node scripts/bundle-runtime.mjs --check   # exit 1 if dream.js is stale
  *
  * Also used by the compiler to assemble selective *.(web|node).runtime.js hosts.
+ */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -137,6 +138,7 @@ export const HOST_CHUNKS = {
   gpu: "hosts/gpu.js",
   console_process: "hosts/console_process.js",
   datetime_text: "hosts/datetime_text.js",
+  net_sockets: "hosts/net_sockets.js",
   workers: "workers.js",
   env: "hosts/env.js",
 };
@@ -153,6 +155,7 @@ export function chunkForImportField(field) {
   if (field.startsWith("crypto")) return "crypto";
   if (field.startsWith("gpu") || field === "__attachGpuAbi") return "gpu";
   if (field.startsWith("worker")) return "workers";
+  if (field.startsWith("tcp") || field.startsWith("ws")) return "net_sockets";
   if (
     field.startsWith("console") ||
     field.startsWith("process")

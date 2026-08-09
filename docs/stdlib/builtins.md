@@ -62,7 +62,7 @@ These use ANSI escapes (macOS/Linux terminals and Windows 10+ with VT enabled).
 
 #### `System.read_line(): string`
 
-Blocks until a full line; returns it without the trailing newline.
+Blocks until a full line; returns it without the trailing newline. Native and Node read real stdin; the browser has no stdin, so it falls back to a blocking `prompt()` dialog.
 
 ```dream
 let line = System.read_line();

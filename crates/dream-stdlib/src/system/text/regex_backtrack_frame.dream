@@ -1,0 +1,15 @@
+module system.text;
+
+// One saved choice point for `RegexBacktrackVM`: resuming at instruction `pc`, input position
+// `pos`, with the capture array restored to a full snapshot taken at the moment of the fork.
+internal class RegexBacktrackFrame {
+    public pc: int;
+    public pos: int;
+    public caps: int[];
+
+    public constructor(pc: int, pos: int, caps: int[]) {
+        this.pc = pc;
+        this.pos = pos;
+        this.caps = caps;
+    }
+}

@@ -1,6 +1,9 @@
 //! Cryptographic host functions (the `Dream` module behind `system.crypto`). Digests use the `sha2`
-//! and `hmac` crates; CSPRNG uses `getrandom`. Browser/Node hosts mirror these in `runtime/dream.js`.
+//! and `hmac` crates; CSPRNG uses `getrandom`; AES-256-GCM uses the `aes-gcm` crate. Browser/Node
+//! hosts mirror these in `runtime/dream.js`.
 
+use aes_gcm::aead::{Aead, KeyInit, Payload};
+use aes_gcm::{Aes256Gcm, Nonce};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha512};
 use wasmtime::*;
@@ -78,8 +81,8 @@ pub fn link_crypto_functions(linker: &mut Linker<()>) -> Result<()> {
         |mut caller: Caller<'_, ()>, key_ptr: i32, data_ptr: i32| -> Result<i32> {
             let key = read_arg_bytes(&mut caller, key_ptr)?;
             let data = read_arg_bytes(&mut caller, data_ptr)?;
-            let mut mac =
-                Hmac::<Sha256>::new_from_slice(&key).map_err(|_| Error::msg("invalid HMAC key"))?;
+            let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key)
+                .map_err(|_| Error::msg("invalid HMAC key"))?;
             mac.update(&data);
             write_bytes_to_memory(&mut caller, &mac.finalize().into_bytes())
         },
@@ -96,6 +99,72 @@ pub fn link_crypto_functions(linker: &mut Linker<()>) -> Result<()> {
                     .map_err(|e| Error::msg(format!("getrandom failed: {}", e)))?;
             }
             write_bytes_to_memory(&mut caller, &out)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "cryptoAesGcmEncrypt",
+        |mut caller: Caller<'_, ()>,
+         key_ptr: i32,
+         nonce_ptr: i32,
+         plaintext_ptr: i32,
+         aad_ptr: i32|
+         -> Result<i32> {
+            let key = read_arg_bytes(&mut caller, key_ptr)?;
+            let nonce_bytes = read_arg_bytes(&mut caller, nonce_ptr)?;
+            let plaintext = read_arg_bytes(&mut caller, plaintext_ptr)?;
+            let aad = read_arg_bytes(&mut caller, aad_ptr)?;
+            let cipher = Aes256Gcm::new_from_slice(&key)
+                .map_err(|_| Error::msg("AES-256-GCM key must be 32 bytes"))?;
+            let nonce = Nonce::from_slice(&nonce_bytes);
+            let ciphertext = cipher
+                .encrypt(
+                    nonce,
+                    Payload {
+                        msg: &plaintext,
+                        aad: &aad,
+                    },
+                )
+                .map_err(|_| Error::msg("AES-256-GCM encryption failed"))?;
+            write_bytes_to_memory(&mut caller, &ciphertext)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "cryptoAesGcmDecrypt",
+        |mut caller: Caller<'_, ()>,
+         key_ptr: i32,
+         nonce_ptr: i32,
+         ciphertext_ptr: i32,
+         aad_ptr: i32|
+         -> Result<i32> {
+            let key = read_arg_bytes(&mut caller, key_ptr)?;
+            let nonce_bytes = read_arg_bytes(&mut caller, nonce_ptr)?;
+            let ciphertext = read_arg_bytes(&mut caller, ciphertext_ptr)?;
+            let aad = read_arg_bytes(&mut caller, aad_ptr)?;
+            let Ok(cipher) = Aes256Gcm::new_from_slice(&key) else {
+                return write_bytes_to_memory(&mut caller, &[0u8]);
+            };
+            let nonce = Nonce::from_slice(&nonce_bytes);
+            match cipher.decrypt(
+                nonce,
+                Payload {
+                    msg: &ciphertext,
+                    aad: &aad,
+                },
+            ) {
+                Ok(plaintext) => {
+                    // `[1, ...plaintext]`: the leading byte distinguishes "decrypted, and it
+                    // happens to be empty" from "authentication failed" without a fallible extern.
+                    let mut tagged = Vec::with_capacity(1 + plaintext.len());
+                    tagged.push(1u8);
+                    tagged.extend_from_slice(&plaintext);
+                    write_bytes_to_memory(&mut caller, &tagged)
+                }
+                Err(_) => write_bytes_to_memory(&mut caller, &[0u8]),
+            }
         },
     )?;
 

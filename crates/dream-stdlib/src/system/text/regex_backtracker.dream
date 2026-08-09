@@ -1,0 +1,265 @@
+module system.text;
+
+// Iterative backtracking interpreter over the *same* compiled `RegexInst[]` program `RegexVM`
+// runs — used instead of the Pike-VM only when the pattern has a backreference, since a
+// backreference ("match whatever text group N previously captured") isn't a regular-language
+// construct: it can't be decided from the program alone the way every other instruction can, so
+// the Thompson-NFA thread simulation `RegexVM` uses fundamentally can't express it.
+//
+// This walks the program with an explicit stack of choice points (one per `Alt` taken) instead of
+// running every live thread in lock-step, which is what lets it support both `Backref` and
+// (transitively, since they compile to ordinary instructions) everything the Pike-VM already
+// handles — at the usual backtracking-engine cost of worst-case exponential blowup on
+// pathological patterns, bounded here by `max_steps` so a search that can't find a match
+// terminates (reporting no match) instead of hanging.
+internal class RegexBacktrackVM {
+    prog: RegexInst[];
+    ngroup: int;
+    multiline: bool;
+    table: RegexSubTable;
+
+    public constructor(prog: RegexInst[], ngroup: int, multiline: bool, table: RegexSubTable) {
+        this.prog = prog;
+        this.ngroup = ngroup;
+        this.multiline = multiline;
+        this.table = table;
+    }
+
+    fun copy_caps(src: int[]): int[] {
+        let n = src.length;
+        let dst = Buffer.alloc<int>(n);
+        let i = 0;
+        while (i < n) {
+            dst[i] = src[i];
+            i = i + 1;
+        }
+        return dst;
+    }
+
+    fun is_word_char(c: char): bool {
+        if (c.is_alpha()) {
+            return true;
+        }
+        if (c.is_digit()) {
+            return true;
+        }
+        return c == '_';
+    }
+
+    fun empty_ok(kind: RegexEmptyKind, pos: int, input: string, len: int): bool {
+        if (kind == RegexEmptyKind.BeginText) {
+            return pos == 0;
+        }
+        if (kind == RegexEmptyKind.EndText) {
+            return pos == len;
+        }
+        if (kind == RegexEmptyKind.BeginLine) {
+            if (pos == 0) {
+                return true;
+            }
+            if (this.multiline == false) {
+                return false;
+            }
+            return input.char_at(pos - 1) == '\n';
+        }
+        if (kind == RegexEmptyKind.EndLine) {
+            if (pos == len) {
+                return true;
+            }
+            if (this.multiline == false) {
+                return false;
+            }
+            return input.char_at(pos) == '\n';
+        }
+        let before = (pos > 0) && this.is_word_char(input.char_at(pos - 1));
+        let after = (pos < len) && this.is_word_char(input.char_at(pos));
+        let boundary = before != after;
+        if (kind == RegexEmptyKind.WordBoundary) {
+            return boundary;
+        }
+        return boundary == false;
+    }
+
+    fun range_hit(ranges: List<char>, c: char, foldcase: bool): bool {
+        let probe = c;
+        if (foldcase) {
+            probe = c.to_lower();
+        }
+        let i = 0;
+        while (i < ranges.length) {
+            let lo = ranges.get(i).unwrap_or(' ');
+            let hi = ranges.get(i + 1).unwrap_or(' ');
+            if ((probe >= lo) && (probe <= hi)) {
+                return true;
+            }
+            i = i + 2;
+        }
+        return false;
+    }
+
+    fun char_matches(inst: RegexInst, c: char): bool {
+        let hit = this.range_hit(inst.ranges, c, inst.foldcase);
+        if (inst.negate) {
+            return hit == false;
+        }
+        return hit;
+    }
+
+    // Same technique `RegexVM.look_holds` uses (see its comment): lookahead checks whether the
+    // sub-program can match anything starting at `pos`; lookbehind tries every candidate start
+    // and checks for a sub-match that ends exactly at `pos`.
+    fun look_holds(inst: RegexInst, pos: int, input: string, len: int): bool {
+        let sub_prog = this.table.progs.get(inst.sub_index).unwrap_or(Buffer.alloc<RegexInst>(0));
+        let sub_ngroup = this.table.ngroups.get(inst.sub_index).unwrap_or(0);
+        let sub_vm = RegexVM(sub_prog, sub_ngroup, this.multiline, this.table);
+        let holds = false;
+        if (inst.look_ahead) {
+            holds = sub_vm.find(input, pos).is_some();
+        } else {
+            let s = pos;
+            let found = false;
+            while ((s >= 0) && (found == false)) {
+                let sub_input = input.substring(s, pos);
+                let m = sub_vm.find(sub_input, 0);
+                switch (m) {
+                    Some(mm) => {
+                        if (mm.end() == sub_input.length) {
+                            found = true;
+                        }
+                    },
+                    None => {},
+                }
+                s = s - 1;
+            }
+            holds = found;
+        }
+        if (inst.negate) {
+            return holds == false;
+        }
+        return holds;
+    }
+
+    // Text previously captured by group `idx` (empty if it never participated — the common
+    // "unmatched backreference matches the empty string" convention).
+    fun group_text(idx: int, caps: int[], input: string): string {
+        let s0 = 2 * idx;
+        let e0 = (2 * idx) + 1;
+        if ((s0 < 0) || (e0 >= caps.length)) {
+            return "";
+        }
+        let s = caps[s0];
+        let e = caps[e0];
+        if ((s < 0) || (e < 0)) {
+            return "";
+        }
+        return input.substring(s, e);
+    }
+
+    fun text_matches_at(text: string, input: string, pos: int, ignore_case: bool): bool {
+        let n = text.length;
+        let i = 0;
+        while (i < n) {
+            let a = text.char_at(i);
+            let b = input.char_at(pos + i);
+            if (ignore_case) {
+                if (a.to_lower() != b.to_lower()) {
+                    return false;
+                }
+            } else if (a != b) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    public fun find(input: string, start: int): Option<RegexMatch> {
+        let len = input.length;
+        let ncap = 2 * (this.ngroup + 1);
+        let caps = Buffer.alloc<int>(ncap);
+        let i0 = 0;
+        while (i0 < ncap) {
+            caps[i0] = 0 - 1;
+            i0 = i0 + 1;
+        }
+
+        let stack = List<RegexBacktrackFrame>();
+        let pc = 0;
+        let pos = start;
+        let steps = 0;
+        let max_steps = 2000000;
+        let result: Option<int[]> = Option.None;
+        let going = true;
+        while (going) {
+            steps = steps + 1;
+            if (steps > max_steps) {
+                going = false;
+            } else {
+                let inst = this.prog[pc];
+                let advanced = true;
+                if (inst.opcode == RegexOp.CharClass) {
+                    if ((pos < len) && (this.char_matches(inst, input.char_at(pos)))) {
+                        pos = pos + 1;
+                        pc = inst.out;
+                    } else {
+                        advanced = false;
+                    }
+                } else if (inst.opcode == RegexOp.Capture) {
+                    if ((inst.cap >= 0) && (inst.cap < caps.length)) {
+                        caps[inst.cap] = pos;
+                    }
+                    pc = inst.out;
+                } else if (inst.opcode == RegexOp.EmptyWidth) {
+                    if (this.empty_ok(inst.empty_kind, pos, input, len)) {
+                        pc = inst.out;
+                    } else {
+                        advanced = false;
+                    }
+                } else if (inst.opcode == RegexOp.Look) {
+                    if (this.look_holds(inst, pos, input, len)) {
+                        pc = inst.out;
+                    } else {
+                        advanced = false;
+                    }
+                } else if (inst.opcode == RegexOp.Backref) {
+                    let text = this.group_text(inst.cap, caps, input);
+                    let tlen = text.length;
+                    if (((pos + tlen) <= len) && this.text_matches_at(text, input, pos, inst.foldcase)) {
+                        pos = pos + tlen;
+                        pc = inst.out;
+                    } else {
+                        advanced = false;
+                    }
+                } else if (inst.opcode == RegexOp.Alt) {
+                    stack.push(RegexBacktrackFrame(inst.out1, pos, this.copy_caps(caps)));
+                    pc = inst.out;
+                } else if (inst.opcode == RegexOp.Nop) {
+                    pc = inst.out;
+                } else {
+                    // Match
+                    result = Option.Some(caps);
+                    going = false;
+                    advanced = true;
+                }
+                if ((advanced == false) && going) {
+                    let frame_opt = stack.pop();
+                    switch (frame_opt) {
+                        Some(frame) => {
+                            pc = frame.pc;
+                            pos = frame.pos;
+                            caps = frame.caps;
+                        },
+                        None => {
+                            going = false;
+                        },
+                    }
+                }
+            }
+        }
+
+        return switch (result) {
+            Some(c) => Option.Some(RegexMatch(c, this.ngroup)),
+            None => Option.None,
+        };
+    }
+}

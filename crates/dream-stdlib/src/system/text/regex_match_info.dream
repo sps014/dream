@@ -1,0 +1,36 @@
+module system.text;
+
+// Rich match result returned by `Regex.match_info`. `full` is the overall match text; `groups`
+// holds each capturing group's text in group-number order (1, 2, 3, ... — `groups[0]` is group 1,
+// since `full` already covers group 0), with `""` for a group that didn't participate; `named`
+// looks a group up by the name it was given via `(?<name>...)`.
+public class RegexMatchInfo {
+    public full: string;
+    public groups: string[];
+    names: string[];
+    name_numbers: int[]; // 1-based group numbers, parallel to `names`
+
+    public constructor(full: string, groups: string[], names: string[], name_numbers: int[]) {
+        this.full = full;
+        this.groups = groups;
+        this.names = names;
+        this.name_numbers = name_numbers;
+    }
+
+    // The text captured by the named group `name`, or `None` if no such name exists on this
+    // pattern or the group didn't participate in the match.
+    public fun named(name: string): Option<string> {
+        let i = 0;
+        while (i < this.names.length) {
+            if (this.names[i] == name) {
+                let num = this.name_numbers[i];
+                if ((num >= 1) && (num <= this.groups.length)) {
+                    return Option.Some(this.groups[num - 1]);
+                }
+                return Option.None;
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+}

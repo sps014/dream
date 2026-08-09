@@ -9,6 +9,9 @@ public class Unicode {
     @js("Dream", "unicodeToLower")
     static extern fun to_lower_host(text: string): string;
 
+    @js("Dream", "unicodeToUpper")
+    static extern fun to_upper_host(text: string): string;
+
     @js("Dream", "unicodeGraphemes")
     static extern fun graphemes_host(text: string): string[];
 
@@ -28,6 +31,11 @@ public class Unicode {
     // Full Unicode lowercase (not limited to ASCII).
     public static fun to_lower_unicode(text: string): string {
         return Unicode.to_lower_host(text);
+    }
+
+    // Full Unicode uppercase (not limited to ASCII).
+    public static fun to_upper_unicode(text: string): string {
+        return Unicode.to_upper_host(text);
     }
 
     // Splits `text` into user-perceived grapheme clusters.

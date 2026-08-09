@@ -17,11 +17,50 @@ internal class RegexVM {
     prog: RegexInst[];
     ngroup: int;
     multiline: bool;
+    table: RegexSubTable;
 
-    public constructor(prog: RegexInst[], ngroup: int, multiline: bool) {
+    public constructor(prog: RegexInst[], ngroup: int, multiline: bool, table: RegexSubTable) {
         this.prog = prog;
         this.ngroup = ngroup;
         this.multiline = multiline;
+        this.table = table;
+    }
+
+    // Whether a lookaround assertion holds at `pos`. Lookahead runs the sub-program anchored at
+    // `pos` and just checks whether it can match at all (any length). Lookbehind has no "run
+    // backwards" primitive, so it instead tries every candidate start `s` in `[0, pos]` and asks
+    // whether the sub-program, run anchored at `0` against the substring `input[s:pos]`, matches
+    // that substring exactly end to end — equivalent to "does the sub-pattern match some span
+    // ending exactly at `pos`", without needing to reverse the pattern or the input.
+    fun look_holds(inst: RegexInst, pos: int, input: string, len: int): bool {
+        let sub_prog = this.table.progs.get(inst.sub_index).unwrap_or(Buffer.alloc<RegexInst>(0));
+        let sub_ngroup = this.table.ngroups.get(inst.sub_index).unwrap_or(0);
+        let sub_vm = RegexVM(sub_prog, sub_ngroup, this.multiline, this.table);
+        let holds = false;
+        if (inst.look_ahead) {
+            holds = sub_vm.find(input, pos).is_some();
+        } else {
+            let s = pos;
+            let found = false;
+            while ((s >= 0) && (found == false)) {
+                let sub_input = input.substring(s, pos);
+                let m = sub_vm.find(sub_input, 0);
+                switch (m) {
+                    Some(mm) => {
+                        if (mm.end() == sub_input.length) {
+                            found = true;
+                        }
+                    },
+                    None => {},
+                }
+                s = s - 1;
+            }
+            holds = found;
+        }
+        if (inst.negate) {
+            return holds == false;
+        }
+        return holds;
     }
 
     fun copy_caps(src: int[]): int[] {
@@ -142,6 +181,10 @@ internal class RegexVM {
                     stack.push(RegexAddFrame(inst.out, updated));
                 } else if (inst.opcode == RegexOp.EmptyWidth) {
                     if (this.empty_ok(inst.empty_kind, pos, input, len)) {
+                        stack.push(RegexAddFrame(inst.out, frame.caps));
+                    }
+                } else if (inst.opcode == RegexOp.Look) {
+                    if (this.look_holds(inst, pos, input, len)) {
                         stack.push(RegexAddFrame(inst.out, frame.caps));
                     }
                 } else {

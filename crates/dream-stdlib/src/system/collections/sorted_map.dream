@@ -1,0 +1,200 @@
+module system.collections;
+
+// An ordered map backed by parallel sorted arrays (binary search + shift on insert/remove).
+// O(log n) lookup, O(n) insert/remove, ascending-key iteration. Prefer `Map<K, V>` when key order
+// doesn't matter — it has O(1) average insert/lookup.
+public class SortedMap<K : Comparable<K>, V> {
+    keys_arr: K[];
+    values_arr: V[];
+    count: int;
+
+    // Allocates an empty sorted map with an initial capacity (defaults to 8).
+    public constructor(capacity: int = 8) {
+        let c = capacity;
+        if (c < sequence_min_capacity()) {
+            c = sequence_min_capacity();
+        }
+        this.keys_arr = Buffer.alloc<K>(c);
+        this.values_arr = Buffer.alloc<V>(c);
+        this.count = 0;
+    }
+
+    // Number of key/value pairs currently stored.
+    public get length(): int {
+        return this.count;
+    }
+
+    // True when the map is empty.
+    public fun is_empty(): bool {
+        return this.count == 0;
+    }
+
+    // Removes every entry.
+    public fun clear(): void {
+        this.count = 0;
+    }
+
+    fun grow(): void {
+        let old_cap = this.keys_arr.length;
+        let new_cap = old_cap * 2;
+        if (new_cap < sequence_min_capacity()) {
+            new_cap = sequence_min_capacity();
+        }
+        this.keys_arr = Buffer.realloc<K>(this.keys_arr, new_cap);
+        this.values_arr = Buffer.realloc<V>(this.values_arr, new_cap);
+    }
+
+    // Binary search for `key`. A non-negative result is the index of an exact match; a negative
+    // result `r` means "not found" and `0 - r - 1` is the sorted insertion point (same convention
+    // as Java's `Collections.binarySearch`/Rust's `slice::binary_search`).
+    fun locate(key: K): int {
+        let lo = 0;
+        let hi = this.count;
+        while (lo < hi) {
+            let mid = lo + (hi - lo) / 2;
+            let c = this.keys_arr[mid].compare(key);
+            if (c == 0) {
+                return mid;
+            }
+            if (c < 0) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        return 0 - lo - 1;
+    }
+
+    // Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to shift.
+    @set_indexer
+    public fun set(key: K, value: V): void {
+        let idx = this.locate(key);
+        if (idx >= 0) {
+            this.values_arr[idx] = value;
+            return;
+        }
+        let insert_at = 0 - idx - 1;
+        if (this.count == this.keys_arr.length) {
+            this.grow();
+        }
+        let i = this.count;
+        while (i > insert_at) {
+            this.keys_arr[i] = this.keys_arr[i - 1];
+            this.values_arr[i] = this.values_arr[i - 1];
+            i = i - 1;
+        }
+        this.keys_arr[insert_at] = key;
+        this.values_arr[insert_at] = value;
+        this.count = this.count + 1;
+    }
+
+    // Gets the value for a key, or `None`.
+    @get_indexer
+    public fun get(key: K): Option<V> {
+        let idx = this.locate(key);
+        if (idx >= 0) {
+            return Option.Some(this.values_arr[idx]);
+        }
+        return Option.None;
+    }
+
+    // True if the map contains the key.
+    public fun contains(key: K): bool {
+        return this.locate(key) >= 0;
+    }
+
+    // Removes a key and returns true if it was present.
+    public fun remove(key: K): bool {
+        let idx = this.locate(key);
+        if (idx < 0) {
+            return false;
+        }
+        let i = idx;
+        while (i < this.count - 1) {
+            this.keys_arr[i] = this.keys_arr[i + 1];
+            this.values_arr[i] = this.values_arr[i + 1];
+            i = i + 1;
+        }
+        this.count = this.count - 1;
+        return true;
+    }
+
+    // The smallest key, or `None` when empty.
+    public fun first_key(): Option<K> {
+        if (this.count == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.keys_arr[0]);
+    }
+
+    // The largest key, or `None` when empty.
+    public fun last_key(): Option<K> {
+        if (this.count == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.keys_arr[this.count - 1]);
+    }
+
+    // The smallest key `>= key`, or `None` if every key is smaller.
+    public fun ceiling_key(key: K): Option<K> {
+        let idx = this.locate(key);
+        if (idx >= 0) {
+            return Option.Some(this.keys_arr[idx]);
+        }
+        let insert_at = 0 - idx - 1;
+        if (insert_at >= this.count) {
+            return Option.None;
+        }
+        return Option.Some(this.keys_arr[insert_at]);
+    }
+
+    // The largest key `<= key`, or `None` if every key is larger.
+    public fun floor_key(key: K): Option<K> {
+        let idx = this.locate(key);
+        if (idx >= 0) {
+            return Option.Some(this.keys_arr[idx]);
+        }
+        let insert_at = 0 - idx - 1;
+        if (insert_at == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.keys_arr[insert_at - 1]);
+    }
+
+    // All keys in ascending order.
+    public fun keys(): K[] {
+        let result = Buffer.alloc<K>(this.count);
+        let i = 0;
+        while (i < this.count) {
+            result[i] = this.keys_arr[i];
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // All values, ordered by ascending key.
+    public fun values(): V[] {
+        let result = Buffer.alloc<V>(this.count);
+        let i = 0;
+        while (i < this.count) {
+            result[i] = this.values_arr[i];
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // Gets an iterator over entries in ascending key order.
+    @iterator
+    public fun iterator(): SortedMapIterator<K, V> {
+        return SortedMapIterator<K, V>(this);
+    }
+
+    // Slot access for `SortedMapIterator` (same-module).
+    internal fun key_at(i: int): K {
+        return this.keys_arr[i];
+    }
+
+    internal fun value_at(i: int): V {
+        return this.values_arr[i];
+    }
+}

@@ -1,0 +1,10 @@
+module system.net;
+
+// A message received from a `WebSocket`.
+public enum WebSocketMessage {
+    Text(text: string),
+    Binary(data: byte[]),
+    // The peer closed the connection; `code`/`reason` come from its close frame (`code` defaults
+    // to `1000` when the peer didn't send one).
+    Close(code: int, reason: string),
+}

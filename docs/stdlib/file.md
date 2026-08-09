@@ -17,6 +17,14 @@ import system.io;
 | Node.js | Real on-disk filesystem |
 | Browser | In-memory VFS for the page session |
 
+The browser VFS (`memFs` in `runtime/src/hosts/fs.js`) is intentionally session-only — files
+disappear on page reload, the same tradeoff as Emscripten's `MEMFS`. Durable browser storage
+(backing `memFs` with OPFS or IndexedDB) is planned but not implemented: every `File`/`FileHandle`
+host call is synchronous today, while OPFS's synchronous access handles are only available inside
+a Worker and IndexedDB is inherently async, so wiring either in is a bigger change than a drop-in
+backend swap (it would need the sync `fileRead`/`fileHandleRead`/... host calls to become async,
+or a separate Worker-backed sync path) — not a pragmatic fit for this pass.
+
 ## `File` — whole-file ops
 
 #### `await File.write(path, content): Result<long, IoError>`

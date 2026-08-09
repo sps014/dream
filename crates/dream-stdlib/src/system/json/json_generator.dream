@@ -171,6 +171,63 @@ public class JsonGenerator {
         return true;
     }
 
+    // `Map<string, V>` -> a JSON object keyed by the map's (string) keys. `pair_var` names the
+    // `for (let pair in access)` loop variable.
+    static fun map_to_stmts(
+        cb: CodeBuilder,
+        value_type: string,
+        access: string,
+        out_var: string,
+        pair_var: string,
+        json_names: List<string>
+    ): bool {
+        let to_e = JsonGenerator.json_to_expr(value_type, pair_var + ".value", json_names);
+        if (to_e.length == 0) {
+            return false;
+        }
+        cb.line("let " + out_var + " = JsonValue.dict();");
+        cb.line("for (let " + pair_var + " in " + access + ") {");
+        cb.indent();
+        cb.line(out_var + ".set(" + pair_var + ".key, " + to_e + ");");
+        cb.dedent();
+        cb.line("}");
+        return true;
+    }
+
+    // Inverse of `map_to_stmts`: rebuilds a `Map<string, V>` from a JSON object.
+    static fun map_from_stmts(
+        cb: CodeBuilder,
+        value_type: string,
+        jexpr: string,
+        out_var: string,
+        src_var: string,
+        keys_var: string,
+        idx_var: string,
+        key_var: string,
+        json_names: List<string>
+    ): bool {
+        let from_e = JsonGenerator.json_from_expr(
+            value_type,
+            src_var + ".get(" + key_var + ").unwrap_or(JsonValue.none())",
+            json_names
+        );
+        if (from_e.length == 0) {
+            return false;
+        }
+        cb.line("let " + src_var + " = " + jexpr + ";");
+        cb.line("let " + out_var + " = Map<string, " + value_type + ">();");
+        cb.line("let " + keys_var + " = " + src_var + ".keys();");
+        cb.line("let " + idx_var + " = 0;");
+        cb.line("while (" + idx_var + " < " + keys_var + ".length) {");
+        cb.indent();
+        cb.line("let " + key_var + " = " + keys_var + ".get(" + idx_var + ").unwrap_or(\"\");");
+        cb.line(out_var + ".set(" + key_var + ", " + from_e + ");");
+        cb.line(idx_var + " = " + idx_var + " + 1;");
+        cb.dedent();
+        cb.line("}");
+        return true;
+    }
+
     static fun is_tuple_type(ftype: string): bool {
         return ftype.starts_with("(") && ftype.ends_with(")") && ftype.length > 2;
     }
@@ -351,7 +408,7 @@ public class JsonGenerator {
         let first_field = true;
         let fi = 0;
         while (fi < t.fields.length) {
-            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
+            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, ""));
             let fname = field.name;
             let ftype = field.type_name;
             let json_key = field.json_key();
@@ -433,17 +490,11 @@ public class JsonGenerator {
                     continue;
                 }
 
-                let to_inner = "";
-                let from_inner = "";
-                if (base == "string") {
-                    to_inner = "JsonValue.from_string(__v_" + fname + ")";
-                    from_inner = "__src_" + fname + ".as_string().unwrap_or(\"\")";
-                } else if (JsonGenerator.name_in(json_names, base)) {
-                    to_inner = "__v_" + fname + ".to_json()";
-                    from_inner = base + ".from_json(__src_" + fname + ")";
-                } else {
+                let to_inner = JsonGenerator.json_to_expr(base, "__v_" + fname, json_names);
+                let from_inner = JsonGenerator.json_from_expr(base, "__src_" + fname, json_names);
+                if (to_inner.length == 0 || from_inner.length == 0) {
                     return GenResult.failure_at(
-                                "@json class '" + t.name + "' field '" + fname + "' has unsupported optional type '" + ftype + "' (only `Option<string>`, `Option<@json class>`, and `Option<T[]>` of those are supported)" + JsonGenerator.missing_hint(base, jsonable),
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported optional type '" + ftype + "' (only `Option<string>`, `Option<int/long/double/float/bool>`, `Option<@json class>`, and `Option<T[]>` of those are supported)" + JsonGenerator.missing_hint(base, jsonable),
                                 t.name,
                                 fname
                             );
@@ -461,6 +512,49 @@ public class JsonGenerator {
                 from_cb.line("__" + fname + " = Option.Some(" + from_inner + ");");
                 from_cb.dedent();
                 from_cb.line("}");
+                if (first_field == false) {
+                    from_fields = from_fields + ", ";
+                }
+                from_fields = from_fields + "__" + fname;
+                first_field = false;
+                fi = fi + 1;
+                continue;
+            }
+
+            if (field.map_value_inner.length > 0) {
+                let value_type = field.map_value_inner;
+                if (JsonGenerator.map_to_stmts(
+                    to_cb,
+                    value_type,
+                    "this." + fname,
+                    "__map_" + fname,
+                    "__pair_" + fname,
+                    json_names
+                ) == false) {
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported map value type '" + value_type + "'" + JsonGenerator.missing_hint(value_type, jsonable),
+                                t.name,
+                                fname
+                            );
+                }
+                to_cb.line("__o.set(\"" + json_key + "\", __map_" + fname + ");");
+                if (JsonGenerator.map_from_stmts(
+                    from_cb,
+                    value_type,
+                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())",
+                    "__" + fname,
+                    "__msrc_" + fname,
+                    "__mkeys_" + fname,
+                    "__mi_" + fname,
+                    "__mk_" + fname,
+                    json_names
+                ) == false) {
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported map value type '" + value_type + "'" + JsonGenerator.missing_hint(value_type, jsonable),
+                                t.name,
+                                fname
+                            );
+                }
                 if (first_field == false) {
                     from_fields = from_fields + ", ";
                 }
@@ -611,10 +705,16 @@ public class JsonGenerator {
         to_cb.indent();
         from_cb.line("let __t = v.get(\"type\").unwrap_or(JsonValue.none()).as_string().unwrap_or(\"\");");
 
+        let known_cond = "";
+
         let vi = 0;
         while (vi < t.variants.length) {
             let variant = t.variants.get(vi).unwrap_or(GenVariant.make("", List<GenField>()));
             let vname = variant.name;
+            if (vi > 0) {
+                known_cond = known_cond + " || ";
+            }
+            known_cond = known_cond + "__t == \"" + vname + "\"";
             let pattern = vname;
             if (variant.fields.is_empty() == false) {
                 pattern = vname + "(";
@@ -623,7 +723,7 @@ public class JsonGenerator {
                     if (bi > 0) {
                         pattern = pattern + ", ";
                     }
-                    pattern = pattern + variant.fields.get(bi).unwrap_or(GenField.make("", "", false, "", "", false)).name;
+                    pattern = pattern + variant.fields.get(bi).unwrap_or(GenField.make("", "", false, "", "", false, "")).name;
                     bi = bi + 1;
                 }
                 pattern = pattern + ")";
@@ -637,7 +737,7 @@ public class JsonGenerator {
             let first_arg = true;
             let fi = 0;
             while (fi < variant.fields.length) {
-                let field = variant.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
+                let field = variant.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, ""));
                 let fname = field.name;
                 let ftype = field.type_name;
                 if (field.json_ignore) {
@@ -803,7 +903,7 @@ public class JsonGenerator {
             let vname = first.name;
             let fi = 0;
             while (fi < first.fields.length) {
-                let field = first.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
+                let field = first.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, ""));
                 let fname = field.name;
                 let ftype = field.type_name;
                 let jexpr = "v.get(\"" + fname + "\").unwrap_or(JsonValue.none())";
@@ -888,6 +988,24 @@ public class JsonGenerator {
         cb.line("public static fun from_json(v: JsonValue): " + self_ty + " {");
         cb.indent();
         JsonGenerator.append_block(cb, from_cb.to_string());
+        cb.dedent();
+        cb.line("}");
+        // Strict variant check used by `Json.deserialize<T>` (see the `JsonDeserialize` intrinsic
+        // expansion): unlike `from_json` above (kept lenient — falls back to the first variant — so
+        // nested/array/tuple/type-param composition never has to thread a `Result` through a
+        // constructor-argument expression), this reports an unknown discriminant as a real error
+        // instead of silently defaulting.
+        cb.line("public static fun __json_check_variant(v: JsonValue): Result<JsonValue, ParseError> {");
+        cb.indent();
+        cb.line("let __t = v.get(\"type\").unwrap_or(JsonValue.none()).as_string().unwrap_or(\"\");");
+        if (known_cond.length > 0) {
+            cb.line("if (" + known_cond + ") {");
+            cb.indent();
+            cb.line("return Result.Ok(v);");
+            cb.dedent();
+            cb.line("}");
+        }
+        cb.line("return Result.Err(ParseError.invalid(\"unknown variant '\" + __t + \"' for union '" + t.name + "'\"));");
         cb.dedent();
         cb.line("}");
         cb.dedent();

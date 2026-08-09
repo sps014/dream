@@ -1,0 +1,143 @@
+module system.codegen;
+
+import system;
+import system.io;
+import system.collections;
+import system.json;
+
+// One `introducer { ... }` syntax-DSL call site, snapshotted for an executed `@generator` body.
+public class GenSyntaxBlock {
+    // Opaque site id; pass back into `GenContext.replace`/`GenContext.error` unchanged.
+    public id: int;
+    // The introducer name (`quote`, `html`, ...).
+    public name: string;
+    // Raw reconstructed body text (splices appear as `{expr}` placeholders).
+    public body: string;
+    // Dream source of each `{ ... }` splice expression, in source order.
+    public splices: List<string>;
+
+    public constructor(id: int, name: string, body: string, splices: List<string>) {
+        this.id = id;
+        this.name = name;
+        this.body = body;
+        this.splices = splices;
+    }
+}
+
+// Compile-time context handed to an executed `@generator` function body. Loaded from a host
+// snapshot (see `from_snapshot`) and flushed back to the host via `finish()`, which prints the
+// same `GenHost` stdout protocol a sibling `harness.dream` would print by hand.
+public class GenContext {
+    blocks: List<GenSyntaxBlock>;
+    replacements: List<string>;
+    error_line: string;
+    has_error: bool;
+
+    constructor(blocks: List<GenSyntaxBlock>) {
+        this.blocks = blocks;
+        this.replacements = List<string>();
+        this.error_line = "";
+        this.has_error = false;
+    }
+
+    // Loads a `GenContext` from the JSON snapshot the host wrote (path from
+    // `DREAM_SYNTAX_GEN_SNAPSHOT`). Mirrors the manual parsing sibling harnesses used to do.
+    public static async fun from_snapshot(path: string): Result<GenContext, string> {
+        if (path.is_empty()) {
+            return Result.Err("DREAM_SYNTAX_GEN_SNAPSHOT is not set");
+        }
+        let text_res = await File.read(path);
+        switch (text_res) {
+            Ok(text) => {
+                let parsed = Json.parse(text);
+                switch (parsed) {
+                    Ok(root) => {
+                        let arr = root.get("blocks").unwrap_or(JsonValue.array());
+                        let blocks = List<GenSyntaxBlock>();
+                        let i = 0;
+                        while (i < arr.length) {
+                            let b = arr.at(i).unwrap_or(JsonValue.none());
+                            let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
+                            let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                            let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                            let splices_json = b.get("splices").unwrap_or(JsonValue.array());
+                            let splices = List<string>();
+                            let j = 0;
+                            while (j < splices_json.length) {
+                                let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                                splices.push(s);
+                                j = j + 1;
+                            }
+                            blocks.push(GenSyntaxBlock(id, name, body, splices));
+                            i = i + 1;
+                        }
+                        return Result.Ok(GenContext(blocks));
+                    }
+                    Err(e) => {
+                        return Result.Err("failed to parse snapshot JSON: " + e.message());
+                    }
+                }
+            }
+            Err(e) => {
+                return Result.Err("failed to read snapshot: " + e.message());
+            }
+        }
+        // Unreachable: every arm above returns; satisfies the flow checker, which treats a
+        // `switch` statement without a `default` arm as a non-exhaustive branch.
+        return Result.Err("unreachable");
+    }
+
+    // Every snapshotted `name { ... }` call site (e.g. `ctx.syntax_blocks("quote")`).
+    public fun syntax_blocks(name: string): List<GenSyntaxBlock> {
+        let out = List<GenSyntaxBlock>();
+        for (let b in this.blocks) {
+            if (b.name == name) {
+                out.push(b);
+            }
+        }
+        return out;
+    }
+
+    // Every snapshotted call site, regardless of introducer.
+    public fun all_blocks(): List<GenSyntaxBlock> {
+        return this.blocks;
+    }
+
+    // Rewrites `block`'s call site to the Dream expression `dream_expr` before type-checking.
+    public fun replace(block: GenSyntaxBlock, dream_expr: string): void {
+        this.replacements.push(block.id.to_string() + "\t" + dream_expr);
+    }
+
+    // Queues a generate-time diagnostic for `block` (surfaces as `CompileError::Generator`).
+    // Only the first reported error is kept, mirroring the harness `ERR` protocol's one-message
+    // contract.
+    public fun error(block: GenSyntaxBlock, message: string): void {
+        if (this.has_error == false) {
+            this.has_error = true;
+            this.error_line = block.id.to_string() + "\t" + message;
+        }
+    }
+
+    // Queues a generate-time diagnostic with no associated call site.
+    public fun error_general(message: string): void {
+        if (this.has_error == false) {
+            this.has_error = true;
+            this.error_line = message;
+        }
+    }
+
+    // Flushes accumulated replace/error calls to stdout using the `GenHost` protocol. The host
+    // that ran this body's auto-harness reads this output the same way it reads a hand-written
+    // `harness.dream`.
+    public fun finish(): void {
+        if (this.has_error) {
+            System.println(GenHost.err_marker());
+            System.println(this.error_line);
+            return;
+        }
+        System.println(GenHost.ok_marker());
+        for (let line in this.replacements) {
+            System.println(line);
+        }
+    }
+}

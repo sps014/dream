@@ -2,6 +2,7 @@
 //! GeneratorContext, registration, and the generate/merge pipeline.
 
 mod context;
+mod context_gen;
 mod json_gen;
 mod manifest;
 mod registration;
@@ -67,7 +68,8 @@ fn run_generators_inner<'a>(
     json_gen::expand_from_acc(&mut ctx, &acc.all_structs, &acc.all_enums, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;
 
-    syntax_gen::expand_syntax_blocks(&mut ctx, diagnostics);
+    let handled = context_gen::expand_context_generators(&mut ctx, diagnostics);
+    syntax_gen::expand_syntax_blocks(&mut ctx, diagnostics, &handled);
 
     ctx.apply_replacements(arena, acc, diagnostics)?;
     // Flush any `ctx.error` reported during replacements (apply_emits already flushed once).

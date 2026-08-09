@@ -183,7 +183,8 @@ impl Compiler {
             return Err(CompileError::Syntax);
         }
 
-        // Source generators: `@json` derive and registered `@generator`s (bodies not executed yet).
+        // Source generators: `@json` derive and registered `@generator`s (executed `GenContext`
+        // bodies or sibling-`harness.dream` fallback for empty bodies).
         // Nested harness compiles set `skip_generators` so this cannot recurse.
         if !self.skip_generators {
             debug_assert!(

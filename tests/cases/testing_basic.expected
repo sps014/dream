@@ -1,0 +1,5 @@
+PASS eq_passes
+PASS ne_passes
+PASS bool_passes
+PASS approx_passes
+PASS eq_str_passes

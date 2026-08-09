@@ -152,3 +152,44 @@ pub fn write_bytes_to_memory(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Resul
     data[base + LEN_PREFIX..base + LEN_PREFIX + bytes.len()].copy_from_slice(bytes);
     Ok(ptr)
 }
+
+/// Calls an exported function on the caller's module by name with the given typed `(i32, i32) ->
+/// ()` signature. A missing export, signature mismatch, or failed call becomes a wasm trap
+/// (propagated `Err`) rather than aborting the host process. Shared by every host module that
+/// bridges a blocking result into Dream's async runtime via [`resolve_host_future_bytes`].
+fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) -> Result<()> {
+    let func = caller
+        .get_export(name)
+        .and_then(Extern::into_func)
+        .ok_or_else(|| Error::msg(format!("module must export `{}`", name)))?
+        .typed::<(i32, i32), ()>(&*caller)
+        .map_err(|_| Error::msg(format!("unexpected `{}` signature", name)))?;
+    func.call(&mut *caller, (a, b))?;
+    Ok(())
+}
+
+/// Bridges a synchronous (blocking) host result into Dream's async runtime, mirroring
+/// `wrapAsyncImport` in `runtime/dream.js`: allocate a host `Future` via the module's exported
+/// `__dream_new_future`, write `bytes` as a `char[]`, resolve the future via `__dream_resolve`, and
+/// return the future pointer. The future is already settled when the awaiting task inspects it, so
+/// the scheduler simply re-polls the waiter. Shared by every `extern async fun` host bridge whose
+/// native implementation is itself synchronous (HTTP, process control, ...).
+pub fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Result<i32> {
+    let new_future = caller
+        .get_export(abi::EXPORT_NEW_FUTURE)
+        .and_then(Extern::into_func)
+        .ok_or_else(|| Error::msg("module must export `__dream_new_future`"))?
+        .typed::<(i32, i32, i32), i32>(&*caller)
+        .map_err(|_| Error::msg("unexpected `__dream_new_future` signature"))?;
+    let future = new_future.call(
+        &mut *caller,
+        (
+            dream_mir::async_emit::F_SLOTS,
+            dream_mir::async_emit::HOST_POLL_INDEX,
+            dream_mir::async_emit::KIND_HOST,
+        ),
+    )?;
+    let data_ptr = write_bytes_to_memory(caller, bytes)?;
+    call_export_2(caller, abi::EXPORT_RESOLVE, future, data_ptr)?;
+    Ok(future)
+}

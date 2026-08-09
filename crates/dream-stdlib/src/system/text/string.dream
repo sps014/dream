@@ -176,6 +176,11 @@ extend string : Comparable<string> {
         return Unicode.to_lower_unicode(this);
     }
 
+    // Full Unicode uppercase via `Unicode.to_upper_unicode`.
+    public fun to_upper_unicode(): string {
+        return Unicode.to_upper_unicode(this);
+    }
+
     // User-perceived grapheme clusters via `Unicode.graphemes`.
     public fun graphemes(): string[] {
         return Unicode.graphemes(this);

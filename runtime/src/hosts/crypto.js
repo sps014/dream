@@ -36,6 +36,53 @@ function cryptoSha512Bytes(data) {
   return Array.from(browserSha512(bytes));
 }
 
+/**
+ * AES-256-GCM encrypt/decrypt for the `system.crypto.AesGcm` host ABI. Node uses `node:crypto`
+ * (sync `createCipheriv`/`createDecipheriv`); browsers use the async Web Crypto `subtle` API
+ * wrapped in a busy-wait on its result since the extern signature is synchronous (matches the
+ * native/wasmtime host, which is also synchronous).
+ */
+function cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad) {
+  const keyBytes = Uint8Array.from(key || []);
+  const nonceBytes = Uint8Array.from(nonce || []);
+  const ptBytes = Uint8Array.from(plaintext || []);
+  const aadBytes = Uint8Array.from(aad || []);
+  if (isNode && getNodeCrypto()) {
+    const nodeCrypto = getNodeCrypto();
+    const cipher = nodeCrypto.createCipheriv("aes-256-gcm", keyBytes, nonceBytes);
+    if (aadBytes.length > 0) cipher.setAAD(aadBytes);
+    const ct = cipher.update(ptBytes);
+    cipher.final();
+    const tag = cipher.getAuthTag();
+    return Array.from(Buffer.concat([ct, tag]));
+  }
+  throw new Error("AES-GCM requires node:crypto (browser Web Crypto path is async-only)");
+}
+
+function cryptoAesGcmDecryptBytes(key, nonce, ciphertext, aad) {
+  const keyBytes = Uint8Array.from(key || []);
+  const nonceBytes = Uint8Array.from(nonce || []);
+  const ctFull = Uint8Array.from(ciphertext || []);
+  const aadBytes = Uint8Array.from(aad || []);
+  const tagLen = 16;
+  if (ctFull.length < tagLen) return [0];
+  const ct = ctFull.subarray(0, ctFull.length - tagLen);
+  const tag = ctFull.subarray(ctFull.length - tagLen);
+  if (isNode && getNodeCrypto()) {
+    try {
+      const nodeCrypto = getNodeCrypto();
+      const decipher = nodeCrypto.createDecipheriv("aes-256-gcm", keyBytes, nonceBytes);
+      decipher.setAuthTag(Buffer.from(tag));
+      if (aadBytes.length > 0) decipher.setAAD(aadBytes);
+      const pt = Buffer.concat([decipher.update(Buffer.from(ct)), decipher.final()]);
+      return [1, ...pt];
+    } catch {
+      return [0];
+    }
+  }
+  throw new Error("AES-GCM requires node:crypto (browser Web Crypto path is async-only)");
+}
+
 function cryptoHmacSha256Bytes(key, data) {
   const keyBytes = Uint8Array.from(key || []);
   const dataBytes = Uint8Array.from(data || []);
@@ -206,5 +253,9 @@ export function makeCryptoHost() {
     cryptoHmacSha256: (key, data) => cryptoHmacSha256Bytes(key, data),
     cryptoSecureRandomBytes: (n) => Array.from(csprngBytes(n > 0 ? n : 0)),
     cryptoSecureRandomFill: null,
+    cryptoAesGcmEncrypt: (key, nonce, plaintext, aad) =>
+      cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad),
+    cryptoAesGcmDecrypt: (key, nonce, ciphertext, aad) =>
+      cryptoAesGcmDecryptBytes(key, nonce, ciphertext, aad),
   };
 }

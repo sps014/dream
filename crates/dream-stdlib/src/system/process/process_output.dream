@@ -1,0 +1,19 @@
+module system.process;
+
+// The captured result of `Process.run`: exit code plus fully buffered stdout/stderr text.
+public class ProcessOutput {
+    public exit_code: int;
+    public stdout: string;
+    public stderr: string;
+
+    public constructor(exit_code: int, stdout: string, stderr: string) {
+        this.exit_code = exit_code;
+        this.stdout = stdout;
+        this.stderr = stderr;
+    }
+
+    // True when the process exited with code `0`.
+    public fun success(): bool {
+        return this.exit_code == 0;
+    }
+}

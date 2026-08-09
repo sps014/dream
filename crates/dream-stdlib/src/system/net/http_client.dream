@@ -15,6 +15,12 @@ public class HttpClient {
     @js("Dream", "httpRequestBytes")
     static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int): char[];
 
+    @js("Dream", "httpRequestStream")
+    static extern async fun http_request_stream(url: string, method: string, headers: string, body: string, timeout_ms: int): char[];
+
+    @js("Dream", "httpRequestStreamBytes")
+    static extern async fun http_request_stream_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int): char[];
+
     // Creates an HTTP client with a base URL.
     public constructor(base_url: string) {
         this.base_url = base_url;
@@ -88,6 +94,22 @@ public class HttpClient {
         return merged.to_wire();
     }
 
+    fun wrap_stream(raw: char[]): Result<HttpStreamResponse, HttpError> {
+        let head = HttpResponse(raw);
+        if (head.status() == 0) {
+            return Result.Err(HttpError.transport(head.text()));
+        }
+        switch (this.cookie_jar) {
+            Some(jar) => { jar.store_from_response(head); },
+            None => { },
+        }
+        let handle = int.parse(head.text()).unwrap_or(0 - 1);
+        if (handle < 0) {
+            return Result.Err(HttpError.transport("invalid stream handle"));
+        }
+        return Result.Ok(HttpStreamResponse(head, handle, this.cancel_token));
+    }
+
     fun wrap(raw: char[]): Result<HttpResponse, HttpError> {
         let res = HttpResponse(raw);
         if (res.status() == 0) {
@@ -142,6 +164,39 @@ public class HttpClient {
     // Performs a HEAD request.
     public async fun head(path: string): Result<HttpResponse, HttpError> {
         return await this.request("HEAD", path, "", HttpHeaders());
+    }
+
+    // Performs a request with a text body, streaming the response instead of buffering it.
+    public async fun request_stream(method: string, path: string, body: string, headers: HttpHeaders): Result<HttpStreamResponse, HttpError> {
+        switch (this.cancel_token) {
+            Some(tok) => {
+                if (tok.is_cancelled()) {
+                    return Result.Err(HttpError.transport("cancelled"));
+                }
+            },
+            None => { },
+        }
+        let raw = await HttpClient.http_request_stream(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
+        return this.wrap_stream(raw);
+    }
+
+    // Performs a GET request, streaming the response instead of buffering it.
+    public async fun get_stream(path: string): Result<HttpStreamResponse, HttpError> {
+        return await this.request_stream("GET", path, "", HttpHeaders());
+    }
+
+    // Performs a request with a binary body, streaming the response instead of buffering it.
+    public async fun request_stream_bytes(method: string, path: string, body: byte[], headers: HttpHeaders): Result<HttpStreamResponse, HttpError> {
+        switch (this.cancel_token) {
+            Some(tok) => {
+                if (tok.is_cancelled()) {
+                    return Result.Err(HttpError.transport("cancelled"));
+                }
+            },
+            None => { },
+        }
+        let raw = await HttpClient.http_request_stream_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
+        return this.wrap_stream(raw);
     }
 
     // Performs a GET request and resolves with its body as text.

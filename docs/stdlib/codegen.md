@@ -20,10 +20,11 @@ Advanced (markup parser + harness):
 | `CodeBuilder` | Shipped — build Dream source strings |
 | `GenHost` | Shipped — OK/ERR/LOC stdout markers for harnesses |
 | `GenResult` (`system.json`) | Shipped — expand outcome + optional type/field for spans |
+| `GenContext` / `GenSyntaxBlock` | Shipped — Dream-side context for an *executed* `@generator` body: `syntax_blocks`, `replace`, `error`, `finish` |
 | Host `GeneratorContext` | Rust only (`driver/generate`) — `emit_*`, `replace`, `error` |
-| User `@generator` Dream bodies | **Registered, not executed yet** (syntax-DSL samples use sibling `harness.dream`) |
+| User `@generator` Dream bodies | **Executed** when the function takes a single `GenContext` and has a non-empty body (see below); an empty body still falls back to a sibling `harness.dream` |
 | Builtin `@json` | Shipped in the driver (language derive) |
-| Syntax-DSL harness runner | Shipped — generic snapshot → harness WASM → `replace` |
+| Syntax-DSL harness runner | Shipped — generic snapshot → harness WASM → `replace` (used for both the auto-generated executed-body harness and a hand-written sibling `harness.dream`) |
 
 When a Dream harness runs (as `@json` does), print `GenHost.err_marker()` then the message, and optionally `GenHost.loc_marker()` + `GenHost.format_loc(type, field)` so the host can attach a source span via `DiagnosticBag`. Failures surface as `CompileError::Generator`.
 
@@ -69,6 +70,46 @@ System.println(GenHost.ok_marker());
 System.println(GenHost.err_marker());
 System.println(GenHost.loc_marker());
 System.println(GenHost.format_loc("User", "name"));
+```
+
+## `GenContext` / `GenSyntaxBlock`
+
+Compile-time context handed to an `@generator(ctx: GenContext)` body when it claims a
+`@syntax_block`. See [Source generators](../language/generators.md#your-first-custom-generator-quote)
+for the end-to-end walkthrough.
+
+#### `GenContext.from_snapshot(path)`
+
+Loads a `GenContext` from the JSON snapshot the host wrote (usually
+`System.env_or("DREAM_SYNTAX_GEN_SNAPSHOT", "")`). The compiler's auto-generated harness calls this
+for you; only call it directly if you're hand-rolling a harness that wants `GenContext`'s parsing.
+
+#### `syntax_blocks(name)` / `all_blocks()`
+
+Returns every `GenSyntaxBlock` snapshot matching introducer `name` (or every site, for
+`all_blocks()`). Each `GenSyntaxBlock` has `id`, `name`, `body` (raw text, splices as `{expr}`
+placeholders), and `splices` (`List<string>` of each splice's Dream source, in order).
+
+#### `replace(block, dream_expr)` / `error(block, message)` / `error_general(message)`
+
+Queues a rewrite or a generate-time diagnostic for later flushing; `error`/`error_general` keep
+only the first reported failure, matching the `GenHost` `ERR` protocol's one-message contract.
+
+#### `finish()`
+
+Flushes every queued `replace`/`error` call to stdout using the `GenHost` protocol. The
+auto-generated harness calls this once after your `@generator` function returns.
+
+```dream
+import system.codegen;
+
+@generator
+@syntax_block("quote")
+public fun quote(ctx: GenContext): void {
+    for (let block in ctx.syntax_blocks("quote")) {
+        ctx.replace(block, "\"" + block.body.trim() + "\"");
+    }
+}
 ```
 
 ## `GenResult` (`system.json`)

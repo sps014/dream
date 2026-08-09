@@ -1,0 +1,38 @@
+module system.process;
+
+// Failure launching or communicating with a child process, implementing `Error`.
+public class ProcessError : Error {
+    _code: string;
+    _message: string;
+
+    // Creates an error with a machine code and message.
+    public constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    // Human-readable description.
+    public fun message(): string {
+        return this._message;
+    }
+
+    // Stable machine code (`ESPAWN`, `EIO`, `EUNSUPPORTED`, …).
+    public fun code(): string {
+        return this._code;
+    }
+
+    // The executable could not be launched (not found, not executable, permission denied, ...).
+    public static fun spawn_failed(message: string): ProcessError {
+        return ProcessError("ESPAWN", message);
+    }
+
+    // A read/write against a running child's stdin/stdout/stderr failed.
+    public static fun io(message: string): ProcessError {
+        return ProcessError("EIO", message);
+    }
+
+    // Process control is not available on the current host (e.g. the browser).
+    public static fun unsupported(message: string): ProcessError {
+        return ProcessError("EUNSUPPORTED", message);
+    }
+}

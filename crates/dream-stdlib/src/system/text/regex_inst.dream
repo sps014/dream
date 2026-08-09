@@ -9,8 +9,10 @@ internal class RegexInst {
     public empty_kind: RegexEmptyKind;
     public out: int;
     public out1: int;
+    public sub_index: int;  // Look only: index into the owning `RegexVM`'s `RegexSubTable`
+    public look_ahead: bool; // Look only: true = lookahead, false = lookbehind
 
-    public constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int) {
+    public constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int, sub_index: int, look_ahead: bool) {
         this.opcode = opcode;
         this.ranges = ranges;
         this.negate = negate;
@@ -19,29 +21,41 @@ internal class RegexInst {
         this.empty_kind = empty_kind;
         this.out = out;
         this.out1 = out1;
+        this.sub_index = sub_index;
+        this.look_ahead = look_ahead;
     }
 
     public static fun char_class(ranges: List<char>, negate: bool, foldcase: bool): RegexInst {
-        return RegexInst(RegexOp.CharClass, ranges, negate, foldcase, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+        return RegexInst(RegexOp.CharClass, ranges, negate, foldcase, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1, 0 - 1, true);
     }
 
     public static fun capture(cap: int): RegexInst {
-        return RegexInst(RegexOp.Capture, List<char>(), false, false, cap, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+        return RegexInst(RegexOp.Capture, List<char>(), false, false, cap, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1, 0 - 1, true);
     }
 
     public static fun empty_width(kind: RegexEmptyKind): RegexInst {
-        return RegexInst(RegexOp.EmptyWidth, List<char>(), false, false, 0, kind, 0 - 1, 0 - 1);
+        return RegexInst(RegexOp.EmptyWidth, List<char>(), false, false, 0, kind, 0 - 1, 0 - 1, 0 - 1, true);
     }
 
     public static fun alt(out: int, out1: int): RegexInst {
-        return RegexInst(RegexOp.Alt, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, out1);
+        return RegexInst(RegexOp.Alt, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, out1, 0 - 1, true);
     }
 
     public static fun nop(out: int): RegexInst {
-        return RegexInst(RegexOp.Nop, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, 0 - 1);
+        return RegexInst(RegexOp.Nop, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, 0 - 1, 0 - 1, true);
     }
 
     public static fun match_inst(): RegexInst {
-        return RegexInst(RegexOp.Match, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+        return RegexInst(RegexOp.Match, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1, 0 - 1, true);
+    }
+
+    public static fun look(sub_index: int, look_ahead: bool, negate: bool): RegexInst {
+        return RegexInst(RegexOp.Look, List<char>(), negate, false, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1, sub_index, look_ahead);
+    }
+
+    // `cap` holds the referenced group number (e.g. `1` for `\1`); `foldcase` mirrors the
+    // pattern's `i` flag for the text comparison.
+    public static fun backref(group: int, foldcase: bool): RegexInst {
+        return RegexInst(RegexOp.Backref, List<char>(), false, foldcase, group, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1, 0 - 1, true);
     }
 }

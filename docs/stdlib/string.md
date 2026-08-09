@@ -161,19 +161,20 @@ System.println("hello world".substring(6, 11));  // world
 
 #### `to_lower(): string` / `to_upper(): string`
 
-ASCII-only case conversion. Fast for identifiers and English text — use `to_lower_unicode` for full Unicode.
+ASCII-only case conversion. Fast for identifiers and English text — use `to_lower_unicode`/`to_upper_unicode` for full Unicode.
 
 ```dream
 System.println("Hello".to_lower());  // hello
 System.println("Hello".to_upper());  // HELLO
 ```
 
-#### `to_lower_unicode(): string`
+#### `to_lower_unicode(): string` / `to_upper_unicode(): string`
 
-Full Unicode lowercase mapping. Use for locale-aware display and case-insensitive comparison of non-ASCII text.
+Full Unicode case mapping. Use for locale-aware display and case-insensitive comparison of non-ASCII text.
 
 ```dream
 System.println("Straße".to_lower_unicode());  // straße
+System.println("straße".to_upper_unicode());  // STRASSE
 ```
 
 #### `trim(): string`
@@ -238,12 +239,13 @@ Static wrapper around normalization — same as `text.normalize(form)` but calla
 let nfc = Unicode.normalize("e\u0301", UnicodeNormForm.Nfc);
 ```
 
-#### `Unicode.to_lower_unicode(text): string`
+#### `Unicode.to_lower_unicode(text): string` / `Unicode.to_upper_unicode(text): string`
 
-Static full-Unicode lowercase. Use when normalizing arbitrary `text` variables in utility code.
+Static full-Unicode case conversion. Use when normalizing arbitrary `text` variables in utility code.
 
 ```dream
 let lower = Unicode.to_lower_unicode("İ");
+let upper = Unicode.to_upper_unicode("straße");
 ```
 
 #### `Unicode.graphemes(text): string[]`

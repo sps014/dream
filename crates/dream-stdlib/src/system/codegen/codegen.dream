@@ -4,9 +4,10 @@ module system.codegen;
 // SyntaxTree / GeneratorContext; this package provides emit helpers generators use when building
 // Dream source strings.
 //
-// User `@generator` Dream functions are registered today; bodies are not executed yet. When a
-// harness runs (as `@json` does), failures should use `GenResult` / `GenHost` markers so the host
-// can map them into `DiagnosticBag` (optionally with type/field spans).
+// A `@generator` function that takes a single `GenContext` parameter has its body compiled and
+// executed by the host (see `gen_context.dream`); one with an empty body instead delegates to a
+// sibling `harness.dream`. Either way, failures should use `GenResult` / `GenHost` markers so the
+// host can map them into `DiagnosticBag` (optionally with type/field spans).
 
 // Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
 // Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;

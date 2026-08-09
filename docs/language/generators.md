@@ -87,11 +87,25 @@ import system.codegen;
 
 @generator
 @syntax_block("quote")
-public fun quote(): void { }
+public fun quote(ctx: GenContext): void {
+    for (let block in ctx.syntax_blocks("quote")) {
+        ctx.replace(block, as_dream_string(block.body.trim()));
+    }
+}
+
+fun as_dream_string(s: string): string {
+    let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+    return "\"" + escaped + "\"";
+}
 ```
 
-The empty body is intentional: user `@generator` functions are **registered, not executed**.
-The host runs sibling `harness.dream` to expand sites. Put expand logic in the harness (or a future executed body), not in this stub.
+A `@generator` function with a single `GenContext` parameter and a non-empty body is **executed
+by the compiler**: it compiles the function (plus whatever it imports) to WASM, runs it with a
+`GenContext` loaded from a snapshot of the matching `@syntax_block` sites, and applies whatever
+`ctx.replace`/`ctx.error` calls it made — no sibling `harness.dream` required. An **empty** body
+(`public fun quote(): void { }`) keeps the old behavior: registration only, expand logic lives in
+a sibling `harness.dream` (see below) — useful when you'd rather hand-roll the snapshot/stdout
+protocol yourself, or are porting an existing harness.
 
 #### `@generator`
 
@@ -106,11 +120,24 @@ Claims expression DSL sites of the form `introducer { … }`. Without it, those 
 | `@generator` | function | Generator entry; name = function name |
 | `@syntax_block("intro")` | same function | Claims expression DSL `intro { … }` |
 
-### Generator author: harness
+### Generator author: executed body (preferred)
 
-`harness.dream` next to `gen.dream` is the expand worker for syntax DSLs. It reads a snapshot JSON file the host writes, builds a Dream expression for each site, and prints `GenHost` OK lines `id\tdream_expr` so the host can `replace` those sites before type-checking.
+Prefer a `GenContext` body (shown above) for new generators: `ctx.syntax_blocks(name)` returns
+every matching call site as a `GenSyntaxBlock` (`id`, `name`, `body`, `splices`); `ctx.replace(block,
+dream_expr)` queues the rewrite; `ctx.error(block, message)` queues a generate-time diagnostic. The
+compiler auto-generates a small harness that imports your generator's own module, calls your
+function with the loaded context, then flushes it — you never touch the stdout protocol directly.
 
-Write a harness whenever you use `@syntax_block`. Keep it small for literal rewrites (`quote`); grow it into a compiler when the body needs parsing (`html`).
+### Generator author: sibling harness (fallback, empty body)
+
+`harness.dream` next to `gen.dream` is the expand worker for syntax DSLs when the `@generator`
+function's body is empty. It reads a snapshot JSON file the host writes, builds a Dream expression
+for each site, and prints `GenHost` OK lines `id\tdream_expr` so the host can `replace` those sites
+before type-checking.
+
+Write a harness only when you want the empty-stub + `harness.dream` split (e.g. porting an existing
+harness, or wanting the harness's `main` to be free-standing). Keep it small for literal rewrites
+(`quote`); grow it into a compiler when the body needs parsing (`html`).
 
 ```dream
 import system;
@@ -139,15 +166,19 @@ Stdout protocol strings the compile host understands. Print `ok_marker()` then e
 
 Use these instead of ad-hoc prefixes — the host only recognizes this protocol when applying replace lines or turning failures into `CompileError::Generator`.
 
-See the full harness in the [quote sample](https://github.com/sps014/dream/tree/main/sample/generators/quote/harness.dream). API details: [CodeBuilder / GenHost](../stdlib/codegen.md).
+See a full harness in the [html sample](https://github.com/sps014/dream/tree/main/sample/generators/html/harness.dream) (the `quote` sample uses the executed `GenContext` body instead — see above). API details: [CodeBuilder / GenHost](../stdlib/codegen.md).
 
 ### How expand works
 
-The host owns discovery and rewrite; your harness owns turning opaque text into Dream source.
+The host owns discovery and rewrite; your generator owns turning opaque text into Dream source.
 
 1. Registration claims introducer `quote` (via `@syntax_block`).
-2. Host snapshots each `quote { }` site and runs sibling `harness.dream`.
-3. Harness prints `GenHost` OK lines `id\tdream_expr`.
+2. Host snapshots each `quote { }` site.
+3. **Executed body**: the host compiles + runs an auto-generated harness that calls your
+   `@generator(ctx: GenContext)` function with the snapshot loaded, then flushes `ctx`'s queued
+   `replace`/`error` calls as `GenHost` OK/ERR lines.
+   **Empty body**: the host instead runs your sibling `harness.dream`, which prints the same
+   `GenHost` OK lines `id\tdream_expr` by hand.
 4. Host replaces those sites with the expressions before type-checking.
 
 Rules for any syntax DSL:

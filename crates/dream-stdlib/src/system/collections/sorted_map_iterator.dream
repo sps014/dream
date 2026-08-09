@@ -1,0 +1,24 @@
+module system.collections;
+
+// Cursor produced by `SortedMap.iterator()` — walks entries in ascending key order.
+public class SortedMapIterator<K : Comparable<K>, V> : Iterator<KeyValuePair<K, V>> {
+    map: SortedMap<K, V>;
+    idx: int;
+
+    // Starts before the first (smallest-key) entry of `map`.
+    public constructor(map: SortedMap<K, V>) {
+        this.map = map;
+        this.idx = 0;
+    }
+
+    // Returns the next key/value pair in ascending key order, or `None` if exhausted.
+    @next
+    public fun next(): Option<KeyValuePair<K, V>> {
+        if (this.idx >= this.map.length) {
+            return Option.None;
+        }
+        let i = this.idx;
+        this.idx = this.idx + 1;
+        return Option.Some(KeyValuePair<K, V>(this.map.key_at(i), this.map.value_at(i)));
+    }
+}

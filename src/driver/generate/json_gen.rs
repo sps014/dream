@@ -220,15 +220,26 @@ fn snapshot_field(
         }
         _ => String::new(),
     };
+    // `Map<string, V>` fields widen `@json` support (see `JsonGenerator.map_to_stmts`/
+    // `map_from_stmts`); the key type must be `string` since JSON object keys are strings.
+    let map_value_inner = match field_ty {
+        Type::Struct(token, Some(args))
+            if token.text == "Map" && args.len() == 2 && args[0].get_type() == "string" =>
+        {
+            args[1].get_type()
+        }
+        _ => String::new(),
+    };
     let is_type_param = generic_params.iter().any(|p| p == type_name);
     format!(
-        "{{\"name\":{},\"type_name\":{},\"json_ignore\":{},\"property_name\":{},\"option_inner\":{},\"is_type_param\":{}}}",
+        "{{\"name\":{},\"type_name\":{},\"json_ignore\":{},\"property_name\":{},\"option_inner\":{},\"is_type_param\":{},\"map_value_inner\":{}}}",
         json_escape(name),
         json_escape(type_name),
         if json_ignore { "true" } else { "false" },
         json_escape(&property_name),
         json_escape(&option_inner),
         if is_type_param { "true" } else { "false" },
+        json_escape(&map_value_inner),
     )
 }
 

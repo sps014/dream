@@ -23,12 +23,18 @@ const OK_MARKER: &str = "__DREAM_GEN_OK__";
 const ERR_MARKER: &str = "__DREAM_GEN_ERR__";
 
 /// For every registered generator that claims syntax blocks and ships a sibling `harness.dream`,
-/// expand matching sites via that Dream harness.
-pub fn expand_syntax_blocks(ctx: &mut GeneratorContext, diagnostics: &mut DiagnosticBag) {
+/// expand matching sites via that Dream harness. Generators already handled by an executed
+/// `@generator(ctx: GenContext)` body (see `context_gen`) are skipped — `handled` names their
+/// sibling-harness fallback would otherwise fight over the same sites.
+pub fn expand_syntax_blocks(
+    ctx: &mut GeneratorContext,
+    diagnostics: &mut DiagnosticBag,
+    handled: &HashSet<String>,
+) {
     let gens: Vec<RegisteredGenerator> = ctx
         .registered
         .iter()
-        .filter(|g| !g.syntax_blocks.is_empty())
+        .filter(|g| !g.syntax_blocks.is_empty() && !handled.contains(&g.name))
         .cloned()
         .collect();
     if gens.is_empty() {
@@ -106,7 +112,7 @@ pub fn expand_syntax_blocks(ctx: &mut GeneratorContext, diagnostics: &mut Diagno
 }
 
 #[cfg(feature = "native")]
-fn build_snapshot(ctx: &GeneratorContext, site_ids: &[SyntaxNodeId]) -> String {
+pub(super) fn build_snapshot(ctx: &GeneratorContext, site_ids: &[SyntaxNodeId]) -> String {
     let mut blocks = String::from("[");
     let mut first = true;
     for id in site_ids {
@@ -162,7 +168,7 @@ fn json_escape(s: &str) -> String {
 }
 
 #[cfg(feature = "native")]
-enum HarnessError {
+pub(super) enum HarnessError {
     Site { id: SyntaxNodeId, message: String },
     General(String),
 }
@@ -195,7 +201,9 @@ fn run_harness(
 }
 
 #[cfg(feature = "native")]
-fn parse_harness_output(output: &str) -> Result<Vec<(SyntaxNodeId, String)>, HarnessError> {
+pub(super) fn parse_harness_output(
+    output: &str,
+) -> Result<Vec<(SyntaxNodeId, String)>, HarnessError> {
     let trimmed = output.trim_start();
     if let Some(rest) = trimmed.strip_prefix(OK_MARKER) {
         let body = rest.trim_start_matches('\n');

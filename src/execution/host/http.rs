@@ -1,53 +1,24 @@
-//! HTTP host functions (the `Dream` module behind `system.net` `HttpClient`). Each performs the whole
-//! request synchronously (blocking `reqwest`) and bridges the serialized response into Dream's async
-//! runtime, so the same `.dream` works under wasmtime, Node, and the browser.
+//! HTTP host functions (the `Dream` module behind `system.net` `HttpClient`). The buffered
+//! `httpRequest*` functions perform the whole request synchronously (blocking `reqwest`) and
+//! bridge the serialized response into Dream's async runtime. The streaming `httpRequestStream*`
+//! functions instead keep the `reqwest::blocking::Response` (which itself streams off the socket
+//! on demand) in a handle table — the same handle-table pattern `net.rs`/`process.rs` use — so
+//! `httpReadChunk` can pull the body incrementally without buffering it all in memory.
 
-use std::sync::OnceLock;
+use std::io::Read;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use indexmap::IndexMap;
 use wasmtime::*;
 
-use dream_mir::abi;
-use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
-
-use super::memory::{read_arg_bytes, read_arg_string, write_bytes_to_memory};
+use super::memory::{read_arg_bytes, read_arg_string, resolve_host_future_bytes};
 
 /// Shared blocking client (one process-wide instance; per-request timeouts use `RequestBuilder::timeout`).
 fn http_client() -> &'static reqwest::blocking::Client {
     static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
     CLIENT.get_or_init(reqwest::blocking::Client::new)
-}
-
-/// Calls an exported function on the caller's module by name with the given typed signature. A
-/// missing export, signature mismatch, or failed call becomes a wasm trap (propagated `Err`) rather
-/// than aborting the host process.
-fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) -> Result<()> {
-    let func = caller
-        .get_export(name)
-        .and_then(Extern::into_func)
-        .ok_or_else(|| Error::msg(format!("module must export `{}`", name)))?
-        .typed::<(i32, i32), ()>(&*caller)
-        .map_err(|_| Error::msg(format!("unexpected `{}` signature", name)))?;
-    func.call(&mut *caller, (a, b))?;
-    Ok(())
-}
-
-/// Bridges a synchronous (blocking) host result into Dream's async runtime, mirroring
-/// `wrapAsyncImport` in `runtime/dream.js`: allocate a host `Future` via the module's exported
-/// `__dream_new_future`, write `bytes` as a `char[]`, resolve the future via `__dream_resolve`, and
-/// return the future pointer. The future is already settled when the awaiting task inspects it, so
-/// the scheduler simply re-polls the waiter.
-fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Result<i32> {
-    let new_future = caller
-        .get_export(abi::EXPORT_NEW_FUTURE)
-        .and_then(Extern::into_func)
-        .ok_or_else(|| Error::msg("module must export `__dream_new_future`"))?
-        .typed::<(i32, i32, i32), i32>(&*caller)
-        .map_err(|_| Error::msg("unexpected `__dream_new_future` signature"))?;
-    let future = new_future.call(&mut *caller, (F_SLOTS, HOST_POLL_INDEX, KIND_HOST))?;
-    let data_ptr = write_bytes_to_memory(caller, bytes)?;
-    call_export_2(caller, abi::EXPORT_RESOLVE, future, data_ptr)?;
-    Ok(future)
 }
 
 /// Performs one blocking HTTP request and serializes the whole response into the wire format shared
@@ -56,31 +27,7 @@ fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Resul
 /// verb is GET/HEAD or it is empty. Network/protocol errors come back as a status `0` response whose
 /// body is the error text. `timeout_ms == 0` means no timeout.
 fn perform_http(method: &str, url: &str, headers_json: &str, body: Vec<u8>, timeout_ms: i32) -> Vec<u8> {
-    let verb = method.to_uppercase();
-    let http_method = reqwest::Method::from_bytes(verb.as_bytes()).unwrap_or(reqwest::Method::GET);
-
-    let mut builder = http_client().request(http_method, url);
-    if timeout_ms > 0 {
-        builder = builder.timeout(Duration::from_millis(timeout_ms as u64));
-    }
-
-    if !headers_json.is_empty() {
-        if let Ok(serde_json::Value::Object(map)) =
-            serde_json::from_str::<serde_json::Value>(headers_json)
-        {
-            for (name, value) in map.iter() {
-                if let Some(v) = value.as_str() {
-                    builder = builder.header(name.as_str(), v);
-                }
-            }
-        }
-    }
-
-    if !body.is_empty() && verb != "GET" && verb != "HEAD" {
-        builder = builder.body(body);
-    }
-
-    match builder.send() {
+    match build_request(method, url, headers_json, body, timeout_ms).send() {
         Ok(response) => {
             let status = response.status().as_u16();
             let mut head = format!("{}\n", status);
@@ -112,8 +59,124 @@ fn perform_http(method: &str, url: &str, headers_json: &str, body: Vec<u8>, time
     }
 }
 
+/// Builds a `reqwest::blocking::RequestBuilder` shared by the buffered and streaming request
+/// paths, applying method/headers/timeout/body identically.
+fn build_request(
+    method: &str,
+    url: &str,
+    headers_json: &str,
+    body: Vec<u8>,
+    timeout_ms: i32,
+) -> reqwest::blocking::RequestBuilder {
+    let verb = method.to_uppercase();
+    let http_method = reqwest::Method::from_bytes(verb.as_bytes()).unwrap_or(reqwest::Method::GET);
+
+    let mut builder = http_client().request(http_method, url);
+    if timeout_ms > 0 {
+        builder = builder.timeout(Duration::from_millis(timeout_ms as u64));
+    }
+
+    if !headers_json.is_empty() {
+        if let Ok(serde_json::Value::Object(map)) =
+            serde_json::from_str::<serde_json::Value>(headers_json)
+        {
+            for (name, value) in map.iter() {
+                if let Some(v) = value.as_str() {
+                    builder = builder.header(name.as_str(), v);
+                }
+            }
+        }
+    }
+
+    if !body.is_empty() && verb != "GET" && verb != "HEAD" {
+        builder = builder.body(body);
+    }
+    builder
+}
+
+fn stream_handles() -> &'static Mutex<IndexMap<u32, reqwest::blocking::Response>> {
+    static HANDLES: OnceLock<Mutex<IndexMap<u32, reqwest::blocking::Response>>> = OnceLock::new();
+    HANDLES.get_or_init(|| Mutex::new(IndexMap::new()))
+}
+
+static NEXT_STREAM_HANDLE: AtomicU32 = AtomicU32::new(1);
+
+/// Opens a request and returns just the head (status + headers), keeping the response body
+/// unread in a handle table for `http_read_chunk` to pull incrementally. Wire format matches
+/// [`perform_http`] exactly except the "body" is the decimal handle id, so `HttpResponse`'s
+/// existing head parser can be reused unchanged on the Dream side (see `wrap_stream` in
+/// `http_client.dream`).
+fn open_http_stream(method: &str, url: &str, headers_json: &str, body: Vec<u8>, timeout_ms: i32) -> Vec<u8> {
+    match build_request(method, url, headers_json, body, timeout_ms).send() {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let mut head = format!("{}\n", status);
+            for (name, value) in response.headers().iter() {
+                if let Ok(v) = value.to_str() {
+                    head.push_str(name.as_str());
+                    head.push_str(": ");
+                    head.push_str(v);
+                    head.push('\n');
+                }
+            }
+            head.push('\n');
+            let id = NEXT_STREAM_HANDLE.fetch_add(1, Ordering::Relaxed);
+            let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
+            table.insert(id, response);
+            head.push_str(&id.to_string());
+            head.into_bytes()
+        }
+        Err(e) => {
+            let msg = if e.is_timeout() {
+                "timeout".to_string()
+            } else {
+                e.to_string()
+            };
+            let mut out = b"0\n\n".to_vec();
+            out.extend_from_slice(msg.as_bytes());
+            out
+        }
+    }
+}
+
+/// Reads up to `max_bytes` from an open stream handle. Wire: `"data\n<bytes>"` | `"eof\n"` |
+/// `"error\n<message>"`.
+fn http_read_chunk(handle: i32, max_bytes: i32) -> Vec<u8> {
+    let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
+    let Some(response) = table.get_mut(&(handle as u32)) else {
+        return b"error\nstream not found".to_vec();
+    };
+    let cap = (max_bytes.max(1) as usize).min(1 << 20);
+    let mut buf = vec![0u8; cap];
+    match response.read(&mut buf) {
+        Ok(0) => {
+            drop(table);
+            let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
+            table.shift_remove(&(handle as u32));
+            b"eof\n".to_vec()
+        }
+        Ok(n) => {
+            let mut out = b"data\n".to_vec();
+            out.extend_from_slice(&buf[..n]);
+            out
+        }
+        Err(e) => {
+            let mut out = b"error\n".to_vec();
+            out.extend_from_slice(e.to_string().as_bytes());
+            out
+        }
+    }
+}
+
+fn http_close_stream(handle: i32) -> i32 {
+    let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
+    table.shift_remove(&(handle as u32)).is_some() as i32
+}
+
 /// Registers the HTTP host functions on `linker`. `httpRequest` takes a text body; `httpRequestBytes`
-/// takes a binary `char[]` body. Both take `timeout_ms` (`0` = none).
+/// takes a binary `char[]` body. Both take `timeout_ms` (`0` = none). `httpRequestStream`/
+/// `httpRequestStreamBytes` open a stream handle instead of buffering the body; `httpReadChunk`/
+/// `httpCloseStream` operate on that handle.
 pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
@@ -151,6 +214,59 @@ pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
             let response = perform_http(&method, &url, &headers, body, timeout_ms);
             resolve_host_future_bytes(&mut caller, &response)
         },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "httpRequestStream",
+        |mut caller: Caller<'_, ()>,
+         url_ptr: i32,
+         method_ptr: i32,
+         headers_ptr: i32,
+         body_ptr: i32,
+         timeout_ms: i32|
+         -> Result<i32> {
+            let url = read_arg_string(&mut caller, url_ptr)?;
+            let method = read_arg_string(&mut caller, method_ptr)?;
+            let headers = read_arg_string(&mut caller, headers_ptr)?;
+            let body = read_arg_string(&mut caller, body_ptr)?.into_bytes();
+            let response = open_http_stream(&method, &url, &headers, body, timeout_ms);
+            resolve_host_future_bytes(&mut caller, &response)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "httpRequestStreamBytes",
+        |mut caller: Caller<'_, ()>,
+         url_ptr: i32,
+         method_ptr: i32,
+         headers_ptr: i32,
+         body_ptr: i32,
+         timeout_ms: i32|
+         -> Result<i32> {
+            let url = read_arg_string(&mut caller, url_ptr)?;
+            let method = read_arg_string(&mut caller, method_ptr)?;
+            let headers = read_arg_string(&mut caller, headers_ptr)?;
+            let body = read_arg_bytes(&mut caller, body_ptr)?;
+            let response = open_http_stream(&method, &url, &headers, body, timeout_ms);
+            resolve_host_future_bytes(&mut caller, &response)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "httpReadChunk",
+        |mut caller: Caller<'_, ()>, handle: i32, max_bytes: i32| -> Result<i32> {
+            let response = http_read_chunk(handle, max_bytes);
+            resolve_host_future_bytes(&mut caller, &response)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "httpCloseStream",
+        |_: Caller<'_, ()>, handle: i32| -> i32 { http_close_stream(handle) },
     )?;
 
     Ok(())

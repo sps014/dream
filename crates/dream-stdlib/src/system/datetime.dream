@@ -38,6 +38,13 @@ public struct DateTime {
         return DateTime(millis, offset);
     }
 
+    // The current instant in `zone` (an IANA timezone, see `TimeZone`).
+    public static fun now_in(zone: TimeZone): DateTime {
+        let millis = DateTime.now_millis();
+        let offset = zone.offset_minutes_at(millis);
+        return DateTime(millis, offset);
+    }
+
     // Wraps a raw UTC epoch millisecond instant.
     public static fun from_epoch_millis(millis: long): DateTime {
         return DateTime(millis, 0);
@@ -61,6 +68,13 @@ public struct DateTime {
         return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
     }
 
+    // Builds an instant from calendar fields interpreted as wall-clock time in `zone`.
+    public static fun of_zoned(year: int, month: int, day: int, hour: int, minute: int, second: int, millisecond: int, zone: TimeZone): DateTime {
+        let tentative = DateTime.of(year, month, day, hour, minute, second, millisecond);
+        let offset = zone.offset_minutes_at(tentative.epoch_millis);
+        return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
+    }
+
     // The same instant in UTC.
     public fun to_utc(): DateTime {
         return DateTime(this._epoch_millis, 0);
@@ -69,6 +83,12 @@ public struct DateTime {
     // The same instant in the local system timezone.
     public fun to_local(): DateTime {
         let offset = DateTime.local_offset_minutes(this._epoch_millis);
+        return DateTime(this._epoch_millis, offset);
+    }
+
+    // The same instant in `zone` (an IANA timezone, see `TimeZone`).
+    public fun to_zone(zone: TimeZone): DateTime {
+        let offset = zone.offset_minutes_at(this._epoch_millis);
         return DateTime(this._epoch_millis, offset);
     }
 

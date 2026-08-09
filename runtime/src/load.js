@@ -6,7 +6,7 @@ import {
   wrapInPlaceByteArrayFill,
   resolveGlobal,
 } from "./marshal.js";
-import { isNode, setNodeFs, setNodeCrypto } from "./platform.js";
+import { isNode, setNodeFs, setNodeCrypto, setNodeChildProcess, setNodeNet } from "./platform.js";
 import { defaultEnv } from "./hosts/env.js";
 import { defaultDreamModule } from "./hosts.js";
 import { csprngBytes } from "./hosts/crypto.js";
@@ -72,6 +72,14 @@ export async function load(source, options = {}) {
     try {
       const crypto = await import("node:crypto");
       setNodeCrypto(crypto);
+    } catch (_) { /* leave unavailable */ }
+    try {
+      const childProcess = await import("node:child_process");
+      setNodeChildProcess(childProcess);
+    } catch (_) { /* leave unavailable */ }
+    try {
+      const net = await import("node:net");
+      setNodeNet(net);
     } catch (_) { /* leave unavailable */ }
   }
 

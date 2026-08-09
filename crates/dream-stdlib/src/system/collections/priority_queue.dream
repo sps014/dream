@@ -1,0 +1,131 @@
+module system.collections;
+
+// Binary min-heap: `pop`/`peek` always return the smallest element by the active comparator
+// (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
+public class PriorityQueue<T> {
+    items: T[];
+    count: int;
+    cmp_fn: fun(T, T): int;
+
+    // Empty queue ordered by `T`'s natural `Comparable` order.
+    public constructor() {
+        this.items = Buffer.alloc<T>(sequence_min_capacity());
+        this.count = 0;
+        let natural: fun(T, T): int = (a, b) => a.compare(b);
+        this.cmp_fn = natural;
+    }
+
+    // Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when
+    // `a` should come out first, positive when `b` should).
+    public constructor(cmp: fun(T, T): int) {
+        this.items = Buffer.alloc<T>(sequence_min_capacity());
+        this.count = 0;
+        this.cmp_fn = cmp;
+    }
+
+    // Number of elements currently stored.
+    public get length(): int {
+        return this.count;
+    }
+
+    // True when the queue has no elements.
+    public fun is_empty(): bool {
+        return this.count == 0;
+    }
+
+    // Removes every element.
+    public fun clear(): void {
+        this.count = 0;
+    }
+
+    fun grow(): void {
+        let old_cap = this.items.length;
+        let new_cap = old_cap * 2;
+        if (new_cap < sequence_min_capacity()) {
+            new_cap = sequence_min_capacity();
+        }
+        this.items = Buffer.realloc<T>(this.items, new_cap);
+    }
+
+    // True when `items[i]` sorts before `items[j]` under the active comparator.
+    fun less(i: int, j: int): bool {
+        let cmp = this.cmp_fn;
+        return cmp(this.items[i], this.items[j]) < 0;
+    }
+
+    fun swap(i: int, j: int): void {
+        let tmp = this.items[i];
+        this.items[i] = this.items[j];
+        this.items[j] = tmp;
+    }
+
+    // Restores the heap invariant by bubbling `items[idx]` up toward the root.
+    fun sift_up(idx: int): void {
+        let i = idx;
+        let done = false;
+        while ((i > 0) && (done == false)) {
+            let parent = (i - 1) / 2;
+            if (this.less(i, parent)) {
+                this.swap(i, parent);
+                i = parent;
+            } else {
+                done = true;
+            }
+        }
+    }
+
+    // Restores the heap invariant by sinking `items[idx]` down toward the leaves.
+    fun sift_down(idx: int): void {
+        let i = idx;
+        let done = false;
+        while (done == false) {
+            let left = i * 2 + 1;
+            let right = i * 2 + 2;
+            let smallest = i;
+            if ((left < this.count) && this.less(left, smallest)) {
+                smallest = left;
+            }
+            if ((right < this.count) && this.less(right, smallest)) {
+                smallest = right;
+            }
+            if (smallest == i) {
+                done = true;
+            } else {
+                this.swap(i, smallest);
+                i = smallest;
+            }
+        }
+    }
+
+    // Inserts `value`, restoring the heap invariant. O(log n).
+    public fun push(value: T): void {
+        if (this.count == this.items.length) {
+            this.grow();
+        }
+        this.items[this.count] = value;
+        this.count = this.count + 1;
+        this.sift_up(this.count - 1);
+    }
+
+    // Removes and returns the smallest element, or `None` when empty. O(log n).
+    public fun pop(): Option<T> {
+        if (this.count == 0) {
+            return Option.None;
+        }
+        let top = this.items[0];
+        this.count = this.count - 1;
+        this.items[0] = this.items[this.count];
+        if (this.count > 0) {
+            this.sift_down(0);
+        }
+        return Option.Some(top);
+    }
+
+    // Returns the smallest element without removing it, or `None` when empty. O(1).
+    public fun peek(): Option<T> {
+        if (this.count == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.items[0]);
+    }
+}

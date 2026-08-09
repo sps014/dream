@@ -56,6 +56,12 @@ pub fn link_text_functions(linker: &mut Linker<()>) -> Result<()> {
         write_string_to_memory(&mut caller, &lowered)
     })?;
 
+    linker.func_wrap("Dream", "unicodeToUpper", |mut caller: Caller<'_, ()>, ptr: i32| {
+        let text = read_arg_string(&mut caller, ptr)?;
+        let uppered = text.to_uppercase();
+        write_string_to_memory(&mut caller, &uppered)
+    })?;
+
     linker.func_wrap(
         "Dream",
         "unicodeGraphemes",

@@ -15,9 +15,25 @@ public class Semaphore {
     @intrinsic("shared_semaphore_release")
     static extern fun host_release(target: Semaphore): void;
 
+    @intrinsic("shared_semaphore_try_acquire")
+    static extern fun host_try_acquire(target: Semaphore): bool;
+
+    @intrinsic("shared_semaphore_try_acquire_for")
+    static extern fun host_try_acquire_for(target: Semaphore, timeout_ms: int): bool;
+
     // Blocks (busy-waiting) until a permit is available, then takes one.
     public fun acquire(): void {
         Semaphore.host_acquire(this);
+    }
+
+    // One-shot acquire: returns `true` if a permit was taken, `false` if none were available.
+    public fun try_acquire(): bool {
+        return Semaphore.host_try_acquire(this);
+    }
+
+    // Waits up to `timeout_ms` milliseconds for a permit. `timeout_ms <= 0` is a single try.
+    public fun try_acquire_for(timeout_ms: int): bool {
+        return Semaphore.host_try_acquire_for(this, timeout_ms);
     }
 
     // Returns one permit.

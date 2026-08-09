@@ -14,4 +14,9 @@ internal enum RegexNodeKind {
     Quest,    // left?
     Assert,   // a zero-width assertion; `empty_kind` selects which one
     Nothing,  // matches the empty string and consumes nothing (compiles to zero instructions)
+    Look,     // a lookaround assertion; `left` is the inner pattern, `look_ahead` picks ahead/behind,
+              // `negate` picks positive/negative, `sub_ngroup` is the inner pattern's own group count
+              // (numbered independently of the outer pattern's capturing groups)
+    Backref,  // \N or \k<name>; `cap` is the (outer) group number being referenced
+    UnicodeProp, // \p{...} / \P{...}; `uprop` selects the category, `negate` picks \P over \p
 }

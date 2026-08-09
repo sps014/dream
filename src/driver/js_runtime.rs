@@ -56,6 +56,8 @@ fn chunk_for_field(field: &str) -> Option<&'static str> {
         Some("gpu")
     } else if field.starts_with("worker") {
         Some("workers")
+    } else if field.starts_with("tcp") || field.starts_with("ws") {
+        Some("net_sockets")
     } else if field.starts_with("console") || field.starts_with("process") {
         Some("console_process")
     } else if field.starts_with("unicode")
@@ -78,6 +80,7 @@ fn chunk_file(chunk: &str) -> Option<&'static str> {
         "gpu" => Some("hosts/gpu.js"),
         "console_process" => Some("hosts/console_process.js"),
         "datetime_text" => Some("hosts/datetime_text.js"),
+        "net_sockets" => Some("hosts/net_sockets.js"),
         "workers" => Some("workers.js"),
         _ => None,
     }
@@ -142,6 +145,9 @@ fn factory_spread(chunks: &BTreeSet<&str>) -> String {
     if chunks.contains("console_process") {
         parts.push("    ...makeConsoleProcessHost(),");
     }
+    if chunks.contains("net_sockets") {
+        parts.push("    ...makeNetSocketsHost(),");
+    }
     if parts.is_empty() {
         "  return {};".to_string()
     } else {
@@ -153,6 +159,8 @@ fn load_footer(chunks: &BTreeSet<&str>, target: JsRuntimeTarget) -> String {
     let need_crypto = chunks.contains("crypto");
     let need_workers = chunks.contains("workers");
     let need_fs = chunks.contains("fs") || chunks.contains("console_process");
+    let need_child_process = chunks.contains("console_process");
+    let need_net = chunks.contains("net_sockets");
     let compose = factory_spread(chunks);
     let is_node = matches!(target, JsRuntimeTarget::Node);
 
@@ -166,6 +174,20 @@ fn load_footer(chunks: &BTreeSet<&str>, target: JsRuntimeTarget) -> String {
     let fs_preload = if is_node && need_fs {
         r#"
   try { setNodeFs(await import("node:fs")); } catch (_) {}
+"#
+    } else {
+        ""
+    };
+    let child_process_preload = if is_node && need_child_process {
+        r#"
+  try { setNodeChildProcess(await import("node:child_process")); } catch (_) {}
+"#
+    } else {
+        ""
+    };
+    let net_preload = if is_node && need_net {
+        r#"
+  try { setNodeNet(await import("node:net")); } catch (_) {}
 "#
     } else {
         ""
@@ -241,7 +263,7 @@ async function load(source, options = {{}}) {{
   const wasmBytes = await fetchBytes(source);
   const abi = await loadAbi(options.abi);
   const wasmModule = await WebAssembly.compile(wasmBytes);
-{fs_preload}{crypto_preload}
+{fs_preload}{crypto_preload}{child_process_preload}{net_preload}
   let instance = null;
   const getInstance = () => {{
     if (!instance) throw new Error("instance not ready");
@@ -367,7 +389,17 @@ pub(crate) fn assemble_selective_runtime(
         out.push('\n');
     }
 
-    for chunk in ["js", "http", "fs", "crypto", "gpu", "console_process", "datetime_text", "workers"] {
+    for chunk in [
+        "js",
+        "http",
+        "fs",
+        "crypto",
+        "gpu",
+        "console_process",
+        "datetime_text",
+        "net_sockets",
+        "workers",
+    ] {
         if !chunks.contains(chunk) {
             continue;
         }

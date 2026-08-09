@@ -1,0 +1,48 @@
+import system;
+import system.crypto;
+import system.encoding;
+
+fun main(): void {
+    let key = AesGcmKey.generate();
+    System.println(key.to_bytes().length);
+
+    let nonce = AesGcm.generate_nonce();
+    System.println(nonce.length);
+
+    let aad = Encoding.utf8_encode("header");
+    let plaintext = Encoding.utf8_encode("attack at dawn");
+
+    let ciphertext = AesGcm.encrypt(key, nonce, plaintext, aad).unwrap_or(Buffer.alloc<byte>(0));
+    System.println(ciphertext.length);
+
+    switch (AesGcm.decrypt(key, nonce, ciphertext, aad)) {
+        Ok(recovered) => System.println(Encoding.utf8_decode(recovered)),
+        Err(e) => System.println("unexpected error: " + e.message()),
+    }
+
+    // Wrong AAD must fail authentication.
+    let wrong_aad = Encoding.utf8_encode("wrong");
+    switch (AesGcm.decrypt(key, nonce, ciphertext, wrong_aad)) {
+        Ok(recovered) => System.println("should not decrypt: " + Encoding.utf8_decode(recovered)),
+        Err(e) => System.println("auth failed as expected: " + e.code()),
+    }
+
+    // Wrong key must fail authentication.
+    let other_key = AesGcmKey.generate();
+    switch (AesGcm.decrypt(other_key, nonce, ciphertext, aad)) {
+        Ok(recovered) => System.println("should not decrypt: " + Encoding.utf8_decode(recovered)),
+        Err(e) => System.println("auth failed as expected: " + e.code()),
+    }
+
+    // Bad key length is rejected before touching the host.
+    switch (AesGcmKey.from_bytes(Buffer.alloc<byte>(10))) {
+        Ok(k) => System.println("should not construct"),
+        Err(e) => System.println("invalid key rejected: " + e.code()),
+    }
+
+    // Bad nonce length is rejected before touching the host.
+    switch (AesGcm.encrypt(key, Buffer.alloc<byte>(4), plaintext, aad)) {
+        Ok(c) => System.println("should not encrypt"),
+        Err(e) => System.println("invalid nonce rejected: " + e.code()),
+    }
+}

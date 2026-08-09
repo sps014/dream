@@ -111,9 +111,12 @@ nav:
       - Random: stdlib/random.md
       - DateTime: stdlib/datetime.md
       - Logging: stdlib/logging.md
+      - Testing: stdlib/testing.md
+      - Process: stdlib/process.md
     - I/O:
       - File I/O: stdlib/file.md
       - HTTP: stdlib/http.md
+      - Raw sockets: stdlib/net.md
     - GPU & compute:
       - system.gpu: stdlib/gpu.md
     - Serialization:

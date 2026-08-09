@@ -1,0 +1,16 @@
+import system;
+import system.net;
+
+async fun main(): void {
+    // The native host has no TLS feature enabled, so `wss://` must resolve `Err(EUNSUPPORTED)`.
+    let result = await WebSocket.connect("wss://example.invalid");
+    switch (result) {
+        Ok(ws) => {
+            System.println("unexpected success");
+            ws.close();
+        },
+        Err(e) => {
+            System.println(e.code());
+        },
+    }
+}

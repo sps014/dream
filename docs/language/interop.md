@@ -134,3 +134,22 @@ Several standard-library features are interop wrappers and serve as worked examp
 
 - [Regex](../stdlib/regex.md) — a pure-Dream regex engine (ASCII subset; no host/`RegExp` dependency).
 - [HttpClient](../stdlib/http.md) — a cross-runtime HTTP client over `extern async fun`.
+
+## Host feature matrix
+
+Every `@js("Dream", "…")` import needs a matching implementation on **each** host: native
+(`src/execution/host/*.rs`, wasmtime) and JS (`runtime/src/hosts/*.js`, shared by Node and the
+browser). Most stdlib packages behave identically everywhere; where a host genuinely can't support
+a feature (no raw sockets in the browser, no process model in the browser, `wss://` unimplemented
+natively, …) that package's own stdlib doc has a "Platform notes" table — check
+[HTTP](../stdlib/http.md), [Raw sockets](../stdlib/net.md), [File I/O](../stdlib/file.md),
+[Process](../stdlib/process.md), [Crypto](../stdlib/crypto.md), [DateTime](../stdlib/datetime.md),
+and [`system.gpu`](../stdlib/gpu.md) for the specifics. Unicode helpers (`Strings`/`Unicode` — see
+[Strings](../stdlib/string.md)) and `System.read_line`/`read_key` (see [Built-ins](../stdlib/builtins.md))
+are backed on both native and JS hosts today; only the interactive input fallback differs (browser
+has no stdin, so it uses a blocking `prompt()` dialog).
+
+`src/execution/host/mod.rs`'s `contract_tests::every_native_dream_host_fn_is_declared_in_the_prelude`
+guards one direction of this contract (every native `Dream`-module function has a matching
+`@js("Dream", …)` declaration in the stdlib prelude); the JS-host mirror is maintained by hand and
+has no equivalent automated check.

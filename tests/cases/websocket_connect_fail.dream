@@ -1,0 +1,16 @@
+import system;
+import system.net;
+
+async fun main(): void {
+    // Nothing listens on this loopback port, so the connect must resolve `Err`, never hang or panic.
+    let result = await WebSocket.connect("ws://127.0.0.1:1");
+    switch (result) {
+        Ok(ws) => {
+            System.println("unexpected success");
+            ws.close();
+        },
+        Err(e) => {
+            System.println(e.code());
+        },
+    }
+}

@@ -1,0 +1,30 @@
+import system;
+fun main(): void {
+    switch (TimeZone.of("America/New_York")) {
+        Ok(ny) => {
+            System.println(ny.name());
+            // 2024-01-15 12:00:00 UTC -> EST (UTC-5) in January (no DST).
+            let winter = DateTime.of(2024, 1, 15, 12, 0, 0, 0);
+            System.println(winter.to_zone(ny).offset_minutes);
+            // 2024-07-15 12:00:00 UTC -> EDT (UTC-4) in July (DST).
+            let summer = DateTime.of(2024, 7, 15, 12, 0, 0, 0);
+            System.println(summer.to_zone(ny).offset_minutes);
+
+            // 2024-07-15 09:00 wall-clock in New York (EDT, UTC-4) is 13:00 UTC.
+            let zoned = DateTime.of_zoned(2024, 7, 15, 9, 0, 0, 0, ny);
+            System.println(zoned.to_utc().hour());
+        },
+        Err(e) => System.println("unexpected error: " + e.message()),
+    }
+
+    switch (TimeZone.of("Not/AZone")) {
+        Ok(z) => System.println("unexpected ok"),
+        Err(e) => System.println(e.code()),
+    }
+
+    System.println(TimeZone.utc().name());
+    System.println(TimeZone.utc().offset_minutes_at(0L));
+
+    let local = TimeZone.local();
+    System.println(local.name().is_empty() == false);
+}

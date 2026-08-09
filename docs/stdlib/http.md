@@ -145,6 +145,30 @@ form.add_file("avatar", "a.png", "image/png", Buffer.alloc<byte>(0));
 await api.post_multipart("/upload", form);
 ```
 
+#### `await get_stream(path): Result<HttpStreamResponse, HttpError>` / `request_stream` / `request_stream_bytes`
+
+Like `get`/`request`/`request_bytes`, but the body is not buffered up front — the status and headers resolve immediately and the body streams incrementally through `HttpStreamResponse.read_chunk`/`read_all`. Prefer this for large downloads or when you want to start processing bytes before the whole response has arrived.
+
+```dream
+switch (await api.get_stream("/big-file")) {
+    Ok(stream) => {
+        let going = true;
+        while (going) {
+            switch (await stream.read_chunk(65536)) {
+                Ok(opt) => {
+                    switch (opt) {
+                        Some(chunk) => { /* process chunk */ },
+                        None => { going = false; }, // end of stream
+                    }
+                },
+                Err(e) => { System.println(e.message()); going = false; },
+            }
+        }
+    },
+    Err(e) => System.println(e.message()),
+}
+```
+
 ## `HttpResponse`
 
 #### `status(): int` / `ok(): bool`
@@ -223,6 +247,52 @@ System.println(jar.get("sid").unwrap_or(""));
 System.println(jar.to_header());
 jar.store_from_response(res);
 jar.clear();
+```
+
+## `HttpStreamResponse`
+
+Returned by `get_stream`/`request_stream`/`request_stream_bytes`. The status line and headers are already available (from the initial request); the body streams in on demand.
+
+#### `status(): int` / `ok(): bool` / `header(name): string`
+
+Same as the corresponding `HttpResponse` accessors — read from the already-resolved head.
+
+#### `await read_chunk(max_bytes): Result<Option<byte[]>, HttpError>`
+
+Reads up to `max_bytes` of the body. `Ok(None)` marks end-of-stream; the actual chunk size is host-determined and may be smaller than `max_bytes` even before EOF.
+
+```dream
+switch (await stream.read_chunk(4096)) {
+    Ok(Some(chunk)) => { /* handle chunk */ },
+    Ok(None) => { /* done */ },
+    Err(e) => System.println(e.message()),
+}
+```
+
+#### `await read_all(): Result<byte[], HttpError>`
+
+Reads and concatenates every remaining chunk. Use when you want streaming's lower latency-to-first-byte but still need the whole body materialized at the end.
+
+```dream
+switch (await stream.read_all()) {
+    Ok(bytes) => { await File.write_bytes("out.bin", bytes); },
+    Err(e) => System.println(e.message()),
+}
+```
+
+#### `close(): void`
+
+Closes the stream early (e.g. after reading only the headers, or on cancellation/error). Safe to call more than once; `read_chunk` after `close()` resolves `Ok(None)`.
+
+```dream
+switch (await api.get_stream("/big-file")) {
+    Ok(stream) => {
+        if (stream.status() != 200) {
+            stream.close();
+        }
+    },
+    Err(e) => System.println(e.message()),
+}
 ```
 
 ## `MultipartForm` / `MultipartBuilt`

@@ -1,0 +1,64 @@
+module system.crypto;
+
+// AES-256-GCM authenticated encryption (confidentiality + integrity). Host-backed via the `aes-gcm`
+// crate natively and Web Crypto / `node:crypto` in the browser/Node hosts.
+public class AesGcm {
+    // Standard 96-bit (12-byte) GCM nonce size.
+    public static fun nonce_size(): int {
+        return 12;
+    }
+
+    // 128-bit (16-byte) authentication tag appended to every ciphertext.
+    public static fun tag_size(): int {
+        return 16;
+    }
+
+    // Generates a fresh random 12-byte nonce. Never reuse a nonce with the same key.
+    public static fun generate_nonce(): byte[] {
+        return SecureRandom.bytes(AesGcm.nonce_size());
+    }
+
+    @js("Dream", "cryptoAesGcmEncrypt")
+    static extern fun encrypt_host(key: byte[], nonce: byte[], plaintext: byte[], aad: byte[]): byte[];
+
+    // Host returns `[ok_flag, ...payload]` (see `decrypt_host`'s doc) so a hard authentication
+    // failure can be distinguished from a genuinely empty plaintext without throwing across the
+    // host boundary.
+    @js("Dream", "cryptoAesGcmDecrypt")
+    static extern fun decrypt_host(key: byte[], nonce: byte[], ciphertext: byte[], aad: byte[]): byte[];
+
+    // Encrypts `plaintext` under `key`/`nonce`, authenticating `aad` (additional authenticated
+    // data, not encrypted but tamper-checked) alongside it. Returns ciphertext with a 16-byte
+    // authentication tag appended. `nonce` must be exactly `nonce_size()` bytes and must never be
+    // reused with the same key.
+    public static fun encrypt(key: AesGcmKey, nonce: byte[], plaintext: byte[], aad: byte[]): Result<byte[], CryptoError> {
+        if (nonce.length != AesGcm.nonce_size()) {
+            return Result.Err(CryptoError.invalid_nonce("AES-GCM nonce must be " + AesGcm.nonce_size() + " bytes, got " + nonce.length));
+        }
+        return Result.Ok(AesGcm.encrypt_host(key.to_bytes(), nonce, plaintext, aad));
+    }
+
+    // Decrypts and authenticates `ciphertext` (as produced by `encrypt`, tag included) under
+    // `key`/`nonce`/`aad`. Returns an error if the nonce length is wrong or authentication fails
+    // (tampered ciphertext, wrong key/nonce/aad, or truncated input).
+    public static fun decrypt(key: AesGcmKey, nonce: byte[], ciphertext: byte[], aad: byte[]): Result<byte[], CryptoError> {
+        if (nonce.length != AesGcm.nonce_size()) {
+            return Result.Err(CryptoError.invalid_nonce("AES-GCM nonce must be " + AesGcm.nonce_size() + " bytes, got " + nonce.length));
+        }
+        if (ciphertext.length < AesGcm.tag_size()) {
+            return Result.Err(CryptoError.decrypt_failed("ciphertext shorter than the authentication tag"));
+        }
+        let tagged = AesGcm.decrypt_host(key.to_bytes(), nonce, ciphertext, aad);
+        if (tagged.is_empty() || (tagged[0] == (byte)0)) {
+            return Result.Err(CryptoError.decrypt_failed("authentication failed: wrong key/nonce/aad or tampered ciphertext"));
+        }
+        let n = tagged.length - 1;
+        let plaintext = Buffer.alloc<byte>(n);
+        let i = 0;
+        while (i < n) {
+            plaintext[i] = tagged[i + 1];
+            i = i + 1;
+        }
+        return Result.Ok(plaintext);
+    }
+}

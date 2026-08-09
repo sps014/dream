@@ -1,0 +1,43 @@
+// `@json` field widening: `Option<T>` now round-trips numeric/bool payloads (previously only
+// `Option<string>`, `Option<@json class>`, and `Option<T[]>` were supported), and `Map<string, V>`
+// fields are supported directly (encoded as a JSON object keyed by the map's string keys).
+import system;
+import system.json;
+import system.collections;
+
+@json
+class Widened {
+    public a: Option<int>;
+    public b: Option<double>;
+    public c: Option<bool>;
+    public scores: Map<string, int>;
+
+    public constructor(a: Option<int>, b: Option<double>, c: Option<bool>, scores: Map<string, int>) {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.scores = scores;
+    }
+}
+
+fun main(): void {
+    let scores = Map<string, int>();
+    scores.set("alice", 10);
+    scores.set("bob", 20);
+
+    let w = Widened(Option.Some(5), Option.None, Option.Some(true), scores);
+    let s = Json.serialize(w);
+    System.println(s);
+
+    switch (Json.deserialize<Widened>(s)) {
+        Ok(back) => {
+            System.println(back.a.unwrap_or(-1));
+            System.println(back.b.is_none());
+            System.println(back.c.unwrap_or(false));
+            System.println(back.scores.length);
+            System.println(back.scores.get("alice").unwrap_or(-1));
+            System.println(back.scores.get("bob").unwrap_or(-1));
+        },
+        Err(e) => System.println("err:" + e.message()),
+    }
+}

@@ -597,11 +597,17 @@ const isNode = typeof process !== "undefined" && !!(process.versions && process.
 
 let _nodeFs = null;
 let _nodeCrypto = null;
+let _nodeChildProcess = null;
+let _nodeNet = null;
 
 function setNodeFs(fs) { _nodeFs = fs; }
 function setNodeCrypto(crypto) { _nodeCrypto = crypto; }
+function setNodeChildProcess(childProcess) { _nodeChildProcess = childProcess; }
+function setNodeNet(net) { _nodeNet = net; }
 function getNodeFs() { return _nodeFs; }
 function getNodeCrypto() { return _nodeCrypto; }
+function getNodeChildProcess() { return _nodeChildProcess; }
+function getNodeNet() { return _nodeNet; }
 
 // ----- hosts/env.js -----
 /** Default `env` builtins every Dream module imports (mirrors src/.../wasm_runner.rs). */
@@ -768,6 +774,11 @@ function makeJsHost(getInstance) {
  * `Uint8Array` for `src/stdlib/net/http_response.dream`: an ASCII head (status line + header lines) and a blank
  * line, then the raw body bytes. Keeping the body raw (an `arrayBuffer`) makes binary responses
  * byte-exact. `body` is either a string or a `Uint8Array` (or "" / empty for none).
+ *
+ * `httpRequestStream`/`httpRequestStreamBytes` below instead keep the response body's
+ * `ReadableStream` reader in a handle table (`streamHandles`) so `httpReadChunk` can pull it
+ * incrementally without buffering the whole body — the JS-host mirror of the native host's
+ * `reqwest::blocking::Response` handle table (`src/execution/host/http.rs`).
  */
 async function httpDo(url, method, headersJson, body, timeoutMs) {
   const verb = (method || "GET").toUpperCase();
@@ -817,12 +828,144 @@ async function httpDo(url, method, headersJson, body, timeoutMs) {
   }
 }
 
+/**
+ * Opens a request via `fetch` and returns just the head (status + headers), keeping the response
+ * body's `ReadableStream` reader in a handle table for `httpReadChunk` to pull incrementally.
+ * Wire format matches [`httpDo`] exactly except the "body" is the decimal handle id, mirroring the
+ * native host's `open_http_stream` (`src/execution/host/http.rs`) so `HttpResponse`'s head parser
+ * and `HttpStreamResponse` (`wrap_stream` in `http_client.dream`) work unchanged on both hosts.
+ */
+async function httpDoStream(url, method, headersJson, body, timeoutMs) {
+  const verb = (method || "GET").toUpperCase();
+  const init = { method: verb };
+  if (headersJson && headersJson !== "") {
+    try { init.headers = JSON.parse(headersJson); } catch (_) { /* ignore bad header json */ }
+  }
+  const hasBody = typeof body === "string" ? body !== "" : body && body.length > 0;
+  if (hasBody && verb !== "GET" && verb !== "HEAD") {
+    init.body = body;
+  }
+  const ms = Number(timeoutMs) || 0;
+  if (ms > 0) {
+    if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+      init.signal = AbortSignal.timeout(ms);
+    } else {
+      const ctrl = new AbortController();
+      init.signal = ctrl.signal;
+      setTimeout(() => ctrl.abort(), ms);
+    }
+  }
+  try {
+    const res = await fetch(url, init);
+
+    let head = `${res.status}\n`;
+    res.headers.forEach((value, name) => {
+      head += `${name}: ${value}\n`;
+    });
+    head += "\n";
+    const id = nextStreamHandle++;
+    streamHandles.set(id, new HttpStreamReader(res.body));
+    head += String(id);
+    return new TextEncoder().encode(head);
+  } catch (e) {
+    const msg = (e && (e.name === "TimeoutError" || e.name === "AbortError"))
+      ? "timeout"
+      : String((e && e.message) || e || "fetch failed");
+    const headBytes = new TextEncoder().encode("0\n\n");
+    const bodyBytes = new TextEncoder().encode(msg);
+    const out = new Uint8Array(headBytes.length + bodyBytes.length);
+    out.set(headBytes, 0);
+    out.set(bodyBytes, headBytes.length);
+    return out;
+  }
+}
+
+const streamHandles = new Map(); // handle -> HttpStreamReader
+let nextStreamHandle = 1;
+
+/** Buffers `ReadableStream` chunks so `httpReadChunk` can hand back exactly `maxBytes` at a time. */
+class HttpStreamReader {
+  constructor(body) {
+    // `fetch` always resolves a body in Node/browsers; a `null` body (e.g. a HEAD response) reads
+    // as immediate EOF.
+    this.reader = body ? body.getReader() : null;
+    this.leftover = null; // Uint8Array not yet handed out
+    this.eof = !body;
+  }
+
+  async read(maxBytes) {
+    const cap = Math.max(1, Number(maxBytes) || 65536);
+    if (!this.leftover && !this.eof) {
+      const { value, done } = await this.reader.read();
+      if (done) {
+        this.eof = true;
+      } else {
+        this.leftover = value;
+      }
+    }
+    if (!this.leftover) {
+      return { tag: "eof", bytes: new Uint8Array(0) };
+    }
+    if (this.leftover.length <= cap) {
+      const out = this.leftover;
+      this.leftover = null;
+      return { tag: "data", bytes: out };
+    }
+    const out = this.leftover.subarray(0, cap);
+    this.leftover = this.leftover.subarray(cap);
+    return { tag: "data", bytes: out };
+  }
+
+  cancel() {
+    if (this.reader) {
+      try { this.reader.cancel(); } catch (_) { /* already closed */ }
+    }
+  }
+}
+
+/** Wire: `"data\n<bytes>"` | `"eof\n"` | `"error\n<message>"`, matching `http_read_chunk`. */
+async function httpReadChunk(handle, maxBytes) {
+  const stream = streamHandles.get(handle);
+  if (!stream) {
+    return new TextEncoder().encode("error\nstream not found");
+  }
+  try {
+    const { tag, bytes } = await stream.read(maxBytes);
+    if (tag === "eof") {
+      streamHandles.delete(handle);
+    }
+    const tagBytes = new TextEncoder().encode(`${tag}\n`);
+    const out = new Uint8Array(tagBytes.length + bytes.length);
+    out.set(tagBytes, 0);
+    out.set(bytes, tagBytes.length);
+    return out;
+  } catch (e) {
+    streamHandles.delete(handle);
+    const msg = String((e && e.message) || e || "stream read failed");
+    return new TextEncoder().encode(`error\n${msg}`);
+  }
+}
+
+function httpCloseStream(handle) {
+  const stream = streamHandles.get(handle);
+  if (!stream) return 0;
+  stream.cancel();
+  streamHandles.delete(handle);
+  return 1;
+}
+
 function makeHttpHost() {
   return {
     httpRequest: (url, method, headersJson, body, timeoutMs) =>
       httpDo(url, method, headersJson, body, timeoutMs),
     httpRequestBytes: (url, method, headersJson, body, timeoutMs) =>
       httpDo(url, method, headersJson, Uint8Array.from(body || []), timeoutMs),
+    httpRequestStream: (url, method, headersJson, body, timeoutMs) =>
+      httpDoStream(url, method, headersJson, body, timeoutMs),
+    httpRequestStreamBytes: (url, method, headersJson, body, timeoutMs) =>
+      httpDoStream(url, method, headersJson, Uint8Array.from(body || []), timeoutMs),
+    httpReadChunk: (handle, maxBytes) => httpReadChunk(handle, maxBytes),
+    httpCloseStream: (handle) => httpCloseStream(handle),
   };
 }
 
@@ -1116,6 +1259,53 @@ function cryptoSha512Bytes(data) {
   return Array.from(browserSha512(bytes));
 }
 
+/**
+ * AES-256-GCM encrypt/decrypt for the `system.crypto.AesGcm` host ABI. Node uses `node:crypto`
+ * (sync `createCipheriv`/`createDecipheriv`); browsers use the async Web Crypto `subtle` API
+ * wrapped in a busy-wait on its result since the extern signature is synchronous (matches the
+ * native/wasmtime host, which is also synchronous).
+ */
+function cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad) {
+  const keyBytes = Uint8Array.from(key || []);
+  const nonceBytes = Uint8Array.from(nonce || []);
+  const ptBytes = Uint8Array.from(plaintext || []);
+  const aadBytes = Uint8Array.from(aad || []);
+  if (isNode && getNodeCrypto()) {
+    const nodeCrypto = getNodeCrypto();
+    const cipher = nodeCrypto.createCipheriv("aes-256-gcm", keyBytes, nonceBytes);
+    if (aadBytes.length > 0) cipher.setAAD(aadBytes);
+    const ct = cipher.update(ptBytes);
+    cipher.final();
+    const tag = cipher.getAuthTag();
+    return Array.from(Buffer.concat([ct, tag]));
+  }
+  throw new Error("AES-GCM requires node:crypto (browser Web Crypto path is async-only)");
+}
+
+function cryptoAesGcmDecryptBytes(key, nonce, ciphertext, aad) {
+  const keyBytes = Uint8Array.from(key || []);
+  const nonceBytes = Uint8Array.from(nonce || []);
+  const ctFull = Uint8Array.from(ciphertext || []);
+  const aadBytes = Uint8Array.from(aad || []);
+  const tagLen = 16;
+  if (ctFull.length < tagLen) return [0];
+  const ct = ctFull.subarray(0, ctFull.length - tagLen);
+  const tag = ctFull.subarray(ctFull.length - tagLen);
+  if (isNode && getNodeCrypto()) {
+    try {
+      const nodeCrypto = getNodeCrypto();
+      const decipher = nodeCrypto.createDecipheriv("aes-256-gcm", keyBytes, nonceBytes);
+      decipher.setAuthTag(Buffer.from(tag));
+      if (aadBytes.length > 0) decipher.setAAD(aadBytes);
+      const pt = Buffer.concat([decipher.update(Buffer.from(ct)), decipher.final()]);
+      return [1, ...pt];
+    } catch {
+      return [0];
+    }
+  }
+  throw new Error("AES-GCM requires node:crypto (browser Web Crypto path is async-only)");
+}
+
 function cryptoHmacSha256Bytes(key, data) {
   const keyBytes = Uint8Array.from(key || []);
   const dataBytes = Uint8Array.from(data || []);
@@ -1286,6 +1476,10 @@ function makeCryptoHost() {
     cryptoHmacSha256: (key, data) => cryptoHmacSha256Bytes(key, data),
     cryptoSecureRandomBytes: (n) => Array.from(csprngBytes(n > 0 ? n : 0)),
     cryptoSecureRandomFill: null,
+    cryptoAesGcmEncrypt: (key, nonce, plaintext, aad) =>
+      cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad),
+    cryptoAesGcmDecrypt: (key, nonce, ciphertext, aad) =>
+      cryptoAesGcmDecryptBytes(key, nonce, ciphertext, aad),
   };
 }
 
@@ -2195,6 +2389,180 @@ function consoleReadKeySync() {
   }
   return 0;
 }
+// ----- system.process: Process.run / Process.spawn -----
+//
+// Wire formats mirror the native host (`src/execution/host/process.rs`) exactly, since both are
+// read by the same `ProcessWireReader` / `ChildProcess` Dream code:
+//   * `processRun`: "<exit_code>\n<stdout_len>\n" + stdout bytes + stderr bytes. `exit_code == -1`
+//     means the process could not be spawned (the tail is the error message); `-2` means it
+//     exited via a signal with no exit code.
+//   * `processSpawn`: "<handle>\n" (success, empty tail) or "-1\n<message>" (spawn failure).
+//   * `processReadStream(Line)`: read side of a spawned child's stdout/stderr (`stream`: 0/1).
+//   * `processWait`: decimal exit code (or `-1`/`-2` sentinels, see above).
+
+let nextProcessHandle = 1;
+const childProcesses = new Map();
+
+function splitProcessArgs(joined) {
+  return joined ? joined.split("\n") : [];
+}
+
+function processWire(header, tail) {
+  return Buffer.concat([Buffer.from(`${header}\n`, "utf8"), Buffer.from(tail)]);
+}
+
+function processUnsupported(message) {
+  return processWire(-1, Buffer.from(message, "utf8"));
+}
+
+function processRunSync(cmd, argsJoined, cwd) {
+  const cp = getNodeChildProcess();
+  if (!isNode || !cp) return processUnsupported("Process.run is not supported in the browser");
+  try {
+    const result = cp.spawnSync(cmd, splitProcessArgs(argsJoined), {
+      cwd: cwd || undefined,
+      encoding: "buffer",
+    });
+    if (result.error) return processUnsupported(result.error.message || String(result.error));
+    const exitCode = result.status === null ? -2 : result.status;
+    const stdout = result.stdout || Buffer.alloc(0);
+    const stderr = result.stderr || Buffer.alloc(0);
+    const tail = Buffer.concat([Buffer.from(`${stdout.length}\n`, "utf8"), stdout, stderr]);
+    return processWire(exitCode, tail);
+  } catch (e) {
+    return processUnsupported((e && e.message) || String(e));
+  }
+}
+
+/** Notifies every pending reader of `stream` (0 = stdout, 1 = stderr) that new data/EOF arrived. */
+function notifyStream(state, stream) {
+  const waiters = state.activityWaiters;
+  state.activityWaiters = waiters.filter((w) => {
+    if (w.stream !== stream) return true;
+    w.resolve();
+    return false;
+  });
+}
+
+function waitForStreamActivity(state, stream) {
+  return new Promise((resolve) => state.activityWaiters.push({ stream, resolve }));
+}
+
+function bufKeyFor(stream) { return stream === 1 ? "stderrBuf" : "stdoutBuf"; }
+function eofKeyFor(stream) { return stream === 1 ? "stderrEof" : "stdoutEof"; }
+
+function processSpawnSync(cmd, argsJoined, cwd) {
+  const cp = getNodeChildProcess();
+  if (!isNode || !cp) return processUnsupported("Process.spawn is not supported in the browser");
+  try {
+    const child = cp.spawn(cmd, splitProcessArgs(argsJoined), { cwd: cwd || undefined });
+    const state = {
+      child,
+      stdoutBuf: Buffer.alloc(0),
+      stdoutEof: false,
+      stderrBuf: Buffer.alloc(0),
+      stderrEof: false,
+      activityWaiters: [],
+      exitCode: null,
+      exitWaiters: [],
+    };
+    child.stdout.on("data", (chunk) => {
+      state.stdoutBuf = Buffer.concat([state.stdoutBuf, chunk]);
+      notifyStream(state, 0);
+    });
+    child.stdout.on("end", () => { state.stdoutEof = true; notifyStream(state, 0); });
+    child.stderr.on("data", (chunk) => {
+      state.stderrBuf = Buffer.concat([state.stderrBuf, chunk]);
+      notifyStream(state, 1);
+    });
+    child.stderr.on("end", () => { state.stderrEof = true; notifyStream(state, 1); });
+    child.on("error", () => {
+      state.stdoutEof = true;
+      state.stderrEof = true;
+      notifyStream(state, 0);
+      notifyStream(state, 1);
+    });
+    child.on("close", (code) => {
+      state.exitCode = code === null ? -2 : code;
+      const waiters = state.exitWaiters;
+      state.exitWaiters = [];
+      waiters.forEach((resolve) => resolve());
+    });
+    const id = nextProcessHandle++;
+    childProcesses.set(id, state);
+    return processWire(id, Buffer.alloc(0));
+  } catch (e) {
+    return processUnsupported((e && e.message) || String(e));
+  }
+}
+
+function processWriteStdinSync(handle, data) {
+  const state = childProcesses.get(handle);
+  if (!state || !state.child.stdin || state.child.stdin.destroyed) return false;
+  try {
+    state.child.stdin.write(Buffer.from(data));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function processReadStreamAsync(handle, stream, maxBytes) {
+  const state = childProcesses.get(handle);
+  if (!state) return Buffer.alloc(0);
+  const bufKey = bufKeyFor(stream);
+  const eofKey = eofKeyFor(stream);
+  while (state[bufKey].length === 0 && !state[eofKey]) {
+    await waitForStreamActivity(state, stream);
+  }
+  const take = Math.max(0, Math.min(maxBytes | 0, state[bufKey].length));
+  const chunk = state[bufKey].subarray(0, take);
+  state[bufKey] = state[bufKey].subarray(take);
+  return Buffer.from(chunk);
+}
+
+async function processReadStreamLineAsync(handle, stream) {
+  const state = childProcesses.get(handle);
+  if (!state) return Buffer.from("0");
+  const bufKey = bufKeyFor(stream);
+  const eofKey = eofKeyFor(stream);
+  while (true) {
+    const buf = state[bufKey];
+    const nl = buf.indexOf(0x0a);
+    if (nl !== -1) {
+      let line = buf.subarray(0, nl);
+      state[bufKey] = buf.subarray(nl + 1);
+      if (line.length > 0 && line[line.length - 1] === 0x0d) line = line.subarray(0, line.length - 1);
+      return Buffer.concat([Buffer.from("1"), line]);
+    }
+    if (state[eofKey]) {
+      if (buf.length === 0) return Buffer.from("0");
+      state[bufKey] = Buffer.alloc(0);
+      return Buffer.concat([Buffer.from("1"), buf]);
+    }
+    await waitForStreamActivity(state, stream);
+  }
+}
+
+function processWaitAsync(handle) {
+  const state = childProcesses.get(handle);
+  if (!state) return Buffer.from("-1");
+  if (state.exitCode !== null) return Buffer.from(String(state.exitCode));
+  return new Promise((resolve) => {
+    state.exitWaiters.push(() => resolve(Buffer.from(String(state.exitCode))));
+  });
+}
+
+function processKillSync(handle) {
+  const state = childProcesses.get(handle);
+  if (!state) return false;
+  try {
+    return state.child.kill();
+  } catch (_) {
+    return false;
+  }
+}
+
 function makeConsoleProcessHost() {
   return {
     consoleReadLine: () => consoleReadLineSync(),
@@ -2227,10 +2595,66 @@ function makeConsoleProcessHost() {
       if (!isNode) return false;
       try { process.chdir(path); return true; } catch (_) { return false; }
     },
+    processRun: (cmd, argsJoined, cwd) => processRunSync(cmd, argsJoined, cwd),
+    processSpawn: (cmd, argsJoined, cwd) => processSpawnSync(cmd, argsJoined, cwd),
+    processWriteStdin: (handle, data) => processWriteStdinSync(handle, data),
+    processReadStream: (handle, stream, maxBytes) => processReadStreamAsync(handle, stream, maxBytes),
+    processReadStreamLine: (handle, stream) => processReadStreamLineAsync(handle, stream),
+    processWait: (handle) => processWaitAsync(handle),
+    processKill: (handle) => processKillSync(handle),
   };
 }
 
 // ----- hosts/datetime_text.js -----
+// Sentinel `dateZoneOffsetMinutes` returns for a zone name the host doesn't recognize. Must match
+// `UNKNOWN_ZONE_OFFSET` in `src/execution/host/datetime.rs`; real UTC offsets are always within
+// [-720, 840], so this can never collide with a real one.
+const UNKNOWN_ZONE_OFFSET = -999999;
+
+/**
+ * Minutes *east* of UTC for the named IANA zone (e.g. "America/New_York") at `millis`, via the
+ * standard `Intl.DateTimeFormat` "format then diff" trick: format `millis` as wall-clock parts in
+ * `zoneName`, reinterpret those parts as UTC, and the difference from `millis` is the offset.
+ * Returns `UNKNOWN_ZONE_OFFSET` if `zoneName` isn't a recognized IANA zone identifier.
+ */
+function zoneOffsetMinutes(zoneName, millis) {
+  const ms = Number(millis);
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: zoneName,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const parts = {};
+    for (const p of dtf.formatToParts(ms)) parts[p.type] = p.value;
+    const asUtc = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      parts.hour === "24" ? 0 : Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second),
+    );
+    return Math.round((asUtc - ms) / 60000);
+  } catch (_) {
+    return UNKNOWN_ZONE_OFFSET;
+  }
+}
+
+/** The host's configured IANA timezone name (e.g. "America/New_York"), or "" if unavailable. */
+function localZoneName() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (_) {
+    return "";
+  }
+}
+
 function makeDatetimeTextHost() {
   return {
     unicodeNormalize: (text, form) => {
@@ -2239,6 +2663,7 @@ function makeDatetimeTextHost() {
       return String(text).normalize(f);
     },
     unicodeToLower: (text) => String(text).toLocaleLowerCase(),
+    unicodeToUpper: (text) => String(text).toLocaleUpperCase(),
     unicodeGraphemes: (text) => {
       const s = String(text);
       if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
@@ -2249,6 +2674,8 @@ function makeDatetimeTextHost() {
     },
     dateNowMillis: () => BigInt(Date.now()),
     dateLocalOffsetMinutes: (millis) => -new Date(Number(millis)).getTimezoneOffset(),
+    dateZoneOffsetMinutes: (zoneName, millis) => zoneOffsetMinutes(zoneName, millis),
+    dateLocalZoneName: () => localZoneName(),
     timeNowNanos: () => {
       if (isNode) {
         return process.hrtime.bigint();
@@ -2257,6 +2684,321 @@ function makeDatetimeTextHost() {
       }
     },
     delayMs: (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms | 0))),
+  };
+}
+
+// ----- hosts/net_sockets.js -----
+/**
+ * Raw TCP (`system.net.TcpClient`) and WebSocket (`system.net.WebSocket`) host functions.
+ *
+ * TCP is Node-only (`node:net`); the browser has no raw socket API, so `tcpConnect` resolves an
+ * error wire there. WebSocket uses whichever global `WebSocket` constructor the host provides
+ * (native in browsers; Node >= 22, or a polyfill assigned onto `globalThis.WebSocket`, on Node).
+ *
+ * Wire formats mirror the native host (`src/execution/host/net.rs`) byte-for-byte so `.dream`
+ * parsing code (`NetWireReader`) is shared across both hosts:
+ *   connect (`tcpConnect`/`wsConnect`): "<handle>\n" on success, "-1\n<message>" on failure,
+ *     "-2\n<message>" for an unsupported host.
+ *   `tcpSend`/`tcpSendText`: "<n>\n" bytes written, or "-1\n<message>".
+ *   `tcpReceive`: "data\n<bytes>" | "eof\n" | "error\n<message>".
+ *   `wsSendText`/`wsSendBinary`: "1\n" on success, "0\n<message>" on failure.
+ *   `wsReceive`: "text\n<utf8>" | "binary\n<bytes>" | "close\n<code>\n<reason>" | "error\n<message>".
+ */
+
+const textEncoder = new TextEncoder();
+
+function encodeWire(tagLine, payloadBytes) {
+  const tagBytes = textEncoder.encode(tagLine + "\n");
+  const payload = payloadBytes || new Uint8Array(0);
+  const out = new Uint8Array(tagBytes.length + payload.length);
+  out.set(tagBytes, 0);
+  out.set(payload, tagBytes.length);
+  return out;
+}
+
+function encodeWireText(tagLine, text) {
+  return encodeWire(tagLine, textEncoder.encode(text || ""));
+}
+
+/* ---------------------------------------------------------------------------------------- TCP */
+
+const tcpHandles = new Map();
+let nextTcpHandle = 1;
+
+class TcpConn {
+  constructor(socket) {
+    this.socket = socket;
+    this.chunks = [];
+    this.eof = false;
+    this.error = null;
+    this.waiters = [];
+    socket.on("data", (chunk) => {
+      this.chunks.push(new Uint8Array(chunk));
+      this._flush();
+    });
+    socket.on("end", () => { this.eof = true; this._flush(); });
+    socket.on("close", () => { this.eof = true; this._flush(); });
+    socket.on("error", (err) => {
+      this.error = err;
+      this.eof = true;
+      this._flush();
+    });
+  }
+
+  _flush() {
+    while (this.waiters.length && (this.chunks.length || this.eof)) {
+      this.waiters.shift()();
+    }
+  }
+
+  async readSome(maxBytes) {
+    while (this.chunks.length === 0 && !this.eof) {
+      await new Promise((resolve) => this.waiters.push(resolve));
+    }
+    if (this.chunks.length === 0) {
+      if (this.error) {
+        return { tag: "error", bytes: textEncoder.encode(String(this.error.message || this.error)) };
+      }
+      return { tag: "eof", bytes: new Uint8Array(0) };
+    }
+    const cap = Math.max(1, Number(maxBytes) || 65536);
+    let total = 0;
+    const parts = [];
+    while (this.chunks.length && total < cap) {
+      const chunk = this.chunks[0];
+      const need = cap - total;
+      if (chunk.length > need) {
+        parts.push(chunk.subarray(0, need));
+        this.chunks[0] = chunk.subarray(need);
+        total += need;
+      } else {
+        parts.push(chunk);
+        total += chunk.length;
+        this.chunks.shift();
+      }
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      out.set(part, offset);
+      offset += part.length;
+    }
+    return { tag: "data", bytes: out };
+  }
+}
+
+function tcpConnect(host, port, timeoutMs) {
+  return new Promise((resolve) => {
+    const net = isNode ? getNodeNet() : null;
+    if (!net) {
+      resolve(encodeWireText("-1", "TCP sockets are not available in this host"));
+      return;
+    }
+    let settled = false;
+    let timer = null;
+    const socket = new net.Socket();
+    const ms = Number(timeoutMs) || 0;
+    if (ms > 0) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve(encodeWireText("-1", "timeout"));
+      }, ms);
+    }
+    socket.once("connect", () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      const id = nextTcpHandle++;
+      tcpHandles.set(id, new TcpConn(socket));
+      resolve(encodeWireText(String(id), ""));
+    });
+    socket.once("error", (err) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(encodeWireText("-1", String(err.message || err)));
+    });
+    socket.connect(port, host);
+  });
+}
+
+async function tcpSend(handle, data) {
+  const conn = tcpHandles.get(handle);
+  if (!conn) return encodeWireText("-1", "connection not found");
+  return new Promise((resolve) => {
+    conn.socket.write(Buffer.from(data), (err) => {
+      if (err) resolve(encodeWireText("-1", String(err.message || err)));
+      else resolve(encodeWireText(String(data.length), ""));
+    });
+  });
+}
+
+async function tcpSendText(handle, text) {
+  return tcpSend(handle, textEncoder.encode(text));
+}
+
+async function tcpReceive(handle, maxBytes) {
+  const conn = tcpHandles.get(handle);
+  if (!conn) return encodeWireText("error", "connection not found");
+  const { tag, bytes } = await conn.readSome(maxBytes);
+  return encodeWire(tag, bytes);
+}
+
+function tcpClose(handle) {
+  const conn = tcpHandles.get(handle);
+  if (!conn) return 0;
+  try { conn.socket.destroy(); } catch (_) { /* already closed */ }
+  tcpHandles.delete(handle);
+  return 1;
+}
+
+/* --------------------------------------------------------------------------------- WebSocket */
+
+const wsHandles = new Map();
+let nextWsHandle = 1;
+
+class WsConn {
+  constructor(socket) {
+    this.socket = socket;
+    this.queue = [];
+    this.waiters = [];
+    socket.binaryType = "arraybuffer";
+    socket.onmessage = (ev) => {
+      const data = ev.data;
+      if (typeof data === "string") {
+        this.queue.push({ tag: "text", bytes: textEncoder.encode(data) });
+      } else {
+        const buf = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data.buffer || data);
+        this.queue.push({ tag: "binary", bytes: buf });
+      }
+      this._flush();
+    };
+    socket.onclose = (ev) => {
+      this.queue.push({ tag: "close", code: ev.code || 1000, reason: ev.reason || "" });
+      this._flush();
+    };
+    socket.onerror = () => {
+      this.queue.push({ tag: "error", message: "websocket error" });
+      this._flush();
+    };
+  }
+
+  _flush() {
+    while (this.waiters.length && this.queue.length) {
+      this.waiters.shift()();
+    }
+  }
+
+  async next() {
+    while (this.queue.length === 0) {
+      await new Promise((resolve) => this.waiters.push(resolve));
+    }
+    return this.queue.shift();
+  }
+}
+
+function resolveWebSocketCtor() {
+  if (typeof WebSocket !== "undefined") return WebSocket;
+  if (typeof globalThis !== "undefined" && globalThis.WebSocket) return globalThis.WebSocket;
+  return null;
+}
+
+function wsConnect(url, timeoutMs) {
+  return new Promise((resolve) => {
+    const Ctor = resolveWebSocketCtor();
+    if (!Ctor) {
+      resolve(encodeWireText("-2", "WebSocket is not available in this host"));
+      return;
+    }
+    let socket;
+    try {
+      socket = new Ctor(url);
+    } catch (e) {
+      resolve(encodeWireText("-1", String((e && e.message) || e)));
+      return;
+    }
+    let settled = false;
+    let timer = null;
+    const ms = Number(timeoutMs) || 0;
+    if (ms > 0) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { socket.close(); } catch (_) { /* ignore */ }
+        resolve(encodeWireText("-1", "timeout"));
+      }, ms);
+    }
+    socket.onopen = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      const id = nextWsHandle++;
+      wsHandles.set(id, new WsConn(socket));
+      resolve(encodeWireText(String(id), ""));
+    };
+    socket.onerror = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(encodeWireText("-1", "connection failed"));
+    };
+  });
+}
+
+async function wsSendText(handle, text) {
+  const conn = wsHandles.get(handle);
+  if (!conn) return encodeWireText("0", "connection not found");
+  try {
+    conn.socket.send(text);
+    return encodeWireText("1", "");
+  } catch (e) {
+    return encodeWireText("0", String((e && e.message) || e));
+  }
+}
+
+async function wsSendBinary(handle, data) {
+  const conn = wsHandles.get(handle);
+  if (!conn) return encodeWireText("0", "connection not found");
+  try {
+    conn.socket.send(new Uint8Array(data));
+    return encodeWireText("1", "");
+  } catch (e) {
+    return encodeWireText("0", String((e && e.message) || e));
+  }
+}
+
+async function wsReceive(handle) {
+  const conn = wsHandles.get(handle);
+  if (!conn) return encodeWireText("error", "connection not found");
+  const msg = await conn.next();
+  if (msg.tag === "text") return encodeWire("text", msg.bytes);
+  if (msg.tag === "binary") return encodeWire("binary", msg.bytes);
+  if (msg.tag === "close") return encodeWire(`close\n${msg.code}`, textEncoder.encode(msg.reason || ""));
+  return encodeWireText("error", msg.message || "websocket error");
+}
+
+function wsClose(handle, code, reason) {
+  const conn = wsHandles.get(handle);
+  if (!conn) return 0;
+  try { conn.socket.close(code || 1000, reason || ""); } catch (_) { /* already closed */ }
+  wsHandles.delete(handle);
+  return 1;
+}
+
+function makeNetSocketsHost() {
+  return {
+    tcpConnect: (host, port, timeoutMs) => tcpConnect(host, port, timeoutMs),
+    tcpSend: (handle, data) => tcpSend(handle, data),
+    tcpSendText: (handle, text) => tcpSendText(handle, text),
+    tcpReceive: (handle, maxBytes) => tcpReceive(handle, maxBytes),
+    tcpClose: (handle) => tcpClose(handle),
+    wsConnect: (url, timeoutMs) => wsConnect(url, timeoutMs),
+    wsSendText: (handle, text) => wsSendText(handle, text),
+    wsSendBinary: (handle, data) => wsSendBinary(handle, data),
+    wsReceive: (handle) => wsReceive(handle),
+    wsClose: (handle, code, reason) => wsClose(handle, code, reason),
   };
 }
 
@@ -2274,6 +3016,7 @@ function defaultDreamModule(getInstance) {
     ...makeCryptoHost(),
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
+    ...makeNetSocketsHost(),
   };
 }
 
@@ -2542,6 +3285,14 @@ async function load(source, options = {}) {
     try {
       const crypto = await import("node:crypto");
       setNodeCrypto(crypto);
+    } catch (_) { /* leave unavailable */ }
+    try {
+      const childProcess = await import("node:child_process");
+      setNodeChildProcess(childProcess);
+    } catch (_) { /* leave unavailable */ }
+    try {
+      const net = await import("node:net");
+      setNodeNet(net);
     } catch (_) { /* leave unavailable */ }
   }
 

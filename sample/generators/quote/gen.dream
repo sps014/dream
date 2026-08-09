@@ -2,8 +2,17 @@ module gen;
 
 import system.codegen;
 
-// Registers the `quote { … }` syntax DSL. Expand lives in sibling `harness.dream`.
-
+// `quote { ... }` becomes a Dream string literal at compile time. The compiler compiles + runs
+// this body directly (it takes a single `GenContext`), so no sibling `harness.dream` is needed.
 @generator
 @syntax_block("quote")
-public fun quote(): void { }
+public fun quote(ctx: GenContext): void {
+    for (let block in ctx.syntax_blocks("quote")) {
+        ctx.replace(block, as_dream_string(block.body.trim()));
+    }
+}
+
+fun as_dream_string(s: string): string {
+    let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+    return "\"" + escaped + "\"";
+}

@@ -13,6 +13,10 @@ pub struct RegisteredGenerator {
     pub module_path: String,
     pub file_path: String,
     pub syntax_blocks: Vec<String>,
+    /// True when the `@generator` function has a non-empty body whose single parameter is a
+    /// `GenContext` — the compiler runs the body directly (see `driver/generate/context_gen.rs`)
+    /// instead of requiring a sibling `harness.dream`.
+    pub has_context_body: bool,
 }
 
 /// Discovers generators from files that contain `@generator` functions and manifest paths.
@@ -84,11 +88,15 @@ fn scan_generator_file(
             .filter(|a| a.name.text == "syntax_block")
             .filter_map(|a| a.args.first().and_then(|t| t.as_string().map(|s| s.to_string())))
             .collect();
+        let has_context_body = !f.body.is_empty()
+            && f.parameters.len() == 1
+            && f.parameters[0].type_.get_type() == "GenContext";
         out.push(RegisteredGenerator {
             name,
             module_path: module_path.clone(),
             file_path: path.to_string(),
             syntax_blocks,
+            has_context_body,
         });
     }
     out

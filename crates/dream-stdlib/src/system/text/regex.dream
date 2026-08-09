@@ -1,18 +1,26 @@
 module system.text;
 
 // Regular expressions — a self-contained engine, no host runtime involved. `Regex(pattern, flags)`
-// parses and compiles the pattern once (see `regex_parser.dream` and `regex_program.dream`), then
-// `test`/`replace`/`match` run it on Dream's own Pike-VM implementation (`regex_vm.dream`). See
-// docs/stdlib/regex.md for the supported syntax subset.
+// parses and compiles the pattern once into a flat instruction program (see `regex_parser.dream`
+// and `regex_compiler.dream`). Patterns without a backreference run on Dream's own Pike-VM
+// (`regex_vm.dream`), which also evaluates lookaround assertions via compiled sub-programs
+// (`regex_sub_table.dream`); a pattern containing a backreference (`\1`, `\k<name>`) instead runs
+// the *same* compiled program on the backtracking interpreter (`regex_backtracker.dream`), since
+// a backreference isn't a regular-language construct the Pike-VM's thread simulation can express.
+// See docs/stdlib/regex.md for the supported syntax.
 public class Regex {
     pattern: string;
     flags: string;
     prog: RegexInst[];
+    table: RegexSubTable;
     ngroup: int;
     ignore_case: bool;
     multiline: bool;
     dot_all: bool;
     global: bool;
+    use_backtrack: bool;
+    group_names: string[];
+    group_name_numbers: int[];
 
     public constructor(pattern: string, flags: string) {
         this.pattern = pattern;
@@ -24,34 +32,51 @@ public class Regex {
 
         let parser = RegexParser(pattern);
         let ast = parser.parse();
-        let compiler = RegexCompiler(this.ignore_case, this.dot_all);
-        this.prog = compiler.compile(ast);
         this.ngroup = parser.groups();
+        this.use_backtrack = parser.backreferenced();
+        this.group_names = this.to_string_array(parser.names());
+        this.group_name_numbers = this.to_int_array(parser.name_indices());
+
+        this.table = RegexSubTable();
+        let compiler = RegexCompiler(this.ignore_case, this.dot_all, this.table);
+        this.prog = compiler.compile(ast);
     }
 
     fun vm(): RegexVM {
-        return RegexVM(this.prog, this.ngroup, this.multiline);
+        return RegexVM(this.prog, this.ngroup, this.multiline, this.table);
+    }
+
+    fun backtrack_vm(): RegexBacktrackVM {
+        return RegexBacktrackVM(this.prog, this.ngroup, this.multiline, this.table);
+    }
+
+    // Finds the next match starting at or after `pos`, dispatching to whichever engine this
+    // pattern requires.
+    fun find_at(input: string, pos: int): Option<RegexMatch> {
+        if (this.use_backtrack) {
+            return this.backtrack_vm().find(input, pos);
+        }
+        return this.vm().find(input, pos);
     }
 
     // True if `input` contains a match for this pattern.
     public fun test(input: string): bool {
-        return this.vm().find(input, 0).is_some();
+        return this.find_at(input, 0).is_some();
     }
 
     // Returns `input` with every match replaced by `replacement` (`g` flag: every match; without
-    // it, only the first). `replacement` may reference capture groups with `$1`.."$9" or the whole
-    // match with `$&`; `$$` is a literal `$`.
+    // it, only the first). `replacement` may reference capture groups with `$1`..`$9`, `${N}`, or
+    // `${name}` for a named group, the whole match with `$&`; `$$` is a literal `$`.
     public fun replace(input: string, replacement: string): string {
         let n = input.length;
         let sb = StringBuilder();
-        let vm = this.vm();
         let pos = 0;
         let going = true;
         while (going) {
             if (pos > n) {
                 going = false;
             } else {
-                let m_opt = vm.find(input, pos);
+                let m_opt = this.find_at(input, pos);
                 switch (m_opt) {
                     Some(m) => {
                         let s = m.start();
@@ -80,6 +105,56 @@ public class Regex {
         return sb.build();
     }
 
+    fun is_all_digits(s: string): bool {
+        if (s.length == 0) {
+            return false;
+        }
+        let i = 0;
+        while (i < s.length) {
+            if (s.char_at(i).is_digit() == false) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    fun parse_int(s: string): int {
+        let value = 0;
+        let zero = '0';
+        let i = 0;
+        while (i < s.length) {
+            value = (value * 10) + (s.char_at(i).to_int() - zero.to_int());
+            i = i + 1;
+        }
+        return value;
+    }
+
+    // Resolves the group number for a named group, or -1 if `name` isn't one of this pattern's
+    // named groups.
+    fun name_to_group(name: string): int {
+        let i = 0;
+        while (i < this.group_names.length) {
+            if (this.group_names[i] == name) {
+                return this.group_name_numbers[i];
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
+    }
+
+    // `${...}`: either digits (a numeric group) or a name registered via `(?<name>...)`.
+    fun resolve_braced_token(token: string, input: string, m: RegexMatch): string {
+        if (this.is_all_digits(token)) {
+            return m.group_text(input, this.parse_int(token));
+        }
+        let g = this.name_to_group(token);
+        if (g >= 0) {
+            return m.group_text(input, g);
+        }
+        return ""; // unknown name: best-effort, no crash
+    }
+
     fun append_replacement(sb: StringBuilder, replacement: string, input: string, m: RegexMatch): void {
         let rn = replacement.length;
         let i = 0;
@@ -93,6 +168,18 @@ public class Regex {
                 } else if (next == '&') {
                     sb.append(m.group_text(input, 0));
                     i = i + 2;
+                } else if (next == '{') {
+                    let j = i + 2;
+                    let token = StringBuilder();
+                    while ((j < rn) && (replacement.char_at(j) != '}')) {
+                        token.append_char(replacement.char_at(j));
+                        j = j + 1;
+                    }
+                    if (j < rn) {
+                        j = j + 1; // consume '}'
+                    }
+                    sb.append(this.resolve_braced_token(token.build(), input, m));
+                    i = j;
                 } else if (next.is_digit()) {
                     let zero = '0';
                     let g = next.to_int() - zero.to_int();
@@ -113,7 +200,6 @@ public class Regex {
     // the first match's full text followed by each capture group (a group that didn't
     // participate is "").
     public fun match(input: string): string[] {
-        let vm = this.vm();
         let n = input.length;
         if (this.global) {
             let results = List<string>();
@@ -123,7 +209,7 @@ public class Regex {
                 if (pos > n) {
                     going = false;
                 } else {
-                    let m_opt = vm.find(input, pos);
+                    let m_opt = this.find_at(input, pos);
                     switch (m_opt) {
                         Some(m) => {
                             results.push(m.group_text(input, 0));
@@ -143,11 +229,33 @@ public class Regex {
             }
             return this.to_array(results);
         }
-        let m_opt = vm.find(input, 0);
+        let m_opt = this.find_at(input, 0);
         return switch (m_opt) {
             Some(m) => this.groups_array(input, m),
             None => Buffer.alloc<string>(0),
         };
+    }
+
+    // Richer match info for the first match in `input`: the full match, every capture group's
+    // text (`groups[0]` is group 1), and `.named(name)` lookup for `(?<name>...)` groups. `None`
+    // if the pattern doesn't match anywhere in `input`.
+    public fun match_info(input: string): Option<RegexMatchInfo> {
+        let m_opt = this.find_at(input, 0);
+        return switch (m_opt) {
+            Some(m) => Option.Some(this.build_match_info(input, m)),
+            None => Option.None,
+        };
+    }
+
+    fun build_match_info(input: string, m: RegexMatch): RegexMatchInfo {
+        let full = m.group_text(input, 0);
+        let groups = Buffer.alloc<string>(this.ngroup);
+        let i = 0;
+        while (i < this.ngroup) {
+            groups[i] = m.group_text(input, i + 1);
+            i = i + 1;
+        }
+        return RegexMatchInfo(full, groups, this.group_names, this.group_name_numbers);
     }
 
     fun groups_array(input: string, m: RegexMatch): string[] {
@@ -166,6 +274,26 @@ public class Regex {
         let i = 0;
         while (i < list.length) {
             arr[i] = list.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return arr;
+    }
+
+    fun to_string_array(list: List<string>): string[] {
+        let arr = Buffer.alloc<string>(list.length);
+        let i = 0;
+        while (i < list.length) {
+            arr[i] = list.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return arr;
+    }
+
+    fun to_int_array(list: List<int>): int[] {
+        let arr = Buffer.alloc<int>(list.length);
+        let i = 0;
+        while (i < list.length) {
+            arr[i] = list.get(i).unwrap_or(0);
             i = i + 1;
         }
         return arr;

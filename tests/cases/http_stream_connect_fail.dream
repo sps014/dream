@@ -1,0 +1,18 @@
+import system;
+import system.net;
+
+async fun main(): void {
+    // Nothing listens on this loopback port, so the streaming request must resolve `Err`, never
+    // hang or panic — exercises `httpRequestStream`'s transport-error wire path (status `0`).
+    let client = HttpClient("").with_timeout(2000);
+    let result = await client.get_stream("http://127.0.0.1:1/");
+    switch (result) {
+        Ok(stream) => {
+            System.println("unexpected success");
+            stream.close();
+        },
+        Err(e) => {
+            System.println(e.code());
+        },
+    }
+}

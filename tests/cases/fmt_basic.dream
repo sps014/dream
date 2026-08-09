@@ -1,0 +1,21 @@
+import system;
+import system.text;
+
+fun main(): void {
+    let args1: object[] = Buffer.alloc<object>(2);
+    args1[0] = "world";
+    args1[1] = 42;
+    System.println(Fmt.format("Hello, {0}! The answer is {1}.", args1));
+
+    let args2: object[] = Buffer.alloc<object>(1);
+    args2[0] = 3.14159d;
+    System.println(Fmt.format("Pi ~= {0:.2}", args2));
+
+    let args3: object[] = Buffer.alloc<object>(2);
+    args3[0] = 1;
+    args3[1] = 1;
+    System.println(Fmt.format("{0} + {1} = {0}", args3));
+
+    let args4: object[] = Buffer.alloc<object>(0);
+    System.println(Fmt.format("literal {{braces}} stay", args4));
+}

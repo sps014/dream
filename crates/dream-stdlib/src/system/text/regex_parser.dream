@@ -3,11 +3,12 @@ module system.text;
 // Recursive-descent regex parser: alternation -> concatenation -> repetition -> atom, the same
 // grammar shape as RE2's own parser (re2/parse.cc) and, before it, the yacc grammar in Russ Cox's
 // `re1` — but hand-written, since RE2's real parser is full Unicode/POSIX and far too large to
-// port, and Dream has no parser-generator tooling. Scoped to the ASCII subset the `Regex` stdlib
-// class documents: literals, `.`, anchors (`^` `$` `\b` `\B`), `* + ? {m,n}` (with lazy `?`
-// variants), alternation, capturing/non-capturing groups, character classes, and the `\d \D \w \W
-// \s \S` shorthand classes. No lookaround, backreferences, named groups, or Unicode property
-// classes.
+// port, and Dream has no parser-generator tooling. Covers the syntax the `Regex` stdlib class
+// documents: literals, `.`, anchors (`^` `$` `\b` `\B`), `* + ? {m,n}` (with lazy `?` variants),
+// alternation, capturing/named/non-capturing groups, lookaround (`(?=...)` `(?!...)` `(?<=...)`
+// `(?<!...)`), backreferences (`\1`, `\k<name>`), character classes, the `\d \D \w \W \s \S`
+// shorthand classes, and `\p{...}`/`\P{...}` for the `L`/`N` Unicode categories (see
+// `regex_unicode_prop.dream`) — not the full Unicode property set.
 //
 // Never panics on a malformed pattern: every cursor read is bounds-checked, and unrecognized or
 // truncated constructs fall back to the most literal reasonable interpretation (e.g. an
@@ -20,17 +21,51 @@ internal class RegexParser {
     pos: int;
     n: int;
     group_count: int;
+    has_backref: bool;
+    group_names: List<string>;   // parallel to group_name_indices
+    group_name_indices: List<int>;
 
     public constructor(pattern: string) {
         this.pattern = pattern;
         this.pos = 0;
         this.n = pattern.length;
         this.group_count = 0;
+        this.has_backref = false;
+        this.group_names = List<string>();
+        this.group_name_indices = List<int>();
     }
 
     // Number of capturing groups seen (not counting the implicit whole-match group 0).
     public fun groups(): int {
         return this.group_count;
+    }
+
+    // True if the pattern contains a backreference (`\1`, `\k<name>`) anywhere — including inside
+    // a lookaround assertion. `Regex` routes such patterns to `RegexBacktracker` instead of the
+    // Pike-VM, since backreferences make the language non-regular.
+    public fun backreferenced(): bool {
+        return this.has_backref;
+    }
+
+    // Names given to capturing groups via `(?<name>...)`, in the order their groups were opened.
+    public fun names(): List<string> {
+        return this.group_names;
+    }
+
+    // The (outer) capturing-group index for each entry in `names()`, same order.
+    public fun name_indices(): List<int> {
+        return this.group_name_indices;
+    }
+
+    fun resolve_name(name: string): int {
+        let i = 0;
+        while (i < this.group_names.length) {
+            if (this.group_names.get(i).unwrap_or("") == name) {
+                return this.group_name_indices.get(i).unwrap_or(0 - 1);
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
     }
 
     // Parses the whole pattern, wrapping it in an implicit capturing group 0 (the overall match)
@@ -279,30 +314,118 @@ internal class RegexParser {
 
     fun parse_group(): RegexNode {
         this.pos = this.pos + 1; // '('
-        let non_capturing = false;
         if ((this.at_end() == false) && (this.current() == '?')) {
-            let next = this.peek_at(1);
-            if (next.unwrap_or(' ') == ':') {
-                non_capturing = true;
+            let c1 = this.peek_at(1).unwrap_or(' ');
+            if (c1 == ':') {
                 this.pos = this.pos + 2;
-            } else {
-                // Any other `(?...)` form (lookaround, named groups, inline flags) is out of
-                // scope; best-effort fallback so we never crash on it: skip the `?` and treat the
-                // rest as a non-capturing group.
-                non_capturing = true;
-                this.pos = this.pos + 1;
+                return this.finish_plain_group(0 - 1);
             }
+            if (c1 == '=') {
+                this.pos = this.pos + 2;
+                return this.finish_lookaround(true, false);
+            }
+            if (c1 == '!') {
+                this.pos = this.pos + 2;
+                return this.finish_lookaround(true, true);
+            }
+            if (c1 == '<') {
+                let c2 = this.peek_at(2).unwrap_or(' ');
+                if (c2 == '=') {
+                    this.pos = this.pos + 3;
+                    return this.finish_lookaround(false, false);
+                }
+                if (c2 == '!') {
+                    this.pos = this.pos + 3;
+                    return this.finish_lookaround(false, true);
+                }
+                this.pos = this.pos + 2; // skip '?<'
+                let name = this.parse_group_name();
+                this.group_count = this.group_count + 1;
+                let cap = this.group_count;
+                if (name.length > 0) {
+                    this.group_names.push(name);
+                    this.group_name_indices.push(cap);
+                }
+                return this.finish_plain_group(cap);
+            }
+            // Any other `(?...)` form (e.g. inline flags) is out of scope; best-effort fallback
+            // so we never crash on it: skip the `?` and treat the rest as a non-capturing group.
+            this.pos = this.pos + 1;
+            return this.finish_plain_group(0 - 1);
         }
-        let cap = 0 - 1;
-        if (non_capturing == false) {
-            this.group_count = this.group_count + 1;
-            cap = this.group_count;
+        this.group_count = this.group_count + 1;
+        return this.finish_plain_group(this.group_count);
+    }
+
+    // Reads a `name` up to (and consuming) the closing `>` of `(?<name>`. Never crashes on a
+    // missing `>`: stops at end of pattern and returns whatever was read.
+    fun parse_group_name(): string {
+        let sb = StringBuilder();
+        while ((this.at_end() == false) && (this.current() != '>')) {
+            sb.append_char(this.current());
+            this.pos = this.pos + 1;
         }
+        if ((this.at_end() == false) && (this.current() == '>')) {
+            this.pos = this.pos + 1;
+        }
+        return sb.build();
+    }
+
+    // Reads `\1`, `\12`, ... — every consecutive digit after the first (already known non-zero)
+    // one is greedily consumed, same as PCRE/JS's multi-digit backreference parsing. A group
+    // number with no matching capturing group simply never participates, so it's safe to accept
+    // any value here without validating it against `group_count`.
+    fun parse_backref_digits(): RegexNode {
+        let value = 0;
+        let zero = '0';
+        while ((this.at_end() == false) && (this.current().is_digit())) {
+            value = (value * 10) + (this.current().to_int() - zero.to_int());
+            this.pos = this.pos + 1;
+        }
+        this.has_backref = true;
+        return RegexNode.backref(value);
+    }
+
+    // Reads `p{name}`/`P{name}` (cursor is on the `p`/`P`); `negate` is true for `\P`.
+    fun parse_unicode_prop(negate: bool): RegexNode {
+        this.pos = this.pos + 2; // 'p' or 'P', then '{'
+        let sb = StringBuilder();
+        while ((this.at_end() == false) && (this.current() != '}')) {
+            sb.append_char(this.current());
+            this.pos = this.pos + 1;
+        }
+        if ((this.at_end() == false) && (this.current() == '}')) {
+            this.pos = this.pos + 1;
+        }
+        let name = sb.build();
+        let prop = RegexUnicodeProp.Letter;
+        if ((name == "N") || (name == "Number") || (name == "Nd")) {
+            prop = RegexUnicodeProp.Number;
+        }
+        return RegexNode.unicode_prop(prop, negate);
+    }
+
+    fun finish_plain_group(cap: int): RegexNode {
         let inner = this.parse_alt();
         if ((this.at_end() == false) && (this.current() == ')')) {
             this.pos = this.pos + 1;
         }
         return RegexNode.paren(inner, cap);
+    }
+
+    // Parses a lookaround body with its own, independent group numbering (captures inside a
+    // lookaround assertion are not exposed on the overall match — only the pass/fail of the
+    // assertion itself matters) by saving and restoring `group_count` around the inner parse.
+    fun finish_lookaround(ahead: bool, negate: bool): RegexNode {
+        let saved_group_count = this.group_count;
+        this.group_count = 0;
+        let inner = this.parse_alt();
+        let sub_ngroup = this.group_count;
+        this.group_count = saved_group_count;
+        if ((this.at_end() == false) && (this.current() == ')')) {
+            this.pos = this.pos + 1;
+        }
+        return RegexNode.look(inner, ahead, negate, sub_ngroup);
     }
 
     fun digit_ranges(): List<char> {
@@ -357,13 +480,34 @@ internal class RegexParser {
         return (e == 'D') || (e == 'W') || (e == 'S');
     }
 
-    // escape := 'd' | 'D' | 'w' | 'W' | 's' | 'S' | 'b' | 'B' | 'n' | 't' | 'r' | any
+    // escape := 'd' | 'D' | 'w' | 'W' | 's' | 'S' | 'b' | 'B' | 'n' | 't' | 'r' | '1'-'9'+
+    //         | 'k<' name '>' | 'p{' name '}' | 'P{' name '}' | any
     fun parse_escape(): RegexNode {
         this.pos = this.pos + 1; // '\'
         if (this.at_end()) {
             return RegexNode.lit('\\');
         }
         let e = this.current();
+        if ((e.is_digit()) && (e != '0')) {
+            return this.parse_backref_digits();
+        }
+        if (e == 'k') {
+            if (this.peek_at(1).unwrap_or(' ') == '<') {
+                this.pos = this.pos + 2; // 'k<'
+                let name = this.parse_group_name();
+                let idx = this.resolve_name(name);
+                if (idx >= 0) {
+                    this.has_backref = true;
+                    return RegexNode.backref(idx);
+                }
+                return RegexNode.nothing(); // unresolved name: best-effort, no crash
+            }
+        }
+        if ((e == 'p') || (e == 'P')) {
+            if (this.peek_at(1).unwrap_or(' ') == '{') {
+                return this.parse_unicode_prop(e == 'P');
+            }
+        }
         this.pos = this.pos + 1;
         let shorthand = this.shorthand_ranges(e);
         if (shorthand.is_some()) {

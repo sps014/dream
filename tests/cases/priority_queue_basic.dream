@@ -1,0 +1,25 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let pq = PriorityQueue<int>();
+    pq.push(5);
+    pq.push(1);
+    pq.push(3);
+    pq.push(2);
+    pq.push(4);
+    System.println(pq.length);
+    System.println(pq.peek().unwrap_or(0 - 1));
+    while (pq.is_empty() == false) {
+        System.println(pq.pop().unwrap_or(0 - 1));
+    }
+    System.println(pq.pop().unwrap_or(0 - 1));
+
+    let maxq = PriorityQueue<int>((a, b) => b - a);
+    maxq.push(5);
+    maxq.push(1);
+    maxq.push(3);
+    System.println(maxq.pop().unwrap_or(0 - 1));
+    System.println(maxq.pop().unwrap_or(0 - 1));
+    System.println(maxq.pop().unwrap_or(0 - 1));
+}

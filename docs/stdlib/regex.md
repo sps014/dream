@@ -61,6 +61,22 @@ let caps = Regex("(\\d{4})-(\\d{2})", "").match("2026-06");
 System.println(caps[1]);  // 2026
 ```
 
+#### `match_info(input: string): Option<RegexMatchInfo>`
+
+Richer match result for the first match: `.full` (the overall match text), `.groups` (each capture group's text in group-number order — `groups[0]` is group 1, since `.full` already covers group 0; `""` for a group that didn't participate), and `.named(name)` to look a group up by the name given via `(?<name>...)`. Prefer this over `match` when you need named-group lookup or want to distinguish "no match" from an empty capture.
+
+```dream
+let re = Regex("(?<year>\\d{4})-(?<month>\\d{2})", "");
+switch (re.match_info("2026-06")) {
+    Some(info) => {
+        System.println(info.full);                      // 2026-06
+        System.println(info.groups[0]);                  // 2026
+        System.println(info.named("month").unwrap_or("")); // 06
+    },
+    None => System.println("no match"),
+}
+```
+
 ## Supported syntax
 
 | Feature | Syntax |
@@ -69,11 +85,21 @@ System.println(caps[1]);  // 2026
 | Anchors | `^`, `$` (respect `m`), `\b`, `\B` |
 | Quantifiers | `*`, `+`, `?`, `{m}`, `{m,}`, `{m,n}`, lazy forms |
 | Alternation | `a\|b` |
-| Groups | `(...)`, `(?:...)` |
+| Groups | `(...)`, `(?:...)`, named `(?<name>...)` |
+| Lookaround | `(?=...)`, `(?!...)`, `(?<=...)`, `(?<!...)` |
+| Backreferences | `\1`..`\9`, `\k<name>` |
 | Character classes | `[abc]`, `[^abc]`, `[a-z]` |
 | Shorthands | `\d`, `\D`, `\w`, `\W`, `\s`, `\S` |
+| Unicode property | `\p{L}`/`\p{Letter}`, `\p{N}`/`\p{Number}`, and their negations `\P{...}` |
 | Escapes | `\n`, `\t`, `\r`, `\` before metacharacters |
 
-**Not supported:** lookaround, backreferences (`\1`), named groups, `\p{...}`. Unsupported constructs parse best-effort without their special meaning.
+Patterns without a backreference run on Dream's Pike-VM (linear time, including lookaround via
+compiled sub-programs); a pattern containing a backreference falls back to a backtracking
+interpreter, since backreferences aren't a regular-language construct.
+
+`\p{...}`/`\P{...}` only recognizes the `L` (Letter) and `N` (Number) categories, and is
+range-based rather than a full Unicode Character Database — it covers the common scripts/ranges
+for each category, not every codepoint the Unicode Standard assigns to it. Other `\p{...}` names
+parse best-effort without special meaning.
 
 A runnable example: [`sample/interop/regex.dream`](https://github.com/sps014/dream/blob/main/sample/interop/regex.dream).

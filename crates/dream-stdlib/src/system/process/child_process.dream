@@ -1,0 +1,96 @@
+module system.process;
+
+// Handle to a spawned child process with piped stdin/stdout/stderr (`Process.spawn`).
+public class ChildProcess {
+    _handle: int;
+
+    public constructor(handle: int) {
+        this._handle = handle;
+    }
+
+    @js("Dream", "processWriteStdin")
+    static extern fun host_write_stdin(handle: int, data: byte[]): bool;
+
+    // `stream`: 0 = stdout, 1 = stderr.
+    @js("Dream", "processReadStream")
+    static extern async fun host_read_stream(handle: int, stream: int, max_bytes: int): char[];
+
+    @js("Dream", "processReadStreamLine")
+    static extern async fun host_read_stream_line(handle: int, stream: int): char[];
+
+    @js("Dream", "processWait")
+    static extern async fun host_wait(handle: int): char[];
+
+    @js("Dream", "processKill")
+    static extern fun host_kill(handle: int): bool;
+
+    // Copies `data[start..]` into a fresh `byte[]` (byte-exact; each `char` is one raw byte).
+    static fun slice_to_bytes(data: char[], start: int): byte[] {
+        let n = data.length - start;
+        let out = Buffer.alloc<byte>(n);
+        let src = Span<char>(data, start, n);
+        let i = 0;
+        while (i < n) {
+            out[i] = (byte)src.get(i);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    async fun read_line(stream: int): Option<string> {
+        let raw = await ChildProcess.host_read_stream_line(this._handle, stream);
+        if (raw.length == 0) {
+            return Option.None;
+        }
+        if (raw[0] == '0') {
+            return Option.None;
+        }
+        return Option.Some(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 1)));
+    }
+
+    // Writes `data` to the child's stdin. Returns `false` if the pipe is closed or the write fails.
+    public fun write_stdin(data: byte[]): bool {
+        return ChildProcess.host_write_stdin(this._handle, data);
+    }
+
+    // Writes UTF-8 text to the child's stdin.
+    public fun write_stdin_text(text: string): bool {
+        return this.write_stdin(Encoding.utf8_encode(text));
+    }
+
+    // Reads up to `max_bytes` currently buffered from stdout, blocking until at least one byte
+    // has arrived or the stream has reached end-of-file (in which case the result is empty).
+    public async fun read_stdout(max_bytes: int): byte[] {
+        let raw = await ChildProcess.host_read_stream(this._handle, 0, max_bytes);
+        return ChildProcess.slice_to_bytes(raw, 0);
+    }
+
+    // Reads one line from stdout (without the trailing newline), or `None` at end-of-file.
+    public async fun read_stdout_line(): Option<string> {
+        return await this.read_line(0);
+    }
+
+    // Reads up to `max_bytes` currently buffered from stderr.
+    public async fun read_stderr(max_bytes: int): byte[] {
+        let raw = await ChildProcess.host_read_stream(this._handle, 1, max_bytes);
+        return ChildProcess.slice_to_bytes(raw, 0);
+    }
+
+    // Reads one line from stderr (without the trailing newline), or `None` at end-of-file.
+    public async fun read_stderr_line(): Option<string> {
+        return await this.read_line(1);
+    }
+
+    // Waits for the process to exit, returning its exit code (or a negative sentinel: `-1` if it
+    // could not be waited on, `-2` if it was terminated by a signal with no exit code).
+    public async fun wait(): int {
+        let raw = await ChildProcess.host_wait(this._handle);
+        return int.parse(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 0))).unwrap_or(0 - 1);
+    }
+
+    // Forcibly terminates the process. Returns `false` if it had already exited or could not be
+    // killed.
+    public fun kill(): bool {
+        return ChildProcess.host_kill(this._handle);
+    }
+}

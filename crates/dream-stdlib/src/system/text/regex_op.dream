@@ -7,4 +7,6 @@ internal enum RegexOp {
     Alt,
     Match,
     Nop,
+    Look,    // lookaround assertion: runs a sub-program (see `RegexSubTable`) without consuming input
+    Backref, // `\1`/`\k<name>`; only ever interpreted by `RegexBacktrackVM` (see regex_backtracker.dream)
 }

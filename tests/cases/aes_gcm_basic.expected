@@ -1,0 +1,8 @@
+32
+12
+30
+attack at dawn
+auth failed as expected: EDECRYPT
+auth failed as expected: EDECRYPT
+invalid key rejected: EINVAL_KEY
+invalid nonce rejected: EINVAL_NONCE

@@ -1,0 +1,28 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let m = SortedMap<int, string>();
+    m.set(5, "five");
+    m.set(1, "one");
+    m.set(3, "three");
+    m.set(2, "two");
+    System.println(m.length);
+    System.println(m.contains(3));
+    System.println(m.contains(9));
+    System.println(m.get(3).unwrap_or("?"));
+    System.println(m.first_key().unwrap_or(0 - 1));
+    System.println(m.last_key().unwrap_or(0 - 1));
+    System.println(m.ceiling_key(4).unwrap_or(0 - 1));
+    System.println(m.floor_key(4).unwrap_or(0 - 1));
+    System.println(m.ceiling_key(10).unwrap_or(0 - 1));
+    System.println(m.floor_key(0).unwrap_or(0 - 1));
+
+    for (let entry in m) {
+        System.println(entry.key + " -> " + entry.value);
+    }
+
+    m.remove(3);
+    System.println(m.length);
+    System.println(m.contains(3));
+}

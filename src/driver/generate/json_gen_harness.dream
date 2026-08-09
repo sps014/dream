@@ -27,7 +27,8 @@ fun field_from_json(v: JsonValue): GenField {
         v.get("json_ignore").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false),
         v.get("property_name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
         v.get("option_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
-        v.get("is_type_param").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false)
+        v.get("is_type_param").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false),
+        v.get("map_value_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or("")
     );
 }
 

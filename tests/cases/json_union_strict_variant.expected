@@ -1,0 +1,4 @@
+{"type":"Circle","radius":7}
+ok:Circle(radius: 7)
+err:unknown variant 'Triangle' for union 'Shape'
+err:EPARSE:unknown variant '' for union 'Shape'

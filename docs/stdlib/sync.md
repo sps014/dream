@@ -15,6 +15,10 @@ A reentrant mutual-exclusion lock, equivalent to `lock (obj) { ... }` bracketed 
 - **Reentrant**: the same thread may call `acquire()` again before releasing — it must call `release()` the same number of times to fully release it. A different thread blocks until the holder releases every level.
 - **Blocking**: `acquire()` busy-waits (parks the OS thread on a WASM atomic wait, not a spin loop) until the lock is free.
 
+#### `try_acquire(): bool` / `try_acquire_for(ms: int): bool`
+
+Non-blocking / timed variants. `try_acquire` returns immediately (`true` on success, including a reentrant bump). `try_acquire_for` waits up to `ms` milliseconds (`ms <= 0` is a single try); timeout is best-effort under contention.
+
 ```dream
 @shared
 class Account {
@@ -50,7 +54,7 @@ A classic counting semaphore. `initial` permits are available up front; unlike `
 
 #### `Semaphore(initial: int)` / `acquire(): void` / `release(): void`
 
-Use it to cap concurrency — e.g. limiting how many workers touch a resource (a connection pool, a fixed-size buffer) at once:
+Use it to cap concurrency — e.g. limiting how many workers touch a resource (a connection pool, a fixed-size buffer) at once. Same `try_acquire` / `try_acquire_for(ms)` surface as `Lock`.
 
 ```dream
 async fun main(): void {

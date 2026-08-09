@@ -209,6 +209,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/collections/map_iterator.dream"),
             ),
             (
+                "<std>/system/collections/sorted_map.dream",
+                include_str!("system/collections/sorted_map.dream"),
+            ),
+            (
+                "<std>/system/collections/sorted_map_iterator.dream",
+                include_str!("system/collections/sorted_map_iterator.dream"),
+            ),
+            (
                 "<std>/system/collections/set.dream",
                 include_str!("system/collections/set.dream"),
             ),
@@ -223,6 +231,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/collections/queue_iterator.dream",
                 include_str!("system/collections/queue_iterator.dream"),
+            ),
+            (
+                "<std>/system/collections/priority_queue.dream",
+                include_str!("system/collections/priority_queue.dream"),
             ),
             (
                 "<std>/system/collections/stack.dream",
@@ -263,6 +275,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/text/string_builder.dream"),
             ),
             (
+                "<std>/system/text/fmt.dream",
+                include_str!("system/text/fmt.dream"),
+            ),
+            (
                 "<std>/system/text/regex_node_kind.dream",
                 include_str!("system/text/regex_node_kind.dream"),
             ),
@@ -271,12 +287,36 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/text/regex_empty_kind.dream"),
             ),
             (
+                "<std>/system/text/regex_unicode_prop.dream",
+                include_str!("system/text/regex_unicode_prop.dream"),
+            ),
+            (
+                "<std>/system/text/regex_unicode_ranges.dream",
+                include_str!("system/text/regex_unicode_ranges.dream"),
+            ),
+            (
                 "<std>/system/text/regex_node.dream",
                 include_str!("system/text/regex_node.dream"),
             ),
             (
                 "<std>/system/text/regex_op.dream",
                 include_str!("system/text/regex_op.dream"),
+            ),
+            (
+                "<std>/system/text/regex_sub_table.dream",
+                include_str!("system/text/regex_sub_table.dream"),
+            ),
+            (
+                "<std>/system/text/regex_backtrack_frame.dream",
+                include_str!("system/text/regex_backtrack_frame.dream"),
+            ),
+            (
+                "<std>/system/text/regex_backtracker.dream",
+                include_str!("system/text/regex_backtracker.dream"),
+            ),
+            (
+                "<std>/system/text/regex_match_info.dream",
+                include_str!("system/text/regex_match_info.dream"),
             ),
             (
                 "<std>/system/text/regex_inst.dream",
@@ -484,6 +524,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/net/http_response.dream"),
             ),
             (
+                "<std>/system/net/net_wire_reader.dream",
+                include_str!("system/net/net_wire_reader.dream"),
+            ),
+            (
+                "<std>/system/net/http_stream_response.dream",
+                include_str!("system/net/http_stream_response.dream"),
+            ),
+            (
                 "<std>/system/net/cookie_jar.dream",
                 include_str!("system/net/cookie_jar.dream"),
             ),
@@ -498,6 +546,22 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/net/http_client.dream",
                 include_str!("system/net/http_client.dream"),
+            ),
+            (
+                "<std>/system/net/net_error.dream",
+                include_str!("system/net/net_error.dream"),
+            ),
+            (
+                "<std>/system/net/tcp_client.dream",
+                include_str!("system/net/tcp_client.dream"),
+            ),
+            (
+                "<std>/system/net/websocket_message.dream",
+                include_str!("system/net/websocket_message.dream"),
+            ),
+            (
+                "<std>/system/net/websocket.dream",
+                include_str!("system/net/websocket.dream"),
             ),
         ],
     },
@@ -516,6 +580,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         deps: &["system.core", "system.primitives"],
         files: &[
             (
+                "<std>/system/crypto/crypto_error.dream",
+                include_str!("system/crypto/crypto_error.dream"),
+            ),
+            (
                 "<std>/system/crypto/sha256.dream",
                 include_str!("system/crypto/sha256.dream"),
             ),
@@ -530,6 +598,40 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/crypto/secure_random.dream",
                 include_str!("system/crypto/secure_random.dream"),
+            ),
+            (
+                "<std>/system/crypto/aes_gcm_key.dream",
+                include_str!("system/crypto/aes_gcm_key.dream"),
+            ),
+            (
+                "<std>/system/crypto/aes_gcm.dream",
+                include_str!("system/crypto/aes_gcm.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.process",
+        deps: &["system.core", "system.primitives", "system.text", "system.encoding"],
+        files: &[
+            (
+                "<std>/system/process/process_error.dream",
+                include_str!("system/process/process_error.dream"),
+            ),
+            (
+                "<std>/system/process/process_output.dream",
+                include_str!("system/process/process_output.dream"),
+            ),
+            (
+                "<std>/system/process/process_wire_reader.dream",
+                include_str!("system/process/process_wire_reader.dream"),
+            ),
+            (
+                "<std>/system/process/child_process.dream",
+                include_str!("system/process/child_process.dream"),
+            ),
+            (
+                "<std>/system/process/process.dream",
+                include_str!("system/process/process.dream"),
             ),
         ],
     },
@@ -574,6 +676,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/datetime_ymd.dream"),
             ),
             (
+                "<std>/system/timezone.dream",
+                include_str!("system/timezone.dream"),
+            ),
+            (
                 "<std>/system/datetime.dream",
                 include_str!("system/datetime.dream"),
             ),
@@ -584,12 +690,40 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
+        name: "system.testing",
+        deps: &["system.core", "system.primitives", "system"],
+        files: &[
+            (
+                "<std>/system/testing/assert.dream",
+                include_str!("system/testing/assert.dream"),
+            ),
+            (
+                "<std>/system/testing/test.dream",
+                include_str!("system/testing/test.dream"),
+            ),
+        ],
+    },
+    StdPackage {
         name: "system.codegen",
-        deps: &["system.core", "system.primitives", "system.text"],
-        files: &[(
-            "<std>/system/codegen/codegen.dream",
-            include_str!("system/codegen/codegen.dream"),
-        )],
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.text",
+            "system",
+            "system.io",
+            "system.collections",
+            "system.json",
+        ],
+        files: &[
+            (
+                "<std>/system/codegen/codegen.dream",
+                include_str!("system/codegen/codegen.dream"),
+            ),
+            (
+                "<std>/system/codegen/gen_context.dream",
+                include_str!("system/codegen/gen_context.dream"),
+            ),
+        ],
     },
     StdPackage {
         name: "system.logging",

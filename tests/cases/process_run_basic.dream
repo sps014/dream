@@ -1,0 +1,18 @@
+import system;
+import system.process;
+async fun main(): void {
+    let ok = await Process.run("echo", ["hello", "world"]);
+    switch (ok) {
+        Ok(out) => {
+            System.println(out.success());
+            System.println(out.stdout.trim());
+        },
+        Err(e) => System.println("unexpected error: " + e.message()),
+    }
+
+    let missing = await Process.run("dream-process-run-basic-missing-binary", []);
+    switch (missing) {
+        Ok(out) => System.println("unexpected success"),
+        Err(e) => System.println(e.code()),
+    }
+}

@@ -21,7 +21,7 @@ fun ocean_fs(v: VsOut): GpuVec4 {
 Host loop:
 
 ```dream
-let uniforms = Uniforms.pack_f32([t, 6.5, 16.0, aspect]);
+let uniforms = Uniforms.pack_f32([t, 14.0, 42.0, aspect]);
 let _ = await GpuRenderPass.draw_indexed_ex(
     surface, pipe, verts, indices, index_count, uniforms, sky
 );
@@ -56,8 +56,9 @@ Build first — a missing `.wasm` is a 404.
 
 ## Notes
 
-- Grid: 128×128 verts, indexed triangles (~32k tris).
-- Five Gerstner layers (swell + chop); normals from tangent derivatives.
+- Grid: 192×192 verts over ~96×96 world units (~73k tris).
+- Five Gerstner layers (long swell → fine ripple), time scaled down for a calm sea.
+- Shading: Schlick fresnel, muted deep water, dual-lobe specular, soft SSS, sparse foam.
 - Uniforms: `time`, camera height/distance, aspect — packed with `Uniforms.pack_f32`.
 - Depth buffer / MSAA / SSR are not in the v1 GPU API yet; this sample stays a single
   opaque mesh with sky clear color.

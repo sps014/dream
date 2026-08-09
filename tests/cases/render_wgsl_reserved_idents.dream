@@ -1,0 +1,32 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+    public color: GpuVec4;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+@vertex
+fun reserved_vs(v: Vertex): VsOut {
+    // `target` / `input` are WGSL reserved keywords; emitter must escape them.
+    let target = GpuVec2.of(v.pos.x, v.pos.y);
+    let input = GpuVec4.of(v.color.x, v.color.y, v.color.z, v.color.w);
+    let o = VsOut();
+    o.position = GpuVec4.of(target.x, target.y, 0.0, 1.0);
+    o.color = input;
+    return o;
+}
+
+@fragment
+fun reserved_fs(v: VsOut): GpuVec4 {
+    return v.color;
+}
+
+async fun main(): void {
+    System.println("ok");
+}

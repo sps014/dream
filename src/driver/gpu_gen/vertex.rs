@@ -1,6 +1,7 @@
 //! `@vertex` shader emission.
 
 use super::context::EmitCtx;
+use super::ident::escape_wgsl_ident;
 use super::layout::{
     assign_locations, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
     emit_interface_struct_wgsl, find_struct, has_position_gpuvec4, struct_name_of,
@@ -165,12 +166,16 @@ pub(super) fn emit_vertex(
     wgsl.push_str("  @builtin(vertex_index) _vi: u32,\n");
     wgsl.push_str("  @builtin(instance_index) _ii: u32,\n");
     if let Some((ref vp, ref sname)) = vertex_param {
-        wgsl.push_str(&format!("  {vp}: {sname},\n"));
+        wgsl.push_str(&format!(
+            "  {}: {},\n",
+            escape_wgsl_ident(vp),
+            escape_wgsl_ident(sname)
+        ));
     }
     let ret = if interface_ty.is_empty() {
         "void".into()
     } else {
-        interface_ty.clone()
+        escape_wgsl_ident(&interface_ty)
     };
     wgsl.push_str(&format!(") -> {ret} {{\n"));
     wgsl.push_str("  let vertex_index = i32(_vi);\n");
@@ -192,7 +197,8 @@ pub(super) fn emit_vertex(
 
 fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, String> {
     let locs = assign_locations(decl, false)?;
-    let mut s = format!("struct {} {{\n", decl.name.text);
+    let sname = escape_wgsl_ident(&decl.name.text);
+    let mut s = format!("struct {sname} {{\n");
     for field in &decl.fields {
         let Some(wgsl_ty) = dream_ty_to_wgsl_vec(&field.field_type) else {
             return Err(format!(
@@ -204,7 +210,7 @@ fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, Str
         let loc = locs.get(&field.name.text).copied().unwrap_or(0);
         s.push_str(&format!(
             "  @location({loc}) {}: {wgsl_ty},\n",
-            field.name.text
+            escape_wgsl_ident(&field.name.text)
         ));
     }
     s.push_str("}\n");
@@ -292,7 +298,7 @@ pub(super) fn emit_resource_param(
         ResClass::Uniform { ty } => {
             *has_uniform = true;
             let pname = param.name.text.clone();
-            uniform_fields.push_str(&format!("  {pname}: {ty},\n"));
+            uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
             bindings.push(GpuBinding {
                 name: pname,
                 binding: *binding_idx,

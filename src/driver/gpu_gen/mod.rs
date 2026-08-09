@@ -7,11 +7,13 @@ mod compute;
 mod context;
 mod expr;
 mod fragment;
+mod ident;
 mod layout;
 mod output;
 mod stmt;
 mod ty;
 mod types;
+mod validate;
 mod vertex;
 
 pub use output::{gpu_abi_json, join_wgsl_module};
@@ -22,6 +24,9 @@ use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::ProgramNode;
 
 /// Emit WGSL for every `@compute` / `@vertex` / `@fragment` function in `program`.
+///
+/// After emission, each shader/kernel source is parsed and validated with naga so reserved
+/// identifiers, type errors, and other WGSL issues fail at compile time instead of in the browser.
 pub fn collect_gpu_shaders(
     program: &ProgramNode<'_>,
     diagnostics: &mut DiagnosticBag,
@@ -42,6 +47,9 @@ pub fn collect_gpu_shaders(
                 .push(fragment::emit_fragment(func, program, diagnostics));
         }
         diagnostics.file_path = saved;
+    }
+    if !diagnostics.has_errors() {
+        validate::validate_gpu_wgsl(&out, diagnostics);
     }
     out
 }

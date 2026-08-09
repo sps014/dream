@@ -1,6 +1,7 @@
 //! `@fragment` shader emission.
 
 use super::context::EmitCtx;
+use super::ident::escape_wgsl_ident;
 use super::layout::{
     build_struct_field_tys, emit_interface_struct_wgsl, find_struct, has_position_gpuvec4,
     struct_name_of,
@@ -134,7 +135,11 @@ pub(super) fn emit_fragment(
     wgsl.push_str(&format!("@fragment\nfn {entry}(\n"));
     wgsl.push_str("  @builtin(position) frag_coord: vec4<f32>,\n");
     if let Some((ref vp, ref sname)) = vary_param {
-        wgsl.push_str(&format!("  {vp}: {sname},\n"));
+        wgsl.push_str(&format!(
+            "  {}: {},\n",
+            escape_wgsl_ident(vp),
+            escape_wgsl_ident(sname)
+        ));
     }
     wgsl.push_str(") -> @location(0) vec4<f32> {\n");
     // Remap Dream `frag_coord` uses; builtin param is already named frag_coord.

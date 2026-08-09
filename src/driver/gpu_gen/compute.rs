@@ -1,6 +1,7 @@
 //! Single-kernel emission: bindings header, body, entry point wrapper.
 
 use super::context::EmitCtx;
+use super::ident::escape_wgsl_ident;
 use super::stmt::emit_stmts;
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
@@ -148,7 +149,7 @@ pub(super) fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticB
             }
             ParamClass::Uniform { ty } => {
                 has_uniform = true;
-                uniform_fields.push_str(&format!("  {pname}: {ty},\n"));
+                uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
                 bindings.push(GpuBinding {
                     name: pname,
                     binding: binding_idx, // assigned after we know the uniform struct binding

@@ -2414,6 +2414,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const rp = renderPipelines.get(pipelineId);
         if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
         const dev = await ensureDevice();
+        if (!s.context) {
+          s.context = s.canvas.getContext("webgpu");
+          if (!s.context) throw new Error("canvas webgpu context unavailable");
+        }
         if (!s.configured) {
           s.context.configure({
             device: dev,
@@ -2466,6 +2470,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const rp = renderPipelines.get(pipelineId);
         if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
         const dev = await ensureDevice();
+        if (!s.context) {
+          s.context = s.canvas.getContext("webgpu");
+          if (!s.context) throw new Error("canvas webgpu context unavailable");
+        }
         if (!s.configured) {
           s.context.configure({
             device: dev,

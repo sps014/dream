@@ -6,6 +6,7 @@ use dream_syntax::nodes::types::Type;
 use dream_syntax::nodes::ProgramNode;
 use indexmap::IndexMap;
 
+use super::ident::escape_wgsl_ident;
 use super::types::GpuVertexAttr;
 
 pub(super) fn find_struct<'a>(
@@ -163,16 +164,18 @@ pub(super) fn emit_interface_struct_wgsl(
     for_fragment_input: bool,
 ) -> Result<String, String> {
     let locs = assign_locations(decl, true)?;
-    let mut s = format!("struct {} {{\n", decl.name.text);
+    let sname = escape_wgsl_ident(&decl.name.text);
+    let mut s = format!("struct {sname} {{\n");
     for field in &decl.fields {
-        let fname = &field.name.text;
+        let fname = escape_wgsl_ident(&field.name.text);
         let Some(wgsl_ty) = dream_ty_to_wgsl_vec(&field.field_type) else {
             return Err(format!(
-                "field '{fname}' has unsupported shader type '{}'",
+                "field '{}' has unsupported shader type '{}'",
+                field.name.text,
                 field.field_type.get_type()
             ));
         };
-        if fname == "position" {
+        if field.name.text == "position" {
             if for_fragment_input {
                 continue;
             }
@@ -184,7 +187,7 @@ pub(super) fn emit_interface_struct_wgsl(
             }
             s.push_str(&format!("  @builtin(position) {fname}: {wgsl_ty},\n"));
         } else {
-            let loc = locs.get(fname).copied().unwrap_or(0);
+            let loc = locs.get(field.name.text.as_str()).copied().unwrap_or(0);
             s.push_str(&format!("  @location({loc}) {fname}: {wgsl_ty},\n"));
         }
     }

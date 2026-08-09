@@ -1,5 +1,6 @@
 //! Per-kernel emit context: scopes, binding lookup, identifier rewriting.
 
+use super::ident::escape_wgsl_ident;
 use super::types::GpuBinding;
 use indexmap::IndexMap;
 use std::cell::RefCell;
@@ -92,13 +93,13 @@ impl EmitCtx<'_> {
     /// Map a Dream identifier to WGSL. Locals always win over bindings (shadowing).
     pub(super) fn rewrite_ident(&self, name: &str) -> String {
         if self.is_local(name) {
-            name.to_string()
+            escape_wgsl_ident(name)
         } else if self.is_uniform(name) {
-            format!("{}.{}", self.uniforms_var(), name)
+            format!("{}.{}", self.uniforms_var(), escape_wgsl_ident(name))
         } else if self.is_resource(name) || self.is_workgroup(name) {
             self.mangle(name)
         } else {
-            name.to_string()
+            escape_wgsl_ident(name)
         }
     }
 

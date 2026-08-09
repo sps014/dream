@@ -2,6 +2,7 @@
 
 use super::context::EmitCtx;
 use super::expr::{coerce_expr_to_wgsl_ty, emit_call, emit_expr};
+use super::ident::escape_wgsl_ident;
 use super::ty::{dream_ty_to_wgsl, infer_wgsl_ty};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::expression::ExpressionNode;
@@ -94,11 +95,12 @@ fn emit_stmt(
                     .map(dream_ty_to_wgsl)
                     .unwrap_or_else(|| infer_wgsl_ty(init, ctx));
                 ctx.define_local(&name.text, t.clone());
+                let wname = escape_wgsl_ident(&name.text);
                 if *prefix {
                     out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
-                    out.push_str(&format!("{}var {}: {} = {};\n", p, name.text, t, place));
+                    out.push_str(&format!("{}var {}: {} = {};\n", p, wname, t, place));
                 } else {
-                    out.push_str(&format!("{}var {}: {} = {};\n", p, name.text, t, place));
+                    out.push_str(&format!("{}var {}: {} = {};\n", p, wname, t, place));
                     out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
                 }
                 return;
@@ -112,7 +114,7 @@ fn emit_stmt(
             out.push_str(&format!(
                 "{}var {}: {} = {};\n",
                 p,
-                name.text,
+                escape_wgsl_ident(&name.text),
                 t,
                 init_s
             ));
@@ -159,7 +161,7 @@ fn emit_stmt(
                 "{}{}.{} = {};\n",
                 p,
                 emit_expr(obj, ctx),
-                member.text,
+                escape_wgsl_ident(&member.text),
                 emit_expr(value, ctx)
             ));
         }

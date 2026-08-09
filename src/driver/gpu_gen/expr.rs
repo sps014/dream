@@ -1,6 +1,7 @@
 //! Expression → WGSL lowering (including scalar coercion).
 
 use super::context::EmitCtx;
+use super::ident::escape_wgsl_ident;
 use super::ty::{
     cast_wgsl_if_needed, common_numeric_wgsl_ty, dream_ty_to_wgsl, infer_wgsl_ty,
 };
@@ -317,7 +318,7 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             if member.text == "length" {
                 format!("i32(arrayLength(&{}))", base)
             } else {
-                format!("{}.{}", base, member.text)
+                format!("{}.{}", base, escape_wgsl_ident(&member.text))
             }
         }
         ExpressionNode::FunctionCall(name, _, args) => emit_call(&name.text, args, ctx),

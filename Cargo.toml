@@ -27,6 +27,8 @@ tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 wasmtime = { version = "45.0.2", optional = true }
 wat = "1.252.0"
+# Parse + validate emitted WGSL at compile time (same frontend WebGPU/naga use).
+naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 # HTTP client backing the native (wasmtime) `HttpClient` host functions (src/execution/host.rs).
 # Blocking so it fits the synchronous host-call model; `serde_json` parses the header object.
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }

@@ -280,6 +280,42 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.",
     },
     AttributeSpec {
+        name: "native",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+            AttributeTarget::ExternFunction,
+        ],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a function/method as available on the native (wasmtime) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.",
+    },
+    AttributeSpec {
+        name: "node",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+            AttributeTarget::ExternFunction,
+        ],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a function/method as available on the Node.js host. Combine with `@native`/`@web` to restrict; absent all three means every runtime.",
+    },
+    AttributeSpec {
+        name: "web",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+            AttributeTarget::ExternFunction,
+        ],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.",
+    },
+    AttributeSpec {
         name: "shared",
         // `class` only: a `struct` is a value type (copied on assignment, no heap allocation), so
         // an embedded lock word would defeat the point (`Shared<T>` is the value-type equivalent —
@@ -395,6 +431,110 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
 /// True when a parameter carries `@readonly` (compute storage → WGSL `read`).
 pub fn has_readonly_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "readonly")
+}
+
+/// Which runtimes a declaration is available on. Absent `@native`/`@node`/`@web` means all three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeSupport {
+    pub native: bool,
+    pub node: bool,
+    pub web: bool,
+}
+
+impl RuntimeSupport {
+    pub const ALL: Self = Self {
+        native: true,
+        node: true,
+        web: true,
+    };
+
+    pub fn from_attributes(attributes: &[AttributeNode]) -> Self {
+        let has_native = attributes.iter().any(|a| a.name.text == "native");
+        let has_node = attributes.iter().any(|a| a.name.text == "node");
+        let has_web = attributes.iter().any(|a| a.name.text == "web");
+        if !has_native && !has_node && !has_web {
+            return Self::ALL;
+        }
+        Self {
+            native: has_native,
+            node: has_node,
+            web: has_web,
+        }
+    }
+
+    pub fn display(&self) -> String {
+        if self.native && self.node && self.web {
+            return "all".to_string();
+        }
+        let mut parts = Vec::new();
+        if self.native {
+            parts.push("native");
+        }
+        if self.node {
+            parts.push("node");
+        }
+        if self.web {
+            parts.push("web");
+        }
+        parts.join(", ")
+    }
+}
+
+/// Active compile-time runtime target(s) selected by the driver/CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompileTargets {
+    pub native: bool,
+    pub node: bool,
+    pub web: bool,
+}
+
+impl CompileTargets {
+    pub fn native_only() -> Self {
+        Self {
+            native: true,
+            node: false,
+            web: false,
+        }
+    }
+
+    /// Every selected compile target must be listed in `support`.
+    pub fn allows(&self, support: RuntimeSupport) -> bool {
+        (!self.native || support.native)
+            && (!self.node || support.node)
+            && (!self.web || support.web)
+    }
+
+    pub fn display_list(&self) -> String {
+        let mut parts = Vec::new();
+        if self.native {
+            parts.push("native");
+        }
+        if self.node {
+            parts.push("node");
+        }
+        if self.web {
+            parts.push("web");
+        }
+        parts.join(", ")
+    }
+
+    fn missing_targets(&self, support: RuntimeSupport) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if self.native && !support.native {
+            missing.push("native");
+        }
+        if self.node && !support.node {
+            missing.push("node");
+        }
+        if self.web && !support.web {
+            missing.push("web");
+        }
+        missing
+    }
+
+    pub fn first_missing_target(&self, support: RuntimeSupport) -> Option<&'static str> {
+        self.missing_targets(support).into_iter().next()
+    }
 }
 
 fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {

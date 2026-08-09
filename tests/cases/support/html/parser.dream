@@ -3,9 +3,10 @@ module parser;
 import system;
 import system.collections;
 import system.json;
+import system.text;
 
 // Compile-time HTML markup → Dream source (`Html.el` / `Html.render`).
-// Used by harness.dream; no Rust markup logic.
+// Called from the `@generator(ctx: GenContext)` body in `gen.dream`.
 
 class SpliceCursor {
     public i: int;
@@ -177,16 +178,16 @@ public class HtmlCompiler {
         if (parts.length == 0) {
             return GenResult.success("[]");
         }
-        let joined = "";
+        let joined_sb = StringBuilder();
         let i = 0;
         while (i < parts.length) {
             if (i > 0) {
-                joined = joined + ", ";
+                joined_sb.append(", ");
             }
-            joined = joined + parts.get(i).unwrap_or("");
+            joined_sb.append(parts.get(i).unwrap_or(""));
             i = i + 1;
         }
-        return GenResult.success("[" + joined + "]");
+        return GenResult.success("[" + joined_sb.build() + "]");
     }
 
     static fun escape_str(s: string): string {
@@ -245,16 +246,16 @@ public class HtmlCompiler {
         if (parts.length == 0) {
             return GenResult.success("\"\"");
         }
-        let joined = "";
+        let joined_sb = StringBuilder();
         let i = 0;
         while (i < parts.length) {
             if (i > 0) {
-                joined = joined + " + ";
+                joined_sb.append(" + ");
             }
-            joined = joined + parts.get(i).unwrap_or("");
+            joined_sb.append(parts.get(i).unwrap_or(""));
             i = i + 1;
         }
-        return GenResult.success(joined);
+        return GenResult.success(joined_sb.build());
     }
 
     static fun element_source_len(s: string): Option<int> {
@@ -327,15 +328,15 @@ public class HtmlCompiler {
         if (result_parts.length == 0) {
             return GenResult.success("\"\"");
         }
-        let joined = "";
+        let joined_sb = StringBuilder();
         let i = 0;
         while (i < result_parts.length) {
             if (i > 0) {
-                joined = joined + " + ";
+                joined_sb.append(" + ");
             }
-            joined = joined + result_parts.get(i).unwrap_or("");
+            joined_sb.append(result_parts.get(i).unwrap_or(""));
             i = i + 1;
         }
-        return GenResult.success(joined);
+        return GenResult.success(joined_sb.build());
     }
 }

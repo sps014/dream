@@ -11,9 +11,15 @@ public class GenField {
     public property_name: string;
     public option_inner: string;
     public is_type_param: bool;
-    // Value type of a `Map<string, V>` field (empty when not a map); the key type is required to
-    // be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).
+    // Value type of a `Map<string, V>` / `SortedMap<string, V>` field (empty when not a map); the
+    // key type is required to be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).
     public map_value_inner: string;
+    // `Map` or `SortedMap` when `map_value_inner` is set (empty otherwise).
+    public map_ctor: string;
+    // Element type of a `List<T>` / `Set<T>` field (empty when not a seq collection).
+    public seq_elem_inner: string;
+    // `list` or `set` when `seq_elem_inner` is set (empty otherwise).
+    public seq_kind: string;
 
     // Builds a field snapshot from SemanticModel data.
     public constructor(
@@ -23,7 +29,10 @@ public class GenField {
         property_name: string,
         option_inner: string,
         is_type_param: bool,
-        map_value_inner: string
+        map_value_inner: string,
+        map_ctor: string,
+        seq_elem_inner: string,
+        seq_kind: string
     ) {
         this.name = name;
         this.type_name = type_name;
@@ -32,6 +41,9 @@ public class GenField {
         this.option_inner = option_inner;
         this.is_type_param = is_type_param;
         this.map_value_inner = map_value_inner;
+        this.map_ctor = map_ctor;
+        this.seq_elem_inner = seq_elem_inner;
+        this.seq_kind = seq_kind;
     }
 
     // Convenience factory matching the constructor arguments.
@@ -42,9 +54,23 @@ public class GenField {
         property_name: string,
         option_inner: string,
         is_type_param: bool,
-        map_value_inner: string
+        map_value_inner: string,
+        map_ctor: string,
+        seq_elem_inner: string,
+        seq_kind: string
     ): GenField {
-        return GenField(name, type_name, json_ignore, property_name, option_inner, is_type_param, map_value_inner);
+        return GenField(
+            name,
+            type_name,
+            json_ignore,
+            property_name,
+            option_inner,
+            is_type_param,
+            map_value_inner,
+            map_ctor,
+            seq_elem_inner,
+            seq_kind
+        );
     }
 
     // JSON object key: `@json_property` override, else the Dream field name.

@@ -1,7 +1,6 @@
 # HTML sample
 
-Compile-time `html { <tags>… }` syntax DSL — a larger example of the same harness protocol
-as [`../quote/`](../quote/). Prefer **quote** if you are learning generators.
+Compile-time `html { <tags>… }` syntax DSL. Prefer **quote** if you are learning generators.
 
 ## User-facing code
 
@@ -43,14 +42,7 @@ Expected stdout:
 | `app.dream` | Program that uses `html { … }` |
 | `html.dream` | Runtime `Html.el` / `render` / `text` |
 | `parser.dream` | `HtmlCompiler` — markup → Dream `Html.el` source |
-| `gen.dream` | `@generator` + `@syntax_block("html")` |
-| `harness.dream` | Snapshot in → replace lines out |
+| `gen.dream` | `@generator(ctx: GenContext)` + `@syntax_block("html")` |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
-
-## Under the hood
-
-Registration claims `html`. The host snapshots each `html { }` site and runs sibling
-`harness.dream`, which calls `HtmlCompiler.compile` and prints `GenHost` OK lines. The host
-`replace`s those expressions before type-checking (no Rust markup parser).
 
 See [Source generators](../../../docs/language/generators.md).

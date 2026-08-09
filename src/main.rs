@@ -1,6 +1,7 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
+use dream_abi::attributes::CompileTargets;
 use dream::execution::wasm_runner::execute_wasm;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
@@ -30,6 +31,7 @@ fn main() -> ExitCode {
     let mut want_runtime = false;
     let mut want_web = false;
     let mut want_node = false;
+    let mut explicit_target: Option<CompileTargets> = None;
     let mut crate_type = CrateType::Bin;
     let mut crate_type_explicit = false;
 
@@ -64,6 +66,55 @@ fn main() -> ExitCode {
             want_web = true;
         } else if arg == "--node" {
             want_node = true;
+        } else if arg == "--target" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--target requires native, node, or web");
+                return ExitCode::FAILURE;
+            };
+            if explicit_target.is_some() {
+                error!("--target may only be specified once");
+                return ExitCode::FAILURE;
+            }
+            explicit_target = Some(match val.as_str() {
+                "native" => CompileTargets::native_only(),
+                "node" => CompileTargets {
+                    native: false,
+                    node: true,
+                    web: false,
+                },
+                "web" => CompileTargets {
+                    native: false,
+                    node: false,
+                    web: true,
+                },
+                other => {
+                    error!("unknown --target '{}': expected native, node, or web", other);
+                    return ExitCode::FAILURE;
+                }
+            });
+        } else if let Some(val) = arg.strip_prefix("--target=") {
+            if explicit_target.is_some() {
+                error!("--target may only be specified once");
+                return ExitCode::FAILURE;
+            }
+            explicit_target = Some(match val {
+                "native" => CompileTargets::native_only(),
+                "node" => CompileTargets {
+                    native: false,
+                    node: true,
+                    web: false,
+                },
+                "web" => CompileTargets {
+                    native: false,
+                    node: false,
+                    web: true,
+                },
+                other => {
+                    error!("unknown --target '{}': expected native, node, or web", other);
+                    return ExitCode::FAILURE;
+                }
+            });
         } else if arg == "--crate-type" {
             i += 1;
             let Some(val) = args.get(i) else {
@@ -144,6 +195,18 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    let compile_targets = explicit_target.unwrap_or_else(|| {
+        if runtimes.is_empty() {
+            CompileTargets::native_only()
+        } else {
+            CompileTargets {
+                native: false,
+                node: want_node,
+                web: want_web,
+            }
+        }
+    });
+
     // Route logs to stderr so they never corrupt stdout — critical in `debug-adapter` mode, where
     // stdout carries the framed DAP protocol stream (and harmless/conventional for other modes).
     let subscriber = FmtSubscriber::builder()
@@ -180,6 +243,7 @@ fn main() -> ExitCode {
         .with_release(release)
         .with_debug_info(debug_info)
         .with_runtimes(runtimes)
+        .with_compile_targets(compile_targets)
         .with_emit_abi(emit_abi)
         .with_crate_type(crate_type);
     if let Some(level) = optimize {
@@ -235,7 +299,7 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--runtime --web|--node] [run|debug-adapter] <file>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [run|debug-adapter] <file>",
         program
     );
     error!("  -v, --verbose         Print progress information");
@@ -249,6 +313,9 @@ fn print_usage(program: &str) {
         "  -O, --optimize[=LVL]  wasm-opt level (LVL: 0-4, s, z; default: s); overrides --release"
     );
     error!("  --crate-type lib|bin  Library (no primary main) or binary (default: bin)");
+    error!(
+        "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
+    );
     error!(
         "  --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)"
     );

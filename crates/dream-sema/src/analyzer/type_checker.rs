@@ -22,20 +22,24 @@ impl<'a> Analyzer<'a> {
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
         let is_compute = dream_abi::attributes::has_compute_attr(&function.attributes);
-        self.with_unsafe_flag(is_unsafe, |s| {
-            s.with_compute_flag(is_compute, |s| {
-                s.with_async_flag(function.is_async, |s| {
-                    s.analyze_body(
-                        function.body,
-                        function,
-                        Some(&param_table),
-                        false,
-                        diagnostics,
-                    )?;
-                    // Enforce the v1 `await` placement rules (only in async functions, only at statement
-                    // position) and that non-async functions contain no `await` at all.
-                    s.check_await_positions(function, diagnostics);
-                    Ok(())
+        let runtime_support =
+            dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
+        self.with_runtime_flag(runtime_support, |s| {
+            s.with_unsafe_flag(is_unsafe, |s| {
+                s.with_compute_flag(is_compute, |s| {
+                    s.with_async_flag(function.is_async, |s| {
+                        s.analyze_body(
+                            function.body,
+                            function,
+                            Some(&param_table),
+                            false,
+                            diagnostics,
+                        )?;
+                        // Enforce the v1 `await` placement rules (only in async functions, only at statement
+                        // position) and that non-async functions contain no `await` at all.
+                        s.check_await_positions(function, diagnostics);
+                        Ok(())
+                    })
                 })
             })
         })?;

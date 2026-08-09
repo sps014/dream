@@ -1,0 +1,10 @@
+import system;
+
+@native
+fun f(): void {
+    System.println("ok");
+}
+
+fun main(): void {
+    f();
+}

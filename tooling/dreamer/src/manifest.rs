@@ -292,31 +292,33 @@ impl Dependency {
     }
 }
 
-/// Package names are restricted to the same "hyphen or underscore, alphanumeric" shape Cargo
-/// uses for crate names, since a hyphenated name maps to an underscored `import` segment
-/// (`json-tools` -> `import json_tools...;`), mirroring how Rust crate names relate to `use` paths.
+/// Package names must start with a letter and use only ASCII alphanumerics, `-`, `_`, or `.`.
+/// Hyphens and dots in the registry name map to underscores in `import` statements and in
+/// `dream_packages/` directory names (`json-tools` / `foo.bar` → `json_tools` / `foo_bar`).
 pub fn validate_package_name(name: &str) -> Result<()> {
     if name.is_empty() {
         bail!("package name must not be empty");
     }
-    let valid = name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    let valid = name.chars().all(|c| {
+        c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'
+    });
     let starts_alpha = name.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
     if !valid || !starts_alpha {
         bail!(
             "invalid package name '{}': must start with a letter and contain only \
-             ASCII letters, digits, '-', or '_'",
+             ASCII letters, digits, '-', '_', or '.'",
             name
         );
     }
     Ok(())
 }
 
-/// Maps a package name to the identifier used in `import` statements (`json-tools` ->
-/// `json_tools`), matching how Rust crate names with hyphens are referenced via `use`.
+/// Maps a registry package name to the `import` segment and `dream_packages/` directory name.
+/// Hyphens and dots become underscores so `import foo.bar;` keeps its usual subpath meaning
+/// (`foo/bar.dream`) and does not collide with a registry package literally named `foo.bar`
+/// (`import foo_bar;` after `dreamer add foo.bar`).
 pub fn import_segment(package_name: &str) -> String {
-    package_name.replace('-', "_")
+    package_name.replace(['-', '.'], "_")
 }
 
 impl Manifest {
@@ -471,12 +473,14 @@ mod tests {
         assert!(validate_package_name("").is_err());
         assert!(validate_package_name("1abc").is_err());
         assert!(validate_package_name("has space").is_err());
-        assert!(validate_package_name("has.dot").is_err());
+        assert!(validate_package_name("has.dot").is_ok());
     }
 
     #[test]
-    fn maps_hyphens_to_underscores_for_import_segments() {
+    fn maps_hyphens_and_dots_to_underscores_for_import_segments() {
         assert_eq!(import_segment("json-tools"), "json_tools");
+        assert_eq!(import_segment("foo.bar"), "foo_bar");
+        assert_eq!(import_segment("json-tools.extra"), "json_tools_extra");
         assert_eq!(import_segment("already_underscored"), "already_underscored");
     }
 

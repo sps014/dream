@@ -1,50 +1,20 @@
 # `system.codegen`
 
-Helpers for compile-time source generators.
+Helpers for **compile-time source generators** you write in Dream.
 
 ```dream
 import system.codegen;
 ```
 
-Syntax DSLs are **not** part of this package — see
-[Source generators](../language/generators.md). Beginner sample:
-[`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote).
-Advanced (markup parser + harness):
+Tutorial and samples: [Source generators](../language/generators.md),
+[`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote),
 [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html).
-
-
-## Status
-
-| Piece | Today |
-|-------|--------|
-| `CodeBuilder` | Shipped — build Dream source strings |
-| `GenHost` | Shipped — OK/ERR/LOC stdout markers for harnesses |
-| `GenResult` (`system.json`) | Shipped — expand outcome + optional type/field for spans |
-| `GenContext` / `GenSyntaxBlock` | Shipped — Dream-side context for an *executed* `@generator` body: `syntax_blocks`, `replace`, `error`, `finish` |
-| Host `GeneratorContext` | Rust only (`driver/generate`) — `emit_*`, `replace`, `error` |
-| User `@generator` Dream bodies | **Executed** when the function takes a single `GenContext` and has a non-empty body (see below); an empty body still falls back to a sibling `harness.dream` |
-| Builtin `@json` | Shipped in the driver (language derive) |
-| Syntax-DSL harness runner | Shipped — generic snapshot → harness WASM → `replace` (used for both the auto-generated executed-body harness and a hand-written sibling `harness.dream`) |
-
-When a Dream harness runs (as `@json` does), print `GenHost.err_marker()` then the message, and optionally `GenHost.loc_marker()` + `GenHost.format_loc(type, field)` so the host can attach a source span via `DiagnosticBag`. Failures surface as `CompileError::Generator`.
 
 ## `CodeBuilder`
 
-Accumulates Dream source for `emit_extend` / `emit_file` bodies. Construct with `CodeBuilder()`
-(4 spaces per indent level) or `CodeBuilder.with_spaces(n)` for `n` spaces per level.
+Builds indented Dream source strings — use in parser/emit helpers that return generated code.
 
-#### `CodeBuilder()` / `CodeBuilder.with_spaces(n)`
-
-Creates an empty builder with default or custom indent width. Use `with_spaces` when generated code must match a project's style guide.
-
-```dream
-let b = CodeBuilder();
-let tight = CodeBuilder.with_spaces(2);
-```
-
-#### `indent()` / `dedent()` / `line(text)` / `append(text)` / `to_string()`
-
-Builds source line by line: `line` adds a newline and applies indent at line start; `append` adds inline text without re-indenting mid-line.
+Construct with `CodeBuilder()` (4 spaces per indent) or `CodeBuilder.with_spaces(n)`.
 
 ```dream
 let b = CodeBuilder();
@@ -53,56 +23,55 @@ b.indent();
 b.line("return JsonValue.dict();");
 b.dedent();
 b.line("}");
-b.append("// trailing comment");
 let src = b.to_string();
 ```
 
-Indent is applied only at the start of a line. Mid-line `append` does not re-prefix.
+| Method | Effect |
+|--------|--------|
+| `indent()` / `dedent()` | Adjust indent depth |
+| `line(text)` | New line at current indent |
+| `append(text)` | Inline text (indent only at line start) |
+| `to_string()` | Final source text |
 
-## `GenHost`
+## `GenSyntaxBlock`
 
-#### `ok_marker()` / `err_marker()` / `loc_marker()` / `format_loc(type, field)`
+One snapshotted `introducer { … }` call site, passed to your `@generator` body.
 
-Returns the stdout marker strings the compile host expects from generator harnesses. Print `err_marker()` + message on failure; optionally `loc_marker()` + `format_loc` to point at a type field.
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | `int` | Opaque site id — pass back to `replace` / `error` unchanged |
+| `name` | `string` | Introducer (`quote`, `html`, …) |
+| `body` | `string` | Raw body text; splices appear as `{expr}` placeholders |
+| `splices` | `List<string>` | Dream source of each splice, in order |
+
+## `GenContext`
+
+Handed to an executed `@generator(ctx: GenContext)` function. The compiler loads it from a
+snapshot of every syntax-block site, runs your function, then applies queued replaces and errors.
+
+Write your generator against these methods:
+
+#### `syntax_blocks(name: string): List<GenSyntaxBlock>`
+
+Every site for introducer `name` (e.g. `ctx.syntax_blocks("quote")`).
+
+#### `all_blocks(): List<GenSyntaxBlock>`
+
+Every snapshotted site, regardless of introducer.
+
+#### `replace(block: GenSyntaxBlock, dream_expr: string): void`
+
+Rewrites `block`'s call site to `dream_expr` before type-checking. Queue one line per site.
+
+#### `error(block: GenSyntaxBlock, message: string): void`
+
+Reports a generate-time diagnostic tied to a site. Only the first error is kept.
+
+#### `error_general(message: string): void`
+
+Reports a generate-time error with no associated site.
 
 ```dream
-System.println(GenHost.ok_marker());
-System.println(GenHost.err_marker());
-System.println(GenHost.loc_marker());
-System.println(GenHost.format_loc("User", "name"));
-```
-
-## `GenContext` / `GenSyntaxBlock`
-
-Compile-time context handed to an `@generator(ctx: GenContext)` body when it claims a
-`@syntax_block`. See [Source generators](../language/generators.md#your-first-custom-generator-quote)
-for the end-to-end walkthrough.
-
-#### `GenContext.from_snapshot(path)`
-
-Loads a `GenContext` from the JSON snapshot the host wrote (usually
-`System.env_or("DREAM_SYNTAX_GEN_SNAPSHOT", "")`). The compiler's auto-generated harness calls this
-for you; only call it directly if you're hand-rolling a harness that wants `GenContext`'s parsing.
-
-#### `syntax_blocks(name)` / `all_blocks()`
-
-Returns every `GenSyntaxBlock` snapshot matching introducer `name` (or every site, for
-`all_blocks()`). Each `GenSyntaxBlock` has `id`, `name`, `body` (raw text, splices as `{expr}`
-placeholders), and `splices` (`List<string>` of each splice's Dream source, in order).
-
-#### `replace(block, dream_expr)` / `error(block, message)` / `error_general(message)`
-
-Queues a rewrite or a generate-time diagnostic for later flushing; `error`/`error_general` keep
-only the first reported failure, matching the `GenHost` `ERR` protocol's one-message contract.
-
-#### `finish()`
-
-Flushes every queued `replace`/`error` call to stdout using the `GenHost` protocol. The
-auto-generated harness calls this once after your `@generator` function returns.
-
-```dream
-import system.codegen;
-
 @generator
 @syntax_block("quote")
 public fun quote(ctx: GenContext): void {
@@ -112,49 +81,28 @@ public fun quote(ctx: GenContext): void {
 }
 ```
 
+Failures surface as `CompileError::Generator` in the main compile diagnostic stream.
+
 ## `GenResult` (`system.json`)
 
-Outcome of a generator expand step.
-
-#### `GenResult.success(source)` / `failure(error)` / `failure_at(error, type, field)`
-
-Constructs the outcome object a harness returns: success with generated source, plain failure, or failure tied to a type/field for span attachment.
+Outcome type for compile helpers (e.g. a markup parser). Import `system.json` alongside
+`system.codegen`.
 
 ```dream
 import system.json;
 
-let ok = GenResult.success("extend User { }");
-let bad = GenResult.failure("unsupported field");
-let at = GenResult.failure_at("bad type", "User", "age");
-System.println(ok.ok);
-System.println(bad.error);
+let ok = GenResult.success("Html.render(...)");
+let bad = GenResult.failure("unexpected token");
+let at = GenResult.failure_at("bad field", "User", "age");
 ```
 
-Fields: `ok`, `source`, `error`, `error_type`, `error_field`.
+Fields: `ok`, `source`, `error`, `error_type`, `error_field`. On failure, call
+`ctx.error(block, result.error)` from your generator.
 
-## Generator host API (Rust)
-
-Generators discover work via `@generator` functions / attributes. The compile host exposes:
-
-### Discovery
-
-- `ctx.types()` / `ctx.types_with("attr")` → type symbols
-- `ctx.functions_with("attr")` → function symbols
-- `ctx.syntax_blocks("introducer")` → sites for `introducer { … }`
-
-### Emit / replace / errors
-
-- `ctx.emit_extend(type_name, body)` — synthesize `extend Type { body }`
-- `ctx.emit_file(path, source)` — parse a synthetic Dream file
-- `ctx.replace(node, dream_expr)` — rewrite a syntax-DSL site
-- `ctx.error(node, message)` — queue a generate-time diagnostic (flushed into `DiagnosticBag`)
-
-### Shipped generators
+## Related
 
 | Feature | Where |
 |---------|--------|
-| `@json` derive | [JSON](json.md) — compiler builtin |
+| `@json` derive | [JSON](json.md) — compiler builtin, not `GenContext` |
 | Quote sample | [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote) |
 | HTML sample | [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html) |
-
-Full tutorial: [Source generators](../language/generators.md).

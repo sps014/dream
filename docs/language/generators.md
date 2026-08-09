@@ -1,57 +1,24 @@
 # Source generators
 
-Dream has **no runtime reflection**. When you need derives, DSLs, or boilerplate that
-depends on types and attributes, write a **compile-time source generator**.
+Dream has **no runtime reflection**. When you need a DSL, compile-time rewriting, or boilerplate
+that depends on types, write a **compile-time source generator**.
 
-Generators inspect declarations and either:
+Generators run during compilation — before type-checking on the final program — and do one of two
+things:
 
-1. **Emit** new Dream source — for example `@json` adds `to_json` / `from_json`. Prefer this when every use site should keep looking like ordinary Dream and the generated code is methods or helpers.
-2. **Replace** custom syntax — for example `quote { … }` or `html { … }` become ordinary Dream expressions. Prefer this when call sites need a domain-specific shape the parser would otherwise reject.
+1. **Replace** custom syntax — `quote { … }` or `html { … }` become ordinary Dream expressions at
+   call sites. Use this when the braced body is a domain-specific shape the main parser does not
+   understand.
+2. **Emit** new Dream source — for example `@json` adds `to_json` / `from_json` on your types.
+   Use this when call sites should stay ordinary Dream and generated code is methods or helpers.
 
-You can write a tiny generator (a few dozen lines) or a complex one (a full markup
-compiler). Start with `@json` or the
-[`quote`](https://github.com/sps014/dream/tree/main/sample/generators/quote) sample;
-study [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html) when you
-need a real DSL. Helpers live in [`system.codegen`](../stdlib/codegen.md).
+This page focuses on **writing replace-style generators** with `@generator`, `GenContext`, and
+`@syntax_block`. API details live in [`system.codegen`](../stdlib/codegen.md). For the shipped
+JSON derive, see [JSON](../stdlib/json.md) (`@json` is a compiler builtin — you do not register it).
 
-## Start here: `@json`
+## Your first generator: `quote`
 
-Marks a type for the compiler's built-in JSON derive. Generates `to_json` / `from_json` so you can round-trip without writing converters by hand. You do not register a generator — `system.json` loads automatically when any type carries `@json`.
-
-Use `@json` when the payload is a fixed Dream type. Reach for a custom generator when you need a different wire format, a DSL, or emit logic `@json` does not cover.
-
-```dream
-import system;
-import system.json;
-
-@json
-class Point {
-    public x: int;
-    public y: int;
-
-    public constructor(x: int, y: int) {
-        this.x = x;
-        this.y = y;
-    }
-}
-
-fun main(): void {
-    let p = Point(1, 2);
-    let text = Json.serialize(p);
-    let back = Json.deserialize<Point>(text).unwrap_or(p);
-    System.println(back.x);
-}
-```
-
-See [JSON](../stdlib/json.md) for field options (`@property_name`, `@json_ignore`, unions, …).
-
-## Your first custom generator: `quote`
-
-`quote { … }` turns the opaque text inside the braces into a Dream string literal at
-compile time. From the app side it looks like ordinary Dream — useful for multi-line
-snippets, embed templates, or teaching the expand pipeline without a real parser.
-
-Prefer `quote` as a learning sample or for literal string payloads. Prefer `html` (or your own DSL) when the braced body must be parsed and rewritten into structured Dream expressions.
+`quote { … }` turns the text inside the braces into a Dream string literal at compile time.
 
 ```dream
 import system;
@@ -69,11 +36,16 @@ Expected stdout: `Hello generators`
 
 Full sample: [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote).
 
-### Register it
+### Register the generator
 
-Tells the compiler which Dream file owns the generator. List the generator next to your entry file in `dream.toml` (search walks upward from the entry file's directory), or import a file that contains the `@generator` function.
+Tell the compiler which file owns the generator:
 
-Use `dream.toml` when the generator should always load with the project; use an import when apps opt in by depending on a module.
+- **`dream.toml`** — list the generator next to your entry file (search walks upward from the
+  entry file's directory).
+- **`import`** — import a module that contains the `@generator` function.
+
+Use `dream.toml` when the generator should always load with the project; use an import when apps
+opt in by depending on a module.
 
 ```toml
 [[generators]]
@@ -99,101 +71,48 @@ fun as_dream_string(s: string): string {
 }
 ```
 
-A `@generator` function with a single `GenContext` parameter and a non-empty body is **executed
-by the compiler**: it compiles the function (plus whatever it imports) to WASM, runs it with a
-`GenContext` loaded from a snapshot of the matching `@syntax_block` sites, and applies whatever
-`ctx.replace`/`ctx.error` calls it made — no sibling `harness.dream` required. An **empty** body
-(`public fun quote(): void { }`) keeps the old behavior: registration only, expand logic lives in
-a sibling `harness.dream` (see below) — useful when you'd rather hand-roll the snapshot/stdout
-protocol yourself, or are porting an existing harness.
-
-#### `@generator`
-
-Marks a top-level function as a generator entry. The function name is the generator's identity in registration and diagnostics. Apply it to every custom generator, even when the body is empty.
-
-#### `@syntax_block("introducer")`
-
-Claims expression DSL sites of the form `introducer { … }`. Without it, those sites fail with “unexpanded syntax block”. Pair with `@generator` on the same function when your feature is a replace-style DSL.
+A `@generator` function with a single `GenContext` parameter and a non-empty body is **compiled and
+run by the compiler**. It receives every matching syntax-block site, queues rewrites with
+`ctx.replace`, and reports failures with `ctx.error` — all before type-checking.
 
 | Attribute | Where | Meaning |
 |-----------|--------|---------|
-| `@generator` | function | Generator entry; name = function name |
-| `@syntax_block("intro")` | same function | Claims expression DSL `intro { … }` |
+| `@generator` | function | Generator entry; the function name is its identity |
+| `@syntax_block("intro")` | same function | Claims expression sites `intro { … }` |
 
-### Generator author: executed body (preferred)
+Without a registered `@syntax_block` for an introducer, call sites fail with “unexpanded syntax
+block”.
 
-Prefer a `GenContext` body (shown above) for new generators: `ctx.syntax_blocks(name)` returns
-every matching call site as a `GenSyntaxBlock` (`id`, `name`, `body`, `splices`); `ctx.replace(block,
-dream_expr)` queues the rewrite; `ctx.error(block, message)` queues a generate-time diagnostic. The
-compiler auto-generates a small harness that imports your generator's own module, calls your
-function with the loaded context, then flushes it — you never touch the stdout protocol directly.
+### `GenContext` workflow
 
-### Generator author: sibling harness (fallback, empty body)
+For each `introducer { … }` site the compiler snapshots:
 
-`harness.dream` next to `gen.dream` is the expand worker for syntax DSLs when the `@generator`
-function's body is empty. It reads a snapshot JSON file the host writes, builds a Dream expression
-for each site, and prints `GenHost` OK lines `id\tdream_expr` so the host can `replace` those sites
-before type-checking.
+- **`body`** — opaque text inside the braces (your DSL grammar).
+- **`splices`** — Dream source of each `{expr}` splice, in order (splices are real expressions and
+  type-check after rewrite).
 
-Write a harness only when you want the empty-stub + `harness.dream` split (e.g. porting an existing
-harness, or wanting the harness's `main` to be free-standing). Keep it small for literal rewrites
-(`quote`); grow it into a compiler when the body needs parsing (`html`).
+Your generator walks matching blocks and either replaces or errors:
 
 ```dream
-import system;
-import system.io;
-import system.collections;
-import system.json;
-import system.codegen;
-
-fun as_dream_string(s: string): string {
-    let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
-    return "\"" + escaped + "\"";
-}
-
-async fun main(): void {
-    let path = System.env_or("DREAM_SYNTAX_GEN_SNAPSHOT", "");
-    // … read path, Json.parse …
-    // for each block: out_lines.push(id + "\t" + as_dream_string(body.trim()));
-    System.println(GenHost.ok_marker());
-    // … println each out line …
+for (let block in ctx.syntax_blocks("quote")) {
+    ctx.replace(block, "\"literal\"");
+    // ctx.error(block, "message");  // first error wins; becomes CompileError::Generator
 }
 ```
 
-#### `GenHost.ok_marker()` / `err_marker()` / `loc_marker()` / `format_loc(type, field)`
+See [`GenContext` / `GenSyntaxBlock`](../stdlib/codegen.md#gensyntaxblock) for the full API.
 
-Stdout protocol strings the compile host understands. Print `ok_marker()` then each `id\texpr` line on success. On failure, print `err_marker()` then the message; optionally `loc_marker()` + `format_loc` so diagnostics can point at a type field.
+### Syntax DSL rules
 
-Use these instead of ad-hoc prefixes — the host only recognizes this protocol when applying replace lines or turning failures into `CompileError::Generator`.
+- The introducer is a bare identifier (`quote`, `html`, …) — not a keyword. Pick a name that will
+  not collide with identifiers in user scope.
+- Text inside `{ … }` is opaque to the Dream parser until your generator rewrites the site.
+- `{ … }` splices must be valid Dream expressions; they are type-checked after rewrite.
+- Every introducer must be claimed by `@syntax_block("…")` on a registered `@generator`.
 
-See a full harness in the [html sample](https://github.com/sps014/dream/tree/main/sample/generators/html/harness.dream) (the `quote` sample uses the executed `GenContext` body instead — see above). API details: [CodeBuilder / GenHost](../stdlib/codegen.md).
+## A larger example: HTML
 
-### How expand works
-
-The host owns discovery and rewrite; your generator owns turning opaque text into Dream source.
-
-1. Registration claims introducer `quote` (via `@syntax_block`).
-2. Host snapshots each `quote { }` site.
-3. **Executed body**: the host compiles + runs an auto-generated harness that calls your
-   `@generator(ctx: GenContext)` function with the snapshot loaded, then flushes `ctx`'s queued
-   `replace`/`error` calls as `GenHost` OK/ERR lines.
-   **Empty body**: the host instead runs your sibling `harness.dream`, which prints the same
-   `GenHost` OK lines `id\tdream_expr` by hand.
-4. Host replaces those sites with the expressions before type-checking.
-
-Rules for any syntax DSL:
-
-- The introducer is a bare identifier (`quote`, `html`, …) — not a keyword. Pick a name that will not collide with user identifiers in the same scope.
-- Inside the braces, non-splice text is opaque to the Dream parser. That is why you need a harness — the main parser does not understand your DSL grammar.
-- `{ … }` splices (when your DSL supports them) must be valid Dream expressions; they type-check after rewrite. Use splices to embed runtime values inside generated literals or builders.
-- Every introducer must be claimed by a registered `@syntax_block("…")`. Unregistered sites fail with “unexpanded syntax block”.
-
-## Complex example: HTML
-
-Same call-site shape as `quote`, but the sample adds a markup parser and runtime helpers.
-Use this pattern when the braced body is a real language (tags, attributes, nested structure) that should lower to ordinary Dream expressions — not a raw string.
-
-User-facing code stays readable; complexity lives in the sample's `HtmlCompiler` + harness.
+Same call-site shape as `quote`, but the sample parses markup and lowers it to runtime helpers.
 
 ```dream
 import system;
@@ -217,46 +136,34 @@ fun main() {
 cargo run -- run sample/generators/html/app.dream
 ```
 
-HTML is **not** a language builtin. Expand is owned by
-[`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html)
-(Dream `HtmlCompiler` + `harness.dream`, registered via `@syntax_block("html")`). The host
-only snapshots sites and applies replace lines — no Rust markup parser. Protocol is the
-same as `quote`; the harness is larger because it parses tags and `{expr}` splices.
+HTML is **not** a language builtin. The sample's `gen.dream` calls `HtmlCompiler` (in
+`parser.dream`) from its `GenContext` body; complexity stays in helper modules, not in the
+one-line call site.
 
-## User-defined attributes
+Full sample: [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html).
 
-Custom attributes annotate declarations so generators can find and configure them. Use them for routes, columns, permissions, or any metadata that should drive emit/replace without hard-coding type names in the generator.
+Typical layout:
 
-#### Declaring with `@attribute`
+| File | Role |
+|------|------|
+| `app.dream` | Program that uses `intro { … }` |
+| `gen.dream` | `@generator` + `@syntax_block`, `GenContext` replace logic |
+| `parser.dream` (optional) | DSL → Dream source (returns `GenResult` on failure) |
+| `dream.toml` | `[[generators]] path = "gen.dream"` |
 
-Define the attribute schema with `@attribute` on a bare top-level function. The function name is the attribute name; its parameters are the `@name(...)` argument schema. Empty bodies are fine — this is a schema declaration, not runtime code.
+## Emit-style derives (`@json`)
 
-```dream
-@attribute
-public fun route(path: string): void { }
-```
+For method synthesis on existing types, the shipped example is **`@json`**: mark a class or union
+and the compiler generates converters — no custom `@generator` registration. See
+[JSON](../stdlib/json.md).
 
-#### Applying the attribute
+Custom emit generators (new attributes that add methods or files) are not yet exposed through
+`GenContext`; use `@json` when JSON round-trip is enough.
 
-Attach the attribute to the declarations your generator should see:
+## Building generated source with `CodeBuilder`
 
-```dream
-@route("/users")
-public fun list_users(): void { }
-```
-
-#### Querying from a generator
-
-Host discovery APIs (Rust `GeneratorContext` today; see [codegen](../stdlib/codegen.md)):
-
-- `functions_with("route")` / `types_with("attr")` — find annotated symbols.
-- `attribute_args("route")` / `attribute_string("name")` / `has_attribute("name")` — read arguments.
-
-Trigger attributes such as `@json` must be known to the language. Generators query attributes by name on declaration symbols — they do not re-parse source for `@…` text.
-
-## Emitting source with CodeBuilder
-
-Builds indented Dream source strings for `emit_extend` / `emit_file`. Prefer `CodeBuilder` over manual `"\n" + "    "` concatenation when generating multi-line methods — indent stays consistent and easier to edit.
+When a helper module emits multi-line Dream source (as `HtmlCompiler` does), use
+[`CodeBuilder`](../stdlib/codegen.md#codebuilder) instead of manual indent strings:
 
 ```dream
 import system.codegen;
@@ -268,43 +175,41 @@ b.line("return \"ok\";");
 b.dedent();
 b.line("}");
 let body = b.to_string();
-// Host APIs: emit_extend(type_name, body) or emit_file(path, source)
 ```
 
-#### Host emit / replace APIs
+Pair with [`GenResult`](../stdlib/json.md#genresult) (`system.json`) to return success/failure
+from compile helpers.
 
-| Goal | API | When to use it |
-|------|-----|----------------|
-| Add methods to an existing type | `emit_extend(name, body)` | Derive-style generators (`to_json`, helpers) that attach to user types |
-| Emit several extends or free declarations | `emit_file(path, source)` | Larger synthetic modules, multiple types, or shared helpers |
-| Rewrite `intro { … }` | `replace(node, dream_expr)` | Syntax DSLs — turns a site into an ordinary expression before type-check |
-| Report a generate-time error | `ctx.error(node, message)` | Validation failures that should become `CompileError::Generator` |
+## User-defined attributes
 
-#### Useful queries on declarations
+Declare custom attribute schemas so user code can annotate declarations. The function name is the
+attribute name; parameters define `@name(arg, …)` arguments.
 
-Use these to decide what to emit without hard-coding every type name:
+```dream
+@attribute
+public fun route(path: string): void { }
 
-- `types()` / `types_with("attr")` / `functions_with("attr")` — enumerate work items.
-- `fields()` / `methods()` / `constructors()` / `variants()` — walk members for derives.
-- `has_attribute("name")` / `attribute_string("name")` / `attribute_args("name")` — read configuration.
-- `is_async` / `is_ref` / `is_static` — specialize generated signatures.
+@route("/users")
+public fun list_users(): void { }
+```
 
-Full reference: [CodeBuilder](../stdlib/codegen.md).
+Syntax DSL generators usually read `block.body` and splices rather than declaration attributes.
+For derive-style metadata on types, use `@json` or the field options documented in
+[JSON](../stdlib/json.md).
 
 ## Checklist
 
-1. Decide **emit** (derive) vs **replace** (DSL) vs both — emit keeps call sites ordinary; replace invents new syntax.
-2. Use builtin attributes, or define your own with `@attribute` on a top-level function.
-3. Mark a function `@generator` (plus `@syntax_block` if you claim an introducer).
-4. For a syntax DSL: ship sibling `harness.dream` that reads the host snapshot and prints replace lines via `GenHost`.
-5. Register via import or `[[generators]]` in `dream.toml`.
-6. Prefer `CodeBuilder` for multi-line bodies.
-7. Report failures via harness OK/ERR markers (or host `ctx.error`) so they become `CompileError::Generator`.
-8. Add a sample under `sample/generators/` or a golden test.
+1. Decide **replace** (DSL) vs **emit** (derive). This guide covers replace; emit today means
+   `@json` or future compiler support.
+2. Add `@generator` and `@syntax_block("intro")` on a function `intro(ctx: GenContext): void`.
+3. Implement `ctx.syntax_blocks("intro")` → `ctx.replace` / `ctx.error`.
+4. Register via `[[generators]]` in `dream.toml` or an `import` of the generator module.
+5. Use `CodeBuilder` and `GenResult` for multi-line emit helpers when the DSL needs a parser.
+6. Add a sample under `sample/generators/` or a golden test under `tests/cases/`.
 
 ## See also
 
-- [CodeBuilder](../stdlib/codegen.md) — `CodeBuilder`, `GenHost`, `GenResult`
-- [JSON](../stdlib/json.md) — builtin `@json` derive
-- Beginner sample: [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote)
-- Advanced sample: [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html)
+- [`system.codegen`](../stdlib/codegen.md) — `CodeBuilder`, `GenContext`, `GenSyntaxBlock`
+- [JSON](../stdlib/json.md) — `@json` derive
+- [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote)
+- [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html)

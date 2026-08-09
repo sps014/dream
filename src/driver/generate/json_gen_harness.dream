@@ -2,6 +2,7 @@ import system;
 import system.io;
 import system.collections;
 import system.json;
+import system.codegen;
 
 // Compile-host entry for the `@json` source generator. The host writes a snapshot JSON file,
 // sets `DREAM_JSON_GEN_SNAPSHOT` to its path, and runs this module with generators skipped.
@@ -28,7 +29,10 @@ fun field_from_json(v: JsonValue): GenField {
         v.get("property_name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
         v.get("option_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
         v.get("is_type_param").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false),
-        v.get("map_value_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or("")
+        v.get("map_value_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("map_ctor").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("seq_elem_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("seq_kind").unwrap_or(JsonValue.none()).as_string().unwrap_or("")
     );
 }
 
@@ -37,6 +41,26 @@ fun fields_from_json(arr: JsonValue): List<GenField> {
     let i = 0;
     while (i < arr.length) {
         out.push(field_from_json(arr.at(i).unwrap_or(JsonValue.none())));
+        i = i + 1;
+    }
+    return out;
+}
+
+fun collection_from_json(v: JsonValue): GenCollection {
+    return GenCollection.make(
+        v.get("kind").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("elem_type").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("value_type").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("self_ty").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("fn_suffix").unwrap_or(JsonValue.none()).as_string().unwrap_or("")
+    );
+}
+
+fun collections_from_json(arr: JsonValue): List<GenCollection> {
+    let out = List<GenCollection>();
+    let i = 0;
+    while (i < arr.length) {
+        out.push(collection_from_json(arr.at(i).unwrap_or(JsonValue.none())));
         i = i + 1;
     }
     return out;
@@ -96,18 +120,33 @@ async fun main(): void {
                     let types = types_from_json(root.get("types").unwrap_or(JsonValue.array()));
                     let json_names = string_list_from_json(root.get("json_names").unwrap_or(JsonValue.array()));
                     let jsonable = string_list_from_json(root.get("jsonable").unwrap_or(JsonValue.array()));
-                    let result = JsonGenerator.expand(types, json_names, jsonable);
-                    if (result.ok) {
-                        System.println("__DREAM_JSON_GEN_OK__");
-                        System.print(result.source);
-                    } else {
+                    let collections = collections_from_json(root.get("collections").unwrap_or(JsonValue.array()));
+                    let cb = CodeBuilder();
+                    let type_result = JsonGenerator.expand(types, json_names, jsonable);
+                    if (type_result.ok == false) {
                         System.println("__DREAM_JSON_GEN_ERR__");
-                        System.println(result.error);
-                        if (result.error_type.length > 0) {
+                        System.println(type_result.error);
+                        if (type_result.error_type.length > 0) {
                             System.println("__DREAM_JSON_GEN_LOC__");
-                            System.println(result.error_type + "\t" + result.error_field);
+                            System.println(type_result.error_type + "\t" + type_result.error_field);
                         }
+                        return;
                     }
+                    cb.append(type_result.source);
+                    let col_result = JsonGenerator.expand_collections(collections, json_names, jsonable);
+                    if (col_result.ok == false) {
+                        System.println("__DREAM_JSON_GEN_ERR__");
+                        System.println(col_result.error);
+                        return;
+                    }
+                    if (col_result.source.length > 0) {
+                        if (type_result.source.length > 0) {
+                            cb.line("");
+                        }
+                        cb.append(col_result.source);
+                    }
+                    System.println("__DREAM_JSON_GEN_OK__");
+                    System.print(cb.to_string());
                 }
                 Err(e) => {
                     System.println("__DREAM_JSON_GEN_ERR__");

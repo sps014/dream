@@ -4,9 +4,10 @@
 //! it, inspect the call stack + variables, step, and continue to exit. Exercises the full pipeline —
 //! debug-info instrumentation, source map, the wasmtime debug runner, and the DAP protocol.
 
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 
 /// A tiny two-function program so the call stack has depth: a breakpoint inside `add` should show
@@ -30,6 +31,9 @@ struct DapClient {
     child: Child,
     stdin: ChildStdin,
     rx: mpsc::Receiver<serde_json::Value>,
+    /// Unmatched messages kept so later `wait_for` callers still see events that arrived while
+    /// waiting for something else (e.g. `thread` started while waiting for `stopped`).
+    pending: Mutex<VecDeque<serde_json::Value>>,
     seq: i64,
 }
 
@@ -55,6 +59,7 @@ impl DapClient {
             child,
             stdin,
             rx,
+            pending: Mutex::new(VecDeque::new()),
             seq: 1,
         }
     }
@@ -73,7 +78,14 @@ impl DapClient {
     }
 
     /// Blocks until a message matching `pred` arrives (or times out / the process exits).
+    /// Non-matching messages are queued so a later wait can still observe them.
     fn wait_for(&self, pred: impl Fn(&serde_json::Value) -> bool) -> serde_json::Value {
+        {
+            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(idx) = pending.iter().position(&pred) {
+                return pending.remove(idx).expect("index from position");
+            }
+        }
         loop {
             let msg = self
                 .rx
@@ -82,6 +94,10 @@ impl DapClient {
             if pred(&msg) {
                 return msg;
             }
+            self.pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push_back(msg);
         }
     }
 
@@ -343,7 +359,7 @@ fn dap_async_breakpoint_on_branch_with_locals() {
 const WORKER_PROGRAM: &str = r#"import system;
 
 fun work(input: string): string {
-    let n = input.size();
+    let n = input.length;
     let acc = 0;
     let i = 0;
     while (i < n) {

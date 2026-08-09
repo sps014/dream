@@ -3,9 +3,11 @@ module system.process;
 // Runs and controls child processes (native only — the browser host reports
 // `ProcessError.unsupported` for every operation; Node supports both `run` and `spawn`).
 public class Process {
+    @native @node
     @js("Dream", "processRun")
     static extern async fun host_run(cmd: string, args: string, cwd: string): char[];
 
+    @native @node
     @js("Dream", "processSpawn")
     static extern async fun host_spawn(cmd: string, args: string, cwd: string): char[];
 
@@ -25,12 +27,14 @@ public class Process {
 
     // Runs `cmd` with `args` in the current working directory, waits for it to exit, and
     // captures stdout/stderr in full.
+    @native @node
     public static async fun run(cmd: string, args: string[]): Result<ProcessOutput, ProcessError> {
         return await Process.run_in(cmd, args, "");
     }
 
     // Same as `run`, but launches the process with `cwd` as its working directory (an empty
     // string keeps the caller's current working directory).
+    @native @node
     public static async fun run_in(cmd: string, args: string[], cwd: string): Result<ProcessOutput, ProcessError> {
         let raw = await Process.host_run(cmd, Process.join_args(args), cwd);
         let reader = ProcessWireReader(raw);
@@ -48,11 +52,13 @@ public class Process {
 
     // Spawns `cmd` with `args` in the current working directory, returning a handle for
     // interactive stdin/stdout/stderr access and lifecycle control.
+    @native @node
     public static async fun spawn(cmd: string, args: string[]): Result<ChildProcess, ProcessError> {
         return await Process.spawn_in(cmd, args, "");
     }
 
     // Same as `spawn`, but launches the process with `cwd` as its working directory.
+    @native @node
     public static async fun spawn_in(cmd: string, args: string[], cwd: string): Result<ChildProcess, ProcessError> {
         let raw = await Process.host_spawn(cmd, Process.join_args(args), cwd);
         let reader = ProcessWireReader(raw);

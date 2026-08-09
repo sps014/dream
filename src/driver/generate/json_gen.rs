@@ -3,12 +3,14 @@
 
 use super::context::GeneratorContext;
 use dream_diagnostics::DiagnosticBag;
+use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::EnumDeclarationNode;
-use std::collections::HashSet;
-
-#[cfg(feature = "native")]
 use dream_syntax::nodes::Type;
+use std::collections::{BTreeSet, HashSet};
+
+use crate::driver::source_loader::ProgramAccumulator;
+
 #[cfg(feature = "native")]
 use std::io::Write;
 #[cfg(feature = "native")]
@@ -28,6 +30,7 @@ const SNAPSHOT_ENV: &str = "DREAM_JSON_GEN_SNAPSHOT";
 /// Expands every `@json` type into synthesized `extend` source through `emit_file`.
 pub fn expand_from_acc(
     ctx: &mut GeneratorContext,
+    acc: &ProgramAccumulator<'_>,
     structs: &[StructDeclarationNode<'_>],
     enums: &[EnumDeclarationNode<'_>],
     diagnostics: &mut DiagnosticBag,
@@ -44,7 +47,17 @@ pub fn expand_from_acc(
             .map(|e| e.name.text.clone()),
     );
     if json_names.is_empty() {
-        return;
+        let mut jsonable: HashSet<String> = structs.iter().map(|s| s.name.text.clone()).collect();
+        jsonable.extend(
+            enums
+                .iter()
+                .filter(|e| e.is_data_enum())
+                .map(|e| e.name.text.clone()),
+        );
+        let collections = collect_all_collections(acc, &jsonable);
+        if collections.is_empty() {
+            return;
+        }
     }
 
     #[cfg(not(feature = "native"))]
@@ -66,7 +79,7 @@ pub fn expand_from_acc(
                 .map(|e| e.name.text.clone()),
         );
 
-        let snapshot = build_snapshot(structs, enums, &json_names, &jsonable);
+        let snapshot = build_snapshot(acc, structs, enums, &json_names, &jsonable);
         match run_dream_json_generator(&snapshot) {
             Ok(source) => {
                 if !source.is_empty() {
@@ -86,6 +99,7 @@ pub fn expand_from_acc(
 
 #[cfg(feature = "native")]
 fn build_snapshot(
+    acc: &ProgramAccumulator<'_>,
     structs: &[StructDeclarationNode<'_>],
     enums: &[EnumDeclarationNode<'_>],
     json_names: &HashSet<String>,
@@ -115,11 +129,22 @@ fn build_snapshot(
     }
     types.push(']');
 
+    let collections = collect_all_collections(acc, jsonable);
+    let mut col_json = String::from("[");
+    for (i, c) in collections.iter().enumerate() {
+        if i > 0 {
+            col_json.push(',');
+        }
+        col_json.push_str(&snapshot_collection(c));
+    }
+    col_json.push(']');
+
     format!(
-        "{{\"types\":{},\"json_names\":{},\"jsonable\":{}}}",
+        "{{\"types\":{},\"json_names\":{},\"jsonable\":{},\"collections\":{}}}",
         types,
         json_string_array(json_names.iter().cloned().collect()),
         json_string_array(jsonable.iter().cloned().collect()),
+        col_json,
     )
 }
 
@@ -220,19 +245,30 @@ fn snapshot_field(
         }
         _ => String::new(),
     };
-    // `Map<string, V>` fields widen `@json` support (see `JsonGenerator.map_to_stmts`/
-    // `map_from_stmts`); the key type must be `string` since JSON object keys are strings.
-    let map_value_inner = match field_ty {
+    // `Map<string, V>` / `SortedMap<string, V>` fields widen `@json` support; the key type must be
+    // `string` since JSON object keys are strings.
+    let (map_value_inner, map_ctor) = match field_ty {
         Type::Struct(token, Some(args))
-            if token.text == "Map" && args.len() == 2 && args[0].get_type() == "string" =>
+            if (token.text == "Map" || token.text == "SortedMap")
+                && args.len() == 2
+                && args[0].get_type() == "string" =>
         {
-            args[1].get_type()
+            (args[1].get_type(), token.text.clone())
         }
-        _ => String::new(),
+        _ => (String::new(), String::new()),
+    };
+    let (seq_elem_inner, seq_kind) = match field_ty {
+        Type::Struct(token, Some(args)) if token.text == "List" && args.len() == 1 => {
+            (args[0].get_type(), "list".to_string())
+        }
+        Type::Struct(token, Some(args)) if token.text == "Set" && args.len() == 1 => {
+            (args[0].get_type(), "set".to_string())
+        }
+        _ => (String::new(), String::new()),
     };
     let is_type_param = generic_params.iter().any(|p| p == type_name);
     format!(
-        "{{\"name\":{},\"type_name\":{},\"json_ignore\":{},\"property_name\":{},\"option_inner\":{},\"is_type_param\":{},\"map_value_inner\":{}}}",
+        "{{\"name\":{},\"type_name\":{},\"json_ignore\":{},\"property_name\":{},\"option_inner\":{},\"is_type_param\":{},\"map_value_inner\":{},\"map_ctor\":{},\"seq_elem_inner\":{},\"seq_kind\":{}}}",
         json_escape(name),
         json_escape(type_name),
         if json_ignore { "true" } else { "false" },
@@ -240,6 +276,9 @@ fn snapshot_field(
         json_escape(&option_inner),
         if is_type_param { "true" } else { "false" },
         json_escape(&map_value_inner),
+        json_escape(&map_ctor),
+        json_escape(&seq_elem_inner),
+        json_escape(&seq_kind),
     )
 }
 
@@ -273,6 +312,409 @@ fn json_escape(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+#[cfg(feature = "native")]
+#[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+struct CollectionSpec {
+    kind: String,
+    elem_type: String,
+    value_type: String,
+    self_ty: String,
+    fn_suffix: String,
+}
+
+#[cfg(feature = "native")]
+fn collection_fn_suffix(mangled: &str) -> String {
+    mangled.replace("[]", "__arr")
+}
+
+#[cfg(feature = "native")]
+fn json_elem_supported(name: &str, jsonable: &HashSet<String>) -> bool {
+    matches!(name, "int" | "long" | "string" | "bool" | "double" | "float")
+        || jsonable.contains(name)
+}
+
+#[cfg(feature = "native")]
+fn insert_collection_spec(
+    out: &mut BTreeSet<CollectionSpec>,
+    kind: &str,
+    elem_type: String,
+    value_type: String,
+    ty: &Type,
+    jsonable: &HashSet<String>,
+) {
+    let elem_ok = if kind == "map" || kind == "sortedmap" {
+        json_elem_supported(&value_type, jsonable)
+    } else {
+        json_elem_supported(&elem_type, jsonable)
+    };
+    if !elem_ok {
+        return;
+    }
+    let self_ty = ty.display_name();
+    let mangled = ty.get_type();
+    out.insert(CollectionSpec {
+        kind: kind.to_string(),
+        elem_type,
+        value_type,
+        self_ty,
+        fn_suffix: collection_fn_suffix(&mangled),
+    });
+}
+
+#[cfg(feature = "native")]
+fn collect_collections_from_type(
+    ty: &Type,
+    jsonable: &HashSet<String>,
+    out: &mut BTreeSet<CollectionSpec>,
+) {
+    match ty {
+        Type::Array(inner) => {
+            insert_collection_spec(
+                out,
+                "array",
+                inner.get_type(),
+                String::new(),
+                ty,
+                jsonable,
+            );
+            collect_collections_from_type(inner, jsonable, out);
+        }
+        Type::Struct(token, Some(args)) => match token.text.as_str() {
+            "List" if args.len() == 1 => {
+                insert_collection_spec(
+                    out,
+                    "list",
+                    args[0].get_type(),
+                    String::new(),
+                    ty,
+                    jsonable,
+                );
+                collect_collections_from_type(&args[0], jsonable, out);
+            }
+            "Set" if args.len() == 1 => {
+                insert_collection_spec(out, "set", args[0].get_type(), String::new(), ty, jsonable);
+                collect_collections_from_type(&args[0], jsonable, out);
+            }
+            "Map" if args.len() == 2 && args[0].get_type() == "string" => {
+                insert_collection_spec(
+                    out,
+                    "map",
+                    String::new(),
+                    args[1].get_type(),
+                    ty,
+                    jsonable,
+                );
+                collect_collections_from_type(&args[1], jsonable, out);
+            }
+            "SortedMap" if args.len() == 2 && args[0].get_type() == "string" => {
+                insert_collection_spec(
+                    out,
+                    "sortedmap",
+                    String::new(),
+                    args[1].get_type(),
+                    ty,
+                    jsonable,
+                );
+                collect_collections_from_type(&args[1], jsonable, out);
+            }
+            "Option" if args.len() == 1 => {
+                collect_collections_from_type(&args[0], jsonable, out);
+            }
+            _ => {
+                for arg in args {
+                    collect_collections_from_type(arg, jsonable, out);
+                }
+            }
+        },
+        Type::Tuple(elems) => {
+            for elem in elems {
+                collect_collections_from_type(elem, jsonable, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(feature = "native")]
+fn collect_collections_from_expr(
+    expr: &ExpressionNode<'_>,
+    jsonable: &HashSet<String>,
+    out: &mut BTreeSet<CollectionSpec>,
+) {
+    match expr {
+        ExpressionNode::MethodCall(receiver, method, type_args, args) => {
+            collect_collections_from_expr(receiver, jsonable, out);
+            for arg in args {
+                collect_collections_from_expr(arg, jsonable, out);
+            }
+            // Only `Json.serialize` / `deserialize` / `from_value` type args need top-level
+            // collection adapters — not every `List<T>()` constructor or array annotation.
+            if is_json_static_receiver(receiver)
+                && (method.text == "serialize"
+                    || method.text == "deserialize"
+                    || method.text == "from_value")
+            {
+                if let Some(types) = type_args {
+                    for ty in types {
+                        collect_collections_from_type(ty, jsonable, out);
+                    }
+                }
+            }
+        }
+        ExpressionNode::FunctionCall(_, _, args) => {
+            for arg in args {
+                collect_collections_from_expr(arg, jsonable, out);
+            }
+        }
+        ExpressionNode::Call(callee, _, args) => {
+            collect_collections_from_expr(callee, jsonable, out);
+            for arg in args {
+                collect_collections_from_expr(arg, jsonable, out);
+            }
+        }
+        ExpressionNode::Binary(a, _, b) => {
+            collect_collections_from_expr(a, jsonable, out);
+            collect_collections_from_expr(b, jsonable, out);
+        }
+        ExpressionNode::Unary(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::IncDec { target, .. } => collect_collections_from_expr(target, jsonable, out),
+        ExpressionNode::Parenthesized(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::IndexAccess(a, b) => {
+            collect_collections_from_expr(a, jsonable, out);
+            collect_collections_from_expr(b, jsonable, out);
+        }
+        ExpressionNode::Cast(_, _, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::MemberAccess(a, _) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::IsExpression(a, _, _) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Ternary(a, b, c) => {
+            collect_collections_from_expr(a, jsonable, out);
+            collect_collections_from_expr(b, jsonable, out);
+            collect_collections_from_expr(c, jsonable, out);
+        }
+        ExpressionNode::Await(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Switch(_, a, arms) => {
+            collect_collections_from_expr(a, jsonable, out);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_collections_from_expr(guard, jsonable, out);
+                }
+                match &arm.body {
+                    dream_syntax::nodes::expression::SwitchArmBody::Expr(e) => {
+                        collect_collections_from_expr(e, jsonable, out);
+                    }
+                    dream_syntax::nodes::expression::SwitchArmBody::Block(stmts) => {
+                        for stmt in *stmts {
+                            collect_collections_from_stmts(stmt, jsonable, out);
+                        }
+                    }
+                }
+            }
+        }
+        ExpressionNode::Try(a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Lambda(lambda) => match &lambda.body {
+            dream_syntax::nodes::expression::LambdaBody::Expr(e) => {
+                collect_collections_from_expr(e, jsonable, out);
+            }
+            dream_syntax::nodes::expression::LambdaBody::Block(stmts) => {
+                for stmt in *stmts {
+                    collect_collections_from_stmts(stmt, jsonable, out);
+                }
+            }
+        },
+        ExpressionNode::NamedArg(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::RefArgument(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::SyntaxBlock(block) => {
+            for part in &block.parts {
+                if let dream_syntax::nodes::expression::SyntaxBlockPart::Splice(e) = part {
+                    collect_collections_from_expr(e, jsonable, out);
+                }
+            }
+        }
+        ExpressionNode::ArrayLiteral(_, elems)
+        | ExpressionNode::TupleLiteral(_, elems)
+        | ExpressionNode::SetLiteral(_, elems) => {
+            for elem in elems {
+                collect_collections_from_expr(elem, jsonable, out);
+            }
+        }
+        ExpressionNode::MapLiteral(_, pairs) => {
+            for (k, v) in pairs {
+                collect_collections_from_expr(k, jsonable, out);
+                collect_collections_from_expr(v, jsonable, out);
+            }
+        }
+        ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
+    }
+}
+
+#[cfg(feature = "native")]
+fn collect_collections_from_stmts(
+    stmt: &dream_syntax::nodes::StatementNode<'_>,
+    jsonable: &HashSet<String>,
+    out: &mut BTreeSet<CollectionSpec>,
+) {
+    use dream_syntax::nodes::StatementNode;
+    match stmt {
+        StatementNode::ExpressionStatement(expr)
+        | StatementNode::AwaitStmt(expr) => collect_collections_from_expr(expr, jsonable, out),
+        StatementNode::Declaration(_, _, init, _) | StatementNode::TupleDeclaration { init, .. } => {
+            collect_collections_from_expr(init, jsonable, out);
+        }
+        StatementNode::Return(expr) => {
+            if let Some(e) = expr {
+                collect_collections_from_expr(e, jsonable, out);
+            }
+        }
+        StatementNode::IfElse(cond, then_body, else_ifs, else_body) => {
+            collect_collections_from_expr(cond, jsonable, out);
+            for s in *then_body {
+                collect_collections_from_stmts(s, jsonable, out);
+            }
+            for (c, body) in else_ifs {
+                collect_collections_from_expr(c, jsonable, out);
+                for s in *body {
+                    collect_collections_from_stmts(s, jsonable, out);
+                }
+            }
+            if let Some(body) = else_body {
+                for s in *body {
+                    collect_collections_from_stmts(s, jsonable, out);
+                }
+            }
+        }
+        StatementNode::While(cond, body) | StatementNode::DoWhile(body, cond) => {
+            collect_collections_from_expr(cond, jsonable, out);
+            for s in *body {
+                collect_collections_from_stmts(s, jsonable, out);
+            }
+        }
+        StatementNode::For(init, cond, step, body) => {
+            if let Some(i) = init {
+                collect_collections_from_stmts(i, jsonable, out);
+            }
+            if let Some(c) = cond {
+                collect_collections_from_expr(c, jsonable, out);
+            }
+            if let Some(s) = step {
+                collect_collections_from_stmts(s, jsonable, out);
+            }
+            for st in *body {
+                collect_collections_from_stmts(st, jsonable, out);
+            }
+        }
+        StatementNode::ForEach(_, iterable, _, _, body) => {
+            collect_collections_from_expr(iterable, jsonable, out);
+            for s in *body {
+                collect_collections_from_stmts(s, jsonable, out);
+            }
+        }
+        StatementNode::Labeled(_, inner) => collect_collections_from_stmts(inner, jsonable, out),
+        StatementNode::Switch(subject, arms, default_body) => {
+            collect_collections_from_expr(subject, jsonable, out);
+            for (labels, body) in arms {
+                for label in labels {
+                    collect_collections_from_expr(label, jsonable, out);
+                }
+                for s in *body {
+                    collect_collections_from_stmts(s, jsonable, out);
+                }
+            }
+            if let Some(body) = default_body {
+                for s in *body {
+                    collect_collections_from_stmts(s, jsonable, out);
+                }
+            }
+        }
+        StatementNode::Lock(target, body) => {
+            collect_collections_from_expr(target, jsonable, out);
+            for s in *body {
+                collect_collections_from_stmts(s, jsonable, out);
+            }
+        }
+        StatementNode::Assignment(_, rhs)
+        | StatementNode::MemberAssignment(_, _, rhs) => {
+            collect_collections_from_expr(rhs, jsonable, out);
+        }
+        StatementNode::IndexAssignment(a, b, rhs) => {
+            collect_collections_from_expr(a, jsonable, out);
+            collect_collections_from_expr(b, jsonable, out);
+            collect_collections_from_expr(rhs, jsonable, out);
+        }
+        StatementNode::FunctionInvocation(_, _, args) => {
+            for arg in args {
+                collect_collections_from_expr(arg, jsonable, out);
+            }
+        }
+        StatementNode::MethodInvocation(receiver, method, type_args, args) => {
+            if is_json_static_receiver(receiver)
+                && (method.text == "serialize"
+                    || method.text == "deserialize"
+                    || method.text == "from_value")
+            {
+                if let Some(types) = type_args {
+                    for ty in types {
+                        collect_collections_from_type(ty, jsonable, out);
+                    }
+                }
+            }
+            for arg in args {
+                collect_collections_from_expr(arg, jsonable, out);
+            }
+        }
+        StatementNode::Break(_) | StatementNode::Continue(_) | StatementNode::WorkgroupDecl(_, _, _) => {}
+    }
+}
+
+#[cfg(feature = "native")]
+fn is_json_static_receiver(expr: &ExpressionNode<'_>) -> bool {
+    matches!(expr, ExpressionNode::Identifier(tok) if tok.text == "Json")
+}
+
+#[cfg(feature = "native")]
+fn is_user_source(path: Option<&std::rc::Rc<str>>) -> bool {
+    match path {
+        Some(p) => !p.starts_with("<std>/"),
+        None => true,
+    }
+}
+
+/// Top-level collection adapters are only needed for `Json.serialize` / `deserialize` /
+/// `from_value` type arguments. `@json` field collections are inlined in generated `to_json`.
+#[cfg(feature = "native")]
+fn collect_all_collections(
+    acc: &ProgramAccumulator<'_>,
+    jsonable: &HashSet<String>,
+) -> Vec<CollectionSpec> {
+    let mut out = BTreeSet::new();
+    for g in &acc.all_globals {
+        if !is_user_source(g.file_path.as_ref()) {
+            continue;
+        }
+        collect_collections_from_expr(&g.initializer, jsonable, &mut out);
+    }
+    for f in &acc.all_functions {
+        if !is_user_source(f.file_path.as_ref()) {
+            continue;
+        }
+        for stmt in f.body {
+            collect_collections_from_stmts(stmt, jsonable, &mut out);
+        }
+    }
+    out.into_iter().collect()
+}
+
+#[cfg(feature = "native")]
+fn snapshot_collection(c: &CollectionSpec) -> String {
+    format!(
+        "{{\"kind\":{},\"elem_type\":{},\"value_type\":{},\"self_ty\":{},\"fn_suffix\":{}}}",
+        json_escape(&c.kind),
+        json_escape(&c.elem_type),
+        json_escape(&c.value_type),
+        json_escape(&c.self_ty),
+        json_escape(&c.fn_suffix),
+    )
 }
 
 #[cfg(feature = "native")]
@@ -465,6 +907,7 @@ fn harness_wat_path() -> Result<String, String> {
             .hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_collection.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream")
             .hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream").hash(&mut h);

@@ -1,10 +1,17 @@
 module gen;
 
 import system.codegen;
-
-// Registers the `html { … }` syntax DSL. Markup lowering lives in `parser.dream`;
-// the host runs sibling `harness.dream` when this introducer is claimed.
+import parser;
 
 @generator
 @syntax_block("html")
-public fun html(): void { }
+public fun html(ctx: GenContext): void {
+    for (let block in ctx.syntax_blocks("html")) {
+        let result = HtmlCompiler.compile(block.body, block.splices);
+        if (!result.ok) {
+            ctx.error(block, result.error);
+            return;
+        }
+        ctx.replace(block, result.source);
+    }
+}

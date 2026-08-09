@@ -137,8 +137,7 @@ For a typed extern that returns a Promise (`@js(...) extern async fun getUser(..
 
 ## Where it runs
 
-`js` needs a JavaScript host (browser or Node). The standalone native runner stubs JS imports as
-traps.
+`js` needs a JavaScript host (browser or Node). Referencing `js` APIs when targeting native is a compile error.
 
 ## Try it
 

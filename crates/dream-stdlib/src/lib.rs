@@ -379,6 +379,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/json/gen_field.dream"),
             ),
             (
+                "<std>/system/json/gen_collection.dream",
+                include_str!("system/json/gen_collection.dream"),
+            ),
+            (
                 "<std>/system/json/gen_variant.dream",
                 include_str!("system/json/gen_variant.dream"),
             ),

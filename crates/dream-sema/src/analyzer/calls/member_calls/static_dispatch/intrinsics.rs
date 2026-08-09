@@ -6,6 +6,33 @@ use super::*;
 use dream_abi::intrinsics;
 use dream_syntax::nodes::types::is_unknown_type_name;
 
+fn json_collection_ser_fn(mangled: &str) -> Option<String> {
+    json_collection_adapter(mangled, true)
+}
+
+fn json_collection_de_fn(mangled: &str) -> Option<String> {
+    json_collection_adapter(mangled, false)
+}
+
+fn json_collection_adapter(mangled: &str, serialize: bool) -> Option<String> {
+    let base = mangled.trim_end_matches('?');
+    let is_collection = base.ends_with("[]")
+        || base.starts_with("List_")
+        || base.starts_with("Set_")
+        || base.starts_with("Map_string_")
+        || base.starts_with("SortedMap_string_");
+    if !is_collection {
+        return None;
+    }
+    let suffix = base.replace("[]", "__arr");
+    let method = if serialize {
+        format!("__col_ser_{}", suffix)
+    } else {
+        format!("__col_de_{}", suffix)
+    };
+    Some(dream_types::method_fn("Json", &method))
+}
+
 /// Call-site bundle for [`Analyzer::analyze_generic_static_method`]: the parsed pieces of a
 /// `Type.method(args)` call already resolved to a generic static method template, kept together
 /// so the analysis function itself only needs the bundle plus the analyzer context/diagnostics.
@@ -117,6 +144,7 @@ impl<'a> Analyzer<'a> {
                 method.position,
                 diagnostics,
             );
+            self.check_runtime_intrinsic_call("Buffer.realloc", template, method.position, diagnostics);
             let element = match generic_args.as_ref().and_then(|g| g.first()) {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
@@ -151,6 +179,7 @@ impl<'a> Analyzer<'a> {
             == Some(intrinsics::IntrinsicOp::ForceFree)
         {
             self.check_unsafe_intrinsic_call("Buffer.free", template, method.position, diagnostics);
+            self.check_runtime_intrinsic_call("Buffer.free", template, method.position, diagnostics);
             if params_types.len() != 1 {
                 diagnostics.report_error(
                     format!(
@@ -328,9 +357,13 @@ impl<'a> Analyzer<'a> {
                 .map(|s| s.trim_end_matches('?').to_string())
                 .unwrap_or_default();
             let value = arg_hirs.into_iter().next().flatten();
-            // `<T>.to_json(value)` (a `this`-taking method, called free with the receiver as arg0).
+            let to_json_call = if let Some(adapter) = json_collection_ser_fn(&struct_name) {
+                adapter
+            } else {
+                method_fn(&struct_name, "to_json")
+            };
             self.hir_set_call(
-                &method_fn(&struct_name, "to_json"),
+                &to_json_call,
                 vec![value],
                 &named("JsonValue"),
             );
@@ -359,6 +392,8 @@ impl<'a> Analyzer<'a> {
                 }
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
+            let from_json_call = json_collection_de_fn(&struct_name)
+                .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
             let text = arg_hirs.into_iter().next().flatten();
 
             let parse_err = named("ParseError");
@@ -457,7 +492,7 @@ impl<'a> Analyzer<'a> {
                             let ty_id = self.type_ctx.lower(&json_value);
                             let read2 = HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
                             self.hir_set_call(
-                                &method_fn(&struct_name, "from_json"),
+                                &from_json_call,
                                 vec![Some(read2)],
                                 &t_type,
                             );
@@ -502,7 +537,7 @@ impl<'a> Analyzer<'a> {
                     }
                 } else {
                     self.hir_set_call(
-                        &method_fn(&struct_name, "from_json"),
+                        &from_json_call,
                         vec![Some(read)],
                         &t_type,
                     );
@@ -564,7 +599,9 @@ impl<'a> Analyzer<'a> {
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
             let value = arg_hirs.into_iter().next().flatten();
-            self.hir_set_call(&method_fn(&struct_name, "from_json"), vec![value], &t_type);
+            let from_json_call = json_collection_de_fn(&struct_name)
+                .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
+            self.hir_set_call(&from_json_call, vec![value], &t_type);
             return Ok(t_type);
         }
 

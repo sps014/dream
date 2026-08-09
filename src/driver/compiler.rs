@@ -11,6 +11,7 @@ use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::wasm_opt::OptLevel;
 use dream_sema::analyzer::Analyzer;
+use dream_abi::attributes::CompileTargets;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
 
@@ -43,6 +44,9 @@ pub struct Compiler {
     /// When non-empty (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
     /// `*.{web,node}.runtime.js` for each listed host (both may be set in one compile).
     runtimes: Vec<JsRuntimeTarget>,
+    /// Active compile-time runtime target(s) for semantic availability checks. Defaults to
+    /// native-only; overridden by `--target` or inferred from `--runtime --web`/`--node`.
+    compile_targets: CompileTargets,
     /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. Native
     /// `run` / `debug-adapter` set this to `false` — wasmtime does not read the ABI.
     emit_abi: bool,
@@ -59,6 +63,7 @@ impl Compiler {
             optimize: None,
             skip_generators: false,
             runtimes: Vec::new(),
+            compile_targets: CompileTargets::native_only(),
             emit_abi: true,
             crate_type: dream_sema::analyzer::CrateType::Bin,
         }
@@ -118,6 +123,19 @@ impl Compiler {
             }
         }
         self.runtimes = out;
+        if !self.runtimes.is_empty() {
+            self.compile_targets = CompileTargets {
+                native: false,
+                node: seen_node,
+                web: seen_web,
+            };
+        }
+        self
+    }
+
+    /// Builder: set compile-time runtime target(s) explicitly (`--target native|node|web`).
+    pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
+        self.compile_targets = targets;
         self
     }
 
@@ -184,8 +202,7 @@ impl Compiler {
         }
 
         // Source generators: `@json` derive and registered `@generator`s (executed `GenContext`
-        // bodies or sibling-`harness.dream` fallback for empty bodies).
-        // Nested harness compiles set `skip_generators` so this cannot recurse.
+        // bodies). Nested generator compiles set `skip_generators` so this cannot recurse.
         if !self.skip_generators {
             debug_assert!(
                 !acc.all_structs.is_empty(),
@@ -230,7 +247,8 @@ impl Compiler {
         let mut analyzer = Analyzer::new(&ast, &arena)
             .with_file_modules(file_modules)
             .with_aliased_imports(acc.aliased_imports)
-            .with_crate_type(self.crate_type, Some(main_file_path.clone()));
+            .with_crate_type(self.crate_type, Some(main_file_path.clone()))
+            .with_compile_targets(self.compile_targets);
         analyzer.set_debug_info(self.debug_info);
         // `analyze` reports each error into the bag and returns a typed failure once any error was
         // recorded, short-circuiting before code generation runs on a poisoned program.

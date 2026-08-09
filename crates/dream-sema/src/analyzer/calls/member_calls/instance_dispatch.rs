@@ -406,6 +406,12 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_runtime_call(
+            &format!("{}.{}", effective_struct, method.text),
+            store_sig.runtime_support,
+            method.position,
+            diagnostics,
+        );
         self.check_compute_call(&store_sig, method.position, diagnostics);
 
         let mut expected_params = store_sig.parameters.clone();
@@ -578,6 +584,12 @@ impl<'a> Analyzer<'a> {
         };
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_runtime_call(
+            &format!("{}.{}", struct_name, method.text),
+            store_sig.runtime_support,
+            method.position,
+            diagnostics,
+        );
         self.check_compute_call(&store_sig, method.position, diagnostics);
 
         let mut expected_params = store_sig.parameters.clone();

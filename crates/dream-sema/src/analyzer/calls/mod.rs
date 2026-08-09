@@ -209,6 +209,58 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Rejects a call when the callee is not available on the active compile target(s), unless the
+    /// calling function is itself unavailable on those targets (so stdlib bodies that call other
+    /// restricted APIs can still be analyzed when imported under a mismatched target).
+    pub(super) fn check_runtime_call(
+        &self,
+        display_name: &str,
+        runtime_support: dream_abi::attributes::RuntimeSupport,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if self.compile_targets.allows(runtime_support) {
+            return;
+        }
+        if !self.compile_targets.allows(self.current_function_runtime) {
+            return;
+        }
+        let target = self
+            .compile_targets
+            .first_missing_target(runtime_support)
+            .unwrap_or("native");
+        let target_label = if self.compile_targets.native as u8
+            + self.compile_targets.node as u8
+            + self.compile_targets.web as u8
+            > 1
+        {
+            format!("compile targets '{}'", self.compile_targets.display_list())
+        } else {
+            format!("compile target '{target}'")
+        };
+        diagnostics.report_error(
+            format!(
+                "'{display_name}' is not available on {target_label} (available on: {})",
+                runtime_support.display()
+            ),
+            Some(position),
+        );
+    }
+
+    /// Like [`Self::check_runtime_call`], but for a template resolved inline before a
+    /// `FunctionTableInfo` exists (e.g. `@js` externs on intrinsic paths).
+    pub(super) fn check_runtime_intrinsic_call(
+        &self,
+        display_name: &str,
+        template: &dream_syntax::nodes::FunctionNode<'_>,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let runtime_support =
+            dream_abi::attributes::RuntimeSupport::from_attributes(&template.attributes);
+        self.check_runtime_call(display_name, runtime_support, position, diagnostics);
+    }
+
     /// Rejects calls that cross the CPU / `@compute` kernel boundary.
     ///
     /// - A `@compute` kernel cannot be called like a CPU function (use `Compute.run("name", ...)`).

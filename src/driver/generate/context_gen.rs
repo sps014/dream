@@ -1,8 +1,7 @@
 //! Executes `@generator` bodies that take a single `GenContext` parameter: compiles a small
-//! auto-generated Dream harness that imports the generator's own module, calls the user's
+//! auto-generated Dream entry that imports the generator's own module, calls the user's
 //! function with a `GenContext` loaded from a snapshot, then flushes `ctx.finish()`. Reuses the
-//! same snapshot format and `GenHost` stdout protocol as `syntax_gen`'s sibling-`harness.dream`
-//! path so both share `build_snapshot`/`parse_harness_output`.
+//! same snapshot format and GenHost stdout protocol helpers in `syntax_gen`.
 
 use super::context::GeneratorContext;
 use super::registration::RegisteredGenerator;
@@ -21,8 +20,7 @@ use std::sync::Mutex;
 const SNAPSHOT_ENV: &str = "DREAM_SYNTAX_GEN_SNAPSHOT";
 
 /// Runs every registered `@generator(ctx: GenContext)` body that claims syntax blocks. Returns
-/// the set of generator names it handled, so the sibling-`harness.dream` fallback in `syntax_gen`
-/// skips them.
+/// the set of generator names it handled.
 pub fn expand_context_generators(
     ctx: &mut GeneratorContext,
     diagnostics: &mut DiagnosticBag,

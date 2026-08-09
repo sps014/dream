@@ -10,7 +10,7 @@ Host-backed digests, a cryptographically secure RNG, and AES-256-GCM authenticat
 | --- | --- | --- |
 | Native (`dream run`) | OS CSPRNG and native digest libraries | Rust `aes-gcm` crate |
 | Node.js | `node:crypto` | `node:crypto` |
-| Browser | Web Crypto | Not supported (Web Crypto's AES-GCM API is async-only; the extern ABI here is synchronous) |
+| Browser (`--web`) | Web Crypto | Compile error — `AesGcm` / `AesGcmKey` are `@native` / `@node` only |
 
 Non-goals: TLS, certificates.
 

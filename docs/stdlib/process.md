@@ -2,7 +2,7 @@
 
 **Package:** `system.process` — `import system.process;`
 
-Runs and controls child processes: capture a command's full output with `Process.run`, or launch an interactive child with `Process.spawn` and stream its stdin/stdout/stderr. Native only — the browser host has no process model, so every operation there resolves to `Err(ProcessError.unsupported(...))`. Node.js supports both.
+Runs and controls child processes: capture a command's full output with `Process.run`, or launch an interactive child with `Process.spawn` and stream its stdin/stdout/stderr. APIs are marked `@native` and `@node` — compiling for the **web** target is a **compile error** if your program references them. Native (`dream run`) and Node.js both support the full API.
 
 ```dream
 import system;
@@ -15,7 +15,7 @@ import system.process;
 | --- | --- | --- |
 | Native (`dream run`) | `std::process::Command::output` | `std::process::Command::spawn` with piped stdio |
 | Node.js | `child_process.spawnSync` | `child_process.spawn` with piped stdio |
-| Browser | `Err(ProcessError.unsupported(...))` | `Err(ProcessError.unsupported(...))` |
+| Browser (`--web`) | Compile error — APIs not available on target `web` | Compile error |
 
 ## `Process`
 
@@ -103,4 +103,4 @@ Implements [`Error`](builtins.md). `code()` is one of:
 | --- | --- |
 | `ESPAWN` | The executable could not be launched (not found, not executable, permission denied, ...). |
 | `EIO` | A read/write against a running child's stdin/stdout/stderr failed. |
-| `EUNSUPPORTED` | Process control is not available on the current host (the browser). |
+| `EUNSUPPORTED` | Operation not supported on the current host |

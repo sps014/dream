@@ -344,6 +344,8 @@ fun count(flags: GpuBuffer<int>, n: int): void {
 | Host | Behavior |
 |------|----------|
 | Browser (`dream.js`) | Real WebGPU when available |
-| Native (`dream run`) | CPU staging; dispatch no-ops WGSL; surface/blit unavailable |
+| Native (`dream run`) | CPU staging; dispatch no-ops WGSL |
+
+`GpuSurface.from_canvas`, `configure`, `present`, and `GpuRenderPass.blit` are `@web`-only — compiling for native or Node reports a compile error if those APIs are referenced.
 
 See [Compute shaders](../language/compute.md).

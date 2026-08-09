@@ -71,7 +71,7 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 
 - `[package].type` is `bin` (default) or `lib`. Libraries omit `entry`, are not runnable (`dreamer run` /
   `dreamer pack` error), and are typechecked via the conventional `src/<import_segment>.dream` root
-  (`http-utils` → `src/http_utils.dream`). Binaries require `entry` and a top-level `main`.
+  (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`). Binaries require `entry` and a top-level `main`.
 - `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler (**bin only**).
 - Package builds emit under `target/debug/` (default) or `target/release/` (`--release`), not beside
   sources. Bare `dream file.dream` compiles without a `dream.toml` still emit siblings next to the
@@ -86,10 +86,13 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   native. Combinations are allowed; see `dreamer run` below for how the host is chosen.
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).
-- Package names follow the same shape as Cargo crate names (letters, digits, `-`, `_`, starting
-  with a letter). A hyphen in the name maps to an underscore in `import` statements — `json-tools`
-  is imported as `import json_tools...;` — mirroring how a hyphenated Rust crate name is referenced
-  via `use` with underscores.
+- Package names must start with a letter and may contain ASCII letters, digits, `-`, `_`, and `.`.
+  The registry identity is always the full name string as written in `dream.toml` / `dream.lock`
+  (e.g. `json-tools`, `foo.bar`). On disk and in `import` statements, hyphens and dots map to
+  underscores: `json-tools` → `import json_tools;`, `foo.bar` → `import foo_bar;`. A dotted
+  `import` path still means a subpath inside a package (`import json_tools.parse;` →
+  `dream_packages/json_tools/src/parse.dream`), never a registry name with a dot — so the registry
+  package `foo.bar` is always imported as `import foo_bar;`, not `import foo.bar;`.
 - `[registries]` maps registry aliases to base URLs; a dependency's `registry = "..."` picks one,
   defaulting to the `default` alias.
 - `[scripts]` is currently informational project metadata — no `dreamer` subcommand executes it
@@ -121,7 +124,7 @@ dependency just because a newer version was published — use `dreamer update` f
 
 ## `dream_packages/`
 
-Every dependency is materialized under `dream_packages/<name-with-underscores>/` next to
+Every dependency is materialized under `dream_packages/<import_segment>/` next to
 `dream.toml` — a local path dependency is symlinked (so edits show up immediately), while registry
 and git dependencies are copied from a shared, checksum-verified download cache at
 `~/.dream/registry/`. `dream_packages/` is never committed (`dreamer init` adds it to
@@ -147,6 +150,9 @@ A registry is a sparse index plus tarball storage. A plain directory works, serv
 <base>/index/<name>                         newline-delimited JSON, one entry per published version
 <base>/dl/<name>/<name>-<version>.tar.gz    the tarball an index entry's "tarball" field points at
 ```
+
+`<name>` is the full registry package name (including `.` when present), e.g. `index/foo.bar` and
+`dl/foo.bar/foo.bar-1.0.0.tar.gz`. Dots are literal filename characters, not path separators.
 
 Each line of `<base>/index/<name>` is a JSON object:
 

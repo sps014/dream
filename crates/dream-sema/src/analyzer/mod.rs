@@ -13,6 +13,7 @@ use dream_syntax::token::token_kind::TokenKind;
 use dream_text::line_text::LineText;
 use dream_text::text_span::TextSpan;
 use dream_types::{DefKind, TypeCtx};
+use dream_abi::attributes::{CompileTargets, RuntimeSupport};
 use bumpalo::Bump;
 use indexmap::IndexMap;
 use std::cell::RefCell;
@@ -435,6 +436,11 @@ pub struct Analyzer<'a> {
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
     /// function/method — see `Analyzer::check_unsafe_call`.
     current_function_is_unsafe: bool,
+    /// Runtime availability of the function whose body is currently being analyzed. Gates
+    /// `check_runtime_call` on nested calls — see `Analyzer::check_runtime_call`.
+    current_function_runtime: RuntimeSupport,
+    /// Active compile-time runtime target(s) from the driver/CLI. Defaults to native-only.
+    compile_targets: CompileTargets,
     /// True while analyzing the body of an `@compute` kernel. Gates calling non-compute functions
     /// and accepting `@workgroup` declarations — see `Analyzer::check_compute_call`.
     current_function_is_compute: bool,
@@ -522,6 +528,8 @@ impl<'a> Analyzer<'a> {
             pending_loop_label: None,
             current_function_is_async: false,
             current_function_is_unsafe: false,
+            current_function_runtime: RuntimeSupport::ALL,
+            compile_targets: CompileTargets::native_only(),
             current_function_is_compute: false,
             current_file: None,
             file_modules: HashMap::new(),
@@ -570,6 +578,12 @@ impl<'a> Analyzer<'a> {
     pub fn with_crate_type(mut self, crate_type: CrateType, primary_file: Option<String>) -> Self {
         self.crate_type = crate_type;
         self.primary_file = primary_file;
+        self
+    }
+
+    /// Active compile-time runtime target(s). Call before [`Self::analyze`].
+    pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
+        self.compile_targets = targets;
         self
     }
 
@@ -781,6 +795,19 @@ impl<'a> Analyzer<'a> {
         self.current_function_is_unsafe = is_unsafe;
         let result = f(self);
         self.current_function_is_unsafe = saved;
+        result
+    }
+
+    /// Runs `f` with `current_function_runtime` set to `runtime`, restoring the previous value
+    /// afterward so the flag cannot leak into a sibling function's analysis.
+    pub(super) fn with_runtime_flag<F, R>(&mut self, runtime: RuntimeSupport, f: F) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
+    {
+        let saved = self.current_function_runtime;
+        self.current_function_runtime = runtime;
+        let result = f(self);
+        self.current_function_runtime = saved;
         result
     }
 

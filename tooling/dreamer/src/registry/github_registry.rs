@@ -303,4 +303,24 @@ mod tests {
         )
         .is_none());
     }
+
+    #[test]
+    fn contents_api_url_accepts_dotted_package_names() {
+        let reg = GithubRegistry::try_parse(
+            "https://raw.githubusercontent.com/sps014/dream-registry/main",
+            None,
+        )
+        .unwrap();
+        let url = reg.api_contents_url("index/foo.bar");
+        assert_eq!(
+            url,
+            "https://api.github.com/repos/sps014/dream-registry/contents/index/foo.bar?ref=main"
+        );
+        let tarball_path = "dl/foo.bar/foo.bar-1.0.0.tar.gz";
+        let put_url = reg.api_put_url(tarball_path);
+        assert_eq!(
+            put_url,
+            "https://api.github.com/repos/sps014/dream-registry/contents/dl/foo.bar/foo.bar-1.0.0.tar.gz"
+        );
+    }
 }

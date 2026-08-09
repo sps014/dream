@@ -1,0 +1,100 @@
+import system;
+import system.json;
+import system.collections;
+
+@json
+class Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@json
+class Bundle {
+    public items: List<int>;
+    public tags: Set<string>;
+    public scores: Map<string, int>;
+    public ordered: SortedMap<string, int>;
+    public trail: int[];
+    public nested: List<Point>;
+
+    public constructor(
+        items: List<int>,
+        tags: Set<string>,
+        scores: Map<string, int>,
+        ordered: SortedMap<string, int>,
+        trail: int[],
+        nested: List<Point>
+    ) {
+        this.items = items;
+        this.tags = tags;
+        this.scores = scores;
+        this.ordered = ordered;
+        this.trail = trail;
+        this.nested = nested;
+    }
+}
+
+fun main(): void {
+    let items = List<int>();
+    items.push(1);
+    items.push(2);
+
+    let tags = Set<string>();
+    tags.add("a");
+    tags.add("b");
+    tags.add("a");
+
+    let scores = Map<string, int>();
+    scores.set("ada", 10);
+
+    let ordered = SortedMap<string, int>();
+    ordered.set("z", 1);
+    ordered.set("a", 2);
+
+    let trail = Buffer.alloc<int>(2);
+    trail[0] = 9;
+    trail[1] = 8;
+
+    let nested = List<Point>();
+    nested.push(Point(3, 4));
+
+    let bundle = Bundle(items, tags, scores, ordered, trail, nested);
+    let text = Json.serialize(bundle);
+    System.println(text);
+
+    switch (Json.deserialize<Bundle>(text)) {
+        Ok(back) => {
+            System.println(back.items.length);
+            System.println(back.tags.length);
+            System.println(back.scores.get("ada").unwrap_or(-1));
+            System.println(back.ordered.get("a").unwrap_or(-1));
+            System.println(back.trail[0]);
+            System.println(back.nested.get(0).unwrap_or(Point(0, 0)).x);
+        },
+        Err(e) => System.println("err:" + e.message()),
+    }
+
+    let top_list = List<int>();
+    top_list.push(7);
+    top_list.push(8);
+    System.println(Json.serialize<List<int>>(top_list));
+
+    let top_set = Set<string>();
+    top_set.add("x");
+    top_set.add("y");
+    System.println(Json.serialize<Set<string>>(top_set));
+
+    let top_map = Map<string, int>();
+    top_map.set("k", 42);
+    System.println(Json.serialize<Map<string, int>>(top_map));
+
+    switch (Json.deserialize<List<int>>("[9,10]")) {
+        Ok(xs) => System.println(xs.get(0).unwrap_or(-1)),
+        Err(e) => System.println(e.message()),
+    }
+}

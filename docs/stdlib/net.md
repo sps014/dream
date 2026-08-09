@@ -17,7 +17,7 @@ import system.net;
 | --- | --- | --- |
 | Native (`dream run`) | Real TCP socket | `ws://` only (plain TCP + handshake); `wss://` resolves `Err(NetError.unsupported(...))` |
 | Node.js | Real TCP socket (`node:net`) | Standard `WebSocket` (Node ≥ 22, or a polyfill assigned onto `globalThis.WebSocket`); both schemes |
-| Browser | Not available — resolves `Err(NetError.unsupported(...))` (no raw socket API on the web) | Standard `WebSocket`; both schemes |
+| Browser (`--web`) | Compile error — `TcpClient` is `@native` / `@node` only | Standard `WebSocket`; both schemes |
 
 ## `TcpClient`
 
@@ -142,6 +142,6 @@ System.println(e.message());  // connection refused
 | `EIO` | A read/write against an open connection failed |
 | `ECLOSED` | The operation was attempted after the connection was already closed |
 | `EPROTOCOL` | The peer sent malformed/unexpected protocol data |
-| `EUNSUPPORTED` | Not available on the current host (raw TCP in the browser, `wss://` natively) |
+| `EUNSUPPORTED` | Operation not supported on the current host (e.g. `wss://` on native — see platform notes) |
 
 See [HTTP](http.md) for request/response networking (`HttpClient`, `HttpStreamResponse`).

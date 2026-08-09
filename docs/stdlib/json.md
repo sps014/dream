@@ -29,11 +29,11 @@ fun main(): void {
 }
 ```
 
-- `Json.serialize(x): string` — stringify any `@json` value.
+- `Json.serialize(x): string` — stringify any supported value (see [Collections](#collections) below).
 - `Json.deserialize<T>(text): Result<T, ParseError>` — parse and reconstruct a `T`.
 - `Json.from_value<T>(value): T` — reconstruct from an already-parsed `JsonValue` (no parse step).
 
-Field types may be primitives, `string`, other `@json` classes, arrays of those, positional **tuples** of supported element types (serialized as JSON arrays), `Map<string, V>` of a supported value type `V` (serialized as a JSON object keyed by the map's string keys), and (for classes) `Option<T>` where `T` is `string`, `int`, `double`, `float`, `bool`, another `@json` class/union, or `T[]` of a supported element. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
+Field types may be primitives, `string`, other `@json` classes, supported [collections](#collections), positional **tuples** of supported element types (serialized as JSON arrays), and (for classes) `Option<T>` where `T` is `string`, `int`, `double`, `float`, `bool`, another `@json` class/union, or `T[]` of a supported element. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
 
 ```dream
 @json
@@ -87,9 +87,45 @@ class Profile {
 }
 ```
 
-### Map fields
+### Collections
 
-A `Map<string, V>` field serializes as a JSON object keyed by the map's (string) keys, with `V` any supported field type:
+`@json` supports these collection shapes both as **class fields** and as **top-level**
+`serialize` / `deserialize` targets. Element types `T` / `V` must be primitives, `string`, or
+`@json` types.
+
+| Dream type | JSON shape | Notes |
+| --- | --- | --- |
+| `List<T>` | array | Order preserved |
+| `Set<T>` | array | Order not guaranteed on round-trip |
+| `T[]` | array | Fixed-length array field; same wire shape as `List` |
+| `Map<string, V>` | object | Keys are JSON object property names |
+| `SortedMap<string, V>` | object | Same wire shape as `Map`; iteration order follows the sorted map |
+
+**As fields** on an `@json` class:
+
+```dream
+@json
+class Bundle {
+    items: List<int>;
+    tags: Set<string>;
+    scores: Map<string, int>;
+    ordered: SortedMap<string, int>;
+    trail: int[];
+}
+```
+
+**At top level** (no wrapping class):
+
+```dream
+let xs = List<int>();
+xs.push(1);
+System.println(Json.serialize(xs));                    // [1]
+
+let back = Json.deserialize<List<int>>("[9,10]").unwrap_or(xs);
+```
+
+`Map<string, V>` and `SortedMap<string, V>` fields serialize as JSON objects keyed by the map's
+string keys:
 
 ```dream
 @json
@@ -130,7 +166,7 @@ switch (Json.deserialize<Shape>("{\"type\":\"Triangle\"}")) {
 `@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
 
 !!! note "v1 limits"
-    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, arrays of those (classes and unions), `Map<string, V>` of a supported value type, and (for classes) `Option<T>` of `string` / `int` / `double` / `float` / `bool` / `@json class` / `T[]`. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error. The strict unknown-`"type"` check above only applies to `Json.deserialize<T>`'s own return value — a union nested *inside* another `@json` type (a class field, array element, tuple slot, or generic type-parameter payload) still falls back to its first variant on an unrecognized tag, since propagating the error through an arbitrarily nested constructor-argument expression isn't supported yet.
+    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, `List<T>`, `Set<T>`, `T[]`, `Map<string, V>`, `SortedMap<string, V>`, and (for classes) `Option<T>` of `string` / `int` / `double` / `float` / `bool` / `@json class` / `T[]`. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error. The strict unknown-`"type"` check above only applies to `Json.deserialize<T>`'s own return value — a union nested *inside* another `@json` type (a class field, array element, tuple slot, or generic type-parameter payload) still falls back to its first variant on an unrecognized tag, since propagating the error through an arbitrarily nested constructor-argument expression isn't supported yet.
 
 ## The `JsonValue` model
 
@@ -239,3 +275,19 @@ A JSON `null` reads back with `is_null() == true`; a missing object key yields `
 #### `Json.serialize<T>(x): string` / `Json.deserialize<T>(text)` / `Json.from_value<T>(value)`
 
 Covered in the auto-derive section above — each has a full example there.
+
+## `GenResult`
+
+Outcome type for compile-time helpers (e.g. a syntax DSL parser). Used by generator samples and
+the `@json` expand logic; import `system.json`.
+
+```dream
+import system.json;
+
+let ok = GenResult.success("extend User { }");
+let bad = GenResult.failure("unsupported field");
+let at = GenResult.failure_at("bad type", "User", "age");
+```
+
+Fields: `ok`, `source`, `error`, `error_type`, `error_field`. From an `@generator` body, pass
+`result.error` to `ctx.error(block, …)` when `!result.ok`.

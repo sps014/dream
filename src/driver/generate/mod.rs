@@ -65,7 +65,7 @@ fn run_generators_inner<'a>(
     let registered = discover_generators(acc, diagnostics);
     let mut ctx = GeneratorContext::build(acc, registered);
 
-    json_gen::expand_from_acc(&mut ctx, &acc.all_structs, &acc.all_enums, diagnostics);
+    json_gen::expand_from_acc(&mut ctx, acc, &acc.all_structs, &acc.all_enums, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;
 
     let handled = context_gen::expand_context_generators(&mut ctx, diagnostics);

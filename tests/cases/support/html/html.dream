@@ -1,17 +1,19 @@
 module html;
 
+import system.text;
+
 /// Runtime HTML helpers — emit target for the sample `html { }` Dream compiler.
 
 /// Builds an HTML element string from a tag, alternating attr key/value pairs, and inner HTML.
 public class Html {
     public static fun el(tag: string, attrs: string[], inner: string): string {
-        let a = "";
+        let a_sb = StringBuilder();
         let i = 0;
         while (i + 1 < attrs.length) {
-            a = a + " " + attrs[i] + "=\"" + attrs[i + 1] + "\"";
+            a_sb.append(" " + attrs[i] + "=\"" + attrs[i + 1] + "\"");
             i = i + 2;
         }
-        return "<" + tag + a + ">" + inner + "</" + tag + ">";
+        return "<" + tag + a_sb.build() + ">" + inner + "</" + tag + ">";
     }
 
     /// Identity helper so nested `el` results compose cleanly.
@@ -21,12 +23,12 @@ public class Html {
 
     /// Joins mixed string parts (text + splices).
     public static fun text(parts: string[]): string {
-        let s = "";
+        let s_sb = StringBuilder();
         let i = 0;
         while (i < parts.length) {
-            s = s + parts[i];
+            s_sb.append(parts[i]);
             i = i + 1;
         }
-        return s;
+        return s_sb.build();
     }
 }

@@ -18,12 +18,14 @@ public class AesGcm {
         return SecureRandom.bytes(AesGcm.nonce_size());
     }
 
+    @native @node
     @js("Dream", "cryptoAesGcmEncrypt")
     static extern fun encrypt_host(key: byte[], nonce: byte[], plaintext: byte[], aad: byte[]): byte[];
 
     // Host returns `[ok_flag, ...payload]` (see `decrypt_host`'s doc) so a hard authentication
     // failure can be distinguished from a genuinely empty plaintext without throwing across the
     // host boundary.
+    @native @node
     @js("Dream", "cryptoAesGcmDecrypt")
     static extern fun decrypt_host(key: byte[], nonce: byte[], ciphertext: byte[], aad: byte[]): byte[];
 
@@ -31,6 +33,7 @@ public class AesGcm {
     // data, not encrypted but tamper-checked) alongside it. Returns ciphertext with a 16-byte
     // authentication tag appended. `nonce` must be exactly `nonce_size()` bytes and must never be
     // reused with the same key.
+    @native @node
     public static fun encrypt(key: AesGcmKey, nonce: byte[], plaintext: byte[], aad: byte[]): Result<byte[], CryptoError> {
         if (nonce.length != AesGcm.nonce_size()) {
             return Result.Err(CryptoError.invalid_nonce("AES-GCM nonce must be " + AesGcm.nonce_size() + " bytes, got " + nonce.length));
@@ -41,6 +44,7 @@ public class AesGcm {
     // Decrypts and authenticates `ciphertext` (as produced by `encrypt`, tag included) under
     // `key`/`nonce`/`aad`. Returns an error if the nonce length is wrong or authentication fails
     // (tampered ciphertext, wrong key/nonce/aad, or truncated input).
+    @native @node
     public static fun decrypt(key: AesGcmKey, nonce: byte[], ciphertext: byte[], aad: byte[]): Result<byte[], CryptoError> {
         if (nonce.length != AesGcm.nonce_size()) {
             return Result.Err(CryptoError.invalid_nonce("AES-GCM nonce must be " + AesGcm.nonce_size() + " bytes, got " + nonce.length));

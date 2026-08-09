@@ -144,15 +144,19 @@ public class Gpu {
         h: int
     ): void;
 
+    @web
     @js("Dream", "gpuSurfaceFromCanvas")
     static extern fun surface_from_canvas(canvas_id: string): int;
 
+    @web
     @js("Dream", "gpuSurfaceConfigure")
     static extern fun surface_configure(id: int, width: int, height: int): void;
 
+    @web
     @js("Dream", "gpuSurfacePresent")
     static extern async fun surface_present(id: int): int;
 
+    @web
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 

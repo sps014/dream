@@ -92,7 +92,7 @@ switch (System.read_int()) {
 
 #### `System.exit(code: int): void`
 
-Terminates immediately; never returns.
+Terminates immediately; never returns. Available on native and Node hosts only (`@native @node`); a compile error on web.
 
 ```dream
 System.exit(0);

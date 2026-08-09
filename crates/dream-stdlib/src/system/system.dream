@@ -17,6 +17,7 @@ public class System {
     @js("Dream", "consoleReadKey")
     static extern fun host_read_key(): char;
 
+    @native @node
     @js("Dream", "consoleExit")
     static extern fun host_exit(code: int): void;
 
@@ -77,6 +78,7 @@ public class System {
     }
 
     // Terminates the process with the given exit code.
+    @native @node
     public static fun exit(code: int): void {
         System.host_exit(code);
     }

@@ -14,8 +14,7 @@ pub struct RegisteredGenerator {
     pub file_path: String,
     pub syntax_blocks: Vec<String>,
     /// True when the `@generator` function has a non-empty body whose single parameter is a
-    /// `GenContext` — the compiler runs the body directly (see `driver/generate/context_gen.rs`)
-    /// instead of requiring a sibling `harness.dream`.
+    /// `GenContext` — the compiler runs the body directly (see `driver/generate/context_gen.rs`).
     pub has_context_body: bool,
 }
 
@@ -91,6 +90,15 @@ fn scan_generator_file(
         let has_context_body = !f.body.is_empty()
             && f.parameters.len() == 1
             && f.parameters[0].type_.get_type() == "GenContext";
+        if !syntax_blocks.is_empty() && !has_context_body {
+            diagnostics.report_error(
+                format!(
+                    "syntax generator '{}': @generator must take a single GenContext parameter and have a non-empty body",
+                    name
+                ),
+                Some(f.name.position),
+            );
+        }
         out.push(RegisteredGenerator {
             name,
             module_path: module_path.clone(),

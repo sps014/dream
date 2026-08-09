@@ -8,19 +8,24 @@ public class ChildProcess {
         this._handle = handle;
     }
 
+    @native @node
     @js("Dream", "processWriteStdin")
     static extern fun host_write_stdin(handle: int, data: byte[]): bool;
 
     // `stream`: 0 = stdout, 1 = stderr.
+    @native @node
     @js("Dream", "processReadStream")
     static extern async fun host_read_stream(handle: int, stream: int, max_bytes: int): char[];
 
+    @native @node
     @js("Dream", "processReadStreamLine")
     static extern async fun host_read_stream_line(handle: int, stream: int): char[];
 
+    @native @node
     @js("Dream", "processWait")
     static extern async fun host_wait(handle: int): char[];
 
+    @native @node
     @js("Dream", "processKill")
     static extern fun host_kill(handle: int): bool;
 
@@ -37,6 +42,7 @@ public class ChildProcess {
         return out;
     }
 
+    @native @node
     async fun read_line(stream: int): Option<string> {
         let raw = await ChildProcess.host_read_stream_line(this._handle, stream);
         if (raw.length == 0) {
@@ -49,40 +55,47 @@ public class ChildProcess {
     }
 
     // Writes `data` to the child's stdin. Returns `false` if the pipe is closed or the write fails.
+    @native @node
     public fun write_stdin(data: byte[]): bool {
         return ChildProcess.host_write_stdin(this._handle, data);
     }
 
     // Writes UTF-8 text to the child's stdin.
+    @native @node
     public fun write_stdin_text(text: string): bool {
         return this.write_stdin(Encoding.utf8_encode(text));
     }
 
     // Reads up to `max_bytes` currently buffered from stdout, blocking until at least one byte
     // has arrived or the stream has reached end-of-file (in which case the result is empty).
+    @native @node
     public async fun read_stdout(max_bytes: int): byte[] {
         let raw = await ChildProcess.host_read_stream(this._handle, 0, max_bytes);
         return ChildProcess.slice_to_bytes(raw, 0);
     }
 
     // Reads one line from stdout (without the trailing newline), or `None` at end-of-file.
+    @native @node
     public async fun read_stdout_line(): Option<string> {
         return await this.read_line(0);
     }
 
     // Reads up to `max_bytes` currently buffered from stderr.
+    @native @node
     public async fun read_stderr(max_bytes: int): byte[] {
         let raw = await ChildProcess.host_read_stream(this._handle, 1, max_bytes);
         return ChildProcess.slice_to_bytes(raw, 0);
     }
 
     // Reads one line from stderr (without the trailing newline), or `None` at end-of-file.
+    @native @node
     public async fun read_stderr_line(): Option<string> {
         return await this.read_line(1);
     }
 
     // Waits for the process to exit, returning its exit code (or a negative sentinel: `-1` if it
     // could not be waited on, `-2` if it was terminated by a signal with no exit code).
+    @native @node
     public async fun wait(): int {
         let raw = await ChildProcess.host_wait(this._handle);
         return int.parse(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 0))).unwrap_or(0 - 1);
@@ -90,6 +103,7 @@ public class ChildProcess {
 
     // Forcibly terminates the process. Returns `false` if it had already exited or could not be
     // killed.
+    @native @node
     public fun kill(): bool {
         return ChildProcess.host_kill(this._handle);
     }

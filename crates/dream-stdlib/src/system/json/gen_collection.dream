@@ -1,0 +1,35 @@
+module system.json;
+
+// Snapshot of a collection type that needs top-level `Json.serialize` / `deserialize` adapters.
+
+public class GenCollection {
+    public kind: string;
+    public elem_type: string;
+    public value_type: string;
+    public self_ty: string;
+    public fn_suffix: string;
+
+    public constructor(
+        kind: string,
+        elem_type: string,
+        value_type: string,
+        self_ty: string,
+        fn_suffix: string
+    ) {
+        this.kind = kind;
+        this.elem_type = elem_type;
+        this.value_type = value_type;
+        this.self_ty = self_ty;
+        this.fn_suffix = fn_suffix;
+    }
+
+    public static fun make(
+        kind: string,
+        elem_type: string,
+        value_type: string,
+        self_ty: string,
+        fn_suffix: string
+    ): GenCollection {
+        return GenCollection(kind, elem_type, value_type, self_ty, fn_suffix);
+    }
+}

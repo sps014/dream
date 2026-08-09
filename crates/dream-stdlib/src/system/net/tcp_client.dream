@@ -6,18 +6,23 @@ public class TcpClient {
     handle: int;
     is_closed: bool;
 
+    @native @node
     @js("Dream", "tcpConnect")
     static extern async fun tcp_connect(host: string, port: int, timeout_ms: int): char[];
 
+    @native @node
     @js("Dream", "tcpSend")
     static extern async fun tcp_send(handle: int, data: byte[]): char[];
 
+    @native @node
     @js("Dream", "tcpSendText")
     static extern async fun tcp_send_text(handle: int, text: string): char[];
 
+    @native @node
     @js("Dream", "tcpReceive")
     static extern async fun tcp_receive(handle: int, max_bytes: int): char[];
 
+    @native @node
     @js("Dream", "tcpClose")
     static extern fun tcp_close(handle: int): bool;
 
@@ -27,11 +32,13 @@ public class TcpClient {
     }
 
     // Opens a TCP connection to `host:port` with no connect timeout.
+    @native @node
     public static async fun connect(host: string, port: int): Result<TcpClient, NetError> {
         return await TcpClient.connect_timeout(host, port, 0);
     }
 
     // Opens a TCP connection with a connect timeout in milliseconds (`0` = none).
+    @native @node
     public static async fun connect_timeout(host: string, port: int, timeout_ms: int): Result<TcpClient, NetError> {
         let wire = await TcpClient.tcp_connect(host, port, timeout_ms);
         let reader = NetWireReader(wire);
@@ -47,6 +54,7 @@ public class TcpClient {
     }
 
     // Sends raw bytes; resolves with the number of bytes written.
+    @native @node
     public async fun send(data: byte[]): Result<int, NetError> {
         if (this.is_closed) {
             return Result.Err(NetError.closed("connection closed"));
@@ -56,6 +64,7 @@ public class TcpClient {
     }
 
     // Sends `text` encoded as UTF-8; resolves with the number of bytes written.
+    @native @node
     public async fun send_text(text: string): Result<int, NetError> {
         if (this.is_closed) {
             return Result.Err(NetError.closed("connection closed"));
@@ -75,6 +84,7 @@ public class TcpClient {
 
     // Reads up to `max_bytes`. An empty array means the peer closed the connection (EOF), not an
     // error — check `data.length == 0` to detect end-of-stream.
+    @native @node
     public async fun receive(max_bytes: int): Result<byte[], NetError> {
         if (this.is_closed) {
             return Result.Err(NetError.closed("connection closed"));
@@ -92,6 +102,7 @@ public class TcpClient {
     }
 
     // Closes the connection. Safe to call more than once.
+    @native @node
     public fun close(): void {
         if (this.is_closed == false) {
             this.is_closed = true;

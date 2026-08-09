@@ -251,7 +251,7 @@ impl<'a> Analyzer<'a> {
 
                 // Inside `@compute`, `GpuBuffer<T>` indexes like `T[]` (storage buffer elements).
                 // Do not use host `@get_indexer` — CPU GpuBuffer has no indexer by design.
-                let gpu_elem = if self.current_function_is_compute {
+                let gpu_elem = if self.current_function_is_gpu {
                     crate::analyzer::declarations::functions::gpu_buffer_elem_type(&array_type)
                         .cloned()
                 } else {

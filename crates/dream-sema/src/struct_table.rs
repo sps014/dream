@@ -16,6 +16,8 @@ pub struct StructFieldInfo {
     /// True when declared `unowned`: a plain reference-type field that does not hold a strong
     /// reference to its referent and is excluded from the reference-cycle graph.
     pub is_unowned: bool,
+    /// Optional `@location(N)` override for vertex attributes / varyings.
+    pub location: Option<u32>,
 }
 
 impl StructFieldInfo {
@@ -99,6 +101,7 @@ impl StructTable {
                     visibility: field.visibility,
                     is_weak: field.is_weak,
                     is_unowned: field.is_unowned,
+                    location: dream_abi::attributes::field_location_override(&field.attributes),
                 },
             );
             current_offset += size;

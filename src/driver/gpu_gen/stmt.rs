@@ -156,14 +156,18 @@ fn emit_stmt(
         }
         StatementNode::MemberAssignment(obj, member, value) => {
             out.push_str(&format!(
-                "{}.{} = {};\n",
+                "{}{}.{} = {};\n",
+                p,
                 emit_expr(obj, ctx),
                 member.text,
                 emit_expr(value, ctx)
             ));
         }
         StatementNode::Return(None) => out.push_str(&format!("{}return;\n", p)),
-        StatementNode::Return(Some(_)) => out.push_str(&format!("{}return;\n", p)),
+        StatementNode::Return(Some(e)) => {
+            let rhs = emit_expr(e, ctx);
+            out.push_str(&format!("{}return {};\n", p, rhs));
+        },
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             out.push_str(&format!("{}if ({}) {{\n", p, emit_expr(cond, ctx)));
             emit_stmts(then_b, out, wg, indent + 1, ctx, diagnostics, kernel);
@@ -262,7 +266,7 @@ fn emit_stmt(
             };
             diagnostics.report_error(
                 format!(
-                    "@compute kernel '{kernel}' contains unsupported {kind}; remove it or rewrite with supported control flow"
+                    "GPU shader '{kernel}' contains unsupported {kind}; remove it or rewrite with supported control flow"
                 ),
                 stmt_span(stmt),
             );

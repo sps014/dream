@@ -183,11 +183,13 @@ pub(super) fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticB
 
     let mut workgroup_names = Vec::new();
     collect_workgroup_names(func.body, &mut workgroup_names);
+    let struct_fields = IndexMap::new();
     let ctx = EmitCtx {
         prefix: &entry,
         bindings: &bindings,
         workgroup_names: &workgroup_names,
         scopes: RefCell::new(vec![IndexMap::new()]),
+        struct_fields: &struct_fields,
     };
 
     let mut workgroup_decls = String::new();

@@ -40,6 +40,24 @@ public struct GpuBuffer<T : unmanaged> {
         return b;
     }
 
+    // Allocates an uninitialized GPU vertex buffer of `n` elements (`VERTEX | COPY_DST`).
+    public static fun vertex(n: int): GpuBuffer<T> {
+        let scratch = Buffer.alloc<T>(1);
+        let stride = Bytes.of(scratch[0]).length;
+        let b = GpuBuffer<T>();
+        b._id = Gpu.buffer_alloc_vertex_bytes(n * stride);
+        b._length = n;
+        b._stride = stride;
+        return b;
+    }
+
+    // Allocates a vertex buffer and uploads `data`.
+    public static fun vertex_from(data: T[]): GpuBuffer<T> {
+        let b = GpuBuffer<T>.vertex(data.length);
+        b.write(data);
+        return b;
+    }
+
     // Overwrites the whole buffer from CPU `data` (must match `length`).
     public fun write(data: T[]): void {
         let n = data.length;

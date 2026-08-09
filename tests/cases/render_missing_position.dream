@@ -1,0 +1,15 @@
+import system;
+import system.gpu;
+
+struct VsOut {
+    public color: GpuVec4;
+}
+
+@vertex
+fun bad_vs(): VsOut {
+    let o = VsOut();
+    o.color = GpuVec4.of(1.0, 0.0, 0.0, 1.0);
+    return o;
+}
+
+fun main(): void {}

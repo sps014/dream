@@ -1,0 +1,22 @@
+import system;
+import system.gpu;
+
+struct Vert {
+    @location(0) public a: float;
+    @location(0) public b: float;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+@vertex
+fun vs(v: Vert): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.a, v.b, 0.0, 1.0);
+    o.color = GpuVec4.of(1.0, 0.0, 0.0, 1.0);
+    return o;
+}
+
+fun main(): void {}

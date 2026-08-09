@@ -160,6 +160,41 @@ public class Gpu {
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
+    @js("Dream", "gpuRenderPipelineCreate")
+    static extern async fun render_pipeline_create(vertex: string, fragment: string): int;
+
+    @web
+    @js("Dream", "gpuRenderDraw")
+    static extern async fun render_draw(
+        surface_id: int,
+        pipeline_id: int,
+        vertex_buffer_id: int,
+        vertex_count: int,
+        uniforms: byte[],
+        clear_r: float,
+        clear_g: float,
+        clear_b: float,
+        clear_a: float
+    ): int;
+
+    @web
+    @js("Dream", "gpuRenderDrawIndexed")
+    static extern async fun render_draw_indexed(
+        surface_id: int,
+        pipeline_id: int,
+        vertex_buffer_id: int,
+        index_buffer_id: int,
+        index_count: int,
+        uniforms: byte[],
+        clear_r: float,
+        clear_g: float,
+        clear_b: float,
+        clear_a: float
+    ): int;
+
+    @js("Dream", "gpuBufferAllocVertexBytes")
+    static extern fun buffer_alloc_vertex_bytes(n: int): int;
+
     @js("Dream", "gpuPassBegin")
     static extern fun pass_begin(): int;
 
@@ -219,4 +254,14 @@ public class Gpu {
         v: float,
         level: float
     ): float { return 0.0; }
+
+    // Fragment texture sample (WGSL `textureSample`; CPU stub returns zeros).
+    public static fun texture_sample(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
 }

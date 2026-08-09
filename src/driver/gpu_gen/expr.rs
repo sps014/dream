@@ -120,9 +120,52 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 .unwrap_or_else(|| "0.0".into());
             format!("textureSampleLevel({tex}, {samp}, vec2<f32>({u}, {v}), {level})")
         }
-        "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "sin" | "cos" | "tan"
-        | "asin" | "acos" | "atan" | "atan2" => {
+        "texture_sample" => {
+            let tex = args
+                .first()
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "tex".into());
+            let samp = args
+                .get(1)
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "samp".into());
+            let u = args
+                .get(2)
+                .map(|a| coerce_expr_to_wgsl_ty(a, "f32", ctx))
+                .unwrap_or_else(|| "0.0".into());
+            let v = args
+                .get(3)
+                .map(|a| coerce_expr_to_wgsl_ty(a, "f32", ctx))
+                .unwrap_or_else(|| "0.0".into());
+            format!("textureSample({tex}, {samp}, vec2<f32>({u}, {v}))")
+        }
+        "of" => {
+            // GpuVecN.of(...) → vecN<f32>(...)
+            let n = args.len();
             let args_s = coerce_all("f32");
+            let joined = args_s.join(", ");
+            match n {
+                2 => format!("vec2<f32>({joined})"),
+                3 => format!("vec3<f32>({joined})"),
+                4 => format!("vec4<f32>({joined})"),
+                _ => format!("vec4<f32>({joined})"),
+            }
+        }
+        "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "sin" | "cos" | "tan"
+        | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
+        | "reflect" | "mix" | "pow" | "exp" => {
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            // Scalar helpers still coerce floats; vector ops pass through.
+            let scalar = matches!(
+                name,
+                "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "sin" | "cos"
+                    | "tan" | "asin" | "acos" | "atan" | "atan2" | "mix" | "pow" | "exp"
+            );
+            let args_s = if scalar {
+                coerce_all("f32")
+            } else {
+                args_s
+            };
             match name {
                 "min" => format!(
                     "min({}, {})",
@@ -149,6 +192,20 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into())
                 ),
+                "mix" => format!(
+                    "mix({}, {}, {})",
+                    args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
+                ),
+                "pow" => format!(
+                    "pow({}, {})",
+                    args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(1).cloned().unwrap_or_else(|| "1.0".into())
+                ),
+                "normalize" | "length" | "cross" | "reflect" | "dot" | "exp" => {
+                    format!("{}({})", name, args_s.join(", "))
+                }
                 other => format!(
                     "{}({})",
                     other,
@@ -265,7 +322,8 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
         }
         ExpressionNode::FunctionCall(name, _, args) => emit_call(&name.text, args, ctx),
         ExpressionNode::MethodCall(obj, method, _, args) => {
-            if method.text == "length" {
+            // Zero-arg `.length()` on a buffer → arrayLength; `GpuMath.length(vec)` has args.
+            if method.text == "length" && args.is_empty() {
                 format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
             } else {
                 emit_call(&method.text, args, ctx)
@@ -274,7 +332,7 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
         ExpressionNode::Call(callee, _, args) => match &**callee {
             ExpressionNode::Identifier(n) => emit_call(&n.text, args, ctx),
             ExpressionNode::MemberAccess(obj, method) => {
-                if method.text == "length" {
+                if method.text == "length" && args.is_empty() {
                     format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
                 } else {
                     emit_call(&method.text, args, ctx)

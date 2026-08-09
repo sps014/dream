@@ -212,7 +212,7 @@ impl<'a> Analyzer<'a> {
                     "int",
                 )));
             }
-            if self.current_function_is_compute
+            if self.current_function_is_gpu
                 && crate::analyzer::declarations::functions::gpu_buffer_elem_type(&obj_type)
                     .is_some()
             {

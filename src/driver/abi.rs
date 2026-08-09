@@ -4,21 +4,21 @@ use std::io::Error;
 use std::path::Path;
 use tracing::{error, info};
 
-use crate::driver::compute_gen::{self, GpuKernelInfo};
+use crate::driver::gpu_gen::{self, GpuEmitResult};
 use dream_syntax::nodes::ProgramNode;
 
 /// One live host import after MIR pruning: `(module, field)` as emitted on the WASM import.
 pub type LiveImport = (String, String);
 
 /// Emits a binary `.wasm` next to the `.wat`, and optionally an `.abi.json` describing the module's
-/// **live** extern imports (for JS interop marshaling) and exported functions. When `kernels` is
+/// **live** extern imports (for JS interop marshaling) and exported functions. When `gpu` is
 /// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI (when ABI
 /// is requested). Native `run` / `debug-adapter` skip ABI — wasmtime does not use it.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     wat_text: &str,
     program: &ProgramNode,
-    kernels: &[GpuKernelInfo],
+    gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     emit_abi: bool,
 ) -> Result<(), Error> {
@@ -35,15 +35,15 @@ pub(crate) fn emit_wasm_and_abi(
         }
     }
 
-    if !kernels.is_empty() {
+    if !gpu.is_empty() {
         let wgsl_path = base.with_extension("wgsl");
-        fs::write(&wgsl_path, compute_gen::join_wgsl_module(kernels))?;
+        fs::write(&wgsl_path, gpu_gen::join_wgsl_module(gpu))?;
         info!("created file: {}", wgsl_path.display());
     }
 
     if emit_abi {
         let abi_path = base.with_extension("abi.json");
-        fs::write(&abi_path, build_abi_json(program, kernels, live_imports))?;
+        fs::write(&abi_path, build_abi_json(program, gpu, live_imports))?;
         info!("created file: {}", abi_path.display());
     }
     Ok(())
@@ -71,7 +71,7 @@ fn json_escape(s: &str) -> String {
 /// `(module, field)` pairs that survived MIR import pruning.
 pub(crate) fn build_abi_json(
     program: &ProgramNode,
-    kernels: &[GpuKernelInfo],
+    gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
 ) -> String {
     let live: BTreeSet<(&str, &str)> = live_imports
@@ -140,7 +140,7 @@ pub(crate) fn build_abi_json(
         if func.is_extern || func.generic_parameters.is_some() {
             continue;
         }
-        if dream_abi::attributes::has_compute_attr(&func.attributes) {
+        if dream_abi::attributes::is_gpu_shader_attr(&func.attributes) {
             continue;
         }
         if func.visibility.is_public() || func.name.text == dream_mir::abi::ENTRY_FN {
@@ -148,10 +148,10 @@ pub(crate) fn build_abi_json(
         }
     }
 
-    let gpu_section = if kernels.is_empty() {
+    let gpu_section = if gpu.is_empty() {
         String::new()
     } else {
-        format!(",\n  \"gpu\": {{ {} }}", compute_gen::gpu_abi_json(kernels))
+        format!(",\n  \"gpu\": {{ {} }}", gpu_gen::gpu_abi_json(gpu))
     };
 
     format!(

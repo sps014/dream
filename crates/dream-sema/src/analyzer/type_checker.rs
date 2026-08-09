@@ -22,11 +22,12 @@ impl<'a> Analyzer<'a> {
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
         let is_compute = dream_abi::attributes::has_compute_attr(&function.attributes);
+        let is_gpu = dream_abi::attributes::is_gpu_shader_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
         self.with_runtime_flag(runtime_support, |s| {
             s.with_unsafe_flag(is_unsafe, |s| {
-                s.with_compute_flag(is_compute, |s| {
+                s.with_gpu_flags(is_compute, is_gpu, |s| {
                     s.with_async_flag(function.is_async, |s| {
                         s.analyze_body(
                             function.body,
@@ -79,7 +80,7 @@ impl<'a> Analyzer<'a> {
             }
         }
         // Compute kernels get WGSL builtins as ordinary locals (`global_id.x`, …). `GpuId3` is
-        // defined in `system.gpu` (auto-loaded whenever any `@compute` is present).
+        // defined in `system.gpu` (auto-loaded whenever any GPU shader attr is present).
         if dream_abi::attributes::has_compute_attr(&function.attributes) {
             let id3 = Type::Struct(
                 super::synthetic_token(TokenKind::IdentifierToken, "GpuId3"),
@@ -88,6 +89,18 @@ impl<'a> Analyzer<'a> {
             for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
                 let _ = param_table.add_symbol(name.to_string(), id3.clone());
             }
+        }
+        if dream_abi::attributes::has_vertex_attr(&function.attributes) {
+            let i32ty = Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int"));
+            let _ = param_table.add_symbol("vertex_index".to_string(), i32ty.clone());
+            let _ = param_table.add_symbol("instance_index".to_string(), i32ty);
+        }
+        if dream_abi::attributes::has_fragment_attr(&function.attributes) {
+            let v4 = Type::Struct(
+                super::synthetic_token(TokenKind::IdentifierToken, "GpuVec4"),
+                None,
+            );
+            let _ = param_table.add_symbol("frag_coord".to_string(), v4);
         }
         Ok(param_table)
     }

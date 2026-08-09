@@ -167,7 +167,7 @@ impl Compiler {
             acc.requested_std_packages
                 .insert("system.json".to_string());
         }
-        if program_uses_compute_attr(&acc) {
+        if program_uses_gpu_shader_attr(&acc) {
             acc.requested_std_packages
                 .insert("system.gpu".to_string());
         }
@@ -262,12 +262,9 @@ impl Compiler {
 
         info!("finished semantic analysis");
 
-        // Validate `@compute` kernels (unsupported stmts) before MIR so failures don't leave a
+        // Validate GPU shaders (unsupported stmts / stage rules) before MIR so failures don't leave a
         // half-written `.wat` behind a generator error.
-        let kernels = crate::driver::compute_gen::collect_compute_kernels(
-            ast.get_root(),
-            &mut diagnostics,
-        );
+        let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
         if diagnostics.has_errors() {
             render(&diagnostics, &acc.file_contents);
             return Err(CompileError::Generator);
@@ -356,12 +353,12 @@ impl Compiler {
 
         // Also emit a binary `.wasm` (what browsers/Node load) and, when requested, an `.abi.json`
         // sidecar describing live extern imports and exports so the JS runtime can auto-marshal
-        // values. `@compute` kernels become a sibling `.wgsl` (+ `"gpu"` ABI section when ABI is on).
+        // values. GPU shaders become a sibling `.wgsl` (+ `"gpu"` ABI section when ABI is on).
         emit_wasm_and_abi(
             out_path,
             &text,
             ast.get_root(),
-            &kernels,
+            &gpu,
             &live_imports,
             self.emit_abi,
         )?;
@@ -432,11 +429,9 @@ fn program_uses_json_attr(acc: &ProgramAccumulator<'_>) -> bool {
     })
 }
 
-/// True when any top-level function carries `@compute` (needs `system.gpu`).
-fn program_uses_compute_attr(acc: &ProgramAccumulator<'_>) -> bool {
-    acc.all_functions.iter().any(|f| {
-        f.attributes
-            .iter()
-            .any(|a| a.name.text == "compute")
-    })
+/// True when any top-level function carries `@compute` / `@vertex` / `@fragment` (needs `system.gpu`).
+fn program_uses_gpu_shader_attr(acc: &ProgramAccumulator<'_>) -> bool {
+    acc.all_functions
+        .iter()
+        .any(|f| dream_abi::attributes::is_gpu_shader_attr(&f.attributes))
 }

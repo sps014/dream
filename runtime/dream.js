@@ -1496,6 +1496,8 @@ function makeGpuHost(getInstance) {
   const surfaces = new Map();
   const passes = new Map(); // id -> { ops: [...] }
   const pipelineCache = new Map();
+  const renderPipelines = new Map(); // id -> { pipeline, vsMeta, fsMeta, layout }
+  const renderPipelineCache = new Map(); // key -> id
   let nextId = 1;
   let devicePromise = null;
   let device = null;
@@ -1845,6 +1847,36 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return 0;
   }
 
+  async function buildRenderBindGroup(dev, rp, uniforms) {
+    const binds = [...(rp.vsMeta.bindings || []), ...(rp.fsMeta.bindings || [])];
+    if (binds.length === 0) return null;
+    const used = new Set();
+    const entries = [];
+    const extra = toU8(uniforms);
+    for (const bind of binds) {
+      if (used.has(bind.binding)) continue;
+      used.add(bind.binding);
+      if (bind.kind === "uniform") {
+        const ubuf = dev.createBuffer({
+          size: 256,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        const bytes = new Uint8Array(256);
+        if (extra.byteLength > 0) {
+          bytes.set(extra.subarray(0, Math.min(extra.byteLength, 256)), 0);
+        }
+        dev.queue.writeBuffer(ubuf, 0, bytes);
+        entries.push({ binding: bind.binding, resource: { buffer: ubuf } });
+      }
+      // textures/samplers for render draws can be added later via dedicated APIs
+    }
+    if (entries.length === 0) return null;
+    return dev.createBindGroup({
+      layout: rp.pipeline.getBindGroupLayout(0),
+      entries,
+    });
+  }
+
   const host = {
     __attachGpuAbi: attachFromAbi,
 
@@ -1877,6 +1909,17 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     gpuBufferAllocBytes: (n) => {
       const id = nextId++;
       buffers.set(id, { gpuBuffer: null, nbytes: Math.max(0, n | 0), cpu: null, usage: 0 });
+      return id;
+    },
+    gpuBufferAllocVertexBytes: (n) => {
+      const id = nextId++;
+      buffers.set(id, {
+        gpuBuffer: null,
+        nbytes: Math.max(0, n | 0),
+        cpu: null,
+        usage: 0,
+        vertex: true,
+      });
       return id;
     },
     gpuBufferWriteBytes: (id, data) => {
@@ -2268,6 +2311,203 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         return 0;
       } catch (e) {
         console.error("Dream gpuRenderBlit:", e);
+        return classifyErr(e);
+      }
+    },
+
+    gpuRenderPipelineCreate: async (vertexName, fragmentName) => {
+      try {
+        const vsName = String(vertexName);
+        const fsName = String(fragmentName);
+        const cacheKey = `${vsName}\0${fsName}`;
+        if (renderPipelineCache.has(cacheKey)) {
+          return renderPipelineCache.get(cacheKey);
+        }
+        const shaders = (gpuAbi && gpuAbi.shaders) || [];
+        const vsMeta = shaders.find((s) => s.name === vsName && s.stage === "vertex");
+        const fsMeta = shaders.find((s) => s.name === fsName && s.stage === "fragment");
+        if (!vsMeta) throw new Error(`unknown @vertex shader '${vsName}'`);
+        if (!fsMeta) throw new Error(`unknown @fragment shader '${fsName}'`);
+        const dev = await ensureDevice();
+        const vsModule = dev.createShaderModule({ code: vsMeta.source || "" });
+        const fsModule = dev.createShaderModule({ code: fsMeta.source || "" });
+        const format = navigator.gpu.getPreferredCanvasFormat();
+        const bindEntries = [];
+        const allBinds = [...(vsMeta.bindings || []), ...(fsMeta.bindings || [])];
+        const seenBind = new Set();
+        for (const b of allBinds) {
+          if (seenBind.has(b.binding)) continue;
+          seenBind.add(b.binding);
+          const visibility =
+            (vsMeta.bindings || []).some((x) => x.binding === b.binding)
+              ? GPUShaderStage.VERTEX
+              : 0;
+          const fragVis =
+            (fsMeta.bindings || []).some((x) => x.binding === b.binding)
+              ? GPUShaderStage.FRAGMENT
+              : 0;
+          const vis = (visibility | fragVis) || (GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT);
+          if (b.kind === "uniform") {
+            bindEntries.push({ binding: b.binding, visibility: vis, buffer: { type: "uniform" } });
+          } else if (b.kind === "sampler") {
+            bindEntries.push({ binding: b.binding, visibility: vis, sampler: { type: "filtering" } });
+          } else if (b.kind === "texture") {
+            bindEntries.push({
+              binding: b.binding,
+              visibility: vis,
+              texture: { sampleType: "float" },
+            });
+          } else if (b.kind === "storage_texture") {
+            bindEntries.push({
+              binding: b.binding,
+              visibility: vis,
+              storageTexture: { access: "write-only", format: "rgba8unorm" },
+            });
+          }
+        }
+        const bgl = bindEntries.length
+          ? dev.createBindGroupLayout({ entries: bindEntries })
+          : null;
+        const layout = bgl
+          ? dev.createPipelineLayout({ bindGroupLayouts: [bgl] })
+          : "auto";
+        const attribs = (vsMeta.vertex_layout || []).map((a) => ({
+          shaderLocation: a.location | 0,
+          offset: a.offset | 0,
+          format: a.format || "float32x4",
+        }));
+        const stride = (vsMeta.vertex_stride | 0) || 0;
+        const vertexBuffers = stride > 0 && attribs.length > 0
+          ? [{ arrayStride: stride, attributes: attribs }]
+          : [];
+        const pipeline = await dev.createRenderPipelineAsync({
+          layout,
+          vertex: {
+            module: vsModule,
+            entryPoint: vsMeta.entry,
+            buffers: vertexBuffers,
+          },
+          fragment: {
+            module: fsModule,
+            entryPoint: fsMeta.entry,
+            targets: [{ format }],
+          },
+          primitive: { topology: "triangle-list" },
+        });
+        const id = nextId++;
+        renderPipelines.set(id, { pipeline, vsMeta, fsMeta, bgl });
+        renderPipelineCache.set(cacheKey, id);
+        return id;
+      } catch (e) {
+        console.error("Dream gpuRenderPipelineCreate:", e);
+        return -(classifyErr(e) || ERR_OTHER);
+      }
+    },
+
+    gpuRenderDraw: async (
+      surfaceId, pipelineId, vertexBufferId, vertexCount,
+      uniforms, clearR, clearG, clearB, clearA,
+    ) => {
+      try {
+        const s = surfaces.get(surfaceId);
+        if (!s) throw new Error(`unknown GpuSurface ${surfaceId}`);
+        const rp = renderPipelines.get(pipelineId);
+        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
+        const dev = await ensureDevice();
+        if (!s.configured) {
+          s.context.configure({
+            device: dev,
+            format: navigator.gpu.getPreferredCanvasFormat(),
+            alphaMode: "opaque",
+          });
+          s.configured = true;
+        }
+        const view = s.context.getCurrentTexture().createView();
+        const encoder = dev.createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view,
+            clearValue: {
+              r: +clearR || 0,
+              g: +clearG || 0,
+              b: +clearB || 0,
+              a: clearA === undefined || clearA === null ? 1 : +clearA,
+            },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(rp.pipeline);
+        const vb = buffers.get(vertexBufferId);
+        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
+          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
+          pass.setVertexBuffer(0, gpuVb);
+        }
+        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
+        if (bg) pass.setBindGroup(0, bg);
+        pass.draw(Math.max(0, vertexCount | 0));
+        pass.end();
+        dev.queue.submit([encoder.finish()]);
+        await dev.queue.onSubmittedWorkDone();
+        return 0;
+      } catch (e) {
+        console.error("Dream gpuRenderDraw:", e);
+        return classifyErr(e);
+      }
+    },
+
+    gpuRenderDrawIndexed: async (
+      surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount,
+      uniforms, clearR, clearG, clearB, clearA,
+    ) => {
+      try {
+        const s = surfaces.get(surfaceId);
+        if (!s) throw new Error(`unknown GpuSurface ${surfaceId}`);
+        const rp = renderPipelines.get(pipelineId);
+        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
+        const dev = await ensureDevice();
+        if (!s.configured) {
+          s.context.configure({
+            device: dev,
+            format: navigator.gpu.getPreferredCanvasFormat(),
+            alphaMode: "opaque",
+          });
+          s.configured = true;
+        }
+        const view = s.context.getCurrentTexture().createView();
+        const encoder = dev.createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view,
+            clearValue: {
+              r: +clearR || 0,
+              g: +clearG || 0,
+              b: +clearB || 0,
+              a: clearA === undefined || clearA === null ? 1 : +clearA,
+            },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(rp.pipeline);
+        const vb = buffers.get(vertexBufferId);
+        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
+          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
+          pass.setVertexBuffer(0, gpuVb);
+        }
+        const ib = buffers.get(indexBufferId);
+        if (!ib) throw new Error(`unknown index GpuBuffer ${indexBufferId}`);
+        const gpuIb = await ensureGpuBuffer(dev, ib, GPUBufferUsage.INDEX);
+        pass.setIndexBuffer(gpuIb, "uint32");
+        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
+        if (bg) pass.setBindGroup(0, bg);
+        pass.drawIndexed(Math.max(0, indexCount | 0));
+        pass.end();
+        dev.queue.submit([encoder.finish()]);
+        await dev.queue.onSubmittedWorkDone();
+        return 0;
+      } catch (e) {
+        console.error("Dream gpuRenderDrawIndexed:", e);
         return classifyErr(e);
       }
     },

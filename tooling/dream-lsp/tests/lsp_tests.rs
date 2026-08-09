@@ -793,6 +793,32 @@ fun main(): void {
 }
 
 #[test]
+fn hover_on_public_field_shows_doc_comment() {
+    // Doc comments before `public` used to stick to the visibility token and never reach LSP.
+    let src = "
+struct Vec2 {
+    /// X component.
+    public x: float;
+    /// Y component.
+    public y: float;
+}
+fun main(): void {
+    let v = Vec2();
+    let a = v.|x;
+}
+";
+    let harness = TestHarness::new(src);
+    let index = harness.index();
+
+    let hover = index.hover(&harness.src, harness.offset).expect("Expected hover on field");
+    assert!(
+        hover.contents.contains("X component"),
+        "public field hover should include the doc comment; got {}",
+        hover.contents
+    );
+}
+
+#[test]
 fn hover_on_union_variant_shows_signature_and_doc() {
     // Cursor on the `Rect` variant in a constructor call.
     let src = "

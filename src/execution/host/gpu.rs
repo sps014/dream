@@ -121,6 +121,13 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         st.buffers.insert(id, vec![0u8; n.max(0) as usize]);
         id
     })?;
+    linker.func_wrap("Dream", "gpuBufferAllocVertexBytes", |n: i32| -> i32 {
+        let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+        let id = st.next_id;
+        st.next_id += 1;
+        st.buffers.insert(id, vec![0u8; n.max(0) as usize]);
+        id
+    })?;
 
     linker.func_wrap(
         "Dream",
@@ -487,6 +494,49 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         "Dream",
         "gpuRenderBlit",
         |mut caller: Caller<'_, ()>, _sid: i32, _tid: i32| -> Result<i32> {
+            resolve_host_future_i32(&mut caller, 1)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuRenderPipelineCreate",
+        |mut caller: Caller<'_, ()>, _vs: i32, _fs: i32| -> Result<i32> {
+            // Native has no WebGPU render path — fail loud (UNAVAILABLE).
+            resolve_host_future_i32(&mut caller, -1)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuRenderDraw",
+        |mut caller: Caller<'_, ()>,
+         _sid: i32,
+         _pid: i32,
+         _vb: i32,
+         _n: i32,
+         _uniforms: i32,
+         _cr: f32,
+         _cg: f32,
+         _cb: f32,
+         _ca: f32|
+         -> Result<i32> {
+            resolve_host_future_i32(&mut caller, 1)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuRenderDrawIndexed",
+        |mut caller: Caller<'_, ()>,
+         _sid: i32,
+         _pid: i32,
+         _vb: i32,
+         _ib: i32,
+         _n: i32,
+         _uniforms: i32,
+         _cr: f32,
+         _cg: f32,
+         _cb: f32,
+         _ca: f32|
+         -> Result<i32> {
             resolve_host_future_i32(&mut caller, 1)
         },
     )?;

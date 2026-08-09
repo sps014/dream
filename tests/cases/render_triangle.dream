@@ -1,0 +1,35 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+    public color: GpuVec4;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+@vertex
+fun tri_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.color = v.color;
+    return o;
+}
+
+@fragment
+fun tri_fs(v: VsOut): GpuVec4 {
+    return v.color;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+    // Shaders compile to WGSL; canvas draw is @web-only (see sample/graphics/triangle).
+    System.println("ok");
+}

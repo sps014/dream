@@ -1,0 +1,19 @@
+import system;
+import system.gpu;
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+@vertex
+fun vs(): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(0.0, 0.0, 0.0, 1.0);
+    o.color = GpuVec4.of(1.0, 0.0, 0.0, 1.0);
+    return o;
+}
+
+fun main(): void {
+    vs();
+}

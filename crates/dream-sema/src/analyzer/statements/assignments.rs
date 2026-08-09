@@ -42,7 +42,7 @@ impl<'a> Analyzer<'a> {
         }
 
         // Inside `@compute`, `GpuBuffer<T>[i] = v` is a storage-buffer write (like `T[]`).
-        let gpu_elem = if self.current_function_is_compute {
+        let gpu_elem = if self.current_function_is_gpu {
             crate::analyzer::declarations::functions::gpu_buffer_elem_type(&array_type).cloned()
         } else {
             None

@@ -261,38 +261,53 @@ impl<'a> Analyzer<'a> {
         self.check_runtime_call(display_name, runtime_support, position, diagnostics);
     }
 
-    /// Rejects calls that cross the CPU / `@compute` kernel boundary.
+    /// Rejects calls that cross the CPU / GPU-shader boundary.
     ///
-    /// - A `@compute` kernel cannot be called like a CPU function (use `Compute.run("name", ...)`).
-    /// - From inside a kernel, v1 only allows calling other `@compute` helpers — every other
-    ///   free/method call is rejected.
+    /// - A `@compute` / `@vertex` / `@fragment` cannot be called like a CPU function.
+    /// - From inside a shader, v1 only allows other GPU shaders and `Gpu` / `GpuMath` / `GpuVec*` helpers.
     pub(super) fn check_compute_call(
         &self,
         callee: &crate::function_table::FunctionTableInfo,
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if callee.is_compute && !self.current_function_is_compute {
+        if callee.is_gpu_shader() && !self.current_function_is_gpu {
+            let kind = if callee.is_compute {
+                "@compute kernel"
+            } else if callee.is_vertex {
+                "@vertex shader"
+            } else {
+                "@fragment shader"
+            };
+            let hint = if callee.is_compute {
+                format!(
+                    "use Compute.run(\"{}\", ...) instead",
+                    callee.name
+                )
+            } else {
+                "link it via GpuRenderPipeline.create(...) instead".to_string()
+            };
             diagnostics.report_error(
                 format!(
-                    "cannot call @compute kernel '{}' like a CPU function; use Compute.run(\"{}\", ...) instead",
-                    callee.name, callee.name
+                    "cannot call {kind} '{}' like a CPU function; {hint}",
+                    callee.name
                 ),
                 Some(position),
             );
             return;
         }
-        if self.current_function_is_compute && !callee.is_compute {
-            // Kernel-safe host/math helpers live on `Gpu` / `GpuMath` (stdlib); their mangled
-            // names are `Gpu_*` / `GpuMath_*`. Everything else is a CPU function and is rejected.
+        if self.current_function_is_gpu && !callee.is_gpu_shader() {
             let allowed_helper = callee.name.starts_with("Gpu_")
                 || callee.name.starts_with("GpuMath_")
+                || callee.name.starts_with("GpuVec2_")
+                || callee.name.starts_with("GpuVec3_")
+                || callee.name.starts_with("GpuVec4_")
                 || callee.name == "Gpu_workgroup_barrier"
                 || callee.name == "Gpu_storage_barrier";
             if !allowed_helper {
                 diagnostics.report_error(
                     format!(
-                        "cannot call non-@compute function '{}' from a @compute kernel; only other @compute helpers and Gpu/GpuMath builtins are allowed",
+                        "cannot call non-GPU-shader function '{}' from a GPU shader; only other @compute/@vertex/@fragment helpers and Gpu/GpuMath/GpuVec builtins are allowed",
                         callee.name
                     ),
                     Some(position),
@@ -301,4 +316,100 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// When both names are string literals, validate `@vertex`/`@fragment` pairing and interface types.
+    pub(super) fn check_render_pipeline_create(
+        &self,
+        args: &[ExpressionNode<'_>],
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let Some(vs_name) = string_literal_text(args.first()) else {
+            return;
+        };
+        let Some(fs_name) = string_literal_text(args.get(1)) else {
+            return;
+        };
+        let vs = match self.function_table.get_function(&vs_name) {
+            Ok(info) if info.is_vertex => info,
+            Ok(_) => {
+                diagnostics.report_error(
+                    format!("GpuRenderPipeline.create: '{}' is not a @vertex shader", vs_name),
+                    Some(position),
+                );
+                return;
+            }
+            Err(_) => {
+                diagnostics.report_error(
+                    format!(
+                        "GpuRenderPipeline.create: unknown vertex shader '{}'",
+                        vs_name
+                    ),
+                    Some(position),
+                );
+                return;
+            }
+        };
+        let fs = match self.function_table.get_function(&fs_name) {
+            Ok(info) if info.is_fragment => info,
+            Ok(_) => {
+                diagnostics.report_error(
+                    format!(
+                        "GpuRenderPipeline.create: '{}' is not a @fragment shader",
+                        fs_name
+                    ),
+                    Some(position),
+                );
+                return;
+            }
+            Err(_) => {
+                diagnostics.report_error(
+                    format!(
+                        "GpuRenderPipeline.create: unknown fragment shader '{}'",
+                        fs_name
+                    ),
+                    Some(position),
+                );
+                return;
+            }
+        };
+        let vs_ret = match &vs.return_type {
+            Some(Type::Struct(tok, None)) => tok.text.clone(),
+            _ => String::new(),
+        };
+        let fs_in = fs
+            .parameter_types
+            .first()
+            .and_then(|t| match t {
+                Type::Struct(tok, None)
+                    if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") =>
+                {
+                    Some(tok.text.clone())
+                }
+                _ => None,
+            })
+            .unwrap_or_default();
+        if !vs_ret.is_empty() && !fs_in.is_empty() && vs_ret != fs_in {
+            diagnostics.report_error(
+                format!(
+                    "GpuRenderPipeline.create: @vertex '{}' returns '{}' but @fragment '{}' expects '{}'",
+                    vs_name, vs_ret, fs_name, fs_in
+                ),
+                Some(position),
+            );
+        }
+    }
+}
+
+fn string_literal_text(expr: Option<&ExpressionNode<'_>>) -> Option<String> {
+    match expr? {
+        ExpressionNode::Literal(Type::String(tok)) => {
+            let raw = tok.text.as_str();
+            let inner = raw
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .unwrap_or(raw);
+            Some(inner.to_string())
+        }
+        _ => None,
+    }
 }

@@ -41,6 +41,14 @@ pub fn json_from_json_fn(struct_name: &str) -> String {
 /// exact rule); any other name (a `class`/`struct`/array/generic-param reference) is a 4-byte
 /// word/pointer, matching every reference type's runtime representation.
 pub fn value_size_align(type_name: &str) -> (usize, usize) {
+    // Known GPU vector value types (stdlib `system.gpu`); keep in sync with `gpu_vec.dream`.
+    match type_name {
+        "GpuVec2" => return (8, 4),
+        "GpuVec3" => return (12, 4),
+        "GpuVec4" => return (16, 4),
+        "GpuId3" => return (12, 4),
+        _ => {}
+    }
     let (size, align) = PrimTy::from_name(type_name)
         .map(PrimTy::size_align)
         .unwrap_or((4, 4));

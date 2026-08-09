@@ -64,6 +64,8 @@ impl<'a> Analyzer<'a> {
                     &template.attributes,
                 ),
                 is_compute: dream_abi::attributes::has_compute_attr(&template.attributes),
+                is_vertex: dream_abi::attributes::has_vertex_attr(&template.attributes),
+                is_fragment: dream_abi::attributes::has_fragment_attr(&template.attributes),
                 visibility: template.visibility,
                 intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
                 declaring_file: template.file_path.clone(),

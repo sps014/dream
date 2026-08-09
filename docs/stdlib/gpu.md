@@ -1,9 +1,11 @@
 # `system.gpu`
 
-WebGPU compute and present from Dream. Auto-imported when any `@compute` kernel is present
-(same pattern as `@json` → `system.json`). You can also `import system.gpu;`.
+WebGPU compute, vertex/fragment shaders, and present from Dream. Auto-imported when any
+`@compute` / `@vertex` / `@fragment` is present (same pattern as `@json` → `system.json`).
+You can also `import system.gpu;`.
 
-Use this package when you need GPU-parallel work (simulations, image processing, particle systems) or to blit a texture to a canvas. The language side is covered in [Compute shaders](../language/compute.md); this page is the API reference.
+Use this package for GPU-parallel work, programmable draws, or to blit a texture to a canvas.
+Language side: [Compute shaders](../language/compute.md), [Vertex & fragment shaders](../language/shaders.md).
 
 Samples (user-facing code in each README / file):
 
@@ -13,6 +15,8 @@ Samples (user-facing code in each README / file):
 | [`gpu_ext.dream`](https://github.com/sps014/dream/tree/main/sample/compute/gpu_ext.dream) | Pass / indirect / `@readonly` |
 | [`life/`](https://github.com/sps014/dream/tree/main/sample/compute/life) | Complex — Gray–Scott reaction–diffusion |
 | [`fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid) | Interactive stable fluids |
+| [`triangle/`](https://github.com/sps014/dream/tree/main/sample/graphics/triangle) | Beginner — `@vertex` / `@fragment` colored triangle |
+| [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean) | Gerstner ocean — fresnel / specular / foam |
 
 ## Device
 
@@ -300,6 +304,24 @@ switch (GpuSurface.from_canvas("fluid")) {
 }
 ```
 
+## Vertex / fragment draw
+
+See [Vertex & fragment shaders](../language/shaders.md). Use `GpuVec2`/`GpuVec3`/`GpuVec4`,
+`GpuBuffer<T>.vertex` / `vertex_from`, then:
+
+- `await GpuRenderPipeline.create(vertex, fragment)` — links named shaders (string literals checked at compile time)
+- `await GpuRenderPass.draw(surface, pipeline, vertices, count)` — `@web`
+- `await GpuRenderPass.draw_ex(..., uniforms, clear)` — uniforms via `Uniforms.pack_f32` + clear color
+- `await GpuRenderPass.draw_indexed` / `draw_indexed_ex` — indexed draws (`GpuBuffer<int>` → uint32)
+
+```dream
+let uniforms = Uniforms.pack_f32([time, cam_y, cam_z, aspect]);
+let _ = await GpuRenderPass.draw_indexed_ex(
+    surface, pipe, verts, indices, count, uniforms, sky
+);
+let _ = await surface.present();
+```
+
 #### Kernel texture builtins
 
 - `Gpu.texture_load(tex, x, y)` — read a texel (storage / load path).
@@ -346,6 +368,9 @@ fun count(flags: GpuBuffer<int>, n: int): void {
 | Browser (`dream.js`) | Real WebGPU when available |
 | Native (`dream run`) | CPU staging; dispatch no-ops WGSL |
 
-`GpuSurface.from_canvas`, `configure`, `present`, and `GpuRenderPass.blit` are `@web`-only — compiling for native or Node reports a compile error if those APIs are referenced.
+`GpuSurface.from_canvas`, `configure`, `present`, `GpuRenderPass.blit`, and `GpuRenderPass.draw` /
+`draw_indexed` are `@web`-only — compiling for native or Node reports a compile error if those APIs
+are referenced. `GpuRenderPipeline.create` is available on all targets for compile-time checks;
+native still returns an error at runtime (no WebGPU render path).
 
 See [Compute shaders](../language/compute.md).

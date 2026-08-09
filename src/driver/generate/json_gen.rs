@@ -47,15 +47,24 @@ pub fn expand_from_acc(
             .map(|e| e.name.text.clone()),
     );
     if json_names.is_empty() {
-        let mut jsonable: HashSet<String> = structs.iter().map(|s| s.name.text.clone()).collect();
-        jsonable.extend(
-            enums
-                .iter()
-                .filter(|e| e.is_data_enum())
-                .map(|e| e.name.text.clone()),
-        );
-        let collections = collect_all_collections(acc, &jsonable);
-        if collections.is_empty() {
+        #[cfg(feature = "native")]
+        {
+            let mut jsonable: HashSet<String> =
+                structs.iter().map(|s| s.name.text.clone()).collect();
+            jsonable.extend(
+                enums
+                    .iter()
+                    .filter(|e| e.is_data_enum())
+                    .map(|e| e.name.text.clone()),
+            );
+            let collections = collect_all_collections(acc, &jsonable);
+            if collections.is_empty() {
+                return;
+            }
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            let _ = acc;
             return;
         }
     }

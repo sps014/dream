@@ -1,0 +1,67 @@
+module system.gpu;
+
+/// Unmanaged float vectors for `@vertex` / `@fragment` (and CPU-side packing).
+///
+/// These lower to WGSL `vec2<f32>` / `vec3<f32>` / `vec4<f32>` inside GPU shaders.
+/// Prefer `GpuVecN.of(...)` when constructing values in a shader body.
+///
+/// Layout (for `GpuBuffer` / vertex attributes): tightly packed floats, no SIMD padding —
+/// `GpuVec2` = 8 bytes, `GpuVec3` = 12 bytes, `GpuVec4` = 16 bytes.
+
+/// Two-component float vector (`vec2<f32>` in WGSL).
+public struct GpuVec2 {
+    /// X component.
+    public x: float;
+    /// Y component.
+    public y: float;
+
+    /// Builds `(x, y)`.
+    public static fun of(x: float, y: float): GpuVec2 {
+        let v = GpuVec2();
+        v.x = x;
+        v.y = y;
+        return v;
+    }
+}
+
+/// Three-component float vector (`vec3<f32>` in WGSL). Common for positions and normals.
+public struct GpuVec3 {
+    /// X component.
+    public x: float;
+    /// Y component.
+    public y: float;
+    /// Z component.
+    public z: float;
+
+    /// Builds `(x, y, z)`.
+    public static fun of(x: float, y: float, z: float): GpuVec3 {
+        let v = GpuVec3();
+        v.x = x;
+        v.y = y;
+        v.z = z;
+        return v;
+    }
+}
+
+/// Four-component float vector (`vec4<f32>` in WGSL). Used for clip-space `position`,
+/// colors (`rgba`), and fragment outputs.
+public struct GpuVec4 {
+    /// X / R component.
+    public x: float;
+    /// Y / G component.
+    public y: float;
+    /// Z / B component.
+    public z: float;
+    /// W / A component.
+    public w: float;
+
+    /// Builds `(x, y, z, w)`.
+    public static fun of(x: float, y: float, z: float, w: float): GpuVec4 {
+        let v = GpuVec4();
+        v.x = x;
+        v.y = y;
+        v.z = z;
+        v.w = w;
+        return v;
+    }
+}

@@ -9,7 +9,7 @@
 
 pub mod abi;
 pub mod compiler;
-pub mod compute_gen;
+pub mod gpu_gen;
 pub mod error;
 pub mod generate;
 pub mod interface_defaults;

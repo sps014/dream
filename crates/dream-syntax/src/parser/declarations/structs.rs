@@ -122,6 +122,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // `weak`/`unowned` are storage qualifiers that break ARC reference cycles (see
                 // `docs/language/memory.md`); any order/combination with the visibility modifier is
                 // accepted here, with `weak`+`unowned` together rejected during semantic analysis.
+                //
+                // Doc comments attach to the first token of the field (`public`, or the name when
+                // bare). Capture before consuming modifiers and splice onto the name for LSP.
+                let first_trivia = self.current_token().leading_trivia.clone();
+                let doc_trivia = Self::recover_doc_trivia(first_trivia, &field_attributes);
                 let mut field_visibility = Visibility::Private;
                 let mut field_weak = false;
                 let mut field_unowned = false;
@@ -141,7 +146,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                         _ => break,
                     }
                 }
-                let field_name = self.match_token(TokenKind::IdentifierToken);
+                let mut field_name = self.match_token(TokenKind::IdentifierToken);
+                // Bare `/// doc\n name: T` already carries trivia on the identifier; only splice
+                // when a modifier/attribute ate it (`public name`, `@loc name`).
+                if field_name.leading_trivia.is_empty() {
+                    Self::splice_leading_trivia(&mut field_name, doc_trivia);
+                }
                 self.match_token(TokenKind::ColonToken);
 
                 // Parse the full type (supporting generic args like `Map<string, JsonValue>`

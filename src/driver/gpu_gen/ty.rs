@@ -15,6 +15,9 @@ pub(super) fn dream_ty_to_wgsl(ty: &Type) -> String {
         Type::ULong(_) => "u32".into(),
         Type::Struct(tok, _) => match tok.text.as_str() {
             "GpuId3" => "vec3<i32>".into(),
+            "GpuVec2" => "vec2<f32>".into(),
+            "GpuVec3" => "vec3<f32>".into(),
+            "GpuVec4" => "vec4<f32>".into(),
             other => other.to_string(),
         },
         Type::Array(inner) => format!("array<{}>", dream_ty_to_wgsl(inner)),
@@ -117,7 +120,27 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             }
             "f32".into()
         }
-        ExpressionNode::MemberAccess(_, _) => "i32".into(),
+        ExpressionNode::MemberAccess(obj, member) => {
+            // Buffer/array `.length` property (no call args). Vector length is `GpuMath.length(...)`.
+            if member.text == "length" {
+                return "i32".into();
+            }
+            let base = infer_wgsl_ty(obj, ctx);
+            if base.starts_with("vec") {
+                // .x/.y/.z/.w of vecN → component type
+                if base.contains("f32") {
+                    return "f32".into();
+                }
+                if base.contains("u32") {
+                    return "u32".into();
+                }
+                return "i32".into();
+            }
+            if let Some(ft) = ctx.lookup_struct_field(&base, &member.text) {
+                return ft;
+            }
+            "i32".into()
+        },
         ExpressionNode::Identifier(name) => {
             if let Some(t) = ctx.lookup_local(&name.text) {
                 return t;
@@ -133,12 +156,23 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             }
             "i32".into()
         }
-        ExpressionNode::FunctionCall(name, _, _) | ExpressionNode::MethodCall(_, name, _, _) => {
+        ExpressionNode::FunctionCall(name, _, args) | ExpressionNode::MethodCall(_, name, _, args) => {
             match name.text.as_str() {
                 "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "floor"
-                | "ceil" | "min" | "max" | "abs" | "clamp" => "f32".into(),
+                | "ceil" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "length"
+                | "dot" => "f32".into(),
+                "normalize" | "cross" | "reflect" => "vec3<f32>".into(),
                 "atomic_load" | "atomic_add" | "atomic_exchange" => "i32".into(),
-                "texture_load" | "texture_sample_level" => "f32".into(),
+                "texture_load" => "f32".into(),
+                "texture_sample_level" => "f32".into(),
+                "texture_sample" => "vec4<f32>".into(),
+                "of" => match args.len() {
+                    2 => "vec2<f32>".into(),
+                    3 => "vec3<f32>".into(),
+                    _ => "vec4<f32>".into(),
+                },
+                // Zero-arg `StructName()` constructor → WGSL struct type.
+                other if args.is_empty() => other.to_string(),
                 _ => "i32".into(),
             }
         }

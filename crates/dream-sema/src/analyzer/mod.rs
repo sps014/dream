@@ -444,6 +444,8 @@ pub struct Analyzer<'a> {
     /// True while analyzing the body of an `@compute` kernel. Gates calling non-compute functions
     /// and accepting `@workgroup` declarations — see `Analyzer::check_compute_call`.
     current_function_is_compute: bool,
+    /// True while analyzing `@vertex` / `@fragment` / `@compute` (GPU shader body).
+    current_function_is_gpu: bool,
     /// The source file of the function whose body is currently being analyzed, used for
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
@@ -531,6 +533,7 @@ impl<'a> Analyzer<'a> {
             current_function_runtime: RuntimeSupport::ALL,
             compile_targets: CompileTargets::native_only(),
             current_function_is_compute: false,
+            current_function_is_gpu: false,
             current_file: None,
             file_modules: HashMap::new(),
             aliased_imports: Vec::new(),
@@ -811,16 +814,18 @@ impl<'a> Analyzer<'a> {
         result
     }
 
-    /// Runs `f` with `current_function_is_compute` set to `on`, restoring the previous value
-    /// afterward so the flag cannot leak into a sibling function's analysis.
-    pub(super) fn with_compute_flag<F, R>(&mut self, on: bool, f: F) -> R
+    /// Runs `f` with GPU-stage flags set, restoring previous values afterward.
+    pub(super) fn with_gpu_flags<F, R>(&mut self, is_compute: bool, is_gpu: bool, f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let saved = self.current_function_is_compute;
-        self.current_function_is_compute = on;
+        let saved_c = self.current_function_is_compute;
+        let saved_g = self.current_function_is_gpu;
+        self.current_function_is_compute = is_compute;
+        self.current_function_is_gpu = is_gpu;
         let result = f(self);
-        self.current_function_is_compute = saved;
+        self.current_function_is_compute = saved_c;
+        self.current_function_is_gpu = saved_g;
         result
     }
 

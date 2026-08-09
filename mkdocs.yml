@@ -89,6 +89,7 @@ nav:
       - Async/Await: language/async.md
       - WebWorkers: language/webworkers.md
       - Compute shaders: language/compute.md
+      - Vertex & fragment shaders: language/shaders.md
       - Memory Management: language/memory.md
     - Interop:
       - Overview: language/interop.md

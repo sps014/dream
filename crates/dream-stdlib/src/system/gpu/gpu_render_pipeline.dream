@@ -1,0 +1,20 @@
+module system.gpu;
+
+// Render pipeline linking a `@vertex` + `@fragment` pair.
+
+public class GpuRenderPipeline {
+    public id: int;
+
+    // Compiles and caches a render pipeline for the named Dream shaders.
+    // Not `@web`-only so string-literal pairing can be checked at compile time on every target;
+    // native hosts still return an error code (no WebGPU device).
+    public static async fun create(vertex: string, fragment: string): Result<GpuRenderPipeline, GpuError> {
+        let id = await Gpu.render_pipeline_create(vertex, fragment);
+        if (id < 0) {
+            return Result.Err(GpuError.from_code(-id, "GpuRenderPipeline.create failed"));
+        }
+        let p = GpuRenderPipeline();
+        p.id = id;
+        return Result.Ok(p);
+    }
+}

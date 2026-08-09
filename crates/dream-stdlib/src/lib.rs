@@ -413,6 +413,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/gpu_id3.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_vec.dream",
+                include_str!("system/gpu/gpu_vec.dream"),
+            ),
+            (
                 "<std>/system/gpu/gpu_buffer.dream",
                 include_str!("system/gpu/gpu_buffer.dream"),
             ),
@@ -451,6 +455,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/gpu/gpu_surface.dream",
                 include_str!("system/gpu/gpu_surface.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_render_pipeline.dream",
+                include_str!("system/gpu/gpu_render_pipeline.dream"),
             ),
             (
                 "<std>/system/gpu/gpu_render_pass.dream",

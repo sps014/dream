@@ -586,6 +586,10 @@ pub struct FunctionTableInfo {
     /// WGSL, not WASM). Calling it like a CPU function is rejected; kernels may only call other
     /// `@compute` helpers (see `Analyzer::check_compute_call`).
     pub is_compute: bool,
+    /// True when the declaration carries `@vertex`.
+    pub is_vertex: bool,
+    /// True when the declaration carries `@fragment`.
+    pub is_fragment: bool,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -626,6 +630,8 @@ impl FunctionTableInfo {
             is_unsafe: false,
             runtime_support: dream_abi::attributes::RuntimeSupport::ALL,
             is_compute: false,
+            is_vertex: false,
+            is_fragment: false,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -666,6 +672,8 @@ impl FunctionTableInfo {
         info.runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
         info.is_compute = dream_abi::attributes::has_compute_attr(&func.attributes);
+        info.is_vertex = dream_abi::attributes::has_vertex_attr(&func.attributes);
+        info.is_fragment = dream_abi::attributes::has_fragment_attr(&func.attributes);
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.
@@ -676,6 +684,11 @@ impl FunctionTableInfo {
         };
         info.declaring_file = func.file_path.clone();
         info
+    }
+
+    /// True for `@compute` / `@vertex` / `@fragment` (WGSL-emitted, no WASM body).
+    pub fn is_gpu_shader(&self) -> bool {
+        self.is_compute || self.is_vertex || self.is_fragment
     }
 
     /// The number of leading required parameters: the index of the first parameter that has a

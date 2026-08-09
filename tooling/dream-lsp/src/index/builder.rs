@@ -557,8 +557,7 @@ impl Builder {
         if let Some(rt) = &func.return_type {
             self.add_type_ref(rt, scope);
         }
-        // Mirror the analyzer: `@compute` kernels get WGSL builtins as locals typed `GpuId3`
-        // (`global_id.x`, …). Declared here so completion/hover work inside the kernel body.
+        // Mirror the analyzer: GPU shaders get stage builtins as locals.
         if dream_abi::attributes::has_compute_attr(&func.attributes) {
             for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
                 self.decls.push(Decl {
@@ -580,6 +579,39 @@ impl Builder {
                     is_main: self.is_main,
                 });
             }
+        }
+        if dream_abi::attributes::has_vertex_attr(&func.attributes) {
+            for (name, detail) in [
+                ("vertex_index", "Vertex index (WGSL `@builtin(vertex_index)`)."),
+                ("instance_index", "Instance index (WGSL `@builtin(instance_index)`)."),
+            ] {
+                self.decls.push(Decl {
+                    name: name.to_string(),
+                    kind: SymKind::Variable,
+                    detail: format!("(vertex builtin) {}: int", name),
+                    doc_comment: Some(detail.to_string()),
+                    start: func.name.position.start,
+                    end: func.name.position.end,
+                    scope,
+                    ty: Some("int".to_string()),
+                    is_main: self.is_main,
+                });
+            }
+        }
+        if dream_abi::attributes::has_fragment_attr(&func.attributes) {
+            self.decls.push(Decl {
+                name: "frag_coord".to_string(),
+                kind: SymKind::Variable,
+                detail: "(fragment builtin) frag_coord: GpuVec4".to_string(),
+                doc_comment: Some(
+                    "Fragment position (WGSL `@builtin(position)`).".to_string(),
+                ),
+                start: func.name.position.start,
+                end: func.name.position.end,
+                scope,
+                ty: Some("GpuVec4".to_string()),
+                is_main: self.is_main,
+            });
         }
         for stmt in func.body {
             self.walk_stmt(stmt, scope);

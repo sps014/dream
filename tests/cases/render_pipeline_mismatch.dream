@@ -1,0 +1,29 @@
+import system;
+import system.gpu;
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+struct Other {
+    public position: GpuVec4;
+    public uv: GpuVec2;
+}
+
+@vertex
+fun vs(): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(0.0, 0.0, 0.0, 1.0);
+    o.color = GpuVec4.of(1.0, 0.0, 0.0, 1.0);
+    return o;
+}
+
+@fragment
+fun fs(v: Other): GpuVec4 {
+    return GpuVec4.of(v.uv.x, v.uv.y, 0.0, 1.0);
+}
+
+async fun main(): void {
+    let _ = await GpuRenderPipeline.create("vs", "fs");
+}

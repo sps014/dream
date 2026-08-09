@@ -426,6 +426,34 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "On a `@compute` `GpuBuffer` parameter: storage access is read-only (WGSL `read`).",
     },
+    // WebGPU vertex stage: body emitted as WGSL, not WASM.
+    AttributeSpec {
+        name: "vertex",
+        targets: &[AttributeTarget::Function],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a function as a WebGPU vertex shader. Body is emitted as WGSL, not WASM.",
+    },
+    // WebGPU fragment stage: body emitted as WGSL, not WASM.
+    AttributeSpec {
+        name: "fragment",
+        targets: &[AttributeTarget::Function],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a function as a WebGPU fragment shader. Body is emitted as WGSL, not WASM.",
+    },
+    // Optional vertex/varying location remap; default is declaration order.
+    AttributeSpec {
+        name: "location",
+        targets: &[AttributeTarget::Field],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::Int],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Optional WGSL @location(N) override on a vertex-attribute or varying field (default: declaration order).",
+    },
 ];
 
 /// True when a parameter carries `@readonly` (compute storage → WGSL `read`).
@@ -748,6 +776,30 @@ pub fn js_import_target(attributes: &[AttributeNode]) -> Option<(String, String)
 /// True when the declaration carries `@compute`.
 pub fn has_compute_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "compute")
+}
+
+/// True when the declaration carries `@vertex`.
+pub fn has_vertex_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "vertex")
+}
+
+/// True when the declaration carries `@fragment`.
+pub fn has_fragment_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "fragment")
+}
+
+/// True when the declaration is any GPU shader stage (`@compute` / `@vertex` / `@fragment`).
+pub fn is_gpu_shader_attr(attributes: &[AttributeNode]) -> bool {
+    has_compute_attr(attributes) || has_vertex_attr(attributes) || has_fragment_attr(attributes)
+}
+
+/// Optional `@location(N)` on a struct field. `None` when absent or malformed.
+pub fn field_location_override(attributes: &[AttributeNode]) -> Option<u32> {
+    let attr = attributes.iter().find(|a| a.name.text == "location")?;
+    attr.args
+        .first()
+        .and_then(|t| t.as_int_text())
+        .and_then(|s| s.parse().ok())
 }
 
 /// Workgroup size from `@compute` / `@compute(x[, y[, z]])`. Defaults to `(64, 1, 1)`.

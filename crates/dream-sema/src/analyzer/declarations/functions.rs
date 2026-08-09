@@ -17,10 +17,17 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&function.file_path);
             self.check_reserved_name(&function.name, "function", diagnostics);
             if function.generic_parameters.is_some() {
-                if dream_abi::attributes::has_compute_attr(&function.attributes) {
+                if dream_abi::attributes::is_gpu_shader_attr(&function.attributes) {
+                    let kind = if dream_abi::attributes::has_compute_attr(&function.attributes) {
+                        "@compute"
+                    } else if dream_abi::attributes::has_vertex_attr(&function.attributes) {
+                        "@vertex"
+                    } else {
+                        "@fragment"
+                    };
                     diagnostics.report_error(
                         format!(
-                            "@compute kernel '{}' cannot be generic",
+                            "{kind} shader '{}' cannot be generic",
                             function.name.text
                         ),
                         Some(function.name.position),
@@ -41,46 +48,13 @@ impl<'a> Analyzer<'a> {
             let mut info = FunctionTableInfo::from(function);
             info.declaring_module = self.module_of(function.file_path.as_ref());
             if info.is_compute {
-                if function.is_async {
-                    diagnostics.report_error(
-                        format!(
-                            "@compute kernel '{}' cannot be async",
-                            function.name.text
-                        ),
-                        Some(function.name.position),
-                    );
-                }
-                if function.is_extern {
-                    diagnostics.report_error(
-                        format!(
-                            "@compute kernel '{}' cannot be extern",
-                            function.name.text
-                        ),
-                        Some(function.name.position),
-                    );
-                }
-                if !matches!(info.return_type, None | Some(Type::Void)) {
-                    diagnostics.report_error(
-                        format!(
-                            "@compute kernel '{}' must return void",
-                            function.name.text
-                        ),
-                        Some(function.name.position),
-                    );
-                }
-                for p in function.parameters.iter() {
-                    if !is_compute_param_type(&p.type_) {
-                        diagnostics.report_error(
-                            format!(
-                                "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuBuffer<T>, GpuTexture, and GpuSampler are allowed",
-                                function.name.text,
-                                p.name.text,
-                                p.type_.get_type()
-                            ),
-                            Some(p.name.position),
-                        );
-                    }
-                }
+                self.validate_compute_shader(function, &info, diagnostics);
+            }
+            if info.is_vertex {
+                self.validate_vertex_shader(function, diagnostics);
+            }
+            if info.is_fragment {
+                self.validate_fragment_shader(function, diagnostics);
             }
             if let Err(e) =
                 self.function_table
@@ -298,6 +272,236 @@ impl<'a> Analyzer<'a> {
         }
         Ok(())
     }
+
+    fn validate_compute_shader(
+        &self,
+        function: &FunctionNode<'a>,
+        info: &FunctionTableInfo,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if function.is_async {
+            diagnostics.report_error(
+                format!(
+                    "@compute kernel '{}' cannot be async",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        if function.is_extern {
+            diagnostics.report_error(
+                format!(
+                    "@compute kernel '{}' cannot be extern",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        if !matches!(info.return_type, None | Some(Type::Void)) {
+            diagnostics.report_error(
+                format!(
+                    "@compute kernel '{}' must return void",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        for p in function.parameters.iter() {
+            if !is_compute_param_type(&p.type_) {
+                diagnostics.report_error(
+                    format!(
+                        "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuBuffer<T>, GpuTexture, and GpuSampler are allowed",
+                        function.name.text,
+                        p.name.text,
+                        p.type_.get_type()
+                    ),
+                    Some(p.name.position),
+                );
+            }
+        }
+    }
+
+    fn validate_vertex_shader(
+        &self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if function.is_async {
+            diagnostics.report_error(
+                format!("@vertex shader '{}' cannot be async", function.name.text),
+                Some(function.name.position),
+            );
+        }
+        if function.is_extern {
+            diagnostics.report_error(
+                format!("@vertex shader '{}' cannot be extern", function.name.text),
+                Some(function.name.position),
+            );
+        }
+        match &function.return_type {
+            Some(Type::Struct(tok, None)) => {
+                if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                    let pos = info.fields.get("position");
+                    let ok = match pos {
+                        Some(f) => matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4"),
+                        None => false,
+                    };
+                    if !ok {
+                        diagnostics.report_error(
+                            format!(
+                                "@vertex shader '{}' return struct '{}' must have a 'position: GpuVec4' field",
+                                function.name.text, tok.text
+                            ),
+                            Some(function.name.position),
+                        );
+                    }
+                    self.check_location_duplicates(info, diagnostics, function.name.position);
+                } else {
+                    diagnostics.report_error(
+                        format!(
+                            "@vertex shader '{}' return type '{}' is not a known struct",
+                            function.name.text, tok.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
+            }
+            _ => {
+                diagnostics.report_error(
+                    format!(
+                        "@vertex shader '{}' must return a value struct with a 'position: GpuVec4' field",
+                        function.name.text
+                    ),
+                    Some(function.name.position),
+                );
+            }
+        }
+        for p in function.parameters.iter() {
+            if !is_render_param_type(&p.type_) {
+                diagnostics.report_error(
+                    format!(
+                        "@vertex shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuTexture, and GpuSampler are allowed",
+                        function.name.text,
+                        p.name.text,
+                        p.type_.get_type()
+                    ),
+                    Some(p.name.position),
+                );
+            }
+            if let Type::Struct(tok, None) = &p.type_ {
+                if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
+                    if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                        self.check_location_duplicates(info, diagnostics, p.name.position);
+                    }
+                }
+            }
+        }
+    }
+
+    fn validate_fragment_shader(
+        &self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if function.is_async {
+            diagnostics.report_error(
+                format!("@fragment shader '{}' cannot be async", function.name.text),
+                Some(function.name.position),
+            );
+        }
+        if function.is_extern {
+            diagnostics.report_error(
+                format!(
+                    "@fragment shader '{}' cannot be extern",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        match &function.return_type {
+            Some(Type::Struct(tok, None)) if tok.text == "GpuVec4" => {}
+            _ => {
+                diagnostics.report_error(
+                    format!("@fragment shader '{}' must return GpuVec4", function.name.text),
+                    Some(function.name.position),
+                );
+            }
+        }
+        if let Some(first) = function.parameters.first() {
+            if let Type::Struct(tok, None) = &first.type_ {
+                if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
+                    if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                        let pos = info.fields.get("position");
+                        let ok = match pos {
+                            Some(f) => {
+                                matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4")
+                            }
+                            None => false,
+                        };
+                        if !ok {
+                            diagnostics.report_error(
+                                format!(
+                                    "@fragment shader '{}' input struct '{}' must include 'position: GpuVec4'",
+                                    function.name.text, tok.text
+                                ),
+                                Some(first.name.position),
+                            );
+                        }
+                        self.check_location_duplicates(info, diagnostics, first.name.position);
+                    }
+                }
+            }
+        }
+        for p in function.parameters.iter() {
+            if !is_render_param_type(&p.type_) {
+                diagnostics.report_error(
+                    format!(
+                        "@fragment shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuTexture, and GpuSampler are allowed",
+                        function.name.text,
+                        p.name.text,
+                        p.type_.get_type()
+                    ),
+                    Some(p.name.position),
+                );
+            }
+        }
+    }
+
+    fn check_location_duplicates(
+        &self,
+        info: &crate::struct_table::StructInfo,
+        diagnostics: &mut DiagnosticBag,
+        span: dream_text::text_span::TextSpan,
+    ) {
+        let mut used = indexmap::IndexMap::<u32, String>::new();
+        let mut auto = 0u32;
+        for (fname, field) in &info.fields {
+            if fname == "position" {
+                continue;
+            }
+            let loc = match field.location {
+                Some(n) => n,
+                None => {
+                    while used.contains_key(&auto) {
+                        auto += 1;
+                    }
+                    auto
+                }
+            };
+            if let Some(prev) = used.insert(loc, fname.clone()) {
+                diagnostics.report_error(
+                    format!(
+                        "duplicate @location({}) on fields '{}' and '{}' in struct '{}'",
+                        loc, prev, fname, info.name
+                    ),
+                    Some(span),
+                );
+            }
+            if field.location.is_none() {
+                auto = loc + 1;
+            }
+        }
+    }
 }
 
 /// Element type of `GpuBuffer<T>`, if `ty` is that form.
@@ -328,6 +532,30 @@ fn is_compute_param_type(ty: &Type) -> bool {
                 return true;
             }
             // Allow unmanaged value structs by name; GpuId3 is synthetic. Reject known heap types.
+            !matches!(
+                tok.text.as_str(),
+                "string" | "List" | "Map" | "Set" | "object" | "js"
+            )
+        }
+        Type::String(_) | Type::Object(_) | Type::Char(_) | Type::Array(_) => false,
+        _ => false,
+    }
+}
+
+/// Vertex/fragment parameters: like compute but no `GpuBuffer` storage (attrs/uniforms/textures).
+fn is_render_param_type(ty: &Type) -> bool {
+    match ty {
+        Type::Integer(_)
+        | Type::Float(_)
+        | Type::Boolean(_)
+        | Type::Byte(_)
+        | Type::UInt(_)
+        | Type::Long(_)
+        | Type::ULong(_) => true,
+        Type::Struct(tok, None) => {
+            if matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
+                return true;
+            }
             !matches!(
                 tok.text.as_str(),
                 "string" | "List" | "Map" | "Set" | "object" | "js"

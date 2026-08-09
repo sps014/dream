@@ -14,6 +14,8 @@ pub(super) struct EmitCtx<'a> {
     pub(super) workgroup_names: &'a [String],
     /// Nested scopes of `var` locals (innermost last). Locals shadow bindings of the same name.
     pub(super) scopes: RefCell<Vec<IndexMap<String, String>>>,
+    /// Struct name → field name → WGSL type (for varying/vertex attribute member inference).
+    pub(super) struct_fields: &'a IndexMap<String, IndexMap<String, String>>,
 }
 
 impl EmitCtx<'_> {
@@ -98,5 +100,11 @@ impl EmitCtx<'_> {
         } else {
             name.to_string()
         }
+    }
+
+    pub(super) fn lookup_struct_field(&self, struct_ty: &str, field: &str) -> Option<String> {
+        self.struct_fields
+            .get(struct_ty)
+            .and_then(|fields| fields.get(field).cloned())
     }
 }

@@ -1,13 +1,103 @@
 module system.gpu;
 
-// Fixed-function render helpers (v1: fullscreen blit only).
+/// Fixed-function blit plus programmable draw helpers for `@vertex` / `@fragment` pipelines.
 
 public class GpuRenderPass {
-    // Blits `source` onto `surface` (fullscreen).
+    /// Blits `source` onto `surface` (fullscreen textured triangle).
     @web
     public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
         let code = await Gpu.render_blit(surface.id, source.id);
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "blit failed"));
+    }
+
+    /// Clears the surface (black) and draws `vertex_count` vertices with `pipeline`.
+    @web
+    public static async fun draw<T : unmanaged>(
+        surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        vertex_count: int
+    ): Result<bool, GpuError> {
+        return await GpuRenderPass.draw_ex(
+            surface,
+            pipeline,
+            vertices,
+            vertex_count,
+            Buffer.alloc<byte>(0),
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+
+    /// Like `draw`, with shader uniforms (`Uniforms.pack_f32` / `pack_i32`) and a clear color.
+    @web
+    public static async fun draw_ex<T : unmanaged>(
+        surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        vertex_count: int,
+        uniforms: byte[],
+        clear: GpuVec4
+    ): Result<bool, GpuError> {
+        let code = await Gpu.render_draw(
+            surface.id,
+            pipeline.id,
+            vertices.id,
+            vertex_count,
+            uniforms,
+            clear.x,
+            clear.y,
+            clear.z,
+            clear.w
+        );
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "draw failed"));
+    }
+
+    /// Clears the surface and draws indexed geometry (indices are `int` → WebGPU `uint32`).
+    @web
+    public static async fun draw_indexed<T : unmanaged>(
+        surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        indices: GpuBuffer<int>,
+        index_count: int
+    ): Result<bool, GpuError> {
+        return await GpuRenderPass.draw_indexed_ex(
+            surface,
+            pipeline,
+            vertices,
+            indices,
+            index_count,
+            Buffer.alloc<byte>(0),
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+
+    /// Like `draw_indexed`, with uniforms and clear color.
+    @web
+    public static async fun draw_indexed_ex<T : unmanaged>(
+        surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        indices: GpuBuffer<int>,
+        index_count: int,
+        uniforms: byte[],
+        clear: GpuVec4
+    ): Result<bool, GpuError> {
+        let code = await Gpu.render_draw_indexed(
+            surface.id,
+            pipeline.id,
+            vertices.id,
+            indices.id,
+            index_count,
+            uniforms,
+            clear.x,
+            clear.y,
+            clear.z,
+            clear.w
+        );
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "draw_indexed failed"));
     }
 }

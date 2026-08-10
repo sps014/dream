@@ -30,19 +30,20 @@ public class GpuSurface {
         return GpuSurface.from_canvas(title, width, height);
     }
 
-    // Sets the swapchain / client size (CSS pixels on web; logical on native).
+    // Sets the window client size (logical) and rebuilds the drawable swapchain.
     @web @native
     public fun configure(width: int, height: int): void {
         Gpu.surface_configure(this.id, width, height);
     }
 
-    // Client width in pointer space (create/configure size; not Retina physical pixels).
+    // Drawable width in pixels (`canvas.width` on web; create/configure size on native —
+    // not Retina physical, so fragment cost matches the browser).
     @web @native
     public fun width(): int {
         return Gpu.surface_width(this.id);
     }
 
-    // Client height in pointer space.
+    // Drawable height in pixels.
     @web @native
     public fun height(): int {
         return Gpu.surface_height(this.id);

@@ -170,7 +170,7 @@ impl Default for GpuState {
             compute_pipes: IndexMap::new(),
             render_pipes: IndexMap::new(),
             surfaces: IndexMap::new(),
-            render_format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            render_format: wgpu::TextureFormat::Bgra8Unorm,
             blit: None,
             last_error: None,
         }

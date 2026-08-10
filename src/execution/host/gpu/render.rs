@@ -383,12 +383,14 @@ fn draw_inner(
 
     let (color_view, pending_frame) = if use_swapchain {
         let surf = st.surfaces.get_mut(&surface_id).unwrap();
+        super::profile::note_size(surf.width, surf.height);
         // Reuse an already-acquired frame so multi-draw + load_op=Load works.
         let frame = if let Some(existing) = surf.pending_frame.take() {
             existing
         } else {
+            let acquire = super::profile::Span::start();
             let surface = surf.surface.as_ref().unwrap();
-            match surface.get_current_texture() {
+            let frame = match surface.get_current_texture() {
                 Ok(f) => f,
                 Err(e) => {
                     // One reconfigure retry for Lost/Outdated.
@@ -422,7 +424,11 @@ fn draw_inner(
                         ));
                     }
                 }
+            };
+            if let Some(s) = acquire {
+                super::profile::note_acquire(s.elapsed());
             }
+            frame
         };
         let view = frame.texture.create_view(&Default::default());
         (view, Some(frame))
@@ -457,6 +463,8 @@ fn draw_inner(
             None,
         )
     };
+
+    let encode = super::profile::Span::start();
 
     {
         let surf = st.surfaces.get_mut(&surface_id).unwrap();
@@ -643,13 +651,16 @@ fn draw_inner(
         }
     }
     queue.submit(Some(encoder.finish()));
+    if let Some(s) = encode {
+        super::profile::note_encode(s.elapsed());
+    }
     if let Some(frame) = pending_frame {
         st.surfaces
             .get_mut(&surface_id)
             .unwrap()
             .pending_frame = Some(frame);
     }
-    // Don't stall the CPU on GPU completion every draw — vsync on present paces frames.
+    // Don't stall the CPU on GPU completion every draw — FIFO present paces frames.
     let _ = device.poll(wgpu::Maintain::Poll);
     if let Some(e) = drain_uncaptured() {
         st.set_last_error(e.clone());

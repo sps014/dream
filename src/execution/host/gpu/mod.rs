@@ -8,6 +8,7 @@ mod error;
 mod gamepad;
 mod icon;
 mod input;
+mod profile;
 mod render;
 mod state;
 mod surface;
@@ -106,7 +107,8 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         "Dream",
         "gpuFrame",
         |mut caller: Caller<'_, ()>| -> Result<i32> {
-            surface::frame_tick();
+            surface::wait_display_frame();
+            profile::end_frame();
             resolve_host_future_void(&mut caller)
         },
     )?;

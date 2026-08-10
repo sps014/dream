@@ -17,6 +17,22 @@ thread_local! {
     static EVENT_LOOP: RefCell<Option<EventLoop<()>>> = const { RefCell::new(None) };
 }
 
+fn surface_config(format: wgpu::TextureFormat, width: u32, height: u32) -> wgpu::SurfaceConfiguration {
+    wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+        format,
+        width: width.max(1),
+        height: height.max(1),
+        // FIFO vsync (browser canvas default). Do not also sleep in `Gpu.frame` — that
+        // double-paces against swapchain acquire and stutters on Metal.
+        present_mode: wgpu::PresentMode::Fifo,
+        // Latency 1 thrashing nextDrawable causes hitching; 2 matches typical browser buffering.
+        desired_maximum_frame_latency: 2,
+        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        view_formats: vec![],
+    }
+}
+
 struct WindowCreateApp {
     title: String,
     width: u32,
@@ -62,8 +78,8 @@ impl ApplicationHandler for PumpApp {
 }
 
 fn map_cursor_to_surface(surf: &SurfaceEntry, physical_x: f64, physical_y: f64) -> (f32, f32) {
-    // winit cursor positions are physical; Dream pointer space is client/logical
-    // (create/configure size), matching web canvas CSS pixels — not Retina swapchain size.
+    // winit cursor positions are physical; map into drawable pixels (`width()` / `height()`),
+    // matching web canvas backing-store pointer space.
     let (win_w, win_h) = surf
         .window
         .as_ref()
@@ -72,8 +88,8 @@ fn map_cursor_to_surface(surf: &SurfaceEntry, physical_x: f64, physical_y: f64) 
             (s.width.max(1) as f64, s.height.max(1) as f64)
         })
         .unwrap_or((surf.width.max(1) as f64, surf.height.max(1) as f64));
-    let x = (physical_x / win_w) * surf.client_width.max(1) as f64;
-    let y = (physical_y / win_h) * surf.client_height.max(1) as f64;
+    let x = (physical_x / win_w) * surf.width.max(1) as f64;
+    let y = (physical_y / win_h) * surf.height.max(1) as f64;
     (x as f32, y as f32)
 }
 
@@ -100,17 +116,7 @@ fn reconfigure_surface(st: &mut super::state::GpuState, id: i32, width: u32, hei
         return;
     };
     let format = st.render_format;
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-        format,
-        width: w,
-        height: h,
-        // Prefer low-latency present when the platform supports it.
-        present_mode: wgpu::PresentMode::AutoNoVsync,
-        desired_maximum_frame_latency: 1,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
-        view_formats: vec![],
-    };
+    let config = surface_config(format, w, h);
     if let Some(surface) = st.surfaces.get(&id).and_then(|s| s.surface.as_ref()) {
         surface.configure(&device, &config);
     }
@@ -135,7 +141,13 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
 
     match event {
         WindowEvent::CloseRequested => {
-            st.surfaces.get_mut(&sid).unwrap().input.close();
+            let surf = st.surfaces.get_mut(&sid).unwrap();
+            surf.input.close();
+            // Hide immediately so the red traffic-light feels responsive; the Dream
+            // loop exits on `close_requested()` and tears the process down.
+            if let Some(window) = surf.window.as_ref() {
+                window.set_visible(false);
+            }
         }
         WindowEvent::Focused(true) => st.surfaces.get_mut(&sid).unwrap().input.focus(),
         WindowEvent::Focused(false) => st.surfaces.get_mut(&sid).unwrap().input.blur(),
@@ -254,7 +266,8 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 surf.client_height = ch;
                 surf.input.resize(cw as i32, ch as i32);
             }
-            reconfigure_surface(&mut st, sid, pw, ph);
+            // Keep drawable at logical/create size (web parity), not Retina physical.
+            reconfigure_surface(&mut st, sid, cw, ch);
         }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             st.surfaces
@@ -262,32 +275,22 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 .unwrap()
                 .input
                 .scale_factor(scale_factor as f32);
-            let (physical, client) = st
+            let client = st
                 .surfaces
                 .get(&sid)
                 .and_then(|s| s.window.as_ref())
-                .map(|w| {
-                    let size = w.inner_size();
-                    (size, client_size_from_window(w, size))
-                })
+                .map(|w| client_size_from_window(w, w.inner_size()))
                 .unwrap_or_else(|| {
                     let surf = st.surfaces.get(&sid).unwrap();
-                    (
-                        winit::dpi::PhysicalSize::new(surf.width, surf.height),
-                        (surf.client_width, surf.client_height),
-                    )
+                    (surf.client_width, surf.client_height)
                 });
             {
                 let surf = st.surfaces.get_mut(&sid).unwrap();
                 surf.client_width = client.0;
                 surf.client_height = client.1;
+                surf.input.resize(client.0 as i32, client.1 as i32);
             }
-            reconfigure_surface(
-                &mut st,
-                sid,
-                physical.width.max(1),
-                physical.height.max(1),
-            );
+            reconfigure_surface(&mut st, sid, client.0.max(1), client.1.max(1));
         }
         WindowEvent::Touch(touch) => {
             use winit::event::TouchPhase;
@@ -384,9 +387,13 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
 
     if let Some(adapter) = st.adapter.as_ref() {
         let caps = surface.get_capabilities(adapter);
-        // Prefer RGBA so compute `rgba8` textures can blit/copy without a format convert.
+        // Match browser `getPreferredCanvasFormat()` (typically bgra8unorm — *not* *-srgb).
+        // Shaders like ocean already tonemap/gamma in-shader; an sRGB swapchain double-encodes
+        // and looks dim/muddy on Metal.
         let preferred = [
+            wgpu::TextureFormat::Bgra8Unorm,
             wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureFormat::Bgra8UnormSrgb,
             wgpu::TextureFormat::Rgba8UnormSrgb,
         ];
         if let Some(fmt) = preferred
@@ -403,28 +410,17 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
     let format = st.render_format;
     let client_w = w;
     let client_h = h;
-    // wgpu swapchain size is physical pixels; pointer API uses client/logical size.
-    let physical = window.inner_size();
-    let pw = physical.width.max(1);
-    let ph = physical.height.max(1);
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-        format,
-        width: pw,
-        height: ph,
-        present_mode: wgpu::PresentMode::AutoNoVsync,
-        desired_maximum_frame_latency: 1,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
-        view_formats: vec![],
-    };
+    // Match web canvas backing store: use the requested create size, not Retina physical
+    // pixels. Ocean at 2560×1440 was ~14 FPS (acquire ~49ms); 1280×720 matches browser work.
+    let config = surface_config(format, client_w, client_h);
     surface.configure(&device, &config);
 
     let id = st.alloc_id();
     st.surfaces.insert(
         id,
         SurfaceEntry {
-            width: pw,
-            height: ph,
+            width: client_w,
+            height: client_h,
             client_width: client_w,
             client_height: client_h,
             color: None,
@@ -452,18 +448,15 @@ pub fn configure(id: i32, width: i32, height: i32) {
     }
     if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.clone()) {
         let _ = window.request_inner_size(winit::dpi::LogicalSize::new(cw as f64, ch as f64));
-        let size = window.inner_size();
-        reconfigure_surface(&mut st, id, size.width.max(1), size.height.max(1));
-    } else {
-        reconfigure_surface(&mut st, id, cw, ch);
     }
+    reconfigure_surface(&mut st, id, cw, ch);
 }
 
 pub fn width(id: i32) -> i32 {
     let st = lock_state();
     st.surfaces
         .get(&id)
-        .map(|s| s.client_width as i32)
+        .map(|s| s.width as i32)
         .unwrap_or(0)
 }
 
@@ -471,7 +464,7 @@ pub fn height(id: i32) -> i32 {
     let st = lock_state();
     st.surfaces
         .get(&id)
-        .map(|s| s.client_height as i32)
+        .map(|s| s.height as i32)
         .unwrap_or(0)
 }
 
@@ -506,14 +499,14 @@ fn present_inner(id: i32) -> Result<(), String> {
 
     // Fast path: last draw already targeted the swapchain.
     if let Some(frame) = surf.pending_frame.take() {
+        let present = super::profile::Span::start();
         frame.present();
+        if let Some(s) = present {
+            super::profile::note_present(s.elapsed());
+        }
         let _ = device;
         let _ = queue;
-        drop(st);
-        let _ = with_event_loop(|el| {
-            let mut app = PumpApp;
-            let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
-        });
+        // Event pump happens in `Gpu.frame` once per loop — don't double-pump here.
         return Ok(());
     }
 
@@ -576,11 +569,7 @@ fn present_inner(id: i32) -> Result<(), String> {
     }
     frame.present();
     drop(st);
-
-    let _ = with_event_loop(|el| {
-        let mut app = PumpApp;
-        let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
-    });
+    // Event pump is owned by `Gpu.frame` — avoid a second pump per present.
     Ok(())
 }
 
@@ -914,13 +903,30 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
     Ok(())
 }
 
-pub fn frame_tick() {
+fn pump_events() {
+    let winit_span = super::profile::Span::start();
     let _ = with_event_loop(|el| {
         let mut app = PumpApp;
-        // Vsync already paces present; only pump input, don't sleep.
         let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
     });
+    if let Some(s) = winit_span {
+        super::profile::note_pump_winit(s.elapsed());
+    }
+    let pad_span = super::profile::Span::start();
     super::gamepad::pump();
+    if let Some(s) = pad_span {
+        super::profile::note_pump_gamepad(s.elapsed());
+    }
+}
+
+/// Pump input only. Used by `poll_events` mid-frame.
+pub fn frame_tick() {
+    pump_events();
+}
+
+/// `Gpu.frame`: pump input once per loop. Display pacing comes from FIFO swapchain acquire.
+pub fn wait_display_frame() {
+    pump_events();
 }
 
 /// Pump the event loop then return packed pointer latch (clears dx/dy).

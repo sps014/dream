@@ -274,8 +274,10 @@ async fun main(): void {
     }
     let surface = surface_r.unwrap_or(GpuSurface());
 
-    let w: int = 1280;
-    let h: int = 720;
+    let w: int = surface.width();
+    let h: int = surface.height();
+    if (w < 1) { w = 1280; }
+    if (h < 1) { h = 720; }
 
     let desc = GpuRenderPipelineDesc.overlay();
     let pipe_r = await GpuRenderPipeline.create_ex("sea_vs", "sea_fs", desc);
@@ -293,11 +295,15 @@ async fun main(): void {
     ]);
 
     let sky = GpuVec4.of(0.44, 0.77, 0.99, 1.0);
-    let rw: float = (float)w;
-    let rh: float = (float)h;
     let t0: long = Time.nano_time();
 
-    while (true) {
+    while (!surface.close_requested()) {
+        w = surface.width();
+        h = surface.height();
+        if (w < 1) { w = 1280; }
+        if (h < 1) { h = 720; }
+        let rw: float = (float)w;
+        let rh: float = (float)h;
         let now: long = Time.nano_time();
         let t: float = (float)(now - t0) / 1000000000.0;
         let uniforms = Uniforms.pack_f32([t, rw, rh]);

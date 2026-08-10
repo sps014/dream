@@ -204,11 +204,16 @@ pub(super) fn emit_kernel(
     collect_workgroup_names(func.body, &mut workgroup_names);
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = super::helpers::build_helper_return_tys(program);
+    // Shadowed as vec3<i32> in the prologue (`global_id_i`, …); type them for inference.
+    let mut scopes = IndexMap::new();
+    for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
+        scopes.insert(name.to_string(), "vec3<i32>".into());
+    }
     let ctx = EmitCtx {
         prefix: &entry,
         bindings: &bindings,
         workgroup_names: &workgroup_names,
-        scopes: RefCell::new(vec![IndexMap::new()]),
+        scopes: RefCell::new(vec![scopes]),
         struct_fields: &struct_fields,
         helper_returns: &helper_returns,
     };

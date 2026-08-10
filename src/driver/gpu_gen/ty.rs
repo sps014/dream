@@ -78,6 +78,32 @@ pub(super) fn is_bool_producing_binop(kind: TokenKind) -> bool {
     )
 }
 
+/// WGSL return type for a known GPU builtin / GpuMath call, if any.
+pub(super) fn builtin_return_wgsl_ty(name: &str, arg_count: usize) -> Option<&'static str> {
+    match name {
+        "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "floor" | "ceil"
+        | "fract" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "log" | "sign"
+        | "saturate" | "step" | "smoothstep" | "fma" | "inversesqrt" | "length" | "length2"
+        | "length4" | "dot" | "dot2" | "dot4" => Some("f32"),
+        "normalize" | "cross" | "reflect" => Some("vec3<f32>"),
+        "normalize2" => Some("vec2<f32>"),
+        "normalize4" => Some("vec4<f32>"),
+        "mul2" => Some("vec2<f32>"),
+        "mul3" => Some("vec3<f32>"),
+        "mul4" => Some("vec4<f32>"),
+        "matmul4" | "transpose4" | "identity" => Some("mat4x4<f32>"),
+        "atomic_load" | "atomic_add" | "atomic_exchange" => Some("i32"),
+        "texture_load" | "texture_sample_level" => Some("f32"),
+        "texture_sample" => Some("vec4<f32>"),
+        "of" => Some(match arg_count {
+            2 => "vec2<f32>",
+            3 => "vec3<f32>",
+            _ => "vec4<f32>",
+        }),
+        _ => None,
+    }
+}
+
 /// Best-effort WGSL type for unannotated `let` bindings (casts/literals/float ops).
 pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     match expr {
@@ -159,20 +185,10 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             "i32".into()
         }
         ExpressionNode::FunctionCall(name, _, args) | ExpressionNode::MethodCall(_, name, _, args) => {
+            if let Some(ty) = builtin_return_wgsl_ty(&name.text, args.len()) {
+                return ty.into();
+            }
             match name.text.as_str() {
-                "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "floor"
-                | "ceil" | "fract" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "length"
-                | "dot" => "f32".into(),
-                "normalize" | "cross" | "reflect" => "vec3<f32>".into(),
-                "atomic_load" | "atomic_add" | "atomic_exchange" => "i32".into(),
-                "texture_load" => "f32".into(),
-                "texture_sample_level" => "f32".into(),
-                "texture_sample" => "vec4<f32>".into(),
-                "of" => match args.len() {
-                    2 => "vec2<f32>".into(),
-                    3 => "vec3<f32>".into(),
-                    _ => "vec4<f32>".into(),
-                },
                 // Zero-arg `StructName()` constructor → WGSL struct type.
                 other if args.is_empty() => escape_wgsl_ident(other),
                 other => ctx
@@ -182,6 +198,27 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                     .unwrap_or_else(|| "i32".into()),
             }
         }
+        ExpressionNode::Call(callee, _, args) => match &**callee {
+            ExpressionNode::Identifier(n) => {
+                if let Some(ty) = builtin_return_wgsl_ty(&n.text, args.len()) {
+                    return ty.into();
+                }
+                if args.is_empty() {
+                    return escape_wgsl_ident(&n.text);
+                }
+                ctx.helper_returns
+                    .get(&n.text)
+                    .cloned()
+                    .unwrap_or_else(|| "i32".into())
+            }
+            ExpressionNode::MemberAccess(_, method) => {
+                if let Some(ty) = builtin_return_wgsl_ty(&method.text, args.len()) {
+                    return ty.into();
+                }
+                "i32".into()
+            }
+            _ => "i32".into(),
+        },
         _ => "i32".into(),
     }
 }

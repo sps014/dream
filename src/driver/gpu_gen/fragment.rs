@@ -139,7 +139,17 @@ pub(super) fn emit_fragment(
 
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = super::helpers::build_helper_return_tys(program);
+    let uses_sample_index = body_mentions(func.body, "sample_index");
+    let uses_primitive_index = body_mentions(func.body, "primitive_index");
     let mut scopes = vec![IndexMap::new()];
+    scopes[0].insert("frag_coord".into(), "vec4<f32>".into());
+    scopes[0].insert("front_facing".into(), "bool".into());
+    if uses_sample_index {
+        scopes[0].insert("sample_index".into(), "i32".into());
+    }
+    if uses_primitive_index {
+        scopes[0].insert("primitive_index".into(), "i32".into());
+    }
     if let Some((ref vp, ref sname)) = vary_param {
         scopes[0].insert(vp.clone(), sname.clone());
     }
@@ -165,9 +175,6 @@ pub(super) fn emit_fragment(
     );
 
     let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
-
-    let uses_sample_index = body_mentions(func.body, "sample_index");
-    let uses_primitive_index = body_mentions(func.body, "primitive_index");
 
     let mut wgsl = String::new();
     if uses_primitive_index {

@@ -409,8 +409,9 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             )
         },
         ExpressionNode::Cast(_, ty, e) => {
+            // Coerce once — wrapping again would emit `f32(f32(x))` / `i32(i32(x))`.
             let wty = dream_ty_to_wgsl(ty);
-            format!("{}({})", wty, coerce_expr_to_wgsl_ty(e, &wty, ctx))
+            coerce_expr_to_wgsl_ty(e, &wty, ctx)
         }
         ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
             emit_expr(inner, ctx)

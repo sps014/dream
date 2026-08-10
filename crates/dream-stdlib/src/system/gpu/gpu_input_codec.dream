@@ -1,0 +1,164 @@
+module system.gpu;
+
+// Decode packed host input bytes (see native `gpu/input.rs` / JS `gpu.js`).
+
+public class GpuInputCodec {
+    public static fun read_i32(buf: byte[], off: int): int {
+        let b0 = (int)buf[off] & 255;
+        let b1 = (int)buf[off + 1] & 255;
+        let b2 = (int)buf[off + 2] & 255;
+        let b3 = (int)buf[off + 3] & 255;
+        return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+    }
+
+    public static fun read_f32(buf: byte[], off: int): float {
+        let slice = Buffer.alloc<byte>(4);
+        slice[0] = buf[off];
+        slice[1] = buf[off + 1];
+        slice[2] = buf[off + 2];
+        slice[3] = buf[off + 3];
+        return Bytes.to<float>(slice);
+    }
+
+    public static fun read_string(buf: byte[], off: int): string {
+        let n = GpuInputCodec.read_i32(buf, off);
+        if (n < 0) { n = 0; }
+        let start = off + 4;
+        let end = start + n;
+        if (end > buf.length) { end = buf.length; }
+        let slice = Buffer.alloc<byte>(end - start);
+        let i = 0;
+        while (start + i < end) {
+            slice[i] = buf[start + i];
+            i = i + 1;
+        }
+        return Encoding.utf8_decode(slice);
+    }
+
+    public static fun string_byte_len(buf: byte[], off: int): int {
+        let n = GpuInputCodec.read_i32(buf, off);
+        if (n < 0) { n = 0; }
+        return 4 + n;
+    }
+
+    public static fun decode_pointer(buf: byte[]): GpuPointer {
+        let p = GpuPointer();
+        if (buf.length < 32) {
+            p.pointer_id = 0 - 1;
+            return p;
+        }
+        p.x = GpuInputCodec.read_f32(buf, 0);
+        p.y = GpuInputCodec.read_f32(buf, 4);
+        p.dx = GpuInputCodec.read_f32(buf, 8);
+        p.dy = GpuInputCodec.read_f32(buf, 12);
+        p.buttons = GpuInputCodec.read_i32(buf, 16);
+        p.down = GpuInputCodec.read_i32(buf, 20) != 0;
+        p.inside = GpuInputCodec.read_i32(buf, 24) != 0;
+        p.pointer_id = GpuInputCodec.read_i32(buf, 28);
+        return p;
+    }
+
+    public static fun decode_mods(buf: byte[]): GpuMods {
+        let m = GpuMods();
+        if (buf.length < 4) { return m; }
+        m.shift = ((int)buf[0] & 255) != 0;
+        m.ctrl = ((int)buf[1] & 255) != 0;
+        m.alt = ((int)buf[2] & 255) != 0;
+        m.meta = ((int)buf[3] & 255) != 0;
+        return m;
+    }
+
+    public static fun decode_events(buf: byte[]): GpuInputEvent[] {
+        if (buf.length < 4) {
+            return Buffer.alloc<GpuInputEvent>(0);
+        }
+        let count = GpuInputCodec.read_i32(buf, 0);
+        if (count < 0) { count = 0; }
+        let out = Buffer.alloc<GpuInputEvent>(count);
+        let off = 4;
+        let i = 0;
+        while (i < count && off < buf.length) {
+            let tag = (int)buf[off] & 255;
+            off = off + 1;
+            if (tag == 0) {
+                let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let button = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                let pid = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.PointerDown(x, y, button, pid);
+            } else if (tag == 1) {
+                let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let button = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                let pid = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.PointerUp(x, y, button, pid);
+            } else if (tag == 2) {
+                let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let pid = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.PointerMove(x, y, pid);
+            } else if (tag == 3) {
+                let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let pid = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.PointerEnter(x, y, pid);
+            } else if (tag == 4) {
+                let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let pid = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.PointerLeave(x, y, pid);
+            } else if (tag == 5) {
+                let pid = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.PointerCancel(pid);
+            } else if (tag == 6) {
+                let dx = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let dy = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.Wheel(dx, dy, x, y);
+            } else if (tag == 7) {
+                let code = GpuInputCodec.read_string(buf, off);
+                off = off + GpuInputCodec.string_byte_len(buf, off);
+                let key = GpuInputCodec.read_string(buf, off);
+                off = off + GpuInputCodec.string_byte_len(buf, off);
+                let repeat = ((int)buf[off] & 255) != 0;
+                off = off + 1;
+                out[i] = GpuInputEvent.KeyDown(code, key, repeat);
+            } else if (tag == 8) {
+                let code = GpuInputCodec.read_string(buf, off);
+                off = off + GpuInputCodec.string_byte_len(buf, off);
+                let key = GpuInputCodec.read_string(buf, off);
+                off = off + GpuInputCodec.string_byte_len(buf, off);
+                out[i] = GpuInputEvent.KeyUp(code, key);
+            } else if (tag == 9) {
+                let text = GpuInputCodec.read_string(buf, off);
+                off = off + GpuInputCodec.string_byte_len(buf, off);
+                out[i] = GpuInputEvent.TextInput(text);
+            } else if (tag == 10) {
+                let w = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                let h = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.Resize(w, h);
+            } else if (tag == 11) {
+                let s = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.ScaleFactor(s);
+            } else if (tag == 12) {
+                out[i] = GpuInputEvent.Focus;
+            } else if (tag == 13) {
+                out[i] = GpuInputEvent.Blur;
+            } else if (tag == 14) {
+                out[i] = GpuInputEvent.Close;
+            } else {
+                break;
+            }
+            i = i + 1;
+        }
+        if (i == count) { return out; }
+        let trimmed = Buffer.alloc<GpuInputEvent>(i);
+        let j = 0;
+        while (j < i) {
+            trimmed[j] = out[j];
+            j = j + 1;
+        }
+        return trimmed;
+    }
+}

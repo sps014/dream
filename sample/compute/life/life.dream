@@ -195,13 +195,12 @@ async fun run_browser(n: int): void {
     let v2 = GpuBuffer<float>.alloc(cells);
     let tex = GpuTexture.rgba8(n, n);
 
-    let surface_r = GpuSurface.from_canvas("life");
+    let surface_r = GpuSurface.create("life", n, n);
     if (surface_r.is_err()) {
-        System.println("GpuSurface.from_canvas failed");
+        System.println("GpuSurface.create failed");
         return;
     }
     let surface = surface_r.unwrap_or(GpuSurface());
-    surface.configure(n, n);
 
     // Fingerprint / coral Gray–Scott (Du, Dv, feed, kill).
     let step_u = Uniforms.pack_f32([0.21, 0.105, 0.026, 0.051]);
@@ -210,7 +209,21 @@ async fun run_browser(n: int): void {
     let steps_per_frame = 14;
 
     System.println("reaction-diffusion gpu — Gray-Scott");
-    while (true) {
+    while (!surface.close_requested()) {
+        for (let ev in surface.poll_events()) {
+            switch (ev) {
+                KeyDown(code, _key, _repeat) => {
+                    if (code == "Escape") {
+                        return;
+                    }
+                },
+                _ => {},
+            }
+        }
+        if (surface.key_down("Escape")) {
+            return;
+        }
+
         let pass = ComputePass.begin();
         let s = 0;
         while (s < steps_per_frame) {
@@ -239,7 +252,8 @@ async fun run_browser(n: int): void {
 
         let bl = await GpuRenderPass.blit(surface, tex);
         if (bl.is_err()) { return; }
-        let _p = await surface.present();
+        let pr = await surface.present();
+        if (pr.is_err()) { return; }
         await Gpu.frame();
     }
 }
@@ -248,11 +262,6 @@ async fun main(): void {
     let init = await Gpu.try_init();
     if (init.is_err()) {
         System.println("WebGPU unavailable — open life.html in a browser");
-        return;
-    }
-    let surface_r = GpuSurface.from_canvas("life");
-    if (surface_r.is_err()) {
-        System.println("no canvas — open sample/compute/life/life.html (reaction-diffusion)");
         return;
     }
     await run_browser(768);

@@ -167,7 +167,7 @@ pub fn ensure_gpu_buffer(
     queue: &wgpu::Queue,
     entry: &mut BufEntry,
     extra: wgpu::BufferUsages,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let needed =
         entry.usage | extra | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC;
     entry.usage = needed;
@@ -187,7 +187,7 @@ pub fn ensure_gpu_buffer(
             }
             entry.dirty_cpu = false;
         }
-        return Ok(());
+        return Ok(false);
     }
 
     let buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -200,7 +200,7 @@ pub fn ensure_gpu_buffer(
     entry.gpu = Some(buf);
     entry.created_usage = needed;
     entry.dirty_cpu = false;
-    Ok(())
+    Ok(true)
 }
 
 fn sync_gpu_to_cpu(id: i32) -> Result<(), String> {

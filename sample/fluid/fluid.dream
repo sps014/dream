@@ -186,7 +186,7 @@ fun paint(
     Gpu.texture_store(tex, x, y, r, g, b, 1.0);
 }
 
-/// UI state for captureless DOM callbacks (one module global).
+/// UI state for the fluid demo (mouse tracked via GpuSurface input).
 class FluidApp {
     public n: int;
     public mouse_x: int;
@@ -209,45 +209,6 @@ class FluidApp {
 
 let app: FluidApp = FluidApp();
 
-fun canvas_el(): js {
-    return js.global.document.getElementById("fluid");
-}
-
-fun update_mouse_from_event(ev: js): void {
-    let c = canvas_el();
-    let rect = c.getBoundingClientRect();
-    let w = rect.width.to_double();
-    let h = rect.height.to_double();
-    if (w < 1.0 || h < 1.0) { return; }
-    let nx = (ev.clientX.to_double() - rect.left.to_double()) / w;
-    let ny = (ev.clientY.to_double() - rect.top.to_double()) / h;
-    if (nx < 0.0) { nx = 0.0; }
-    if (ny < 0.0) { ny = 0.0; }
-    if (nx > 1.0) { nx = 1.0; }
-    if (ny > 1.0) { ny = 1.0; }
-    app.prev_mx = app.mouse_x;
-    app.prev_my = app.mouse_y;
-    app.mouse_x = (int)(nx * (app.n - 1));
-    app.mouse_y = (int)(ny * (app.n - 1));
-}
-
-fun on_pointer_down(ev: js): void {
-    app.mouse_down = true;
-    update_mouse_from_event(ev);
-    let pid = ev.pointerId;
-    if (!pid.is_null()) {
-        canvas_el().setPointerCapture(pid);
-    }
-}
-
-fun on_pointer_up(ev: js): void {
-    app.mouse_down = false;
-}
-
-fun on_pointer_move(ev: js): void {
-    update_mouse_from_event(ev);
-}
-
 fun splat_uniforms(
     cx: float,
     cy: float,
@@ -269,13 +230,12 @@ async fun main(): void {
     let n = app.n;
     let cells = n * n;
 
-    let surface_r = GpuSurface.from_canvas("fluid");
+    let surface_r = GpuSurface.create("fluid", n, n);
     if (surface_r.is_err()) {
-        System.println("GpuSurface.from_canvas failed");
+        System.println("GpuSurface.create failed");
         return;
     }
     let surface = surface_r.unwrap_or(GpuSurface());
-    surface.configure(n, n);
     let tex = GpuTexture.rgba8(n, n);
 
     let dens = GpuBuffer<float>.alloc(cells);
@@ -297,16 +257,6 @@ async fun main(): void {
     }
     dens.write(seed);
 
-    let canvas = canvas_el();
-    canvas.style.touchAction = "none";
-    canvas.addEventListener("pointerdown", on_pointer_down);
-    canvas.addEventListener("pointerup", on_pointer_up);
-    canvas.addEventListener("pointercancel", on_pointer_up);
-    canvas.addEventListener("pointermove", on_pointer_move);
-    canvas.addEventListener("mousedown", on_pointer_down);
-    canvas.addEventListener("mouseup", on_pointer_up);
-    canvas.addEventListener("mousemove", on_pointer_move);
-
     System.println("fluid gpu — ComputePass Stam + paint");
 
     let empty_u = Buffer.alloc<byte>(0);
@@ -314,16 +264,44 @@ async fun main(): void {
     let dens_decay_u = Uniforms.pack_f32([0.996]);
     let vel_decay_u = Uniforms.pack_f32([0.995]);
 
-    while (true) {
+    while (!surface.close_requested()) {
+        // One event-loop pump per frame (poll_events); then read latches.
+        for (let ev in surface.poll_events()) {
+            switch (ev) {
+                KeyDown(code, _key, _repeat) => {
+                    if (code == "Escape") {
+                        return;
+                    }
+                },
+                _ => {},
+            }
+        }
+        if (surface.key_down("Escape") || surface.close_requested()) {
+            return;
+        }
+
+        let ptr = surface.pointer();
+        let mx = (int)ptr.x;
+        let my = (int)ptr.y;
+        if (mx < 0) { mx = 0; }
+        if (my < 0) { my = 0; }
+        if (mx > n - 1) { mx = n - 1; }
+        if (my > n - 1) { my = n - 1; }
+        app.prev_mx = app.mouse_x;
+        app.prev_my = app.mouse_y;
+        app.mouse_x = mx;
+        app.mouse_y = my;
+        app.mouse_down = ptr.down && ptr.inside;
+
         let ang: double = 0.07d * app.frame;
         let ox: float = (float)(n / 2) + (float)(Math.cos(ang) * (n / 5));
         let oy: float = (float)(n / 2) + (float)(Math.sin(ang) * (n / 5));
         let fx: float = (float)((0.0d - Math.sin(ang)) * 1.2d);
         let fy: float = (float)(Math.cos(ang) * 1.2d);
 
-        // Pass 1: forces + advect velocity (both advects read the same pre-update vx/vy).
-        let pass1 = ComputePass.begin();
-        pass1.dispatch_uniforms(
+        // One ComputePass / one queue submit for the whole frame.
+        let pass = ComputePass.begin();
+        pass.dispatch_uniforms(
             "splat",
             [dens, vx, vy],
             n,
@@ -334,7 +312,7 @@ async fun main(): void {
         if (app.mouse_down) {
             let mfx: float = 0.8 * (float)(app.mouse_x - app.prev_mx);
             let mfy: float = 0.8 * (float)(app.mouse_y - app.prev_my);
-            pass1.dispatch_uniforms(
+            pass.dispatch_uniforms(
                 "splat",
                 [dens, vx, vy],
                 n,
@@ -342,55 +320,24 @@ async fun main(): void {
                 1,
                 splat_uniforms((float)app.mouse_x, (float)app.mouse_y, 0.95, mfx, mfy, 14.0)
             );
-            app.prev_mx = app.mouse_x;
-            app.prev_my = app.mouse_y;
         }
-        pass1.dispatch("advect", [vx, vx_tmp, vx, vy], n, n, 1);
-        pass1.dispatch("advect", [vy, vy_tmp, vx, vy], n, n, 1);
-        let s1 = await pass1.submit();
-        if (s1.is_err()) {
-            System.println("ComputePass 1 failed");
-            return;
-        }
-
-        // Ping-pong velocity handles (no CPU readback).
-        let swap_vx = vx;
-        vx = vx_tmp;
-        vx_tmp = swap_vx;
-        let swap_vy = vy;
-        vy = vy_tmp;
-        vy_tmp = swap_vy;
-
-        // Pass 2: project + advect dye.
-        let pass2 = ComputePass.begin();
-        pass2.dispatch("divergence", [vx, vy, div, p0], n, n, 1);
-        // 3 Jacobi pairs (p0↔p1), same depth as the old CPU solver.
-        pass2.dispatch("pressure_jacobi", [div, p0, p1], n, n, 1);
-        pass2.dispatch("pressure_jacobi", [div, p1, p0], n, n, 1);
-        pass2.dispatch("pressure_jacobi", [div, p0, p1], n, n, 1);
-        pass2.dispatch("pressure_jacobi", [div, p1, p0], n, n, 1);
-        pass2.dispatch("pressure_jacobi", [div, p0, p1], n, n, 1);
-        pass2.dispatch("pressure_jacobi", [div, p1, p0], n, n, 1);
-        pass2.dispatch("subtract_gradient", [vx, vy, p0], n, n, 1);
-        pass2.dispatch("advect", [dens, dens_tmp, vx, vy], n, n, 1);
-        let s2 = await pass2.submit();
-        if (s2.is_err()) {
-            System.println("ComputePass 2 failed");
-            return;
-        }
-
-        let swap_d = dens;
-        dens = dens_tmp;
-        dens_tmp = swap_d;
-
-        // Pass 3: decay + paint to storage texture.
-        let pass3 = ComputePass.begin();
-        pass3.dispatch_uniforms("decay_field", [dens], n, n, 1, dens_decay_u);
-        pass3.dispatch_uniforms("decay_field", [vx], n, n, 1, vel_decay_u);
-        pass3.dispatch_uniforms("decay_field", [vy], n, n, 1, vel_decay_u);
-        pass3.dispatch_resources(
+        pass.dispatch("advect", [vx, vx_tmp, vx, vy], n, n, 1);
+        pass.dispatch("advect", [vy, vy_tmp, vx, vy], n, n, 1);
+        pass.dispatch("divergence", [vx_tmp, vy_tmp, div, p0], n, n, 1);
+        pass.dispatch("pressure_jacobi", [div, p0, p1], n, n, 1);
+        pass.dispatch("pressure_jacobi", [div, p1, p0], n, n, 1);
+        pass.dispatch("pressure_jacobi", [div, p0, p1], n, n, 1);
+        pass.dispatch("pressure_jacobi", [div, p1, p0], n, n, 1);
+        pass.dispatch("pressure_jacobi", [div, p0, p1], n, n, 1);
+        pass.dispatch("pressure_jacobi", [div, p1, p0], n, n, 1);
+        pass.dispatch("subtract_gradient", [vx_tmp, vy_tmp, p0], n, n, 1);
+        pass.dispatch("advect", [dens, dens_tmp, vx_tmp, vy_tmp], n, n, 1);
+        pass.dispatch_uniforms("decay_field", [dens_tmp], n, n, 1, dens_decay_u);
+        pass.dispatch_uniforms("decay_field", [vx_tmp], n, n, 1, vel_decay_u);
+        pass.dispatch_uniforms("decay_field", [vy_tmp], n, n, 1, vel_decay_u);
+        pass.dispatch_resources(
             "paint",
-            [dens.id, vx.id, vy.id],
+            [dens_tmp.id, vx_tmp.id, vy_tmp.id],
             [tex.id],
             no_samplers,
             n,
@@ -398,15 +345,27 @@ async fun main(): void {
             1,
             empty_u
         );
-        let s3 = await pass3.submit();
-        if (s3.is_err()) {
-            System.println("ComputePass 3 failed");
+        let sub = await pass.submit();
+        if (sub.is_err()) {
+            System.println("ComputePass.submit failed");
             return;
         }
 
+        // Ping-pong handles for the next frame (no CPU readback).
+        let swap_vx = vx;
+        vx = vx_tmp;
+        vx_tmp = swap_vx;
+        let swap_vy = vy;
+        vy = vy_tmp;
+        vy_tmp = swap_vy;
+        let swap_d = dens;
+        dens = dens_tmp;
+        dens_tmp = swap_d;
+
         let bl = await GpuRenderPass.blit(surface, tex);
         if (bl.is_err()) { return; }
-        let _p = await surface.present();
+        let pr = await surface.present();
+        if (pr.is_err()) { return; }
         app.frame = app.frame + 1;
         await Gpu.frame();
     }

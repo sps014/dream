@@ -69,6 +69,7 @@ fn texture_create(
             format,
             cpu,
             gpu: None,
+            view: None,
             storage: false,
             depth,
             layers,

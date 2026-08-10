@@ -1,0 +1,10 @@
+module system.gpu;
+
+/// Keyboard modifier latches for a `GpuSurface`.
+public struct GpuMods {
+    public shift: bool;
+    public ctrl: bool;
+    public alt: bool;
+    /// Cmd on macOS / Windows key on PC.
+    public meta: bool;
+}

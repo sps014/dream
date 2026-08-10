@@ -173,6 +173,30 @@ public class Gpu {
     static extern async fun surface_present(id: int): int;
 
     @web @native
+    @js("Dream", "gpuSurfacePointer")
+    static extern fun surface_pointer(id: int): byte[];
+
+    @web @native
+    @js("Dream", "gpuSurfaceMods")
+    static extern fun surface_mods(id: int): byte[];
+
+    @web @native
+    @js("Dream", "gpuSurfaceKeyDown")
+    static extern fun surface_key_down(id: int, code: string): bool;
+
+    @web @native
+    @js("Dream", "gpuSurfaceFocused")
+    static extern fun surface_focused(id: int): bool;
+
+    @web @native
+    @js("Dream", "gpuSurfaceCloseRequested")
+    static extern fun surface_close_requested(id: int): bool;
+
+    @web @native
+    @js("Dream", "gpuSurfacePollEvents")
+    static extern fun surface_poll_events(id: int): byte[];
+
+    @web @native
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 

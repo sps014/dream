@@ -5,6 +5,7 @@ mod buffers;
 mod compute;
 mod device;
 mod error;
+mod input;
 mod render;
 mod state;
 mod surface;
@@ -332,6 +333,48 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
             let code = surface::present(id);
             resolve_host_future_i32(&mut caller, code)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfacePointer",
+        |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
+            let bytes = surface::pointer_bytes(id);
+            super::memory::write_bytes_to_memory(&mut caller, &bytes)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceMods",
+        |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
+            let bytes = surface::mods_bytes(id);
+            super::memory::write_bytes_to_memory(&mut caller, &bytes)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceKeyDown",
+        |mut caller: Caller<'_, ()>, id: i32, code_ptr: i32| -> Result<i32> {
+            let code = read_arg_string(&mut caller, code_ptr)?;
+            Ok(i32::from(surface::key_down(id, &code)))
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceFocused",
+        |id: i32| -> i32 { i32::from(surface::focused(id)) },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceCloseRequested",
+        |id: i32| -> i32 { i32::from(surface::close_requested(id)) },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfacePollEvents",
+        |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
+            let bytes = surface::poll_events_bytes(id);
+            super::memory::write_bytes_to_memory(&mut caller, &bytes)
         },
     )?;
     linker.func_wrap(

@@ -1561,6 +1561,268 @@ function makeGpuHost(getInstance) {
     return Array.from(data).map((x) => x | 0);
   }
 
+  /** Packed surface input — keep in sync with native `gpu/input.rs`. */
+  function makeInputState() {
+    return {
+      x: 0,
+      y: 0,
+      dx: 0,
+      dy: 0,
+      buttons: 0,
+      inside: false,
+      pointerId: -1,
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+      focused: true,
+      closeRequested: false,
+      keysDown: new Set(),
+      queue: [],
+    };
+  }
+
+  function pushEvent(input, ev) {
+    if (input.queue.length >= 256) input.queue.shift();
+    input.queue.push(ev);
+  }
+
+  function setPointerPos(input, x, y) {
+    input.dx += x - input.x;
+    input.dy += y - input.y;
+    input.x = x;
+    input.y = y;
+  }
+
+  function canvasPointerPos(canvas, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const rw = rect.width || 1;
+    const rh = rect.height || 1;
+    const x = ((clientX - rect.left) / rw) * (canvas.width || 1);
+    const y = ((clientY - rect.top) / rh) * (canvas.height || 1);
+    return { x, y };
+  }
+
+  function writeF32(view, o, v) {
+    view.setFloat32(o, v, true);
+    return o + 4;
+  }
+  function writeI32(view, o, v) {
+    view.setInt32(o, v | 0, true);
+    return o + 4;
+  }
+  function appendF32(chunks, v) {
+    const b = new ArrayBuffer(4);
+    new DataView(b).setFloat32(0, v, true);
+    chunks.push(new Uint8Array(b));
+  }
+  function appendI32(chunks, v) {
+    const b = new ArrayBuffer(4);
+    new DataView(b).setInt32(0, v | 0, true);
+    chunks.push(new Uint8Array(b));
+  }
+  function appendStr(chunks, s) {
+    const enc = new TextEncoder().encode(String(s ?? ""));
+    appendI32(chunks, enc.length);
+    chunks.push(enc);
+  }
+  function concatChunks(chunks) {
+    let n = 0;
+    for (const c of chunks) n += c.length;
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const c of chunks) {
+      out.set(c, o);
+      o += c.length;
+    }
+    return out;
+  }
+
+  function packPointer(input) {
+    const buf = new ArrayBuffer(32);
+    const view = new DataView(buf);
+    let o = 0;
+    o = writeF32(view, o, input.x);
+    o = writeF32(view, o, input.y);
+    o = writeF32(view, o, input.dx);
+    o = writeF32(view, o, input.dy);
+    o = writeI32(view, o, input.buttons);
+    o = writeI32(view, o, input.buttons !== 0 ? 1 : 0);
+    o = writeI32(view, o, input.inside ? 1 : 0);
+    writeI32(view, o, input.pointerId | 0);
+    input.dx = 0;
+    input.dy = 0;
+    return new Uint8Array(buf);
+  }
+
+  function packMods(input) {
+    return new Uint8Array([
+      input.shift ? 1 : 0,
+      input.ctrl ? 1 : 0,
+      input.alt ? 1 : 0,
+      input.meta ? 1 : 0,
+    ]);
+  }
+
+  function packEvents(input) {
+    const chunks = [];
+    appendI32(chunks, input.queue.length);
+    for (const ev of input.queue) {
+      chunks.push(new Uint8Array([ev.tag | 0]));
+      switch (ev.tag) {
+        case 0:
+        case 1:
+          appendF32(chunks, ev.x);
+          appendF32(chunks, ev.y);
+          appendI32(chunks, ev.button);
+          appendI32(chunks, ev.pointerId);
+          break;
+        case 2:
+        case 3:
+        case 4:
+          appendF32(chunks, ev.x);
+          appendF32(chunks, ev.y);
+          appendI32(chunks, ev.pointerId);
+          break;
+        case 5:
+          appendI32(chunks, ev.pointerId);
+          break;
+        case 6:
+          appendF32(chunks, ev.dx);
+          appendF32(chunks, ev.dy);
+          appendF32(chunks, ev.x);
+          appendF32(chunks, ev.y);
+          break;
+        case 7:
+          appendStr(chunks, ev.code);
+          appendStr(chunks, ev.key);
+          chunks.push(new Uint8Array([ev.repeat ? 1 : 0]));
+          break;
+        case 8:
+          appendStr(chunks, ev.code);
+          appendStr(chunks, ev.key);
+          break;
+        case 9:
+          appendStr(chunks, ev.text);
+          break;
+        case 10:
+          appendI32(chunks, ev.width);
+          appendI32(chunks, ev.height);
+          break;
+        case 11:
+          appendF32(chunks, ev.scale);
+          break;
+        default:
+          break;
+      }
+    }
+    input.queue = [];
+    return concatChunks(chunks);
+  }
+
+  function attachSurfaceInput(surface) {
+    const canvas = surface.canvas;
+    const input = surface.input;
+    if (!canvas || typeof canvas.addEventListener !== "function") return;
+
+    const onPtr = (type, ev) => {
+      const { x, y } = canvasPointerPos(canvas, ev.clientX, ev.clientY);
+      const pid = ev.pointerId != null ? ev.pointerId | 0 : 0;
+      const button = ev.button != null ? ev.button | 0 : 0;
+      if (type === "down") {
+        setPointerPos(input, x, y);
+        input.buttons |= 1 << Math.max(0, Math.min(31, button));
+        input.pointerId = pid;
+        pushEvent(input, { tag: 0, x, y, button, pointerId: pid });
+        try {
+          canvas.setPointerCapture?.(pid);
+        } catch (_) {}
+      } else if (type === "up") {
+        setPointerPos(input, x, y);
+        input.buttons &= ~(1 << Math.max(0, Math.min(31, button)));
+        pushEvent(input, { tag: 1, x, y, button, pointerId: pid });
+      } else if (type === "move") {
+        setPointerPos(input, x, y);
+        input.pointerId = pid;
+        pushEvent(input, { tag: 2, x, y, pointerId: pid });
+      } else if (type === "enter") {
+        input.inside = true;
+        setPointerPos(input, x, y);
+        input.pointerId = pid;
+        pushEvent(input, { tag: 3, x, y, pointerId: pid });
+      } else if (type === "leave") {
+        input.inside = false;
+        setPointerPos(input, x, y);
+        pushEvent(input, { tag: 4, x, y, pointerId: pid });
+      } else if (type === "cancel") {
+        input.buttons = 0;
+        pushEvent(input, { tag: 5, pointerId: pid });
+      }
+    };
+
+    canvas.style.touchAction = "none";
+    canvas.addEventListener("pointerdown", (e) => onPtr("down", e));
+    canvas.addEventListener("pointerup", (e) => onPtr("up", e));
+    canvas.addEventListener("pointermove", (e) => onPtr("move", e));
+    canvas.addEventListener("pointerenter", (e) => onPtr("enter", e));
+    canvas.addEventListener("pointerleave", (e) => onPtr("leave", e));
+    canvas.addEventListener("pointercancel", (e) => onPtr("cancel", e));
+    canvas.addEventListener(
+      "wheel",
+      (e) => {
+        const { x, y } = canvasPointerPos(canvas, e.clientX, e.clientY);
+        pushEvent(input, { tag: 6, dx: e.deltaX, dy: e.deltaY, x, y });
+      },
+      { passive: true },
+    );
+
+    const onKey = (down, e) => {
+      input.shift = !!e.shiftKey;
+      input.ctrl = !!e.ctrlKey;
+      input.alt = !!e.altKey;
+      input.meta = !!e.metaKey;
+      const code = String(e.code || "");
+      const key = String(e.key || "");
+      if (down) {
+        if (!e.repeat) input.keysDown.add(code);
+        pushEvent(input, { tag: 7, code, key, repeat: !!e.repeat });
+        if (!e.repeat && key.length === 1) {
+          pushEvent(input, { tag: 9, text: key });
+        }
+      } else {
+        input.keysDown.delete(code);
+        pushEvent(input, { tag: 8, code, key });
+      }
+    };
+    window.addEventListener("keydown", (e) => onKey(true, e));
+    window.addEventListener("keyup", (e) => onKey(false, e));
+    window.addEventListener("focus", () => {
+      input.focused = true;
+      pushEvent(input, { tag: 12 });
+    });
+    window.addEventListener("blur", () => {
+      input.focused = false;
+      pushEvent(input, { tag: 13 });
+    });
+    window.addEventListener("beforeunload", () => {
+      input.closeRequested = true;
+      pushEvent(input, { tag: 14 });
+    });
+
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        const w = canvas.clientWidth | 0;
+        const h = canvas.clientHeight | 0;
+        if (w > 0 && h > 0) {
+          pushEvent(input, { tag: 10, width: w, height: h });
+        }
+        const dpr = globalThis.devicePixelRatio || 1;
+        pushEvent(input, { tag: 11, scale: dpr });
+      });
+      ro.observe(canvas);
+    }
+  }
+
   async function ensureBlit(dev) {
     if (blitPipeline) return;
     const code = `
@@ -2329,14 +2591,17 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       const h = Math.max(1, height | 0);
       el.width = w;
       el.height = h;
-      surfaces.set(id, {
+      const surface = {
         canvas: el,
         context: null,
         width: w,
         height: h,
         configured: false,
         lastTexture: null,
-      });
+        input: makeInputState(),
+      };
+      surfaces.set(id, surface);
+      attachSurfaceInput(surface);
       return id;
     },
     gpuSurfaceConfigure: (id, width, height) => {
@@ -2350,6 +2615,34 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     },
     gpuSurfacePresent: async (id) => {
       return surfaces.has(id) ? 0 : ERR_OTHER;
+    },
+    gpuSurfacePointer: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return new Uint8Array(32);
+      return packPointer(s.input);
+    },
+    gpuSurfaceMods: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return new Uint8Array(4);
+      return packMods(s.input);
+    },
+    gpuSurfaceKeyDown: (id, code) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return false;
+      return s.input.keysDown.has(String(code));
+    },
+    gpuSurfaceFocused: (id) => {
+      const s = surfaces.get(id);
+      return !!(s && s.input && s.input.focused);
+    },
+    gpuSurfaceCloseRequested: (id) => {
+      const s = surfaces.get(id);
+      return !!(s && s.input && s.input.closeRequested);
+    },
+    gpuSurfacePollEvents: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return new Uint8Array(4);
+      return packEvents(s.input);
     },
     gpuRenderBlit: async (surfaceId, textureId) => {
       try {

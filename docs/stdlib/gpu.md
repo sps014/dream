@@ -299,6 +299,47 @@ let wrap = GpuSampler.create(1, 1, 1);
 
 `configure` when the size changes; `present` after the frame you want shown.
 
+#### Input (web + native)
+
+Same Dream API on both hosts — no `js.global` / DOM listeners required. The host latches pointer/mods/keys and queues edge events; call these each frame (often after `Gpu.frame` / before simulate).
+
+| API | Role |
+|---|---|
+| `pointer(): GpuPointer` | `x`/`y` in surface pixels, `dx`/`dy` since last read (cleared on read), `buttons`/`down`/`inside`/`pointer_id` |
+| `mods(): GpuMods` | `shift` / `ctrl` / `alt` / `meta` |
+| `key_down(code): bool` | Physical key latch (`Escape`, `KeyR`, `Space`, …) |
+| `focused(): bool` | Window/canvas focus |
+| `close_requested(): bool` | Sticky close (native window chrome; browser `beforeunload`) |
+| `poll_events(): GpuInputEvent[]` | Drain queue (pumps the native event loop once); call once per frame before reading latches |
+
+```dream
+switch (GpuSurface.create("fluid", w, h)) {
+    Ok(surface) => {
+        while (!surface.close_requested()) {
+            let p = surface.pointer();
+            if (p.down && p.inside) {
+                // continuous paint from p.x / p.y / p.dx / p.dy
+            }
+            for (let ev in surface.poll_events()) {
+                switch (ev) {
+                    KeyDown(code, key, repeat) => {
+                        if (code == "Escape") { return; }
+                    },
+                    Resize(nw, nh) => { surface.configure(nw, nh); },
+                    _ => {},
+                }
+            }
+            await GpuRenderPass.blit(surface, tex);
+            await surface.present();
+            await Gpu.frame();
+        }
+    },
+    Err(e) => System.println(e.message()),
+}
+```
+
+Browser note: `Close` is uncommon (tab close); prefer Escape / `close_requested` checks in demos.
+
 #### `await GpuRenderPass.blit(surface, tex)`
 
 Fullscreen blit of a texture onto the surface. Typical end of an interactive frame: compute → texture → blit → present → `Gpu.frame`.
@@ -381,8 +422,9 @@ fun count(flags: GpuBuffer<int>, n: int): void {
 | Browser (`dream.js`) | Real WebGPU when available |
 | Native (`dream run`) | Real wgpu compute + render; presents to a winit window |
 
-`GpuSurface.from_canvas` / `create`, `configure`, `present`, `GpuRenderPass.blit`, and draw helpers
-are available on `@web` and `@native`. On native, `create(title, w, h)` opens a window titled
-`title` at that size. Present needs a display; compute still works headless when an adapter exists.
+`GpuSurface.from_canvas` / `create`, `configure`, `present`, **polled input** (`pointer` / `mods` /
+`key_down` / `poll_events` / …), `GpuRenderPass.blit`, and draw helpers are available on `@web` and
+`@native`. On native, `create(title, w, h)` opens a window titled `title` at that size. Present needs
+a display; compute still works headless when an adapter exists.
 
 See [Compute shaders](../language/compute.md) and [Vertex & fragment shaders](../language/shaders.md).

@@ -1,6 +1,6 @@
 module system.gpu;
 
-// Canvas / native-window swapchain.
+// Canvas / native-window swapchain + polled input (web and native).
 
 public class GpuSurface {
     public id: int;
@@ -42,5 +42,41 @@ public class GpuSurface {
         let code = await Gpu.surface_present(this.id);
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "surface present failed"));
+    }
+
+    // Latched pointer state; clears `dx`/`dy` after each read.
+    @web @native
+    public fun pointer(): GpuPointer {
+        return GpuInputCodec.decode_pointer(Gpu.surface_pointer(this.id));
+    }
+
+    // Latched modifier keys.
+    @web @native
+    public fun mods(): GpuMods {
+        return GpuInputCodec.decode_mods(Gpu.surface_mods(this.id));
+    }
+
+    // True while a physical key `code` (e.g. `Escape`, `KeyR`) is held.
+    @web @native
+    public fun key_down(code: string): bool {
+        return Gpu.surface_key_down(this.id, code);
+    }
+
+    // True when the surface/window has keyboard focus.
+    @web @native
+    public fun focused(): bool {
+        return Gpu.surface_focused(this.id);
+    }
+
+    // Sticky latch set on window close (native) or sample Escape handling.
+    @web @native
+    public fun close_requested(): bool {
+        return Gpu.surface_close_requested(this.id);
+    }
+
+    // Drain queued input events since the last call.
+    @web @native
+    public fun poll_events(): GpuInputEvent[] {
+        return GpuInputCodec.decode_events(Gpu.surface_poll_events(this.id));
     }
 }

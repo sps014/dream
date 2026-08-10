@@ -402,7 +402,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.gpu",
-        deps: &["system.core", "system.primitives", "system"],
+        deps: &["system.core", "system.primitives", "system", "system.encoding"],
         files: &[
             (
                 "<std>/system/gpu/gpu_error.dream",
@@ -451,6 +451,22 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/gpu/gpu_texture.dream",
                 include_str!("system/gpu/gpu_texture.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_pointer.dream",
+                include_str!("system/gpu/gpu_pointer.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_mods.dream",
+                include_str!("system/gpu/gpu_mods.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_input_event.dream",
+                include_str!("system/gpu/gpu_input_event.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_input_codec.dream",
+                include_str!("system/gpu/gpu_input_codec.dream"),
             ),
             (
                 "<std>/system/gpu/gpu_surface.dream",

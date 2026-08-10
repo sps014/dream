@@ -1,0 +1,21 @@
+module system.gpu;
+
+/// Queued input events drained by `GpuSurface.poll_events` (web + native).
+public enum GpuInputEvent {
+    PointerDown(x: float, y: float, button: int, pointer_id: int),
+    PointerUp(x: float, y: float, button: int, pointer_id: int),
+    PointerMove(x: float, y: float, pointer_id: int),
+    PointerEnter(x: float, y: float, pointer_id: int),
+    PointerLeave(x: float, y: float, pointer_id: int),
+    PointerCancel(pointer_id: int),
+    Wheel(dx: float, dy: float, x: float, y: float),
+    /// `code` is physical (`KeyR`, `Escape`, …); `key` is the typed glyph when available.
+    KeyDown(code: string, key: string, repeat: bool),
+    KeyUp(code: string, key: string),
+    TextInput(text: string),
+    Resize(width: int, height: int),
+    ScaleFactor(scale: float),
+    Focus,
+    Blur,
+    Close,
+}

@@ -130,7 +130,8 @@ cargo run -- sample/compute/life/life.dream
 
 [`sample/fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid) — Jos Stam–style
 2D stable fluids on the GPU: `ComputePass` batches splat / advect / Jacobi project / decay /
-paint; the CPU only tracks mouse + frame.
+paint; the CPU tracks mouse via `GpuSurface.pointer()` / `poll_events()` (works in the browser and
+under `dream run` — no `js.global` DOM listeners).
 
 ```dream
 @compute(8, 8)
@@ -155,8 +156,8 @@ let _ = await pass.submit();
 ```
 
 ```bash
-cargo run -- sample/fluid/fluid.dream
-# serve repo root → sample/fluid/fluid.html
+cargo run -- run sample/fluid/fluid.dream
+# or serve repo root → sample/fluid/fluid.html
 ```
 
 ## Attribute

@@ -25,6 +25,8 @@ pub struct TexEntry {
     pub format: wgpu::TextureFormat,
     pub cpu: Vec<u8>,
     pub gpu: Option<wgpu::Texture>,
+    /// Cached default view; cleared when `gpu` is recreated.
+    pub view: Option<wgpu::TextureView>,
     pub storage: bool,
     pub depth: bool,
     pub layers: u32,
@@ -64,11 +66,24 @@ pub enum PassOp {
     },
 }
 
+/// Cache key for compute bind groups (resource ids + which uniform pool slot).
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ComputeBgKey {
+    pub kernel: String,
+    pub buffer_ids: Vec<i32>,
+    pub texture_ids: Vec<i32>,
+    pub sampler_ids: Vec<i32>,
+    pub uniform_slot: u32,
+}
+
 pub struct ComputePipe {
     pub pipeline: wgpu::ComputePipeline,
     pub bgl: wgpu::BindGroupLayout,
-    /// Reusable 256-byte uniform buffer (extents + packed uniforms).
-    pub uniform_buf: wgpu::Buffer,
+    /// Pool of 256-byte uniform buffers so batched dispatches don't clobber each other.
+    pub uniform_pool: Vec<wgpu::Buffer>,
+    /// Next pool slot to use; reset at the start of each submit/dispatch.
+    pub uniform_cursor: usize,
+    pub bg_cache: IndexMap<ComputeBgKey, wgpu::BindGroup>,
 }
 
 pub struct RenderPipe {
@@ -94,6 +109,14 @@ pub struct SurfaceEntry {
     pub config: Option<wgpu::SurfaceConfiguration>,
     /// Acquired swapchain frame drawn into by the last render pass; presented by `present`.
     pub pending_frame: Option<wgpu::SurfaceTexture>,
+    pub input: super::input::InputState,
+}
+
+pub struct BlitPipe {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bgl: wgpu::BindGroupLayout,
+    pub sampler: wgpu::Sampler,
+    pub format: wgpu::TextureFormat,
 }
 
 pub struct GpuState {
@@ -113,6 +136,7 @@ pub struct GpuState {
     pub render_pipes: IndexMap<i32, RenderPipe>,
     pub surfaces: IndexMap<i32, SurfaceEntry>,
     pub render_format: wgpu::TextureFormat,
+    pub blit: Option<BlitPipe>,
     /// Last wgpu uncaptured error; consumed by host calls after submit.
     pub last_error: Option<String>,
 }
@@ -136,6 +160,7 @@ impl Default for GpuState {
             render_pipes: IndexMap::new(),
             surfaces: IndexMap::new(),
             render_format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            blit: None,
             last_error: None,
         }
     }

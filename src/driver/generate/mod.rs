@@ -70,6 +70,7 @@ fn run_generators_inner<'a>(
     ctx.apply_emits(arena, acc, diagnostics)?;
 
     let handled = context_gen::expand_context_generators(&mut ctx, diagnostics);
+    ctx.apply_emits(arena, acc, diagnostics)?;
     syntax_gen::expand_syntax_blocks(&mut ctx, diagnostics, &handled);
 
     ctx.apply_replacements(arena, acc, diagnostics)?;

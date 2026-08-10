@@ -26,12 +26,13 @@ pub(super) fn cast_sym(
 }
 
 /// Emits the generated struct/class <-> JS object marshalers that back a `Cast` between a
-/// struct/class type and `js` (wired up in [`Emitter::emit_cast`]). For every struct/class layout
-/// this emits `$<Name>_to_js` (build a plain JS object, deep-copying each field) and `$js_to_<Name>`
-/// (allocate the object and populate each field from the JS object's properties). Array-typed fields
+/// struct/class type and `js` (wired up in [`Emitter::emit_cast`] / [`Emitter::emit_value_store`]).
+/// For every struct/class layout this emits `$<Name>_to_js` (build a plain JS object, deep-copying
+/// each field) and `$js_to_<Name>`: reference types allocate and return a heap pointer; value types
+/// take `(param $j i32) (param $dst i32)` and fill the destination in place. Array-typed fields
 /// route through per-element-type `$array_to_js_t<id>` / `$js_to_array_t<id>` helpers. Fields whose
-/// type is not marshalable (maps, interfaces, inline value structs, ...) are skipped on the way out
-/// and zeroed on the way in.
+/// type is not marshalable (maps, interfaces, functions, ...) are skipped on the way out and
+/// zeroed on the way in.
 ///
 /// Every struct gets both helpers; the whole-module WAT DCE drops the ones no `Cast` references, and
 /// [`prune_dead_imports`](crate::prune) keeps the `js*` host bridges alive whenever a
@@ -59,14 +60,14 @@ pub(super) fn emit_js_marshal(
 }
 
 /// Whether a value of `ty` can cross the struct<->js boundary as a field/element: primitives, enums,
-/// `string`, `js`, reference struct/class types, and arrays of the same. Inline value structs, maps,
+/// `string`, `js`, struct/class types (reference or value), and arrays of the same. Maps,
 /// interfaces, and functions are not marshalable here.
 fn is_marshalable(interner: &TypeInterner, ty: TypeId) -> bool {
     let s = ty;
     match interner.kind(s) {
         TyKind::Prim(_) | TyKind::Enum(_) | TyKind::Js => true,
         TyKind::Array(elem) => is_marshalable(interner, *elem),
-        TyKind::Struct(..) => interner.is_reference(s),
+        TyKind::Struct(..) => true,
         _ => false,
     }
 }
@@ -153,7 +154,9 @@ fn value_to_js(
 }
 
 /// WAT that consumes nothing and pushes the Dream value of type `ty` decoded from the `js` handle
-/// produced by `jsval` (a WAT snippet pushing that handle). `None` when `ty` is not marshalable.
+/// produced by `jsval` (a WAT snippet pushing that handle). `None` when `ty` is not marshalable as a
+/// stack value (including value structs, which fill a destination in place — see
+/// [`write_from_js`]).
 fn value_from_js(
     interner: &TypeInterner,
     mir: &crate::Mir,
@@ -176,6 +179,38 @@ fn value_from_js(
             Some(format!("{jsval} (call {})", js_to_struct_sym(&name)))
         }
         _ => None,
+    }
+}
+
+/// Writes a Dream value of type `ty` decoded from `jsval` into the memory at `dst` (a WAT snippet
+/// pushing that address). Value structs call the in-place `$js_to_<Name>(j, dst)` filler; other
+/// marshalable types decode to a stack value and `store`.
+fn write_from_js(
+    out: &mut String,
+    indent: &str,
+    interner: &TypeInterner,
+    mir: &crate::Mir,
+    dst: &str,
+    jsval: &str,
+    ty: TypeId,
+) -> bool {
+    if matches!(interner.kind(ty), TyKind::Struct(..)) && interner.is_value_type(ty) {
+        let Some(name) = struct_name(mir, ty) else {
+            return false;
+        };
+        let _ = writeln!(
+            out,
+            "{indent}{jsval} {dst} (call {})",
+            js_to_struct_sym(&name)
+        );
+        return true;
+    }
+    if let Some(val) = value_from_js(interner, mir, jsval, ty) {
+        let store = store_instr_for(interner, ty);
+        let _ = writeln!(out, "{indent}{dst} {val} ({store})");
+        true
+    } else {
+        false
     }
 }
 
@@ -209,8 +244,9 @@ fn emit_struct_to_js(
     out.push_str("  (local.get $o)\n)\n");
 }
 
-/// `$js_to_<Name>`: allocate the object, then read each marshalable field from a JS property (unset
-/// fields are zeroed so reference slots stay null-safe for release).
+/// `$js_to_<Name>`: reference types allocate a heap object and return it; value types take an
+/// explicit `$dst` and fill fields in place (no malloc / no result). Unset / unmapped fields are
+/// zeroed so reference slots stay null-safe for release.
 fn emit_js_to_struct(
     out: &mut String,
     ty: TypeId,
@@ -220,30 +256,40 @@ fn emit_js_to_struct(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
 ) {
-    let tag = tags.get(&ty).copied().unwrap_or(0);
-    let _ = writeln!(
-        out,
-        "(func {} (param $j i32) (result i32)",
-        js_to_struct_sym(&layout.name)
-    );
-    out.push_str("  (local $o i32)\n");
-    let _ = writeln!(
-        out,
-        "  (i32.const {}) (i32.const {}) (call $malloc) (local.set $o)",
-        layout.size, tag
-    );
+    let is_value = interner.is_value_type(ty);
+    if is_value {
+        let _ = writeln!(
+            out,
+            "(func {} (param $j i32) (param $dst i32)",
+            js_to_struct_sym(&layout.name)
+        );
+    } else {
+        let tag = tags.get(&ty).copied().unwrap_or(0);
+        let _ = writeln!(
+            out,
+            "(func {} (param $j i32) (result i32)",
+            js_to_struct_sym(&layout.name)
+        );
+        out.push_str("  (local $o i32)\n");
+        let _ = writeln!(
+            out,
+            "  (i32.const {}) (i32.const {}) (call $malloc) (local.set $o)",
+            layout.size, tag
+        );
+    }
+    let base = if is_value {
+        "(local.get $dst)"
+    } else {
+        "(local.get $o)"
+    };
     for f in &layout.fields {
-        let dst = addr_at("(local.get $o)", f.offset);
+        let dst = addr_at(base, f.offset);
         let jsval = format!(
             "(local.get $j) (i32.const {}) (call {})",
             strings[&f.name],
             bridge_sym("get")
         );
-        if let Some(val) = value_from_js(interner, mir, &jsval, f.ty) {
-            let store = store_instr_for(interner, f.ty);
-            let _ = writeln!(out, "  {dst} {val} ({store})");
-        } else {
-            // Skipped field: zero its whole footprint (memory.fill: dst, value, len).
+        if !write_from_js(out, "  ", interner, mir, &dst, &jsval, f.ty) {
             let (size, _) = scalar_size(interner, f.ty);
             let _ = writeln!(
                 out,
@@ -251,7 +297,10 @@ fn emit_js_to_struct(
             );
         }
     }
-    out.push_str("  (local.get $o)\n)\n");
+    if !is_value {
+        out.push_str("  (local.get $o)\n");
+    }
+    out.push_str(")\n");
 }
 
 /// `$array_to_js_t<id>`: a Dream `elem[]` -> a JS array, deep-copying each element.
@@ -296,13 +345,11 @@ fn emit_js_to_array(
     strings: &IndexMap<String, u32>,
 ) {
     let (esize, _) = scalar_size(interner, elem);
-    let store = store_instr_for(interner, elem);
     let jsval = format!(
         "(local.get $j) (local.get $i) (call {}) (call {})",
         bridge_sym("box_int"),
         bridge_sym("index_get")
     );
-    let val = value_from_js(interner, mir, &jsval, elem).expect("array element is marshalable");
     let _ = writeln!(
         out,
         "(func {} (param $j i32) (result i32)",
@@ -327,7 +374,9 @@ fn emit_js_to_array(
     let dst = format!(
         "(local.get $o) (i32.const 4) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)"
     );
-    let _ = writeln!(out, "    {dst} {val} ({store})");
+    if !write_from_js(out, "    ", interner, mir, &dst, &jsval, elem) {
+        crate::internal_error!("array element should be marshalable");
+    }
     out.push_str("    (local.get $i) (i32.const 1) (i32.add) (local.set $i)\n");
     out.push_str("    (br $lp)))\n");
     out.push_str("  (local.get $o)\n)\n");

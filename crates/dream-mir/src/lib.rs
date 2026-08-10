@@ -184,7 +184,13 @@ pub enum Statement {
     /// position (e.g. a capturing closure passed to `WebWorker`/a method-group value) has no
     /// result to assign, and materializing one anyway would emit a `local.set`/`drop` with nothing
     /// on the stack.
-    IndirectCall { target: Operand, args: Vec<Operand> },
+    IndirectCall {
+        target: Operand,
+        /// Interned `fun(...): ret` shape for the `call_indirect` type immediate (see
+        /// [`Rvalue::IndirectCall`]).
+        sig: TypeId,
+        args: Vec<Operand>,
+    },
     /// The `print`/`println` builtins, lowered to the host `print_*` imports. `ty` is the argument's
     /// interned type (selecting `$print_int`/`$print_char`/`$print_string`); `newline` appends `\n`.
     Print {
@@ -377,9 +383,12 @@ pub enum Rvalue {
         callee: Callee,
         args: Vec<Operand>,
     },
-    /// An indirect call through a function-pointer operand.
+    /// An indirect call through a raw function-table index (`target` is `int`). `sig` is the
+    /// interned `fun(...): ret` shape selecting the `call_indirect` type immediate — not carried on
+    /// `target`'s type, so ARC never treats a table index as a reference `fun`/funcbox.
     IndirectCall {
         target: Operand,
+        sig: TypeId,
         args: Vec<Operand>,
     },
     /// A dynamically-dispatched interface method call. Lowered to a call to the generated dispatch

@@ -226,36 +226,12 @@ impl<'a> Analyzer<'a> {
         self.hir.last = self.build_funcbox(raw, None, func_ty);
     }
 
-    /// Appends `Closure.retain(env);` as a statement: bumps the captured environment's (a
-    /// `CaptureCell<T>`, reinterpreted as `object`) reference count with no matching release, so it
-    /// outlives the enclosing function's own scope-exit release of its `let`/parameter slot — see
-    /// `src/stdlib/core/closure.dream`'s doc comment for the full leak-vs-dangle tradeoff this
-    /// buys. A no-op (returns `false`) if the `Closure` intrinsics are unavailable.
-    pub(in crate::analyzer) fn hir_retain_env(&mut self, env: HExpr) -> bool {
-        let Some(def) = self.closure_intrinsic("retain") else {
-            return false;
-        };
-        let void_ty = self.type_ctx.interner.void();
-        let object_ty = self.type_ctx.interner.object();
-        let arg = HExpr::new(object_ty, HExprKind::Cast(Box::new(env)));
-        self.push_stmt(HStmt::Expr(HExpr::new(
-            void_ty,
-            HExprKind::Call {
-                callee: Callee {
-                    def,
-                    instance: vec![],
-                    ret: void_ty,
-                },
-                args: vec![arg],
-            },
-        )));
-        true
-    }
-
     /// Like [`hir_set_func_value`], but wraps the box around a *captured* environment (a
     /// `CaptureCell<T>` pointer, reinterpreted to `int` — see [`build_funcbox`]) instead of a null one:
     /// the lambda's own lifted function reads it back apart at its own prologue (see
     /// `Analyzer::hir_begin_function`). Drops coverage if the name is not a registered function def.
+    /// The funcbox owns a retain on `env_cell` (via `$funcbox_new`); the creator's scope-exit release
+    /// of the cell is balanced by that ownership transfer.
     pub(in crate::analyzer) fn hir_set_capturing_func_value(
         &mut self,
         name: &str,
@@ -290,8 +266,9 @@ impl<'a> Analyzer<'a> {
     /// a single `CaptureCell<T>` — see the lifted function's receiving half,
     /// `Analyzer::receive_closure_captures`. Each cell is written into the array as an ordinary
     /// `object[]` store, so the emitter's normal container-store rule retains it on the array's
-    /// behalf (see `mir::passes::rc`'s doc comment) — only the array itself, not each individual
-    /// cell, needs the explicit permanent [`Self::hir_retain_env`] to outlive this scope's exit.
+    /// behalf (see `mir::passes::rc`'s doc comment). The array itself is owned by the funcbox
+    /// (`$funcbox_new` retains it); the `__closure_env_array` local's scope-exit release is
+    /// balanced by that ownership transfer.
     pub(in crate::analyzer) fn hir_set_multi_capturing_func_value(
         &mut self,
         name: &str,
@@ -342,7 +319,6 @@ impl<'a> Analyzer<'a> {
                 value,
             });
         }
-        self.hir_retain_env(array_read());
 
         let ret_ty = self.type_ctx.lower(ret);
         let raw = HExpr::new(
@@ -432,6 +408,12 @@ impl<'a> Analyzer<'a> {
     /// Shared unboxing logic for an indirect call through a boxed `fun(...)` value `boxed` — see
     /// [`hir_set_indirect_call`]. Used for both named locals and arbitrary `fun(...)`-typed
     /// expression callees.
+    ///
+    /// When `boxed` is already a local, both `funcbox_env` / `funcbox_funcidx` reads use that local
+    /// directly (no extra ARC). Complex callees are materialized into a temporary `__closure_box`
+    /// (borrowed retain) and that temporary is cleared to null after the call so the retain does
+    /// not keep the funcbox alive until function exit — otherwise a loop that calls `f()` each
+    /// iteration would leak the last (or every) closure via the stale temp.
     pub(in crate::analyzer) fn hir_set_indirect_call_expr(
         &mut self,
         boxed: HExpr,
@@ -451,20 +433,27 @@ impl<'a> Analyzer<'a> {
         };
         let int_ty = self.type_ctx.interner.int();
         let box_ty = boxed.ty;
-        // Materialize the box into a fresh local so both reads below see the same value.
-        let box_local = LocalId(self.hir.next_local);
-        self.hir.next_local += 1;
-        self.hir.local_decls.push(HLocal {
-            id: box_local,
-            name: "__closure_box".to_string(),
-            ty: box_ty,
-        });
-        self.push_stmt(HStmt::Let {
-            local: box_local,
-            ty: box_ty,
-            value: boxed,
-        });
-        let box_read = || HExpr::new(box_ty, HExprKind::Var(Binding::Local(box_local)));
+
+        let (box_expr, scratch_local) = if matches!(boxed.kind, HExprKind::Var(Binding::Local(_))) {
+            (boxed, None)
+        } else {
+            let box_local = LocalId(self.hir.next_local);
+            self.hir.next_local += 1;
+            self.hir.local_decls.push(HLocal {
+                id: box_local,
+                name: "__closure_box".to_string(),
+                ty: box_ty,
+            });
+            self.push_stmt(HStmt::Let {
+                local: box_local,
+                ty: box_ty,
+                value: boxed,
+            });
+            (
+                HExpr::new(box_ty, HExprKind::Var(Binding::Local(box_local))),
+                Some(box_local),
+            )
+        };
 
         let Some(&(env_global, _)) = self.hir.globals.get("__closure_env") else {
             self.hir.last = None;
@@ -478,7 +467,7 @@ impl<'a> Analyzer<'a> {
                     instance: vec![],
                     ret: int_ty,
                 },
-                args: vec![box_read()],
+                args: vec![box_expr.clone()],
             },
         );
         self.push_stmt(HStmt::Assign {
@@ -486,29 +475,66 @@ impl<'a> Analyzer<'a> {
             value: env_call,
         });
 
-        // `target`'s type must stay `box_ty` (the `fun(...)` shape, e.g. `fun(int,int):int`), *not*
-        // `int` — despite the funcidx being a plain `i32` at runtime, the emitter derives the
-        // `call_indirect` signature from this type (see `func_sig`/`Rvalue::IndirectCall` emission),
-        // so mislabeling it as `int` would emit the wrong (fallback) `call_indirect` type immediate.
+        // Funcidx is a plain `int` at runtime. The `fun(...)` shape for `call_indirect` lives on
+        // `IndirectCall.sig` (not on `target`'s type) so ARC does not release a table index as a
+        // funcbox when `TyKind::Func` is a reference.
         let funcidx_call = HExpr::new(
-            box_ty,
+            int_ty,
             HExprKind::Call {
                 callee: Callee {
                     def: funcidx_def,
                     instance: vec![],
                     ret: int_ty,
                 },
-                args: vec![box_read()],
+                args: vec![box_expr],
             },
         );
         let ret_ty = self.type_ctx.lower(ret);
-        self.hir.last = Some(HExpr::new(
+        let call = HExpr::new(
             ret_ty,
             HExprKind::IndirectCall {
                 target: Box::new(funcidx_call),
+                sig: box_ty,
                 args: collected,
             },
-        ));
+        );
+
+        if let Some(box_local) = scratch_local {
+            // Drop the scratch retain immediately after the call so the funcbox's lifetime follows
+            // the source expression, not the enclosing function.
+            let clear = HExpr::new(box_ty, HExprKind::IntLit(0));
+            if matches!(self.type_ctx.interner.kind(ret_ty), dream_types::TyKind::Void) {
+                self.push_stmt(HStmt::Expr(call));
+                self.push_stmt(HStmt::Assign {
+                    place: HPlace::Local(box_local),
+                    value: clear,
+                });
+                self.hir.last = Some(HExpr::new(ret_ty, HExprKind::IntLit(0)));
+            } else {
+                let result_local = LocalId(self.hir.next_local);
+                self.hir.next_local += 1;
+                self.hir.local_decls.push(HLocal {
+                    id: result_local,
+                    name: "__indirect_result".to_string(),
+                    ty: ret_ty,
+                });
+                self.push_stmt(HStmt::Let {
+                    local: result_local,
+                    ty: ret_ty,
+                    value: call,
+                });
+                self.push_stmt(HStmt::Assign {
+                    place: HPlace::Local(box_local),
+                    value: clear,
+                });
+                self.hir.last = Some(HExpr::new(
+                    ret_ty,
+                    HExprKind::Var(Binding::Local(result_local)),
+                ));
+            }
+        } else {
+            self.hir.last = Some(call);
+        }
     }
 
     /// Records the HIR for a resolved call to a generic free function. `base_name` is the template's

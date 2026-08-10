@@ -23,6 +23,8 @@ pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: T
         // An interface-typed value is a concrete tagged object; release it through the
         // tag-dispatching `$release_object` so the concrete type's deep release runs.
         TyKind::Object | TyKind::Interface(..) => "$release_object".to_string(),
+        // Funcboxes deep-release their env word; `$release_generic` would only free the box.
+        TyKind::Func(..) => "$release_funcbox".to_string(),
         _ => "$release_generic".to_string(),
     }
 }

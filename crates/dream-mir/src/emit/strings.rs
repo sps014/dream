@@ -200,7 +200,7 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::Tuple { elems: args, .. } => {
             args.iter().for_each(|a| strings_in_operand(a, out))
         }
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             strings_in_operand(target, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
@@ -260,7 +260,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(receiver, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
-        Statement::IndirectCall { target, args } => {
+        Statement::IndirectCall { target, args, .. } => {
             strings_in_operand(target, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
@@ -354,7 +354,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
             | Rvalue::UnionNew { args, .. }
             | Rvalue::ArrayLit { elems: args, .. }
             | Rvalue::Tuple { elems: args, .. } => args.iter().for_each(|a| in_operand(a, out)),
-            Rvalue::IndirectCall { target, args } => {
+            Rvalue::IndirectCall { target, args, .. } => {
                 in_operand(target, out);
                 args.iter().for_each(|a| in_operand(a, out));
             }

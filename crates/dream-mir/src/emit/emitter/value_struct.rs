@@ -293,8 +293,8 @@ impl Emitter<'_> {
                 ..
             } => self.construct_value_union(&dst, *uty, *variant, args),
             Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
-            Rvalue::IndirectCall { target, args } => {
-                self.emit_indirect_sret_call(&dst, target, args)
+            Rvalue::IndirectCall { target, sig, args } => {
+                self.emit_indirect_sret_call(&dst, target, *sig, args)
             }
             Rvalue::InterfaceCall {
                 receiver,
@@ -307,6 +307,19 @@ impl Emitter<'_> {
             Rvalue::Use(Operand::Copy(src)) => {
                 let src = src.clone();
                 self.emit_value_copy(&dst, |s| s.emit_place_addr(&src), ty);
+            }
+            // JS → value struct: fill `dst` in place via `$js_to_<Name>(j, dst)` (no heap alloc).
+            Rvalue::Cast(o, from, to)
+                if matches!(self.interner.kind(*from), TyKind::Js)
+                    && self.interner.is_value_type(*to) =>
+            {
+                if let Some(sym) = js_marshal::cast_sym(self.interner, self.layouts, *from, *to) {
+                    self.emit_operand(o);
+                    dst(self);
+                    self.line(&format!("     (call {})", sym));
+                } else {
+                    crate::internal_error!("missing js→value-struct marshaler");
+                }
             }
             other => {
                 // Any other value-struct-producing rvalue (e.g. a `UnionField` payload extraction)

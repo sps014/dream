@@ -181,9 +181,13 @@ pub enum HExprKind {
         callee: Callee,
         args: Vec<HExpr>,
     },
-    /// An indirect call through a function-typed value.
+    /// An indirect call through a raw function-table index (`target` is always `int`-typed).
+    /// `sig` is the interned `fun(...): ret` shape used for the `call_indirect` type immediate —
+    /// kept separate from `target` so the funcidx is never mis-typed as a reference `fun` value
+    /// (which would make ARC release a table index as if it were a funcbox).
     IndirectCall {
         target: Box<HExpr>,
+        sig: TypeId,
         args: Vec<HExpr>,
     },
     /// A dynamically-dispatched interface method call `receiver.method(args)` where `receiver`'s

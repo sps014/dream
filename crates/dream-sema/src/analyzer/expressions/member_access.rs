@@ -463,7 +463,6 @@ impl<'a> Analyzer<'a> {
             .insert(name.clone(), vec![(recv_name, receiver_ty.clone())]);
 
         let cell = self.hir_build_cell_new(receiver_ty, receiver_hir)?;
-        self.hir_retain_env(cell.clone());
         self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
         Some(func_ty)
     }

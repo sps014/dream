@@ -117,7 +117,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
                 hir_expr_edges(a, out);
             }
         }
-        K::IndirectCall { target, args } => {
+        K::IndirectCall { target, args, .. } => {
             hir_expr_edges(target, out);
             for a in args {
                 hir_expr_edges(a, out);

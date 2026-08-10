@@ -117,7 +117,9 @@ pub enum TyKind {
     Interface(DefId, Vec<TypeId>),
     /// A C-style enum definition (no type arguments; values are `int` at runtime).
     Enum(DefId),
-    /// A first-class function value `fun(params...): ret`, an `i32` table index at runtime.
+    /// A first-class function value `fun(params...): ret`. At runtime this is a heap-allocated
+    /// 2-word funcbox `[funcidx][env]` (see `runtime/closure.wat`), reference-counted like other
+    /// heap values so a capturing lambda's environment is reclaimed when the last `fun` drops.
     Func(Vec<TypeId>, TypeId),
     /// A positional product type `(T, U, …)` (arity ≥ 2). Structural identity by element
     /// `TypeId`s; always stored inline as a value type (never a heap reference for the envelope).
@@ -131,7 +133,7 @@ pub enum TyKind {
 
 impl TyKind {
     /// True if a value of this type is a heap-allocated, reference-counted object (strings, arrays,
-    /// objects, structs, and unions).
+    /// objects, structs, unions, interfaces, and first-class `fun` values).
     pub fn is_reference(&self) -> bool {
         matches!(
             self,
@@ -141,6 +143,7 @@ impl TyKind {
                 | TyKind::Struct(_, _)
                 | TyKind::Union(_, _)
                 | TyKind::Interface(_, _)
+                | TyKind::Func(_, _)
         )
     }
 }

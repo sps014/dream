@@ -100,8 +100,8 @@ impl Emitter<'_> {
                     self.line("     (drop)");
                 }
             }
-            Statement::IndirectCall { target, args } => {
-                if self.emit_indirect_call(target, args).is_some() {
+            Statement::IndirectCall { target, sig, args } => {
+                if self.emit_indirect_call(target, *sig, args).is_some() {
                     self.line("     (drop)");
                 }
             }

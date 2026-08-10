@@ -140,7 +140,7 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
                 remap_operand(a, base);
             }
         }
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             remap_operand(target, base);
             for a in args {
                 remap_operand(a, base);
@@ -212,7 +212,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
                 remap_operand(a, base);
             }
         }
-        Statement::IndirectCall { target, args } => {
+        Statement::IndirectCall { target, args, .. } => {
             remap_operand(target, base);
             for a in args {
                 remap_operand(a, base);

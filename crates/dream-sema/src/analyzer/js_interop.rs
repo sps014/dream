@@ -223,13 +223,13 @@ impl<'a> Analyzer<'a> {
     /// registered.
     pub(super) fn unbox_from_js(&mut self, e: HExpr, target: TypeId) -> HExpr {
         let target_stripped = target;
-        // A reference struct/class target reconstructs from the JS object's properties via the
-        // generated `$js_to_<Type>` marshaler that the `Cast` dispatches to.
+        // A struct/class target reconstructs from the JS object's properties via the generated
+        // `$js_to_<Type>` marshaler that the `Cast` dispatches to (heap result for reference
+        // classes; in-place `(j, dst)` fill for value structs — see `mir/emit/js_marshal.rs`).
         if matches!(
             self.type_ctx.interner.kind(target_stripped),
             TyKind::Struct(..)
-        ) && self.type_ctx.interner.is_reference(target_stripped)
-        {
+        ) {
             return HExpr::new(target_stripped, HExprKind::Cast(Box::new(e)));
         }
         let TyKind::Prim(p) = self.type_ctx.interner.kind(target_stripped).clone() else {

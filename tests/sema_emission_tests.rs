@@ -1025,7 +1025,7 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
 
     let mut mb = FunctionBuilder::new("main", void);
     mb.set_def(DefId(11), vec![]);
-    let f = mb.new_local(functy, Some("f".into()));
+    let f = mb.new_local(int, Some("f".into()));
     let r = mb.new_local(int, Some("r".into()));
     mb.assign(
         Place::Local(f),
@@ -1039,6 +1039,7 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
         Place::Local(r),
         Rvalue::IndirectCall {
             target: Operand::Copy(Place::Local(f)),
+            sig: functy,
             args: vec![Operand::Const(Const::Int(2)), Operand::Const(Const::Int(3))],
         },
     );
@@ -1938,5 +1939,35 @@ fn test_js_fuses_get_call_as_string() {
         wat.contains("(call $js_get_call_as_string)"),
         "fused get+call+unbox:\n{}",
         wat
+    );
+}
+
+#[test]
+fn test_js_to_value_struct_fills_in_place() {
+    // A `js` → value `struct` cast must emit the in-place `$js_to_<Name>(j, dst)` filler (no
+    // malloc result), and the store site must pass the destination address as the second arg.
+    let code = format!(
+        "{JS_STUB}
+        struct Point {{
+            public x: int;
+            public y: int;
+        }}
+        fun entry(): int {{
+            let p: Point = js.global(\"origin\");
+            return p.x + p.y;
+        }}"
+    );
+    let wat = emit_hir_to_module(&code);
+    assert!(
+        wat.contains("(func $js_to_Point (param $j i32) (param $dst i32)"),
+        "value-struct js_to must take (j, dst)"
+    );
+    assert!(
+        !wat.contains("(func $js_to_Point (param $j i32) (result i32)"),
+        "value-struct js_to must not return a heap pointer"
+    );
+    assert!(
+        wat.contains("(call $js_to_Point)"),
+        "assignment should call in-place filler"
     );
 }

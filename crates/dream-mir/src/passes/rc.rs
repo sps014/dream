@@ -229,7 +229,7 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         | Rvalue::UnionNew { args, .. }
         | Rvalue::ArrayLit { elems: args, .. }
         | Rvalue::Tuple { elems: args, .. } => args.iter().for_each(&mut check),
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             check(target);
             args.iter().for_each(&mut check);
         }
@@ -269,8 +269,17 @@ fn is_borrowed_copy(rvalue: &Rvalue, interner: &TypeInterner) -> bool {
         // identity: the destination local aliases the source's reference, so it is a borrow and must
         // be retained to balance its scope-exit release — otherwise the shared pointer is
         // double-freed. Reference→primitive unboxes and numeric casts produce fresh values.
+        //
+        // An `int`→reference cast is the same kind of alias: `$__closure_env` (and similar)
+        // reinterprets an existing heap pointer as a typed ref without transferring ownership — the
+        // funcbox (or other owner) still holds the +1. Treating it as owned would let the callee's
+        // scope-exit release steal that count and free the env out from under the closure.
         Rvalue::Cast(Operand::Copy(_), from, to) => {
-            interner.is_reference(*from) && interner.is_reference(*to)
+            if !interner.is_reference(*to) {
+                return false;
+            }
+            interner.is_reference(*from)
+                || matches!(interner.kind(*from), dream_types::TyKind::Prim(dream_types::PrimTy::Int))
         }
         _ => false,
     }

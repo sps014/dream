@@ -129,8 +129,8 @@ impl Emitter<'_> {
                     self.line(&format!("     (call ${sym})"));
                 }
             }
-            Rvalue::IndirectCall { target, args } => {
-                self.emit_indirect_call(target, args);
+            Rvalue::IndirectCall { target, sig, args } => {
+                self.emit_indirect_call(target, *sig, args);
             }
             Rvalue::InterfaceCall {
                 receiver,

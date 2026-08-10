@@ -360,7 +360,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             args.iter()
                 .for_each(|a| collect_global_reads_operand(a, out));
         }
-        Statement::IndirectCall { target, args } => {
+        Statement::IndirectCall { target, args, .. } => {
             collect_global_reads_operand(target, out);
             args.iter()
                 .for_each(|a| collect_global_reads_operand(a, out));
@@ -415,7 +415,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::Tuple { elems: args, .. } => args
             .iter()
             .for_each(|a| collect_global_reads_operand(a, out)),
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             collect_global_reads_operand(target, out);
             args.iter()
                 .for_each(|a| collect_global_reads_operand(a, out));

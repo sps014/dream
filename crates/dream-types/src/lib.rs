@@ -51,6 +51,11 @@ mod tests {
         assert!(i.is_reference(i.string()));
         let arr = i.array(i.int());
         assert!(i.is_reference(arr));
+        let fun = i.func(vec![i.int()], i.int());
+        assert!(
+            i.is_reference(fun),
+            "fun(...) values are ARC-managed funcboxes"
+        );
     }
 
     #[test]

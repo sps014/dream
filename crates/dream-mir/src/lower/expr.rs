@@ -87,11 +87,12 @@ impl Lowerer<'_> {
                     args: lowered,
                 }
             }
-            HExprKind::IndirectCall { target, args } => {
+            HExprKind::IndirectCall { target, sig, args } => {
                 let t = self.lower_operand(target);
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                 Rvalue::IndirectCall {
                     target: t,
+                    sig: *sig,
                     args: lowered,
                 }
             }

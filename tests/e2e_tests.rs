@@ -337,13 +337,16 @@ fn codegen_is_deterministic() {
     if !cases_dir.exists() {
         return;
     }
-    // Exercise structs, enums, discriminated unions, generics, strings, and the object protocol.
+    // Exercise classes, enums, unions, generics, strings, interfaces, async, and object protocol.
     let fixtures = [
-        "structs",
+        "classes",
         "enum_basic",
         "union_to_string",
         "generic_structs",
         "json_derive",
+        "object_protocol",
+        "interfaces",
+        "async_basic",
     ];
     for name in fixtures {
         let src = cases_dir.join(format!("{}.dream", name));

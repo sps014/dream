@@ -355,11 +355,14 @@ impl Lowerer<'_> {
                         args: lowered,
                     });
                 }
-                HExprKind::IndirectCall { target, args } if !self.interner.is_reference(e.ty) => {
+                HExprKind::IndirectCall { target, sig, args }
+                    if !self.interner.is_reference(e.ty) =>
+                {
                     let t = self.lower_operand(target);
                     let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                     self.b.push(Statement::IndirectCall {
                         target: t,
+                        sig: *sig,
                         args: lowered,
                     });
                 }

@@ -58,19 +58,13 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
     // coercion pass; here we only permit the assignment to type-check. `js <-> js` is the identity
     // handled above.
     // A struct/class also deep-copies into a `js` object and reconstructs from one (the backend
-    // generates the `$<Type>_to_js` / `$js_to_<Type>` marshalers); reconstruction targets a reference
-    // class only.
+    // generates the `$<Type>_to_js` / `$js_to_<Type>` marshalers — heap result for classes, in-place
+    // fill for value structs).
     if matches!(tk, TyKind::Js) {
         return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..));
     }
     if matches!(vk, TyKind::Js) {
-        if matches!(tk, TyKind::Prim(_)) {
-            return true;
-        }
-        if matches!(tk, TyKind::Struct(..)) {
-            return interner.is_reference(target);
-        }
-        return false;
+        return matches!(tk, TyKind::Prim(_) | TyKind::Struct(..));
     }
 
     // Enum <-> int both directions.

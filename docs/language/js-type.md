@@ -91,15 +91,28 @@ class Point {
 js.global.render(Point(3, 4));   // -> render({ x: 3, y: 4 })
 ```
 
-Assigning a `js` object to a `class`-typed variable rebuilds an instance by reading each declared
-field — the constructor is not called:
+Assigning a `js` object to a `class`- or value-`struct`-typed variable rebuilds it by reading
+each declared field — the constructor is not called. Classes allocate a heap instance; value
+structs fill the destination slot in place:
 
 ```dream
+class Point {
+    public x: int;
+    public y: int;
+    public constructor(x: int, y: int) { this.x = x; this.y = y; }
+}
+
 let p: Point = js.global.originPoint();
 ```
 
-!!! note
-    Reconstruction targets reference `class` types; a value `struct` return is not supported yet.
+```dream
+struct Vec2 {
+    public x: int;
+    public y: int;
+}
+
+let v: Vec2 = js.global.originVec();
+```
 
 ## Getting values back out
 
@@ -144,4 +157,5 @@ For a typed extern that returns a Promise (`@js(...) extern async fun getUser(..
 - [`sample/interop/js.dream`](https://github.com/sps014/dream/blob/main/sample/interop/js.dream)
 - [`sample/interop/slots.dream`](https://github.com/sps014/dream/blob/main/sample/interop/slots.dream)
 - [`sample/interop/structs.dream`](https://github.com/sps014/dream/blob/main/sample/interop/structs.dream)
+- [`sample/interop/value_structs.dream`](https://github.com/sps014/dream/blob/main/sample/interop/value_structs.dream)
 - [`sample/interop/async_js.dream`](https://github.com/sps014/dream/blob/main/sample/interop/async_js.dream)

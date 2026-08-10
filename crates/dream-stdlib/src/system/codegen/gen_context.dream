@@ -5,6 +5,39 @@ import system.io;
 import system.collections;
 import system.json;
 
+// One field on a snapshotted declaration type.
+public class GenFieldInfo {
+    public name: string;
+    public type_name: string;
+
+    public constructor(name: string, type_name: string) {
+        this.name = name;
+        this.type_name = type_name;
+    }
+}
+
+// One declaration type snapshotted for an executed `@generator` body.
+public class GenTypeInfo {
+    public name: string;
+    public attributes: List<string>;
+    public fields: List<GenFieldInfo>;
+
+    public constructor(name: string, attributes: List<string>, fields: List<GenFieldInfo>) {
+        this.name = name;
+        this.attributes = attributes;
+        this.fields = fields;
+    }
+
+    public fun has_attribute(attr: string): bool {
+        for (let a in this.attributes) {
+            if (a == attr) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 // One `introducer { ... }` syntax-DSL call site, snapshotted for an executed `@generator` body.
 public class GenSyntaxBlock {
     // Opaque site id; pass back into `GenContext.replace`/`GenContext.error` unchanged.
@@ -29,13 +62,23 @@ public class GenSyntaxBlock {
 // same `GenHost` stdout protocol a sibling `harness.dream` would print by hand.
 public class GenContext {
     blocks: List<GenSyntaxBlock>;
+    types: List<GenTypeInfo>;
     replacements: List<string>;
+    extend_types: List<string>;
+    extend_bodies: List<string>;
+    file_paths: List<string>;
+    file_sources: List<string>;
     error_line: string;
     has_error: bool;
 
-    constructor(blocks: List<GenSyntaxBlock>) {
+    constructor(blocks: List<GenSyntaxBlock>, types: List<GenTypeInfo>) {
         this.blocks = blocks;
+        this.types = types;
         this.replacements = List<string>();
+        this.extend_types = List<string>();
+        this.extend_bodies = List<string>();
+        this.file_paths = List<string>();
+        this.file_sources = List<string>();
         this.error_line = "";
         this.has_error = false;
     }
@@ -52,26 +95,9 @@ public class GenContext {
                 let parsed = Json.parse(text);
                 switch (parsed) {
                     Ok(root) => {
-                        let arr = root.get("blocks").unwrap_or(JsonValue.array());
-                        let blocks = List<GenSyntaxBlock>();
-                        let i = 0;
-                        while (i < arr.length) {
-                            let b = arr.at(i).unwrap_or(JsonValue.none());
-                            let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
-                            let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                            let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                            let splices_json = b.get("splices").unwrap_or(JsonValue.array());
-                            let splices = List<string>();
-                            let j = 0;
-                            while (j < splices_json.length) {
-                                let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                                splices.push(s);
-                                j = j + 1;
-                            }
-                            blocks.push(GenSyntaxBlock(id, name, body, splices));
-                            i = i + 1;
-                        }
-                        return Result.Ok(GenContext(blocks));
+                        let blocks = parse_blocks(root.get("blocks").unwrap_or(JsonValue.array()));
+                        let types = parse_types(root.get("types").unwrap_or(JsonValue.array()));
+                        return Result.Ok(GenContext(blocks, types));
                     }
                     Err(e) => {
                         return Result.Err("failed to parse snapshot JSON: " + e.message());
@@ -85,6 +111,58 @@ public class GenContext {
         // Unreachable: every arm above returns; satisfies the flow checker, which treats a
         // `switch` statement without a `default` arm as a non-exhaustive branch.
         return Result.Err("unreachable");
+    }
+
+    static fun parse_blocks(arr: JsonValue): List<GenSyntaxBlock> {
+        let blocks = List<GenSyntaxBlock>();
+        let i = 0;
+        while (i < arr.length) {
+            let b = arr.at(i).unwrap_or(JsonValue.none());
+            let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
+            let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+            let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+            let splices_json = b.get("splices").unwrap_or(JsonValue.array());
+            let splices = List<string>();
+            let j = 0;
+            while (j < splices_json.length) {
+                let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                splices.push(s);
+                j = j + 1;
+            }
+            blocks.push(GenSyntaxBlock(id, name, body, splices));
+            i = i + 1;
+        }
+        return blocks;
+    }
+
+    static fun parse_types(arr: JsonValue): List<GenTypeInfo> {
+        let types = List<GenTypeInfo>();
+        let i = 0;
+        while (i < arr.length) {
+            let t = arr.at(i).unwrap_or(JsonValue.none());
+            let name = t.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+            let attrs_json = t.get("attributes").unwrap_or(JsonValue.array());
+            let attributes = List<string>();
+            let ai = 0;
+            while (ai < attrs_json.length) {
+                let a = attrs_json.at(ai).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                attributes.push(a);
+                ai = ai + 1;
+            }
+            let fields_json = t.get("fields").unwrap_or(JsonValue.array());
+            let fields = List<GenFieldInfo>();
+            let fi = 0;
+            while (fi < fields_json.length) {
+                let f = fields_json.at(fi).unwrap_or(JsonValue.none());
+                let fname = f.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                let ftype = f.get("type_name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                fields.push(GenFieldInfo(fname, ftype));
+                fi = fi + 1;
+            }
+            types.push(GenTypeInfo(name, attributes, fields));
+            i = i + 1;
+        }
+        return types;
     }
 
     // Every snapshotted `name { ... }` call site (e.g. `ctx.syntax_blocks("quote")`).
@@ -103,9 +181,32 @@ public class GenContext {
         return this.blocks;
     }
 
+    // Every snapshotted declaration type carrying attribute `attr`.
+    public fun types_with(attr: string): List<GenTypeInfo> {
+        let out = List<GenTypeInfo>();
+        for (let t in this.types) {
+            if (t.has_attribute(attr)) {
+                out.push(t);
+            }
+        }
+        return out;
+    }
+
     // Rewrites `block`'s call site to the Dream expression `dream_expr` before type-checking.
     public fun replace(block: GenSyntaxBlock, dream_expr: string): void {
         this.replacements.push(block.id.to_string() + "\t" + dream_expr);
+    }
+
+    // Queues synthesized `extend Type { ... }` source for the host to merge before type-checking.
+    public fun emit_extend(type_name: string, body: string): void {
+        this.extend_types.push(type_name);
+        this.extend_bodies.push(body);
+    }
+
+    // Queues a synthetic Dream source file for the host to parse and merge.
+    public fun emit_file(path: string, source: string): void {
+        this.file_paths.push(path);
+        this.file_sources.push(source);
     }
 
     // Queues a generate-time diagnostic for `block` (surfaces as `CompileError::Generator`).
@@ -139,5 +240,23 @@ public class GenContext {
         for (let line in this.replacements) {
             System.println(line);
         }
+        let ei = 0;
+        while (ei < this.extend_types.length) {
+            System.println(GenHost.emit_extend_marker());
+            System.println(this.extend_types.at(ei).unwrap_or(""));
+            System.println(escape_emit_line(this.extend_bodies.at(ei).unwrap_or("")));
+            ei = ei + 1;
+        }
+        let fi = 0;
+        while (fi < this.file_paths.length) {
+            System.println(GenHost.emit_file_marker());
+            System.println(this.file_paths.at(fi).unwrap_or(""));
+            System.println(escape_emit_line(this.file_sources.at(fi).unwrap_or("")));
+            fi = fi + 1;
+        }
     }
+}
+
+fun escape_emit_line(s: string): string {
+    return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
 }

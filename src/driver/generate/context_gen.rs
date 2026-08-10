@@ -28,7 +28,7 @@ pub fn expand_context_generators(
     let gens: Vec<RegisteredGenerator> = ctx
         .registered
         .iter()
-        .filter(|g| g.has_context_body && !g.syntax_blocks.is_empty())
+        .filter(|g| g.has_context_body)
         .cloned()
         .collect();
     let mut handled = HashSet::new();
@@ -45,9 +45,6 @@ pub fn expand_context_generators(
                     site_ids.push(id);
                 }
             }
-        }
-        if site_ids.is_empty() {
-            continue;
         }
         handled.insert(gen.name.clone());
 
@@ -66,9 +63,15 @@ pub fn expand_context_generators(
         {
             let snapshot = build_snapshot(ctx, &site_ids);
             match run_context_body(&gen, &snapshot) {
-                Ok(replacements) => {
-                    for (id, source) in replacements {
+                Ok(output) => {
+                    for (id, source) in output.replacements {
                         ctx.replace(id, source);
+                    }
+                    for (type_name, body) in output.extend_emits {
+                        ctx.emit_extend(type_name, body);
+                    }
+                    for (path, source) in output.file_emits {
+                        ctx.emit_file(path, source);
                     }
                 }
                 Err(err) => match err {
@@ -89,7 +92,7 @@ pub fn expand_context_generators(
 fn run_context_body(
     gen: &RegisteredGenerator,
     snapshot: &str,
-) -> Result<Vec<(SyntaxNodeId, String)>, HarnessError> {
+) -> Result<super::syntax_gen::HarnessOutput, HarnessError> {
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
     let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 

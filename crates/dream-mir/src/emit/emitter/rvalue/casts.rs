@@ -34,7 +34,15 @@ impl Emitter<'_> {
     pub(super) fn emit_cast(&mut self, o: &Operand, from: TypeId, to: TypeId) {
         // A struct/class <-> `js` cast routes through the generated deep-copy marshalers (see
         // `js_marshal`); everything else falls through to the primitive box/unbox path below.
+        // Value-struct reconstruction is in-place (`$js_to_Name(j, dst)`) and only valid via
+        // [`emit_value_store`](Self::emit_value_store) — never as a stack-producing call.
         if let Some(sym) = js_marshal::cast_sym(self.interner, self.layouts, from, to) {
+            if matches!(self.interner.kind(from), TyKind::Js) && self.interner.is_value_type(to) {
+                crate::internal_error!(
+                    "js→value-struct cast must be stored in place (got stack emit of {})",
+                    sym
+                );
+            }
             self.emit_operand(o);
             self.line(&format!("     (call {})", sym));
             return;

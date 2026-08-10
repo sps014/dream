@@ -292,7 +292,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(receiver, f);
             args.iter().for_each(|a| operand_reads(a, f));
         }
-        Statement::IndirectCall { target, args } => {
+        Statement::IndirectCall { target, args, .. } => {
             operand_reads(target, f);
             args.iter().for_each(|a| operand_reads(a, f));
         }
@@ -354,7 +354,7 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         | Rvalue::UnionNew { args, .. }
         | Rvalue::ArrayLit { elems: args, .. }
         | Rvalue::Tuple { elems: args, .. } => args.iter().for_each(|a| operand_reads(a, f)),
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             operand_reads(target, f);
             args.iter().for_each(|a| operand_reads(a, f));
         }

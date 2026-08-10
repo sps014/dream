@@ -1,12 +1,13 @@
 module system.core;
 
-// Compiler-internal support for arrow-lambda closures (Milestone B: capturing closures). Not a
-// user-facing API — every call site is emitted directly by the analyzer's closure-lowering code,
-// never reached through ordinary name resolution.
+// Compiler-internal support for arrow-lambda closures. Not a user-facing API — every call site is
+// emitted directly by the analyzer's closure-lowering code, never reached through ordinary name
+// resolution.
 //
-// A `fun(...)`-typed value is represented at runtime as a 2-word heap box `[funcidx][env]`
-// (`env` is 0 for a non-capturing function/lambda). `funcbox_new` allocates the box;
-// `funcbox_funcidx`/`funcbox_env` read it back apart at an indirect-call site.
+// A `fun(...)`-typed value is a reference-counted 2-word heap box `[funcidx][env]` (`env` is 0 for
+// a non-capturing function/lambda). `funcbox_new` allocates the box and retains a non-null env;
+// `$release_funcbox` (wired by the backend for `TyKind::Func`) releases that env when the last
+// fun reference drops. `funcbox_funcidx`/`funcbox_env` read the box apart at an indirect-call site.
 internal class Closure {
     @intrinsic("funcbox_new")
     static extern fun funcbox_new(funcidx: int, env: int): int;
@@ -16,12 +17,4 @@ internal class Closure {
 
     @intrinsic("funcbox_env")
     static extern fun funcbox_env(box: int): int;
-
-    // Bumps a heap value's reference count with no matching release: used to keep a capturing
-    // lambda's environment object alive for the process lifetime once boxed (see
-    // `analyze_lambda`/`hir_set_closure_value`). A deliberate, documented v1 tradeoff — capturing
-    // closures leak their environment rather than risk a use-after-free from a scope-exit release
-    // racing the closure's escape from its creating function. See `docs/language/functions.md`.
-    @intrinsic("retain")
-    static extern fun retain(v: object): void;
 }

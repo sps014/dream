@@ -112,6 +112,16 @@ public class GenHost {
         return "__DREAM_GEN_LOC__";
     }
 
+    /// Marker before an `emit_extend` payload in a successful harness run.
+    public static fun emit_extend_marker(): string {
+        return "__DREAM_GEN_EMIT_EXTEND__";
+    }
+
+    /// Marker before an `emit_file` payload in a successful harness run.
+    public static fun emit_file_marker(): string {
+        return "__DREAM_GEN_EMIT_FILE__";
+    }
+
     /// Formats a span hint the host can attach to a diagnostic (empty field allowed).
     public static fun format_loc(type_name: string, field_name: string): string {
         return type_name + "\t" + field_name;

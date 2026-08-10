@@ -151,14 +151,48 @@ Typical layout:
 | `parser.dream` (optional) | DSL → Dream source (returns `GenResult` on failure) |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
-## Emit-style derives (`@json`)
+## Emit-style derives (`@json` and custom attributes)
 
 For method synthesis on existing types, the shipped example is **`@json`**: mark a class or union
 and the compiler generates converters — no custom `@generator` registration. See
 [JSON](../stdlib/json.md).
 
-Custom emit generators (new attributes that add methods or files) are not yet exposed through
-`GenContext`; use `@json` when JSON round-trip is enough.
+Custom emit generators use `GenContext.types_with` and `emit_extend` / `emit_file` to queue
+synthesized Dream source before type-checking. Declare the attribute schema with `@attribute`,
+then register a `@generator` body that reads matching types from the snapshot:
+
+```dream
+@attribute
+public fun dto(): void { }
+
+@generator
+public fun dto_derive(ctx: GenContext): void {
+    for (let t in ctx.types_with("dto")) {
+        let b = CodeBuilder();
+        b.line("public fun describe(): string {");
+        b.indent();
+        b.line("return \"dto\";");
+        b.dedent();
+        b.line("}");
+        ctx.emit_extend(t.name, b.to_string());
+    }
+}
+```
+
+```dream
+import gen;
+
+@dto
+class Point {
+    public x: int;
+    public y: int;
+}
+```
+
+Full sample: [`sample/generators/dto/`](https://github.com/sps014/dream/tree/main/sample/generators/dto).
+
+A `@generator` with a `GenContext` body runs even when it claims no `@syntax_block` introducers —
+the snapshot still includes every declaration type for `types_with`.
 
 ## Building generated source with `CodeBuilder`
 
@@ -199,10 +233,12 @@ For derive-style metadata on types, use `@json` or the field options documented 
 
 ## Checklist
 
-1. Decide **replace** (DSL) vs **emit** (derive). This guide covers replace; emit today means
-   `@json` or future compiler support.
-2. Add `@generator` and `@syntax_block("intro")` on a function `intro(ctx: GenContext): void`.
-3. Implement `ctx.syntax_blocks("intro")` → `ctx.replace` / `ctx.error`.
+1. Decide **replace** (DSL) vs **emit** (derive). This guide covers both: replace via
+   `syntax_blocks` / `replace`, emit via `types_with` / `emit_extend` / `emit_file`.
+2. Add `@generator` and, for DSL generators, `@syntax_block("intro")` on a function
+   `intro(ctx: GenContext): void`.
+3. Implement `ctx.syntax_blocks("intro")` → `ctx.replace` / `ctx.error`, or
+   `ctx.types_with("attr")` → `ctx.emit_extend` / `ctx.emit_file`.
 4. Register via `[[generators]]` in `dream.toml` or an `import` of the generator module.
 5. Use `CodeBuilder` and `GenResult` for multi-line emit helpers when the DSL needs a parser.
 6. Add a sample under `sample/generators/` or a golden test under `tests/cases/`.
@@ -213,3 +249,4 @@ For derive-style metadata on types, use `@json` or the field options documented 
 - [JSON](../stdlib/json.md) — `@json` derive
 - [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote)
 - [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html)
+- [`sample/generators/dto/`](https://github.com/sps014/dream/tree/main/sample/generators/dto)

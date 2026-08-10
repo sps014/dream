@@ -76,7 +76,7 @@ fn stmt(s: &Statement) -> String {
                 ops(args)
             )
         }
-        Statement::IndirectCall { target, args } => {
+        Statement::IndirectCall { target, args, .. } => {
             format!("indirect_call {}({})", operand(target), ops(args))
         }
         Statement::Print { arg, newline, .. } => {
@@ -162,7 +162,7 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::Binary(op, a, b) => format!("{:?}({}, {})", op, operand(a), operand(b)),
         Rvalue::Unary(op, a) => format!("{:?}({})", op, operand(a)),
         Rvalue::Call { callee, args } => format!("call def{}({})", callee.def.0, ops(args)),
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             format!("call_indirect {}({})", operand(target), ops(args))
         }
         Rvalue::InterfaceCall {

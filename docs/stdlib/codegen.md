@@ -8,7 +8,8 @@ import system.codegen;
 
 Tutorial and samples: [Source generators](../language/generators.md),
 [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote),
-[`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html).
+[`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html),
+[`sample/generators/dto/`](https://github.com/sps014/dream/tree/main/sample/generators/dto).
 
 ## `CodeBuilder`
 
@@ -33,6 +34,27 @@ let src = b.to_string();
 | `append(text)` | Inline text (indent only at line start) |
 | `to_string()` | Final source text |
 
+## `GenFieldInfo`
+
+One field on a snapshotted declaration type.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `name` | `string` | Field name |
+| `type_name` | `string` | Display type (e.g. `int`, `string`) |
+
+## `GenTypeInfo`
+
+One declaration type in the generator snapshot (classes, structs, unions, …).
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `name` | `string` | Type name |
+| `attributes` | `List<string>` | Attribute names on the declaration |
+| `fields` | `List<GenFieldInfo>` | Instance fields (empty for plain enums) |
+
+`has_attribute(attr: string): bool` — whether the type carries attribute `attr`.
+
 ## `GenSyntaxBlock`
 
 One snapshotted `introducer { … }` call site, passed to your `@generator` body.
@@ -47,7 +69,8 @@ One snapshotted `introducer { … }` call site, passed to your `@generator` body
 ## `GenContext`
 
 Handed to an executed `@generator(ctx: GenContext)` function. The compiler loads it from a
-snapshot of every syntax-block site, runs your function, then applies queued replaces and errors.
+snapshot of every syntax-block site and declaration type, runs your function, then applies
+queued replaces, emits, and errors.
 
 Write your generator against these methods:
 
@@ -59,9 +82,21 @@ Every site for introducer `name` (e.g. `ctx.syntax_blocks("quote")`).
 
 Every snapshotted site, regardless of introducer.
 
+#### `types_with(attr: string): List<GenTypeInfo>`
+
+Every snapshotted type carrying attribute `attr` (e.g. `ctx.types_with("dto")`).
+
 #### `replace(block: GenSyntaxBlock, dream_expr: string): void`
 
 Rewrites `block`'s call site to `dream_expr` before type-checking. Queue one line per site.
+
+#### `emit_extend(type_name: string, body: string): void`
+
+Queues synthesized `extend Type { ... }` member source. `body` is the inner block (methods only).
+
+#### `emit_file(path: string, source: string): void`
+
+Queues a synthetic Dream source file for the host to parse and merge.
 
 #### `error(block: GenSyntaxBlock, message: string): void`
 
@@ -106,3 +141,4 @@ Fields: `ok`, `source`, `error`, `error_type`, `error_field`. On failure, call
 | `@json` derive | [JSON](json.md) — compiler builtin, not `GenContext` |
 | Quote sample | [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote) |
 | HTML sample | [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html) |
+| DTO emit sample | [`sample/generators/dto/`](https://github.com/sps014/dream/tree/main/sample/generators/dto) |

@@ -95,7 +95,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             }
             c
         }
-        Statement::IndirectCall { target, args } => {
+        Statement::IndirectCall { target, args, .. } => {
             let mut c = subst_operand(target, known);
             for a in args {
                 c |= subst_operand(a, known);
@@ -149,7 +149,7 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::Tuple { elems: args, .. } => args
             .iter_mut()
             .fold(false, |c, a| c | subst_operand(a, known)),
-        Rvalue::IndirectCall { target, args } => {
+        Rvalue::IndirectCall { target, args, .. } => {
             let mut c = subst_operand(target, known);
             for a in args {
                 c |= subst_operand(a, known);

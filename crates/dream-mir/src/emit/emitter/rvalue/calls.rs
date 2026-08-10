@@ -36,24 +36,24 @@ impl Emitter<'_> {
         }
     }
 
-    /// Emits an indirect call through a boxed `fun(...)` value's raw function-table index `target`
-    /// (already unboxed by the caller — see `Analyzer::hir_set_indirect_call_expr`): pushes `args`
-    /// then `target`, then dispatches through `$__ft` with the signature derived from `target`'s own
-    /// interned type (a `fun(...)` shape, not `int`, despite the funcidx being a plain `i32` at
-    /// runtime — see that HIR builder's comment for why). Returns the callee's WASM result type name
-    /// (`None` for `void`/an unrecognized target type), so callers know whether the trampoline left a
-    /// value on the stack to consume or discard. Shared by [`Rvalue::IndirectCall`] (leaves the result
-    /// on the stack) and [`Statement::IndirectCall`] (drops it — see `emit_stmt`).
+    /// Emits an indirect call through a raw function-table index `target` (already unboxed by the
+    /// caller — see `Analyzer::hir_set_indirect_call_expr`): pushes `args` then `target`, then
+    /// dispatches through `$__ft` with the signature derived from `sig` (the interned `fun(...)`
+    /// shape). Returns the callee's WASM result type name (`None` for `void`/an unrecognized
+    /// signature), so callers know whether the trampoline left a value on the stack to consume or
+    /// discard. Shared by [`Rvalue::IndirectCall`] (leaves the result on the stack) and
+    /// [`Statement::IndirectCall`] (drops it — see `emit_stmt`).
     pub(in crate::emit::emitter) fn emit_indirect_call(
         &mut self,
         target: &Operand,
+        sig: dream_types::TypeId,
         args: &[Operand],
     ) -> Option<&'static str> {
         for a in args {
             self.emit_operand(a);
         }
         self.emit_operand(target);
-        let (sig_name, ret) = func_sig(self.interner, self.operand_ty(target))
+        let (sig_name, ret) = func_sig(self.interner, sig)
             .map(|(name, _, ret)| (name, ret))
             .unwrap_or_else(|| ("$sig___v".to_string(), None));
         self.line(&format!("     (call_indirect $__ft (type {}))", sig_name));
@@ -122,13 +122,14 @@ impl Emitter<'_> {
 
     /// Emits an indirect (funcref) call to a value-struct-returning target using the sret ABI: the
     /// destination address (`dst`) is passed as the hidden leading argument, then the real
-    /// arguments, then the table index dispatched through `$__ft` with the target's sret signature.
+    /// arguments, then the table index dispatched through `$__ft` with `sig`'s sret signature.
     /// Mirrors [`emit_value_sret_call`](Self::emit_value_sret_call) for first-class function values
     /// (e.g. a worker body funcref of type `fun(TIn): TOut` where `TOut` is a struct).
     pub(in crate::emit::emitter) fn emit_indirect_sret_call(
         &mut self,
         dst: impl Fn(&mut Self),
         target: &Operand,
+        sig: dream_types::TypeId,
         args: &[Operand],
     ) {
         dst(self);
@@ -136,9 +137,9 @@ impl Emitter<'_> {
             self.emit_operand(a);
         }
         self.emit_operand(target);
-        let sig = func_sig(self.interner, self.operand_ty(target))
+        let sig_name = func_sig(self.interner, sig)
             .map(|(name, _, _)| name)
             .unwrap_or_else(|| "$sig___v".to_string());
-        self.line(&format!("     (call_indirect $__ft (type {}))", sig));
+        self.line(&format!("     (call_indirect $__ft (type {}))", sig_name));
     }
 }

@@ -610,7 +610,6 @@ impl<'a> Analyzer<'a> {
                 let (cap_name, _) = &captures[0];
                 match self.hir_read_cell_ref(cap_name) {
                     Some(cell) => {
-                        self.hir_retain_env(cell.clone());
                         self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
                     }
                     None => self.hir_none(),

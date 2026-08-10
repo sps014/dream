@@ -1,5 +1,13 @@
 module system.core;
 
+// `Array.alloc<T>(n)` — user-facing zero-initialized `T[]` allocation. Thin wrapper over the
+// lower-level `Buffer.alloc` intrinsic.
+public class Array {
+    public static fun alloc<T>(len: int): T[] {
+        return Buffer.alloc<T>(len);
+    }
+}
+
 // Every `T[]` implements `IndexedCollection<T>` (and thus `Collection<T>`). Instantiated on demand
 // for each concrete element type (`int[]`, `Point[]`, …).
 // `this.length` resolves to the builtin `ArrayLen` (checked before instance dispatch).

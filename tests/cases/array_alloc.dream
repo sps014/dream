@@ -1,0 +1,10 @@
+// `Array.alloc<T>(n)` allocates a zero-initialized `T[]` of length `n`.
+import system;
+fun main(): void {
+    let a = Array.alloc<int>(4);
+    System.println(a.length);
+    System.println(a[0]);
+    System.println(a[3]);
+    a[1] = 42;
+    System.println(a[1]);
+}

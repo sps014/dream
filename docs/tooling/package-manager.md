@@ -52,6 +52,7 @@ entry = "src/main.dream"        # required for bin; forbidden for lib
 license = "MIT"
 keywords = ["http", "json"]         # optional; used by dreamer search / the registry site
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
+icon = "assets/icon.png"        # optional; linked PNG path relative to dream.toml (not embedded)
 
 [dependencies]
 http-utils = "1.2"                                    # semver requirement, resolved from a registry
@@ -84,6 +85,10 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
   Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
   native. Combinations are allowed; see `dreamer run` below for how the host is chosen.
+- `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory). On native,
+  `dream run` loads that file from disk when a GPU window is created (winit window icon). On web,
+  `dreamer serve` maps `/favicon.ico` to the same file and scaffolds may add a `<link rel="icon">`.
+  The icon is **never** embedded into packed executables — it stays a normal project file.
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).
 - Package names must start with a letter and may contain ASCII letters, digits, `-`, `_`, and `.`.

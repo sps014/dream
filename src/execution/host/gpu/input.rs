@@ -17,10 +17,18 @@
 //!   10 Resize: i32 w,h
 //!   11 ScaleFactor: f32 scale
 //!   12 Focus / 13 Blur / 14 Close: (no payload)
+//!   15 GamepadConnected / 16 GamepadDisconnected: i32 pad
+//!   17 GamepadButtonDown / 18 GamepadButtonUp: i32 pad, u8 button
 //! Strings: u32 utf8_len LE + utf8 bytes.
+//!
+//! Gamepad button ids (keep in sync with `GamepadButton` in stdlib):
+//!   0 Unknown, 1 South, 2 East, 3 West, 4 North,
+//!   5–8 DPad Up/Down/Left/Right, 9–10 Shoulders, 11–12 Triggers,
+//!   13–14 Stick clicks, 15 Start, 16 Select
+//! Axes: 0–1 LeftStick X/Y, 2–3 RightStick X/Y, 4–5 Left/Right Trigger
 
 use indexmap::IndexSet;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 pub const TAG_POINTER_DOWN: u8 = 0;
 pub const TAG_POINTER_UP: u8 = 1;
@@ -37,6 +45,39 @@ pub const TAG_SCALE_FACTOR: u8 = 11;
 pub const TAG_FOCUS: u8 = 12;
 pub const TAG_BLUR: u8 = 13;
 pub const TAG_CLOSE: u8 = 14;
+pub const TAG_GAMEPAD_CONNECTED: u8 = 15;
+pub const TAG_GAMEPAD_DISCONNECTED: u8 = 16;
+pub const TAG_GAMEPAD_BUTTON_DOWN: u8 = 17;
+pub const TAG_GAMEPAD_BUTTON_UP: u8 = 18;
+
+pub const BTN_UNKNOWN: u8 = 0;
+pub const BTN_SOUTH: u8 = 1;
+pub const BTN_EAST: u8 = 2;
+pub const BTN_WEST: u8 = 3;
+pub const BTN_NORTH: u8 = 4;
+pub const BTN_DPAD_UP: u8 = 5;
+pub const BTN_DPAD_DOWN: u8 = 6;
+pub const BTN_DPAD_LEFT: u8 = 7;
+pub const BTN_DPAD_RIGHT: u8 = 8;
+pub const BTN_LEFT_SHOULDER: u8 = 9;
+pub const BTN_RIGHT_SHOULDER: u8 = 10;
+pub const BTN_LEFT_TRIGGER: u8 = 11;
+pub const BTN_RIGHT_TRIGGER: u8 = 12;
+pub const BTN_LEFT_STICK: u8 = 13;
+pub const BTN_RIGHT_STICK: u8 = 14;
+pub const BTN_START: u8 = 15;
+pub const BTN_SELECT: u8 = 16;
+
+pub const AXIS_LEFT_STICK_X: usize = 0;
+pub const AXIS_LEFT_STICK_Y: usize = 1;
+pub const AXIS_RIGHT_STICK_X: usize = 2;
+pub const AXIS_RIGHT_STICK_Y: usize = 3;
+pub const AXIS_LEFT_TRIGGER: usize = 4;
+pub const AXIS_RIGHT_TRIGGER: usize = 5;
+pub const AXIS_COUNT: usize = 6;
+
+/// Stick deadzone applied before exposing axis values to Dream.
+pub const STICK_DEADZONE: f32 = 0.15;
 
 const MAX_EVENTS: usize = 256;
 
@@ -100,6 +141,26 @@ pub enum InputEvent {
     Focus,
     Blur,
     Close,
+    GamepadConnected {
+        pad: i32,
+    },
+    GamepadDisconnected {
+        pad: i32,
+    },
+    GamepadButtonDown {
+        pad: i32,
+        button: u8,
+    },
+    GamepadButtonUp {
+        pad: i32,
+        button: u8,
+    },
+}
+
+#[derive(Clone, Default)]
+pub struct PadState {
+    pub buttons_down: IndexSet<u8>,
+    pub axes: [f32; AXIS_COUNT],
 }
 
 #[derive(Clone)]
@@ -118,6 +179,8 @@ pub struct InputState {
     pub focused: bool,
     pub close_requested: bool,
     pub keys_down: IndexSet<String>,
+    /// Connected pads keyed by stable host index (sorted via BTreeMap).
+    pub pads: BTreeMap<i32, PadState>,
     queue: VecDeque<InputEvent>,
 }
 
@@ -138,6 +201,7 @@ impl Default for InputState {
             focused: true,
             close_requested: false,
             keys_down: IndexSet::new(),
+            pads: BTreeMap::new(),
             queue: VecDeque::new(),
         }
     }
@@ -262,6 +326,49 @@ impl InputState {
         self.push(InputEvent::Close);
     }
 
+    pub fn gamepad_connected(&mut self, pad: i32) {
+        self.pads.entry(pad).or_default();
+        self.push(InputEvent::GamepadConnected { pad });
+    }
+
+    pub fn gamepad_disconnected(&mut self, pad: i32) {
+        self.pads.remove(&pad);
+        self.push(InputEvent::GamepadDisconnected { pad });
+    }
+
+    pub fn gamepad_button_down(&mut self, pad: i32, button: u8) {
+        if button == BTN_UNKNOWN {
+            return;
+        }
+        let inserted = self
+            .pads
+            .entry(pad)
+            .or_default()
+            .buttons_down
+            .insert(button);
+        if inserted {
+            self.push(InputEvent::GamepadButtonDown { pad, button });
+        }
+    }
+
+    pub fn gamepad_button_up(&mut self, pad: i32, button: u8) {
+        if button == BTN_UNKNOWN {
+            return;
+        }
+        if let Some(entry) = self.pads.get_mut(&pad) {
+            if entry.buttons_down.shift_remove(&button) {
+                self.push(InputEvent::GamepadButtonUp { pad, button });
+            }
+        }
+    }
+
+    pub fn gamepad_set_axis(&mut self, pad: i32, axis: usize, value: f32) {
+        if axis >= AXIS_COUNT {
+            return;
+        }
+        self.pads.entry(pad).or_default().axes[axis] = value;
+    }
+
     pub fn pack_pointer_and_clear_delta(&mut self) -> Vec<u8> {
         let mut out = Vec::with_capacity(32);
         out.extend_from_slice(&self.x.to_le_bytes());
@@ -290,6 +397,30 @@ impl InputState {
         self.keys_down.contains(code)
     }
 
+    pub fn connected_pads(&self) -> Vec<i32> {
+        self.pads.keys().copied().collect()
+    }
+
+    pub fn gamepad_is_connected(&self, pad: i32) -> bool {
+        self.pads.contains_key(&pad)
+    }
+
+    pub fn gamepad_button_is_down(&self, pad: i32, button: u8) -> bool {
+        self.pads
+            .get(&pad)
+            .is_some_and(|p| p.buttons_down.contains(&button))
+    }
+
+    pub fn gamepad_axis_value(&self, pad: i32, axis: i32) -> f32 {
+        if !(0..AXIS_COUNT as i32).contains(&axis) {
+            return 0.0;
+        }
+        self.pads
+            .get(&pad)
+            .map(|p| p.axes[axis as usize])
+            .unwrap_or(0.0)
+    }
+
     pub fn drain_events_packed(&mut self) -> Vec<u8> {
         let count = self.queue.len() as u32;
         let mut out = Vec::with_capacity(4 + self.queue.len() * 16);
@@ -298,6 +429,14 @@ impl InputState {
             pack_event(&mut out, &ev);
         }
         out
+    }
+}
+
+pub fn apply_deadzone(value: f32, zone: f32) -> f32 {
+    if value.abs() < zone {
+        0.0
+    } else {
+        value.clamp(-1.0, 1.0)
     }
 }
 
@@ -401,5 +540,48 @@ fn pack_event(out: &mut Vec<u8>, ev: &InputEvent) {
         InputEvent::Focus => out.push(TAG_FOCUS),
         InputEvent::Blur => out.push(TAG_BLUR),
         InputEvent::Close => out.push(TAG_CLOSE),
+        InputEvent::GamepadConnected { pad } => {
+            out.push(TAG_GAMEPAD_CONNECTED);
+            out.extend_from_slice(&pad.to_le_bytes());
+        }
+        InputEvent::GamepadDisconnected { pad } => {
+            out.push(TAG_GAMEPAD_DISCONNECTED);
+            out.extend_from_slice(&pad.to_le_bytes());
+        }
+        InputEvent::GamepadButtonDown { pad, button } => {
+            out.push(TAG_GAMEPAD_BUTTON_DOWN);
+            out.extend_from_slice(&pad.to_le_bytes());
+            out.push(*button);
+        }
+        InputEvent::GamepadButtonUp { pad, button } => {
+            out.push(TAG_GAMEPAD_BUTTON_UP);
+            out.extend_from_slice(&pad.to_le_bytes());
+            out.push(*button);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packs_gamepad_button_events() {
+        let mut input = InputState::default();
+        input.gamepad_connected(0);
+        input.gamepad_button_down(0, BTN_SOUTH);
+        let bytes = input.drain_events_packed();
+        assert!(bytes.len() >= 4);
+        let count = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(count, 2);
+        assert_eq!(bytes[4], TAG_GAMEPAD_CONNECTED);
+        assert_eq!(bytes[9], TAG_GAMEPAD_BUTTON_DOWN);
+        assert_eq!(bytes[14], BTN_SOUTH);
+    }
+
+    #[test]
+    fn stick_deadzone_zeros_small_values() {
+        assert_eq!(apply_deadzone(0.1, STICK_DEADZONE), 0.0);
+        assert!(apply_deadzone(0.5, STICK_DEADZONE) > 0.0);
     }
 }

@@ -213,14 +213,14 @@ async fun run_browser(n: int): void {
         for (let ev in surface.poll_events()) {
             switch (ev) {
                 KeyDown(code, _key, _repeat) => {
-                    if (code == "Escape") {
+                    if (code == KeyCode.Escape) {
                         return;
                     }
                 },
                 _ => {},
             }
         }
-        if (surface.key_down("Escape")) {
+        if (surface.key_down(KeyCode.Escape)) {
             return;
         }
 

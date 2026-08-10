@@ -152,23 +152,32 @@ fn write_index_html(dir: &Path) -> Result<()> {
     if path.exists() {
         return Ok(());
     }
-    let html = r#"<!DOCTYPE html>
+    let icon_link = match Manifest::load(&dir.join(MANIFEST_FILE_NAME))
+        .ok()
+        .and_then(|m| m.package.icon)
+    {
+        Some(icon) => format!("    <link rel=\"icon\" href=\"{}\" />\n", icon),
+        None => "    <link rel=\"icon\" href=\"/favicon.ico\" />\n".to_string(),
+    };
+    let html = format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dream app</title>
-  </head>
+{icon_link}  </head>
   <body>
     <h1>Dream</h1>
     <p>Build with <code>dreamer build</code>, then open this page (or <code>dreamer run</code>).</p>
     <script type="module">
-      import { run } from "./target/web/main.web.runtime.js";
+      import {{ run }} from "./target/web/main.web.runtime.js";
       await run("./target/web/main.wasm");
     </script>
   </body>
 </html>
-"#;
+"#
+    );
     std::fs::write(&path, html).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
 }

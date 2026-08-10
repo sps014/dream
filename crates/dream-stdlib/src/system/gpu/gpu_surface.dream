@@ -68,10 +68,34 @@ public class GpuSurface {
         return GpuInputCodec.decode_mods(Gpu.surface_mods(this.id));
     }
 
-    // True while a physical key `code` (e.g. `Escape`, `KeyR`) is held.
+    // True while a physical key is held.
     @web @native
-    public fun key_down(code: string): bool {
-        return Gpu.surface_key_down(this.id, code);
+    public fun key_down(code: KeyCode): bool {
+        return Gpu.surface_key_down(this.id, key_code_name(code));
+    }
+
+    // Connected gamepad indices (ascending); prefer over scanning a fixed range.
+    @web @native
+    public fun gamepads(): int[] {
+        return Gpu.surface_gamepads(this.id);
+    }
+
+    // True when `pad` is currently connected.
+    @web @native
+    public fun gamepad_connected(pad: int): bool {
+        return Gpu.surface_gamepad_connected(this.id, pad);
+    }
+
+    // True while a gamepad button is held past the host threshold.
+    @web @native
+    public fun gamepad_button_down(pad: int, button: GamepadButton): bool {
+        return Gpu.surface_gamepad_button_down(this.id, pad, gamepad_button_id(button));
+    }
+
+    // Stick axes ~−1…1; triggers 0…1 (host deadzone applied).
+    @web @native
+    public fun gamepad_axis(pad: int, axis: GamepadAxis): float {
+        return Gpu.surface_gamepad_axis(this.id, pad, gamepad_axis_id(axis));
     }
 
     // True when the surface/window has keyboard focus.

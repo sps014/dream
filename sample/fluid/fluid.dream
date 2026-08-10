@@ -269,14 +269,14 @@ async fun main(): void {
         for (let ev in surface.poll_events()) {
             switch (ev) {
                 KeyDown(code, _key, _repeat) => {
-                    if (code == "Escape") {
+                    if (code == KeyCode.Escape) {
                         return;
                     }
                 },
                 _ => {},
             }
         }
-        if (surface.key_down("Escape") || surface.close_requested()) {
+        if (surface.key_down(KeyCode.Escape) || surface.close_requested()) {
             return;
         }
 

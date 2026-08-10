@@ -310,7 +310,11 @@ Same Dream API on both hosts — no `js.global` / DOM listeners required. The ho
 | `pointer(): GpuPointer` | `x`/`y` in surface client pixels (create/configure size; not Retina physical), `dx`/`dy` since last read (cleared on read), `buttons`/`down`/`inside`/`pointer_id` |
 | `width()` / `height()` | Client size matching pointer space |
 | `mods(): GpuMods` | `shift` / `ctrl` / `alt` / `meta` |
-| `key_down(code): bool` | Physical key latch (`Escape`, `KeyR`, `Space`, …) |
+| `key_down(code: KeyCode): bool` | Physical key latch (`KeyCode.Escape`, `KeyCode.KeyR`, `KeyCode.Space`, …) |
+| `gamepads(): int[]` | Connected pad indices (ascending) |
+| `gamepad_connected(pad): bool` | Whether `pad` is connected |
+| `gamepad_button_down(pad, button: GamepadButton): bool` | Face / D-pad / shoulder / menu latch |
+| `gamepad_axis(pad, axis: GamepadAxis): float` | Sticks ~−1…1; triggers 0…1 (host deadzone) |
 | `focused(): bool` | Window/canvas focus |
 | `close_requested(): bool` | Sticky close (native window chrome; browser `beforeunload`) |
 | `poll_events(): GpuInputEvent[]` | Drain queue (pumps the native event loop once); call once per frame before reading latches |
@@ -323,10 +327,19 @@ switch (GpuSurface.create("fluid", w, h)) {
             if (p.down && p.inside) {
                 // continuous paint from p.x / p.y / p.dx / p.dy
             }
+            for (let pad in surface.gamepads()) {
+                if (surface.gamepad_button_down(pad, GamepadButton.South)) {
+                    // primary face button
+                }
+                let lx = surface.gamepad_axis(pad, GamepadAxis.LeftStickX);
+            }
             for (let ev in surface.poll_events()) {
                 switch (ev) {
                     KeyDown(code, key, repeat) => {
-                        if (code == "Escape") { return; }
+                        if (code == KeyCode.Escape) { return; }
+                    },
+                    GamepadButtonDown(pad, button) => {
+                        if (button == GamepadButton.Start) { /* … */ }
                     },
                     Resize(nw, nh) => { surface.configure(nw, nh); },
                     _ => {},
@@ -340,6 +353,9 @@ switch (GpuSurface.create("fluid", w, h)) {
     Err(e) => System.println(e.message()),
 }
 ```
+
+`KeyCode` mirrors UI Events physical codes. `GamepadButton` / `GamepadAxis` use Xbox-layout names
+(South/East/West/North ≈ A/B/X/Y). Native gamepads use gilrs; the browser uses `navigator.getGamepads()`.
 
 Browser note: `Close` is uncommon (tab close); prefer Escape / `close_requested` checks in demos.
 

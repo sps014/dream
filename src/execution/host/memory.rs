@@ -144,6 +144,23 @@ pub(crate) fn read_arg_i32_array(caller: &mut Caller<'_, ()>, ptr: i32) -> Resul
     Ok(out)
 }
 
+/// Allocates a Dream `int[]` holding `values` via the module's exported `malloc`.
+pub(crate) fn write_i32_array_to_memory(caller: &mut Caller<'_, ()>, values: &[i32]) -> Result<i32> {
+    let malloc = required_malloc(caller)?;
+    let count = values.len() as i32;
+    let nbytes = LEN_PREFIX as i32 + count.saturating_mul(4);
+    let ptr = malloc.call(&mut *caller, (nbytes, TAG_ARRAY))?;
+    let memory = required_memory(caller)?;
+    let base = ptr as usize;
+    let data = shared_bytes_mut(&memory);
+    data[base..base + LEN_PREFIX].copy_from_slice(&count.to_le_bytes());
+    for (i, v) in values.iter().enumerate() {
+        let o = base + LEN_PREFIX + i * 4;
+        data[o..o + 4].copy_from_slice(&v.to_le_bytes());
+    }
+    Ok(ptr)
+}
+
 /// Reads a Dream `char[]` (byte array) at data pointer `ptr` into a `Vec<u8>` with a single bulk
 /// copy. Layout: `[count: i32][bytes...]` (char elements are 1 byte). No string round-trip, so
 /// this is binary-safe.

@@ -1,0 +1,95 @@
+module system.gpu;
+
+/// Standard gamepad face / D-pad / shoulder / menu buttons (Xbox layout names).
+/// Discriminants 0… are shared with the host wire format — keep in sync with `gpu/input.rs`.
+public enum GamepadButton {
+    Unknown = 0,
+    South = 1,
+    East = 2,
+    West = 3,
+    North = 4,
+    DPadUp = 5,
+    DPadDown = 6,
+    DPadLeft = 7,
+    DPadRight = 8,
+    LeftShoulder = 9,
+    RightShoulder = 10,
+    LeftTrigger = 11,
+    RightTrigger = 12,
+    LeftStick = 13,
+    RightStick = 14,
+    Start = 15,
+    Select = 16,
+}
+
+/// Analog axes (sticks −1…1, triggers 0…1 after host deadzone).
+public enum GamepadAxis {
+    LeftStickX = 0,
+    LeftStickY = 1,
+    RightStickX = 2,
+    RightStickY = 3,
+    LeftTrigger = 4,
+    RightTrigger = 5,
+}
+
+/// Map a host button id to `GamepadButton`.
+public fun gamepad_button_from_id(id: int): GamepadButton {
+    if (id == 1) { return GamepadButton.South; }
+    if (id == 2) { return GamepadButton.East; }
+    if (id == 3) { return GamepadButton.West; }
+    if (id == 4) { return GamepadButton.North; }
+    if (id == 5) { return GamepadButton.DPadUp; }
+    if (id == 6) { return GamepadButton.DPadDown; }
+    if (id == 7) { return GamepadButton.DPadLeft; }
+    if (id == 8) { return GamepadButton.DPadRight; }
+    if (id == 9) { return GamepadButton.LeftShoulder; }
+    if (id == 10) { return GamepadButton.RightShoulder; }
+    if (id == 11) { return GamepadButton.LeftTrigger; }
+    if (id == 12) { return GamepadButton.RightTrigger; }
+    if (id == 13) { return GamepadButton.LeftStick; }
+    if (id == 14) { return GamepadButton.RightStick; }
+    if (id == 15) { return GamepadButton.Start; }
+    if (id == 16) { return GamepadButton.Select; }
+    return GamepadButton.Unknown;
+}
+
+/// Map a host axis id to `GamepadAxis` (defaults to `LeftStickX` for out-of-range).
+public fun gamepad_axis_from_id(id: int): GamepadAxis {
+    if (id == 1) { return GamepadAxis.LeftStickY; }
+    if (id == 2) { return GamepadAxis.RightStickX; }
+    if (id == 3) { return GamepadAxis.RightStickY; }
+    if (id == 4) { return GamepadAxis.LeftTrigger; }
+    if (id == 5) { return GamepadAxis.RightTrigger; }
+    return GamepadAxis.LeftStickX;
+}
+
+/// Wire discriminant for a button (for host latch calls).
+public fun gamepad_button_id(button: GamepadButton): int {
+    if (button == GamepadButton.South) { return 1; }
+    if (button == GamepadButton.East) { return 2; }
+    if (button == GamepadButton.West) { return 3; }
+    if (button == GamepadButton.North) { return 4; }
+    if (button == GamepadButton.DPadUp) { return 5; }
+    if (button == GamepadButton.DPadDown) { return 6; }
+    if (button == GamepadButton.DPadLeft) { return 7; }
+    if (button == GamepadButton.DPadRight) { return 8; }
+    if (button == GamepadButton.LeftShoulder) { return 9; }
+    if (button == GamepadButton.RightShoulder) { return 10; }
+    if (button == GamepadButton.LeftTrigger) { return 11; }
+    if (button == GamepadButton.RightTrigger) { return 12; }
+    if (button == GamepadButton.LeftStick) { return 13; }
+    if (button == GamepadButton.RightStick) { return 14; }
+    if (button == GamepadButton.Start) { return 15; }
+    if (button == GamepadButton.Select) { return 16; }
+    return 0;
+}
+
+/// Wire discriminant for an axis (for host latch calls).
+public fun gamepad_axis_id(axis: GamepadAxis): int {
+    if (axis == GamepadAxis.LeftStickY) { return 1; }
+    if (axis == GamepadAxis.RightStickX) { return 2; }
+    if (axis == GamepadAxis.RightStickY) { return 3; }
+    if (axis == GamepadAxis.LeftTrigger) { return 4; }
+    if (axis == GamepadAxis.RightTrigger) { return 5; }
+    return 0;
+}

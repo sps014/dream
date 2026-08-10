@@ -5,6 +5,8 @@ mod buffers;
 mod compute;
 mod device;
 mod error;
+mod gamepad;
+mod icon;
 mod input;
 mod render;
 mod state;
@@ -18,7 +20,7 @@ use wasmtime::*;
 
 use super::memory::{
     read_arg_bytes, read_arg_i32_array, read_arg_string, resolve_host_future_bytes,
-    write_string_to_memory,
+    write_i32_array_to_memory, write_string_to_memory,
 };
 use dream_mir::abi as mir_abi;
 use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
@@ -368,6 +370,31 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             let code = read_arg_string(&mut caller, code_ptr)?;
             Ok(i32::from(surface::key_down(id, &code)))
         },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceGamepads",
+        |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
+            let pads = surface::gamepads(id);
+            write_i32_array_to_memory(&mut caller, &pads)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceGamepadConnected",
+        |id: i32, pad: i32| -> i32 { i32::from(surface::gamepad_connected(id, pad)) },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceGamepadButtonDown",
+        |id: i32, pad: i32, button: i32| -> i32 {
+            i32::from(surface::gamepad_button_down(id, pad, button))
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSurfaceGamepadAxis",
+        |id: i32, pad: i32, axis: i32| -> f32 { surface::gamepad_axis(id, pad, axis) },
     )?;
     linker.func_wrap(
         "Dream",

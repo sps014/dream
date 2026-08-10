@@ -1507,6 +1507,8 @@ function makeGpuHost(getInstance) {
   let blitSampler = null;
   let blitBindLayout = null;
 
+  let lastError = "";
+
   const ERR_UNAVAILABLE = 1;
   const ERR_TIMEOUT = 2;
   const ERR_VALIDATION = 3;
@@ -1514,6 +1516,7 @@ function makeGpuHost(getInstance) {
 
   function classifyErr(err) {
     const msg = String(err && err.message ? err.message : err);
+    lastError = msg;
     if (/not available|no WebGPU|no WebGPU adapter/i.test(msg)) return ERR_UNAVAILABLE;
     if (/timed out|timeout/i.test(msg)) return ERR_TIMEOUT;
     if (/WGSL|validation|compile/i.test(msg)) return ERR_VALIDATION;
@@ -1578,8 +1581,124 @@ function makeGpuHost(getInstance) {
       focused: true,
       closeRequested: false,
       keysDown: new Set(),
+      pads: new Map(),
+      knownPads: new Set(),
       queue: [],
     };
+  }
+
+  const BTN_SOUTH = 1;
+  const BTN_EAST = 2;
+  const BTN_WEST = 3;
+  const BTN_NORTH = 4;
+  const BTN_DPAD_UP = 5;
+  const BTN_DPAD_DOWN = 6;
+  const BTN_DPAD_LEFT = 7;
+  const BTN_DPAD_RIGHT = 8;
+  const BTN_LEFT_SHOULDER = 9;
+  const BTN_RIGHT_SHOULDER = 10;
+  const BTN_LEFT_TRIGGER = 11;
+  const BTN_RIGHT_TRIGGER = 12;
+  const BTN_LEFT_STICK = 13;
+  const BTN_RIGHT_STICK = 14;
+  const BTN_START = 15;
+  const BTN_SELECT = 16;
+  const STICK_DEADZONE = 0.15;
+
+  /** HTML Gamepad standard button index → Dream GamepadButton id. */
+  const STANDARD_BUTTON_MAP = [
+    BTN_SOUTH,
+    BTN_EAST,
+    BTN_WEST,
+    BTN_NORTH,
+    BTN_LEFT_SHOULDER,
+    BTN_RIGHT_SHOULDER,
+    BTN_LEFT_TRIGGER,
+    BTN_RIGHT_TRIGGER,
+    BTN_SELECT,
+    BTN_START,
+    BTN_LEFT_STICK,
+    BTN_RIGHT_STICK,
+    BTN_DPAD_UP,
+    BTN_DPAD_DOWN,
+    BTN_DPAD_LEFT,
+    BTN_DPAD_RIGHT,
+  ];
+
+  function applyDeadzone(v) {
+    return Math.abs(v) < STICK_DEADZONE ? 0 : Math.max(-1, Math.min(1, v));
+  }
+
+  function ensurePad(input, pad) {
+    if (!input.pads.has(pad)) {
+      input.pads.set(pad, {
+        buttons: new Set(),
+        axes: [0, 0, 0, 0, 0, 0],
+      });
+    }
+    return input.pads.get(pad);
+  }
+
+  function syncGamepads(input) {
+    if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
+      return;
+    }
+    let list;
+    try {
+      list = navigator.getGamepads();
+    } catch (_) {
+      return;
+    }
+    if (!list) return;
+    const seen = new Set();
+    for (let i = 0; i < list.length; i++) {
+      const gp = list[i];
+      if (!gp) continue;
+      const pad = i | 0;
+      seen.add(pad);
+      if (!input.knownPads.has(pad)) {
+        input.knownPads.add(pad);
+        ensurePad(input, pad);
+        pushEvent(input, { tag: 15, pad });
+      }
+      const state = ensurePad(input, pad);
+      const pressed = new Set();
+      const buttons = gp.buttons || [];
+      for (let bi = 0; bi < buttons.length && bi < STANDARD_BUTTON_MAP.length; bi++) {
+        const btn = buttons[bi];
+        const down = !!(btn && (btn.pressed || (btn.value != null && btn.value > 0.5)));
+        const id = STANDARD_BUTTON_MAP[bi];
+        if (down) {
+          pressed.add(id);
+          if (!state.buttons.has(id)) {
+            state.buttons.add(id);
+            pushEvent(input, { tag: 17, pad, button: id });
+          }
+        }
+      }
+      for (const id of [...state.buttons]) {
+        if (!pressed.has(id)) {
+          state.buttons.delete(id);
+          pushEvent(input, { tag: 18, pad, button: id });
+        }
+      }
+      const axes = gp.axes || [];
+      state.axes[0] = applyDeadzone(axes[0] || 0);
+      state.axes[1] = applyDeadzone(axes[1] || 0);
+      state.axes[2] = applyDeadzone(axes[2] || 0);
+      state.axes[3] = applyDeadzone(axes[3] || 0);
+      const lt = buttons[6];
+      const rt = buttons[7];
+      state.axes[4] = lt && lt.value != null ? Math.max(0, Math.min(1, lt.value)) : 0;
+      state.axes[5] = rt && rt.value != null ? Math.max(0, Math.min(1, rt.value)) : 0;
+    }
+    for (const pad of [...input.knownPads]) {
+      if (!seen.has(pad)) {
+        input.knownPads.delete(pad);
+        input.pads.delete(pad);
+        pushEvent(input, { tag: 16, pad });
+      }
+    }
   }
 
   function pushEvent(input, ev) {
@@ -1665,6 +1784,7 @@ function makeGpuHost(getInstance) {
   }
 
   function packEvents(input) {
+    syncGamepads(input);
     const chunks = [];
     appendI32(chunks, input.queue.length);
     for (const ev of input.queue) {
@@ -1711,6 +1831,15 @@ function makeGpuHost(getInstance) {
           break;
         case 11:
           appendF32(chunks, ev.scale);
+          break;
+        case 15:
+        case 16:
+          appendI32(chunks, ev.pad);
+          break;
+        case 17:
+        case 18:
+          appendI32(chunks, ev.pad);
+          chunks.push(new Uint8Array([ev.button | 0]));
           break;
         default:
           break;
@@ -2177,6 +2306,11 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
     gpuIsAvailable: () => !!(globalThis.navigator && globalThis.navigator.gpu),
     gpuReady: () => device != null,
+    gpuLastError: () => {
+      const msg = lastError;
+      lastError = "";
+      return msg;
+    },
     gpuTryInit: async () => {
       try {
         await ensureDevice();
@@ -2630,6 +2764,34 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       const s = surfaces.get(id);
       if (!s || !s.input) return false;
       return s.input.keysDown.has(String(code));
+    },
+    gpuSurfaceGamepads: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return [];
+      syncGamepads(s.input);
+      return [...s.input.pads.keys()].sort((a, b) => a - b);
+    },
+    gpuSurfaceGamepadConnected: (id, pad) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return false;
+      syncGamepads(s.input);
+      return s.input.pads.has(pad | 0);
+    },
+    gpuSurfaceGamepadButtonDown: (id, pad, button) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return false;
+      syncGamepads(s.input);
+      const st = s.input.pads.get(pad | 0);
+      return !!(st && st.buttons.has(button | 0));
+    },
+    gpuSurfaceGamepadAxis: (id, pad, axis) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return 0;
+      syncGamepads(s.input);
+      const st = s.input.pads.get(pad | 0);
+      if (!st) return 0;
+      const a = axis | 0;
+      return a >= 0 && a < st.axes.length ? st.axes[a] : 0;
     },
     gpuSurfaceFocused: (id) => {
       const s = surfaces.get(id);

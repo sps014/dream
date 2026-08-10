@@ -9,13 +9,17 @@ public enum GpuInputEvent {
     PointerLeave(x: float, y: float, pointer_id: int),
     PointerCancel(pointer_id: int),
     Wheel(dx: float, dy: float, x: float, y: float),
-    /// `code` is physical (`KeyR`, `Escape`, …); `key` is the typed glyph when available.
-    KeyDown(code: string, key: string, repeat: bool),
-    KeyUp(code: string, key: string),
+    /// `code` is physical; `key` is the typed glyph when available.
+    KeyDown(code: KeyCode, key: string, repeat: bool),
+    KeyUp(code: KeyCode, key: string),
     TextInput(text: string),
     Resize(width: int, height: int),
     ScaleFactor(scale: float),
     Focus,
     Blur,
     Close,
+    GamepadConnected(pad: int),
+    GamepadDisconnected(pad: int),
+    GamepadButtonDown(pad: int, button: GamepadButton),
+    GamepadButtonUp(pad: int, button: GamepadButton),
 }

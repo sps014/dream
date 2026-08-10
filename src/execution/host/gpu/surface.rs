@@ -29,12 +29,15 @@ impl ApplicationHandler for WindowCreateApp {
         if self.window.is_some() {
             return;
         }
-        let attrs = Window::default_attributes()
+        let mut attrs = Window::default_attributes()
             .with_title(self.title.clone())
             .with_inner_size(winit::dpi::LogicalSize::new(
                 self.width.max(1) as f64,
                 self.height.max(1) as f64,
             ));
+        if let Some(icon) = super::icon::load_window_icon() {
+            attrs = attrs.with_window_icon(Some(icon));
+        }
         match event_loop.create_window(attrs) {
             Ok(w) => self.window = Some(Arc::new(w)),
             Err(e) => eprintln!("Dream gpuSurfaceCreate: window create failed: {e}"),
@@ -917,6 +920,7 @@ pub fn frame_tick() {
         // Vsync already paces present; only pump input, don't sleep.
         let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
     });
+    super::gamepad::pump();
 }
 
 /// Pump the event loop then return packed pointer latch (clears dx/dy).
@@ -942,6 +946,41 @@ pub fn key_down(id: i32, code: &str) -> bool {
         .get(&id)
         .map(|s| s.input.key_is_down(code))
         .unwrap_or(false)
+}
+
+pub fn gamepads(id: i32) -> Vec<i32> {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.input.connected_pads())
+        .unwrap_or_default()
+}
+
+pub fn gamepad_connected(id: i32, pad: i32) -> bool {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.input.gamepad_is_connected(pad))
+        .unwrap_or(false)
+}
+
+pub fn gamepad_button_down(id: i32, pad: i32, button: i32) -> bool {
+    if !(0..=255).contains(&button) {
+        return false;
+    }
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.input.gamepad_button_is_down(pad, button as u8))
+        .unwrap_or(false)
+}
+
+pub fn gamepad_axis(id: i32, pad: i32, axis: i32) -> f32 {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.input.gamepad_axis_value(pad, axis))
+        .unwrap_or(0.0)
 }
 
 pub fn focused(id: i32) -> bool {

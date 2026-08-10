@@ -117,19 +117,19 @@ public class GpuInputCodec {
                 let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
                 out[i] = GpuInputEvent.Wheel(dx, dy, x, y);
             } else if (tag == 7) {
-                let code = GpuInputCodec.read_string(buf, off);
+                let code_s = GpuInputCodec.read_string(buf, off);
                 off = off + GpuInputCodec.string_byte_len(buf, off);
                 let key = GpuInputCodec.read_string(buf, off);
                 off = off + GpuInputCodec.string_byte_len(buf, off);
                 let repeat = ((int)buf[off] & 255) != 0;
                 off = off + 1;
-                out[i] = GpuInputEvent.KeyDown(code, key, repeat);
+                out[i] = GpuInputEvent.KeyDown(key_code_from_name(code_s), key, repeat);
             } else if (tag == 8) {
-                let code = GpuInputCodec.read_string(buf, off);
+                let code_s = GpuInputCodec.read_string(buf, off);
                 off = off + GpuInputCodec.string_byte_len(buf, off);
                 let key = GpuInputCodec.read_string(buf, off);
                 off = off + GpuInputCodec.string_byte_len(buf, off);
-                out[i] = GpuInputEvent.KeyUp(code, key);
+                out[i] = GpuInputEvent.KeyUp(key_code_from_name(code_s), key);
             } else if (tag == 9) {
                 let text = GpuInputCodec.read_string(buf, off);
                 off = off + GpuInputCodec.string_byte_len(buf, off);
@@ -147,6 +147,22 @@ public class GpuInputCodec {
                 out[i] = GpuInputEvent.Blur;
             } else if (tag == 14) {
                 out[i] = GpuInputEvent.Close;
+            } else if (tag == 15) {
+                let pad = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.GamepadConnected(pad);
+            } else if (tag == 16) {
+                let pad = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.GamepadDisconnected(pad);
+            } else if (tag == 17) {
+                let pad = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                let bid = (int)buf[off] & 255;
+                off = off + 1;
+                out[i] = GpuInputEvent.GamepadButtonDown(pad, gamepad_button_from_id(bid));
+            } else if (tag == 18) {
+                let pad = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                let bid = (int)buf[off] & 255;
+                off = off + 1;
+                out[i] = GpuInputEvent.GamepadButtonUp(pad, gamepad_button_from_id(bid));
             } else {
                 break;
             }

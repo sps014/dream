@@ -461,6 +461,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/gpu_mods.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_key_code.dream",
+                include_str!("system/gpu/gpu_key_code.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_gamepad.dream",
+                include_str!("system/gpu/gpu_gamepad.dream"),
+            ),
+            (
                 "<std>/system/gpu/gpu_input_event.dream",
                 include_str!("system/gpu/gpu_input_event.dream"),
             ),

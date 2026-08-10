@@ -188,6 +188,12 @@ fn handle_request(root: &Path, request: Request) -> Result<()> {
     let url_path = request.url().split('?').next().unwrap_or("/");
     let rel = if url_path == "/" || url_path.is_empty() {
         PathBuf::from("index.html")
+    } else if url_path == "/favicon.ico" || url_path == "/favicon.png" {
+        if let Some(icon) = package_icon_rel(root) {
+            PathBuf::from(icon)
+        } else {
+            PathBuf::from(url_path.trim_start_matches('/'))
+        }
     } else {
         PathBuf::from(url_path.trim_start_matches('/'))
     };
@@ -219,6 +225,15 @@ fn handle_request(root: &Path, request: Request) -> Result<()> {
     };
     request.respond(response)?;
     Ok(())
+}
+
+/// `[package].icon` from `dream.toml` when present and valid.
+fn package_icon_rel(root: &Path) -> Option<String> {
+    let manifest = root.join(crate::manifest::MANIFEST_FILE_NAME);
+    let m = crate::manifest::Manifest::load(&manifest).ok()?;
+    let icon = m.package.icon?;
+    let path = root.join(&icon);
+    path.is_file().then_some(icon)
 }
 
 fn safe_join(root: &Path, rel: &Path) -> Option<PathBuf> {

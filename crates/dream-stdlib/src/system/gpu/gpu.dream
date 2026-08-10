@@ -185,6 +185,22 @@ public class Gpu {
     static extern fun surface_key_down(id: int, code: string): bool;
 
     @web @native
+    @js("Dream", "gpuSurfaceGamepads")
+    static extern fun surface_gamepads(id: int): int[];
+
+    @web @native
+    @js("Dream", "gpuSurfaceGamepadConnected")
+    static extern fun surface_gamepad_connected(id: int, pad: int): bool;
+
+    @web @native
+    @js("Dream", "gpuSurfaceGamepadButtonDown")
+    static extern fun surface_gamepad_button_down(id: int, pad: int, button: int): bool;
+
+    @web @native
+    @js("Dream", "gpuSurfaceGamepadAxis")
+    static extern fun surface_gamepad_axis(id: int, pad: int, axis: int): float;
+
+    @web @native
     @js("Dream", "gpuSurfaceFocused")
     static extern fun surface_focused(id: int): bool;
 

@@ -192,6 +192,10 @@ pub struct PackageMeta {
     /// defaults to native wasmtime execution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<String>,
+    /// Optional app icon path relative to the manifest directory (PNG). Linked file only — never
+    /// embedded into packed executables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 /// A dependency requirement: either a bare semver requirement string (`"^1.2"`) or a detailed
@@ -321,6 +325,28 @@ pub fn import_segment(package_name: &str) -> String {
     package_name.replace(['-', '.'], "_")
 }
 
+/// Reject empty, absolute, or `..`-escaping paths for linked package assets (e.g. `package.icon`).
+pub fn validate_relative_asset_path(path: &str, field: &str) -> Result<()> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        bail!("{field} must not be empty");
+    }
+    let p = Path::new(trimmed);
+    if p.is_absolute() {
+        bail!("{field} must be relative to the dream.toml directory (got '{trimmed}')");
+    }
+    for c in p.components() {
+        match c {
+            std::path::Component::Normal(_) | std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                bail!("{field} must not contain '..' (got '{trimmed}')");
+            }
+            _ => bail!("{field} is not a valid relative path (got '{trimmed}')"),
+        }
+    }
+    Ok(())
+}
+
 impl Manifest {
     /// Create a `bin` package manifest with the given entry point.
     pub fn new(name: String, version: String, entry: String) -> Self {
@@ -336,6 +362,7 @@ impl Manifest {
                 license: None,
                 keywords: Vec::new(),
                 targets: Vec::new(),
+                icon: None,
             },
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
@@ -358,6 +385,7 @@ impl Manifest {
                 license: None,
                 keywords: Vec::new(),
                 targets: Vec::new(),
+                icon: None,
             },
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
@@ -416,6 +444,9 @@ impl Manifest {
                 );
             }
             seen.push(parsed);
+        }
+        if let Some(icon) = &self.package.icon {
+            validate_relative_asset_path(icon, "package.icon")?;
         }
         Ok(())
     }
@@ -532,6 +563,28 @@ mod tests {
             "not-a-version".to_string(),
             "src/main.dream".to_string(),
         );
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn icon_round_trip_and_path_rules() {
+        let mut manifest = Manifest::new(
+            "myapp".to_string(),
+            "0.1.0".to_string(),
+            "src/main.dream".to_string(),
+        );
+        manifest.package.icon = Some("assets/icon.png".into());
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(MANIFEST_FILE_NAME);
+        manifest.save(&path).unwrap();
+        let loaded = Manifest::load(&path).unwrap();
+        assert_eq!(loaded.package.icon.as_deref(), Some("assets/icon.png"));
+
+        manifest.package.icon = Some("../escape.png".into());
+        assert!(manifest.validate().is_err());
+        manifest.package.icon = Some("/abs/icon.png".into());
+        assert!(manifest.validate().is_err());
+        manifest.package.icon = Some("".into());
         assert!(manifest.validate().is_err());
     }
 

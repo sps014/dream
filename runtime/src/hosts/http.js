@@ -9,7 +9,7 @@
  * incrementally without buffering the whole body — the JS-host mirror of the native host's
  * `reqwest::blocking::Response` handle table (`src/execution/host/http.rs`).
  */
-async function httpDo(url, method, headersJson, body, timeoutMs) {
+async function httpDo(url, method, headersJson, body, timeoutMs, _httpVersion) {
   const verb = (method || "GET").toUpperCase();
   const init = { method: verb };
   if (headersJson && headersJson !== "") {
@@ -64,7 +64,7 @@ async function httpDo(url, method, headersJson, body, timeoutMs) {
  * native host's `open_http_stream` (`src/execution/host/http.rs`) so `HttpResponse`'s head parser
  * and `HttpStreamResponse` (`wrap_stream` in `http_client.dream`) work unchanged on both hosts.
  */
-async function httpDoStream(url, method, headersJson, body, timeoutMs) {
+async function httpDoStream(url, method, headersJson, body, timeoutMs, _httpVersion) {
   const verb = (method || "GET").toUpperCase();
   const init = { method: verb };
   if (headersJson && headersJson !== "") {
@@ -185,14 +185,15 @@ function httpCloseStream(handle) {
 
 export function makeHttpHost() {
   return {
-    httpRequest: (url, method, headersJson, body, timeoutMs) =>
-      httpDo(url, method, headersJson, body, timeoutMs),
-    httpRequestBytes: (url, method, headersJson, body, timeoutMs) =>
-      httpDo(url, method, headersJson, Uint8Array.from(body || []), timeoutMs),
-    httpRequestStream: (url, method, headersJson, body, timeoutMs) =>
-      httpDoStream(url, method, headersJson, body, timeoutMs),
-    httpRequestStreamBytes: (url, method, headersJson, body, timeoutMs) =>
-      httpDoStream(url, method, headersJson, Uint8Array.from(body || []), timeoutMs),
+    // `httpVersion` is accepted for ABI parity with the native host; `fetch` negotiates on its own.
+    httpRequest: (url, method, headersJson, body, timeoutMs, httpVersion) =>
+      httpDo(url, method, headersJson, body, timeoutMs, httpVersion),
+    httpRequestBytes: (url, method, headersJson, body, timeoutMs, httpVersion) =>
+      httpDo(url, method, headersJson, Uint8Array.from(body || []), timeoutMs, httpVersion),
+    httpRequestStream: (url, method, headersJson, body, timeoutMs, httpVersion) =>
+      httpDoStream(url, method, headersJson, body, timeoutMs, httpVersion),
+    httpRequestStreamBytes: (url, method, headersJson, body, timeoutMs, httpVersion) =>
+      httpDoStream(url, method, headersJson, Uint8Array.from(body || []), timeoutMs, httpVersion),
     httpReadChunk: (handle, maxBytes) => httpReadChunk(handle, maxBytes),
     httpCloseStream: (handle) => httpCloseStream(handle),
   };

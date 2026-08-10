@@ -6,26 +6,29 @@ public class HttpClient {
     default_headers: HttpHeaders;
     // Request timeout in milliseconds; `0` means no timeout.
     _timeout_ms: int;
+    // Native HTTP version: `1` = HTTP/1.1 (default), `2` = HTTP/2. Ignored on JS hosts.
+    _http_version: int;
     cookie_jar: Option<CookieJar>;
     cancel_token: Option<CancellationToken>;
 
     @js("Dream", "httpRequest")
-    static extern async fun http_request(url: string, method: string, headers: string, body: string, timeout_ms: int): char[];
+    static extern async fun http_request(url: string, method: string, headers: string, body: string, timeout_ms: int, http_version: int): char[];
 
     @js("Dream", "httpRequestBytes")
-    static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int): char[];
+    static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int, http_version: int): char[];
 
     @js("Dream", "httpRequestStream")
-    static extern async fun http_request_stream(url: string, method: string, headers: string, body: string, timeout_ms: int): char[];
+    static extern async fun http_request_stream(url: string, method: string, headers: string, body: string, timeout_ms: int, http_version: int): char[];
 
     @js("Dream", "httpRequestStreamBytes")
-    static extern async fun http_request_stream_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int): char[];
+    static extern async fun http_request_stream_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int, http_version: int): char[];
 
     // Creates an HTTP client with a base URL.
     public constructor(base_url: string) {
         this.base_url = base_url;
         this.default_headers = HttpHeaders();
         this._timeout_ms = 0;
+        this._http_version = 1;
         this.cookie_jar = Option.None;
         this.cancel_token = Option.None;
     }
@@ -43,6 +46,22 @@ public class HttpClient {
     // Sets the request timeout in milliseconds (`0` = none).
     public fun with_timeout(ms: int): HttpClient {
         this._timeout_ms = ms;
+        return this;
+    }
+
+    // Preferred HTTP version on the native host (`1` = HTTP/1.1, `2` = HTTP/2).
+    public get http_version(): int {
+        return this._http_version;
+    }
+
+    // Sets the preferred HTTP version on the native host (`1` = HTTP/1.1, `2` = HTTP/2).
+    public set http_version(version: int) {
+        this._http_version = version;
+    }
+
+    // Sets the preferred HTTP version on the native host (`1` = HTTP/1.1, `2` = HTTP/2).
+    public fun with_http_version(version: int): HttpClient {
+        this._http_version = version;
         return this;
     }
 
@@ -132,7 +151,7 @@ public class HttpClient {
             },
             None => { },
         }
-        let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
+        let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
         return this.wrap(raw);
     }
 
@@ -176,7 +195,7 @@ public class HttpClient {
             },
             None => { },
         }
-        let raw = await HttpClient.http_request_stream(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
+        let raw = await HttpClient.http_request_stream(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
         return this.wrap_stream(raw);
     }
 
@@ -195,7 +214,7 @@ public class HttpClient {
             },
             None => { },
         }
-        let raw = await HttpClient.http_request_stream_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
+        let raw = await HttpClient.http_request_stream_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
         return this.wrap_stream(raw);
     }
 
@@ -217,7 +236,7 @@ public class HttpClient {
             },
             None => { },
         }
-        let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
+        let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
         return this.wrap(raw);
     }
 

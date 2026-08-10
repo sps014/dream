@@ -428,3 +428,24 @@ fn selective_runtime_omits_unused_host_chunks() {
     assert!(!rt.contains("makeCryptoHost"), "crypto chunk should be absent");
     assert!(rt.contains("function load("));
 }
+
+/// `@test` discovery + synthesized runner (`dream test` path).
+#[test]
+fn dream_test_runs_attr_marked_functions() {
+    let path = Path::new("tests/cases/support/attr_tests");
+    if !path.exists() {
+        return;
+    }
+    let result = dream::driver::test::run_tests(
+        path,
+        &dream::driver::test::TestOptions {
+            release: false,
+            filter: None,
+            verbose: false,
+        },
+    )
+    .expect("dream test should succeed");
+    assert_eq!(result.files_run, 1);
+    assert_eq!(result.tests_run, 3);
+}
+

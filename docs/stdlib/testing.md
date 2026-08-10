@@ -2,22 +2,40 @@
 
 **Package:** `system.testing` — `import system.testing;`
 
-Minimal assertion + test-runner helpers for ordinary Dream scripts (not a full framework — there's no discovery or reporting beyond stdout). Assertion failures are unrecoverable: Dream has no exceptions, so `Assert.*` prints the failure and exits the process via `System.exit(1)`.
+Mark tests with `@test`, then run them with `dream test` or `dreamer test`. Assertion failures print a message and exit via `System.exit(1)` (fail-fast; Dream has no exceptions).
 
 ```dream
 import system;
 import system.testing;
+
+@test
+fun addition_works(): void {
+    Assert.eq(2 + 2, 4);
+}
+```
+
+```bash
+dream test path/to/file.dream
+dream test tests/                 # every *.dream under tests/
+dreamer test                      # install deps, then dream test tests/
+dream test --filter addition tests/
+```
+
+`@test` applies only to top-level `fun name(): void` (no parameters, not `async`, not `main`). Test files must not declare `main` — the runner synthesizes one. Prefer a project `tests/` directory; `dreamer test` requires it.
+
+You can still call `Test.run` from an ordinary `main` when you want a single script without discovery:
+
+```dream
+fun main(): void {
+    Test.run("addition works", () => {
+        Assert.eq(2 + 2, 4);
+    });
+}
 ```
 
 #### `Test.run(name: string, body: fun(): void): void`
 
 Runs `body` and prints `PASS <name>` if it returns normally. If an assertion inside `body` fails, the process exits before printing — the failure message from `Assert.fail` is the last line of output.
-
-```dream
-Test.run("addition works", () => {
-    Assert.eq(2 + 2, 4);
-});
-```
 
 #### `Assert.eq<T>(actual: T, expected: T): void` / `Assert.ne<T>(actual: T, expected: T): void`
 
@@ -62,3 +80,5 @@ if (!some_invariant) {
     Assert.fail("invariant violated");
 }
 ```
+
+`Assert.*` and `System.exit` are `@native` / `@node` only (no process model on the web target).

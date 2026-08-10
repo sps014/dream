@@ -80,6 +80,15 @@ enum Cmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Install dependencies (incl. dev), then run `@test` suites under `tests/`.
+    Test {
+        /// Pass `--release` through to `dream test`.
+        #[arg(long)]
+        release: bool,
+        /// Only run `@test` functions whose names contain this substring.
+        #[arg(long, value_name = "SUBSTR")]
+        filter: Option<String>,
+    },
     /// Package the current project and publish it to a registry.
     Publish {
         /// Registry base URL; defaults to [registries] default in dream.toml.
@@ -145,6 +154,7 @@ fn main() -> ExitCode {
             port,
             args,
         } => commands::run::run(&cwd, target, release, port, &args),
+        Cmd::Test { release, filter } => commands::test::run(&cwd, release, filter),
         Cmd::Publish { registry, token } => commands::publish::run(&cwd, registry, token),
         Cmd::Pack { targets } => commands::pack::run(&cwd, &targets),
         Cmd::Search { query } => commands::search::run(&cwd, &query),

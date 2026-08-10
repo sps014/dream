@@ -381,6 +381,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Marks a function as a source generator entry point (`system.codegen`).",
     },
     AttributeSpec {
+        name: "test",
+        targets: &[AttributeTarget::Function],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a top-level `fun name(): void` as a unit test discovered by `dream test` / `dreamer test`.",
+    },
+    AttributeSpec {
         name: "syntax_block",
         targets: &[
             AttributeTarget::Function,
@@ -784,6 +791,16 @@ pub fn js_import_target(attributes: &[AttributeNode]) -> Option<(String, String)
 /// True when the declaration carries `@compute`.
 pub fn has_compute_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "compute")
+}
+
+/// True when the declaration carries `@test`.
+pub fn has_test_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "test")
+}
+
+/// True when the declaration carries `@generator`.
+pub fn has_generator_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "generator")
 }
 
 /// True when the declaration carries `@vertex`.

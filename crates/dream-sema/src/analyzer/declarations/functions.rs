@@ -17,6 +17,15 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&function.file_path);
             self.check_reserved_name(&function.name, "function", diagnostics);
             if function.generic_parameters.is_some() {
+                if dream_abi::attributes::has_test_attr(&function.attributes) {
+                    diagnostics.report_error(
+                        format!(
+                            "@test function '{}' cannot be generic",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
                 if dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
                     || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
                 {
@@ -51,6 +60,9 @@ impl<'a> Analyzer<'a> {
             }
             let mut info = FunctionTableInfo::from(function);
             info.declaring_module = self.module_of(function.file_path.as_ref());
+            if dream_abi::attributes::has_test_attr(&function.attributes) {
+                self.validate_test_function(function, diagnostics);
+            }
             if info.is_compute {
                 self.validate_compute_shader(function, &info, diagnostics);
             }
@@ -275,6 +287,72 @@ impl<'a> Analyzer<'a> {
             }
         }
         Ok(())
+    }
+
+    fn validate_test_function(
+        &self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if function.name.text == "main" {
+            diagnostics.report_error(
+                "'main' cannot be marked @test".to_string(),
+                Some(function.name.position),
+            );
+        }
+        if function.is_async {
+            diagnostics.report_error(
+                format!(
+                    "@test function '{}' cannot be async",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        if function.is_extern {
+            diagnostics.report_error(
+                format!(
+                    "@test function '{}' cannot be extern",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        if !function.parameters.is_empty() {
+            diagnostics.report_error(
+                format!(
+                    "@test function '{}' must take no parameters",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        let ret = function
+            .return_type
+            .as_ref()
+            .map(|t| t.get_type())
+            .unwrap_or_else(|| "void".to_string());
+        if ret != "void" {
+            diagnostics.report_error(
+                format!(
+                    "@test function '{}' must return void",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        if dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
+            || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
+            || dream_abi::attributes::has_generator_attr(&function.attributes)
+        {
+            diagnostics.report_error(
+                format!(
+                    "@test function '{}' cannot also be a generator or GPU shader",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
     }
 
     fn validate_compute_shader(

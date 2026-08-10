@@ -22,6 +22,8 @@ fn main() -> ExitCode {
 
     let mut verbose = false;
     let mut run_after_compile = false;
+    let mut run_tests = false;
+    let mut test_filter: Option<String> = None;
     let mut release = false;
     let mut debug_info = false;
     let mut debug_adapter = false;
@@ -55,6 +57,17 @@ fn main() -> ExitCode {
             show_help = true;
         } else if arg == "run" {
             run_after_compile = true;
+        } else if arg == "test" {
+            run_tests = true;
+        } else if arg == "--filter" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--filter requires a substring");
+                return ExitCode::FAILURE;
+            };
+            test_filter = Some(val.clone());
+        } else if let Some(val) = arg.strip_prefix("--filter=") {
+            test_filter = Some(val.to_string());
         } else if arg == "debug-adapter" {
             // Speak the Debug Adapter Protocol over stdio for the given source file (used by editor
             // debug clients such as the VS Code extension). Implies debug-info.
@@ -222,6 +235,39 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    if run_tests {
+        if run_after_compile || debug_adapter {
+            error!("'test' cannot be combined with 'run' or 'debug-adapter'");
+            return ExitCode::FAILURE;
+        }
+        let path = match file_name {
+            Some(name) => PathBuf::from(name),
+            None => {
+                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let tests = cwd.join("tests");
+                if tests.is_dir() {
+                    tests
+                } else {
+                    error!("Expected a .dream file or tests/ directory (or run from a project with tests/)");
+                    print_usage(&program);
+                    return ExitCode::FAILURE;
+                }
+            }
+        };
+        let opts = dream::driver::test::TestOptions {
+            release,
+            filter: test_filter,
+            verbose,
+        };
+        return match dream::driver::test::run_tests(&path, &opts) {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(e) => {
+                error!("{}", e);
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     let file_name = match file_name {
         Some(name) => name,
         None => {
@@ -299,7 +345,7 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [run|debug-adapter] <file>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir>",
         program
     );
     error!("  -v, --verbose         Print progress information");
@@ -321,10 +367,14 @@ fn print_usage(program: &str) {
     );
     error!("  --web                 With --runtime: browser-targeted *.web.runtime.js");
     error!("  --node                With --runtime: Node-targeted *.node.runtime.js");
+    error!("  --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR");
     error!("  -h, --help            Show this help message");
     error!("  run                   Execute the compiled module after a successful build");
+    error!("  test                  Discover and run @test functions in a file or directory");
     error!("  debug-adapter         Run the Debug Adapter Protocol server over stdio (implies -g)");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
+    error!(r"Example: {} test tests/", program);
+    error!(r"Example: {} --filter adds test tests/math.dream", program);
     error!(r"Example: {} --release run src/sample/test_arrays.dream", program);
     error!(r"Example: {} --runtime --web sample/interop/js.dream", program);
     error!(r"Example: {} --runtime --node sample/interop/js.dream", program);

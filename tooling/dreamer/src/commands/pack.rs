@@ -58,9 +58,11 @@ pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
         };
         let dest = pack_dir.join(&out_name);
         let icon_path = resolve_package_icon(&workspace);
+        let abi_path = wasm_path.with_extension("abi.json");
         build_runner(
             &dream_root,
             &wasm_path,
+            abi_path.as_path(),
             icon_path.as_deref(),
             rust_triple,
             &dest,
@@ -225,6 +227,7 @@ fn find_dream_workspace_root() -> Option<PathBuf> {
 fn build_runner(
     dream_root: &Path,
     wasm_path: &Path,
+    abi_path: &Path,
     icon_path: Option<&Path>,
     rust_triple: &str,
     dest: &Path,
@@ -243,6 +246,9 @@ fn build_runner(
         ])
         .arg(dream_root.join("Cargo.toml"));
 
+    if abi_path.is_file() {
+        cmd.env("DREAM_EMBEDDED_ABI", abi_path);
+    }
     if let Some(icon) = icon_path {
         cmd.env("DREAM_EMBEDDED_ICON", icon);
     }

@@ -30,3 +30,4 @@ tooling/vscode/bin/
 
 *.pyc
 sample/sqlite/*.db
+sample/sqlite/target/pack/*

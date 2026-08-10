@@ -31,7 +31,7 @@ mod worker;
 
 pub use console::{enable_ansi_support, link_console_functions};
 #[cfg(feature = "c-ffi")]
-pub use c_ffi::{attach_c_abi_from_wat_path, link_c_ffi_imports};
+pub use c_ffi::{attach_c_abi_from_json, attach_c_abi_from_wat_path, link_c_ffi_imports};
 #[cfg(feature = "c-ffi")]
 pub use ffi_helpers::link_ffi_helpers;
 pub use crypto::link_crypto_functions;

@@ -1,10 +1,10 @@
 use super::host::{
-    attach_c_abi_from_wat_path, enable_ansi_support, link_c_ffi_imports, link_console_functions,
-    link_crypto_functions, link_datetime_functions, link_ffi_helpers, link_file_functions,
-    link_gpu_functions,
-    link_http_functions, link_math_functions, link_net_functions, link_process_functions,
-    link_text_functions, link_worker_functions, read_string_from_memory, set_worker_module,
-    set_worker_runtime, shared_memory_for, threaded_wasm_config,
+    attach_c_abi_from_json, attach_c_abi_from_wat_path, enable_ansi_support, link_c_ffi_imports,
+    link_console_functions, link_crypto_functions, link_datetime_functions, link_ffi_helpers,
+    link_file_functions, link_gpu_functions, link_http_functions, link_math_functions,
+    link_net_functions, link_process_functions, link_text_functions, link_worker_functions,
+    read_string_from_memory, set_worker_module, set_worker_runtime, shared_memory_for,
+    threaded_wasm_config,
 };
 use std::cell::RefCell;
 use std::fs;
@@ -35,6 +35,20 @@ pub fn execute_wasm_capturing(wat_path: &str) -> Result<String, Box<dyn std::err
 
 /// Run a compiled module from raw wasm (or wat) bytes — used by `dream-runner` packed binaries.
 pub fn execute_wasm_bytes(wasm_or_wat: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    execute_wasm_bytes_with_abi(wasm_or_wat, None)
+}
+
+/// Like [`execute_wasm_bytes`], but installs `@c` / struct ABI from embedded `.abi.json` text so
+/// packed hosts can marshal strings, `ref`, and callbacks without a sibling file on disk.
+pub fn execute_wasm_bytes_with_abi(
+    wasm_or_wat: &[u8],
+    abi_json: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(text) = abi_json {
+        if !text.is_empty() {
+            attach_c_abi_from_json(text);
+        }
+    }
     run_wasm_bytes(wasm_or_wat, false, &[PathBuf::from(".")])?;
     Ok(())
 }

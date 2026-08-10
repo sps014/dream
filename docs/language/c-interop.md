@@ -184,10 +184,10 @@ dream run sample/sqlite/raw.dream
 dream run sample/sqlite/db.dream
 ```
 
-Expected `db.dream` output includes the selected rows:
+Expected `db.dream` / packed `sqlite-demo` output includes the selected rows:
 
 ```text
-opened sample/sqlite/demo.db
+opened demo.db (cwd=…)
 DROP rc=0
 CREATE rc=0
 INSERT rc=0
@@ -199,9 +199,19 @@ SELECT rc=0
 done
 ```
 
+To ship a single native executable (embeds the `.wasm` + `.abi.json`, and links `sqlite3`
+via `c_libs`):
+
+```bash
+cd sample/sqlite
+dreamer pack                 # → target/pack/sqlite-demo-<os>-<arch>
+./target/pack/sqlite-demo-macos-arm64
+```
+
 Both work out-of-the-box on macOS and on Linux distributions that ship libsqlite3 in a standard
 library dir; on hosts that don't, drop a `native/libsqlite3.*` into `sample/sqlite/` (or set
-`DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`).
+`DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`). The packed binary still needs the system/`-lsqlite3`
+shared library at run time unless you vendor it.
 
 ## Host helpers for C pointers
 

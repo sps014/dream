@@ -98,17 +98,13 @@ fn with_abi_mut<R>(f: impl FnOnce(&mut CAbiState) -> R) -> R {
     C_ABI.with(|c| f(&mut c.borrow_mut()))
 }
 
-/// Load sibling `.abi.json` `externs` for `@c` imports (mirrors GPU ABI attach).
-pub fn attach_c_abi_from_wat_path(wat_path: &str) {
-    let path = Path::new(wat_path);
-    let abi_path = path.with_extension("abi.json");
+/// Load `@c` extern / struct metadata from `.abi.json` text (used by `dream run` and packed
+/// `dream-runner` embeds).
+pub fn attach_c_abi_from_json(text: &str) {
     C_ABI.with(|c| {
         let mut st = c.borrow_mut();
         st.reset();
-        let Ok(text) = std::fs::read_to_string(&abi_path) else {
-            return;
-        };
-        let Ok(file) = serde_json::from_str::<AbiFile>(&text) else {
+        let Ok(file) = serde_json::from_str::<AbiFile>(text) else {
             return;
         };
         for ext in file.externs {
@@ -121,6 +117,17 @@ pub fn attach_c_abi_from_wat_path(wat_path: &str) {
             st.structs.insert(name, meta);
         }
     });
+}
+
+/// Load sibling `.abi.json` `externs` for `@c` imports (mirrors GPU ABI attach).
+pub fn attach_c_abi_from_wat_path(wat_path: &str) {
+    let path = Path::new(wat_path);
+    let abi_path = path.with_extension("abi.json");
+    let Ok(text) = std::fs::read_to_string(&abi_path) else {
+        C_ABI.with(|c| c.borrow_mut().reset());
+        return;
+    };
+    attach_c_abi_from_json(&text);
 }
 
 /// Resolves and links every `c/<lib>` WASM import using ABI metadata + libffi trampolines.

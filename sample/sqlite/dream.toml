@@ -1,0 +1,7 @@
+[package]
+name = "sqlite-demo"
+version = "0.1.0"
+type = "bin"
+entry = "db.dream"
+targets = ["native"]
+description = "SQLite @c FFI sample (create local DB, query via callback)"

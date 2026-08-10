@@ -4,9 +4,9 @@
 #![allow(clippy::too_many_arguments)]
 
 use super::buffers::ensure_gpu_buffer;
-use super::state::{lock_state, PassOp, ERR_OTHER, ERR_UNAVAILABLE, ERR_VALIDATION};
+use super::error::{classify_err, drain_uncaptured};
+use super::state::{lock_state, ComputePipe, PassOp};
 use indexmap::IndexSet;
-use wgpu::util::DeviceExt;
 
 pub fn dispatch(
     kernel: &str,
@@ -22,7 +22,7 @@ pub fn dispatch(
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuDispatch: {e}");
-            classify(&e)
+            classify_err(&e)
         }
     }
 }
@@ -49,18 +49,8 @@ pub fn dispatch_indirect(
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuDispatchIndirect: {e}");
-            classify(&e)
+            classify_err(&e)
         }
-    }
-}
-
-fn classify(e: &str) -> i32 {
-    if e.contains("not initialized") || e.contains("adapter") {
-        ERR_UNAVAILABLE
-    } else if e.contains("unknown") || e.contains("empty") || e.contains("abi") {
-        ERR_VALIDATION
-    } else {
-        ERR_OTHER
     }
 }
 
@@ -76,21 +66,61 @@ fn run(
     indirect: Option<(i32, i32)>,
 ) -> Result<(), String> {
     ensure_pipeline(kernel)?;
-
     let mut st = lock_state();
     if !st.ready {
         return Err("GPU not initialized".into());
     }
     let device = st.device.as_ref().unwrap().clone();
     let queue = st.queue.as_ref().unwrap().clone();
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("dream-dispatch"),
+    });
+    encode_op(
+        &mut st,
+        &device,
+        &queue,
+        &mut encoder,
+        kernel,
+        buffer_ids,
+        texture_ids,
+        sampler_ids,
+        ex,
+        ey,
+        ez,
+        uniforms,
+        indirect,
+    )?;
+    queue.submit(Some(encoder.finish()));
+    let _ = device.poll(wgpu::Maintain::Poll);
+    if let Some(e) = drain_uncaptured() {
+        st.set_last_error(e.clone());
+        return Err(e);
+    }
+    Ok(())
+}
+
+fn encode_op(
+    st: &mut super::state::GpuState,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    encoder: &mut wgpu::CommandEncoder,
+    kernel: &str,
+    buffer_ids: &[i32],
+    texture_ids: &[i32],
+    sampler_ids: &[i32],
+    ex: i32,
+    ey: i32,
+    ez: i32,
+    uniforms: &[u8],
+    indirect: Option<(i32, i32)>,
+) -> Result<(), String> {
     let meta = st
         .abi
         .as_ref()
         .and_then(|a| a.kernels.iter().find(|k| k.name == kernel))
         .cloned()
-        .ok_or_else(|| format!("unknown @compute kernel '{kernel}'"))?;
+        .ok_or_else(|| format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"))?;
 
-    // Upload storage buffers.
     let mut storage_idx = 0usize;
     let mut seen = IndexSet::new();
     for bind in &meta.bindings {
@@ -102,8 +132,8 @@ fn run(
             storage_idx += 1;
             if let Some(entry) = st.buffers.get_mut(&id) {
                 ensure_gpu_buffer(
-                    &device,
-                    &queue,
+                    device,
+                    queue,
                     entry,
                     wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
                 )?;
@@ -116,25 +146,24 @@ fn run(
     if let Some((iid, _)) = indirect {
         if let Some(entry) = st.buffers.get_mut(&iid) {
             ensure_gpu_buffer(
-                &device,
-                &queue,
+                device,
+                queue,
                 entry,
                 wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
             )?;
         }
     }
 
-    // Owned resources for bind group.
-    let mut uniforms_bufs: Vec<wgpu::Buffer> = Vec::new();
     let mut storage_bufs: Vec<wgpu::Buffer> = Vec::new();
     let mut samplers: Vec<wgpu::Sampler> = Vec::new();
     let mut views: Vec<wgpu::TextureView> = Vec::new();
+    let mut entry_plan: Vec<(u32, usize, u8)> = Vec::new();
 
     seen.clear();
     storage_idx = 0;
     let mut tex_idx = 0usize;
     let mut samp_idx = 0usize;
-    let mut entry_plan: Vec<(u32, usize, u8)> = Vec::new(); // binding, index into vec, kind tag
+    let mut uniform_binding: Option<u32> = None;
 
     for bind in &meta.bindings {
         if !seen.insert(bind.binding) {
@@ -142,7 +171,8 @@ fn run(
         }
         match bind.kind.as_str() {
             "uniform" => {
-                let mut bytes = vec![0u8; 256];
+                uniform_binding = Some(bind.binding);
+                let mut bytes = [0u8; 256];
                 bytes[0..4].copy_from_slice(&ex.to_le_bytes());
                 bytes[4..8].copy_from_slice(&ey.to_le_bytes());
                 bytes[8..12].copy_from_slice(&ez.to_le_bytes());
@@ -150,15 +180,12 @@ fn run(
                 if n > 0 {
                     bytes[12..12 + n].copy_from_slice(&uniforms[..n]);
                 }
-                let i = uniforms_bufs.len();
-                uniforms_bufs.push(device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("dream-uniform"),
-                        contents: &bytes,
-                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                    },
-                ));
-                entry_plan.push((bind.binding, i, 0));
+                let pipe = st
+                    .compute_pipes
+                    .get(kernel)
+                    .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
+                queue.write_buffer(&pipe.uniform_buf, 0, &bytes);
+                entry_plan.push((bind.binding, 0, 0));
             }
             "storage" => {
                 let id = *buffer_ids.get(storage_idx).unwrap_or(&-1);
@@ -175,7 +202,7 @@ fn run(
             "sampler" => {
                 let id = *sampler_ids.get(samp_idx).unwrap_or(&-1);
                 samp_idx += 1;
-                ensure_sampler(&mut st, &device, id)?;
+                ensure_sampler(st, device, id)?;
                 let g = st.samplers.get(&id).unwrap().gpu.clone().unwrap();
                 let i = samplers.len();
                 samplers.push(g);
@@ -184,7 +211,7 @@ fn run(
             "texture" | "storage_texture" => {
                 let id = *texture_ids.get(tex_idx).unwrap_or(&-1);
                 tex_idx += 1;
-                ensure_texture(&mut st, &device, &queue, id, bind.kind == "storage_texture")?;
+                ensure_texture(st, device, queue, id, bind.kind == "storage_texture")?;
                 let view = st
                     .textures
                     .get(&id)
@@ -200,14 +227,18 @@ fn run(
             _ => {}
         }
     }
+    let _ = uniform_binding;
 
-    let bgl = &st.compute_pipes.get(kernel).unwrap().1;
+    let pipe = st
+        .compute_pipes
+        .get(kernel)
+        .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
     let bg_entries: Vec<wgpu::BindGroupEntry<'_>> = entry_plan
         .iter()
         .map(|(binding, idx, kind)| wgpu::BindGroupEntry {
             binding: *binding,
             resource: match kind {
-                0 => uniforms_bufs[*idx].as_entire_binding(),
+                0 => pipe.uniform_buf.as_entire_binding(),
                 1 => storage_bufs[*idx].as_entire_binding(),
                 2 => wgpu::BindingResource::Sampler(&samplers[*idx]),
                 _ => wgpu::BindingResource::TextureView(&views[*idx]),
@@ -217,21 +248,17 @@ fn run(
 
     let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("dream-compute-bg"),
-        layout: bgl,
+        layout: &pipe.bgl,
         entries: &bg_entries,
     });
 
-    let pipeline = &st.compute_pipes.get(kernel).unwrap().0;
     let wg = meta.workgroup;
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("dream-dispatch"),
-    });
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("dream-cpass"),
             timestamp_writes: None,
         });
-        pass.set_pipeline(pipeline);
+        pass.set_pipeline(&pipe.pipeline);
         pass.set_bind_group(0, &bg, &[]);
         if let Some((iid, off)) = indirect {
             let indirect_buf = st
@@ -247,8 +274,6 @@ fn run(
             pass.dispatch_workgroups(gx.max(1), gy.max(1), gz.max(1));
         }
     }
-    queue.submit(Some(encoder.finish()));
-    device.poll(wgpu::Maintain::Wait);
     Ok(())
 }
 
@@ -332,8 +357,20 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         compilation_options: Default::default(),
         cache: None,
     });
-    st.compute_pipes
-        .insert(kernel.to_string(), (pipeline, bgl));
+    let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("dream-compute-uniform"),
+        size: 256,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    st.compute_pipes.insert(
+        kernel.to_string(),
+        ComputePipe {
+            pipeline,
+            bgl,
+            uniform_buf,
+        },
+    );
     Ok(())
 }
 
@@ -389,39 +426,42 @@ fn ensure_texture(
     if storage {
         t.storage = true;
     }
-    if t.gpu.is_some() {
+    if t.gpu.is_some() && !t.dirty_cpu {
         return Ok(());
     }
-    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
-        | wgpu::TextureUsages::COPY_DST
-        | wgpu::TextureUsages::COPY_SRC
-        | wgpu::TextureUsages::RENDER_ATTACHMENT;
-    if t.storage {
-        usage |= wgpu::TextureUsages::STORAGE_BINDING;
+    if t.gpu.is_none() {
+        let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::RENDER_ATTACHMENT;
+        if t.storage {
+            usage |= wgpu::TextureUsages::STORAGE_BINDING;
+        }
+        t.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("dream-tex"),
+            size: wgpu::Extent3d {
+                width: t.width.max(1),
+                height: t.height.max(1),
+                depth_or_array_layers: t.layers.max(1),
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: t.format,
+            usage,
+            view_formats: &[],
+        }));
     }
-    let tex = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("dream-tex"),
-        size: wgpu::Extent3d {
-            width: t.width.max(1),
-            height: t.height.max(1),
-            depth_or_array_layers: t.layers.max(1),
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: t.format,
-        usage,
-        view_formats: &[],
-    });
-    if !t.cpu.is_empty() && !t.depth {
+    if t.dirty_cpu && !t.cpu.is_empty() && !t.depth {
         let bpp = if t.format == wgpu::TextureFormat::Rgba16Float {
             8
         } else {
             4
         };
+        let tex = t.gpu.as_ref().unwrap();
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &tex,
+                texture: tex,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -438,8 +478,8 @@ fn ensure_texture(
                 depth_or_array_layers: 1,
             },
         );
+        t.dirty_cpu = false;
     }
-    t.gpu = Some(tex);
     Ok(())
 }
 
@@ -503,10 +543,7 @@ pub fn shader_from_wgsl(source: String, entry: String) -> i32 {
     let id = st.alloc_id();
     st.shaders.insert(
         id,
-        super::state::RawShader {
-            source,
-            entry,
-        },
+        super::state::RawShader { source, entry },
     );
     id
 }
@@ -516,7 +553,7 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
         let st = lock_state();
         match st.shaders.get(&shader_id) {
             Some(s) => (s.source.clone(), s.entry.clone()),
-            None => return ERR_OTHER,
+            None => return classify_err("unknown shader id / missing shader"),
         }
     };
     let name = format!("__raw_{shader_id}");
@@ -553,46 +590,90 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         let mut st = lock_state();
         st.passes.swap_remove(&pass_id).unwrap_or_default()
     };
-    for op in ops {
-        let code = match op {
-            PassOp::Dispatch {
-                kernel,
-                buffer_ids,
-                texture_ids,
-                sampler_ids,
-                ex,
-                ey,
-                ez,
-                uniforms,
-            } => dispatch(
-                &kernel,
-                &buffer_ids,
-                &texture_ids,
-                &sampler_ids,
-                ex,
-                ey,
-                ez,
-                &uniforms,
-            ),
-            PassOp::DispatchIndirect {
-                kernel,
-                buffer_ids,
-                texture_ids,
-                sampler_ids,
-                indirect_id,
-                offset,
-            } => dispatch_indirect(
-                &kernel,
-                &buffer_ids,
-                &texture_ids,
-                &sampler_ids,
-                indirect_id,
-                offset,
-            ),
+    if ops.is_empty() {
+        return 0;
+    }
+    for op in &ops {
+        let kernel = match op {
+            PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => kernel,
         };
-        if code != 0 {
-            return code;
+        if let Err(e) = ensure_pipeline(kernel) {
+            eprintln!("Dream gpuPassSubmit: {e}");
+            return classify_err(&e);
         }
     }
-    0
+
+    match (|| -> Result<(), String> {
+        let mut st = lock_state();
+        if !st.ready {
+            return Err("GPU not initialized".into());
+        }
+        let device = st.device.as_ref().unwrap().clone();
+        let queue = st.queue.as_ref().unwrap().clone();
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("dream-pass"),
+        });
+        for op in ops {
+            match op {
+                PassOp::Dispatch {
+                    kernel,
+                    buffer_ids,
+                    texture_ids,
+                    sampler_ids,
+                    ex,
+                    ey,
+                    ez,
+                    uniforms,
+                } => encode_op(
+                    &mut st,
+                    &device,
+                    &queue,
+                    &mut encoder,
+                    &kernel,
+                    &buffer_ids,
+                    &texture_ids,
+                    &sampler_ids,
+                    ex,
+                    ey,
+                    ez,
+                    &uniforms,
+                    None,
+                )?,
+                PassOp::DispatchIndirect {
+                    kernel,
+                    buffer_ids,
+                    texture_ids,
+                    sampler_ids,
+                    indirect_id,
+                    offset,
+                } => encode_op(
+                    &mut st,
+                    &device,
+                    &queue,
+                    &mut encoder,
+                    &kernel,
+                    &buffer_ids,
+                    &texture_ids,
+                    &sampler_ids,
+                    1,
+                    1,
+                    1,
+                    &[],
+                    Some((indirect_id, offset)),
+                )?,
+            }
+        }
+        queue.submit(Some(encoder.finish()));
+        let _ = device.poll(wgpu::Maintain::Poll);
+        if let Some(e) = drain_uncaptured() {
+            return Err(e);
+        }
+        Ok(())
+    })() {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("Dream gpuPassSubmit: {e}");
+            classify_err(&e)
+        }
+    }
 }

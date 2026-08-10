@@ -1,6 +1,7 @@
 //! Native window surface (winit) + present / blit.
 
-use super::state::{lock_state, SurfaceEntry, ERR_OTHER, ERR_UNAVAILABLE};
+use super::error::{classify_err, classify_surface_error, drain_uncaptured};
+use super::state::{lock_state, SurfaceEntry};
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
@@ -74,24 +75,14 @@ pub fn from_canvas(name: &str) -> i32 {
 }
 
 /// Create a surface / native window at `width`×`height`, titled `name`.
+/// Returns `-1` if the window or wgpu surface cannot be created (no hollow entries).
 pub fn create(name: &str, width: i32, height: i32) -> i32 {
     let mut st = lock_state();
     if !st.ready {
         return -1;
     }
-    let id = st.alloc_id();
     let w = width.max(1) as u32;
     let h = height.max(1) as u32;
-    let mut entry = SurfaceEntry {
-        width: w,
-        height: h,
-        color: None,
-        depth: None,
-        window: None,
-        surface: None,
-        config: None,
-        pending_frame: None,
-    };
 
     let title = name.to_string();
     let created = with_event_loop(|el| {
@@ -105,49 +96,62 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
         app.window
     });
 
-    if let Ok(Some(window)) = created {
-        let instance = st.instance.as_ref().unwrap();
-        match instance.create_surface(window.clone()) {
-            Ok(surface) => {
-                if let Some(adapter) = st.adapter.as_ref() {
-                    let caps = surface.get_capabilities(adapter);
-                    if let Some(fmt) = caps.formats.first().copied() {
-                        st.render_format = fmt;
-                    }
-                }
-                entry.window = Some(window);
-                entry.surface = Some(surface);
-            }
-            Err(e) => {
-                eprintln!("Dream gpuSurfaceCreate: surface create failed: {e}");
-                entry.window = Some(window);
-            }
+    let window = match created {
+        Ok(Some(window)) => window,
+        Ok(None) => {
+            eprintln!("Dream gpuSurfaceCreate: no window (unavailable)");
+            return -1;
         }
-    } else if let Err(e) = created {
-        eprintln!("Dream gpuSurfaceCreate: {e}");
+        Err(e) => {
+            eprintln!("Dream gpuSurfaceCreate: {e}");
+            return -1;
+        }
+    };
+
+    let instance = st.instance.as_ref().unwrap();
+    let surface = match instance.create_surface(window.clone()) {
+        Ok(surface) => surface,
+        Err(e) => {
+            eprintln!("Dream gpuSurfaceCreate: surface create failed: {e}");
+            return -1;
+        }
+    };
+
+    if let Some(adapter) = st.adapter.as_ref() {
+        let caps = surface.get_capabilities(adapter);
+        if let Some(fmt) = caps.formats.first().copied() {
+            st.render_format = fmt;
+        }
     }
 
-    // Auto-configure when a window surface exists so the first draw can hit the swapchain.
-    if entry.surface.is_some() {
-        let device = st.device.as_ref().unwrap().clone();
-        let format = st.render_format;
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-            format,
+    let device = st.device.as_ref().unwrap().clone();
+    let format = st.render_format;
+    let config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+        format,
+        width: w,
+        height: h,
+        present_mode: wgpu::PresentMode::AutoVsync,
+        desired_maximum_frame_latency: 2,
+        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        view_formats: vec![],
+    };
+    surface.configure(&device, &config);
+
+    let id = st.alloc_id();
+    st.surfaces.insert(
+        id,
+        SurfaceEntry {
             width: w,
             height: h,
-            present_mode: wgpu::PresentMode::AutoVsync,
-            desired_maximum_frame_latency: 2,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
-        };
-        if let Some(surface) = entry.surface.as_ref() {
-            surface.configure(&device, &config);
-        }
-        entry.config = Some(config);
-    }
-
-    st.surfaces.insert(id, entry);
+            color: None,
+            depth: None,
+            window: Some(window),
+            surface: Some(surface),
+            config: Some(config),
+            pending_frame: None,
+        },
+    );
     id
 }
 
@@ -198,11 +202,7 @@ pub fn present(id: i32) -> i32 {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuSurfacePresent: {e}");
-            if e.contains("unavailable") || e.contains("no window") {
-                ERR_UNAVAILABLE
-            } else {
-                ERR_OTHER
-            }
+            classify_err(&e)
         }
     }
 }
@@ -223,7 +223,7 @@ fn present_inner(id: i32) -> Result<(), String> {
         return Err("no window surface (unavailable)".into());
     };
     if surf.config.is_none() {
-        return Err("surface not configured".into());
+        return Err("surface not configured (validation)".into());
     }
 
     // Fast path: last draw already targeted the swapchain.
@@ -242,9 +242,30 @@ fn present_inner(id: i32) -> Result<(), String> {
     // Slow path: blit offscreen color → swapchain (e.g. after `blit`).
     let width = surf.width;
     let height = surf.height;
-    let frame = surface
-        .get_current_texture()
-        .map_err(|e| format!("acquire: {e}"))?;
+    let frame = match surface.get_current_texture() {
+        Ok(f) => f,
+        Err(e) => {
+            if matches!(
+                e,
+                wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated
+            ) {
+                if let Some(cfg) = surf.config.clone() {
+                    surface.configure(&device, &cfg);
+                }
+                surface.get_current_texture().map_err(|e2| {
+                    format!(
+                        "surface acquire failed ({})",
+                        surface_err_word(&e2)
+                    )
+                })?
+            } else {
+                return Err(format!(
+                    "surface acquire failed ({})",
+                    surface_err_word(&e)
+                ));
+            }
+        }
+    };
 
     if let Some(color) = surf.color.as_ref() {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -270,6 +291,10 @@ fn present_inner(id: i32) -> Result<(), String> {
             },
         );
         queue.submit(Some(encoder.finish()));
+        if let Some(e) = drain_uncaptured() {
+            st.set_last_error(e.clone());
+            return Err(e);
+        }
     }
     frame.present();
     drop(st);
@@ -281,12 +306,20 @@ fn present_inner(id: i32) -> Result<(), String> {
     Ok(())
 }
 
+fn surface_err_word(err: &wgpu::SurfaceError) -> &'static str {
+    match classify_surface_error(err) {
+        c if c == super::state::ERR_TIMEOUT => "timeout",
+        c if c == super::state::ERR_VALIDATION => "validation",
+        _ => "other",
+    }
+}
+
 pub fn blit(surface_id: i32, texture_id: i32) -> i32 {
     match blit_inner(surface_id, texture_id) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuRenderBlit: {e}");
-            ERR_OTHER
+            classify_err(&e)
         }
     }
 }
@@ -308,7 +341,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         let usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_DST
             | wgpu::TextureUsages::COPY_SRC;
-        let gpu = device.create_texture(&wgpu::TextureDescriptor {
+        tex.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
             label: Some("dream-blit-src"),
             size: wgpu::Extent3d {
                 width: tex.width.max(1),
@@ -321,37 +354,89 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
             format: tex.format,
             usage,
             view_formats: &[],
-        });
-        if !tex.cpu.is_empty() && !tex.depth {
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &gpu,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &tex.cpu,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(tex.width * 4),
-                    rows_per_image: Some(tex.height),
-                },
-                wgpu::Extent3d {
-                    width: tex.width,
-                    height: tex.height,
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
-        tex.gpu = Some(gpu);
+        }));
+    }
+    if tex.dirty_cpu && !tex.cpu.is_empty() && !tex.depth {
+        let bpp = if tex.format == wgpu::TextureFormat::Rgba16Float {
+            8
+        } else {
+            4
+        };
+        let gpu = tex.gpu.as_ref().unwrap();
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: gpu,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &tex.cpu,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(tex.width * bpp),
+                rows_per_image: Some(tex.height),
+            },
+            wgpu::Extent3d {
+                width: tex.width,
+                height: tex.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        tex.dirty_cpu = false;
     }
 
     let src = tex.gpu.as_ref().unwrap().clone();
+    let src_format = tex.format;
     let surf = st
         .surfaces
         .get_mut(&surface_id)
         .ok_or_else(|| format!("unknown surface {surface_id}"))?;
-    // Blit always targets offscreen; present will copy to swapchain.
+
+    // Prefer direct blit onto the swapchain when formats match (skip offscreen).
+    let can_swapchain = surf.surface.is_some()
+        && surf.config.is_some()
+        && src_format == format;
+
+    if can_swapchain {
+        surf.pending_frame = None;
+        let surface = surf.surface.as_ref().unwrap();
+        let frame = surface
+            .get_current_texture()
+            .map_err(|e| format!("surface acquire failed ({})", surface_err_word(&e)))?;
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("dream-blit-sc"),
+        });
+        let w = src.width().min(frame.texture.width());
+        let h = src.height().min(frame.texture.height());
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &src,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &frame.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit(Some(encoder.finish()));
+        if let Some(e) = drain_uncaptured() {
+            st.set_last_error(e.clone());
+            return Err(e);
+        }
+        surf.pending_frame = Some(frame);
+        return Ok(());
+    }
+
+    // Offscreen path; present will copy to swapchain.
     surf.pending_frame = None;
     if surf.color.is_none() {
         surf.color = Some(device.create_texture(&wgpu::TextureDescriptor {
@@ -398,6 +483,10 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         },
     );
     queue.submit(Some(encoder.finish()));
+    if let Some(e) = drain_uncaptured() {
+        st.set_last_error(e.clone());
+        return Err(e);
+    }
     Ok(())
 }
 

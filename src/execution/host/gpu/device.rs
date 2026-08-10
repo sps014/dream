@@ -1,6 +1,7 @@
 //! wgpu device init.
 
-use super::state::{lock_state, ERR_OTHER, ERR_TIMEOUT, ERR_UNAVAILABLE};
+use super::error::{classify_err, note_uncaptured};
+use super::state::{lock_state, ERR_UNAVAILABLE};
 
 pub fn is_available() -> bool {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
@@ -39,16 +40,20 @@ pub fn try_init() -> i32 {
         None,
     )) {
         Ok(pair) => pair,
-        Err(_) => return ERR_OTHER,
+        Err(e) => {
+            let msg = format!("request_device failed: {e}");
+            eprintln!("Dream gpuTryInit: {msg}");
+            return classify_err(&msg);
+        }
     };
     device.on_uncaptured_error(Box::new(|err| {
-        eprintln!("Dream wgpu error: {err}");
+        note_uncaptured(err.to_string());
     }));
     st.instance = Some(instance);
     st.adapter = Some(adapter);
     st.device = Some(device);
     st.queue = Some(queue);
     st.ready = true;
-    let _ = ERR_TIMEOUT; // reserved
+    st.last_error = None;
     0
 }

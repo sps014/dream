@@ -5,9 +5,9 @@
 
 use super::abi::GpuBindingMeta;
 use super::buffers::ensure_gpu_buffer;
-use super::state::{lock_state, RenderPipe, ERR_OTHER, ERR_UNAVAILABLE, ERR_VALIDATION};
+use super::error::{classify_err, classify_surface_error, drain_uncaptured};
+use super::state::{lock_state, RenderPipe};
 use indexmap::IndexSet;
-use wgpu::util::DeviceExt;
 
 fn vertex_format(s: &str) -> wgpu::VertexFormat {
     match s {
@@ -76,13 +76,7 @@ pub fn pipeline_create_ex(
         Ok(id) => id,
         Err(e) => {
             eprintln!("Dream gpuRenderPipelineCreateEx: {e}");
-            -(if e.contains("not initialized") {
-                ERR_UNAVAILABLE
-            } else if e.contains("unknown") {
-                ERR_VALIDATION
-            } else {
-                ERR_OTHER
-            })
+            -classify_err(&e)
         }
     }
 }
@@ -250,6 +244,17 @@ fn create_inner(
         cache: None,
     });
 
+    let uniform_buf = if bgl.is_some() && !uniform_bindings.is_empty() {
+        Some(device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("dream-draw-uniform"),
+            size: 256,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        }))
+    } else {
+        None
+    };
+
     let id = st.alloc_id();
     st.render_pipes.insert(
         id,
@@ -257,6 +262,7 @@ fn create_inner(
             pipeline,
             bgl,
             uniform_bindings,
+            uniform_buf,
             depth_enabled,
             sample_count,
             format,
@@ -332,7 +338,7 @@ pub fn draw_ex(
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuRenderDraw: {e}");
-            ERR_OTHER
+            classify_err(&e)
         }
     }
 }
@@ -374,11 +380,47 @@ fn draw_inner(
 
     let (color_view, pending_frame) = if use_swapchain {
         let surf = st.surfaces.get_mut(&surface_id).unwrap();
-        surf.pending_frame = None;
-        let surface = surf.surface.as_ref().unwrap();
-        let frame = surface
-            .get_current_texture()
-            .map_err(|e| format!("acquire: {e}"))?;
+        // Reuse an already-acquired frame so multi-draw + load_op=Load works.
+        let frame = if let Some(existing) = surf.pending_frame.take() {
+            existing
+        } else {
+            let surface = surf.surface.as_ref().unwrap();
+            match surface.get_current_texture() {
+                Ok(f) => f,
+                Err(e) => {
+                    // One reconfigure retry for Lost/Outdated.
+                    if matches!(
+                        e,
+                        wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated
+                    ) {
+                        if let Some(cfg) = surf.config.clone() {
+                            surface.configure(&device, &cfg);
+                        }
+                        surface
+                            .get_current_texture()
+                            .map_err(|e2| {
+                                format!(
+                                    "surface acquire failed ({})",
+                                    match classify_surface_error(&e2) {
+                                        c if c == super::state::ERR_TIMEOUT => "timeout",
+                                        c if c == super::state::ERR_VALIDATION => "validation",
+                                        _ => "other",
+                                    }
+                                )
+                            })?
+                    } else {
+                        return Err(format!(
+                            "surface acquire failed ({})",
+                            match classify_surface_error(&e) {
+                                c if c == super::state::ERR_TIMEOUT => "timeout",
+                                c if c == super::state::ERR_VALIDATION => "validation",
+                                _ => "other",
+                            }
+                        ));
+                    }
+                }
+            }
+        };
         let view = frame.texture.create_view(&Default::default());
         (view, Some(frame))
     } else {
@@ -506,28 +548,30 @@ fn draw_inner(
         .get(&pipeline_id)
         .map(|rp| rp.uniform_bindings.clone())
         .unwrap_or_default();
-    let needs_bg = st
-        .render_pipes
-        .get(&pipeline_id)
-        .and_then(|rp| rp.bgl.as_ref())
-        .is_some();
-    let ubuf = if needs_bg {
-        let mut bytes = vec![0u8; 256];
+    let needs_bg = !uniform_bindings.is_empty()
+        && st
+            .render_pipes
+            .get(&pipeline_id)
+            .and_then(|rp| rp.bgl.as_ref())
+            .is_some();
+    if needs_bg {
+        let mut bytes = [0u8; 256];
         let n = uniforms.len().min(256);
         if n > 0 {
             bytes[..n].copy_from_slice(&uniforms[..n]);
         }
-        Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("dream-draw-uniform"),
-            contents: &bytes,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        }))
-    } else {
-        None
-    };
+        let ub = st
+            .render_pipes
+            .get(&pipeline_id)
+            .and_then(|rp| rp.uniform_buf.as_ref())
+            .ok_or_else(|| "missing persistent draw uniform buffer".to_string())?;
+        queue.write_buffer(ub, 0, &bytes);
+    }
 
     let rp = st.render_pipes.get(&pipeline_id).unwrap();
-    let bg = if let (Some(bgl), Some(ub)) = (&rp.bgl, &ubuf) {
+    let bg = if needs_bg {
+        let bgl = rp.bgl.as_ref().unwrap();
+        let ub = rp.uniform_buf.as_ref().unwrap();
         let entries: Vec<wgpu::BindGroupEntry<'_>> = uniform_bindings
             .iter()
             .map(|binding| wgpu::BindGroupEntry {
@@ -535,15 +579,11 @@ fn draw_inner(
                 resource: ub.as_entire_binding(),
             })
             .collect();
-        if entries.is_empty() {
-            None
-        } else {
-            Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("dream-draw-bg"),
-                layout: bgl,
-                entries: &entries,
-            }))
-        }
+        Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("dream-draw-bg"),
+            layout: bgl,
+            entries: &entries,
+        }))
     } else {
         None
     };
@@ -608,5 +648,9 @@ fn draw_inner(
     }
     // Don't stall the CPU on GPU completion every draw — vsync on present paces frames.
     let _ = device.poll(wgpu::Maintain::Poll);
+    if let Some(e) = drain_uncaptured() {
+        st.set_last_error(e.clone());
+        return Err(e);
+    }
     Ok(())
 }

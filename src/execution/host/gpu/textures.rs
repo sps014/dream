@@ -1,5 +1,6 @@
 //! Texture + sampler CPU/GPU resources.
 
+use super::error::classify_err;
 use super::state::{lock_state, SampEntry, TexEntry};
 
 pub fn sampler_create(filter: i32) -> i32 {
@@ -71,6 +72,7 @@ fn texture_create(
             storage: false,
             depth,
             layers,
+            dirty_cpu: true,
         },
     );
     id
@@ -79,10 +81,10 @@ fn texture_create(
 pub fn texture_write_rgba(id: i32, pixels: Vec<u8>, x: i32, y: i32, w: i32, h: i32) -> i32 {
     let mut st = lock_state();
     let Some(tex) = st.textures.get_mut(&id) else {
-        return super::state::ERR_OTHER;
+        return classify_err(&format!("unknown texture {id}"));
     };
     if tex.depth {
-        return super::state::ERR_VALIDATION;
+        return classify_err("validation: cannot write rgba to depth texture");
     }
     let px = x.max(0) as u32;
     let py = y.max(0) as u32;
@@ -98,7 +100,7 @@ pub fn texture_write_rgba(id: i32, pixels: Vec<u8>, x: i32, y: i32, w: i32, h: i
             tex.cpu[dst_i..dst_i + n].copy_from_slice(&pixels[src..src + n]);
         }
     }
-    tex.gpu = None; // recreate on next use
+    tex.dirty_cpu = true;
     0
 }
 
@@ -132,7 +134,7 @@ pub fn texture_copy_from_buffer(
     let take = end.saturating_sub(off).min(tex.cpu.len());
     if take > 0 {
         tex.cpu[..take].copy_from_slice(&src[off..off + take]);
-        tex.gpu = None;
+        tex.dirty_cpu = true;
     }
 }
 
@@ -155,6 +157,7 @@ pub fn texture_copy_to_buffer(
         usage: wgpu::BufferUsages::STORAGE
             | wgpu::BufferUsages::COPY_DST
             | wgpu::BufferUsages::COPY_SRC,
+        created_usage: wgpu::BufferUsages::empty(),
         dirty_cpu: true,
     });
     let off = byte_offset.max(0) as usize;

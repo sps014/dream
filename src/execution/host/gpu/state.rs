@@ -14,6 +14,8 @@ pub struct BufEntry {
     pub cpu: Vec<u8>,
     pub gpu: Option<wgpu::Buffer>,
     pub usage: wgpu::BufferUsages,
+    /// Usage flags the live `gpu` buffer was created with (if any).
+    pub created_usage: wgpu::BufferUsages,
     pub dirty_cpu: bool,
 }
 
@@ -26,6 +28,7 @@ pub struct TexEntry {
     pub storage: bool,
     pub depth: bool,
     pub layers: u32,
+    pub dirty_cpu: bool,
 }
 
 pub struct SampEntry {
@@ -61,11 +64,20 @@ pub enum PassOp {
     },
 }
 
+pub struct ComputePipe {
+    pub pipeline: wgpu::ComputePipeline,
+    pub bgl: wgpu::BindGroupLayout,
+    /// Reusable 256-byte uniform buffer (extents + packed uniforms).
+    pub uniform_buf: wgpu::Buffer,
+}
+
 pub struct RenderPipe {
     pub pipeline: wgpu::RenderPipeline,
     pub bgl: Option<wgpu::BindGroupLayout>,
     /// Uniform binding slots declared by VS/FS (Dream packs draw uniforms into each).
     pub uniform_bindings: Vec<u32>,
+    /// Reusable 256-byte uniform buffer for draw uniforms.
+    pub uniform_buf: Option<wgpu::Buffer>,
     pub depth_enabled: bool,
     pub sample_count: u32,
     pub format: wgpu::TextureFormat,
@@ -97,10 +109,12 @@ pub struct GpuState {
     pub samplers: IndexMap<i32, SampEntry>,
     pub shaders: IndexMap<i32, RawShader>,
     pub passes: IndexMap<i32, Vec<PassOp>>,
-    pub compute_pipes: IndexMap<String, (wgpu::ComputePipeline, wgpu::BindGroupLayout)>,
+    pub compute_pipes: IndexMap<String, ComputePipe>,
     pub render_pipes: IndexMap<i32, RenderPipe>,
     pub surfaces: IndexMap<i32, SurfaceEntry>,
     pub render_format: wgpu::TextureFormat,
+    /// Last wgpu uncaptured error; consumed by host calls after submit.
+    pub last_error: Option<String>,
 }
 
 impl Default for GpuState {
@@ -122,6 +136,7 @@ impl Default for GpuState {
             render_pipes: IndexMap::new(),
             surfaces: IndexMap::new(),
             render_format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            last_error: None,
         }
     }
 }
@@ -136,6 +151,10 @@ impl GpuState {
     /// Drop GPU resources while the thread is still alive (safe for wgpu).
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    pub fn set_last_error(&mut self, msg: String) {
+        self.last_error = Some(msg);
     }
 }
 

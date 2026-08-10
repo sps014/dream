@@ -4,6 +4,7 @@ mod abi;
 mod buffers;
 mod compute;
 mod device;
+mod error;
 mod render;
 mod state;
 mod surface;
@@ -51,7 +52,21 @@ fn resolve_host_future_void(caller: &mut Caller<'_, ()>) -> Result<i32> {
 /// Load sibling `.abi.json` `gpu` section into this thread's GPU state (for `dream run` / e2e).
 pub fn attach_abi_from_wat_path(wat_path: &str) {
     let path = Path::new(wat_path);
+    let abi_path = path.with_extension("abi.json");
     let gpu = abi::load_gpu_abi_beside(path);
+    if gpu.is_none() {
+        if !abi_path.exists() {
+            eprintln!(
+                "Dream GPU: sibling ABI missing ({}); kernels/shaders will fail validation",
+                abi_path.display()
+            );
+        } else {
+            eprintln!(
+                "Dream GPU: no `gpu` section in {}; kernels/shaders will fail validation",
+                abi_path.display()
+            );
+        }
+    }
     let mut st = lock_state();
     // Fresh slot per compile+run so parallel e2e cases never share ids/pipelines.
     st.reset();

@@ -1,7 +1,6 @@
 //! Buffer CPU staging + GPU upload/download.
 
 use super::state::{lock_state, BufEntry};
-use wgpu::util::DeviceExt;
 
 pub fn alloc_bytes(n: i32) -> i32 {
     let mut st = lock_state();
@@ -15,6 +14,7 @@ pub fn alloc_bytes(n: i32) -> i32 {
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::UNIFORM,
+            created_usage: wgpu::BufferUsages::empty(),
             dirty_cpu: true,
         },
     );
@@ -34,6 +34,7 @@ pub fn alloc_vertex_bytes(n: i32) -> i32 {
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::STORAGE,
+            created_usage: wgpu::BufferUsages::empty(),
             dirty_cpu: true,
         },
     );
@@ -104,9 +105,40 @@ pub fn read_bytes_at(id: i32, byte_offset: i32, n: i32) -> Result<Vec<u8>, Strin
 
 pub fn copy(src_id: i32, dst_id: i32, src_off: i32, dst_off: i32, size: i32) {
     let mut st = lock_state();
-    let n = size.max(0) as usize;
-    let so = src_off.max(0) as usize;
-    let d_off = dst_off.max(0) as usize;
+    let n = size.max(0) as u64;
+    let so = src_off.max(0) as u64;
+    let d_off = dst_off.max(0) as u64;
+
+    let can_gpu = {
+        let src = st.buffers.get(&src_id);
+        let dst = st.buffers.get(&dst_id);
+        matches!(
+            (src, dst),
+            (Some(s), Some(d))
+                if s.gpu.is_some() && d.gpu.is_some() && !s.dirty_cpu && !d.dirty_cpu && n > 0
+        )
+    };
+    if can_gpu {
+        if let (Some(device), Some(queue)) = (st.device.clone(), st.queue.clone()) {
+            let src_gpu = st.buffers.get(&src_id).and_then(|b| b.gpu.clone());
+            let dst_gpu = st.buffers.get(&dst_id).and_then(|b| b.gpu.clone());
+            if let (Some(src_gpu), Some(dst_gpu)) = (src_gpu, dst_gpu) {
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("dream-buf-copy"),
+                });
+                encoder.copy_buffer_to_buffer(&src_gpu, so, &dst_gpu, d_off, n);
+                queue.submit(Some(encoder.finish()));
+                if let Some(dst) = st.buffers.get_mut(&dst_id) {
+                    let end = (d_off as usize) + (n as usize);
+                    if end > dst.cpu.len() {
+                        dst.cpu.resize(end, 0);
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     let src = st.buffers.get(&src_id).map(|b| b.cpu.clone()).unwrap_or_default();
     let dst = st.buffers.entry(dst_id).or_insert_with(|| BufEntry {
         cpu: Vec::new(),
@@ -114,15 +146,17 @@ pub fn copy(src_id: i32, dst_id: i32, src_off: i32, dst_off: i32, size: i32) {
         usage: wgpu::BufferUsages::STORAGE
             | wgpu::BufferUsages::COPY_DST
             | wgpu::BufferUsages::COPY_SRC,
+        created_usage: wgpu::BufferUsages::empty(),
         dirty_cpu: true,
     });
-    let end = d_off + n;
+    let end = (d_off as usize) + (n as usize);
     if end > dst.cpu.len() {
         dst.cpu.resize(end, 0);
     }
-    let take = n.min(src.len().saturating_sub(so));
+    let take = (n as usize).min(src.len().saturating_sub(so as usize));
     if take > 0 {
-        dst.cpu[d_off..d_off + take].copy_from_slice(&src[so..so + take]);
+        dst.cpu[d_off as usize..d_off as usize + take]
+            .copy_from_slice(&src[so as usize..so as usize + take]);
     }
     dst.dirty_cpu = true;
 }
@@ -134,56 +168,72 @@ pub fn ensure_gpu_buffer(
     entry: &mut BufEntry,
     extra: wgpu::BufferUsages,
 ) -> Result<(), String> {
-    entry.usage |= extra;
-    let size = entry.cpu.len().max(4) as u64;
-    let size = (size + 3) & !3; // wgpu storage buffers prefer 4-byte alignment
-    if entry.gpu.as_ref().is_some_and(|b| b.size() >= size) && !entry.dirty_cpu {
-        return Ok(());
-    }
-    if entry.cpu.len() < size as usize {
-        entry.cpu.resize(size as usize, 0);
-    }
-    let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("dream-buf"),
-        contents: &entry.cpu[..size as usize],
-        usage: entry.usage
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC,
-    });
-    entry.gpu = Some(buf);
-    entry.dirty_cpu = false;
-    let _ = queue;
-    Ok(())
-}
-
-fn sync_gpu_to_cpu(id: i32) -> Result<(), String> {
-    let mut st = lock_state();
-    let device = st
-        .device
-        .as_ref()
-        .ok_or_else(|| "GPU device not initialized".to_string())?
-        .clone();
-    let queue = st
-        .queue
-        .as_ref()
-        .ok_or_else(|| "GPU queue not initialized".to_string())?
-        .clone();
-    let entry = st
-        .buffers
-        .get_mut(&id)
-        .ok_or_else(|| format!("unknown GpuBuffer {id}"))?;
-    // CPU write is newer than last GPU download — skip readback.
-    if entry.dirty_cpu {
-        return Ok(());
-    }
-    let Some(gpu) = entry.gpu.as_ref() else {
-        return Ok(());
-    };
+    let needed =
+        entry.usage | extra | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC;
+    entry.usage = needed;
     let size = entry.cpu.len().max(4) as u64;
     let size = (size + 3) & !3;
     if entry.cpu.len() < size as usize {
         entry.cpu.resize(size as usize, 0);
     }
+
+    let can_reuse = entry.gpu.as_ref().is_some_and(|b| {
+        b.size() >= size && entry.created_usage.contains(needed)
+    });
+    if can_reuse {
+        if entry.dirty_cpu {
+            if let Some(gpu) = entry.gpu.as_ref() {
+                queue.write_buffer(gpu, 0, &entry.cpu[..size as usize]);
+            }
+            entry.dirty_cpu = false;
+        }
+        return Ok(());
+    }
+
+    let buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("dream-buf"),
+        size,
+        usage: needed,
+        mapped_at_creation: false,
+    });
+    queue.write_buffer(&buf, 0, &entry.cpu[..size as usize]);
+    entry.gpu = Some(buf);
+    entry.created_usage = needed;
+    entry.dirty_cpu = false;
+    Ok(())
+}
+
+fn sync_gpu_to_cpu(id: i32) -> Result<(), String> {
+    let (device, queue, gpu, mut cpu, size) = {
+        let mut st = lock_state();
+        let device = st
+            .device
+            .as_ref()
+            .ok_or_else(|| "GPU device not initialized".to_string())?
+            .clone();
+        let queue = st
+            .queue
+            .as_ref()
+            .ok_or_else(|| "GPU queue not initialized".to_string())?
+            .clone();
+        let entry = st
+            .buffers
+            .get_mut(&id)
+            .ok_or_else(|| format!("unknown GpuBuffer {id}"))?;
+        if entry.dirty_cpu {
+            return Ok(());
+        }
+        let Some(gpu) = entry.gpu.clone() else {
+            return Ok(());
+        };
+        let size = entry.cpu.len().max(4) as u64;
+        let size = (size + 3) & !3;
+        if entry.cpu.len() < size as usize {
+            entry.cpu.resize(size as usize, 0);
+        }
+        (device, queue, gpu, entry.cpu.clone(), size)
+    };
+
     let staging = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("dream-readback"),
         size,
@@ -193,7 +243,7 @@ fn sync_gpu_to_cpu(id: i32) -> Result<(), String> {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("dream-readback-enc"),
     });
-    encoder.copy_buffer_to_buffer(gpu, 0, &staging, 0, size);
+    encoder.copy_buffer_to_buffer(&gpu, 0, &staging, 0, size);
     queue.submit(Some(encoder.finish()));
     let slice = staging.slice(..);
     let (tx, rx) = std::sync::mpsc::channel();
@@ -206,8 +256,16 @@ fn sync_gpu_to_cpu(id: i32) -> Result<(), String> {
         .map_err(|e| format!("map failed: {e}"))?;
     {
         let data = slice.get_mapped_range();
-        entry.cpu[..size as usize].copy_from_slice(&data);
+        cpu[..size as usize].copy_from_slice(&data);
     }
     staging.unmap();
+
+    let mut st = lock_state();
+    if let Some(entry) = st.buffers.get_mut(&id) {
+        if entry.cpu.len() < size as usize {
+            entry.cpu.resize(size as usize, 0);
+        }
+        entry.cpu[..size as usize].copy_from_slice(&cpu[..size as usize]);
+    }
     Ok(())
 }

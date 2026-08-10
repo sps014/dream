@@ -197,11 +197,11 @@ class FluidApp {
     public frame: int;
 
     public constructor() {
-        this.n = 256;
-        this.mouse_x = 128;
-        this.mouse_y = 128;
-        this.prev_mx = 128;
-        this.prev_my = 128;
+        this.n = 512;
+        this.mouse_x = 256;
+        this.mouse_y = 256;
+        this.prev_mx = 256;
+        this.prev_my = 256;
         this.mouse_down = false;
         this.frame = 0;
     }
@@ -281,8 +281,13 @@ async fun main(): void {
         }
 
         let ptr = surface.pointer();
-        let mx = (int)ptr.x;
-        let my = (int)ptr.y;
+        // Pointer is in surface client pixels; map onto the simulation grid.
+        let sw = surface.width();
+        let sh = surface.height();
+        if (sw < 1) { sw = n; }
+        if (sh < 1) { sh = n; }
+        let mx = (int)(ptr.x * (float)n / (float)sw);
+        let my = (int)(ptr.y * (float)n / (float)sh);
         if (mx < 0) { mx = 0; }
         if (my < 0) { my = 0; }
         if (mx > n - 1) { mx = n - 1; }
@@ -307,7 +312,7 @@ async fun main(): void {
             n,
             n,
             1,
-            splat_uniforms(ox, oy, 0.35, fx, fy, 10.0)
+            splat_uniforms(ox, oy, 0.35, fx, fy, 20.0)
         );
         if (app.mouse_down) {
             let mfx: float = 0.8 * (float)(app.mouse_x - app.prev_mx);
@@ -318,7 +323,7 @@ async fun main(): void {
                 n,
                 n,
                 1,
-                splat_uniforms((float)app.mouse_x, (float)app.mouse_y, 0.95, mfx, mfy, 14.0)
+                splat_uniforms((float)app.mouse_x, (float)app.mouse_y, 0.95, mfx, mfy, 28.0)
             );
         }
         pass.dispatch("advect", [vx, vx_tmp, vx, vy], n, n, 1);

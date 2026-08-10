@@ -81,7 +81,8 @@ fn run(
         &mut st,
         &device,
         &queue,
-        &mut encoder,
+        Some(&mut encoder),
+        None,
         kernel,
         buffer_ids,
         texture_ids,
@@ -140,7 +141,8 @@ fn encode_op(
     st: &mut super::state::GpuState,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    encoder: &mut wgpu::CommandEncoder,
+    encoder: Option<&mut wgpu::CommandEncoder>,
+    shared_pass: Option<&mut wgpu::ComputePass<'_>>,
     kernel: &str,
     buffer_ids: &[i32],
     texture_ids: &[i32],
@@ -319,7 +321,7 @@ fn encode_op(
     }
 
     let wg = meta.workgroup;
-    {
+    let dispatch = |pass: &mut wgpu::ComputePass<'_>, st: &super::state::GpuState| -> Result<(), String> {
         let pipe = st
             .compute_pipes
             .get(kernel)
@@ -328,10 +330,6 @@ fn encode_op(
             .bg_cache
             .get(&bg_key)
             .ok_or_else(|| "missing cached bind group".to_string())?;
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("dream-cpass"),
-            timestamp_writes: None,
-        });
         pass.set_pipeline(&pipe.pipeline);
         pass.set_bind_group(0, bg, &[]);
         if let Some((iid, off)) = indirect {
@@ -347,6 +345,17 @@ fn encode_op(
             let gz = (ez.max(1) as u32).div_ceil(wg[2].max(1));
             pass.dispatch_workgroups(gx.max(1), gy.max(1), gz.max(1));
         }
+        Ok(())
+    };
+    if let Some(pass) = shared_pass {
+        dispatch(pass, st)?;
+    } else {
+        let encoder = encoder.ok_or_else(|| "missing command encoder".to_string())?;
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("dream-cpass"),
+            timestamp_writes: None,
+        });
+        dispatch(&mut pass, st)?;
     }
     Ok(())
 }
@@ -510,67 +519,74 @@ fn ensure_texture(
     id: i32,
     storage: bool,
 ) -> Result<(), String> {
-    let t = st
-        .textures
-        .get_mut(&id)
-        .ok_or_else(|| format!("missing texture {id}"))?;
-    if storage {
-        t.storage = true;
-    }
-    if t.gpu.is_some() && !t.dirty_cpu {
-        return Ok(());
-    }
-    if t.gpu.is_none() {
-        let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::COPY_SRC
-            | wgpu::TextureUsages::RENDER_ATTACHMENT;
-        if t.storage {
-            usage |= wgpu::TextureUsages::STORAGE_BINDING;
+    let mut recreated = false;
+    {
+        let t = st
+            .textures
+            .get_mut(&id)
+            .ok_or_else(|| format!("missing texture {id}"))?;
+        if storage {
+            t.storage = true;
         }
-        t.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("dream-tex"),
-            size: wgpu::Extent3d {
-                width: t.width.max(1),
-                height: t.height.max(1),
-                depth_or_array_layers: t.layers.max(1),
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: t.format,
-            usage,
-            view_formats: &[],
-        }));
-        t.view = None;
+        if t.gpu.is_some() && !t.dirty_cpu {
+            return Ok(());
+        }
+        if t.gpu.is_none() {
+            let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::RENDER_ATTACHMENT;
+            if t.storage {
+                usage |= wgpu::TextureUsages::STORAGE_BINDING;
+            }
+            t.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("dream-tex"),
+                size: wgpu::Extent3d {
+                    width: t.width.max(1),
+                    height: t.height.max(1),
+                    depth_or_array_layers: t.layers.max(1),
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: t.format,
+                usage,
+                view_formats: &[],
+            }));
+            t.view = None;
+            recreated = true;
+        }
+        if t.dirty_cpu && !t.cpu.is_empty() && !t.depth {
+            let bpp = if t.format == wgpu::TextureFormat::Rgba16Float {
+                8
+            } else {
+                4
+            };
+            let tex = t.gpu.as_ref().unwrap();
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &t.cpu,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(t.width * bpp),
+                    rows_per_image: Some(t.height),
+                },
+                wgpu::Extent3d {
+                    width: t.width,
+                    height: t.height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            t.dirty_cpu = false;
+        }
     }
-    if t.dirty_cpu && !t.cpu.is_empty() && !t.depth {
-        let bpp = if t.format == wgpu::TextureFormat::Rgba16Float {
-            8
-        } else {
-            4
-        };
-        let tex = t.gpu.as_ref().unwrap();
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: tex,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &t.cpu,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(t.width * bpp),
-                rows_per_image: Some(t.height),
-            },
-            wgpu::Extent3d {
-                width: t.width,
-                height: t.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        t.dirty_cpu = false;
+    if recreated {
+        st.invalidate_blit_tex(id);
     }
     Ok(())
 }
@@ -706,54 +722,62 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("dream-pass"),
         });
-        for op in ops {
-            match op {
-                PassOp::Dispatch {
-                    kernel,
-                    buffer_ids,
-                    texture_ids,
-                    sampler_ids,
-                    ex,
-                    ey,
-                    ez,
-                    uniforms,
-                } => encode_op(
-                    &mut st,
-                    &device,
-                    &queue,
-                    &mut encoder,
-                    &kernel,
-                    &buffer_ids,
-                    &texture_ids,
-                    &sampler_ids,
-                    ex,
-                    ey,
-                    ez,
-                    &uniforms,
-                    None,
-                )?,
-                PassOp::DispatchIndirect {
-                    kernel,
-                    buffer_ids,
-                    texture_ids,
-                    sampler_ids,
-                    indirect_id,
-                    offset,
-                } => encode_op(
-                    &mut st,
-                    &device,
-                    &queue,
-                    &mut encoder,
-                    &kernel,
-                    &buffer_ids,
-                    &texture_ids,
-                    &sampler_ids,
-                    1,
-                    1,
-                    1,
-                    &[],
-                    Some((indirect_id, offset)),
-                )?,
+        {
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("dream-batched-cpass"),
+                timestamp_writes: None,
+            });
+            for op in ops {
+                match op {
+                    PassOp::Dispatch {
+                        kernel,
+                        buffer_ids,
+                        texture_ids,
+                        sampler_ids,
+                        ex,
+                        ey,
+                        ez,
+                        uniforms,
+                    } => encode_op(
+                        &mut st,
+                        &device,
+                        &queue,
+                        None,
+                        Some(&mut cpass),
+                        &kernel,
+                        &buffer_ids,
+                        &texture_ids,
+                        &sampler_ids,
+                        ex,
+                        ey,
+                        ez,
+                        &uniforms,
+                        None,
+                    )?,
+                    PassOp::DispatchIndirect {
+                        kernel,
+                        buffer_ids,
+                        texture_ids,
+                        sampler_ids,
+                        indirect_id,
+                        offset,
+                    } => encode_op(
+                        &mut st,
+                        &device,
+                        &queue,
+                        None,
+                        Some(&mut cpass),
+                        &kernel,
+                        &buffer_ids,
+                        &texture_ids,
+                        &sampler_ids,
+                        1,
+                        1,
+                        1,
+                        &[],
+                        Some((indirect_id, offset)),
+                    )?,
+                }
             }
         }
         queue.submit(Some(encoder.finish()));

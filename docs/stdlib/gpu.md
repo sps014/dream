@@ -305,7 +305,8 @@ Same Dream API on both hosts — no `js.global` / DOM listeners required. The ho
 
 | API | Role |
 |---|---|
-| `pointer(): GpuPointer` | `x`/`y` in surface pixels, `dx`/`dy` since last read (cleared on read), `buttons`/`down`/`inside`/`pointer_id` |
+| `pointer(): GpuPointer` | `x`/`y` in surface client pixels (create/configure size; not Retina physical), `dx`/`dy` since last read (cleared on read), `buttons`/`down`/`inside`/`pointer_id` |
+| `width()` / `height()` | Client size matching pointer space |
 | `mods(): GpuMods` | `shift` / `ctrl` / `alt` / `meta` |
 | `key_down(code): bool` | Physical key latch (`Escape`, `KeyR`, `Space`, …) |
 | `focused(): bool` | Window/canvas focus |

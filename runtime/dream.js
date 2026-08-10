@@ -2644,6 +2644,14 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       if (!s || !s.input) return new Uint8Array(4);
       return packEvents(s.input);
     },
+    gpuSurfaceWidth: (id) => {
+      const s = surfaces.get(id);
+      return s ? s.width | 0 : 0;
+    },
+    gpuSurfaceHeight: (id) => {
+      const s = surfaces.get(id);
+      return s ? s.height | 0 : 0;
+    },
     gpuRenderBlit: async (surfaceId, textureId) => {
       try {
         const s = surfaces.get(surfaceId);

@@ -2,6 +2,7 @@
 
 use super::error::{classify_err, classify_surface_error, drain_uncaptured};
 use super::state::{lock_state, SurfaceEntry};
+use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,37 +58,114 @@ impl ApplicationHandler for PumpApp {
     }
 }
 
+fn map_cursor_to_surface(surf: &SurfaceEntry, physical_x: f64, physical_y: f64) -> (f32, f32) {
+    // winit cursor positions are physical; Dream pointer space is client/logical
+    // (create/configure size), matching web canvas CSS pixels — not Retina swapchain size.
+    let (win_w, win_h) = surf
+        .window
+        .as_ref()
+        .map(|w| {
+            let s = w.inner_size();
+            (s.width.max(1) as f64, s.height.max(1) as f64)
+        })
+        .unwrap_or((surf.width.max(1) as f64, surf.height.max(1) as f64));
+    let x = (physical_x / win_w) * surf.client_width.max(1) as f64;
+    let y = (physical_y / win_h) * surf.client_height.max(1) as f64;
+    (x as f32, y as f32)
+}
+
+fn client_size_from_window(window: &Window, physical: winit::dpi::PhysicalSize<u32>) -> (u32, u32) {
+    let logical = physical.to_logical::<f64>(window.scale_factor());
+    (
+        (logical.width.round() as u32).max(1),
+        (logical.height.round() as u32).max(1),
+    )
+}
+
+fn reconfigure_surface(st: &mut super::state::GpuState, id: i32, width: u32, height: u32) {
+    let w = width.max(1);
+    let h = height.max(1);
+    let Some(surf) = st.surfaces.get_mut(&id) else {
+        return;
+    };
+    surf.width = w;
+    surf.height = h;
+    surf.color = None;
+    surf.depth = None;
+    surf.pending_frame = None;
+    let Some(device) = st.device.as_ref().cloned() else {
+        return;
+    };
+    let format = st.render_format;
+    let config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+        format,
+        width: w,
+        height: h,
+        // Prefer low-latency present when the platform supports it.
+        present_mode: wgpu::PresentMode::AutoNoVsync,
+        desired_maximum_frame_latency: 1,
+        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        view_formats: vec![],
+    };
+    if let Some(surface) = st.surfaces.get(&id).and_then(|s| s.surface.as_ref()) {
+        surface.configure(&device, &config);
+    }
+    if let Some(surf) = st.surfaces.get_mut(&id) {
+        surf.config = Some(config);
+    }
+}
+
 fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
     use winit::event::{ElementState, MouseButton, MouseScrollDelta};
     use winit::keyboard::{Key, ModifiersState, NamedKey};
 
     let mut st = lock_state();
-    let Some((_, surf)) = st.surfaces.iter_mut().find(|(_, s)| {
+    let Some(sid) = st.surfaces.iter().find_map(|(id, s)| {
         s.window
             .as_ref()
-            .map(|w| w.id() == window_id)
-            .unwrap_or(false)
+            .filter(|w| w.id() == window_id)
+            .map(|_| *id)
     }) else {
         return;
     };
 
     match event {
         WindowEvent::CloseRequested => {
-            surf.input.close();
+            st.surfaces.get_mut(&sid).unwrap().input.close();
         }
-        WindowEvent::Focused(true) => surf.input.focus(),
-        WindowEvent::Focused(false) => surf.input.blur(),
+        WindowEvent::Focused(true) => st.surfaces.get_mut(&sid).unwrap().input.focus(),
+        WindowEvent::Focused(false) => st.surfaces.get_mut(&sid).unwrap().input.blur(),
         WindowEvent::CursorMoved { position, .. } => {
-            surf.input
-                .pointer_move(position.x as f32, position.y as f32, 0);
+            let surf = st.surfaces.get(&sid).unwrap();
+            let (x, y) = map_cursor_to_surface(surf, position.x, position.y);
+            st.surfaces
+                .get_mut(&sid)
+                .unwrap()
+                .input
+                .pointer_move(x, y, 0);
         }
         WindowEvent::CursorEntered { .. } => {
-            let (x, y) = (surf.input.x, surf.input.y);
-            surf.input.pointer_enter(x, y, 0);
+            let (x, y) = {
+                let i = &st.surfaces.get(&sid).unwrap().input;
+                (i.x, i.y)
+            };
+            st.surfaces
+                .get_mut(&sid)
+                .unwrap()
+                .input
+                .pointer_enter(x, y, 0);
         }
         WindowEvent::CursorLeft { .. } => {
-            let (x, y) = (surf.input.x, surf.input.y);
-            surf.input.pointer_leave(x, y, 0);
+            let (x, y) = {
+                let i = &st.surfaces.get(&sid).unwrap().input;
+                (i.x, i.y)
+            };
+            st.surfaces
+                .get_mut(&sid)
+                .unwrap()
+                .input
+                .pointer_leave(x, y, 0);
         }
         WindowEvent::MouseInput { state, button, .. } => {
             let b = match button {
@@ -98,10 +176,14 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 MouseButton::Forward => 4,
                 MouseButton::Other(n) => i32::from(n),
             };
-            let (x, y) = (surf.input.x, surf.input.y);
+            let (x, y) = {
+                let i = &st.surfaces.get(&sid).unwrap().input;
+                (i.x, i.y)
+            };
+            let input = &mut st.surfaces.get_mut(&sid).unwrap().input;
             match state {
-                ElementState::Pressed => surf.input.pointer_down(x, y, b, 0),
-                ElementState::Released => surf.input.pointer_up(x, y, b, 0),
+                ElementState::Pressed => input.pointer_down(x, y, b, 0),
+                ElementState::Released => input.pointer_up(x, y, b, 0),
             }
         }
         WindowEvent::MouseWheel { delta, .. } => {
@@ -109,58 +191,114 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 MouseScrollDelta::LineDelta(x, y) => (x, y),
                 MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
             };
-            let (x, y) = (surf.input.x, surf.input.y);
-            surf.input.wheel(dx, dy, x, y);
+            let (x, y) = {
+                let i = &st.surfaces.get(&sid).unwrap().input;
+                (i.x, i.y)
+            };
+            st.surfaces
+                .get_mut(&sid)
+                .unwrap()
+                .input
+                .wheel(dx, dy, x, y);
         }
         WindowEvent::KeyboardInput { event, .. } => {
             let code = physical_code_string(event.physical_key);
             let key = logical_key_string(&event.logical_key);
+            let input = &mut st.surfaces.get_mut(&sid).unwrap().input;
             match event.state {
                 ElementState::Pressed => {
                     if !event.repeat {
                         if let Key::Character(ch) = &event.logical_key {
                             if !ch.is_empty() {
-                                surf.input.text_input(ch.to_string());
+                                input.text_input(ch.to_string());
                             }
                         } else if let Key::Named(NamedKey::Space) = &event.logical_key {
-                            surf.input.text_input(" ".into());
+                            input.text_input(" ".into());
                         }
                     }
-                    surf.input.key_down(code, key, event.repeat);
+                    input.key_down(code, key, event.repeat);
                 }
-                ElementState::Released => surf.input.key_up(code, key),
+                ElementState::Released => input.key_up(code, key),
             }
         }
         WindowEvent::ModifiersChanged(mods) => {
             let m: ModifiersState = mods.state();
-            surf.input.shift = m.shift_key();
-            surf.input.ctrl = m.control_key();
-            surf.input.alt = m.alt_key();
-            surf.input.meta = m.super_key();
+            let input = &mut st.surfaces.get_mut(&sid).unwrap().input;
+            input.shift = m.shift_key();
+            input.ctrl = m.control_key();
+            input.alt = m.alt_key();
+            input.meta = m.super_key();
         }
         WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
-            surf.input.text_input(text);
+            st.surfaces
+                .get_mut(&sid)
+                .unwrap()
+                .input
+                .text_input(text);
         }
         WindowEvent::Resized(size) => {
-            let w = size.width.max(1);
-            let h = size.height.max(1);
-            surf.width = w;
-            surf.height = h;
-            surf.input.resize(w as i32, h as i32);
+            let pw = size.width.max(1);
+            let ph = size.height.max(1);
+            let (cw, ch) = st
+                .surfaces
+                .get(&sid)
+                .and_then(|s| s.window.as_ref())
+                .map(|w| client_size_from_window(w, size))
+                .unwrap_or((pw, ph));
+            {
+                let surf = st.surfaces.get_mut(&sid).unwrap();
+                surf.client_width = cw;
+                surf.client_height = ch;
+                surf.input.resize(cw as i32, ch as i32);
+            }
+            reconfigure_surface(&mut st, sid, pw, ph);
         }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-            surf.input.scale_factor(scale_factor as f32);
+            st.surfaces
+                .get_mut(&sid)
+                .unwrap()
+                .input
+                .scale_factor(scale_factor as f32);
+            let (physical, client) = st
+                .surfaces
+                .get(&sid)
+                .and_then(|s| s.window.as_ref())
+                .map(|w| {
+                    let size = w.inner_size();
+                    (size, client_size_from_window(w, size))
+                })
+                .unwrap_or_else(|| {
+                    let surf = st.surfaces.get(&sid).unwrap();
+                    (
+                        winit::dpi::PhysicalSize::new(surf.width, surf.height),
+                        (surf.client_width, surf.client_height),
+                    )
+                });
+            {
+                let surf = st.surfaces.get_mut(&sid).unwrap();
+                surf.client_width = client.0;
+                surf.client_height = client.1;
+            }
+            reconfigure_surface(
+                &mut st,
+                sid,
+                physical.width.max(1),
+                physical.height.max(1),
+            );
         }
         WindowEvent::Touch(touch) => {
             use winit::event::TouchPhase;
-            let x = touch.location.x as f32;
-            let y = touch.location.y as f32;
+            let (x, y) = {
+                let surf = st.surfaces.get(&sid).unwrap();
+                map_cursor_to_surface(surf, touch.location.x, touch.location.y)
+            };
             let pid = touch.id as i32;
+            let input = &mut st.surfaces.get_mut(&sid).unwrap().input;
             match touch.phase {
-                TouchPhase::Started => surf.input.pointer_down(x, y, 0, pid),
-                TouchPhase::Moved => surf.input.pointer_move(x, y, pid),
-                TouchPhase::Ended => surf.input.pointer_up(x, y, 0, pid),
-                TouchPhase::Cancelled => surf.input.pointer_cancel(pid),
+                TouchPhase::Started => input.pointer_down(x, y, 0, pid),
+                TouchPhase::Moved => input.pointer_move(x, y, pid),
+                TouchPhase::Ended => input.pointer_up(x, y, 0, pid),
+                TouchPhase::Cancelled => input.pointer_cancel(pid),
             }
         }
         _ => {}
@@ -260,13 +398,19 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
 
     let device = st.device.as_ref().unwrap().clone();
     let format = st.render_format;
+    let client_w = w;
+    let client_h = h;
+    // wgpu swapchain size is physical pixels; pointer API uses client/logical size.
+    let physical = window.inner_size();
+    let pw = physical.width.max(1);
+    let ph = physical.height.max(1);
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
         format,
-        width: w,
-        height: h,
-        present_mode: wgpu::PresentMode::AutoVsync,
-        desired_maximum_frame_latency: 2,
+        width: pw,
+        height: ph,
+        present_mode: wgpu::PresentMode::AutoNoVsync,
+        desired_maximum_frame_latency: 1,
         alpha_mode: wgpu::CompositeAlphaMode::Auto,
         view_formats: vec![],
     };
@@ -276,8 +420,10 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
     st.surfaces.insert(
         id,
         SurfaceEntry {
-            width: w,
-            height: h,
+            width: pw,
+            height: ph,
+            client_width: client_w,
+            client_height: client_h,
             color: None,
             depth: None,
             window: Some(window),
@@ -292,44 +438,38 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
 
 pub fn configure(id: i32, width: i32, height: i32) {
     let mut st = lock_state();
-    let Some(surf) = st.surfaces.get_mut(&id) else {
-        return;
-    };
-    surf.width = width.max(1) as u32;
-    surf.height = height.max(1) as u32;
-    surf.color = None;
-    surf.depth = None;
-    surf.pending_frame = None;
-
-    let (w, h) = (surf.width, surf.height);
-    let has_window = surf.window.is_some() && surf.surface.is_some();
-    if !has_window {
+    if st.surfaces.get(&id).is_none() {
         return;
     }
-    if let Some(window) = surf.window.as_ref() {
-        let _ = window.request_inner_size(winit::dpi::LogicalSize::new(w as f64, h as f64));
-    }
-    let device = match st.device.as_ref() {
-        Some(d) => d.clone(),
-        None => return,
-    };
-    let format = st.render_format;
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-        format,
-        width: w,
-        height: h,
-        present_mode: wgpu::PresentMode::AutoVsync,
-        desired_maximum_frame_latency: 2,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
-        view_formats: vec![],
-    };
-    if let Some(surface) = st.surfaces.get(&id).and_then(|s| s.surface.as_ref()) {
-        surface.configure(&device, &config);
-    }
+    let cw = width.max(1) as u32;
+    let ch = height.max(1) as u32;
     if let Some(surf) = st.surfaces.get_mut(&id) {
-        surf.config = Some(config);
+        surf.client_width = cw;
+        surf.client_height = ch;
     }
+    if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.clone()) {
+        let _ = window.request_inner_size(winit::dpi::LogicalSize::new(cw as f64, ch as f64));
+        let size = window.inner_size();
+        reconfigure_surface(&mut st, id, size.width.max(1), size.height.max(1));
+    } else {
+        reconfigure_surface(&mut st, id, cw, ch);
+    }
+}
+
+pub fn width(id: i32) -> i32 {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.client_width as i32)
+        .unwrap_or(0)
+}
+
+pub fn height(id: i32) -> i32 {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.client_height as i32)
+        .unwrap_or(0)
 }
 
 pub fn present(id: i32) -> i32 {
@@ -551,6 +691,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
         bgl,
         sampler,
         format,
+        bg_by_tex: IndexMap::new(),
     });
 }
 
@@ -568,6 +709,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         .textures
         .get_mut(&texture_id)
         .ok_or_else(|| format!("unknown texture {texture_id}"))?;
+    let mut tex_gpu_recreated = false;
     if tex.gpu.is_none() {
         let usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_DST
@@ -586,6 +728,8 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
             usage,
             view_formats: &[],
         }));
+        tex.view = None;
+        tex_gpu_recreated = true;
     }
     if tex.dirty_cpu && !tex.cpu.is_empty() && !tex.depth {
         let bpp = if tex.format == wgpu::TextureFormat::Rgba16Float {
@@ -617,7 +761,13 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
     }
 
     let src = tex.gpu.as_ref().unwrap().clone();
-    let src_view = src.create_view(&Default::default());
+    let src_view = if let Some(v) = tex.view.as_ref() {
+        v.clone()
+    } else {
+        let v = src.create_view(&Default::default());
+        tex.view = Some(v.clone());
+        v
+    };
     let can_swapchain = {
         let surf = st
             .surfaces
@@ -626,9 +776,18 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         surf.surface.is_some() && surf.config.is_some()
     };
 
-    let bg = {
+    if tex_gpu_recreated {
+        if let Some(blit) = st.blit.as_mut() {
+            blit.bg_by_tex.shift_remove(&texture_id);
+        }
+    }
+    if !st
+        .blit
+        .as_ref()
+        .is_some_and(|b| b.bg_by_tex.contains_key(&texture_id))
+    {
         let blit = st.blit.as_ref().unwrap();
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("dream-blit-bg"),
             layout: &blit.bgl,
             entries: &[
@@ -641,8 +800,13 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
                     resource: wgpu::BindingResource::TextureView(&src_view),
                 },
             ],
-        })
-    };
+        });
+        st.blit
+            .as_mut()
+            .unwrap()
+            .bg_by_tex
+            .insert(texture_id, bg);
+    }
 
     if can_swapchain {
         let surf = st.surfaces.get_mut(&surface_id).unwrap();
@@ -672,7 +836,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&blit.pipeline);
-            pass.set_bind_group(0, &bg, &[]);
+            pass.set_bind_group(0, blit.bg_by_tex.get(&texture_id).unwrap(), &[]);
             pass.draw(0..3, 0..1);
         }
         queue.submit(Some(encoder.finish()));
@@ -736,7 +900,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
             occlusion_query_set: None,
         });
         pass.set_pipeline(&blit.pipeline);
-        pass.set_bind_group(0, &bg, &[]);
+        pass.set_bind_group(0, blit.bg_by_tex.get(&texture_id).unwrap(), &[]);
         pass.draw(0..3, 0..1);
     }
     queue.submit(Some(encoder.finish()));

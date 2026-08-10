@@ -30,10 +30,22 @@ public class GpuSurface {
         return GpuSurface.from_canvas(title, width, height);
     }
 
-    // Sets the swapchain size in CSS/device pixels.
+    // Sets the swapchain / client size (CSS pixels on web; logical on native).
     @web @native
     public fun configure(width: int, height: int): void {
         Gpu.surface_configure(this.id, width, height);
+    }
+
+    // Client width in pointer space (create/configure size; not Retina physical pixels).
+    @web @native
+    public fun width(): int {
+        return Gpu.surface_width(this.id);
+    }
+
+    // Client height in pointer space.
+    @web @native
+    public fun height(): int {
+        return Gpu.surface_height(this.id);
     }
 
     // Presents the current backbuffer to the canvas / native window.

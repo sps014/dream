@@ -197,6 +197,14 @@ public class Gpu {
     static extern fun surface_poll_events(id: int): byte[];
 
     @web @native
+    @js("Dream", "gpuSurfaceWidth")
+    static extern fun surface_width(id: int): int;
+
+    @web @native
+    @js("Dream", "gpuSurfaceHeight")
+    static extern fun surface_height(id: int): int;
+
+    @web @native
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 

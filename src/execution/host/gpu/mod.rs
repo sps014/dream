@@ -377,6 +377,12 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             super::memory::write_bytes_to_memory(&mut caller, &bytes)
         },
     )?;
+    linker.func_wrap("Dream", "gpuSurfaceWidth", |id: i32| -> i32 {
+        surface::width(id)
+    })?;
+    linker.func_wrap("Dream", "gpuSurfaceHeight", |id: i32| -> i32 {
+        surface::height(id)
+    })?;
     linker.func_wrap(
         "Dream",
         "gpuRenderBlit",

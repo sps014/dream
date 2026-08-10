@@ -99,8 +99,12 @@ pub struct RenderPipe {
 }
 
 pub struct SurfaceEntry {
+    /// Swapchain / wgpu size in physical pixels.
     pub width: u32,
     pub height: u32,
+    /// Pointer + `width()`/`height()` space (logical / create·configure size). Matches web canvas CSS pixels.
+    pub client_width: u32,
+    pub client_height: u32,
     /// Offscreen color target used when there is no window swapchain (or for blit).
     pub color: Option<wgpu::Texture>,
     pub depth: Option<wgpu::Texture>,
@@ -117,6 +121,8 @@ pub struct BlitPipe {
     pub bgl: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
     pub format: wgpu::TextureFormat,
+    /// Cached blit bind groups keyed by source texture id.
+    pub bg_by_tex: IndexMap<i32, wgpu::BindGroup>,
 }
 
 pub struct GpuState {
@@ -171,6 +177,12 @@ impl GpuState {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    pub fn invalidate_blit_tex(&mut self, tex_id: i32) {
+        if let Some(blit) = self.blit.as_mut() {
+            blit.bg_by_tex.shift_remove(&tex_id);
+        }
     }
 
     /// Drop GPU resources while the thread is still alive (safe for wgpu).

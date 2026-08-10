@@ -44,13 +44,12 @@ async fun main(): void {
         return;
     }
 
-    let surface_r = GpuSurface.from_canvas("c");
+    let surface_r = GpuSurface.create("c", 800, 600);
     if (surface_r.is_err()) {
-        System.println("GpuSurface.from_canvas failed");
+        System.println("GpuSurface.create failed");
         return;
     }
     let surface = surface_r.unwrap_or(GpuSurface());
-    surface.configure(800, 600);
 
     // Explicit pipeline state (still triangle-list / no depth for this demo).
     let desc = GpuRenderPipelineDesc.defaults();

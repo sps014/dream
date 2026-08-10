@@ -363,8 +363,25 @@ fn draw_inner(
     let format = rp.format;
     let sample_count = rp.sample_count;
 
-    // Ensure surface offscreen color exists.
-    {
+    // Prefer drawing straight into the window swapchain (avoids an extra copy on present).
+    let use_swapchain = {
+        let surf = st
+            .surfaces
+            .get(&surface_id)
+            .ok_or_else(|| format!("unknown surface {surface_id}"))?;
+        surf.surface.is_some() && surf.config.is_some() && sample_count <= 1
+    };
+
+    let (color_view, pending_frame) = if use_swapchain {
+        let surf = st.surfaces.get_mut(&surface_id).unwrap();
+        surf.pending_frame = None;
+        let surface = surf.surface.as_ref().unwrap();
+        let frame = surface
+            .get_current_texture()
+            .map_err(|e| format!("acquire: {e}"))?;
+        let view = frame.texture.create_view(&Default::default());
+        (view, Some(frame))
+    } else {
         let surf = st
             .surfaces
             .get_mut(&surface_id)
@@ -387,6 +404,17 @@ fn draw_inner(
                 view_formats: &[],
             }));
         }
+        (
+            surf.color
+                .as_ref()
+                .unwrap()
+                .create_view(&Default::default()),
+            None,
+        )
+    };
+
+    {
+        let surf = st.surfaces.get_mut(&surface_id).unwrap();
         if depth_enabled && surf.depth.is_none() && depth_texture_id < 0 {
             surf.depth = Some(device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("dream-surface-depth"),
@@ -424,13 +452,6 @@ fn draw_inner(
             )?;
         }
     }
-
-    let color_view = st
-        .surfaces
-        .get(&surface_id)
-        .and_then(|s| s.color.as_ref())
-        .unwrap()
-        .create_view(&Default::default());
 
     let depth_view = if depth_enabled {
         if depth_texture_id >= 0 {
@@ -579,6 +600,13 @@ fn draw_inner(
         }
     }
     queue.submit(Some(encoder.finish()));
-    device.poll(wgpu::Maintain::Wait);
+    if let Some(frame) = pending_frame {
+        st.surfaces
+            .get_mut(&surface_id)
+            .unwrap()
+            .pending_frame = Some(frame);
+    }
+    // Don't stall the CPU on GPU completion every draw — vsync on present paces frames.
+    let _ = device.poll(wgpu::Maintain::Poll);
     Ok(())
 }

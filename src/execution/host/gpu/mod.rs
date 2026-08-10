@@ -298,6 +298,14 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
     )?;
     linker.func_wrap(
         "Dream",
+        "gpuSurfaceCreate",
+        |mut caller: Caller<'_, ()>, title_ptr: i32, width: i32, height: i32| -> Result<i32> {
+            let title = read_arg_string(&mut caller, title_ptr)?;
+            Ok(surface::create(&title, width, height))
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
         "gpuSurfaceConfigure",
         |id: i32, w: i32, h: i32| {
             surface::configure(id, w, h);

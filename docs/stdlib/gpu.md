@@ -291,18 +291,21 @@ let samp = GpuSampler.linear();
 let wrap = GpuSampler.create(1, 1, 1);
 ```
 
-#### `GpuSurface.from_canvas(canvas_id)` / `configure(w, h)` / `await present()`
+#### `GpuSurface.from_canvas` / `create` / `configure` / `await present()`
 
-Swapchain for an HTML canvas. `configure` when the canvas size changes; `present` after blitting the frame you want shown.
+- `from_canvas(id)` — canvas id (browser) or window title (native); default size 800×600
+- `from_canvas(id, w, h)` — same, with initial size
+- `create(title, w, h)` — alias of `from_canvas(title, w, h)`
+
+`configure` when the size changes; `present` after the frame you want shown.
 
 #### `await GpuRenderPass.blit(surface, tex)`
 
 Fullscreen blit of a texture onto the surface. Typical end of an interactive frame: compute → texture → blit → present → `Gpu.frame`.
 
 ```dream
-switch (GpuSurface.from_canvas("fluid")) {
+switch (GpuSurface.create("fluid", w, h)) {
     Ok(surface) => {
-        surface.configure(w, h);
         await GpuRenderPass.blit(surface, tex);
         await surface.present();
         await Gpu.frame();
@@ -378,8 +381,8 @@ fun count(flags: GpuBuffer<int>, n: int): void {
 | Browser (`dream.js`) | Real WebGPU when available |
 | Native (`dream run`) | Real wgpu compute + render; presents to a winit window |
 
-`GpuSurface.from_canvas`, `configure`, `present`, `GpuRenderPass.blit`, and draw helpers
-are available on `@web` and `@native`. On native, `from_canvas(name)` opens a window titled
-`name`. Present needs a display; compute still works headless when an adapter exists.
+`GpuSurface.from_canvas` / `create`, `configure`, `present`, `GpuRenderPass.blit`, and draw helpers
+are available on `@web` and `@native`. On native, `create(title, w, h)` opens a window titled
+`title` at that size. Present needs a display; compute still works headless when an adapter exists.
 
 See [Compute shaders](../language/compute.md) and [Vertex & fragment shaders](../language/shaders.md).

@@ -1,21 +1,33 @@
 module system.gpu;
 
-// Canvas-backed WebGPU swapchain.
+// Canvas / native-window swapchain.
 
 public class GpuSurface {
     public id: int;
 
     // Creates a surface bound to the DOM canvas with id `canvas_id` (browser),
-    // or a native window titled `canvas_id` under `dream run`.
+    // or a native window titled `canvas_id` under `dream run` (default 800×600).
     @web @native
     public static fun from_canvas(canvas_id: string): Result<GpuSurface, GpuError> {
-        let sid = Gpu.surface_from_canvas(canvas_id);
+        return GpuSurface.from_canvas(canvas_id, 800, 600);
+    }
+
+    // Like `from_canvas(id)`, with an initial swapchain / window size.
+    @web @native
+    public static fun from_canvas(canvas_id: string, width: int, height: int): Result<GpuSurface, GpuError> {
+        let sid = Gpu.surface_create(canvas_id, width, height);
         if (sid < 0) {
             return Result.Err(GpuError.unavailable("GpuSurface.from_canvas failed"));
         }
         let s = GpuSurface();
         s.id = sid;
         return Result.Ok(s);
+    }
+
+    // Native-friendly alias: window titled `title` at `width`×`height` (same host as `from_canvas`).
+    @web @native
+    public static fun create(title: string, width: int, height: int): Result<GpuSurface, GpuError> {
+        return GpuSurface.from_canvas(title, width, height);
     }
 
     // Sets the swapchain size in CSS/device pixels.

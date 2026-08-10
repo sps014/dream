@@ -267,17 +267,15 @@ async fun main(): void {
         return;
     }
 
-    let surface_r = GpuSurface.from_canvas("ocean");
+    let surface_r = GpuSurface.create("ocean", 1280, 720);
     if (surface_r.is_err()) {
-        System.println("GpuSurface.from_canvas failed");
+        System.println("GpuSurface.create failed");
         return;
     }
     let surface = surface_r.unwrap_or(GpuSurface());
 
-    // Fixed resolution works on native and web (HTML can still override via configure later).
     let w: int = 1280;
     let h: int = 720;
-    surface.configure(w, h);
 
     let desc = GpuRenderPipelineDesc.overlay();
     let pipe_r = await GpuRenderPipeline.create_ex("sea_vs", "sea_fs", desc);

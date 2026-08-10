@@ -35,7 +35,7 @@ impl ApplicationHandler for WindowCreateApp {
             ));
         match event_loop.create_window(attrs) {
             Ok(w) => self.window = Some(Arc::new(w)),
-            Err(e) => eprintln!("Dream gpuSurfaceFromCanvas: window create failed: {e}"),
+            Err(e) => eprintln!("Dream gpuSurfaceCreate: window create failed: {e}"),
         }
     }
 
@@ -68,31 +68,37 @@ fn with_event_loop<R>(f: impl FnOnce(&mut EventLoop<()>) -> R) -> Result<R, Stri
     })
 }
 
-/// Create a surface entry; try to open a winit window titled `name`.
+/// Legacy: create with default 800×600.
 pub fn from_canvas(name: &str) -> i32 {
+    create(name, 800, 600)
+}
+
+/// Create a surface / native window at `width`×`height`, titled `name`.
+pub fn create(name: &str, width: i32, height: i32) -> i32 {
     let mut st = lock_state();
     if !st.ready {
         return -1;
     }
     let id = st.alloc_id();
+    let w = width.max(1) as u32;
+    let h = height.max(1) as u32;
     let mut entry = SurfaceEntry {
-        width: 800,
-        height: 600,
+        width: w,
+        height: h,
         color: None,
         depth: None,
         window: None,
         surface: None,
         config: None,
+        pending_frame: None,
     };
 
-    let width = entry.width;
-    let height = entry.height;
     let title = name.to_string();
     let created = with_event_loop(|el| {
         let mut app = WindowCreateApp {
             title,
-            width,
-            height,
+            width: w,
+            height: h,
             window: None,
         };
         let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
@@ -113,13 +119,34 @@ pub fn from_canvas(name: &str) -> i32 {
                 entry.surface = Some(surface);
             }
             Err(e) => {
-                eprintln!("Dream gpuSurfaceFromCanvas: surface create failed: {e}");
+                eprintln!("Dream gpuSurfaceCreate: surface create failed: {e}");
                 entry.window = Some(window);
             }
         }
     } else if let Err(e) = created {
-        eprintln!("Dream gpuSurfaceFromCanvas: {e}");
+        eprintln!("Dream gpuSurfaceCreate: {e}");
     }
+
+    // Auto-configure when a window surface exists so the first draw can hit the swapchain.
+    if entry.surface.is_some() {
+        let device = st.device.as_ref().unwrap().clone();
+        let format = st.render_format;
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+            format,
+            width: w,
+            height: h,
+            present_mode: wgpu::PresentMode::AutoVsync,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+        };
+        if let Some(surface) = entry.surface.as_ref() {
+            surface.configure(&device, &config);
+        }
+        entry.config = Some(config);
+    }
+
     st.surfaces.insert(id, entry);
     id
 }
@@ -133,6 +160,7 @@ pub fn configure(id: i32, width: i32, height: i32) {
     surf.height = height.max(1) as u32;
     surf.color = None;
     surf.depth = None;
+    surf.pending_frame = None;
 
     let (w, h) = (surf.width, surf.height);
     let has_window = surf.window.is_some() && surf.surface.is_some();
@@ -197,6 +225,21 @@ fn present_inner(id: i32) -> Result<(), String> {
     if surf.config.is_none() {
         return Err("surface not configured".into());
     }
+
+    // Fast path: last draw already targeted the swapchain.
+    if let Some(frame) = surf.pending_frame.take() {
+        frame.present();
+        let _ = device;
+        let _ = queue;
+        drop(st);
+        let _ = with_event_loop(|el| {
+            let mut app = PumpApp;
+            let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
+        });
+        return Ok(());
+    }
+
+    // Slow path: blit offscreen color → swapchain (e.g. after `blit`).
     let width = surf.width;
     let height = surf.height;
     let frame = surface
@@ -229,7 +272,6 @@ fn present_inner(id: i32) -> Result<(), String> {
         queue.submit(Some(encoder.finish()));
     }
     frame.present();
-    device.poll(wgpu::Maintain::Wait);
     drop(st);
 
     let _ = with_event_loop(|el| {
@@ -309,6 +351,8 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         .surfaces
         .get_mut(&surface_id)
         .ok_or_else(|| format!("unknown surface {surface_id}"))?;
+    // Blit always targets offscreen; present will copy to swapchain.
+    surf.pending_frame = None;
     if surf.color.is_none() {
         surf.color = Some(device.create_texture(&wgpu::TextureDescriptor {
             label: Some("dream-surface-color"),
@@ -354,14 +398,13 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         },
     );
     queue.submit(Some(encoder.finish()));
-    device.poll(wgpu::Maintain::Wait);
     Ok(())
 }
 
 pub fn frame_tick() {
     let _ = with_event_loop(|el| {
         let mut app = PumpApp;
-        let _ = el.pump_app_events(Some(Duration::from_millis(1)), &mut app);
+        // Vsync already paces present; only pump input, don't sleep.
+        let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
     });
-    std::thread::sleep(Duration::from_millis(8));
 }

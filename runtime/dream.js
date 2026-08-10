@@ -2317,15 +2317,23 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     },
 
     gpuSurfaceFromCanvas: (canvasId) => {
+      return host.gpuSurfaceCreate(canvasId, 800, 600);
+    },
+    gpuSurfaceCreate: (title, width, height) => {
       if (typeof document === "undefined") return -1;
-      const el = document.getElementById(String(canvasId)) || document.querySelector("canvas");
+      const el =
+        document.getElementById(String(title)) || document.querySelector("canvas");
       if (!el || typeof el.getContext !== "function") return -1;
       const id = nextId++;
+      const w = Math.max(1, width | 0);
+      const h = Math.max(1, height | 0);
+      el.width = w;
+      el.height = h;
       surfaces.set(id, {
         canvas: el,
         context: null,
-        width: el.width || 1,
-        height: el.height || 1,
+        width: w,
+        height: h,
         configured: false,
         lastTexture: null,
       });

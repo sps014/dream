@@ -74,12 +74,14 @@ pub struct RenderPipe {
 pub struct SurfaceEntry {
     pub width: u32,
     pub height: u32,
-    /// Offscreen color target drawn into by render passes.
+    /// Offscreen color target used when there is no window swapchain (or for blit).
     pub color: Option<wgpu::Texture>,
     pub depth: Option<wgpu::Texture>,
     pub window: Option<Arc<winit::window::Window>>,
     pub surface: Option<wgpu::Surface<'static>>,
     pub config: Option<wgpu::SurfaceConfiguration>,
+    /// Acquired swapchain frame drawn into by the last render pass; presented by `present`.
+    pub pending_frame: Option<wgpu::SurfaceTexture>,
 }
 
 pub struct GpuState {

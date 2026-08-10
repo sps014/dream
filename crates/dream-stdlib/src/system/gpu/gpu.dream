@@ -161,6 +161,10 @@ public class Gpu {
     static extern fun surface_from_canvas(canvas_id: string): int;
 
     @web @native
+    @js("Dream", "gpuSurfaceCreate")
+    static extern fun surface_create(title: string, width: int, height: int): int;
+
+    @web @native
     @js("Dream", "gpuSurfaceConfigure")
     static extern fun surface_configure(id: int, width: int, height: int): void;
 

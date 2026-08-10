@@ -79,11 +79,14 @@ pub(super) fn signature_table(
 /// Maps each function's `(DefId, instance args)` to its slot in the module's function table, in
 /// `mir.functions` order (so the slot index matches the `(elem ...)` position below). A `FuncRef`
 /// resolves to this index; `call_indirect` uses it as the table entry.
+///
+/// Slot `0` is reserved as the null funcref (never populated). Host trampolines (JS/`@c`) treat a
+/// bare funcidx of `0` as a null callback, so real functions must start at index `1`.
 pub(super) fn func_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>), usize> {
     mir.functions
         .iter()
         .enumerate()
-        .map(|(i, f)| ((f.def, f.instance.clone()), i))
+        .map(|(i, f)| ((f.def, f.instance.clone()), i + 1))
         .collect()
 }
 
@@ -153,13 +156,17 @@ pub(crate) fn poll_symbol(func: &MirFunction) -> String {
 
 /// Emits the function table and its element section (constructors/sync functions first, then async
 /// poll functions), plus the `__indirect_function_table` export.
+///
+/// Index `0` is left empty (null funcref) so host-side `0` stays a null callback sentinel; real
+/// entries are installed starting at `(elem (i32.const 1) …)`.
 pub(super) fn emit_func_table(out: &mut String, mir: &crate::Mir) {
     let poll_count = mir.functions.iter().filter(|f| f.is_async).count();
     let n = mir.functions.len() + poll_count;
     if n == 0 {
         return;
     }
-    let _ = writeln!(out, "(table $__ft {} funcref)", n);
+    // +1: reserved null slot at index 0 (see [`func_table`]).
+    let _ = writeln!(out, "(table $__ft {} funcref)", n + 1);
     let mut syms: Vec<String> = mir
         .functions
         .iter()
@@ -168,7 +175,7 @@ pub(super) fn emit_func_table(out: &mut String, mir: &crate::Mir) {
     for f in mir.functions.iter().filter(|f| f.is_async) {
         syms.push(format!("${}", poll_symbol(f)));
     }
-    let _ = writeln!(out, "(elem (i32.const 0) {})", syms.join(" "));
+    let _ = writeln!(out, "(elem (i32.const 1) {})", syms.join(" "));
     out.push_str("(export \"__indirect_function_table\" (table $__ft))\n");
 }
 

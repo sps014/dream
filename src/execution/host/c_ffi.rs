@@ -556,11 +556,12 @@ fn invoke_c(
                     c_args.push(ArgSlot::Ptr(0));
                 } else {
                     let (arg_kinds, ret_kind) = parse_fn_tag(t);
+                    // Use pointer types for `ptr` so libffi matches the C ABI (not `i64`).
                     let cif_args: Vec<Type> = arg_kinds
                         .iter()
                         .map(|k| match *k {
                             "i32" => Type::i32(),
-                            "i64" | "ptr" => Type::i64(),
+                            "i64" => Type::i64(),
                             "f32" => Type::f32(),
                             "f64" => Type::f64(),
                             _ => Type::pointer(),
@@ -574,6 +575,8 @@ fn invoke_c(
                         _ => Type::i32(),
                     };
                     let cb_cif = Cif::new(cif_args, cif_ret);
+                    // `p == 0` is the reserved null funcref (see MIR `func_table`); real callbacks
+                    // start at index 1.
                     let data = Box::new(DreamCbData {
                         funcidx: p as u32,
                         arg_kinds,

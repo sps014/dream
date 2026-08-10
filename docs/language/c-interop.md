@@ -172,9 +172,10 @@ dependencies without re-parsing sources.
 The [`sample/sqlite/`](../../sample/sqlite) folder contains two runnable samples:
 
 - [`raw.dream`](../../sample/sqlite/raw.dream) — direct `@c` bindings to libsqlite3, opening an
-  in-memory database and executing a couple of statements.
-- [`db.dream`](../../sample/sqlite/db.dream) — a small `Database` class that hides the raw C
-  handle behind idiomatic Dream methods.
+  in-memory database and executing DDL/DML.
+- [`db.dream`](../../sample/sqlite/db.dream) — a small `Database` class that creates `./demo.db` in
+  the process working directory, inserts rows, and prints `SELECT` results via a C callback that
+  uses `dream_ffi.read_ptr` / `dream_ffi.read_cstring` to read host `char**` values.
 
 Run either with:
 
@@ -183,9 +184,42 @@ dream run sample/sqlite/raw.dream
 dream run sample/sqlite/db.dream
 ```
 
+Expected `db.dream` output includes the selected rows:
+
+```text
+opened sample/sqlite/demo.db
+DROP rc=0
+CREATE rc=0
+INSERT rc=0
+--- SELECT ---
+1 | apple
+2 | pear
+3 | kiwi
+SELECT rc=0
+done
+```
+
 Both work out-of-the-box on macOS and on Linux distributions that ship libsqlite3 in a standard
 library dir; on hosts that don't, drop a `native/libsqlite3.*` into `sample/sqlite/` (or set
 `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`).
+
+## Host helpers for C pointers
+
+SQLite (and most C libraries) pass `char*` / `T*` that live in the **host** address space, not
+Dream linear memory. From a Dream callback, use:
+
+```dream
+@native
+@js("dream_ffi", "read_ptr")
+extern fun ffi_read_ptr(base: long, index: int): long;
+
+@native
+@js("dream_ffi", "read_cstring")
+extern fun ffi_read_cstring(ptr: long): string;
+```
+
+`read_ptr(base, i)` loads `*((void**)base + i)`; `read_cstring` copies a NUL-terminated UTF-8
+C string into a Dream `string`.
 
 ## Compared to `@js`
 
@@ -199,6 +233,6 @@ share the same *shape* on the Dream side:
 | Automatic marshaling      | Yes, via `.abi.json`                | Yes, via `.abi.json` (`kind: "c"`)         |
 | Async                     | `async` + `Promise` bridge          | Not supported (call C on the caller thread) |
 | Out-params                | Return a wrapper struct / tuple     | Dream `ref` parameter                      |
-| Callbacks (into Dream)    | `fun(...)` values marshalled to JS  | Not yet supported (null accepted)          |
+| Callbacks (into Dream)    | `fun(...)` values marshalled to JS  | Captureless `fun(...)` → native trampoline |
 
 See [JS Interop](interop.md) for the JS side.

@@ -14,6 +14,8 @@
 mod console;
 #[cfg(feature = "c-ffi")]
 mod c_ffi;
+#[cfg(feature = "c-ffi")]
+mod ffi_helpers;
 mod crypto;
 mod datetime;
 mod file;
@@ -30,6 +32,8 @@ mod worker;
 pub use console::{enable_ansi_support, link_console_functions};
 #[cfg(feature = "c-ffi")]
 pub use c_ffi::{attach_c_abi_from_wat_path, link_c_ffi_imports};
+#[cfg(feature = "c-ffi")]
+pub use ffi_helpers::link_ffi_helpers;
 pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;
 pub use file::link_file_functions;

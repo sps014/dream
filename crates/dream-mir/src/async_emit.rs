@@ -36,7 +36,9 @@ const RUNTIME_ASYNC: &str = include_str!("runtime/async.wat");
 pub fn poll_indices(
     functions: &[MirFunction],
 ) -> HashMap<(dream_types::DefId, Vec<TypeId>), usize> {
-    let base = functions.len();
+    // Match [`crate::emit::tables::func_table`]: slot 0 is the null funcref sentinel, so constructor
+    // and poll entries begin at 1 / `functions.len() + 1`.
+    let base = functions.len() + 1;
     functions
         .iter()
         .filter(|f| f.is_async)

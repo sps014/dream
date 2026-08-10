@@ -1064,12 +1064,12 @@ fn test_indirect_call_emits_table_and_signature() {
     let (mir, interner) = indirect_call_demo();
     let wat = dream_mir::emit::emit_module(&mir, &interner, false);
     assert!(
-        wat.contains("(table $__ft 2 funcref)"),
+        wat.contains("(table $__ft 3 funcref)"),
         "function table missing:\n{}",
         wat
     );
     assert!(
-        wat.contains("(elem (i32.const 0) $add $main)"),
+        wat.contains("(elem (i32.const 1) $add $main)"),
         "elem section missing:\n{}",
         wat
     );

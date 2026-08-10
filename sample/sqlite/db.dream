@@ -1,9 +1,9 @@
-// A tiny `Database` wrapper around the raw `@c` sqlite3 bindings from `raw.dream`.
-// Demonstrates hiding the C-level `ref long` handle behind a Dream class so end users get an
-// idiomatic API (`db.exec(sql)`) while the FFI stays out of sight.
+// Create a local SQLite file, insert rows, then SELECT them back through a C callback.
 //
-// Run:
-//   dream run sample/sqlite/db.dream
+// Run from any cwd:
+//   dream run /path/to/Dream/sample/sqlite/db.dream
+//
+// Creates `./demo.db` in the process working directory and prints query rows.
 import system;
 
 @native
@@ -16,15 +16,56 @@ extern fun sqlite3_close(db: long): int;
 
 @native
 @c("sqlite3", "sqlite3_exec")
-extern fun sqlite3_exec(db: long, sql: string, callback: long, arg: long, ref errmsg: long): int;
+extern fun sqlite3_exec(
+    db: long,
+    sql: string,
+    callback: fun(long, int, long, long): int,
+    arg: long,
+    ref errmsg: long
+): int;
+
+// Host helpers: read native `char**` / `char*` from C callbacks into Dream values.
+@native
+@js("dream_ffi", "read_ptr")
+extern fun ffi_read_ptr(base: long, index: int): long;
+
+@native
+@js("dream_ffi", "read_cstring")
+extern fun ffi_read_cstring(ptr: long): string;
+
+fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
+    let line = "";
+    let i = 0;
+    while (i < argc) {
+        let cell = ffi_read_ptr(argv, i);
+        let text = "";
+        if (cell == 0L) {
+            text = "NULL";
+        } else {
+            text = ffi_read_cstring(cell);
+        }
+        if (i > 0) {
+            line = line + " | ";
+        }
+        line = line + text;
+        i = i + 1;
+    }
+    System.println(line);
+    return 0;
+}
+
+// No-op callback for DDL/DML (sqlite only invokes the callback for result rows).
+fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
+    return 0;
+}
 
 class Database {
     handle: long;
-    is_open: bool;
+    public is_open: bool;
 
-    constructor(handle: long) {
+    constructor(handle: long, is_open: bool) {
         this.handle = handle;
-        this.is_open = true;
+        this.is_open = is_open;
     }
 
     public static fun open(path: string): Database {
@@ -32,8 +73,9 @@ class Database {
         let rc = sqlite3_open(path, ref handle);
         if (rc != 0) {
             System.println("sqlite3_open('" + path + "') failed with rc=" + rc);
+            return Database(0L, false);
         }
-        return Database(handle);
+        return Database(handle, true);
     }
 
     public fun exec(sql: string): int {
@@ -41,7 +83,17 @@ class Database {
             return -1;
         }
         let errmsg: long = 0L;
-        return sqlite3_exec(this.handle, sql, 0L, 0L, ref errmsg);
+        let rc = sqlite3_exec(this.handle, sql, ignore_row, 0L, ref errmsg);
+        return rc;
+    }
+
+    public fun query(sql: string): int {
+        if (this.is_open == false) {
+            return -1;
+        }
+        let errmsg: long = 0L;
+        let rc = sqlite3_exec(this.handle, sql, print_row, 0L, ref errmsg);
+        return rc;
     }
 
     public fun close(): void {
@@ -53,11 +105,27 @@ class Database {
 }
 
 fun main(): void {
-    let db = Database.open(":memory:");
-    let rc = db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);");
+    // Relative to process cwd (not the .dream file). Repo-relative paths like
+    // `sample/sqlite/demo.db` only work when you launch from the Dream repo root.
+    let path = "demo.db";
+    let db = Database.open(path);
+    if (db.is_open == false) {
+        System.println("aborting: could not open database");
+        return;
+    }
+    System.println("opened " + path + " (cwd=" + System.cwd().unwrap_or("?") + ")");
+
+    let rc = db.exec("DROP TABLE IF EXISTS items;");
+    System.println("DROP rc=" + rc);
+    rc = db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);");
     System.println("CREATE rc=" + rc);
     rc = db.exec("INSERT INTO items(name) VALUES ('apple'), ('pear'), ('kiwi');");
     System.println("INSERT rc=" + rc);
+
+    System.println("--- SELECT ---");
+    rc = db.query("SELECT id, name FROM items ORDER BY id;");
+    System.println("SELECT rc=" + rc);
+
     db.close();
     System.println("done");
 }

@@ -64,6 +64,8 @@ pub enum PassOp {
 pub struct RenderPipe {
     pub pipeline: wgpu::RenderPipeline,
     pub bgl: Option<wgpu::BindGroupLayout>,
+    /// Uniform binding slots declared by VS/FS (Dream packs draw uniforms into each).
+    pub uniform_bindings: Vec<u32>,
     pub depth_enabled: bool,
     pub sample_count: u32,
     pub format: wgpu::TextureFormat,

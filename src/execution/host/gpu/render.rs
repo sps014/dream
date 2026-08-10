@@ -135,9 +135,13 @@ fn create_inner(
     all_binds.extend(fs.bindings.iter().cloned());
     let mut seen = IndexSet::new();
     let mut layout_entries = Vec::new();
+    let mut uniform_bindings = Vec::new();
     for b in &all_binds {
         if !seen.insert(b.binding) {
             continue;
+        }
+        if b.kind == "uniform" {
+            uniform_bindings.push(b.binding);
         }
         layout_entries.push(render_layout_entry(b));
     }
@@ -252,6 +256,7 @@ fn create_inner(
         RenderPipe {
             pipeline,
             bgl,
+            uniform_bindings,
             depth_enabled,
             sample_count,
             format,
@@ -474,14 +479,22 @@ fn draw_inner(
         })
     };
 
-    // Uniform bind group (optional).
-    let ubuf = if !uniforms.is_empty() || st.render_pipes.get(&pipeline_id).unwrap().bgl.is_some() {
-        let mut bytes = vec![0u8; uniforms.len().max(16)];
-        if !uniforms.is_empty() {
-            bytes[..uniforms.len()].copy_from_slice(uniforms);
-        }
-        while !bytes.len().is_multiple_of(16) {
-            bytes.push(0);
+    // Uniform bind group — binding indices come from abi.gpu (e.g. ocean uses @binding(3)).
+    let uniform_bindings = st
+        .render_pipes
+        .get(&pipeline_id)
+        .map(|rp| rp.uniform_bindings.clone())
+        .unwrap_or_default();
+    let needs_bg = st
+        .render_pipes
+        .get(&pipeline_id)
+        .and_then(|rp| rp.bgl.as_ref())
+        .is_some();
+    let ubuf = if needs_bg {
+        let mut bytes = vec![0u8; 256];
+        let n = uniforms.len().min(256);
+        if n > 0 {
+            bytes[..n].copy_from_slice(&uniforms[..n]);
         }
         Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("dream-draw-uniform"),
@@ -494,15 +507,22 @@ fn draw_inner(
 
     let rp = st.render_pipes.get(&pipeline_id).unwrap();
     let bg = if let (Some(bgl), Some(ub)) = (&rp.bgl, &ubuf) {
-        // Only wire uniform bindings for the common Dream case.
-        Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("dream-draw-bg"),
-            layout: bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
+        let entries: Vec<wgpu::BindGroupEntry<'_>> = uniform_bindings
+            .iter()
+            .map(|binding| wgpu::BindGroupEntry {
+                binding: *binding,
                 resource: ub.as_entire_binding(),
-            }],
-        }))
+            })
+            .collect();
+        if entries.is_empty() {
+            None
+        } else {
+            Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("dream-draw-bg"),
+                layout: bgl,
+                entries: &entries,
+            }))
+        }
     } else {
         None
     };

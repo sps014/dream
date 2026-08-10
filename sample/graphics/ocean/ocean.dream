@@ -1,8 +1,9 @@
 // Fullscreen Seascape raymarch after Alexander Alekseev / TDM (Shadertoy Ms2SD1).
 // A displaced mesh cannot match that look — this ports heightMapTracing + getSeaColor.
 //
-// Build: cargo run -- --runtime --web sample/graphics/ocean/ocean.dream
-// Serve sample/graphics/ocean → ocean.html
+// Native: cargo run -- run sample/graphics/ocean/ocean.dream
+// Browser: cargo run -- --runtime --web sample/graphics/ocean/ocean.dream
+//          then serve sample/graphics/ocean → ocean.html
 
 import system;
 import system.gpu;
@@ -273,10 +274,9 @@ async fun main(): void {
     }
     let surface = surface_r.unwrap_or(GpuSurface());
 
-    let w: int = js.global.__oceanW;
-    let h: int = js.global.__oceanH;
-    if (w < 640) { w = 1920; }
-    if (h < 360) { h = 1080; }
+    // Fixed resolution works on native and web (HTML can still override via configure later).
+    let w: int = 1280;
+    let h: int = 720;
     surface.configure(w, h);
 
     let desc = GpuRenderPipelineDesc.overlay();
@@ -297,11 +297,11 @@ async fun main(): void {
     let sky = GpuVec4.of(0.44, 0.77, 0.99, 1.0);
     let rw: float = (float)w;
     let rh: float = (float)h;
-    let t0: float = (float)js.global.performance.now().to_double();
+    let t0: long = Time.nano_time();
 
     while (true) {
-        let now: float = (float)js.global.performance.now().to_double();
-        let t: float = (now - t0) / 1000.0;
+        let now: long = Time.nano_time();
+        let t: float = (float)(now - t0) / 1000000000.0;
         let uniforms = Uniforms.pack_f32([t, rw, rh]);
         let _ = await GpuRenderPass.draw_ex(surface, pipe, verts, 3, uniforms, sky);
         let _ = await surface.present();

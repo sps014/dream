@@ -110,14 +110,31 @@ about.
 
 ## Callbacks
 
-Real function-pointer callbacks require a native trampoline that can re-enter WebAssembly, which
-Dream does not yet ship. For now:
+Captureless Dream `fun` values passed to `@c` parameters become native function pointers for the
+duration of the call. The host installs a libffi trampoline that re-enters the WebAssembly module
+through `__indirect_function_table`.
 
-- Passing `0L` / `null` where the C API accepts a null callback works.
-- Passing a non-null Dream `fun` value returns a clear runtime error until callback support lands
-  (patch welcome).
+```dream
+fun row_cb(arg: long, argc: int, argv: long, cols: long): int {
+    return 0; // continue
+}
 
-The `sqlite3_exec` sample uses a null callback to demonstrate a still-useful subset of the API.
+@native
+@c("sqlite3", "sqlite3_exec")
+extern fun sqlite3_exec(
+    db: long,
+    sql: string,
+    callback: fun(long, int, long, long): int,
+    arg: long,
+    ref errmsg: long
+): int;
+
+sqlite3_exec(db, "SELECT 1", row_cb, 0L, ref err);
+```
+
+- Callbacks must be **captureless** (same rule as JS callbacks).
+- Null C callbacks: declare the parameter as `long` and pass `0L` when you need a null function
+  pointer (a `fun` value cannot be null).
 
 ## Auto-linking libraries
 

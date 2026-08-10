@@ -1,16 +1,12 @@
-// Raw `@c` bindings to libsqlite3. Every function is a direct declaration of the underlying C
-// symbol; the driver marshals strings/pointers automatically and passes Dream `ref` params as C
-// out-pointers on the native (wasmtime) host.
+// Raw `@c` bindings to libsqlite3. Out-params use Dream `ref` (not a separate attribute).
 //
 // Run:
 //   dream run sample/sqlite/raw.dream
 //
-// This sample assumes libsqlite3 is available on the system loader path (Homebrew, apt, etc.).
-// Place a copy at `sample/sqlite/native/libsqlite3.dylib` (macOS) / `.so` (Linux) / `.dll`
-// (Windows) if you want it resolved next to the source.
+// Assumes libsqlite3 is on the system loader path, or place a copy under
+// `sample/sqlite/native/libsqlite3.dylib` (macOS) / `.so` / `.dll`.
 import system;
 
-// sqlite3 database handle (opaque pointer).
 @native
 @c("sqlite3", "sqlite3_open")
 extern fun sqlite3_open(path: string, ref db: long): int;
@@ -19,19 +15,20 @@ extern fun sqlite3_open(path: string, ref db: long): int;
 @c("sqlite3", "sqlite3_close")
 extern fun sqlite3_close(db: long): int;
 
-// Execute one or more statements. The `errmsg` and `callback` slots are `long`/`0L` here — the
-// C API accepts NULL. Real callbacks are not yet supported by the Dream FFI trampoline.
+// sqlite3_exec callback: int (*)(void*, int, char**, char**)
 @native
 @c("sqlite3", "sqlite3_exec")
-extern fun sqlite3_exec(db: long, sql: string, callback: long, arg: long, ref errmsg: long): int;
+extern fun sqlite3_exec(
+    db: long,
+    sql: string,
+    callback: fun(long, int, long, long): int,
+    arg: long,
+    ref errmsg: long
+): int;
 
-@native
-@c("sqlite3", "sqlite3_errmsg")
-extern fun sqlite3_errmsg(db: long): long;
-
-@native
-@c("sqlite3", "sqlite3_libversion")
-extern fun sqlite3_libversion(): long;
+fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
+    return 0;
+}
 
 fun main(): void {
     let db: long = 0L;
@@ -40,11 +37,11 @@ fun main(): void {
         System.println("sqlite3_open failed: " + rc);
         return;
     }
-    System.println("opened in-memory database (handle=" + db + ")");
+    System.println("opened in-memory database");
 
     let errmsg: long = 0L;
-    let ddl = "CREATE TABLE greetings (id INTEGER PRIMARY KEY, msg TEXT); INSERT INTO greetings(msg) VALUES ('hello'), ('from dream');";
-    let ok = sqlite3_exec(db, ddl, 0L, 0L, ref errmsg);
+    let ddl = "CREATE TABLE t(x INT); INSERT INTO t VALUES (1), (2);";
+    let ok = sqlite3_exec(db, ddl, ignore_row, 0L, ref errmsg);
     if (ok != 0) {
         System.println("exec failed with rc=" + ok);
     } else {

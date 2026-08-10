@@ -35,8 +35,11 @@ fn main() {
                 icon_dest.display()
             )
         });
-    } else {
-        // Empty = no packaged icon (dev `dream run` still loads from dream.toml on disk).
-        fs::write(&icon_dest, b"").expect("write empty icon placeholder");
+    println!("cargo:rerun-if-env-changed=DREAM_C_LIBS");
+    if let Ok(libs) = env::var("DREAM_C_LIBS") {
+        for lib in libs.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            // Auto-link `@c("lib", …)` libraries into the packed host (no CLI flags).
+            println!("cargo:rustc-link-lib={lib}");
+        }
     }
 }

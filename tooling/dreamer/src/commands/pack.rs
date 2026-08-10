@@ -38,6 +38,8 @@ pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
         );
     }
 
+    let c_libs = read_c_libs_from_abi(&wasm_path);
+
     let dream_root = find_dream_workspace_root()
         .context("could not locate the Dream workspace (need tooling/dream-runner). \
                   Set DREAM_REPO to the Dream checkout root, or run pack from a tree that \
@@ -56,7 +58,14 @@ pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
         };
         let dest = pack_dir.join(&out_name);
         let icon_path = resolve_package_icon(&workspace);
-        build_runner(&dream_root, &wasm_path, icon_path.as_deref(), rust_triple, &dest)?;
+        build_runner(
+            &dream_root,
+            &wasm_path,
+            icon_path.as_deref(),
+            rust_triple,
+            &dest,
+            &c_libs,
+        )?;
         println!("packed {}", dest.display());
     }
     Ok(())
@@ -150,6 +159,25 @@ fn artifact_wasm_path(workspace: &Workspace) -> Result<PathBuf> {
         .join(format!("{stem}.wasm")))
 }
 
+/// Reads `c_libs` from the sibling `.abi.json` produced next to the release wasm (auto-link set).
+fn read_c_libs_from_abi(wasm_path: &Path) -> Vec<String> {
+    let abi_path = wasm_path.with_extension("abi.json");
+    let Ok(text) = std::fs::read_to_string(&abi_path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    v.get("c_libs")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn find_dream_workspace_root() -> Option<PathBuf> {
     if let Ok(repo) = std::env::var("DREAM_REPO") {
         let p = PathBuf::from(repo);
@@ -200,6 +228,7 @@ fn build_runner(
     icon_path: Option<&Path>,
     rust_triple: &str,
     dest: &Path,
+    c_libs: &[String],
 ) -> Result<()> {
     let host_triple = host_rustc_triple()?;
     let mut cmd = Command::new("cargo");
@@ -216,6 +245,9 @@ fn build_runner(
 
     if let Some(icon) = icon_path {
         cmd.env("DREAM_EMBEDDED_ICON", icon);
+    }
+    if !c_libs.is_empty() {
+        cmd.env("DREAM_C_LIBS", c_libs.join(","));
     }
 
     if rust_triple != host_triple {

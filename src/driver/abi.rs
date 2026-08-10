@@ -71,6 +71,24 @@ fn json_escape(s: &str) -> String {
     out
 }
 
+/// ABI tag for a Dream `fun(...)` parameter: `fn:i64,i32,ptr:i32`.
+fn fn_tag_from_types(params: &[Type], ret: &Type) -> String {
+    fn one(t: &Type) -> &'static str {
+        match t {
+            Type::Integer(_) | Type::Boolean(_) | Type::Byte(_) | Type::Char(_) | Type::UInt(_) => {
+                "i32"
+            }
+            Type::Long(_) | Type::ULong(_) => "i64",
+            Type::Float(_) => "f32",
+            Type::Double(_) => "f64",
+            Type::Void => "void",
+            _ => "ptr",
+        }
+    }
+    let args: Vec<&str> = params.iter().map(one).collect();
+    format!("fn:{}:{}", args.join(","), one(ret))
+}
+
 /// Builds the `.abi.json` describing live extern imports and exported functions. Externs are
 /// taken from the AST (for accurate Dream names / async flags / type strings) but filtered to
 /// `(module, field)` pairs that survived MIR import pruning.
@@ -107,8 +125,8 @@ pub(crate) fn build_abi_json(
             return format!("out_struct:{ty}");
         }
         let ty = &param.type_;
-        if matches!(ty, Type::Function(..)) {
-            return "fn".to_string();
+        if let Type::Function(params, ret) = ty {
+            return fn_tag_from_types(params, ret);
         }
         if let Type::Array(inner) = ty {
             if matches!(**inner, Type::Byte(_)) {

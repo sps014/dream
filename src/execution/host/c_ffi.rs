@@ -1,23 +1,21 @@
 //! Native C FFI host: resolves `@c("lib", "symbol")` imports via libloading + libffi.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::ffi::CString;
+use std::ffi::{c_void, CString};
 use std::path::{Path, PathBuf};
 
+use libffi::low::ffi_cif;
 use libffi::middle::{arg, Cif, Closure, CodePtr, Type};
-use libffi::low::{ffi_cif, Callback as FfiCallback};
 use libloading::Library;
 use serde::Deserialize;
-use std::cell::Cell;
-use std::ffi::c_void;
 use wasmtime::*;
 
 use super::memory::{required_memory, shared_bytes, shared_bytes_mut};
 
-/// Set for the duration of a native C call so Dream `fun` callbacks can re-enter the current
-/// wasmtime [`Caller`]. Only valid while blocked inside `ffi_call`.
 thread_local! {
+    // Set for the duration of a native C call so Dream `fun` callbacks can re-enter the
+    // current wasmtime Caller. Only valid while blocked inside `ffi_call`.
     static ACTIVE_CALLER: Cell<*mut Caller<'static, ()>> = const { Cell::new(std::ptr::null_mut()) };
 }
 
@@ -339,6 +337,129 @@ fn ffi_return_type(tag: &str) -> Type {
     }
 }
 
+/// Parse `fn` or `fn:i64,i32,i64,i64:i32` into (arg_kinds, ret_kind).
+/// Bare `fn` defaults to the sqlite3_exec callback shape `(void*, int, char**, char**) -> int`.
+fn parse_fn_tag(tag: &str) -> (Vec<&'static str>, &'static str) {
+    let rest = tag.strip_prefix("fn").unwrap_or(tag);
+    let rest = rest.strip_prefix(':').unwrap_or(rest);
+    if rest.is_empty() {
+        return (vec!["ptr", "i32", "ptr", "ptr"], "i32");
+    }
+    let (args_part, ret_part) = rest.split_once(':').unwrap_or((rest, "i32"));
+    let args: Vec<&'static str> = args_part
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(|s| match s.trim() {
+            "int" | "bool" | "byte" | "i32" => "i32",
+            "long" | "i64" => "i64",
+            "float" | "f32" => "f32",
+            "double" | "f64" => "f64",
+            "ptr" | "pointer" | "string" => "ptr",
+            _ => "ptr",
+        })
+        .collect();
+    let ret = match ret_part.trim() {
+        "void" => "void",
+        "long" | "i64" => "i64",
+        "float" | "f32" => "f32",
+        "double" | "f64" => "f64",
+        _ => "i32",
+    };
+    (args, ret)
+}
+
+/// libffi entry: C calls here, we re-enter the active wasmtime Caller and invoke the Dream fun.
+unsafe extern "C" fn dream_callback_entry(
+    _cif: &ffi_cif,
+    result: &mut c_void,
+    args: *const *const c_void,
+    userdata: &DreamCbData,
+) {
+    let caller_ptr = ACTIVE_CALLER.with(|c| c.get());
+    if caller_ptr.is_null() {
+        return;
+    }
+    let caller: &mut Caller<'_, ()> = unsafe { &mut *caller_ptr };
+
+    let mut wasm_args: Vec<Val> = Vec::with_capacity(userdata.arg_kinds.len());
+    for (i, kind) in userdata.arg_kinds.iter().enumerate() {
+        let arg_ptr = unsafe { *args.add(i) };
+        let v = match *kind {
+            "i32" => Val::I32(unsafe { *(arg_ptr as *const i32) }),
+            "i64" | "ptr" => {
+                // Pointers and i64: read as usize-width then widen to i64.
+                let width = std::mem::size_of::<usize>();
+                if width == 8 {
+                    Val::I64(unsafe { *(arg_ptr as *const i64) })
+                } else {
+                    Val::I64(unsafe { *(arg_ptr as *const u32) } as i64)
+                }
+            }
+            "f32" => Val::F32(unsafe { *(arg_ptr as *const f32) }.to_bits()),
+            "f64" => Val::F64(unsafe { *(arg_ptr as *const f64) }.to_bits()),
+            _ => Val::I64(0),
+        };
+        wasm_args.push(v);
+    }
+
+    let mut results = match userdata.ret_kind {
+        "void" => vec![],
+        "i64" => vec![Val::I64(0)],
+        "f32" => vec![Val::F32(0)],
+        "f64" => vec![Val::F64(0)],
+        _ => vec![Val::I32(0)],
+    };
+
+    if let Err(e) = call_dream_funcref(caller, userdata.funcidx, &wasm_args, &mut results) {
+        eprintln!("dream c-ffi callback error: {e}");
+        return;
+    }
+
+    if userdata.ret_kind != "void" && !results.is_empty() {
+        match userdata.ret_kind {
+            "i64" => unsafe {
+                *(result as *mut c_void as *mut i64) = results[0].unwrap_i64();
+            },
+            "f32" => unsafe {
+                *(result as *mut c_void as *mut f32) = results[0].unwrap_f32();
+            },
+            "f64" => unsafe {
+                *(result as *mut c_void as *mut f64) = results[0].unwrap_f64();
+            },
+            _ => unsafe {
+                *(result as *mut c_void as *mut i32) = results[0].unwrap_i32();
+            },
+        }
+    }
+}
+
+fn call_dream_funcref(
+    caller: &mut Caller<'_, ()>,
+    funcidx: u32,
+    args: &[Val],
+    results: &mut [Val],
+) -> Result<()> {
+    let table = caller
+        .get_export("__indirect_function_table")
+        .and_then(|e| e.into_table())
+        .ok_or_else(|| Error::msg("module missing __indirect_function_table export"))?;
+    let entry = table
+        .get(&mut *caller, u64::from(funcidx))
+        .ok_or_else(|| Error::msg(format!("funcref table index {funcidx} out of bounds")))?;
+    let func = match entry {
+        Ref::Func(Some(f)) => f,
+        Ref::Func(None) => {
+            return Err(Error::msg("null funcref for Dream callback"));
+        }
+        _ => {
+            return Err(Error::msg("callback table entry is not a funcref"));
+        }
+    };
+    func.call(&mut *caller, args, results)
+        .map_err(|e| Error::msg(format!("Dream callback call failed: {e}")))?;
+    Ok(())
+}
+
 fn invoke_c(
     caller: &mut Caller<'_, ()>,
     fn_ptr: *mut std::ffi::c_void,
@@ -366,6 +487,9 @@ fn invoke_c(
     // `out_struct:`.
     let mut struct_scratch: HashMap<usize, Vec<u8>> = HashMap::new();
     let mut c_args: Vec<ArgSlot> = Vec::with_capacity(param_tags.len());
+    // Keep closures + userdata alive across `ffi_call` (C may invoke them).
+    let mut cb_closures: Vec<Closure<'_>> = Vec::new();
+    let mut cb_data_owners: Vec<Box<DreamCbData>> = Vec::new();
 
     // Pre-lookup struct sizes so borrows don't overlap with the mutable scratch map below.
     let struct_sizes: HashMap<String, u32> = with_abi(|abi| {
@@ -426,17 +550,42 @@ fn invoke_c(
                 );
                 c_args.push(ArgSlot::Ptr(ptr));
             }
-            "fn" => {
+            t if t == "fn" || t.starts_with("fn:") => {
                 let p = wasm_val.i32().unwrap_or(0);
                 if p == 0 {
                     c_args.push(ArgSlot::Ptr(0));
                 } else {
-                    // Real callback trampolines would require a per-call libffi Closure that
-                    // re-enters wasm; until that lands, refuse the call so failures are loud
-                    // rather than silently passing a bogus pointer.
-                    return Err(Error::msg(
-                        "C callbacks: non-null Dream `fun` values are not yet supported for `@c` externs (pass null / 0 for now)",
-                    ));
+                    let (arg_kinds, ret_kind) = parse_fn_tag(t);
+                    let cif_args: Vec<Type> = arg_kinds
+                        .iter()
+                        .map(|k| match *k {
+                            "i32" => Type::i32(),
+                            "i64" | "ptr" => Type::i64(),
+                            "f32" => Type::f32(),
+                            "f64" => Type::f64(),
+                            _ => Type::pointer(),
+                        })
+                        .collect();
+                    let cif_ret = match ret_kind {
+                        "void" => Type::void(),
+                        "i64" => Type::i64(),
+                        "f32" => Type::f32(),
+                        "f64" => Type::f64(),
+                        _ => Type::i32(),
+                    };
+                    let cb_cif = Cif::new(cif_args, cif_ret);
+                    let data = Box::new(DreamCbData {
+                        funcidx: p as u32,
+                        arg_kinds,
+                        ret_kind,
+                    });
+                    let data_ptr = data.as_ref() as *const DreamCbData;
+                    cb_data_owners.push(data);
+                    let data_ref = unsafe { &*data_ptr };
+                    let closure = Closure::new(cb_cif, dream_callback_entry, data_ref);
+                    let code = *closure.code_ptr() as *mut c_void as usize;
+                    cb_closures.push(closure);
+                    c_args.push(ArgSlot::Ptr(code));
                 }
             }
             t if t.starts_with("out_int") => {
@@ -451,7 +600,21 @@ fn invoke_c(
         }
     }
 
-    let ret = unsafe { call_cif(&cif, fn_ptr, &c_args, result_tag)? };
+    // Install Caller for nested Dream callbacks, then invoke C.
+    // Lifetime transmute: the pointer is only dereferenced while `caller` is still borrowed
+    // for this stack frame (blocked inside `ffi_call`).
+    let caller_ptr =
+        unsafe { std::mem::transmute::<*mut Caller<'_, ()>, *mut Caller<'static, ()>>(caller) };
+    ACTIVE_CALLER.with(|c| c.set(caller_ptr));
+    let ret = unsafe { call_cif(&cif, fn_ptr, &c_args, result_tag) };
+    ACTIVE_CALLER.with(|c| c.set(std::ptr::null_mut()));
+    // Drop closures before we continue using caller (they must outlive ffi_call only).
+    drop(cb_closures);
+    drop(cb_data_owners);
+    let ret = ret?;
+
+    // Re-fetch memory after the C call (caller still valid).
+    let memory = required_memory(caller)?;
 
     for (i, tag) in param_tags.iter().enumerate() {
         let wasm_val = wasm_args.get(i).copied().unwrap_or(Val::I32(0));

@@ -86,9 +86,17 @@ fn collect_dream_files_rec(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Str
     for entry in entries {
         let entry = entry.map_err(|e| format!("read {}: {}", dir.display(), e))?;
         let p = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        // Skip build caches and previously synthesized runners.
+        if name == "target" || name.starts_with('.') {
+            continue;
+        }
         if p.is_dir() {
             collect_dream_files_rec(&p, out)?;
-        } else if p.extension().and_then(|e| e.to_str()) == Some("dream") {
+        } else if p.extension().and_then(|e| e.to_str()) == Some("dream")
+            && !name.ends_with(".runner.dream")
+        {
             out.push(p);
         }
     }

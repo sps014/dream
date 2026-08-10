@@ -15,23 +15,71 @@ use wasmtime::*;
 
 use super::memory::{read_arg_bytes, read_arg_string, resolve_host_future_bytes};
 
-/// Shared blocking clients (process-wide; per-request timeouts use `RequestBuilder::timeout`).
-/// Default is HTTP/1.1 — Google fronts (youtube.com → googlevideo.com) can leave a shared HTTP/2
-/// pool hung so later CDN GETs never complete. `http_version == 2` opts into a separate HTTP/2
-/// client so that path cannot poison the default pool.
-fn http_client(http_version: i32) -> &'static reqwest::blocking::Client {
-    if http_version == 2 {
-        static HTTP2: OnceLock<reqwest::blocking::Client> = OnceLock::new();
-        HTTP2.get_or_init(reqwest::blocking::Client::new)
-    } else {
-        static HTTP1: OnceLock<reqwest::blocking::Client> = OnceLock::new();
-        HTTP1.get_or_init(|| {
-            reqwest::blocking::Client::builder()
-                .http1_only()
-                .build()
-                .expect("reqwest HTTP/1.1 client")
-        })
+fn build_http_client(http2: bool) -> reqwest::blocking::Client {
+    let mut builder = reqwest::blocking::Client::builder()
+        .pool_max_idle_per_host(0)
+        .pool_idle_timeout(Duration::from_secs(0))
+        .tcp_keepalive(None)
+        .connect_timeout(Duration::from_secs(10));
+    if !http2 {
+        builder = builder.http1_only();
     }
+    builder.build().expect("reqwest HTTP client")
+}
+
+/// Fresh client per request so idle connection state is not reused across calls.
+fn http_client(http_version: i32) -> reqwest::blocking::Client {
+    build_http_client(http_version == 2)
+}
+
+fn http_transport_error(msg: &str) -> Vec<u8> {
+    let mut out = b"0\n\n".to_vec(); // status 0 = transport error; body is the message
+    out.extend_from_slice(msg.as_bytes());
+    out
+}
+
+fn http_error_message(err: &reqwest::Error) -> String {
+    if err.is_timeout() {
+        "timeout".to_string()
+    } else {
+        err.to_string()
+    }
+}
+
+/// Runs `f` with an optional wall-clock budget. When `wall` is `None`, runs on the calling thread.
+/// When set, runs on a worker and returns `None` if the budget elapses before `f` finishes; the
+/// worker result is then discarded (never published to the caller).
+fn with_http_wall<T, F>(wall: Option<Duration>, f: F) -> Option<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let Some(wall) = wall else {
+        return Some(f());
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    match rx.recv_timeout(wall) {
+        Ok(out) => Some(out),
+        Err(_) => None,
+    }
+}
+
+fn response_head(response: &reqwest::blocking::Response) -> String {
+    let status = response.status().as_u16();
+    let mut head = format!("{}\n", status);
+    for (name, value) in response.headers().iter() {
+        if let Ok(v) = value.to_str() {
+            head.push_str(name.as_str());
+            head.push_str(": ");
+            head.push_str(v);
+            head.push('\n');
+        }
+    }
+    head.push('\n');
+    head
 }
 
 /// Performs one blocking HTTP request and serializes the whole response into the wire format shared
@@ -47,35 +95,28 @@ fn perform_http(
     timeout_ms: i32,
     http_version: i32,
 ) -> Vec<u8> {
-    match build_request(method, url, headers_json, body, timeout_ms, http_version).send() {
-        Ok(response) => {
-            let status = response.status().as_u16();
-            let mut head = format!("{}\n", status);
-            for (name, value) in response.headers().iter() {
-                if let Ok(v) = value.to_str() {
-                    head.push_str(name.as_str());
-                    head.push_str(": ");
-                    head.push_str(v);
-                    head.push('\n');
+    let method = method.to_owned();
+    let url = url.to_owned();
+    let headers_json = headers_json.to_owned();
+    let wall = if timeout_ms > 0 {
+        Some(Duration::from_millis(timeout_ms as u64))
+    } else {
+        None
+    };
+    match with_http_wall(wall, move || {
+        match build_request(&method, &url, &headers_json, body, timeout_ms, http_version).send() {
+            Ok(response) => {
+                let mut out = response_head(&response).into_bytes();
+                if let Ok(body_bytes) = response.bytes() {
+                    out.extend_from_slice(&body_bytes);
                 }
+                out
             }
-            head.push('\n'); // blank line separating head from body
-            let mut out = head.into_bytes();
-            if let Ok(body_bytes) = response.bytes() {
-                out.extend_from_slice(&body_bytes);
-            }
-            out
+            Err(e) => http_transport_error(&http_error_message(&e)),
         }
-        Err(e) => {
-            let msg = if e.is_timeout() {
-                "timeout".to_string()
-            } else {
-                e.to_string()
-            };
-            let mut out = b"0\n\n".to_vec(); // status 0 = transport error; body is the message
-            out.extend_from_slice(msg.as_bytes());
-            out
-        }
+    }) {
+        Some(out) => out,
+        None => http_transport_error("timeout"),
     }
 }
 
@@ -135,34 +176,30 @@ fn open_http_stream(
     timeout_ms: i32,
     http_version: i32,
 ) -> Vec<u8> {
-    match build_request(method, url, headers_json, body, timeout_ms, http_version).send() {
-        Ok(response) => {
-            let status = response.status().as_u16();
-            let mut head = format!("{}\n", status);
-            for (name, value) in response.headers().iter() {
-                if let Ok(v) = value.to_str() {
-                    head.push_str(name.as_str());
-                    head.push_str(": ");
-                    head.push_str(v);
-                    head.push('\n');
-                }
-            }
-            head.push('\n');
+    let method = method.to_owned();
+    let url = url.to_owned();
+    let headers_json = headers_json.to_owned();
+    let wall = if timeout_ms > 0 {
+        Some(Duration::from_millis(timeout_ms as u64))
+    } else {
+        None
+    };
+    // Send the Response back to this thread before publishing a stream handle, so a wall timeout
+    // cannot leave an orphan entry in the handle table.
+    match with_http_wall(wall, move || {
+        build_request(&method, &url, &headers_json, body, timeout_ms, http_version)
+            .send()
+            .map_err(|e| http_error_message(&e))
+    }) {
+        None => http_transport_error("timeout"),
+        Some(Err(msg)) => http_transport_error(&msg),
+        Some(Ok(response)) => {
+            let mut head = response_head(&response);
             let id = NEXT_STREAM_HANDLE.fetch_add(1, Ordering::Relaxed);
             let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
             table.insert(id, response);
             head.push_str(&id.to_string());
             head.into_bytes()
-        }
-        Err(e) => {
-            let msg = if e.is_timeout() {
-                "timeout".to_string()
-            } else {
-                e.to_string()
-            };
-            let mut out = b"0\n\n".to_vec();
-            out.extend_from_slice(msg.as_bytes());
-            out
         }
     }
 }
@@ -202,9 +239,10 @@ fn http_close_stream(handle: i32) -> i32 {
 }
 
 /// Registers the HTTP host functions on `linker`. `httpRequest` takes a text body; `httpRequestBytes`
-/// takes a binary `char[]` body. Both take `timeout_ms` (`0` = none) and `http_version` (`1` =
-/// HTTP/1.1 default, `2` = HTTP/2). `httpRequestStream`/`httpRequestStreamBytes` open a stream
-/// handle instead of buffering the body; `httpReadChunk`/`httpCloseStream` operate on that handle.
+/// takes a binary `char[]` body. Both take `timeout_ms` (`0` = none) and `http_version`
+/// (`1` = HTTP/1.1 default, `2` = HTTP/2). `httpRequestStream`/`httpRequestStreamBytes` open a
+/// stream handle instead of buffering the body; `httpReadChunk`/`httpCloseStream` operate on that
+/// handle.
 pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",

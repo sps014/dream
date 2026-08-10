@@ -1,25 +1,45 @@
 module system.json;
 
-// A cursor over the input text used by the recursive-descent JSON parser.
+// Byte-cursor recursive-descent JSON parser.
+// Reads UTF-8 via `Span<byte>` indexing (O(1)). `Span` is a `ref struct` and cannot be stored as a
+// class field, so the payload lives in a `byte[]` and is viewed with `Span.of` for each access.
 internal class JsonParser {
-    src: string;
+    bytes: byte[];
     pos: int;
-    n: int;
 
-    public constructor(src: string, pos: int, n: int) {
-        this.src = src;
+    public constructor(bytes: byte[], pos: int) {
+        this.bytes = bytes;
         this.pos = pos;
-        this.n = n;
+    }
+
+    fun span(): Span<byte> {
+        return Span<byte>.of(this.bytes);
+    }
+
+    fun len(): int {
+        return this.bytes.length;
+    }
+
+    fun b(): int {
+        return (int)this.span().get(this.pos);
+    }
+
+    fun b_at(i: int): int {
+        return (int)this.span().get(i);
+    }
+
+    fun is_cont(c: int): bool {
+        return (c >= 128) && (c < 192);
     }
 
     public fun skip_ws(): void {
         let going = true;
         while (going == true) {
-            if (this.pos >= this.n) {
+            if (this.pos >= this.len()) {
                 going = false;
             } else {
-                let c = this.src.char_at(this.pos);
-                if ((c == ' ') || (c == '\n') || (c == '\t') || (c == '\r')) {
+                let c = this.b();
+                if ((c == 32) || (c == 10) || (c == 9) || (c == 13)) {
                     this.pos = this.pos + 1;
                 } else {
                     going = false;
@@ -28,83 +48,213 @@ internal class JsonParser {
         }
     }
 
-    // True when the cursor has consumed the whole input (after skipping trailing whitespace).
     public fun at_end(): bool {
         this.skip_ws();
-        return this.pos >= this.n;
+        return this.pos >= this.len();
     }
 
-    // Consumes a literal keyword (`true`/`false`/`null`) of the given length, returning `value`.
     public fun keyword(length: int, value: JsonValue): JsonValue {
         this.pos = this.pos + length;
         return value;
     }
 
-    public fun parse_string(): string {
-        this.pos = this.pos + 1; // opening quote
-        let sb = StringBuilder();
-        let going = true;
-        while (going == true) {
-            if (this.pos >= this.n) {
-                going = false;
-            } else {
-                let c = this.src.char_at(this.pos);
-                if (c == '"') {
-                    this.pos = this.pos + 1;
-                    going = false;
-                } else if (c == '\\') {
-                    this.pos = this.pos + 1;
-                    let e = this.src.char_at(this.pos);
-                    if (e == 'n') {
-                        sb.append_char('\n');
-                    } else if (e == 't') {
-                        sb.append_char('\t');
-                    } else if (e == 'r') {
-                        sb.append_char('\r');
-                    } else if (e == '"') {
-                        sb.append_char('"');
-                    } else if (e == '\\') {
-                        sb.append_char('\\');
-                    } else if (e == '/') {
-                        sb.append_char('/');
-                    } else {
-                        sb.append_char(e);
-                    }
-                    this.pos = this.pos + 1;
-                } else {
-                    sb.append_char(c);
-                    this.pos = this.pos + 1;
+    fun hex_nibble(c: int): int {
+        if ((c >= 48) && (c <= 57)) {
+            return c - 48;
+        }
+        if ((c >= 97) && (c <= 102)) {
+            return c - 97 + 10;
+        }
+        if ((c >= 65) && (c <= 70)) {
+            return c - 65 + 10;
+        }
+        return 0 - 1;
+    }
+
+    // Decode one UTF-8 scalar at `pos` and advance. Invalid sequences become U+FFFD.
+    fun next_utf8_scalar(): int {
+        let c0 = this.b();
+        if (c0 < 128) {
+            this.pos = this.pos + 1;
+            return c0;
+        }
+        if ((c0 >= 194) && (c0 < 224) && ((this.pos + 1) < this.len())) {
+            let c1 = this.b_at(this.pos + 1);
+            if (this.is_cont(c1)) {
+                this.pos = this.pos + 2;
+                return ((c0 - 192) * 64) + (c1 - 128);
+            }
+        }
+        if ((c0 >= 224) && (c0 < 240) && ((this.pos + 2) < this.len())) {
+            let c1 = this.b_at(this.pos + 1);
+            let c2 = this.b_at(this.pos + 2);
+            if (this.is_cont(c1) && this.is_cont(c2)) {
+                let cp = ((c0 - 224) * 4096) + ((c1 - 128) * 64) + (c2 - 128);
+                if ((cp < 55296) || (cp > 57343)) {
+                    this.pos = this.pos + 3;
+                    return cp;
                 }
             }
         }
-        return sb.build();
+        if ((c0 >= 240) && (c0 < 245) && ((this.pos + 3) < this.len())) {
+            let c1b = this.b_at(this.pos + 1);
+            let c2b = this.b_at(this.pos + 2);
+            let c3 = this.b_at(this.pos + 3);
+            if (this.is_cont(c1b) && this.is_cont(c2b) && this.is_cont(c3)) {
+                let cp4 = ((c0 - 240) * 262144) + ((c1b - 128) * 4096) + ((c2b - 128) * 64) + (c3 - 128);
+                if ((cp4 >= 65536) && (cp4 <= 1114111)) {
+                    this.pos = this.pos + 4;
+                    return cp4;
+                }
+            }
+        }
+        this.pos = this.pos + 1;
+        return 65533;
+    }
+
+    fun read_hex4(): int {
+        let cp = 0;
+        let k = 0;
+        while (k < 4) {
+            if (this.pos >= this.len()) {
+                return 0 - 1;
+            }
+            let h = this.hex_nibble(this.b());
+            if (h < 0) {
+                return 0 - 1;
+            }
+            cp = cp * 16 + h;
+            this.pos = this.pos + 1;
+            k = k + 1;
+        }
+        return cp;
+    }
+
+    fun ensure_cps(cps: int[], n: int): int[] {
+        if (n < cps.length) {
+            return cps;
+        }
+        let grown = Buffer.alloc<int>(cps.length * 2);
+        let i = 0;
+        while (i < n) {
+            grown[i] = cps[i];
+            i = i + 1;
+        }
+        return grown;
+    }
+
+    public fun parse_string(): string {
+        this.pos = this.pos + 1; // opening quote
+        // Accumulate Unicode scalars in `int[]` (not `StringBuilder`: `char[]` stores one byte).
+        let cps = Buffer.alloc<int>(32);
+        let n = 0;
+        let going = true;
+        while (going == true) {
+            if (this.pos >= this.len()) {
+                going = false;
+            } else {
+                let c = this.b();
+                if (c == 34) {
+                    this.pos = this.pos + 1;
+                    going = false;
+                } else if (c == 92) {
+                    this.pos = this.pos + 1;
+                    if (this.pos >= this.len()) {
+                        going = false;
+                    } else {
+                        let e = this.b();
+                        let cp = 0;
+                        if (e == 110) {
+                            cp = 10;
+                            this.pos = this.pos + 1;
+                        } else if (e == 116) {
+                            cp = 9;
+                            this.pos = this.pos + 1;
+                        } else if (e == 114) {
+                            cp = 13;
+                            this.pos = this.pos + 1;
+                        } else if (e == 34) {
+                            cp = 34;
+                            this.pos = this.pos + 1;
+                        } else if (e == 92) {
+                            cp = 92;
+                            this.pos = this.pos + 1;
+                        } else if (e == 47) {
+                            cp = 47;
+                            this.pos = this.pos + 1;
+                        } else if (e == 98) {
+                            cp = 8;
+                            this.pos = this.pos + 1;
+                        } else if (e == 102) {
+                            cp = 12;
+                            this.pos = this.pos + 1;
+                        } else if (e == 117) {
+                            this.pos = this.pos + 1;
+                            cp = this.read_hex4();
+                            if (cp < 0) {
+                                cp = 65533;
+                            } else if ((cp >= 55296) && (cp <= 56319)) {
+                                if (((this.pos + 5) < this.len()) && (this.b() == 92) && (this.b_at(this.pos + 1) == 117)) {
+                                    let save = this.pos;
+                                    this.pos = this.pos + 2;
+                                    let lo = this.read_hex4();
+                                    if ((lo >= 56320) && (lo <= 57343)) {
+                                        cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320);
+                                    } else {
+                                        this.pos = save;
+                                    }
+                                }
+                            }
+                        } else {
+                            cp = e;
+                            this.pos = this.pos + 1;
+                        }
+                        cps = this.ensure_cps(cps, n);
+                        cps[n] = cp;
+                        n = n + 1;
+                    }
+                } else {
+                    let scalar = this.next_utf8_scalar();
+                    cps = this.ensure_cps(cps, n);
+                    cps[n] = scalar;
+                    n = n + 1;
+                }
+            }
+        }
+        let s = string.alloc(n);
+        let k = 0;
+        while (k < n) {
+            string.set(s, k, (char)cps[k]);
+            k = k + 1;
+        }
+        return s;
     }
 
     public fun parse_number(): JsonValue {
-        let start = this.pos;
+        let sb = StringBuilder();
         let going = true;
         while (going == true) {
-            if (this.pos >= this.n) {
+            if (this.pos >= this.len()) {
                 going = false;
             } else {
-                let c = this.src.char_at(this.pos);
-                if (((c >= '0') && (c <= '9')) || (c == '-') || (c == '+') || (c == '.') || (c == 'e') || (c == 'E')) {
+                let c = this.b();
+                if (((c >= 48) && (c <= 57)) || (c == 45) || (c == 43) || (c == 46) || (c == 101) || (c == 69)) {
+                    sb.append_char((char)c);
                     this.pos = this.pos + 1;
                 } else {
                     going = false;
                 }
             }
         }
-        let text = this.src.substring(start, this.pos);
-        return JsonValue.number(double.parse(text).unwrap_or(0.0d));
+        return JsonValue.number(double.parse(sb.build()).unwrap_or(0.0d));
     }
 
     public fun parse_array(): JsonValue {
         let result = JsonValue.array();
         this.pos = this.pos + 1; // '['
         this.skip_ws();
-        if (this.pos < this.n) {
-            if (this.src.char_at(this.pos) == ']') {
+        if (this.pos < this.len()) {
+            if (this.b() == 93) {
                 this.pos = this.pos + 1;
                 return result;
             }
@@ -114,14 +264,13 @@ internal class JsonParser {
             let element = this.parse_value();
             result.push(element);
             this.skip_ws();
-            if (this.pos >= this.n) {
+            if (this.pos >= this.len()) {
                 going = false;
             } else {
-                let c = this.src.char_at(this.pos);
-                if (c == ',') {
+                if (this.b() == 44) {
                     this.pos = this.pos + 1;
                 } else {
-                    this.pos = this.pos + 1; // ']' (or stray char)
+                    this.pos = this.pos + 1; // ']'
                     going = false;
                 }
             }
@@ -133,8 +282,8 @@ internal class JsonParser {
         let result = JsonValue.dict();
         this.pos = this.pos + 1; // '{'
         this.skip_ws();
-        if (this.pos < this.n) {
-            if (this.src.char_at(this.pos) == '}') {
+        if (this.pos < this.len()) {
+            if (this.b() == 125) {
                 this.pos = this.pos + 1;
                 return result;
             }
@@ -144,22 +293,21 @@ internal class JsonParser {
             this.skip_ws();
             let key = this.parse_string();
             this.skip_ws();
-            if (this.pos < this.n) {
-                if (this.src.char_at(this.pos) == ':') {
+            if (this.pos < this.len()) {
+                if (this.b() == 58) {
                     this.pos = this.pos + 1;
                 }
             }
             let value = this.parse_value();
             result.set(key, value);
             this.skip_ws();
-            if (this.pos >= this.n) {
+            if (this.pos >= this.len()) {
                 going = false;
             } else {
-                let c = this.src.char_at(this.pos);
-                if (c == ',') {
+                if (this.b() == 44) {
                     this.pos = this.pos + 1;
                 } else {
-                    this.pos = this.pos + 1; // '}' (or stray char)
+                    this.pos = this.pos + 1; // '}'
                     going = false;
                 }
             }
@@ -169,26 +317,26 @@ internal class JsonParser {
 
     public fun parse_value(): JsonValue {
         this.skip_ws();
-        if (this.pos >= this.n) {
+        if (this.pos >= this.len()) {
             return JsonValue.none();
         }
-        let c = this.src.char_at(this.pos);
-        if (c == '{') {
+        let c = this.b();
+        if (c == 123) {
             return this.parse_object();
         }
-        if (c == '[') {
+        if (c == 91) {
             return this.parse_array();
         }
-        if (c == '"') {
+        if (c == 34) {
             return JsonValue.from_string(this.parse_string());
         }
-        if (c == 't') {
+        if (c == 116) {
             return this.keyword(4, JsonValue.boolean(true));
         }
-        if (c == 'f') {
+        if (c == 102) {
             return this.keyword(5, JsonValue.boolean(false));
         }
-        if (c == 'n') {
+        if (c == 110) {
             return this.keyword(4, JsonValue.none());
         }
         return this.parse_number();

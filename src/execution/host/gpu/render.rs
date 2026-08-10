@@ -98,10 +98,13 @@ fn create_inner(
         return Err("GPU not initialized".into());
     }
     let device = st.device.as_ref().unwrap().clone();
-    let abi = st
-        .abi
-        .as_ref()
-        .ok_or_else(|| "no abi.gpu loaded".to_string())?;
+    let abi = match st.abi.as_ref() {
+        Some(abi) => abi,
+        None => {
+            st.warn_if_gpu_abi_missing();
+            return Err("no abi.gpu loaded".to_string());
+        }
+    };
     let vs = abi
         .shaders
         .iter()

@@ -155,12 +155,18 @@ fn encode_op(
     uniforms: &[u8],
     indirect: Option<(i32, i32)>,
 ) -> Result<(), String> {
-    let meta = st
+    let meta = match st
         .abi
         .as_ref()
         .and_then(|a| a.kernels.iter().find(|k| k.name == kernel))
         .cloned()
-        .ok_or_else(|| format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"))?;
+    {
+        Some(meta) => meta,
+        None => {
+            st.warn_if_gpu_abi_missing();
+            return Err(format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"));
+        }
+    };
 
     let mut storage_idx = 0usize;
     let mut seen = IndexSet::new();
@@ -387,12 +393,18 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         .as_ref()
         .ok_or_else(|| "GPU not initialized".to_string())?
         .clone();
-    let meta = st
+    let meta = match st
         .abi
         .as_ref()
         .and_then(|a| a.kernels.iter().find(|k| k.name == kernel))
         .cloned()
-        .ok_or_else(|| format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"))?;
+    {
+        Some(meta) => meta,
+        None => {
+            st.warn_if_gpu_abi_missing();
+            return Err(format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"));
+        }
+    };
     if meta.source.is_empty() {
         return Err(format!("kernel '{kernel}' has empty WGSL source"));
     }

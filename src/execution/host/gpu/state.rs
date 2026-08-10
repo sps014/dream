@@ -129,6 +129,9 @@ pub struct GpuState {
     pub next_id: i32,
     pub ready: bool,
     pub abi: Option<GpuAbi>,
+    /// Set when sibling `.abi.json` is missing or has no `gpu` section; logged once on first use.
+    pub missing_gpu_abi: Option<String>,
+    pub warned_missing_gpu_abi: bool,
     pub instance: Option<wgpu::Instance>,
     pub adapter: Option<wgpu::Adapter>,
     pub device: Option<wgpu::Device>,
@@ -153,6 +156,8 @@ impl Default for GpuState {
             next_id: 1,
             ready: false,
             abi: None,
+            missing_gpu_abi: None,
+            warned_missing_gpu_abi: false,
             instance: None,
             adapter: None,
             device: None,
@@ -182,6 +187,17 @@ impl GpuState {
     pub fn invalidate_blit_tex(&mut self, tex_id: i32) {
         if let Some(blit) = self.blit.as_mut() {
             blit.bg_by_tex.shift_remove(&tex_id);
+        }
+    }
+
+    /// Log once when kernels/shaders need ABI metadata that was not loaded.
+    pub fn warn_if_gpu_abi_missing(&mut self) {
+        if self.abi.is_some() || self.warned_missing_gpu_abi {
+            return;
+        }
+        if let Some(reason) = self.missing_gpu_abi.as_ref() {
+            eprintln!("Dream GPU: {}; kernels/shaders will fail validation", reason);
+            self.warned_missing_gpu_abi = true;
         }
     }
 

@@ -14,7 +14,7 @@ import system.json;
 
 | Runtime | HTTP backend |
 | --- | --- |
-| Native (`dream run`) | Native HTTP client (HTTP/1.1 by default; opt into HTTP/2 with `with_http_version(2)`) |
+| Native (`dream run`) | Native HTTP client (HTTP/1.1 by default; opt into HTTP/2 with `with_http_version(2)`). Each request uses a fresh client with idle keep-alive disabled. When `timeout_ms > 0`, the host also enforces that budget as a wall-clock deadline. |
 | Node.js | Global `fetch` (Node 18+) |
 | Browser | Page `fetch` |
 
@@ -49,7 +49,7 @@ System.println(api.timeout_ms);
 
 #### `with_http_version(version: int): HttpClient` / `.http_version`
 
-Selects the HTTP version used by the **native** host (`1` = HTTP/1.1, `2` = HTTP/2). Defaults to `1`. HTTP/1.1 avoids connection-pool hangs when talking to Google CDN hosts (e.g. googlevideo.com) after youtube.com in the same process. Opt into `2` only when you need HTTP/2 and accept that risk. JS hosts ignore this setting (`fetch` negotiates on its own).
+Selects the HTTP version used by the **native** host (`1` = HTTP/1.1, `2` = HTTP/2). Defaults to `1`. JS hosts ignore this setting (`fetch` negotiates on its own).
 
 ```dream
 let api = HttpClient("").with_http_version(2);

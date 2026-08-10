@@ -36,7 +36,14 @@ public class Json {
         if (text.is_empty()) {
             return Result.Err(ParseError.invalid("empty JSON input"));
         }
-        let parser = JsonParser(text, 0, text.length);
+        let n = text.byte_size();
+        let bytes = Buffer.alloc<byte>(n);
+        let i = 0;
+        while (i < n) {
+            bytes[i] = (byte)text.byte_at(i);
+            i = i + 1;
+        }
+        let parser = JsonParser(bytes, 0);
         let value = parser.parse_value();
         if (parser.at_end() == false) {
             return Result.Err(ParseError.invalid("trailing characters after JSON value"));
@@ -47,6 +54,24 @@ public class Json {
 
     // --- internal serialization helpers -----------------------------------------------------
 
+    static fun _append_hex4(sb: StringBuilder, value: int): void {
+        let digits = Buffer.alloc<int>(4);
+        digits[0] = (value / 4096) % 16;
+        digits[1] = (value / 256) % 16;
+        digits[2] = (value / 16) % 16;
+        digits[3] = value % 16;
+        let i = 0;
+        while (i < 4) {
+            let nibble = digits[i];
+            if (nibble < 10) {
+                sb.append_char((char)(48 + nibble));
+            } else {
+                sb.append_char((char)(87 + nibble));
+            }
+            i = i + 1;
+        }
+    }
+
     // Appends a quoted, escaped JSON string to `sb`.
     static fun _json_escape_into(sb: StringBuilder, s: string): void {
         sb.append_char('"');
@@ -54,6 +79,7 @@ public class Json {
         let i = 0;
         while (i < n) {
             let c = s.char_at(i);
+            let cp = c.to_int();
             if (c == '"') {
                 sb.append_char('\\');
                 sb.append_char('"');
@@ -69,8 +95,19 @@ public class Json {
             } else if (c == '\r') {
                 sb.append_char('\\');
                 sb.append_char('r');
-            } else {
+            } else if ((cp >= 32) && (cp <= 126)) {
                 sb.append_char(c);
+            } else if (cp <= 65535) {
+                sb.append("\\u");
+                Json._append_hex4(sb, cp);
+            } else {
+                let u = cp - 65536;
+                let hi = 55296 + (u / 1024);
+                let lo = 56320 + (u % 1024);
+                sb.append("\\u");
+                Json._append_hex4(sb, hi);
+                sb.append("\\u");
+                Json._append_hex4(sb, lo);
             }
             i = i + 1;
         }

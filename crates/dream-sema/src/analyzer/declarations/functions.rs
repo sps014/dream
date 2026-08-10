@@ -17,17 +17,21 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&function.file_path);
             self.check_reserved_name(&function.name, "function", diagnostics);
             if function.generic_parameters.is_some() {
-                if dream_abi::attributes::is_gpu_shader_attr(&function.attributes) {
+                if dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
+                    || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
+                {
                     let kind = if dream_abi::attributes::has_compute_attr(&function.attributes) {
                         "@compute"
                     } else if dream_abi::attributes::has_vertex_attr(&function.attributes) {
                         "@vertex"
-                    } else {
+                    } else if dream_abi::attributes::has_fragment_attr(&function.attributes) {
                         "@fragment"
+                    } else {
+                        "@gpu"
                     };
                     diagnostics.report_error(
                         format!(
-                            "{kind} shader '{}' cannot be generic",
+                            "{kind} function '{}' cannot be generic",
                             function.name.text
                         ),
                         Some(function.name.position),

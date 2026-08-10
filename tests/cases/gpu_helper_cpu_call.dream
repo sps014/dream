@@ -1,0 +1,12 @@
+import system;
+import system.gpu;
+
+@gpu
+fun helper(x: float): float {
+    return GpuMath.sin(x);
+}
+
+fun main(): void {
+    // @gpu helpers are shader-only — same restriction as calling a stage entry.
+    let _ = helper(1.0);
+}

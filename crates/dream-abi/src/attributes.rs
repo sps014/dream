@@ -442,6 +442,14 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "Marks a function as a WebGPU fragment shader. Body is emitted as WGSL, not WASM.",
     },
+    // GPU helper: callable from `@compute`/`@vertex`/`@fragment` and emitted as a WGSL `fn`.
+    AttributeSpec {
+        name: "gpu",
+        targets: &[AttributeTarget::Function],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a helper callable from GPU shaders; body is also emitted as WGSL when referenced.",
+    },
     // Optional vertex/varying location remap; default is declaration order.
     AttributeSpec {
         name: "location",
@@ -786,6 +794,11 @@ pub fn has_vertex_attr(attributes: &[AttributeNode]) -> bool {
 /// True when the declaration carries `@fragment`.
 pub fn has_fragment_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "fragment")
+}
+
+/// True when the declaration carries `@gpu` (shader-callable helper).
+pub fn has_gpu_helper_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "gpu")
 }
 
 /// True when the declaration is any GPU shader stage (`@compute` / `@vertex` / `@fragment`).

@@ -158,7 +158,7 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
         ExpressionNode::FunctionCall(name, _, args) | ExpressionNode::MethodCall(_, name, _, args) => {
             match name.text.as_str() {
                 "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "floor"
-                | "ceil" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "length"
+                | "ceil" | "fract" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "length"
                 | "dot" => "f32".into(),
                 "normalize" | "cross" | "reflect" => "vec3<f32>".into(),
                 "atomic_load" | "atomic_add" | "atomic_exchange" => "i32".into(),
@@ -172,7 +172,11 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                 },
                 // Zero-arg `StructName()` constructor → WGSL struct type.
                 other if args.is_empty() => escape_wgsl_ident(other),
-                _ => "i32".into(),
+                other => ctx
+                    .helper_returns
+                    .get(other)
+                    .cloned()
+                    .unwrap_or_else(|| "i32".into()),
             }
         }
         _ => "i32".into(),

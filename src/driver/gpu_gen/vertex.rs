@@ -1,6 +1,7 @@
 //! `@vertex` shader emission.
 
 use super::context::EmitCtx;
+use super::helpers::emit_helpers_wgsl;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
     assign_locations, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
@@ -133,6 +134,7 @@ pub(super) fn emit_vertex(
     }
 
     let struct_fields = build_struct_field_tys(program);
+    let helper_returns = super::helpers::build_helper_return_tys(program);
     let mut scopes = vec![IndexMap::new()];
     if let Some((ref vp, ref sname)) = vertex_param {
         scopes[0].insert(vp.clone(), sname.clone());
@@ -143,6 +145,7 @@ pub(super) fn emit_vertex(
         workgroup_names: &[],
         scopes: RefCell::new(scopes),
         struct_fields: &struct_fields,
+        helper_returns: &helper_returns,
     };
 
     let mut workgroup_decls = String::new();
@@ -157,8 +160,11 @@ pub(super) fn emit_vertex(
         &func.name.text,
     );
 
+    let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
+
     let mut wgsl = String::new();
     wgsl.push_str(&struct_header);
+    wgsl.push_str(&helpers);
     wgsl.push_str(&header);
     wgsl.push('\n');
     wgsl.push_str(&format!("@vertex\nfn {entry}(\n"));

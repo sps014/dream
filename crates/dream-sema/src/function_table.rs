@@ -590,6 +590,8 @@ pub struct FunctionTableInfo {
     pub is_vertex: bool,
     /// True when the declaration carries `@fragment`.
     pub is_fragment: bool,
+    /// True when the declaration carries `@gpu` (callable from shaders as a WGSL helper).
+    pub is_gpu_helper: bool,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -632,6 +634,7 @@ impl FunctionTableInfo {
             is_compute: false,
             is_vertex: false,
             is_fragment: false,
+            is_gpu_helper: false,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -674,6 +677,7 @@ impl FunctionTableInfo {
         info.is_compute = dream_abi::attributes::has_compute_attr(&func.attributes);
         info.is_vertex = dream_abi::attributes::has_vertex_attr(&func.attributes);
         info.is_fragment = dream_abi::attributes::has_fragment_attr(&func.attributes);
+        info.is_gpu_helper = dream_abi::attributes::has_gpu_helper_attr(&func.attributes);
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.

@@ -7,6 +7,7 @@ mod compute;
 mod context;
 mod expr;
 mod fragment;
+mod helpers;
 mod ident;
 mod layout;
 mod output;

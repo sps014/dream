@@ -23,6 +23,10 @@ public class GpuMath {
     public static fun floor(x: float): float {
         return (float)Math.floor((double)x);
     }
+    // Fractional part `x - floor(x)` (WGSL `fract`).
+    public static fun fract(x: float): float {
+        return x - GpuMath.floor(x);
+    }
     public static fun ceil(x: float): float {
         return (float)Math.ceil((double)x);
     }

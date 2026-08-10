@@ -1,6 +1,7 @@
 //! `@fragment` shader emission.
 
 use super::context::EmitCtx;
+use super::helpers::emit_helpers_wgsl;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
     build_struct_field_tys, emit_interface_struct_wgsl, find_struct, has_position_gpuvec4,
@@ -104,6 +105,7 @@ pub(super) fn emit_fragment(
     }
 
     let struct_fields = build_struct_field_tys(program);
+    let helper_returns = super::helpers::build_helper_return_tys(program);
     let mut scopes = vec![IndexMap::new()];
     if let Some((ref vp, ref sname)) = vary_param {
         scopes[0].insert(vp.clone(), sname.clone());
@@ -114,6 +116,7 @@ pub(super) fn emit_fragment(
         workgroup_names: &[],
         scopes: RefCell::new(scopes),
         struct_fields: &struct_fields,
+        helper_returns: &helper_returns,
     };
 
     let mut workgroup_decls = String::new();
@@ -128,8 +131,11 @@ pub(super) fn emit_fragment(
         &func.name.text,
     );
 
+    let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
+
     let mut wgsl = String::new();
     wgsl.push_str(&struct_header);
+    wgsl.push_str(&helpers);
     wgsl.push_str(&header);
     wgsl.push('\n');
     wgsl.push_str(&format!("@fragment\nfn {entry}(\n"));

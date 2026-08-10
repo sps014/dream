@@ -206,11 +206,16 @@ Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z
 
 Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels), early
 `return`, ternary, integer `switch`, arithmetic/bitwise, `GpuBuffer` indexing / `.length`,
-unmanaged value structs, calls to other `@compute` helpers, `Gpu.workgroup_barrier` /
-`Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`.
+unmanaged value structs, calls to **`@gpu` helpers** (and other `@compute` kernels),
+`Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`.
 
 Forbidden: bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`,
-union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions.
+union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions that are
+**not** marked `@gpu`. Calling `@gpu` / `@compute` / `@vertex` / `@fragment` from normal CPU
+code is also a compile error — helpers are WGSL-only; stages dispatch via `Compute.run` /
+`GpuRenderPipeline.create`.
+
+See [`@gpu` helpers](shaders.md#gpu-helpers).
 
 ### Workgroup memory
 

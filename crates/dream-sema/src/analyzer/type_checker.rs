@@ -22,7 +22,8 @@ impl<'a> Analyzer<'a> {
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
         let is_compute = dream_abi::attributes::has_compute_attr(&function.attributes);
-        let is_gpu = dream_abi::attributes::is_gpu_shader_attr(&function.attributes);
+        let is_gpu = dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
+            || dream_abi::attributes::has_gpu_helper_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
         self.with_runtime_flag(runtime_support, |s| {

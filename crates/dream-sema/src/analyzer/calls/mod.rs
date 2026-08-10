@@ -271,6 +271,16 @@ impl<'a> Analyzer<'a> {
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
+        if callee.is_gpu_helper && !self.current_function_is_gpu {
+            diagnostics.report_error(
+                format!(
+                    "cannot call @gpu helper '{}' from CPU code; it is only callable from @compute/@vertex/@fragment/@gpu functions",
+                    callee.name
+                ),
+                Some(position),
+            );
+            return;
+        }
         if callee.is_gpu_shader() && !self.current_function_is_gpu {
             let kind = if callee.is_compute {
                 "@compute kernel"
@@ -296,7 +306,7 @@ impl<'a> Analyzer<'a> {
             );
             return;
         }
-        if self.current_function_is_gpu && !callee.is_gpu_shader() {
+        if self.current_function_is_gpu && !callee.is_gpu_shader() && !callee.is_gpu_helper {
             let allowed_helper = callee.name.starts_with("Gpu_")
                 || callee.name.starts_with("GpuMath_")
                 || callee.name.starts_with("GpuVec2_")
@@ -307,7 +317,7 @@ impl<'a> Analyzer<'a> {
             if !allowed_helper {
                 diagnostics.report_error(
                     format!(
-                        "cannot call non-GPU-shader function '{}' from a GPU shader; only other @compute/@vertex/@fragment helpers and Gpu/GpuMath/GpuVec builtins are allowed",
+                        "cannot call non-GPU function '{}' from a GPU shader; mark helpers with @gpu, or call @compute/@vertex/@fragment / GpuMath builtins",
                         callee.name
                     ),
                     Some(position),

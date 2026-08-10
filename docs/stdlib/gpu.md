@@ -2,6 +2,8 @@
 
 WebGPU compute, vertex/fragment shaders, and present from Dream. Auto-imported when any
 `@compute` / `@vertex` / `@fragment` is present (same pattern as `@json` → `system.json`).
+
+Shader language docs: [`@compute`](../language/compute.md), [`@vertex` / `@fragment` / `@gpu`](../language/shaders.md).
 You can also `import system.gpu;`.
 
 Use this package for GPU-parallel work, programmable draws, or to blit a texture to a canvas.

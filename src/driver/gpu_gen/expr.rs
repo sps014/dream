@@ -152,15 +152,15 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 _ => format!("vec4<f32>({joined})"),
             }
         }
-        "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "sin" | "cos" | "tan"
+        "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin" | "cos" | "tan"
         | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
         | "reflect" | "mix" | "pow" | "exp" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
             // Scalar helpers still coerce floats; vector ops pass through.
             let scalar = matches!(
                 name,
-                "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "sin" | "cos"
-                    | "tan" | "asin" | "acos" | "atan" | "atan2" | "mix" | "pow" | "exp"
+                "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin"
+                    | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "mix" | "pow" | "exp"
             );
             let args_s = if scalar {
                 coerce_all("f32")

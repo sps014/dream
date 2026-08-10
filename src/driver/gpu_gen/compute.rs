@@ -203,12 +203,14 @@ pub(super) fn emit_kernel(
     let mut workgroup_names = Vec::new();
     collect_workgroup_names(func.body, &mut workgroup_names);
     let struct_fields = build_struct_field_tys(program);
+    let helper_returns = super::helpers::build_helper_return_tys(program);
     let ctx = EmitCtx {
         prefix: &entry,
         bindings: &bindings,
         workgroup_names: &workgroup_names,
         scopes: RefCell::new(vec![IndexMap::new()]),
         struct_fields: &struct_fields,
+        helper_returns: &helper_returns,
     };
 
     let mut workgroup_decls = String::new();

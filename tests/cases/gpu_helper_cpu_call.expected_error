@@ -1,0 +1,2 @@
+ERROR cannot call @gpu helper 'helper' from CPU code; it is only callable from @compute/@vertex/@fragment/@gpu functions
+ERROR Compilation failed: Semantic errors found

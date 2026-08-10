@@ -1,298 +1,261 @@
-// Large-scale Gerstner ocean: slow swell, muted water, soft fresnel/specular.
+// Fullscreen Seascape raymarch after Alexander Alekseev / TDM (Shadertoy Ms2SD1).
+// A displaced mesh cannot match that look — this ports heightMapTracing + getSeaColor.
 //
 // Build: cargo run -- --runtime --web sample/graphics/ocean/ocean.dream
-// Browser: serve sample/graphics/ocean (or repo root) → ocean.html
+// Serve sample/graphics/ocean → ocean.html
 
 import system;
 import system.gpu;
 
 struct Vertex {
-    public xz: GpuVec2;
+    public pos: GpuVec2;
 }
 
 struct VsOut {
     public position: GpuVec4;
-    public world: GpuVec3;
-    public normal: GpuVec3;
-    public view_dir: GpuVec3;
-    public foam: float;
+    public pad: float;
+}
+
+@gpu
+fun sea_noise(x: float, z: float): float {
+    let ix: float = GpuMath.floor(x);
+    let iz: float = GpuMath.floor(z);
+    let fx: float = GpuMath.fract(x);
+    let fz: float = GpuMath.fract(z);
+    let ux: float = fx * fx * (3.0 - 2.0 * fx);
+    let uz: float = fz * fz * (3.0 - 2.0 * fz);
+    let h00: float = GpuMath.fract(GpuMath.sin(ix * 127.1 + iz * 311.7) * 43758.5453123);
+    let h10: float = GpuMath.fract(GpuMath.sin((ix + 1.0) * 127.1 + iz * 311.7) * 43758.5453123);
+    let h01: float = GpuMath.fract(GpuMath.sin(ix * 127.1 + (iz + 1.0) * 311.7) * 43758.5453123);
+    let h11: float = GpuMath.fract(GpuMath.sin((ix + 1.0) * 127.1 + (iz + 1.0) * 311.7) * 43758.5453123);
+    return 0.0 - 1.0 + 2.0 * GpuMath.mix(GpuMath.mix(h00, h10, ux), GpuMath.mix(h01, h11, ux), uz);
+}
+
+@gpu
+fun sea_octave(ux: float, uz: float, choppy: float): float {
+    let n: float = sea_noise(ux, uz);
+    let ox: float = ux + n;
+    let oz: float = uz + n;
+    let wvx: float = 1.0 - GpuMath.abs(GpuMath.sin(ox));
+    let wvz: float = 1.0 - GpuMath.abs(GpuMath.sin(oz));
+    let swx: float = GpuMath.abs(GpuMath.cos(ox));
+    let swz: float = GpuMath.abs(GpuMath.cos(oz));
+    let mx: float = GpuMath.mix(wvx, swx, wvx);
+    let mz: float = GpuMath.mix(wvz, swz, wvz);
+    return GpuMath.pow(1.0 - GpuMath.pow(mx * mz, 0.65), choppy);
+}
+
+@gpu
+fun sea_height(px: float, pz: float, sea_time: float, octaves: int): float {
+    let SEA_HEIGHT: float = 0.6;
+    let freq: float = 0.16;
+    let amp: float = SEA_HEIGHT;
+    let choppy: float = 4.0;
+    let uvx: float = px * 0.75;
+    let uvz: float = pz;
+    let h: float = 0.0;
+    for (let i = 0; i < octaves; i = i + 1) {
+        h = h + (sea_octave((uvx + sea_time) * freq, (uvz + sea_time) * freq, choppy)
+            + sea_octave((uvx - sea_time) * freq, (uvz - sea_time) * freq, choppy)) * amp;
+        let nux: float = uvx * 1.6 + uvz * 1.2;
+        let nuz: float = uvx * (0.0 - 1.2) + uvz * 1.6;
+        uvx = nux;
+        uvz = nuz;
+        freq = freq * 1.9;
+        amp = amp * 0.22;
+        choppy = GpuMath.mix(choppy, 1.0, 0.2);
+    }
+    return h;
+}
+
+// Signed distance to sea surface: p.y - height (Ms2SD1 `map` / `map_detailed`).
+@gpu
+fun sea_map(px: float, py: float, pz: float, sea_time: float): float {
+    return py - sea_height(px, pz, sea_time, 3);
+}
+
+@gpu
+fun sea_map_detailed(px: float, py: float, pz: float, sea_time: float): float {
+    return py - sea_height(px, pz, sea_time, 5);
+}
+
+@gpu
+fun get_sky_color(e: GpuVec3): GpuVec3 {
+    let y: float = (GpuMath.max(e.y, 0.0) * 0.8 + 0.2) * 0.8;
+    return GpuVec3.of(
+        GpuMath.pow(1.0 - y, 2.0) * 1.1,
+        (1.0 - y) * 1.1,
+        (0.6 + (1.0 - y) * 0.4) * 1.1
+    );
+}
+
+@gpu
+fun get_sea_color(p: GpuVec3, n: GpuVec3, l: GpuVec3, eye: GpuVec3, dist2: float): GpuVec3 {
+    let SEA_HEIGHT: float = 0.6;
+    let SEA_BASE = GpuVec3.of(0.0, 0.09, 0.18);
+    let SEA_WATER = GpuVec3.of(0.8 * 0.6, 0.9 * 0.6, 0.6 * 0.6);
+
+    let ndote: float = GpuMath.dot(n, GpuVec3.of(0.0 - eye.x, 0.0 - eye.y, 0.0 - eye.z));
+    let fres: float = GpuMath.clamp(1.0 - ndote, 0.0, 1.0);
+    fres = GpuMath.min(fres * fres * fres, 0.5);
+
+    let reflected = get_sky_color(GpuMath.reflect(eye, n));
+    let diff: float = GpuMath.pow(GpuMath.max(GpuMath.dot(n, l) * 0.4 + 0.6, 0.0), 80.0);
+    let refracted = GpuVec3.of(
+        SEA_BASE.x + diff * SEA_WATER.x * 0.12,
+        SEA_BASE.y + diff * SEA_WATER.y * 0.12,
+        SEA_BASE.z + diff * SEA_WATER.z * 0.12
+    );
+
+    let cr: float = GpuMath.mix(refracted.x, reflected.x, fres);
+    let cg: float = GpuMath.mix(refracted.y, reflected.y, fres);
+    let cb: float = GpuMath.mix(refracted.z, reflected.z, fres);
+
+    let atten: float = GpuMath.max(1.0 - dist2 * 0.001, 0.0);
+    let peak: float = (p.y - SEA_HEIGHT) * 0.18 * atten;
+    cr = cr + SEA_WATER.x * peak;
+    cg = cg + SEA_WATER.y * peak;
+    cb = cb + SEA_WATER.z * peak;
+
+    let spec_pow: float = 600.0 / GpuMath.sqrt(GpuMath.max(dist2, 1.0));
+    let spec_dir = GpuMath.reflect(eye, n);
+    let nrm: float = (spec_pow + 8.0) / (3.141592 * 8.0);
+    let spec: float = GpuMath.pow(GpuMath.max(GpuMath.dot(spec_dir, l), 0.0), spec_pow) * nrm;
+    cr = cr + spec;
+    cg = cg + spec;
+    cb = cb + spec;
+    return GpuVec3.of(cr, cg, cb);
+}
+
+@gpu
+fun get_normal(px: float, py: float, pz: float, eps: float, sea_time: float): GpuVec3 {
+    let h0: float = sea_map_detailed(px, py, pz, sea_time);
+    let hx: float = sea_map_detailed(px + eps, py, pz, sea_time);
+    let hz: float = sea_map_detailed(px, py, pz + eps, sea_time);
+    return GpuMath.normalize(GpuVec3.of(hx - h0, eps, hz - h0));
+}
+
+// Binary-search the height field (Ms2SD1 `heightMapTracing`).
+@gpu
+fun height_map_tracing(
+    ox: float, oy: float, oz: float,
+    dx: float, dy: float, dz: float,
+    sea_time: float
+): GpuVec3 {
+    let tm: float = 0.0;
+    let tx: float = 1000.0;
+    let hx: float = sea_map(ox + dx * tx, oy + dy * tx, oz + dz * tx, sea_time);
+    if (hx > 0.0) {
+        return GpuVec3.of(ox + dx * tx, oy + dy * tx, oz + dz * tx);
+    }
+    let hm: float = sea_map(ox, oy, oz, sea_time);
+    for (let i = 0; i < 32; i = i + 1) {
+        let tmid: float = GpuMath.mix(tm, tx, hm / (hm - hx));
+        let px: float = ox + dx * tmid;
+        let py: float = oy + dy * tmid;
+        let pz: float = oz + dz * tmid;
+        let hmid: float = sea_map(px, py, pz, sea_time);
+        if (hmid < 0.0) {
+            tx = tmid;
+            hx = hmid;
+        } else {
+            tm = tmid;
+            hm = hmid;
+        }
+        if (GpuMath.abs(hmid) < 0.001) {
+            return GpuVec3.of(px, py, pz);
+        }
+    }
+    let tfin: float = GpuMath.mix(tm, tx, hm / (hm - hx));
+    return GpuVec3.of(ox + dx * tfin, oy + dy * tfin, oz + dz * tfin);
+}
+
+// GLSL `dir * fromEuler(ang)`.
+@gpu
+fun apply_euler(dir: GpuVec3, ax: float, ay: float, az: float): GpuVec3 {
+    let a1s: float = GpuMath.sin(ax);
+    let a1c: float = GpuMath.cos(ax);
+    let a2s: float = GpuMath.sin(ay);
+    let a2c: float = GpuMath.cos(ay);
+    let a3s: float = GpuMath.sin(az);
+    let a3c: float = GpuMath.cos(az);
+
+    let c0x: float = a1c * a3c + a1s * a2s * a3s;
+    let c0y: float = a1c * a2s * a3s + a3c * a1s;
+    let c0z: float = 0.0 - a2c * a3s;
+    let c1x: float = 0.0 - a2c * a1s;
+    let c1y: float = a1c * a2c;
+    let c1z: float = a2s;
+    let c2x: float = a3c * a1s * a2s + a1c * a3s;
+    let c2y: float = a1s * a3s - a1c * a3c * a2s;
+    let c2z: float = a2c * a3c;
+
+    // v * M  (row-vector × columns of fromEuler)
+    return GpuVec3.of(
+        dir.x * c0x + dir.y * c1x + dir.z * c2x,
+        dir.x * c0y + dir.y * c1y + dir.z * c2y,
+        dir.x * c0z + dir.y * c1z + dir.z * c2z
+    );
 }
 
 @vertex
-fun ocean_vs(v: Vertex, time: float, cam_y: float, cam_z: float, aspect: float): VsOut {
-    let x0: float = v.xz.x;
-    let z0: float = v.xz.y;
-
-    // Global time scale: keep deep-water dispersion, but don't race the camera.
-    let t: float = time * 0.42;
-
-    let px: float = x0;
-    let py: float = 0.0;
-    let pz: float = z0;
-    let txx: float = 1.0;
-    let txy: float = 0.0;
-    let txz: float = 0.0;
-    let tzx: float = 0.0;
-    let tzy: float = 0.0;
-    let tzz: float = 1.0;
-
-    // Long primary swell
-    let dx1: float = 0.95;
-    let dz1: float = 0.32;
-    let a1: float = 0.55;
-    let q1: float = 0.42;
-    let k1: float = 6.2831853 / 48.0;
-    let w1: float = GpuMath.sqrt(9.8 * k1);
-    let ph1: float = k1 * (dx1 * x0 + dz1 * z0) - w1 * t;
-    let s1: float = GpuMath.sin(ph1);
-    let c1: float = GpuMath.cos(ph1);
-    px = px + dx1 * q1 * a1 * c1;
-    py = py + a1 * s1;
-    pz = pz + dz1 * q1 * a1 * c1;
-    txx = txx - dx1 * dx1 * q1 * k1 * a1 * s1;
-    txy = txy + dx1 * k1 * a1 * c1;
-    txz = txz - dx1 * dz1 * q1 * k1 * a1 * s1;
-    tzx = tzx - dx1 * dz1 * q1 * k1 * a1 * s1;
-    tzy = tzy + dz1 * k1 * a1 * c1;
-    tzz = tzz - dz1 * dz1 * q1 * k1 * a1 * s1;
-
-    // Cross swell
-    let dx2: float = 0.0 - 0.42;
-    let dz2: float = 0.91;
-    let a2: float = 0.32;
-    let q2: float = 0.38;
-    let k2: float = 6.2831853 / 28.0;
-    let w2: float = GpuMath.sqrt(9.8 * k2);
-    let ph2: float = k2 * (dx2 * x0 + dz2 * z0) - w2 * t * 1.05;
-    let s2: float = GpuMath.sin(ph2);
-    let c2: float = GpuMath.cos(ph2);
-    px = px + dx2 * q2 * a2 * c2;
-    py = py + a2 * s2;
-    pz = pz + dz2 * q2 * a2 * c2;
-    txx = txx - dx2 * dx2 * q2 * k2 * a2 * s2;
-    txy = txy + dx2 * k2 * a2 * c2;
-    txz = txz - dx2 * dz2 * q2 * k2 * a2 * s2;
-    tzx = tzx - dx2 * dz2 * q2 * k2 * a2 * s2;
-    tzy = tzy + dz2 * k2 * a2 * c2;
-    tzz = tzz - dz2 * dz2 * q2 * k2 * a2 * s2;
-
-    // Mid wind sea
-    let dx3: float = 0.72;
-    let dz3: float = 0.0 - 0.69;
-    let a3: float = 0.16;
-    let q3: float = 0.32;
-    let k3: float = 6.2831853 / 14.0;
-    let w3: float = GpuMath.sqrt(9.8 * k3);
-    let ph3: float = k3 * (dx3 * x0 + dz3 * z0) - w3 * t * 1.08;
-    let s3: float = GpuMath.sin(ph3);
-    let c3: float = GpuMath.cos(ph3);
-    px = px + dx3 * q3 * a3 * c3;
-    py = py + a3 * s3;
-    pz = pz + dz3 * q3 * a3 * c3;
-    txx = txx - dx3 * dx3 * q3 * k3 * a3 * s3;
-    txy = txy + dx3 * k3 * a3 * c3;
-    txz = txz - dx3 * dz3 * q3 * k3 * a3 * s3;
-    tzx = tzx - dx3 * dz3 * q3 * k3 * a3 * s3;
-    tzy = tzy + dz3 * k3 * a3 * c3;
-    tzz = tzz - dz3 * dz3 * q3 * k3 * a3 * s3;
-
-    // Secondary chop
-    let dx4: float = 0.0 - 0.88;
-    let dz4: float = 0.0 - 0.47;
-    let a4: float = 0.08;
-    let q4: float = 0.28;
-    let k4: float = 6.2831853 / 7.5;
-    let w4: float = GpuMath.sqrt(9.8 * k4);
-    let ph4: float = k4 * (dx4 * x0 + dz4 * z0) - w4 * t * 1.12;
-    let s4: float = GpuMath.sin(ph4);
-    let c4: float = GpuMath.cos(ph4);
-    px = px + dx4 * q4 * a4 * c4;
-    py = py + a4 * s4;
-    pz = pz + dz4 * q4 * a4 * c4;
-    txx = txx - dx4 * dx4 * q4 * k4 * a4 * s4;
-    txy = txy + dx4 * k4 * a4 * c4;
-    txz = txz - dx4 * dz4 * q4 * k4 * a4 * s4;
-    tzx = tzx - dx4 * dz4 * q4 * k4 * a4 * s4;
-    tzy = tzy + dz4 * k4 * a4 * c4;
-    tzz = tzz - dz4 * dz4 * q4 * k4 * a4 * s4;
-
-    // Fine ripple (low amplitude — detail, not bounce)
-    let dx5: float = 0.35;
-    let dz5: float = 0.94;
-    let a5: float = 0.035;
-    let q5: float = 0.22;
-    let k5: float = 6.2831853 / 3.2;
-    let w5: float = GpuMath.sqrt(9.8 * k5);
-    let ph5: float = k5 * (dx5 * x0 + dz5 * z0) - w5 * t * 1.18;
-    let s5: float = GpuMath.sin(ph5);
-    let c5: float = GpuMath.cos(ph5);
-    px = px + dx5 * q5 * a5 * c5;
-    py = py + a5 * s5;
-    pz = pz + dz5 * q5 * a5 * c5;
-    txx = txx - dx5 * dx5 * q5 * k5 * a5 * s5;
-    txy = txy + dx5 * k5 * a5 * c5;
-    txz = txz - dx5 * dz5 * q5 * k5 * a5 * s5;
-    tzx = tzx - dx5 * dz5 * q5 * k5 * a5 * s5;
-    tzy = tzy + dz5 * k5 * a5 * c5;
-    tzz = tzz - dz5 * dz5 * q5 * k5 * a5 * s5;
-
-    let tx = GpuVec3.of(txx, txy, txz);
-    let tz = GpuVec3.of(tzx, tzy, tzz);
-    let n = GpuMath.normalize(GpuMath.cross(tz, tx));
-    // Whitecaps only on tight crests (Jacobian-ish).
-    let foam: float = GpuMath.clamp((txx + tzz - 1.72) * 3.5, 0.0, 1.0);
-
-    let pos = GpuVec3.of(px, py, pz);
-    let eye = GpuVec3.of(0.0, cam_y, cam_z);
-    let look = GpuVec3.of(0.0, 0.0 - 1.2, 0.0 - 18.0);
-    let forward = GpuMath.normalize(GpuVec3.of(
-        look.x - eye.x,
-        look.y - eye.y,
-        look.z - eye.z
-    ));
-    let right = GpuMath.normalize(GpuMath.cross(forward, GpuVec3.of(0.0, 1.0, 0.0)));
-    let up = GpuMath.cross(right, forward);
-
-    let to_eye = GpuVec3.of(pos.x - eye.x, pos.y - eye.y, pos.z - eye.z);
-    let vx: float = GpuMath.dot(to_eye, right);
-    let vy: float = GpuMath.dot(to_eye, up);
-    let vz: float = GpuMath.dot(to_eye, forward);
-
-    let f: float = 1.35;
-    let near: float = 0.5;
-    let far: float = 220.0;
-    let clip = GpuVec4.of(
-        vx * f / aspect,
-        vy * f,
-        ((far + near) / (far - near)) * vz - (2.0 * far * near) / (far - near),
-        vz
-    );
-
-    let view_dir = GpuMath.normalize(GpuVec3.of(eye.x - pos.x, eye.y - pos.y, eye.z - pos.z));
-
+fun sea_vs(v: Vertex): VsOut {
     let o = VsOut();
-    o.position = clip;
-    o.world = pos;
-    o.normal = n;
-    o.view_dir = view_dir;
-    o.foam = foam;
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.pad = 0.0;
     return o;
 }
 
 @fragment
-fun ocean_fs(v: VsOut): GpuVec4 {
-    let n = GpuMath.normalize(v.normal);
-    let view = GpuMath.normalize(v.view_dir);
+fun sea_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
+    let cam_t: float = time * 0.3;
+    let sea_time: float = 1.0 + time * 0.8;
 
-    // Late-afternoon sun — warm, not cartoon white.
-    let light = GpuMath.normalize(GpuVec3.of(0.55, 0.48, 0.28));
-    let ndl: float = GpuMath.max(GpuMath.dot(n, light), 0.0);
-    let wrap: float = GpuMath.max(GpuMath.dot(n, light) * 0.5 + 0.5, 0.0);
+    // WebGPU frag_coord is top-left; Shadertoy is bottom-left.
+    let fx: float = frag_coord.x;
+    let fy: float = res_y - frag_coord.y;
+    let uvx: float = (fx / res_x) * 2.0 - 1.0;
+    let uvy: float = (fy / res_y) * 2.0 - 1.0;
+    uvx = uvx * (res_x / res_y);
 
-    // Deep Atlantic / coastal shelf — desaturated, not toy cyan.
-    let deep_r: float = 0.012;
-    let deep_g: float = 0.045;
-    let deep_b: float = 0.085;
-    let mid_r: float = 0.02;
-    let mid_g: float = 0.11;
-    let mid_b: float = 0.14;
-    let sh_r: float = 0.04;
-    let sh_g: float = 0.18;
-    let sh_b: float = 0.17;
+    let ang_x: float = GpuMath.sin(cam_t * 3.0) * 0.1;
+    let ang_y: float = GpuMath.sin(cam_t) * 0.2 + 0.3;
+    let ang_z: float = cam_t;
 
-    let height_t: float = GpuMath.clamp(v.world.y * 0.55 + 0.42, 0.0, 1.0);
-    let wr: float = GpuMath.mix(GpuMath.mix(deep_r, mid_r, height_t), sh_r, height_t * height_t);
-    let wg: float = GpuMath.mix(GpuMath.mix(deep_g, mid_g, height_t), sh_g, height_t * height_t);
-    let wb: float = GpuMath.mix(GpuMath.mix(deep_b, mid_b, height_t), sh_b, height_t * height_t);
+    let ori = GpuVec3.of(0.0, 3.5, cam_t * 5.0);
+    let dir0 = GpuMath.normalize(GpuVec3.of(uvx, uvy, 0.0 - 2.0));
+    let pull: float = GpuMath.sqrt(uvx * uvx + uvy * uvy) * 0.14;
+    let dir1 = GpuMath.normalize(GpuVec3.of(dir0.x, dir0.y, dir0.z + pull));
+    let dir = apply_euler(dir1, ang_x, ang_y, ang_z);
 
-    // Schlick-ish fresnel (water F0 ≈ 0.02).
-    let ndv: float = GpuMath.clamp(GpuMath.dot(n, view), 0.0, 1.0);
-    let fres: float = 0.02 + 0.98 * GpuMath.pow(1.0 - ndv, 5.0);
+    let p = height_map_tracing(ori.x, ori.y, ori.z, dir.x, dir.y, dir.z, sea_time);
+    let dist = GpuVec3.of(p.x - ori.x, p.y - ori.y, p.z - ori.z);
+    let dist2: float = GpuMath.dot(dist, dist);
+    let eps: float = dist2 * (0.1 / res_x);
+    let n = get_normal(p.x, p.y, p.z, eps, sea_time);
+    let light = GpuMath.normalize(GpuVec3.of(0.0, 1.0, 0.8));
 
-    // Soft sky hemisphere (haze gray-blue, not saturated).
-    let sky_r: float = 0.38;
-    let sky_g: float = 0.52;
-    let sky_b: float = 0.68;
-    let hor_r: float = 0.62;
-    let hor_g: float = 0.66;
-    let hor_b: float = 0.70;
-    let sky_t: float = GpuMath.clamp(n.y * 0.65 + 0.35, 0.0, 1.0);
-    let scr: float = GpuMath.mix(hor_r, sky_r, sky_t);
-    let scg: float = GpuMath.mix(hor_g, sky_g, sky_t);
-    let scb: float = GpuMath.mix(hor_b, sky_b, sky_t);
+    let sea = get_sea_color(p, n, light, dir, dist2);
+    let sky = get_sky_color(dir);
+    // smoothstep(0.0, -0.02, dir.y) then pow(_, 0.2) — sky above horizon.
+    let t: float = GpuMath.clamp((0.0 - dir.y) / 0.02, 0.0, 1.0);
+    t = t * t * (3.0 - 2.0 * t);
+    let mix_k: float = GpuMath.pow(t, 0.2);
 
-    let br: float = GpuMath.mix(wr, scr, fres);
-    let bg: float = GpuMath.mix(wg, scg, fres);
-    let bb: float = GpuMath.mix(wb, scb, fres);
+    let cr: float = GpuMath.mix(sky.x, sea.x, mix_k);
+    let cg: float = GpuMath.mix(sky.y, sea.y, mix_k);
+    let cb: float = GpuMath.mix(sky.z, sea.z, mix_k);
 
-    // Broad SSS-ish lift from behind the wave + soft diffuse.
-    let sss: float = GpuMath.pow(GpuMath.clamp(1.0 - n.y, 0.0, 1.0), 2.0) * wrap * 0.22;
-    let lit: float = 0.22 + ndl * 0.38 + wrap * 0.18;
-
-    let halfv = GpuMath.normalize(GpuVec3.of(
-        light.x + view.x,
-        light.y + view.y,
-        light.z + view.z
-    ));
-    let ndh: float = GpuMath.max(GpuMath.dot(n, halfv), 0.0);
-    // Dual-lobe: soft glitter + tight sun streak (kept dim).
-    let spec_soft: float = GpuMath.pow(ndh, 48.0) * 0.18;
-    let spec_hard: float = GpuMath.pow(ndh, 220.0) * 0.35;
-    let spec: float = (spec_soft + spec_hard) * fres;
-
-    let cr: float = br * lit + sss * 0.10 + spec * 0.95;
-    let cg: float = bg * lit + sss * 0.18 + spec * 0.88;
-    let cb: float = bb * lit + sss * 0.16 + spec * 0.78;
-
-    // Sparse whitecaps — cool gray, not chalk white.
-    let foam = v.foam * v.foam;
-    cr = GpuMath.mix(cr, 0.72, foam * 0.55);
-    cg = GpuMath.mix(cg, 0.76, foam * 0.55);
-    cb = GpuMath.mix(cb, 0.80, foam * 0.55);
-
-    // Distance aerial perspective over a larger sea.
-    let dist: float = GpuMath.length(GpuVec3.of(v.world.x, 0.0, v.world.z - (0.0 - 18.0)));
-    let haze: float = GpuMath.clamp((dist - 35.0) / 90.0, 0.0, 0.72);
-    cr = GpuMath.mix(cr, hor_r, haze);
-    cg = GpuMath.mix(cg, hor_g, haze);
-    cb = GpuMath.mix(cb, hor_b, haze);
-
+    cr = GpuMath.pow(GpuMath.max(cr, 0.0001), 0.65);
+    cg = GpuMath.pow(GpuMath.max(cg, 0.0001), 0.65);
+    cb = GpuMath.pow(GpuMath.max(cb, 0.0001), 0.65);
     return GpuVec4.of(cr, cg, cb, 1.0);
 }
 
-fun make_grid(n: int, half: float): GpuBuffer<Vertex> {
-    let count = n * n;
-    let verts = Buffer.alloc<Vertex>(count);
-    let step: float = (half * 2.0) / (float)(n - 1);
-    for (let j = 0; j < n; j = j + 1) {
-        for (let i = 0; i < n; i = i + 1) {
-            let v = Vertex();
-            v.xz = GpuVec2.of(0.0 - half + (float)i * step, 0.0 - half + (float)j * step);
-            verts[j * n + i] = v;
-        }
-    }
-    return GpuBuffer<Vertex>.vertex_from(verts);
-}
-
-fun make_indices(n: int): GpuBuffer<int> {
-    let quads = (n - 1) * (n - 1);
-    let idx = Buffer.alloc<int>(quads * 6);
-    let p = 0;
-    for (let j = 0; j < n - 1; j = j + 1) {
-        for (let i = 0; i < n - 1; i = i + 1) {
-            let a = j * n + i;
-            let b = a + 1;
-            let c = a + n;
-            let d = c + 1;
-            idx[p] = a; p = p + 1;
-            idx[p] = c; p = p + 1;
-            idx[p] = b; p = p + 1;
-            idx[p] = b; p = p + 1;
-            idx[p] = c; p = p + 1;
-            idx[p] = d; p = p + 1;
-        }
-    }
-    return GpuBuffer<int>.from(idx);
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
 }
 
 async fun main(): void {
@@ -309,40 +272,36 @@ async fun main(): void {
     }
     let surface = surface_r.unwrap_or(GpuSurface());
 
-    let w = 1280;
-    let h = 720;
+    let w: int = js.global.__oceanW;
+    let h: int = js.global.__oceanH;
+    if (w < 640) { w = 1920; }
+    if (h < 360) { h = 1080; }
     surface.configure(w, h);
 
-    let pipe_r = await GpuRenderPipeline.create("ocean_vs", "ocean_fs");
+    let pipe_r = await GpuRenderPipeline.create("sea_vs", "sea_fs");
     if (pipe_r.is_err()) {
         System.println("GpuRenderPipeline.create failed");
         return;
     }
     let pipe = pipe_r.unwrap_or(GpuRenderPipeline());
 
-    // ~96×96 world units, denser mesh so long swell still looks smooth.
-    let n = 192;
-    let verts = make_grid(n, 48.0);
-    let indices = make_indices(n);
-    let index_count = (n - 1) * (n - 1) * 6;
+    // Fullscreen triangle covers clip space.
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(0.0 - 1.0, 0.0 - 1.0),
+        make_vert(3.0, 0.0 - 1.0),
+        make_vert(0.0 - 1.0, 3.0),
+    ]);
 
-    let sky = GpuVec4.of(0.52, 0.60, 0.68, 1.0);
-    let t: float = 0.0;
-    let aspect: float = (float)w / (float)h;
+    let sky = GpuVec4.of(0.44, 0.77, 0.99, 1.0);
+    let rw: float = (float)w;
+    let rh: float = (float)h;
+    let t0: float = (float)js.global.performance.now().to_double();
 
     while (true) {
-        t = t + 0.012;
-        // Camera: higher + farther back, looking out over the patch.
-        let uniforms = Uniforms.pack_f32([t, 14.0, 42.0, aspect]);
-        let _ = await GpuRenderPass.draw_indexed_ex(
-            surface,
-            pipe,
-            verts,
-            indices,
-            index_count,
-            uniforms,
-            sky
-        );
+        let now: float = (float)js.global.performance.now().to_double();
+        let t: float = (now - t0) / 1000.0;
+        let uniforms = Uniforms.pack_f32([t, rw, rh]);
+        let _ = await GpuRenderPass.draw_ex(surface, pipe, verts, 3, uniforms, sky);
         let _ = await surface.present();
         await Gpu.frame();
     }

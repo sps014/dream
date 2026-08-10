@@ -17,6 +17,8 @@ pub(super) struct EmitCtx<'a> {
     pub(super) scopes: RefCell<Vec<IndexMap<String, String>>>,
     /// Struct name → field name → WGSL type (for varying/vertex attribute member inference).
     pub(super) struct_fields: &'a IndexMap<String, IndexMap<String, String>>,
+    /// `@gpu` helper name → WGSL return type (for unannotated `let` inference).
+    pub(super) helper_returns: &'a IndexMap<String, String>,
 }
 
 impl EmitCtx<'_> {

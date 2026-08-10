@@ -139,7 +139,11 @@ impl<'a> Analyzer<'a> {
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
         // them would define a second `$string_alloc`, colliding with the runtime function.
         // `@compute` kernels are emitted as WGSL, not WASM — skip HIR collection the same way.
-        if function.is_extern || dream_abi::attributes::is_gpu_shader_attr(&function.attributes) {
+        // `@compute`/`@vertex`/`@fragment` stages and `@gpu` helpers are WGSL-only — skip HIR/MIR.
+        if function.is_extern
+            || dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
+            || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
+        {
             self.hir.collecting = false;
             return;
         }

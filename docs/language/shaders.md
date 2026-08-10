@@ -53,11 +53,46 @@ let _ = await surface.present();
 | Need | Default | Optional |
 |------|---------|----------|
 | Stage | — | **`@vertex` / `@fragment` required** |
+| Shared helpers | — | **`@gpu`** on ordinary functions called from shaders |
 | Attribute / varying slots | Field order → `0, 1, 2…` | `@location(N)` to remap |
 | Clip position | Field named **`position: GpuVec4`** on the VS return struct | — |
 | Fragment color | Return **`GpuVec4`** | — |
 
 Do not put `@location` / `@builtin` on the happy path unless you need a remap.
+
+## `@gpu` helpers
+
+Shaders may only call:
+
+- other `@compute` / `@vertex` / `@fragment` / `@gpu` functions,
+- `GpuMath` / `GpuVec*` builtins.
+
+Ordinary functions must be marked **`@gpu`** to be callable from a shader. Those helpers are
+emitted as WGSL `fn`s and have **no** CPU/WASM body — calling them from normal (non-GPU) code
+is a **compile error**.
+
+```dream
+@gpu
+fun sea_octave(ux: float, uz: float, choppy: float): float {
+    // … GpuMath only …
+    return GpuMath.pow(1.0 - GpuMath.pow(mx * mz, 0.65), choppy);
+}
+
+@vertex
+fun sea_vs(v: Vertex, time: float): VsOut {
+    let h = sea_octave(/* … */); // ok — callee is @gpu
+    // …
+}
+
+fun main(): void {
+    // error: cannot call @gpu helper 'sea_octave' from CPU code
+    // let x = sea_octave(0.0, 0.0, 1.0);
+}
+```
+
+Helpers must use shader-safe types (`float`, `GpuVec*`, …) and cannot be generic or declare
+`@workgroup` locals. Stage entry points (`@vertex` / `@fragment` / `@compute`) likewise cannot
+be called like CPU functions — use `GpuRenderPipeline.create` / `Compute.run`.
 
 ## Rules
 
@@ -68,6 +103,36 @@ Do not put `@location` / `@builtin` on the happy path unless you need a remap.
 - Cannot call `@vertex` / `@fragment` like CPU functions — use `GpuRenderPipeline.create`.
 - When both names passed to `create` are **string literals**, the compiler checks that the
   shaders exist, have the right stages, and share the same interface struct.
+
+## `@gpu` helpers
+
+Factor shared math out of stage functions with **`@gpu`**. Helpers are emitted as WGSL `fn`s
+when referenced from a shader (or another `@gpu` helper) and are **not** callable from ordinary
+CPU code (same rule as calling a stage entry point).
+
+```dream
+@gpu
+fun sea_noise(x: float, z: float): float {
+    return GpuMath.fract(GpuMath.sin(x * 127.1 + z * 311.7) * 43758.5453);
+}
+
+@vertex
+fun vs(...): VsOut {
+    let n = sea_noise(v.xz.x, v.xz.y); // ok
+    ...
+}
+
+fun main(): void {
+    let _ = sea_noise(0.0, 0.0); // error: cannot call @gpu helper from CPU code
+}
+```
+
+Rules:
+
+- Top-level only; not generic, async, or extern; body skipped for MIR/WASM.
+- May call other `@gpu` helpers and `Gpu` / `GpuMath` / `GpuVec*` builtins.
+- Must declare an explicit non-void return type (needed for WGSL `fn` emission).
+- See [`sample/graphics/ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean).
 
 ## Vectors
 

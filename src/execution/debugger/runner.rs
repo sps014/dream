@@ -84,6 +84,8 @@ fn run_program(
     let shared_mem = crate::execution::host::shared_memory_for(&engine, &module)?;
     crate::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
     let mut store = Store::new(&engine, ());
+    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
+    store.set_epoch_deadline(u64::MAX);
     let mut linker: Linker<()> = Linker::new(&engine);
 
     // Program output is routed to DAP `output` events (stdout is reserved for the DAP stream).

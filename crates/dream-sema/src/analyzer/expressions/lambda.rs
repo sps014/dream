@@ -506,10 +506,11 @@ impl<'a> Analyzer<'a> {
                 return Err(report(
                     diagnostics,
                     format!(
-                        "cannot capture '{}' of type '{}' in a `{}` body: only '@shared class' instances and unmanaged (blittable) values can safely cross into another thread — mark its type '@shared' or avoid capturing it",
+                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not in worker-shared memory — mark its type '@shared', pass it as a wire `spawn` argument, or allocate it inside the worker body (only '@shared class' instances and unmanaged values may cross threads)",
                         bad,
                         bad_ty.get_type(),
-                        who
+                        who,
+                        bad_ty.get_type()
                     ),
                     Some(lambda.open_paren_position),
                 ));
@@ -637,19 +638,18 @@ impl<'a> Analyzer<'a> {
         Ok(func_ty)
     }
 
-    /// True when the lambda/function-value being analyzed is a `WebWorker`/`WebWorker.map`/
-    /// `WebWorkerPool.dispatch` body argument — see `current_call_target_name` set by the
-    /// call-argument analysis paths. `WebWorker<TIn, TOut>.map(...)` dispatches through the
-    /// *generic*-class static-call path (`try_analyze_static_method`'s `generic_structs` branch in
-    /// `static_dispatch/mod.rs`), which monomorphizes the receiver to its mangled name
-    /// (`WebWorker_string_string`) before `plain.rs` sets the call target from *that* — so the
-    /// receiver half is matched by its unmangled prefix (mangling only ever appends `_{arg}...`),
-    /// not by exact string.
+    // True when the lambda/function-value being analyzed is a `WebWorker.spawn` /
+    // `WebWorker.map` / `WebWorkerPool.dispatch` body argument — see `current_call_target_name`
+    // set by the call-argument analysis paths. `WebWorker<TOut>.spawn` / `.map` dispatch through
+    // the generic-class static-call path, which monomorphizes the receiver to a mangled name
+    // (`WebWorker_int`) before `plain.rs` sets the call target from *that* — so the receiver half
+    // is matched by its unmangled prefix (mangling only ever appends `_{arg}...`), not by exact
+    // string.
     pub(in crate::analyzer) fn is_webworker_body_call(&self) -> bool {
         match self.current_call_target_name.as_deref() {
             Some("WebWorker") => true,
             Some(name) => match name.split_once('.') {
-                Some((recv, "map")) => {
+                Some((recv, "spawn")) | Some((recv, "map")) => {
                     recv == "WebWorker" || recv.starts_with("WebWorker_")
                 }
                 Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => {

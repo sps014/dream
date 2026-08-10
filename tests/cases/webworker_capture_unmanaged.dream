@@ -6,7 +6,7 @@ async fun main(): void {
     let scale = 3;
     let offset = 3;
 
-    let w = WebWorker<string, string>((msg) => {
+    let w = WebWorker<string, string>.spawn("result=", (msg) => {
         let result = scale + offset;
         if (result == 6) {
             return msg + "ok";
@@ -14,5 +14,5 @@ async fun main(): void {
         return msg + "bad";
     });
 
-    System.println(await w.send("result="));
+    System.println(await w.join());
 }

@@ -1,10 +1,10 @@
-// Async lambda as a `WebWorker` body via the `fun(TIn): Future<TOut>` constructor overload.
+// Async lambda as a `WebWorker` body via the `fun(TIn): Future<TOut>` spawn overload.
 import system;
 async fun main(): void {
-    let w = WebWorker<string, string>(async (msg) => {
+    let w = WebWorker<string, string>.spawn("hi", async (msg) => {
         await Time.sleep(1);
         return msg + "!";
     });
-    System.println(await w.send("hi"));
+    System.println(await w.join());
     w.terminate();
 }

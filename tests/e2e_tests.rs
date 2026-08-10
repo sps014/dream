@@ -107,6 +107,7 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
 
     let mut store = Store::new(&engine, ());
+    store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
     linker
         .define(&mut store, "env", "memory", shared_mem.clone())

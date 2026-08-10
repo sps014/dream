@@ -37,7 +37,7 @@ pub fn execute_wasm_bytes(wasm_or_wat: &[u8]) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-    fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
     super::host::attach_abi_from_wat_path(wat_path);
     let wat_content = fs::read_to_string(wat_path)?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
@@ -67,6 +67,8 @@ fn run_wasm_bytes(wasm_bytes: &[u8], capturing: bool) -> Result<(), Box<dyn std:
     set_worker_runtime(engine.clone(), shared_mem.clone());
 
     let mut store = Store::new(&engine, ());
+    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
+    store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
 
     link_host_functions(&mut linker)?;

@@ -47,8 +47,8 @@ public class Bytes {
 
     // Encodes a `WebWorker`-safe value of type `T` as the `string` the worker wire carries:
     // identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`)
-    // re-encoded via `toWireString`. Used by `WebWorker<TIn, TOut>`/`WebWorker.map`/
-    // `WebWorkerPool.dispatch` to marshal an arbitrary `TIn`/`TOut` without a second wire format.
+    // re-encoded via `toWireString`. Used by `WebWorker`/`WebWorker.map`/
+    // `WebWorkerPool.dispatch` to marshal an arbitrary wire value without a second wire format.
     @intrinsic("wire_encode")
     static extern fun toWire<T>(value: T): string;
 

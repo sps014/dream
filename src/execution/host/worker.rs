@@ -15,7 +15,7 @@
 //! reply channel and pre-resolves a host `Future`, so `await w.receive()` works under wasmtime
 //! exactly as it does in the browser (where the reply arrives via `onmessage`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -89,6 +89,13 @@ struct WorkerHandle {
 fn workers() -> &'static Mutex<HashMap<u32, WorkerHandle>> {
     static WORKERS: OnceLock<Mutex<HashMap<u32, WorkerHandle>>> = OnceLock::new();
     WORKERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Worker ids whose `terminate` has been requested. Shared-engine epoch bumps wake every
+/// worker store; the deadline callback only traps when this worker's id is present.
+fn killed_workers() -> &'static Mutex<HashSet<u32>> {
+    static KILLED: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
+    KILLED.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
@@ -184,11 +191,11 @@ fn store_write_string(
 
 /// The worker thread body: instantiate a fresh copy of the module and run the message loop,
 /// calling each job's own `(fn_idx, env)` body on its message — an ordinary `WebWorker`'s jobs all
-/// carry the same fixed pair (attached by `workerPost`/`send`); a pooled worker's jobs carry a
-/// fresh pair per dispatch (attached by `workerPoolDispatch`), so the same thread runs a different
-/// body every call with no respawn cost. Exits (dropping `reply_tx`, which unblocks any pending
-/// owner `recv`) on `Terminate`, channel close, or any instantiation failure.
+/// carry the same fixed pair (attached by `workerPost`); a pooled worker's jobs carry a fresh pair
+/// per dispatch. Exits (dropping `reply_tx`, which unblocks any pending owner `recv`) on
+/// `Terminate`, epoch-interrupt kill, channel close, or any instantiation failure.
 fn worker_thread(
+    worker_id: u32,
     bytes: Arc<Vec<u8>>,
     engine: Engine,
     shared_mem: SharedMemory,
@@ -202,20 +209,31 @@ fn worker_thread(
     SHARED_RUNTIME.with(|c| *c.borrow_mut() = Some((engine.clone(), shared_mem.clone())));
 
     // Announce thread exit to the debugger on every return path from this point on.
-    struct ExitGuard(Option<u32>);
+    struct ExitGuard(Option<u32>, u32);
     impl Drop for ExitGuard {
         fn drop(&mut self) {
+            killed_workers().lock().unwrap().remove(&self.1);
             if let (Some(d), Some(tid)) = (worker_debug(), self.0) {
                 d.on_exit(tid);
             }
         }
     }
-    let _exit_guard = ExitGuard(dap_tid);
+    let _exit_guard = ExitGuard(dap_tid, worker_id);
 
     let Ok(module) = Module::new(&engine, &bytes[..]) else {
         return;
     };
     let mut store = Store::new(&engine, ());
+    // Interrupt when the owner bumps the engine epoch *and* this worker was terminated. Other
+    // workers' kills also bump the epoch; those continue via `UpdateDeadline::Continue`.
+    store.set_epoch_deadline(1);
+    store.epoch_deadline_callback(move |_| {
+        if killed_workers().lock().unwrap().contains(&worker_id) {
+            Ok(UpdateDeadline::Interrupt)
+        } else {
+            Ok(UpdateDeadline::Continue(1))
+        }
+    });
     let mut linker: Linker<()> = Linker::new(&engine);
     build_worker_linker(&mut linker, dap_tid);
     if linker
@@ -246,13 +264,18 @@ fn worker_thread(
                 let reply = match store_write_string(&mut store, &malloc, &shared_mem, &msg) {
                     Some(ptr) => match invoke.call(&mut store, (fn_idx, env, ptr)) {
                         Ok(reply_ptr) => read_string_from_memory(&shared_mem, reply_ptr),
-                        Err(_) => String::new(),
+                        Err(_) => String::new(), // epoch interrupt / trap — settle join
                     },
                     None => String::new(),
                 };
                 if reply_tx.send(reply).is_err() {
                     break; // owner gone
                 }
+                if killed_workers().lock().unwrap().contains(&worker_id) {
+                    break;
+                }
+                // Re-arm so a later kill can interrupt the next job.
+                store.set_epoch_deadline(1);
             }
         }
     }
@@ -327,7 +350,9 @@ fn spawn_worker_thread(fn_idx: i32, env: i32) -> Result<i32> {
     if let (Some(d), Some(tid)) = (&dbg, dap_tid) {
         d.on_start(tid);
     }
-    std::thread::spawn(move || worker_thread(bytes, engine, shared_mem, job_rx, reply_tx, dap_tid));
+    std::thread::spawn(move || {
+        worker_thread(id, bytes, engine, shared_mem, job_rx, reply_tx, dap_tid)
+    });
     workers().lock().unwrap().insert(
         id,
         WorkerHandle {
@@ -433,12 +458,19 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
         },
     )?;
 
-    // workerTerminate(id): stop the worker and drop its registration (idempotent).
+    // workerTerminate(id): hard-abort the worker (epoch interrupt + Terminate job) and drop its
+    // registration (idempotent). Pending `join`/`recv` settles when the reply channel closes or
+    // the interrupted invoke sends an empty reply.
     linker.func_wrap(
         "Dream",
         "workerTerminate",
         |_caller: Caller<'_, ()>, id: i32| {
-            if let Some(handle) = workers().lock().unwrap().remove(&(id as u32)) {
+            let id = id as u32;
+            killed_workers().lock().unwrap().insert(id);
+            if let Some((engine, _)) = worker_runtime() {
+                engine.increment_epoch();
+            }
+            if let Some(handle) = workers().lock().unwrap().remove(&id) {
                 let _ = handle.to_worker.send(Job::Terminate);
             }
         },

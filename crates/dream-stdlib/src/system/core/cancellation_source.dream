@@ -1,7 +1,9 @@
 module system.core;
 
 // Cooperative cancellation flag shared with tokens from a `CancellationSource`.
+// `@shared` so a token/source can be captured into a `WebWorker.spawn` body and polled cross-thread.
 
+@shared
 public class CancellationSource {
     _cancelled: bool;
 
@@ -12,12 +14,18 @@ public class CancellationSource {
 
     // True after `cancel` has been called.
     public fun is_cancelled(): bool {
-        return this._cancelled;
+        let cancelled = false;
+        lock (this) {
+            cancelled = this._cancelled;
+        }
+        return cancelled;
     }
 
     // Marks this source (and all of its tokens) as cancelled.
     public fun cancel(): void {
-        this._cancelled = true;
+        lock (this) {
+            this._cancelled = true;
+        }
     }
 
     // Returns a token that observes this source's cancelled state.

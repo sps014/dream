@@ -1,7 +1,9 @@
 module system.core;
 
 // Read-only view of a `CancellationSource` for cooperative checks at await boundaries.
+// `@shared` (closed-graph over `@shared` `CancellationSource`) so tokens can cross into workers.
 
+@shared
 public class CancellationToken {
     _source: CancellationSource;
 

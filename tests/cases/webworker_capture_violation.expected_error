@@ -1,1 +1,1 @@
-cannot capture 'counter' of type 'Counter' in a `WebWorker` body: only '@shared class' instances and unmanaged (blittable) values can safely cross into another thread — mark its type '@shared' or avoid capturing it
+cannot capture 'counter' of type 'Counter' in a `WebWorker_string_string.spawn` body: 'Counter' is not in worker-shared memory — mark its type '@shared', pass it as a wire `spawn` argument, or allocate it inside the worker body (only '@shared class' instances and unmanaged values may cross threads)

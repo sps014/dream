@@ -1,7 +1,5 @@
-// Real parallel WebWorkers with separate memory spaces. Each worker runs a top-level
-// `fun(string): string` body on its own OS thread (native) / Web Worker (browser); messages cross
-// the boundary as copied strings. `send` is post+await; `post`/`receive` let several workers run
-// concurrently.
+// Real parallel WebWorkers. Each worker runs a body once via spawn/join on its own OS thread
+// (native) / Web Worker (browser); wire args cross as copied values.
 
 import system;
 fun shout(msg: string): string {
@@ -13,19 +11,19 @@ fun twice(msg: string): string {
 }
 
 async fun main(): void {
-    // Request/response on a single worker.
-    let w = WebWorker<string, string>(shout);
-    System.println(await w.send("hello"));
-    System.println(await w.send("world"));
+    let w = WebWorker<string, string>.spawn("hello", shout);
+    System.println(await w.join());
     w.terminate();
 
-    // Two workers running concurrently: post to both, then collect the replies.
-    let a = WebWorker<string, string>(shout);
-    let b = WebWorker<string, string>(twice);
-    a.post("A");
-    b.post("B");
-    System.println(await a.receive());
-    System.println(await b.receive());
+    let w2 = WebWorker<string, string>.spawn("world", shout);
+    System.println(await w2.join());
+    w2.terminate();
+
+    // Two workers running concurrently: spawn both, then join.
+    let a = WebWorker<string, string>.spawn("A", shout);
+    let b = WebWorker<string, string>.spawn("B", twice);
+    System.println(await a.join());
+    System.println(await b.join());
     a.terminate();
     b.terminate();
 }

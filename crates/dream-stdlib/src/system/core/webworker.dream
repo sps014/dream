@@ -1,58 +1,31 @@
 module system.core;
 
-// Real OS-parallel workers with a shared heap.
+// Real OS-parallel workers with a shared heap — thread-like spawn / join.
 //
-// A `WebWorker<TIn, TOut>` runs a `fun(TIn): TOut` body on its own thread (native wasmtime) or Web
-// Worker (browser/Node). Each worker instantiates its OWN copy of the module (so it has its own
-// private globals/shadow stack), but every instance of the same program shares the same linear
-// memory - `@shared class` objects, `Lock`/`Semaphore`, and anything else already on the heap are
-// visible to every worker, not just the thread that allocated them.
+// `WebWorker<TIn, TOut>.spawn(input, body)` starts a body on its own OS thread (native wasmtime)
+// or Web Worker (browser/Node); `await join()` waits for the single result. Each worker
+// instantiates its OWN copy of the module (private globals/shadow stack), but every instance of
+// the same program shares the same linear memory — `@shared class` objects, `Lock`/`Semaphore`,
+// and `CancellationSource`/`CancellationToken` are visible across workers.
 //
-// `TIn`/`TOut` each must be `string`, an `unmanaged` (blittable) value type, or a `T[]` of one:
-// every message is copied across the wire (`Bytes.toWire`/`fromWire` under the hood - a `string`
-// crosses as-is, an unmanaged value as a raw byte-blit, an array as a dynamic-length raw byte-blit
-// of its elements), never a live pointer into memory the other thread might mutate. `body` may be
-// `fun(TIn): TOut` or `fun(TIn): Future<TOut>` (named `async fun` / `async` lambda); capturing
-// lambdas are allowed when everything captured is either an `@shared class` instance or an
-// unmanaged/value type — capturing an ordinary (non-`@shared`) managed object reference is a
-// compile error, since handing a worker a live pointer into memory the creating thread may keep
-// mutating non-atomically is exactly the bug `@shared`/`lock` exist to prevent. The body's
-// funcref index is portable across instances because every worker loads the same module.
-//
-//   fun echo(msg: string): string { return msg + "!"; }
+// Capturing lambdas may only close over `@shared class` instances or unmanaged/value locals —
+// ordinary managed refs are a compile error (not in worker-shared memory). `TIn`/`TOut` must be
+// `string`, unmanaged, or a `T[]` of one (`Bytes.toWire`/`fromWire`).
 //
 //   async fun main(): void {
-//       let w = WebWorker<string, string>(echo);
-//       let reply = await w.send("hello");   // "hello!", computed on another thread
-//       System.println(reply);
-//
-//       // A value-typed channel: TIn/TOut cross as a raw byte-blit, no serialization to write.
-//       let squarer = WebWorker<int, int>((n) => n * n);
-//       System.println((await squarer.send(6)).to_string()); // 36
-//
-//       // Capturing an `@shared class` instance: safe, real cross-thread state.
-//       let counter = Counter();
-//       let a = WebWorker<string, string>((msg) => { lock (counter) { counter.value = counter.value + 1; } return msg; });
-//       await a.send("go");
-//       System.println(counter.value.toString()); // 1
+//       let w = WebWorker<int, int>.spawn(6, (n) => n * n);
+//       System.println((await w.join()).to_string()); // 36
 //   }
 public class WebWorker<TIn, TOut> {
-    // Opaque host handle identifying this worker's thread/instance and its message channels.
+    // Opaque host handle identifying this worker's thread/instance.
     id: int;
 
-    // Spawn a worker running the function at table index `funcidx` with closure environment `env`
-    // (0 for a non-capturing body); returns the host handle id. `env` is fixed for the worker's
-    // whole lifetime - every message it processes reuses the same body/environment.
     @js("Dream", "workerSpawn")
     static extern fun spawn_host(funcidx: int, env: int): int;
 
-    // Unboxes a `fun(string): string` value (the internal wire-marshaling wrapper built below, not
-    // the user's own `fun(TIn): TOut)` body) to its raw function-table index. The funcidx is
-    // portable across the worker's fresh module instance (every worker loads the same module).
     @intrinsic("funcbox_funcidx")
     static extern fun funcidx(body: fun(string): string): int;
 
-    // Future-body wrapper unbox (same runtime intrinsic as `funcidx`).
     @intrinsic("funcbox_funcidx")
     static extern fun funcidx_async(body: fun(string): Future<string>): int;
 
@@ -62,105 +35,93 @@ public class WebWorker<TIn, TOut> {
     @intrinsic("funcbox_env")
     static extern fun env_async(body: fun(string): Future<string>): int;
 
-    // Enqueue `msg` to the worker's inbox (does not wait for a reply).
     @js("Dream", "workerPost")
     static extern fun post_host(id: int, msg: string): void;
 
-    // Await the next reply from the worker. Native blocks the host call until the reply is ready
-    // and pre-resolves the future; the browser resolves it from the worker's `onmessage`.
     @js("Dream", "workerRecv")
     static extern async fun recv_host(id: int): string;
 
-    // Terminate the worker's thread/instance. Idempotent.
     @js("Dream", "workerTerminate")
     static extern fun terminate_host(id: int): void;
 
-    // Spawn a worker running `body` (top-level function or capturing lambda; see the class doc
-    // comment for the capture rules). `body` itself never crosses the wire - only the `TIn`/`TOut`
-    // values each message carries do - so it is wrapped once here in the `fun(string): string)`
-    // the underlying worker thread actually calls: decode the wire string to `TIn`, run `body`,
-    // encode its `TOut` result back to the wire string.
-    public constructor(body: fun(TIn): TOut) {
-        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
-        this.id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
+    // Internal: host id only. Prefer `spawn`.
+    constructor(id: int) {
+        this.id = id;
     }
 
-    // Async-body overload: `body` returns `Future<TOut>` (a named `async fun`, or an
-    // `async (x) => …` lambda). The wrapper awaits the Future, then wire-encodes — so the
-    // trampoline always sees a `Future<string>` whose settled result is already the wire form.
-    // Unlike the sync-constructor + identity-`toWire` path used for a bare string-returning
-    // `async fun`, this works for any `TOut` (int, unmanaged structs, arrays, …).
-    public constructor(body: fun(TIn): Future<TOut>) {
+    // Start `body(input)` on a new thread immediately; `input` is wire-copied.
+    public static fun spawn(input: TIn, body: fun(TIn): TOut): WebWorker<TIn, TOut> {
+        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
+        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
+        WebWorker<TIn, TOut>.post_host(id, Bytes.toWire<TIn>(input));
+        return WebWorker<TIn, TOut>(id);
+    }
+
+    public static fun spawn(input: TIn, body: fun(TIn): Future<TOut>): WebWorker<TIn, TOut> {
         let wrapped: fun(string): Future<string> = async (raw: string) => {
             return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
         };
-        this.id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
+        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
+        WebWorker<TIn, TOut>.post_host(id, Bytes.toWire<TIn>(input));
+        return WebWorker<TIn, TOut>(id);
     }
 
-    // Post a message to the worker without waiting for its reply. Pair with `receive()` to collect
-    // replies later - posting to several workers first lets them run in parallel.
-    public fun post(msg: TIn): void {
-        WebWorker<TIn, TOut>.post_host(this.id, Bytes.toWire<TIn>(msg));
+    // Capture-only entry: no wire argument. `TIn` is unused at the call site (pass any dummy type
+    // args, e.g. `WebWorker<string, int>.spawn(() => …)`).
+    public static fun spawn(body: fun(): TOut): WebWorker<TIn, TOut> {
+        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
+        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
+        WebWorker<TIn, TOut>.post_host(id, "");
+        return WebWorker<TIn, TOut>(id);
     }
 
-    // Await the next reply the worker produces (FIFO).
-    public async fun receive(): TOut {
+    public static fun spawn(body: fun(): Future<TOut>): WebWorker<TIn, TOut> {
+        let wrapped: fun(string): Future<string> = async (_raw: string) => {
+            return Bytes.toWire<TOut>(await body());
+        };
+        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
+        WebWorker<TIn, TOut>.post_host(id, "");
+        return WebWorker<TIn, TOut>(id);
+    }
+
+    // Await the body's single result. After hard `terminate()`, the pending join settles.
+    public async fun join(): TOut {
         return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.recv_host(this.id));
     }
 
-    // Post `msg` and await the matching reply in one call (request/response).
-    public async fun send(msg: TIn): TOut {
-        WebWorker<TIn, TOut>.post_host(this.id, Bytes.toWire<TIn>(msg));
-        return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.recv_host(this.id));
-    }
-
-    // Stop the worker and release its thread/instance.
+    // Hard-abort the worker thread. Idempotent. Does not run Dream finally / orderly ARC unwind.
     public fun terminate(): void {
         WebWorker<TIn, TOut>.terminate_host(this.id);
     }
 
-    // Terminate the worker when this handle is destroyed.
     del() {
         WebWorker<TIn, TOut>.terminate_host(this.id);
     }
 
-    // Runs `body` once per `items` element, one worker per item, computed in parallel; results
-    // come back in input order. Spawn-then-collect (not spawn-then-immediately-await), so every
-    // worker's message overlaps exactly like the manual `post`-then-`receive` pattern documented
-    // on the class - `map` is just that pattern with the bookkeeping done for you. `body` follows
-    // the same capture rules as the plain constructor: a non-capturing top-level function, or a
-    // lambda capturing only `@shared class`/unmanaged state. Called as `WebWorker<T, R>.map(...)`.
+    // Fan `body` over `items` (one worker per element, spawn-then-join); results in input order.
     public static async fun map(items: TIn[], body: fun(TIn): TOut): TOut[] {
         let n = items.length;
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
-            workers[i] = WebWorker<TIn, TOut>(body);
-        }
-        for (let i = 0; i < n; i = i + 1) {
-            workers[i].post(items[i]);
+            workers[i] = WebWorker<TIn, TOut>.spawn(items[i], body);
         }
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
-            results[i] = await workers[i].receive();
+            results[i] = await workers[i].join();
             workers[i].terminate();
         }
         return results;
     }
 
-    // Async-body `map`: same shape as the sync overload, but `body` returns `Future<TOut>`
-    // (named `async fun` or `async (…) => …`). Each worker drives its own awaits to completion.
     public static async fun map(items: TIn[], body: fun(TIn): Future<TOut>): TOut[] {
         let n = items.length;
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
-            workers[i] = WebWorker<TIn, TOut>(body);
-        }
-        for (let i = 0; i < n; i = i + 1) {
-            workers[i].post(items[i]);
+            workers[i] = WebWorker<TIn, TOut>.spawn(items[i], body);
         }
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
-            results[i] = await workers[i].receive();
+            results[i] = await workers[i].join();
             workers[i].terminate();
         }
         return results;

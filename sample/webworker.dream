@@ -1,11 +1,6 @@
-// Real parallel WebWorkers - separate memory spaces, typed message passing.
+// Real parallel WebWorkers — thread-like spawn / join over a shared heap.
 //
 // Run natively:   dream run sample/webworker.dream
-//
-// Each worker body is a top-level `fun(string): string`. A worker runs on its own OS thread
-// (native) / Web Worker (browser) with its OWN linear memory - nothing is shared, so messages are
-// copied across the boundary as strings. Use `Json.serialize`/`Json.deserialize` at the call site
-// for structured payloads.
 
 import system;
 import system.text;
@@ -25,22 +20,18 @@ fun work(input: string): string {
 }
 
 async fun main(): void {
-    // 1) Request/response on one worker.
-    let g = WebWorker<string, string>(greet);
-    System.println(await g.send("dream"));
+    // 1) One-shot spawn / join.
+    let g = WebWorker<string, string>.spawn("dream", greet);
+    System.println(await g.join());
     g.terminate();
 
-    // 2) Fan work out to several workers that run concurrently: post to all first, then collect the
-    //    replies. The three loops run in parallel on three threads.
-    let w1 = WebWorker<string, string>(work);
-    let w2 = WebWorker<string, string>(work);
-    let w3 = WebWorker<string, string>(work);
-    w1.post("alpha");
-    w2.post("beta");
-    w3.post("gamma");
-    System.println(await w1.receive());
-    System.println(await w2.receive());
-    System.println(await w3.receive());
+    // 2) Fan work out to several workers that run concurrently.
+    let w1 = WebWorker<string, string>.spawn("alpha", work);
+    let w2 = WebWorker<string, string>.spawn("beta", work);
+    let w3 = WebWorker<string, string>.spawn("gamma", work);
+    System.println(await w1.join());
+    System.println(await w2.join());
+    System.println(await w3.join());
     w1.terminate();
     w2.terminate();
     w3.terminate();

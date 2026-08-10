@@ -1,4 +1,4 @@
-// Named async fun returning non-string: uses the Future-body constructor overload
+// Named async fun returning non-string: uses the Future-body spawn overload
 // (`fun(int): Future<int>`), which awaits then wire-encodes.
 import system;
 async fun computeInt(n: int): int {
@@ -7,7 +7,7 @@ async fun computeInt(n: int): int {
 }
 
 async fun main(): void {
-    let w = WebWorker<int, int>(computeInt);
-    System.println((await w.send(21)).to_string());
+    let w = WebWorker<int, int>.spawn(21, computeInt);
+    System.println((await w.join()).to_string());
     w.terminate();
 }

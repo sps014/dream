@@ -13,10 +13,10 @@ class Counter {
 async fun main(): void {
     let counter = Counter();
 
-    let w = WebWorker<string, string>((msg) => {
+    let w = WebWorker<string, string>.spawn("go", (msg) => {
         counter.value = counter.value + 1;
         return msg;
     });
 
-    await w.send("go");
+    await w.join();
 }

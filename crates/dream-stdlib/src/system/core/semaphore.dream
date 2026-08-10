@@ -1,6 +1,7 @@
 module system.core;
 
 // Counting semaphore for limiting concurrent access to a shared resource.
+@shared
 public class Semaphore {
     permits: int;
 

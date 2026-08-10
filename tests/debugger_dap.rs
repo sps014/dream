@@ -370,9 +370,8 @@ fun work(input: string): string {
 }
 
 async fun main(): void {
-    let w = WebWorker<string, string>(work);
-    w.post("hello");
-    let r = await w.receive();
+    let w = WebWorker<string, string>.spawn("hello", work);
+    let r = await w.join();
     System.println(r);
     w.terminate();
 }

@@ -19,6 +19,10 @@ pub fn threaded_wasm_config() -> Config {
     config.async_stack_size(20 * 1024 * 1024);
     config.wasm_threads(true);
     config.shared_memory(true);
+    // Hard `WebWorker.terminate()` aborts an in-flight body via `Engine::increment_epoch` (see
+    // `host::worker`). Owner stores must call `set_epoch_deadline(u64::MAX)` so they are not
+    // interrupted when a worker is killed.
+    config.epoch_interruption(true);
     // `WebWorker::spawn_worker_thread` compiles a fresh `Module` for every worker from a plain
     // `std::thread`, not a rayon worker. Wasmtime's default parallel compilation submits its
     // codegen work to rayon's *global* thread pool — the same pool a caller may already be using

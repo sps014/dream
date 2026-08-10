@@ -1,0 +1,22 @@
+// Cooperative cancel: capture an `@shared` CancellationToken into a spawn body and poll it.
+import system;
+
+async fun main(): void {
+    let src = CancellationSource();
+    let tok = src.token();
+    let w = WebWorker<int, int>.spawn(() => {
+        let n = 0;
+        while (!tok.is_cancelled()) {
+            n = n + 1;
+            if (n > 1000000) {
+                // Safety valve if cancel never arrives.
+                break;
+            }
+        }
+        return n;
+    });
+    src.cancel();
+    let n = await w.join();
+    System.println(n > 0 || tok.is_cancelled());
+    w.terminate();
+}

@@ -36,11 +36,11 @@ async fun main(): void {
     let acct = Account();
     let mtx = Lock();
 
-    let w1 = WebWorker<string, string>((_) => { transfer(acct, 10, mtx); return ""; });
-    let w2 = WebWorker<string, string>((_) => { transfer(acct, 5, mtx); return ""; });
+    let w1 = WebWorker<string, string>.spawn("", (_) => { transfer(acct, 10, mtx); return ""; });
+    let w2 = WebWorker<string, string>.spawn("", (_) => { transfer(acct, 5, mtx); return ""; });
 
-    await w1.send("");
-    await w2.send("");
+    await w1.join();
+    await w2.join();
     System.println(acct.balance);   // 15
 }
 ```
@@ -60,13 +60,13 @@ Use it to cap concurrency — e.g. limiting how many workers touch a resource (a
 async fun main(): void {
     let gate = Semaphore(2);   // at most 2 concurrent holders
 
-    let w1 = WebWorker<string, string>((_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
-    let w2 = WebWorker<string, string>((_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
-    let w3 = WebWorker<string, string>((_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
+    let w1 = WebWorker<string, string>.spawn("", (_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
+    let w2 = WebWorker<string, string>.spawn("", (_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
+    let w3 = WebWorker<string, string>.spawn("", (_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
 
-    await w1.send("");
-    await w2.send("");
-    await w3.send("");
+    await w1.join();
+    await w2.join();
+    await w3.join();
 }
 ```
 

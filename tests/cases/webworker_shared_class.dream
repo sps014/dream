@@ -20,19 +20,19 @@ class Counter {
 async fun main(): void {
     let counter = Counter();
 
-    let a = WebWorker<string, string>((msg) => {
+    let a = WebWorker<string, string>.spawn("go", (msg) => {
         lock (counter) {
             counter.value = counter.value + 1;
         }
         return msg;
     });
-    let b = WebWorker<string, string>((msg) => {
+    let b = WebWorker<string, string>.spawn("go", (msg) => {
         counter.increment();
         return msg;
     });
 
-    await a.send("go");
-    await b.send("go");
+    await a.join();
+    await b.join();
 
     System.println(counter.value);
 

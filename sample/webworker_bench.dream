@@ -1,13 +1,7 @@
 // Benchmark: parallel WebWorkers vs. sequential (single-threaded) calls.
 //
 //   dream run sample/webworker_bench.dream
-//
-// We do the same CPU-bound work N times. First sequentially on the main thread (the "native"
-// single-threaded baseline), then across N workers running on N threads/cores at once. With more
-// than one core the parallel run should finish several times faster.
 
-// A deliberately CPU-bound body: a long arithmetic loop. Returns the accumulator so the loop can't
-// be optimized away. `input` seeds the work so each call is real.
 import system;
 fun heavy(input: string): string {
     let seed = input.length;
@@ -27,7 +21,6 @@ fun ms_between(start: long, end: long): long {
 async fun main(): void {
     let tasks = 8;
 
-    // --- Sequential baseline: call heavy() directly, one after another, on this thread. ---
     let seq_start = Time.nano_time();
     let i = 0;
     while (i < tasks) {
@@ -37,25 +30,21 @@ async fun main(): void {
     let seq_end = Time.nano_time();
     let seq_ms = ms_between(seq_start, seq_end);
 
-    // --- Parallel: N workers, each runs heavy() once, all at the same time. ---
     let par_start = Time.nano_time();
     let workers = Buffer.alloc<WebWorker<string, string>>(tasks);
     let s = 0;
     while (s < tasks) {
-        workers[s] = WebWorker<string, string>(heavy);
-        workers[s].post("par");   // fire off the work; does not block
+        workers[s] = WebWorker<string, string>.spawn("par", heavy);
         s = s + 1;
     }
-    // Now collect every reply (the workers have been computing in parallel this whole time).
     let c = 0;
     while (c < tasks) {
-        let r = await workers[c].receive();
+        let r = await workers[c].join();
         c = c + 1;
     }
     let par_end = Time.nano_time();
     let par_ms = ms_between(par_start, par_end);
 
-    // Clean up.
     let t = 0;
     while (t < tasks) {
         workers[t].terminate();

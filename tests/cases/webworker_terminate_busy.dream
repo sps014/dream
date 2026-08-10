@@ -1,0 +1,13 @@
+// Hard terminate aborts a busy worker; join settles (does not hang).
+import system;
+
+async fun main(): void {
+    let w = WebWorker<string, string>.spawn(() => {
+        while (true) {
+        }
+        return "never";
+    });
+    w.terminate();
+    let _ = await w.join();
+    System.println("done");
+}

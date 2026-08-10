@@ -44,6 +44,9 @@ pub struct Decl {
     /// Resolved type name for variables/params/fields, used to type member access.
     pub ty: Option<String>,
     pub is_main: bool,
+    /// Absolute (or virtual `<std>/…`) path of the file that owns this declaration when it is not
+    /// the open document. `None` means the span is in the document being indexed.
+    pub file_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]

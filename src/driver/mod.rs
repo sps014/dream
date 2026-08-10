@@ -16,5 +16,6 @@ pub mod interface_defaults;
 pub mod js_runtime;
 pub mod prelude;
 pub mod source_loader;
+#[cfg(feature = "native")]
 pub mod test;
 pub mod wasm_opt;

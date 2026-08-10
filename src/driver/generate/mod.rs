@@ -33,6 +33,7 @@ thread_local! {
     static CURRENT_ENTRY_FILE: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
+#[cfg(feature = "native")]
 pub(crate) fn current_entry_file() -> Option<String> {
     CURRENT_ENTRY_FILE.with(|c| c.borrow().clone())
 }

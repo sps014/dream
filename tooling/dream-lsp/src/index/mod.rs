@@ -49,6 +49,7 @@ impl Index {
             inlay_hints: Vec::new(),
             next_scope: 0,
             is_main: true,
+            current_file: None,
             fn_params: HashMap::new(),
             method_params: HashMap::new(),
             ctor_params: HashMap::new(),

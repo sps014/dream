@@ -3,11 +3,15 @@
 
 use super::context::GeneratorContext;
 use dream_diagnostics::DiagnosticBag;
+#[cfg(feature = "native")]
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::EnumDeclarationNode;
+#[cfg(feature = "native")]
 use dream_syntax::nodes::Type;
-use std::collections::{BTreeSet, HashSet};
+#[cfg(feature = "native")]
+use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use crate::driver::source_loader::ProgramAccumulator;
 

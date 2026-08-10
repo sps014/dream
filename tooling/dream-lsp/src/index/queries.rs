@@ -428,8 +428,8 @@ impl Index {
     }
 
     /// Resolves the declaration the cursor sits on, whether `offset` lands on the declaration's
-    /// own name or on a reference to it. Shared by go-to-definition and find-references.
-    fn decl_for_offset(&self, offset: usize) -> Option<&Decl> {
+    /// own name or on a reference to it. Shared by go-to-definition, find-references, and rename.
+    pub fn decl_for_offset(&self, offset: usize) -> Option<&Decl> {
         if let Some(decl) = self.decl_at(offset) {
             return Some(decl);
         }
@@ -448,14 +448,17 @@ impl Index {
         }
     }
 
-    pub fn definition(&self, offset: usize) -> Option<(usize, usize)> {
-        self.decl_for_offset(offset).map(|d| (d.start, d.end))
+    pub fn definition(&self, offset: usize) -> Option<(usize, usize, Option<String>)> {
+        self.decl_for_offset(offset)
+            .map(|d| (d.start, d.end, d.file_path.clone()))
     }
 
     /// All occurrences (byte spans) of the symbol under `offset`: the declaration (when
     /// `include_declaration`) plus every recorded reference that resolves to it. Locals and
     /// parameters are confined to their function scope; everything else matches by name across the
-    /// document, mirroring the index's best-effort resolution.
+    /// document, mirroring the index's best-effort resolution. Spans are always in the open
+    /// document; declarations that live in another file are omitted from the declaration slot
+    /// (use [`definition`](Self::definition) to navigate there).
     pub fn references(&self, offset: usize, include_declaration: bool) -> Vec<(usize, usize)> {
         let Some(decl) = self.decl_for_offset(offset) else {
             return Vec::new();
@@ -464,10 +467,11 @@ impl Index {
         let is_local =
             matches!(decl.kind, SymKind::Param | SymKind::Variable) && decl.scope != GLOBAL;
         let scope = decl.scope;
+        let decl_in_main = decl.is_main && decl.file_path.is_none();
         let decl_span = (decl.start, decl.end);
 
         let mut out = Vec::new();
-        if include_declaration {
+        if include_declaration && decl_in_main {
             out.push(decl_span);
         }
         for r in &self.refs {
@@ -535,6 +539,7 @@ impl Index {
                 scope: GLOBAL,
                 ty: None,
                 is_main: true,
+                file_path: None,
             });
         }
 

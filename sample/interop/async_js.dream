@@ -12,8 +12,7 @@ async fun main(): void {
     System.println("fetching...");
 
     // `await` on a `js` yields `Option<js>`: `Some(value)` on resolve, `None` on rejection - so
-    // failure is impossible to ignore. (Note: the async lowering does not yet support an `await`
-    // that follows a branch, so the two awaits come first, then we handle their results.)
+    // failure is impossible to ignore. Awaits may appear in any control-flow position.
     let user = await js.global.fetchUser(42);
     let res = await js.global.fetchUser(7);
 

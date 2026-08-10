@@ -3,12 +3,12 @@
 //!
 //! [`Analyzer::check_reference_cycles`] builds a directed graph whose nodes are non-generic
 //! `class` declarations and whose edges are strong (non-`weak`/`unowned`) fields that hold (or,
-//! through `Option<T>`/`T[]`, transitively hold) a reference to another class. Any strongly
-//! connected component of that graph — including a self-loop — is a leak the runtime's ARC can
-//! never collect, and is reported as a hard compile error unless every class in the cycle carries
-//! `@allow_cycle`. See `docs/language/memory.md` and the design note referenced there for the
-//! full rationale, including why this is a *structural* check (it cannot see cycles assembled
-//! dynamically through collections/`object`/callbacks).
+//! through `Option<T>`/`T[]`/`List`/`Map`/`Set`, transitively hold) a reference to another class.
+//! Any strongly connected component of that graph — including a self-loop — is a leak the
+//! runtime's ARC can never collect, and is reported as a hard compile error unless every class in
+//! the cycle carries `@allow_cycle`. See `docs/language/memory.md` and the design note referenced
+//! there for the full rationale, including why this is a *structural* check (it cannot see cycles
+//! assembled dynamically through `object`/callbacks).
 
 use super::*;
 use indexmap::IndexMap;
@@ -197,18 +197,27 @@ impl<'a> Analyzer<'a> {
     }
 
     /// The class names transitively strong-referenced by `ty`: `ty` itself if it names a class,
-    /// or (recursively) the element type of `T[]` / the payload type of `Option<T>`. Anything else
-    /// (primitives, value structs, generic collections other than `Option`, unresolved types)
-    /// contributes no edge — a known, documented limitation of this structural check.
+    /// or (recursively) the element type of `T[]` / the payload of `Option<T>` /
+    /// `List<T>` / `Set<T>` / both type args of `Map<K, V>`. Anything else (primitives, value
+    /// structs, unresolved types, `object`, callbacks) contributes no edge — a known, documented
+    /// limitation of this structural check.
     fn strong_ref_targets(&self, ty: &Type) -> Vec<String> {
         match ty {
             Type::Array(inner) => self.strong_ref_targets(inner),
             Type::Struct(token, args) => {
-                if token.text == "Option" {
-                    return match args {
-                        Some(a) if a.len() == 1 => self.strong_ref_targets(&a[0]),
-                        _ => Vec::new(),
-                    };
+                match (token.text.as_str(), args.as_ref()) {
+                    ("Option", Some(a)) if a.len() == 1 => {
+                        return self.strong_ref_targets(&a[0]);
+                    }
+                    ("List" | "Set", Some(a)) if a.len() == 1 => {
+                        return self.strong_ref_targets(&a[0]);
+                    }
+                    ("Map", Some(a)) if a.len() == 2 => {
+                        let mut out = self.strong_ref_targets(&a[0]);
+                        out.extend(self.strong_ref_targets(&a[1]));
+                        return out;
+                    }
+                    _ => {}
                 }
                 match self.struct_table.get_struct(&token.text) {
                     Some(info) if !info.is_value => vec![token.text.clone()],

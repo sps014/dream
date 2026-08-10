@@ -159,31 +159,6 @@ impl<'a> Analyzer<'a> {
         if let Some(line) = super::statement_line(statement) {
             self.hir_mark_line(line as u32);
         }
-        // Disable HIR collection for statement kinds the interleaved emitter does not yet handle,
-        // *before* recursing into any nested body, so a function containing one is skipped cleanly.
-        match statement {
-            StatementNode::Declaration(..)
-            | StatementNode::TupleDeclaration { .. }
-            | StatementNode::Assignment(..)
-            | StatementNode::IndexAssignment(..)
-            | StatementNode::MemberAssignment(..)
-            | StatementNode::Return(..)
-            | StatementNode::ExpressionStatement(..)
-            | StatementNode::IfElse(..)
-            | StatementNode::While(..)
-            | StatementNode::DoWhile(..)
-            | StatementNode::For(..)
-            | StatementNode::ForEach(..)
-            | StatementNode::Break(..)
-            | StatementNode::Continue(..)
-            | StatementNode::Switch(..)
-            | StatementNode::Labeled(..)
-            | StatementNode::FunctionInvocation(..)
-            | StatementNode::MethodInvocation(..)
-            | StatementNode::AwaitStmt(..)
-            | StatementNode::Lock(..)
-            | StatementNode::WorkgroupDecl(..) => {}
-        }
         match statement {
             StatementNode::Declaration(left, type_annotation, right, is_const) => self
                 .analyze_declaration(left, type_annotation, right, *is_const, &ctx, diagnostics)?,

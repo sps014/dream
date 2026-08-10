@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use tower_lsp::lsp_types::*;
-use tower_lsp::{jsonrpc::Result, Client, LanguageServer};
+use tower_lsp::{jsonrpc, Client, LanguageServer};
+use tower_lsp::jsonrpc::Result;
 
 use crate::analysis;
 use crate::conversions::{completion_kind, map_position, map_range, symbol_kind};
@@ -93,6 +94,46 @@ impl Backend {
         uri.to_file_path()
             .ok()
             .map(|p| p.to_string_lossy().to_string())
+    }
+
+    /// Builds an LSP [`Location`] for a byte span, optionally in another on-disk file. Virtual
+    /// `<std>/…` paths and missing files return `None` (do not jump into the wrong document).
+    fn location_at(
+        default_uri: &Url,
+        default_text: &str,
+        start: usize,
+        end: usize,
+        file_path: Option<&str>,
+    ) -> Option<Location> {
+        match file_path {
+            None => {
+                let line_index = LineIndex::new(default_text);
+                Some(Location {
+                    uri: default_uri.clone(),
+                    range: Range {
+                        start: map_position(line_index.position(start)),
+                        end: map_position(line_index.position(end)),
+                    },
+                })
+            }
+            Some(path) if path.starts_with('<') => None,
+            Some(path) => {
+                let path_buf = std::path::Path::new(path);
+                if !path_buf.is_file() {
+                    return None;
+                }
+                let text = std::fs::read_to_string(path_buf).ok()?;
+                let uri = Url::from_file_path(path_buf).ok()?;
+                let line_index = LineIndex::new(&text);
+                Some(Location {
+                    uri,
+                    range: Range {
+                        start: map_position(line_index.position(start)),
+                        end: map_position(line_index.position(end)),
+                    },
+                })
+            }
+        }
     }
 
     /// Returns the current text of a document, if open.
@@ -239,6 +280,11 @@ impl LanguageServer for Backend {
                 }),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
@@ -379,14 +425,15 @@ impl LanguageServer for Backend {
         let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        if let Some((start, end)) = idx.definition(offset) {
-            return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                uri,
-                range: Range {
-                    start: map_position(line_index.position(start)),
-                    end: map_position(line_index.position(end)),
-                },
-            })));
+        if let Some((start, end, file_path)) = idx.definition(offset) {
+            return Ok(Self::location_at(
+                &uri,
+                &text,
+                start,
+                end,
+                file_path.as_deref(),
+            )
+            .map(GotoDefinitionResponse::Scalar));
         }
         Ok(None)
     }
@@ -417,6 +464,136 @@ impl LanguageServer for Backend {
             })
             .collect();
         Ok(Some(locations))
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = params.text_document_position_params.text_document.uri.clone();
+        let key = uri.to_string();
+        let Some(text) = self.document_text(&key) else {
+            return Ok(None);
+        };
+        let line_index = LineIndex::new(&text);
+        let offset = line_index.offset(
+            params.text_document_position_params.position.line,
+            params.text_document_position_params.position.character,
+        );
+        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+            return Ok(None);
+        };
+        let highlights = idx
+            .references(offset, true)
+            .into_iter()
+            .map(|(start, end)| DocumentHighlight {
+                range: Range {
+                    start: map_position(line_index.position(start)),
+                    end: map_position(line_index.position(end)),
+                },
+                kind: Some(DocumentHighlightKind::TEXT),
+            })
+            .collect::<Vec<_>>();
+        Ok(Some(highlights))
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri.clone();
+        let key = uri.to_string();
+        let Some(text) = self.document_text(&key) else {
+            return Ok(None);
+        };
+        let line_index = LineIndex::new(&text);
+        let offset = line_index.offset(params.position.line, params.position.character);
+        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+            return Ok(None);
+        };
+        let Some(decl) = idx.decl_for_offset(offset) else {
+            return Ok(None);
+        };
+        // Only rename symbols whose declaration lives in this document.
+        if !decl.is_main || decl.file_path.is_some() {
+            return Ok(None);
+        }
+        if decl.name == "this" || decl.name.is_empty() {
+            return Ok(None);
+        }
+        // Prefer the identifier under the cursor (ref or decl span).
+        let (start, end) = idx
+            .references(offset, true)
+            .into_iter()
+            .find(|(s, e)| *s <= offset && offset <= *e)
+            .unwrap_or((decl.start, decl.end));
+        Ok(Some(PrepareRenameResponse::Range(Range {
+            start: map_position(line_index.position(start)),
+            end: map_position(line_index.position(end)),
+        })))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri.clone();
+        let key = uri.to_string();
+        let Some(text) = self.document_text(&key) else {
+            return Ok(None);
+        };
+        let line_index = LineIndex::new(&text);
+        let offset = line_index.offset(
+            params.text_document_position.position.line,
+            params.text_document_position.position.character,
+        );
+        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+            return Ok(None);
+        };
+        let Some(decl) = idx.decl_for_offset(offset) else {
+            return Ok(None);
+        };
+        if !decl.is_main || decl.file_path.is_some() {
+            return Ok(None);
+        }
+        if decl.name == "this" || decl.name.is_empty() {
+            return Ok(None);
+        }
+        let new_name = params.new_name;
+        if new_name.is_empty()
+            || !new_name
+                .chars()
+                .next()
+                .map(|c| c == '_' || c.is_ascii_alphabetic())
+                .unwrap_or(false)
+            || !new_name
+                .chars()
+                .all(|c| c == '_' || c.is_ascii_alphanumeric())
+        {
+            return Err(jsonrpc::Error {
+                code: jsonrpc::ErrorCode::InvalidParams,
+                message: "Invalid identifier for rename".into(),
+                data: None,
+            });
+        }
+        let edits: Vec<TextEdit> = idx
+            .references(offset, true)
+            .into_iter()
+            .map(|(start, end)| TextEdit {
+                range: Range {
+                    start: map_position(line_index.position(start)),
+                    end: map_position(line_index.position(end)),
+                },
+                new_text: new_name.clone(),
+            })
+            .collect();
+        if edits.is_empty() {
+            return Ok(None);
+        }
+        let mut changes = std::collections::HashMap::new();
+        changes.insert(uri, edits);
+        Ok(Some(WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        }))
     }
 
     async fn document_symbol(

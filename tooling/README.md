@@ -16,10 +16,15 @@ The `dream-lsp` server provides the following capabilities:
 - **Autocomplete (IntelliSense)**: Intelligent completions for keywords, data types, and scoped symbols (locals, parameters, top-level `let`/`const` globals, and cross-file imports).
 - **Hover**: Rich Markdown hover tooltips displaying symbol signatures and documentation comments (functions, types, members, and top-level globals).
 - **Signature Help**: Pop-up parameter hints and active parameter tracking when writing function or constructor calls.
-- **Go to Definition / Find References**: Jump to a symbol's declaration or list every usage of it.
+- **Go to Definition / Find References**: Jump to a symbol's declaration (including on-disk imports) or list every usage of it in the open file.
+- **Rename**: Rename a local or same-file declaration and all of its references in the document.
+- **Document Highlight**: Highlight every occurrence of the symbol under the cursor.
 - **Document Symbols**: An outline of a file's top-level declarations (functions, types, enum members, fields, methods, and globals).
+- **Workspace Symbols**: Search named declarations across currently open documents.
+- **Code Actions**: Auto-import quick fixes for unresolved names.
+- **CodeLens**: Run / Debug lenses on `main` (skipped for `type = "lib"` packages).
 - **Inlay Hints**: Inferred variable types and parameter-name hints at call sites.
-- **Formatting**: Brace-depth indentation.
+- **Formatting**: Brace-depth indentation (preserves line content; not a full pretty-printer).
 
 Documents are synced **incrementally** (only the changed range is applied) and the symbol index is **cached per document version**, so repeated navigation on an unchanged file is free.
 

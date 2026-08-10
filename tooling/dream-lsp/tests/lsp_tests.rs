@@ -1722,6 +1722,65 @@ fun main(): void {
 }
 
 #[test]
+fn rename_targets_match_references() {
+    let src = "
+fun add(a: int, b: int): int {
+    return a + b;
+}
+fun main(): void {
+    let x: int = a|dd(1, 2);
+    let y: int = add(3, 4);
+}
+";
+    let harness = TestHarness::new(src);
+    let index = harness.index();
+    let decl = index
+        .decl_for_offset(harness.offset)
+        .expect("expected to resolve `add`");
+    assert_eq!(decl.name, "add");
+    assert!(decl.is_main);
+    assert!(decl.file_path.is_none());
+    let refs = index.references(harness.offset, true);
+    assert!(
+        refs.len() >= 3,
+        "rename should edit decl + both call sites, got {:?}",
+        refs
+    );
+}
+
+#[test]
+fn definition_carries_file_path_for_imported_symbol() {
+    let dir = std::env::temp_dir().join(format!(
+        "dream_lsp_cross_file_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let lib = dir.join("lib.dream");
+    let main = dir.join("main.dream");
+    std::fs::write(
+        &lib,
+        "public fun helper(): int {\n    return 1;\n}\n",
+    )
+    .unwrap();
+    let main_src = "import lib;\nfun main(): void {\n    let x: int = hel|per();\n}\n";
+    let offset = main_src.find('|').unwrap();
+    let main_text = main_src.replace('|', "");
+    std::fs::write(&main, &main_text).unwrap();
+    let index = dream_lsp::index::Index::build(Some(main.to_str().unwrap()), &main_text);
+    let (start, end, file_path) = index
+        .definition(offset)
+        .expect("expected definition for imported helper");
+    let path = file_path.expect("imported decl should carry a file_path");
+    assert!(
+        path.ends_with("lib.dream"),
+        "expected lib.dream path, got {path}"
+    );
+    assert!(end > start);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn document_symbols_list_top_level_declarations() {
     let src = "
 let g: int = 1;

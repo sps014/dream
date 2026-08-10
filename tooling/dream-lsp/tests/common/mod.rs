@@ -87,6 +87,7 @@ pub fn exercise_all(src: &str) {
         }
         let _ = idx.hover(src, off);
         let _ = idx.definition(off);
+        let _ = idx.decl_for_offset(off);
         let _ = idx.references(off, true);
         let _ = idx.completions(None, src, off);
         let _ = idx.signature_help(src, off);

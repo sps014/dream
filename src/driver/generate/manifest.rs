@@ -21,6 +21,7 @@ pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
 
 /// Cache directory for a generator harness: `target/generators/<kind>-<fingerprint>` when a
 /// project root is known, otherwise the system temp dir.
+#[cfg(feature = "native")]
 pub fn harness_cache_dir(entry_file: Option<&str>, kind: &str, fingerprint: u64) -> PathBuf {
     let name = format!("dream-{kind}-{fingerprint:x}");
     if let Some(entry) = entry_file {

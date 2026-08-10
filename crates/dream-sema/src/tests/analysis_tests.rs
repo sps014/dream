@@ -1490,6 +1490,56 @@ fn test_array_field_self_reference_is_a_cycle_error() {
 }
 
 #[test]
+fn test_list_field_self_reference_is_a_cycle_error() {
+    let code = "class List<T> {}
+        class Node { public children: List<Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")
+            && d.message.contains("Node.children")));
+}
+
+#[test]
+fn test_map_value_field_self_reference_is_a_cycle_error() {
+    let code = "class Map<K, V> {}
+        class Node { public kids: Map<string, Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")));
+}
+
+#[test]
+fn test_set_field_self_reference_is_a_cycle_error() {
+    let code = "class Set<T> {}
+        class Node { public peers: Set<Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")));
+}
+
+#[test]
+fn test_option_list_field_self_reference_is_a_cycle_error() {
+    let code = "enum Option<T> { Some(value: T), None }
+        class List<T> {}
+        class Node { public children: Option<List<Node>>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")));
+}
+
+#[test]
 fn test_mutual_class_cycle_is_error() {
     let code = "class A { public b: B; }
         class B { public a: A; }";

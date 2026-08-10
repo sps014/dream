@@ -392,6 +392,14 @@ println(inc());   // 2
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
 
+!!! note "Capturing-closure lifetime (v1)"
+    Capturing closures permanently retain their environment for the life of the process. The
+    runtime keeps the captured `CaptureCell`s alive rather than risk a use-after-free if a
+    closure escapes its creating function while a scope-exit release races it. Prefer
+    captureless lambdas in long-running loops that allocate many closures, or reuse a single
+    capturing closure instead of creating a fresh one on every iteration. A future release may
+    reclaim environments when the last reference to the closure drops.
+
 Capturing closures are ordinary `fun(...)` values inside Dream, but they **cannot** be passed to JavaScript APIs — the JS bridges drop the closure environment. See [Callbacks](callbacks.md).
 
 See [Pass by reference (`ref`)](#pass-by-reference-ref) for how a captured variable composes with a `ref` parameter on another function (they share the same underlying storage), and why a lambda cannot capture an enclosing `ref` parameter itself.

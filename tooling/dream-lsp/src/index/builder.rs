@@ -23,6 +23,8 @@ pub(crate) struct Builder {
     pub(crate) inlay_hints: Vec<InlayHintOut>,
     pub(crate) next_scope: usize,
     pub(crate) is_main: bool,
+    /// File owning decls currently being recorded (`None` = the open document).
+    pub(crate) current_file: Option<String>,
     /// Parameter names per free function name, used to render parameter-name inlay hints at calls.
     pub(crate) fn_params: HashMap<String, Vec<String>>,
     /// Parameter names per method name (the implicit `this` is not a parsed parameter).
@@ -269,8 +271,17 @@ impl Builder {
         })
     }
 
+    fn set_current_file(&mut self, path: Option<&str>) {
+        self.current_file = if self.is_main {
+            None
+        } else {
+            path.map(str::to_string)
+        };
+    }
+
     pub(crate) fn walk_program_for_imports(&mut self, program: &ProgramNode) {
         for func in &program.functions {
+            self.set_current_file(func.file_path.as_deref());
             let detail = signature(func);
             let fn_ty = fn_value_type(func);
             self.push_decl(&func.name, SymKind::Function, detail, GLOBAL, Some(fn_ty));
@@ -278,6 +289,7 @@ impl Builder {
                 .insert(func.name.text.clone(), param_names(func));
         }
         for st in &program.structs {
+            self.set_current_file(st.file_path.as_deref());
             let (kind, keyword) = if st.is_value {
                 (
                     SymKind::Struct,
@@ -312,6 +324,7 @@ impl Builder {
             }
         }
         for en in &program.enums {
+            self.set_current_file(en.file_path.as_deref());
             let generics = en
                 .generic_parameters
                 .as_ref()
@@ -363,6 +376,7 @@ impl Builder {
             }
         }
         for iface in &program.interfaces {
+            self.set_current_file(iface.file_path.as_deref());
             let generics = iface
                 .generic_parameters
                 .as_ref()
@@ -387,6 +401,7 @@ impl Builder {
             }
         }
         for ext in &program.extends {
+            self.set_current_file(ext.file_path.as_deref());
             // Primitive / builtin extend targets (`js`, `object`, `int`, …) have no class/struct
             // declaration of their own — register them as types so `js.` member completion works.
             let target = ext.target.text.as_str();
@@ -421,6 +436,7 @@ impl Builder {
         // Top-level `let`/`const` variables live at file scope and are visible from every
         // function body, so they are declared here in pass 1 alongside the other globals.
         for global in &program.globals {
+            self.set_current_file(global.file_path.as_deref());
             let ty = global
                 .declared_type
                 .as_ref()
@@ -433,6 +449,7 @@ impl Builder {
             };
             self.push_decl(&global.name, SymKind::Variable, detail, GLOBAL, ty);
         }
+        self.current_file = None;
     }
 
     fn walk_attributes(
@@ -537,6 +554,7 @@ impl Builder {
                 scope,
                 ty: Some(owner.to_string()),
                 is_main: self.is_main,
+                file_path: self.current_file.clone(),
             });
         }
         self.walk_params_and_body(func, scope);
@@ -577,6 +595,7 @@ impl Builder {
                     scope,
                     ty: Some("GpuId3".to_string()),
                     is_main: self.is_main,
+                file_path: self.current_file.clone(),
                 });
             }
         }
@@ -595,6 +614,7 @@ impl Builder {
                     scope,
                     ty: Some("int".to_string()),
                     is_main: self.is_main,
+                file_path: self.current_file.clone(),
                 });
             }
         }
@@ -611,6 +631,7 @@ impl Builder {
                 scope,
                 ty: Some("GpuVec4".to_string()),
                 is_main: self.is_main,
+                file_path: self.current_file.clone(),
             });
             self.decls.push(Decl {
                 name: "front_facing".to_string(),
@@ -624,6 +645,7 @@ impl Builder {
                 scope,
                 ty: Some("bool".to_string()),
                 is_main: self.is_main,
+                file_path: self.current_file.clone(),
             });
             for (name, doc) in [
                 (
@@ -645,6 +667,7 @@ impl Builder {
                     scope,
                     ty: Some("int".to_string()),
                     is_main: self.is_main,
+                file_path: self.current_file.clone(),
                 });
             }
         }
@@ -1045,6 +1068,7 @@ impl Builder {
             scope,
             ty,
             is_main: self.is_main,
+            file_path: self.current_file.clone(),
         });
     }
 

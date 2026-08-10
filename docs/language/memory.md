@@ -56,7 +56,7 @@ objects can ever be freed; mark one field 'weak' or 'unowned' to break it, or an
 class in the cycle with '@allow_cycle' if the cycle is intentional
 ```
 
-This is a **structural**, type-level check, not a value-level one: it flags "these class types are structurally capable of forming a cycle," not "this specific program creates one." It reliably catches the textbook cases — direct self-reference, parent/child, doubly-linked lists, observer/observed — but it can't see cycles assembled dynamically through collections, `object`, or callbacks (e.g. a list that happens to contain itself); those still require programmer discipline.
+This is a **structural**, type-level check, not a value-level one: it flags "these class types are structurally capable of forming a cycle," not "this specific program creates one." It follows strong fields through `Option<T>`, `T[]`, `List<T>`, `Map<K, V>`, and `Set<T>`, so textbook cases — direct self-reference, parent/child, doubly-linked lists, observer/observed, and the same shapes behind stdlib collections — are caught. It still cannot see cycles assembled dynamically through `object` or callbacks (e.g. an `object` that happens to hold itself); those still require programmer discipline.
 
 ### Breaking a cycle: `weak` and `unowned`
 

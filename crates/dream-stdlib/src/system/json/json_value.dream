@@ -1,6 +1,8 @@
 module system.json;
 
-// Native JSON value tree.
+// Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are
+// acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check.
+@allow_cycle
 public class JsonValue {
     public kind: int;
     public bool_val: bool;

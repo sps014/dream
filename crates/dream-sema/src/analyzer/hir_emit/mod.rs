@@ -515,7 +515,7 @@ impl<'a> Analyzer<'a> {
             if !reported_during_fn {
                 diagnostics.report_error(
                     format!(
-                        "function '{}' uses a construct that is not yet supported by the compiler backend (v1); no code was generated for it",
+                        "function '{}' failed to produce code for the compiler backend; no code was generated for it",
                         self.hir.name
                     ),
                     self.hir.name_span,

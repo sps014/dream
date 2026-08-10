@@ -665,12 +665,7 @@ impl<'a> Analyzer<'a> {
 }
 
 fn extern_import_target(func: &FunctionNode) -> (String, String) {
-    dream_abi::attributes::js_import_target(&func.attributes).unwrap_or_else(|| {
-        (
-            "env".to_string(),
-            func.name.text.clone(),
-        )
-    })
+    dream_abi::attributes::extern_import_target(&func.attributes, &func.name.text)
 }
 
 /// Expands the backslash escapes a string/char literal body may contain (`\n`, `\t`, `\r`, `\0`,

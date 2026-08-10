@@ -1,7 +1,7 @@
 use super::*;
 
-/// A struct lowered for layout: `(interned type id, name, [(field name, interned field type)])`.
-type LoweredStruct = (TypeId, String, Vec<(String, TypeId, bool, bool)>);
+/// A struct lowered for layout: `(interned type id, name, packed, [(field name, interned field type)])`.
+type LoweredStruct = (TypeId, String, bool, Vec<(String, TypeId, bool, bool)>);
 /// One struct's fields as `(name, source type, is_weak, is_unowned)`, snapshotted from
 /// `StructFieldInfo` before `type_ctx` is re-borrowed mutably for lowering.
 type StructFieldSnapshot = (String, Type, bool, bool);
@@ -62,7 +62,7 @@ impl<'a> Analyzer<'a> {
         // Discriminated unions are also registered in the struct table (for tagging/release), but they
         // get a variant-aware layout + `to_string` from the union table below — so exclude them here to
         // avoid a duplicate (empty) struct layout and a duplicate `$<Union>_to_string`.
-        let struct_snapshot: Vec<(String, Vec<StructFieldSnapshot>)> = self
+        let struct_snapshot: Vec<(String, bool, Vec<StructFieldSnapshot>)> = self
             .struct_table
             .structs
             .iter()
@@ -73,7 +73,7 @@ impl<'a> Analyzer<'a> {
                     .iter()
                     .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.is_weak, f.is_unowned))
                     .collect();
-                (name.clone(), fields)
+                (name.clone(), info.packed, fields)
             })
             .collect();
         // (union name, block size, [(variant name, discriminant, [(field name, offset, field type)])]).
@@ -103,7 +103,7 @@ impl<'a> Analyzer<'a> {
         // (`lower_str` canonicalizes both plain names and mangled generic instances like `Box_int` to
         // `struct_ty(def, args)`), so each monomorphization gets its own layout.
         let mut lowered: Vec<LoweredStruct> = Vec::with_capacity(struct_snapshot.len());
-        for (name, fields) in struct_snapshot {
+        for (name, packed, fields) in struct_snapshot {
             let ty = self.type_ctx.lower_str(&name);
             let defs: Vec<(String, TypeId, bool, bool)> = fields
                 .iter()
@@ -111,7 +111,7 @@ impl<'a> Analyzer<'a> {
                     (fname.clone(), self.type_ctx.lower(t), *is_weak, *is_unowned)
                 })
                 .collect();
-            lowered.push((ty, name, defs));
+            lowered.push((ty, name, packed, defs));
         }
         // Value (`struct`) types are stored inline, so their footprint must be known before any layout
         // (or an enclosing struct/array/union) can size them. Compute each value struct's inline
@@ -119,7 +119,7 @@ impl<'a> Analyzer<'a> {
         // contributes a 4-byte pointer — and record it on the interner so `scalar_size` resolves it.
         let mut field_map: std::collections::HashMap<TypeId, Vec<TypeId>> = lowered
             .iter()
-            .map(|(ty, _, defs)| (*ty, defs.iter().map(|(_, t, ..)| *t).collect()))
+            .map(|(ty, _, _packed, defs)| (*ty, defs.iter().map(|(_, t, ..)| *t).collect()))
             .collect();
         // Tuples are also inline value aggregates; include them so nested tuples/structs size correctly.
         let tuple_defs: Vec<(TypeId, Vec<TypeId>)> = self
@@ -198,11 +198,13 @@ impl<'a> Analyzer<'a> {
         for (ty, sz) in &memo {
             self.type_ctx.interner.set_value_layout(*ty, sz.0, sz.1);
         }
-        for (ty, name, defs) in lowered {
-            layouts.insert(
-                ty,
-                TypeLayout::from_fields(&self.type_ctx.interner, name, defs),
-            );
+        for (ty, name, packed, defs) in lowered {
+            let layout = if packed {
+                TypeLayout::from_fields_packed(&self.type_ctx.interner, name, defs)
+            } else {
+                TypeLayout::from_fields(&self.type_ctx.interner, name, defs)
+            };
+            layouts.insert(ty, layout);
         }
         for (ty, elems) in tuple_defs {
             let name = dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, ty);
@@ -335,6 +337,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             };
             let (module, field) = extern_import_target(func);
+            let param_by_ref: Vec<bool> = func.parameters.iter().map(|p| p.is_ref).collect();
             let params = func
                 .parameters
                 .iter()
@@ -357,6 +360,7 @@ impl<'a> Analyzer<'a> {
                 module,
                 field,
                 params,
+                param_by_ref,
                 ret,
             });
         }

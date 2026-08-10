@@ -1,12 +1,13 @@
 use super::host::{
-    enable_ansi_support, link_console_functions, link_crypto_functions, link_datetime_functions,
-    link_file_functions, link_gpu_functions, link_http_functions, link_math_functions,
-    link_net_functions, link_process_functions, link_text_functions, link_worker_functions,
-    read_string_from_memory, set_worker_module, set_worker_runtime, shared_memory_for,
-    threaded_wasm_config,
+    attach_c_abi_from_wat_path, enable_ansi_support, link_c_ffi_imports, link_console_functions,
+    link_crypto_functions, link_datetime_functions, link_file_functions, link_gpu_functions,
+    link_http_functions, link_math_functions, link_net_functions, link_process_functions,
+    link_text_functions, link_worker_functions, read_string_from_memory, set_worker_module,
+    set_worker_runtime, shared_memory_for, threaded_wasm_config,
 };
 use std::cell::RefCell;
 use std::fs;
+use std::path::PathBuf;
 use wasmtime::*;
 
 thread_local! {
@@ -33,18 +34,27 @@ pub fn execute_wasm_capturing(wat_path: &str) -> Result<String, Box<dyn std::err
 
 /// Run a compiled module from raw wasm (or wat) bytes — used by `dream-runner` packed binaries.
 pub fn execute_wasm_bytes(wasm_or_wat: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-    run_wasm_bytes(wasm_or_wat, false)?;
+    run_wasm_bytes(wasm_or_wat, false, &[PathBuf::from(".")])?;
     Ok(())
 }
 
 fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
     super::host::attach_abi_from_wat_path(wat_path);
+    attach_c_abi_from_wat_path(wat_path);
     let wat_content = fs::read_to_string(wat_path)?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
-    run_wasm_bytes(&wasm_bytes, capturing)
+    let search_roots = vec![std::path::Path::new(wat_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))];
+    run_wasm_bytes(&wasm_bytes, capturing, &search_roots)
 }
 
-fn run_wasm_bytes(wasm_bytes: &[u8], capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn run_wasm_bytes(
+    wasm_bytes: &[u8],
+    capturing: bool,
+    search_roots: &[PathBuf],
+) -> Result<(), Box<dyn std::error::Error>> {
     enable_ansi_support();
 
     // Make the module bytes available to `WebWorker` spawns on this thread (workers instantiate a
@@ -73,6 +83,8 @@ fn run_wasm_bytes(wasm_bytes: &[u8], capturing: bool) -> Result<(), Box<dyn std:
 
     link_host_functions(&mut linker)?;
     linker.define(&mut store, "env", "memory", shared_mem.clone())?;
+
+    link_c_ffi_imports(&mut linker, &module, search_roots)?;
 
     // JS-interop externs (e.g. the `Dream` host module behind the dynamic `js` type/regex/fetch, or any
     // user `@js(...)` import) have no native implementation. Stub every still-unresolved import

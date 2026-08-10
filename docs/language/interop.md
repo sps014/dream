@@ -7,6 +7,7 @@ Dream compiles to WebAssembly, so it runs anywhere WASM does — including the b
 | `extern fun` | a typed, fixed-signature function that lives in JS (`Math.max`, your glue code) | this page |
 | `js` | a dynamic handle to *any* live JS value, used with native syntax | [The js type](js-type.md) |
 | function values | passing functions across the boundary in either direction | [Callbacks](callbacks.md) |
+| `@c(...)` | binds an extern to a native C library on the wasmtime host | [C Interop](c-interop.md) |
 
 This page covers `extern` functions.
 

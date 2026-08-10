@@ -51,6 +51,11 @@ pub struct TypeLayout {
     pub fields: Vec<FieldLayout>,
     /// Total allocated size in bytes (data only; the allocator adds its own header).
     pub size: u32,
+    /// True when the struct carries `@packed` — fields are packed with no padding, the whole
+    /// struct is `align=1`, and its size is the raw sum of field sizes with no trailing pad-up.
+    /// Meaningful for the `.abi.json` `structs` map consumed by the C FFI host, so a C ABI struct
+    /// with explicit `#pragma pack(1)` semantics round-trips byte-identical.
+    pub packed: bool,
 }
 
 impl TypeLayout {
@@ -81,6 +86,36 @@ impl TypeLayout {
             name: name.into(),
             fields,
             size: align_up(offset, max_align),
+            packed: false,
+        }
+    }
+
+    /// Builds a `@packed` layout: fields are laid out sequentially with **no** inter-field
+    /// alignment padding, the struct's own alignment is `1`, and its size is the raw byte sum
+    /// with no trailing pad-up. Mirrors C's `#pragma pack(1)` / `__attribute__((packed))`.
+    pub fn from_fields_packed(
+        interner: &TypeInterner,
+        name: impl Into<String>,
+        field_defs: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
+    ) -> Self {
+        let mut offset = 0u32;
+        let mut fields = Vec::new();
+        for (field_name, ty, is_weak, is_unowned) in field_defs {
+            let (size, _align) = scalar_size(interner, ty);
+            fields.push(FieldLayout {
+                offset,
+                ty,
+                name: field_name,
+                is_weak,
+                is_unowned,
+            });
+            offset += size;
+        }
+        TypeLayout {
+            name: name.into(),
+            fields,
+            size: offset,
+            packed: true,
         }
     }
 }
@@ -178,5 +213,29 @@ mod tests {
         assert_eq!(l.fields[1].offset, 8);
         assert_eq!(l.fields[2].offset, 16);
         assert_eq!(l.size, 24);
+        assert!(!l.packed);
+    }
+
+    #[test]
+    fn packed_layout_has_no_padding() {
+        let mut i = TypeInterner::new();
+        let by = i.prim(PrimTy::Byte);
+        let dbl = i.prim(PrimTy::Double);
+        let int = i.int();
+        // Packed: byte@0 (size 1) + double@1 (size 8) + int@9 (size 4) = 13 bytes total, align=1.
+        let l = TypeLayout::from_fields_packed(
+            &i,
+            "T",
+            [
+                ("b".into(), by, false, false),
+                ("d".into(), dbl, false, false),
+                ("n".into(), int, false, false),
+            ],
+        );
+        assert_eq!(l.fields[0].offset, 0);
+        assert_eq!(l.fields[1].offset, 1);
+        assert_eq!(l.fields[2].offset, 9);
+        assert_eq!(l.size, 13);
+        assert!(l.packed);
     }
 }

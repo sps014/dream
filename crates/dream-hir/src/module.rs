@@ -92,6 +92,9 @@ pub struct HImport {
     pub module: String,
     pub field: String,
     pub params: Vec<TypeId>,
+    /// Parallel to `params`: true for `ref` parameters (C out-params), which the WASM import
+    /// receives as an `i32` address into linear memory (not the value's native WASM type).
+    pub param_by_ref: Vec<bool>,
     pub ret: Option<TypeId>,
 }
 

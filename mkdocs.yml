@@ -95,6 +95,7 @@ nav:
       - Overview: language/interop.md
       - The js type: language/js-type.md
       - Callbacks: language/callbacks.md
+      - C interop: language/c-interop.md
     - Metaprogramming:
       - Source Generators: language/generators.md
       - CodeBuilder: stdlib/codegen.md

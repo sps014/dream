@@ -63,6 +63,9 @@ impl<'a> Analyzer<'a> {
             if dream_abi::attributes::has_test_attr(&function.attributes) {
                 self.validate_test_function(function, diagnostics);
             }
+            if function.is_extern && dream_abi::attributes::has_c_attr(&function.attributes) {
+                self.validate_c_extern_signature(function, diagnostics);
+            }
             if info.is_compute {
                 self.validate_compute_shader(function, &info, diagnostics);
             }
@@ -353,6 +356,48 @@ impl<'a> Analyzer<'a> {
                 Some(function.name.position),
             );
         }
+    }
+
+    /// Rejects `@c` extern signatures whose nominal struct parameter types are not `@unmanaged`
+    /// (heap classes or unions carry ARC headers and non-trivial layouts, neither of which the C
+    /// FFI trampoline can pass by pointer safely). Primitive/scalar params, `string`, `byte[]`,
+    /// and `ref` out-params are always accepted; a struct that satisfies `Unmanaged` (a value
+    /// struct with only value-typed / primitive fields) is accepted too.
+    fn validate_c_extern_signature(
+        &self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        use dream_syntax::nodes::ConstraintKind;
+        for param in &function.parameters {
+            let base = param.type_.get_type();
+            let base = strip_array(&base);
+            // Only nominal names (not primitives / builtins / arrays / functions) are candidates
+            // for the unmanaged check: those the analyzer already knows about are the ones a `@c`
+            // callee would treat as a raw struct pointer.
+            if !self.name_is_known_nominal(base) {
+                continue;
+            }
+            if self.type_satisfies_kind(&param.type_, ConstraintKind::Unmanaged) {
+                continue;
+            }
+            diagnostics.report_error(
+                format!(
+                    "'@c' extern '{}' parameter '{}' has type '{}', which is not unmanaged; C ABI parameters must be primitives, `string`, `byte[]`, or an @unmanaged value struct",
+                    function.name.text,
+                    param.name.text,
+                    param.type_.get_type()
+                ),
+                Some(param.name.position),
+            );
+        }
+    }
+
+    /// True when `name` is a class/struct/union the analyzer has registered — cheap gate to skip
+    /// primitives/builtins/arrays before running the more expensive `type_satisfies_kind` check.
+    fn name_is_known_nominal(&self, name: &str) -> bool {
+        self.struct_table.get_struct(name).is_some()
+            || self.union_table.contains_key(name)
     }
 
     fn validate_compute_shader(

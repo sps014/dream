@@ -69,13 +69,16 @@ gilrs = { version = "0.11", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 tungstenite = { version = "0.24", optional = true, default-features = false, features = ["handshake", "native-tls"] }
+libloading = { version = "0.8", optional = true }
+libffi = { version = "3.2", optional = true, features = ["system"] }
 
 [features]
 default = ["native", "wasm-opt"]
 # `native` pulls in the wasmtime-backed WASM runtime used by the `dream` CLI to
 # execute compiled programs. It is excluded from the wasm32 analyzer build, whose
 # only need is the lexer/parser/analyzer front-end.
-native = ["wasmtime", "reqwest", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "gilrs", "image"]
+native = ["wasmtime", "reqwest", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "gilrs", "image", "c-ffi"]
+c-ffi = ["libloading", "libffi"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
 # since it's a build-time optimization concern rather than a runtime-execution one, but excluded
 # from the wasm32 analyzer build the same way.

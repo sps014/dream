@@ -21,7 +21,7 @@ struct ModuleTables {
 fn build_tables(mir: &crate::Mir, interner: &TypeInterner, locate_panics: bool) -> ModuleTables {
     ModuleTables {
         symbols: symbol_table(mir),
-        sigs: signature_table(mir),
+        sigs: signature_table(mir, interner),
         strings: string_table(mir, interner, locate_panics),
         tags: struct_tags(mir),
         ftable: func_table(mir),
@@ -458,7 +458,15 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
         let params: String = imp
             .params
             .iter()
-            .map(|t| format!(" {}", wasm_ty_of(interner, *t)))
+            .enumerate()
+            .map(|(i, t)| {
+                let by_ref = imp.param_by_ref.get(i).copied().unwrap_or(false);
+                if by_ref {
+                    " i32".to_string()
+                } else {
+                    format!(" {}", wasm_ty_of(interner, *t))
+                }
+            })
             .collect();
         let params = if params.is_empty() {
             String::new()

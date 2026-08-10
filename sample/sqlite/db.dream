@@ -1,0 +1,63 @@
+// A tiny `Database` wrapper around the raw `@c` sqlite3 bindings from `raw.dream`.
+// Demonstrates hiding the C-level `ref long` handle behind a Dream class so end users get an
+// idiomatic API (`db.exec(sql)`) while the FFI stays out of sight.
+//
+// Run:
+//   dream run sample/sqlite/db.dream
+import system;
+
+@native
+@c("sqlite3", "sqlite3_open")
+extern fun sqlite3_open(path: string, ref db: long): int;
+
+@native
+@c("sqlite3", "sqlite3_close")
+extern fun sqlite3_close(db: long): int;
+
+@native
+@c("sqlite3", "sqlite3_exec")
+extern fun sqlite3_exec(db: long, sql: string, callback: long, arg: long, ref errmsg: long): int;
+
+class Database {
+    handle: long;
+    is_open: bool;
+
+    constructor(handle: long) {
+        this.handle = handle;
+        this.is_open = true;
+    }
+
+    public static fun open(path: string): Database {
+        let handle: long = 0L;
+        let rc = sqlite3_open(path, ref handle);
+        if (rc != 0) {
+            System.println("sqlite3_open('" + path + "') failed with rc=" + rc);
+        }
+        return Database(handle);
+    }
+
+    public fun exec(sql: string): int {
+        if (this.is_open == false) {
+            return -1;
+        }
+        let errmsg: long = 0L;
+        return sqlite3_exec(this.handle, sql, 0L, 0L, ref errmsg);
+    }
+
+    public fun close(): void {
+        if (this.is_open) {
+            sqlite3_close(this.handle);
+            this.is_open = false;
+        }
+    }
+}
+
+fun main(): void {
+    let db = Database.open(":memory:");
+    let rc = db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);");
+    System.println("CREATE rc=" + rc);
+    rc = db.exec("INSERT INTO items(name) VALUES ('apple'), ('pear'), ('kiwi');");
+    System.println("INSERT rc=" + rc);
+    db.close();
+    System.println("done");
+}

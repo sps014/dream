@@ -105,6 +105,7 @@ fn field_access_uses_layout_offsets_and_widths() {
                 },
             ],
             size: 16,
+            packed: false,
         },
     );
 
@@ -169,6 +170,7 @@ fn new_allocates_and_initializes_fields() {
                 },
             ],
             size: 8,
+            packed: false,
         },
     );
 
@@ -269,6 +271,7 @@ fn emit_module_assembles_to_valid_wasm() {
                 is_unowned: false,
             }],
             size: 4,
+            packed: false,
         },
     );
 

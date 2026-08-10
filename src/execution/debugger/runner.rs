@@ -2,7 +2,7 @@
 //! `dream_debug.*` host hooks and DAP-routed print builtins, and attaching newly spawned `WebWorker`
 //! threads as their own DAP threads. Split out of `mod.rs`.
 
-use crate::execution::host::{read_string_from_memory, WorkerDebug};
+use crate::execution::host::{link_c_ffi_imports, read_string_from_memory, WorkerDebug};
 use crate::execution::wasm_runner::link_runtime_host_functions;
 use serde_json::json;
 use std::sync::atomic::Ordering;
@@ -73,6 +73,7 @@ fn run_program(
     crate::execution::host::enable_ansi_support();
     // GPU state is per OS thread; attach on this execution thread (not the DAP stdio thread).
     crate::execution::host::attach_abi_from_wat_path(wat_path);
+    crate::execution::host::attach_c_abi_from_wat_path(wat_path);
     let wat_content = std::fs::read_to_string(wat_path)
         .map_err(|e| Error::msg(format!("failed to read {}: {}", wat_path, e)))?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
@@ -95,6 +96,11 @@ fn run_program(
     link_runtime_host_functions(&mut linker)?;
     link_debug_hooks(&mut linker, shared, source_map, writer, MAIN_THREAD)?;
     linker.define(&mut store, "env", "memory", shared_mem.clone())?;
+    let search_roots = vec![std::path::Path::new(wat_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))];
+    link_c_ffi_imports(&mut linker, &module, &search_roots)?;
     linker.define_unknown_imports_as_traps(&module)?;
 
     let instance = linker.instantiate(&mut store, &module)?;

@@ -41,7 +41,10 @@ pub(super) fn symbol_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>), St
 /// have no env-restoring prologue, so only the funcidx half of the box is meaningful to them).
 /// Keyed like [`symbol_table`]; imports are included (always with an empty instance) since they are
 /// call targets too, just with no MIR body to read parameter types from otherwise.
-pub(super) fn signature_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> {
+pub(super) fn signature_table(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+) -> HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> {
     let mut table: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = mir
         .functions
         .iter()
@@ -51,7 +54,24 @@ pub(super) fn signature_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>),
         })
         .collect();
     for imp in &mir.imports {
-        table.insert((imp.def, vec![]), imp.params.clone());
+        // A `ref` param crosses the wire as an `i32` pointer (see `emit_imports`), not the
+        // element type: substitute `int` here so the caller reports i32 in the argument-widening
+        // path (`emit_call_args`) and the call site emits the box address as-is instead of
+        // widening it to the element's WASM type.
+        let int_id = interner.int();
+        let params = imp
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                if imp.param_by_ref.get(i).copied().unwrap_or(false) {
+                    int_id
+                } else {
+                    *t
+                }
+            })
+            .collect();
+        table.insert((imp.def, vec![]), params);
     }
     table
 }

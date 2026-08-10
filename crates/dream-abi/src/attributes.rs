@@ -517,6 +517,46 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "Optional WGSL `@binding(N)` override on a shader resource parameter (default: auto-assigned).",
     },
+    AttributeSpec {
+        name: "c",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String, ArgKind::String],
+            min: 2,
+            max: 2,
+        },
+        repeatable: false,
+        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")` for auto-link on the wasmtime host.",
+    },
+    AttributeSpec {
+        name: "c_call",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "C calling convention for `@c` externs: `@c_call(\"cdecl\")` or `@c_call(\"stdcall\")`.",
+    },
+    AttributeSpec {
+        name: "marshal",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "String marshaling for `@c` externs: `@marshal(\"lpstr\")` or `@marshal(\"lpwstr\")`.",
+    },
+    AttributeSpec {
+        name: "packed",
+        targets: &[AttributeTarget::ValueStruct],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Packs a value struct with no padding for C ABI layout (`@packed`).",
+    },
 ];
 
 /// True when a parameter carries `@readonly` (compute storage → WGSL `read`).
@@ -540,6 +580,13 @@ impl RuntimeSupport {
     };
 
     pub fn from_attributes(attributes: &[AttributeNode]) -> Self {
+        if has_c_attr(attributes) {
+            return Self {
+                native: true,
+                node: false,
+                web: false,
+            };
+        }
         let has_native = attributes.iter().any(|a| a.name.text == "native");
         let has_node = attributes.iter().any(|a| a.name.text == "node");
         let has_web = attributes.iter().any(|a| a.name.text == "web");
@@ -836,6 +883,81 @@ pub fn js_import_target(attributes: &[AttributeNode]) -> Option<(String, String)
     Some((module, field))
 }
 
+/// Extracts the `(lib, symbol)` pair from `@c("lib", "symbol")`, or `None` when absent.
+pub fn c_import_target(attributes: &[AttributeNode]) -> Option<(String, String)> {
+    let c = attributes.iter().find(|a| a.name.text == "c")?;
+    let lib = c.args.first()?.as_string()?.to_string();
+    let symbol = c.args.get(1)?.as_string()?.to_string();
+    Some((lib, symbol))
+}
+
+/// True when the declaration carries `@c`.
+pub fn has_c_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "c")
+}
+
+/// True when a value struct carries `@packed`.
+pub fn has_packed_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "packed")
+}
+
+/// `@c_call("cdecl")` or `@c_call("stdcall")`. `None` when absent (platform default).
+pub fn c_call_convention(attributes: &[AttributeNode]) -> Option<&str> {
+    let attr = attributes.iter().find(|a| a.name.text == "c_call")?;
+    attr.args.first()?.as_string()
+}
+
+/// `@marshal("lpstr")` or `@marshal("lpwstr")`. `None` when absent (ANSI/`lpstr`).
+pub fn c_marshal_charset(attributes: &[AttributeNode]) -> Option<&str> {
+    let attr = attributes.iter().find(|a| a.name.text == "marshal")?;
+    attr.args.first()?.as_string()
+}
+
+/// True when both `@c` and `@js` are present on the same extern declaration.
+pub fn extern_binding_conflict(attributes: &[AttributeNode]) -> bool {
+    has_c_attr(attributes) && js_import_target(attributes).is_some()
+}
+
+/// WASM import `(module, field)`: `@c` → `("c/<lib>", symbol)`; else `@js`; else `("env", default_field)`.
+pub fn extern_import_target(attributes: &[AttributeNode], default_field: &str) -> (String, String) {
+    if let Some((lib, symbol)) = c_import_target(attributes) {
+        return (format!("c/{lib}"), symbol);
+    }
+    if let Some((module, field)) = js_import_target(attributes) {
+        return (module, field);
+    }
+    ("env".to_string(), default_field.to_string())
+}
+
+/// Reports `@c`-family placement errors on one extern's attribute list:
+/// - `@c` combined with `@js` (they name incompatible binding hosts),
+/// - `@marshal(...)` without `@c` (only meaningful for the C ABI),
+/// - `@c_call(...)` without `@c` (ditto).
+///
+/// Call after generic attribute shape validation.
+pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut DiagnosticBag) {
+    if extern_binding_conflict(attrs) {
+        let pos = attrs
+            .iter()
+            .find(|a| a.name.text == "c" || a.name.text == "js")
+            .map(|a| a.name.position);
+        diagnostics.report_error(
+            "an extern function cannot carry both `@c` and `@js`".to_string(),
+            pos,
+        );
+    }
+    if !has_c_attr(attrs) {
+        for name in ["marshal", "c_call"] {
+            if let Some(attr) = attrs.iter().find(|a| a.name.text == name) {
+                diagnostics.report_error(
+                    format!("'@{name}' requires '@c' on the same extern (it only applies to C ABI imports)"),
+                    Some(attr.name.position),
+                );
+            }
+        }
+    }
+}
+
 /// True when the declaration carries `@compute`.
 pub fn has_compute_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "compute")
@@ -973,6 +1095,9 @@ fn validate_function_list(
                 target
             };
             validate_attributes_with(&f.attributes, target, user_attrs, diagnostics);
+            if matches!(target, AttributeTarget::ExternFunction) {
+                validate_c_extern_attrs(&f.attributes, diagnostics);
+            }
         }
         for p in &f.parameters {
             validate_attributes_with(
@@ -1162,6 +1287,74 @@ mod tests {
             AttributeTarget::ExternFunction,
             &mut diagnostics,
         );
+        assert!(!diagnostics.has_errors());
+    }
+
+    #[test]
+    fn c_import_target_extracts_lib_and_symbol() {
+        let attrs = &[attr("c", &["\"sqlite3\"", "\"sqlite3_open\""])];
+        assert_eq!(
+            c_import_target(attrs),
+            Some(("sqlite3".to_string(), "sqlite3_open".to_string()))
+        );
+        assert!(has_c_attr(attrs));
+        assert_eq!(
+            extern_import_target(attrs, "fallback"),
+            (
+                "c/sqlite3".to_string(),
+                "sqlite3_open".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn extern_binding_conflict_detected() {
+        let attrs = &[
+            attr("c", &["\"sqlite3\"", "\"sqlite3_open\""]),
+            attr("js", &["\"Dream\"", "\"open\""]),
+        ];
+        assert!(extern_binding_conflict(attrs));
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
+        assert!(diagnostics.has_errors());
+    }
+
+    #[test]
+    fn c_attr_implies_native_only_runtime() {
+        let attrs = &[attr("c", &["\"m\"", "\"f\""]), attr("web", &[])];
+        let support = RuntimeSupport::from_attributes(attrs);
+        assert!(support.native);
+        assert!(!support.node);
+        assert!(!support.web);
+    }
+
+    #[test]
+    fn marshal_without_c_is_rejected() {
+        // `@marshal` only affects `@c` externs — attaching it to a plain (or `@js`) extern is a
+        // no-op and probably a bug, so the validator flags it.
+        let attrs = &[attr("marshal", &["\"lpwstr\""])];
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
+        assert!(diagnostics.has_errors());
+    }
+
+    #[test]
+    fn c_call_without_c_is_rejected() {
+        let attrs = &[attr("c_call", &["\"stdcall\""])];
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
+        assert!(diagnostics.has_errors());
+    }
+
+    #[test]
+    fn c_with_marshal_and_c_call_is_accepted() {
+        let attrs = &[
+            attr("c", &["\"user32\"", "\"MessageBoxW\""]),
+            attr("marshal", &["\"lpwstr\""]),
+            attr("c_call", &["\"stdcall\""]),
+        ];
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
         assert!(!diagnostics.has_errors());
     }
 }

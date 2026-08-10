@@ -43,6 +43,10 @@ pub struct StructInfo {
     /// True for `struct` (value) types: stored inline with copy semantics, not heap-allocated and
     /// reference-counted. Unions are always reference types (`false`).
     pub is_value: bool,
+    /// True when the (value) struct carries `@packed`: fields are laid out with no inter-field
+    /// alignment padding and the struct is `align=1`. Only meaningful for C ABI interop; a heap
+    /// class or a union is always `false`.
+    pub packed: bool,
     /// Source file this type was declared in, for file/module-level visibility: a non-public type
     /// is only referenceable from its own file. `None` for synthesized types (always visible).
     pub file_path: Option<std::rc::Rc<str>>,
@@ -73,6 +77,9 @@ impl StructTable {
             return Err(format!("Struct '{}' is already defined", name));
         }
 
+        let packed = struct_decl.is_value
+            && dream_abi::attributes::has_packed_attr(&struct_decl.attributes);
+
         let mut fields = IndexMap::new();
         let mut current_offset = 0;
 
@@ -91,10 +98,13 @@ impl StructTable {
 
             let (size, alignment) = value_size_align(field_type.get_type().as_str());
 
-            // Align current_offset
-            let remainder = current_offset % alignment;
-            if remainder != 0 {
-                current_offset += alignment - remainder;
+            // A `@packed` struct lays fields out with no inter-field alignment padding so its
+            // wire layout matches C's `__attribute__((packed))` / `#pragma pack(1)`.
+            if !packed {
+                let remainder = current_offset % alignment;
+                if remainder != 0 {
+                    current_offset += alignment - remainder;
+                }
             }
 
             fields.insert(
@@ -113,16 +123,18 @@ impl StructTable {
             current_offset += size;
         }
 
-        // Align total size to the largest alignment (usually 8 if double is present, else 4)
-        let max_alignment = fields
-            .values()
-            .map(|f| value_size_align(f.type_.get_type().as_str()).1)
-            .max()
-            .unwrap_or(4);
+        if !packed {
+            // Align total size to the largest alignment (usually 8 if double is present, else 4)
+            let max_alignment = fields
+                .values()
+                .map(|f| value_size_align(f.type_.get_type().as_str()).1)
+                .max()
+                .unwrap_or(4);
 
-        let remainder = current_offset % max_alignment;
-        if remainder != 0 {
-            current_offset += max_alignment - remainder;
+            let remainder = current_offset % max_alignment;
+            if remainder != 0 {
+                current_offset += max_alignment - remainder;
+            }
         }
 
         self.structs.insert(
@@ -133,6 +145,7 @@ impl StructTable {
                 size: current_offset,
                 visibility: struct_decl.visibility,
                 is_value: struct_decl.is_value,
+                packed,
                 file_path: struct_decl.file_path.clone(),
             },
         );
@@ -162,6 +175,7 @@ impl StructTable {
                 size,
                 visibility,
                 is_value: false,
+                packed: false,
                 file_path,
             },
         );

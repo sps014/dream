@@ -21,6 +21,8 @@ function makeGpuHost(getInstance) {
   let blitSampler = null;
   let blitBindLayout = null;
 
+  let lastError = "";
+
   const ERR_UNAVAILABLE = 1;
   const ERR_TIMEOUT = 2;
   const ERR_VALIDATION = 3;
@@ -28,6 +30,7 @@ function makeGpuHost(getInstance) {
 
   function classifyErr(err) {
     const msg = String(err && err.message ? err.message : err);
+    lastError = msg;
     if (/not available|no WebGPU|no WebGPU adapter/i.test(msg)) return ERR_UNAVAILABLE;
     if (/timed out|timeout/i.test(msg)) return ERR_TIMEOUT;
     if (/WGSL|validation|compile/i.test(msg)) return ERR_VALIDATION;
@@ -691,6 +694,11 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
     gpuIsAvailable: () => !!(globalThis.navigator && globalThis.navigator.gpu),
     gpuReady: () => device != null,
+    gpuLastError: () => {
+      const msg = lastError;
+      lastError = "";
+      return msg;
+    },
     gpuTryInit: async () => {
       try {
         await ensureDevice();

@@ -71,6 +71,8 @@ fn run_program(
     writer: &Writer,
 ) -> Result<()> {
     crate::execution::host::enable_ansi_support();
+    // GPU state is per OS thread; attach on this execution thread (not the DAP stdio thread).
+    crate::execution::host::attach_abi_from_wat_path(wat_path);
     let wat_content = std::fs::read_to_string(wat_path)
         .map_err(|e| Error::msg(format!("failed to read {}: {}", wat_path, e)))?;
     let wasm_bytes = wat::parse_str(&wat_content)?;

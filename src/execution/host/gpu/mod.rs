@@ -18,6 +18,7 @@ use wasmtime::*;
 
 use super::memory::{
     read_arg_bytes, read_arg_i32_array, read_arg_string, resolve_host_future_bytes,
+    write_string_to_memory,
 };
 use dream_mir::abi as mir_abi;
 use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
@@ -83,6 +84,15 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         let st = lock_state();
         i32::from(st.ready)
     })?;
+    linker.func_wrap(
+        "Dream",
+        "gpuLastError",
+        |mut caller: Caller<'_, ()>| -> Result<i32> {
+            // Consume so each Dream `GpuError.from_code` gets a fresh detail once.
+            let msg = error::take_last_error();
+            write_string_to_memory(&mut caller, &msg)
+        },
+    )?;
     linker.func_wrap(
         "Dream",
         "gpuTryInit",

@@ -23,6 +23,7 @@ pub fn dispatch(
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuDispatch: {e}");
+            lock_state().set_last_error(e.clone());
             classify_err(&e)
         }
     }
@@ -50,6 +51,7 @@ pub fn dispatch_indirect(
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuDispatchIndirect: {e}");
+            lock_state().set_last_error(e.clone());
             classify_err(&e)
         }
     }
@@ -707,6 +709,7 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         };
         if let Err(e) = ensure_pipeline(kernel) {
             eprintln!("Dream gpuPassSubmit: {e}");
+            lock_state().set_last_error(e.clone());
             return classify_err(&e);
         }
     }
@@ -790,6 +793,7 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuPassSubmit: {e}");
+            lock_state().set_last_error(e.clone());
             classify_err(&e)
         }
     }

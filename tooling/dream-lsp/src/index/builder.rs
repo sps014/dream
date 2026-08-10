@@ -13,8 +13,9 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, detail_belongs_to, fn_value_type, method_detail, param_names, signature,
-    type_base, Decl, Index, InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
+    base_struct, detail_belongs_to, fn_value_type, method_detail, param_names,
+    parse_angle_type_args, signature, substitute_named_type_params, type_base, Decl, Index,
+    InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
 };
 
 pub(crate) struct Builder {
@@ -947,8 +948,9 @@ impl Builder {
             ExpressionNode::Await(_, e) => self.walk_expr(e, scope),
             ExpressionNode::Switch(_, subject, arms) => {
                 self.walk_expr(subject, scope);
+                let subject_ty = self.infer_type(subject, scope);
                 for arm in arms {
-                    self.walk_pattern(&arm.pattern, scope);
+                    self.walk_pattern(&arm.pattern, scope, subject_ty.clone());
                     if let Some(guard) = &arm.guard {
                         self.walk_expr(guard, scope);
                     }
@@ -985,29 +987,82 @@ impl Builder {
     }
 
     /// Indexes the bindings and variant references introduced by a match pattern so hover, rename,
-    /// and go-to work for them. Binding identifiers become local variables; variant names (and an
-    /// optional `Enum.` qualifier) become references.
-    fn walk_pattern(&mut self, pattern: &PatternNode, scope: usize) {
+    /// and go-to work for them. Binding identifiers become local variables (typed from `expected`
+    /// when the subject type is known — required for `Err(e) => { e.| }` member completion);
+    /// variant names (and an optional `Enum.` qualifier) become references.
+    fn walk_pattern(&mut self, pattern: &PatternNode, scope: usize, expected: Option<String>) {
         match pattern {
             PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => {}
             PatternNode::Binding(name) => {
-                self.push_decl(name, SymKind::Variable, "binding".to_string(), scope, None);
+                let detail = match &expected {
+                    Some(ty) => format!("{}: {}", name.text, ty),
+                    None => "binding".to_string(),
+                };
+                self.push_decl(name, SymKind::Variable, detail, scope, expected);
             }
             PatternNode::Variant(qualifier, variant, subs) => {
                 if let Some(q) = qualifier {
                     self.add_ref(q, self.type_name_kind(&q.text), scope);
                 }
                 self.add_ref(variant, SymKind::EnumMember, scope);
-                for sub in subs {
-                    self.walk_pattern(sub, scope);
+                let enum_name = qualifier
+                    .as_ref()
+                    .map(|q| q.text.as_str())
+                    .or_else(|| expected.as_deref().map(type_base));
+                let subject_args = expected
+                    .as_deref()
+                    .map(parse_angle_type_args)
+                    .unwrap_or_default();
+                let enum_params = enum_name
+                    .and_then(|n| self.enum_type_params(n))
+                    .unwrap_or_default();
+                let payload_tys = self.variant_payload_types(enum_name, &variant.text);
+                for (i, sub) in subs.iter().enumerate() {
+                    let field_ty = payload_tys.get(i).cloned();
+                    let concrete = field_ty.map(|t| {
+                        if enum_params.is_empty() || subject_args.is_empty() {
+                            t
+                        } else {
+                            substitute_named_type_params(&t, &enum_params, &subject_args)
+                        }
+                    });
+                    self.walk_pattern(sub, scope, concrete);
                 }
             }
             PatternNode::Or(alts) => {
                 for alt in alts {
-                    self.walk_pattern(alt, scope);
+                    self.walk_pattern(alt, scope, expected.clone());
                 }
             }
         }
+    }
+
+    /// Generic parameter names declared on `enum Name<…>` (`Result` → `["T","E"]`).
+    fn enum_type_params(&self, name: &str) -> Option<Vec<String>> {
+        let detail = self
+            .decls
+            .iter()
+            .find(|d| d.kind == SymKind::Enum && d.name == name)
+            .map(|d| d.detail.as_str())?;
+        let args = parse_angle_type_args(detail);
+        if args.is_empty() {
+            None
+        } else {
+            Some(args)
+        }
+    }
+
+    /// Payload field types of `Enum.Variant` in declaration order (`Result.Err` → `["E"]`).
+    fn variant_payload_types(&self, enum_name: Option<&str>, variant: &str) -> Vec<String> {
+        let Some(en) = enum_name else {
+            return Vec::new();
+        };
+        let prefix = format!("{en}.{variant}::");
+        self.decls
+            .iter()
+            .filter(|d| d.kind == SymKind::Param && d.detail.starts_with(&prefix))
+            .filter_map(|d| d.ty.clone())
+            .collect()
     }
 
     fn add_type_ref(&mut self, ty: &Type, scope: usize) {

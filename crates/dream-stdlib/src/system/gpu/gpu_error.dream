@@ -44,11 +44,20 @@ public class GpuError : Error {
         return GpuError("EIO", message);
     }
 
-    // Maps a numeric host status code to a typed `GpuError`.
+    // Maps a numeric host status code to a typed `GpuError`. When the host recorded a detail string
+    // (pipeline compile failure, missing bind, wgpu validation, …), it is appended after `detail`.
     public static fun from_code(code: int, detail: string): GpuError {
-        if (code == 1) { return GpuError.unavailable(detail); }
-        if (code == 2) { return GpuError.timeout(detail); }
-        if (code == 3) { return GpuError.validation(detail); }
-        return GpuError.other(detail);
+        let last = GpuError.last_error_host();
+        let msg = detail;
+        if (last.length > 0) {
+            msg = detail + ": " + last;
+        }
+        if (code == 1) { return GpuError.unavailable(msg); }
+        if (code == 2) { return GpuError.timeout(msg); }
+        if (code == 3) { return GpuError.validation(msg); }
+        return GpuError.other(msg);
     }
+
+    @js("Dream", "gpuLastError")
+    static extern fun last_error_host(): string;
 }

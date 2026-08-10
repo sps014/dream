@@ -293,6 +293,52 @@ fun f(r: Result<int, string>): void {
 }
 
 #[test]
+fn switch_arm_binding_member_completions_for_result_err() {
+    // Pattern bindings must carry the concrete payload type so `e.` completes GpuError members.
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+fun f(r: Result<bool, GpuError>): void {
+    switch (r) {
+        Ok(v) => {},
+        Err(e) => { e.| },
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"message") && names.contains(&"code"),
+        "expected GpuError methods on Err(e) binding, got {names:?}"
+    );
+}
+
+#[test]
+fn switch_arm_binding_member_completions_for_option_some() {
+    let harness = TestHarness::new(
+        r#"
+class Point {
+    x: int;
+    y: int;
+}
+fun f(o: Option<Point>): void {
+    switch (o) {
+        None => {},
+        Some(p) => { p.| },
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"x") && names.contains(&"y"),
+        "expected Point fields on Some(p) binding, got {names:?}"
+    );
+}
+
+#[test]
 fn result_inferred_from_gpu_try_init_member_completions() {
     let harness = TestHarness::new(
         "import system.gpu;\nasync fun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",

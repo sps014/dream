@@ -57,6 +57,8 @@ System.println(Gpu.ready());
 
 Implements [`Error`](option-result.md) with `message()` / `code()`. Factories (`unavailable`, `timeout`, `validation`, `other`, `from_code`) are for constructing errors in host bridges and tests — application code usually reads them from `Result`.
 
+`from_code` appends the host's last detail string when present (pipeline/WGSL compile failure, missing buffer bind, wgpu validation text, …), so `e.message()` names the real cause — not only a bare `VALIDATION` code. Prefer `System.println(e.message())` over stringifying the error object.
+
 ```dream
 let e = GpuError.unavailable("no adapter");
 System.println(e.code());

@@ -13,7 +13,7 @@ pub type LiveImport = (String, String);
 /// Emits a binary `.wasm` next to the `.wat`, and optionally an `.abi.json` describing the module's
 /// **live** extern imports (for JS interop marshaling) and exported functions. When `gpu` is
 /// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI (when ABI
-/// is requested). Native `run` / `debug-adapter` skip ABI — wasmtime does not use it.
+/// is requested). Native `run` / `debug-adapter` also load `abi.gpu` for wgpu kernels/shaders.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     wat_text: &str,

@@ -220,6 +220,92 @@ pub(crate) fn type_base(ty: &str) -> &str {
     base.split('<').next().unwrap_or(base).trim()
 }
 
+/// Splits a comma-separated type-argument list, respecting nested `<…>` / `(…)`.
+pub(crate) fn split_comma_type_list(inner: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0;
+    let bytes = inner.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'<' | b'(' => depth += 1,
+            b'>' | b')' => depth -= 1,
+            b',' if depth == 0 => {
+                let part = inner[start..i].trim();
+                if !part.is_empty() {
+                    out.push(part.to_string());
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let part = inner[start..].trim();
+    if !part.is_empty() {
+        out.push(part.to_string());
+    }
+    out
+}
+
+/// Type arguments inside the outermost `<…>` of `ty` (`Result<int, string>` → `["int","string"]`).
+pub(crate) fn parse_angle_type_args(ty: &str) -> Vec<String> {
+    let bytes = ty.as_bytes();
+    let Some(start) = ty.find('<') else {
+        return Vec::new();
+    };
+    let mut depth = 0i32;
+    let mut end = None;
+    for (i, &b) in bytes.iter().enumerate().skip(start) {
+        match b {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let Some(end) = end else {
+        return Vec::new();
+    };
+    split_comma_type_list(&ty[start + 1..end])
+}
+
+/// Substitutes named type parameters in a type / signature fragment (`E` → `GpuError`, `T[]` → `int[]`).
+pub(crate) fn substitute_named_type_params(ty: &str, params: &[String], args: &[String]) -> String {
+    let mut out = ty.to_string();
+    for (param, arg) in params.iter().zip(args.iter()) {
+        if param.is_empty() {
+            continue;
+        }
+        if out == *param {
+            out = arg.clone();
+            continue;
+        }
+        out = out
+            .replace(&format!("{param}[]"), &format!("{arg}[]"))
+            .replace(&format!("<{param}>"), &format!("<{arg}>"))
+            .replace(&format!(": {param}"), &format!(": {arg}"))
+            .replace(&format!(" {param},"), &format!(" {arg},"))
+            .replace(&format!(" {param})"), &format!(" {arg})"))
+            .replace(&format!(" {param}>"), &format!(" {arg}>"))
+            .replace(&format!(" {param} "), &format!(" {arg} "))
+            .replace(&format!("({param})"), &format!("({arg})"))
+            .replace(&format!("({param},"), &format!("({arg},"))
+            .replace(&format!(", {param},"), &format!(", {arg},"))
+            .replace(&format!(", {param})"), &format!(", {arg})"))
+            .replace(&format!(", {param}>"), &format!(", {arg}>"))
+            .replace(&format!("<{param},"), &format!("<{arg},"));
+        if out.ends_with(&format!(": {param}")) {
+            out = format!("{}: {arg}", &out[..out.len() - param.len() - 2]);
+        }
+    }
+    out
+}
+
 /// Substitutes method type parameters in a detail string when call-site type args are known.
 /// `detail` looks like `async WebWorkerPool.dispatch<TIn, TOut>(msg: TIn, …): TOut`;
 /// `type_args` are the call-site args (`["int", "string"]`).

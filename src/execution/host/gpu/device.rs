@@ -28,7 +28,10 @@ pub fn try_init() -> i32 {
         force_fallback_adapter: false,
     })) {
         Some(a) => a,
-        None => return ERR_UNAVAILABLE,
+        None => {
+            st.set_last_error("no GPU adapter".into());
+            return ERR_UNAVAILABLE;
+        }
     };
     let (device, queue) = match pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
@@ -43,6 +46,7 @@ pub fn try_init() -> i32 {
         Err(e) => {
             let msg = format!("request_device failed: {e}");
             eprintln!("Dream gpuTryInit: {msg}");
+            st.set_last_error(msg.clone());
             return classify_err(&msg);
         }
     };

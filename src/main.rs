@@ -283,9 +283,9 @@ fn main() -> ExitCode {
 
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides. Do not call
     // `with_optimize(None)` after release — that would clear the default.
-    // Emit `.abi.json` for JS runtimes and for native `run` (wgpu loads `abi.gpu`). Skip for
-    // debug-adapter-only sessions unless `--runtime` was also requested.
-    let emit_abi = want_runtime || run_after_compile || !debug_adapter;
+    // Always emit `.abi.json`: JS hosts need imports/exports, and native `run` / `debug-adapter`
+    // load `abi.gpu` for `@compute` / shader metadata.
+    let emit_abi = true;
     let mut compiler = Compiler::new(Target::Wasm)
         .with_release(release)
         .with_debug_info(debug_info)

@@ -3,6 +3,7 @@
 
 use super::context::GeneratorContext;
 use super::registration::RegisteredGenerator;
+#[cfg(feature = "native")]
 use super::semantic::TypeSymbol;
 #[cfg(feature = "native")]
 use super::syntax::SyntaxNodeId;

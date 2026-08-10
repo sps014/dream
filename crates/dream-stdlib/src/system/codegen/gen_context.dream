@@ -95,8 +95,52 @@ public class GenContext {
                 let parsed = Json.parse(text);
                 switch (parsed) {
                     Ok(root) => {
-                        let blocks = parse_blocks(root.get("blocks").unwrap_or(JsonValue.array()));
-                        let types = parse_types(root.get("types").unwrap_or(JsonValue.array()));
+                        let arr = root.get("blocks").unwrap_or(JsonValue.array());
+                        let blocks = List<GenSyntaxBlock>();
+                        let i = 0;
+                        while (i < arr.length) {
+                            let b = arr.at(i).unwrap_or(JsonValue.none());
+                            let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
+                            let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                            let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                            let splices_json = b.get("splices").unwrap_or(JsonValue.array());
+                            let splices = List<string>();
+                            let j = 0;
+                            while (j < splices_json.length) {
+                                let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                                splices.push(s);
+                                j = j + 1;
+                            }
+                            blocks.push(GenSyntaxBlock(id, name, body, splices));
+                            i = i + 1;
+                        }
+                        let types_arr = root.get("types").unwrap_or(JsonValue.array());
+                        let types = List<GenTypeInfo>();
+                        let ti = 0;
+                        while (ti < types_arr.length) {
+                            let t = types_arr.at(ti).unwrap_or(JsonValue.none());
+                            let tname = t.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                            let attrs_json = t.get("attributes").unwrap_or(JsonValue.array());
+                            let attributes = List<string>();
+                            let ai = 0;
+                            while (ai < attrs_json.length) {
+                                let a = attrs_json.at(ai).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                                attributes.push(a);
+                                ai = ai + 1;
+                            }
+                            let fields_json = t.get("fields").unwrap_or(JsonValue.array());
+                            let fields = List<GenFieldInfo>();
+                            let fi = 0;
+                            while (fi < fields_json.length) {
+                                let f = fields_json.at(fi).unwrap_or(JsonValue.none());
+                                let fname = f.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                                let ftype = f.get("type_name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                                fields.push(GenFieldInfo(fname, ftype));
+                                fi = fi + 1;
+                            }
+                            types.push(GenTypeInfo(tname, attributes, fields));
+                            ti = ti + 1;
+                        }
                         return Result.Ok(GenContext(blocks, types));
                     }
                     Err(e) => {
@@ -111,58 +155,6 @@ public class GenContext {
         // Unreachable: every arm above returns; satisfies the flow checker, which treats a
         // `switch` statement without a `default` arm as a non-exhaustive branch.
         return Result.Err("unreachable");
-    }
-
-    static fun parse_blocks(arr: JsonValue): List<GenSyntaxBlock> {
-        let blocks = List<GenSyntaxBlock>();
-        let i = 0;
-        while (i < arr.length) {
-            let b = arr.at(i).unwrap_or(JsonValue.none());
-            let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
-            let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-            let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-            let splices_json = b.get("splices").unwrap_or(JsonValue.array());
-            let splices = List<string>();
-            let j = 0;
-            while (j < splices_json.length) {
-                let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                splices.push(s);
-                j = j + 1;
-            }
-            blocks.push(GenSyntaxBlock(id, name, body, splices));
-            i = i + 1;
-        }
-        return blocks;
-    }
-
-    static fun parse_types(arr: JsonValue): List<GenTypeInfo> {
-        let types = List<GenTypeInfo>();
-        let i = 0;
-        while (i < arr.length) {
-            let t = arr.at(i).unwrap_or(JsonValue.none());
-            let name = t.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-            let attrs_json = t.get("attributes").unwrap_or(JsonValue.array());
-            let attributes = List<string>();
-            let ai = 0;
-            while (ai < attrs_json.length) {
-                let a = attrs_json.at(ai).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                attributes.push(a);
-                ai = ai + 1;
-            }
-            let fields_json = t.get("fields").unwrap_or(JsonValue.array());
-            let fields = List<GenFieldInfo>();
-            let fi = 0;
-            while (fi < fields_json.length) {
-                let f = fields_json.at(fi).unwrap_or(JsonValue.none());
-                let fname = f.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                let ftype = f.get("type_name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-                fields.push(GenFieldInfo(fname, ftype));
-                fi = fi + 1;
-            }
-            types.push(GenTypeInfo(name, attributes, fields));
-            i = i + 1;
-        }
-        return types;
     }
 
     // Every snapshotted `name { ... }` call site (e.g. `ctx.syntax_blocks("quote")`).
@@ -227,9 +219,7 @@ public class GenContext {
         }
     }
 
-    // Flushes accumulated replace/error calls to stdout using the `GenHost` protocol. The host
-    // that ran this body's auto-harness reads this output the same way it reads a hand-written
-    // `harness.dream`.
+    // Flushes accumulated replace/error/emit calls to stdout using the `GenHost` protocol.
     public fun finish(): void {
         if (this.has_error) {
             System.println(GenHost.err_marker());
@@ -243,20 +233,20 @@ public class GenContext {
         let ei = 0;
         while (ei < this.extend_types.length) {
             System.println(GenHost.emit_extend_marker());
-            System.println(this.extend_types.at(ei).unwrap_or(""));
-            System.println(escape_emit_line(this.extend_bodies.at(ei).unwrap_or("")));
+            System.println(this.extend_types.get(ei).unwrap_or(""));
+            System.println(escape_gen_payload(this.extend_bodies.get(ei).unwrap_or("")));
             ei = ei + 1;
         }
         let fi = 0;
         while (fi < this.file_paths.length) {
             System.println(GenHost.emit_file_marker());
-            System.println(this.file_paths.at(fi).unwrap_or(""));
-            System.println(escape_emit_line(this.file_sources.at(fi).unwrap_or("")));
+            System.println(this.file_paths.get(fi).unwrap_or(""));
+            System.println(escape_gen_payload(this.file_sources.get(fi).unwrap_or("")));
             fi = fi + 1;
         }
     }
 }
 
-fun escape_emit_line(s: string): string {
-    return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+fun escape_gen_payload(s: string): string {
+    return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r");
 }

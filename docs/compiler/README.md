@@ -22,6 +22,7 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 08 | [Testing & Determinism](./08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
 | 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
+| 11 | [Durable browser FS design spike](./11-durable-browser-fs-design-note.md) | Worker + OPFS sync handles vs async host imports (spike only) |
 
 ## Why a multi-pass architecture
 

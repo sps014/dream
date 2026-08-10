@@ -140,8 +140,8 @@ Several standard-library features are interop wrappers and serve as worked examp
 Every `@js("Dream", "…")` import needs a matching implementation on **each** host: native
 (`src/execution/host/*.rs`, wasmtime) and JS (`runtime/src/hosts/*.js`, shared by Node and the
 browser). Most stdlib packages behave identically everywhere; where a host genuinely can't support
-a feature (no raw sockets in the browser, no process model in the browser, `wss://` unimplemented
-natively, …) that package's own stdlib doc has a "Platform notes" table — check
+a feature (no raw sockets in the browser, no process model in the browser, …) that package's own
+stdlib doc has a "Platform notes" table — check
 [HTTP](../stdlib/http.md), [Raw sockets](../stdlib/net.md), [File I/O](../stdlib/file.md),
 [Process](../stdlib/process.md), [Crypto](../stdlib/crypto.md), [DateTime](../stdlib/datetime.md),
 and [`system.gpu`](../stdlib/gpu.md) for the specifics. Unicode helpers (`Strings`/`Unicode` — see
@@ -149,7 +149,11 @@ and [`system.gpu`](../stdlib/gpu.md) for the specifics. Unicode helpers (`String
 are backed on both native and JS hosts today; only the interactive input fallback differs (browser
 has no stdin, so it uses a blocking `prompt()` dialog).
 
-`src/execution/host/mod.rs`'s `contract_tests::every_native_dream_host_fn_is_declared_in_the_prelude`
-guards one direction of this contract (every native `Dream`-module function has a matching
-`@js("Dream", …)` declaration in the stdlib prelude); the JS-host mirror is maintained by hand and
-has no equivalent automated check.
+`src/execution/host/mod.rs`'s `contract_tests` guard the `@js("Dream", …)` link contract both ways:
+
+- `every_native_dream_host_fn_is_declared_in_the_prelude` — every native `Dream`-module registration
+  has a matching prelude declaration (the reverse is intentionally unchecked: dynamic `js*` bridges
+  exist only on the JS host and trap under wasmtime).
+- `js_dream_host_keys_match_prelude_js_declarations` — JS host export keys
+  (`runtime/src/hosts/*.js` + `workers.js`, minus internal hooks like `__attachGpuAbi`) and prelude
+  `@js("Dream", …)` names are the same set.

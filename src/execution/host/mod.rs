@@ -122,4 +122,114 @@ mod contract_tests {
             orphaned
         );
     }
+
+    /// JS host factories that contribute keys to the composed `Dream` module (see
+    /// `runtime/src/hosts.js` + `workers.js`). `env.js` binds `env`, not `Dream`.
+    const JS_HOST_SOURCES: &[&str] = &[
+        include_str!("../../../runtime/src/hosts/js.js"),
+        include_str!("../../../runtime/src/hosts/http.js"),
+        include_str!("../../../runtime/src/hosts/fs.js"),
+        include_str!("../../../runtime/src/hosts/crypto.js"),
+        include_str!("../../../runtime/src/hosts/gpu.js"),
+        include_str!("../../../runtime/src/hosts/console_process.js"),
+        include_str!("../../../runtime/src/hosts/datetime_text.js"),
+        include_str!("../../../runtime/src/hosts/net_sockets.js"),
+        include_str!("../../../runtime/src/workers.js"),
+    ];
+
+    /// Internal JS-only keys that are not `@js` imports (ABI attach hooks, etc.).
+    const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
+
+    /// Extracts keys from the primary host factory object in a source file: the last `return {`
+    /// on its own line (`make*Host` pattern) or `const host = {` (GPU). Earlier helper
+    /// `return {` blocks (e.g. inside GPU bind-group builders) are ignored. Nested objects use
+    /// brace depth; keys are recorded before same-line `{`. Method-shorthand `name(` requires
+    /// `{` on the line so call continuations are not mistaken for exports.
+    fn js_host_export_keys(src: &str) -> HashSet<String> {
+        let lines: Vec<&str> = src.lines().collect();
+        let mut start = None;
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if trimmed == "return {"
+                || trimmed.starts_with("const host = {")
+                || trimmed.starts_with("const host={")
+            {
+                start = Some(i);
+            }
+        }
+        let Some(start) = start else {
+            return HashSet::new();
+        };
+        let mut keys = HashSet::new();
+        let first = lines[start].trim();
+        let mut depth = first.chars().filter(|&c| c == '{').count() as i32
+            - first.chars().filter(|&c| c == '}').count() as i32;
+        for line in &lines[start + 1..] {
+            let trimmed = line.trim();
+            if depth == 1 {
+                let ident = if let Some(r) = trimmed.strip_prefix("async ") {
+                    r
+                } else {
+                    trimmed
+                };
+                let end = ident
+                    .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .unwrap_or(ident.len());
+                if end > 0 {
+                    let name = &ident[..end];
+                    let after = ident[end..].trim_start();
+                    if after.starts_with(':')
+                        || (after.starts_with('(') && trimmed.contains('{'))
+                    {
+                        keys.insert(name.to_string());
+                    }
+                }
+            }
+            for c in trimmed.chars() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => depth -= 1,
+                    _ => {}
+                }
+            }
+            if depth <= 0 {
+                break;
+            }
+        }
+        keys
+    }
+
+    #[test]
+    fn js_dream_host_keys_match_prelude_js_declarations() {
+        let mut declared: HashSet<String> = HashSet::new();
+        for (_, src) in dream_stdlib::all_prelude_files() {
+            for name in names_after_module(src, HOST_MODULE) {
+                declared.insert(name);
+            }
+        }
+
+        let mut js_keys: HashSet<String> = HashSet::new();
+        for src in JS_HOST_SOURCES {
+            js_keys.extend(js_host_export_keys(src));
+        }
+        for internal in JS_HOST_INTERNAL_KEYS {
+            js_keys.remove(*internal);
+        }
+
+        assert!(
+            !js_keys.is_empty(),
+            "scanner found no JS Dream host keys; the pattern likely drifted"
+        );
+
+        let js_only: Vec<&String> = js_keys.difference(&declared).collect();
+        let prelude_only: Vec<&String> = declared.difference(&js_keys).collect();
+        assert!(
+            js_only.is_empty() && prelude_only.is_empty(),
+            "JS Dream host keys and prelude `@js(\"Dream\", …)` declarations have drifted.\n\
+             JS-only (missing from prelude): {:?}\n\
+             prelude-only (missing from JS hosts): {:?}",
+            js_only,
+            prelude_only
+        );
+    }
 }

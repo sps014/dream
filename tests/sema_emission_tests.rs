@@ -1165,11 +1165,10 @@ fn print_function_value_emits_hir() {
 }
 
 #[test]
-fn func_value_argument_is_not_reference_counted() {
-    // Documents how memory is managed when a function is passed as an argument: it isn't. A
-    // `fun(...)` value is a plain `i32` table index, not a heap reference, so the RC pass never
-    // retains or releases it. A `string` bound alongside it in the same scope still gets its normal
-    // reference-counting treatment — proving the distinction is real, not that RC is globally off.
+fn func_value_argument_is_reference_counted() {
+    // A `fun(...)` value is a heap funcbox (`TyKind::Func` is a reference), so the RC pass retains
+    // and releases it like any other managed ref. A `string` bound alongside it is also counted —
+    // both should see Retain/Release traffic after RC insertion.
     let code = format!(
         "{SYSTEM_STUB}
         {CLOSURE_STUB}
@@ -1227,9 +1226,9 @@ fn func_value_argument_is_not_reference_counted() {
         }
     }
 
-    assert_eq!(
-        func_value_rc, 0,
-        "a function value is a scalar table index and must never be retained/released:\n{:#?}",
+    assert!(
+        func_value_rc > 0,
+        "a function value is a heap funcbox and must be retained/released:\n{:#?}",
         main
     );
     assert!(

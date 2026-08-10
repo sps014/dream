@@ -3,13 +3,13 @@
 //! client): a connection is opened once and kept in a handle table (like `process.rs`'s spawned
 //! children) so later `send`/`receive` calls reuse the same socket.
 //!
-//! WebSocket uses `tungstenite` without a TLS feature enabled, so only `ws://` is supported
-//! natively today; `wss://` fails with a connect error (see `Cargo.toml`'s `tungstenite` comment).
+//! WebSocket uses `tungstenite` with `native-tls`, so both `ws://` and `wss://` are supported.
+//! Unknown schemes fail with wire `-2` (see `Cargo.toml`'s `tungstenite` features).
 //!
 //! Wire formats are shared with the JS host (`runtime/src/hosts/net_sockets.js`) and parsed
 //! Dream-side by `NetWireReader` (`crates/dream-stdlib/src/system/net/net_wire_reader.dream`):
 //!   connect (`tcpConnect`/`wsConnect`): `"<handle>\n"` on success, `"-1\n<message>"` on failure,
-//!     `"-2\n<message>"` for an unsupported scheme (e.g. `wss://` here).
+//!     `"-2\n<message>"` for an unsupported scheme.
 //!   `tcpSend`/`tcpSendText`: `"<n>\n"` bytes written, or `"-1\n<message>"`.
 //!   `tcpReceive`: `"data\n<bytes>"` | `"eof\n"` | `"error\n<message>"`.
 //!   `wsSendText`/`wsSendBinary`: `"1\n"` on success, `"0\n<message>"` on failure.
@@ -23,6 +23,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use indexmap::IndexMap;
+use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Message, WebSocket};
 use wasmtime::*;
 
@@ -118,64 +119,78 @@ fn tcp_close(handle: i32) -> i32 {
 
 /* ------------------------------------------------------------------------------- WebSocket -- */
 
-fn ws_handles() -> &'static Mutex<IndexMap<u32, WebSocket<TcpStream>>> {
-    static HANDLES: OnceLock<Mutex<IndexMap<u32, WebSocket<TcpStream>>>> = OnceLock::new();
+type WsStream = WebSocket<MaybeTlsStream<TcpStream>>;
+
+fn ws_handles() -> &'static Mutex<IndexMap<u32, WsStream>> {
+    static HANDLES: OnceLock<Mutex<IndexMap<u32, WsStream>>> = OnceLock::new();
     HANDLES.get_or_init(|| Mutex::new(IndexMap::new()))
 }
 
 static NEXT_WS_HANDLE: AtomicU32 = AtomicU32::new(1);
 
 fn ws_connect(url: &str, timeout_ms: i32) -> Vec<u8> {
-    if !url.starts_with("ws://") {
-        if url.starts_with("wss://") {
-            return wire_text(
-                -2,
-                "wss:// is not supported by the native host (no TLS feature enabled)",
-            );
-        }
-        return wire_text(-2, "unsupported URL scheme (expected ws://)");
+    if !(url.starts_with("ws://") || url.starts_with("wss://")) {
+        return wire_text(-2, "unsupported URL scheme (expected ws:// or wss://)");
     }
-    let host_port = &url["ws://".len()..];
-    let (authority, _rest) = host_port.split_once('/').unwrap_or((host_port, ""));
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => match p.parse::<u16>() {
-            Ok(p) => (h, p),
-            Err(_) => (authority, 80),
-        },
-        None => (authority, 80),
-    };
 
-    let stream = if timeout_ms > 0 {
-        match (host, port).to_socket_addrs() {
-            Ok(mut addrs) => match addrs.next() {
-                Some(addr) => {
-                    TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms as u64))
-                }
-                None => Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "could not resolve host",
-                )),
+    // Plain `ws://` still honors `timeout_ms` on the TCP connect. `wss://` goes through
+    // `tungstenite::connect` (TLS handshake included); a non-zero timeout is applied as a
+    // read/write deadline on the resulting stream when possible.
+    let socket = if let Some(host_port) = url.strip_prefix("ws://") {
+        let (authority, _rest) = host_port.split_once('/').unwrap_or((host_port, ""));
+        let (host, port) = match authority.rsplit_once(':') {
+            Some((h, p)) => match p.parse::<u16>() {
+                Ok(p) => (h, p),
+                Err(_) => (authority, 80),
             },
-            Err(e) => Err(e),
+            None => (authority, 80),
+        };
+
+        let stream = if timeout_ms > 0 {
+            match (host, port).to_socket_addrs() {
+                Ok(mut addrs) => match addrs.next() {
+                    Some(addr) => {
+                        TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms as u64))
+                    }
+                    None => Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "could not resolve host",
+                    )),
+                },
+                Err(e) => Err(e),
+            }
+        } else {
+            TcpStream::connect((host, port))
+        };
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => return wire_text(-1, &e.to_string()),
+        };
+        let _ = stream.set_nodelay(true);
+        match tungstenite::client(url, MaybeTlsStream::Plain(stream)) {
+            Ok((socket, _response)) => socket,
+            Err(e) => return wire_text(-1, &e.to_string()),
         }
     } else {
-        TcpStream::connect((host, port))
-    };
-    let stream = match stream {
-        Ok(s) => s,
-        Err(e) => return wire_text(-1, &e.to_string()),
-    };
-    let _ = stream.set_nodelay(true);
-
-    match tungstenite::client(url, stream) {
-        Ok((socket, _response)) => {
-            let id = NEXT_WS_HANDLE.fetch_add(1, Ordering::Relaxed);
-            let mut table = ws_handles().lock().unwrap_or_else(|e| e.into_inner());
-            table.insert(id, socket);
-            wire_text(id, "")
+        match tungstenite::connect(url) {
+            Ok((socket, _response)) => {
+                if timeout_ms > 0 {
+                    let dur = Duration::from_millis(timeout_ms as u64);
+                    if let MaybeTlsStream::NativeTls(s) = socket.get_ref() {
+                        let _ = s.get_ref().set_read_timeout(Some(dur));
+                        let _ = s.get_ref().set_write_timeout(Some(dur));
+                    }
+                }
+                socket
+            }
+            Err(e) => return wire_text(-1, &e.to_string()),
         }
-        Err(e) => wire_text(-1, &e.to_string()),
-    }
+    };
+
+    let id = NEXT_WS_HANDLE.fetch_add(1, Ordering::Relaxed);
+    let mut table = ws_handles().lock().unwrap_or_else(|e| e.into_inner());
+    table.insert(id, socket);
+    wire_text(id, "")
 }
 
 fn ws_send(handle: i32, message: Message) -> Vec<u8> {

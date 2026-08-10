@@ -45,6 +45,7 @@ fn run_wasm_binary(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let module = wasmtime::Module::new(&engine, bytes)?;
     let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)?;
     let mut store = wasmtime::Store::new(&engine, ());
+    store.set_epoch_deadline(u64::MAX);
     let mut linker = wasmtime::Linker::new(&engine);
     link_host_functions(&mut linker)?;
     linker.define(&mut store, "env", "memory", shared_mem.clone())?;

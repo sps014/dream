@@ -1,0 +1,20 @@
+module gen;
+
+import system.codegen;
+
+@attribute
+public fun dto(): void {
+}
+
+@generator
+public fun dto_derive(ctx: GenContext): void {
+    for (let t in ctx.types_with("dto")) {
+        let b = CodeBuilder();
+        b.line("public fun describe(): string {");
+        b.indent();
+        b.line("return \"dto\";");
+        b.dedent();
+        b.line("}");
+        ctx.emit_extend(t.name, b.to_string());
+    }
+}

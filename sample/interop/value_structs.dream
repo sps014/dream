@@ -1,0 +1,38 @@
+// Value-struct <-> JS object marshaling: a `struct` deep-copies into a plain JS object, and a JS
+// object fills a value-struct slot in place via `$js_to_<Name>(j, dst)` (no heap allocation).
+//
+//   cargo run -- sample/interop/value_structs.dream
+//   node sample/interop/value_structs.mjs sample/interop/value_structs.wasm
+
+import system;
+struct Point {
+    public x: int;
+    public y: int;
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+struct User {
+    public name: string;
+    public age: int;
+    public home: Point;
+    public constructor(name: string, age: int, home: Point) {
+        this.name = name;
+        this.age = age;
+        this.home = home;
+    }
+}
+
+fun main(): void {
+    let u = User("Ada", 36, Point(3, 4));
+
+    // Dream -> JS: deep-copied into `{ name, age, home: { x, y } }`.
+    js.global.receiveValueUser(u);
+
+    // JS -> Dream: fill a value `User` from the returned JS object's properties.
+    let v: User = js.global.makeValueUser();
+    System.println("name=" + v.name + " age=" + v.age);
+    System.println("home=(" + v.home.x + "," + v.home.y + ")");
+}

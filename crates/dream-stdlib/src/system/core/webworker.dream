@@ -19,6 +19,10 @@ module system.core;
 public class WebWorker<TIn, TOut> {
     // Opaque host handle identifying this worker's thread/instance.
     id: int;
+    // Owns the spawn-time wrapping funcbox (and its capture env) for the worker's lifetime.
+    // Sync and async spawns use different fun types; the unused field stays null (release no-op).
+    sync_body: fun(string): string;
+    async_body: fun(string): Future<string>;
 
     @js("Dream", "workerSpawn")
     static extern fun spawn_host(funcidx: int, env: int): int;
@@ -44,9 +48,16 @@ public class WebWorker<TIn, TOut> {
     @js("Dream", "workerTerminate")
     static extern fun terminate_host(id: int): void;
 
-    // Internal: host id only. Prefer `spawn`.
-    constructor(id: int) {
+    // Sync-wrapper spawn: keep `sync_body` alive until this instance is released.
+    constructor(id: int, sync_body: fun(string): string) {
         this.id = id;
+        this.sync_body = sync_body;
+    }
+
+    // Async-wrapper spawn: keep `async_body` alive until this instance is released.
+    constructor(id: int, async_body: fun(string): Future<string>) {
+        this.id = id;
+        this.async_body = async_body;
     }
 
     // Start `body(input)` on a new thread immediately; `input` is wire-copied.
@@ -54,7 +65,7 @@ public class WebWorker<TIn, TOut> {
         let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
         let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
         WebWorker<TIn, TOut>.post_host(id, Bytes.toWire<TIn>(input));
-        return WebWorker<TIn, TOut>(id);
+        return WebWorker<TIn, TOut>(id, wrapped);
     }
 
     public static fun spawn(input: TIn, body: fun(TIn): Future<TOut>): WebWorker<TIn, TOut> {
@@ -63,7 +74,7 @@ public class WebWorker<TIn, TOut> {
         };
         let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
         WebWorker<TIn, TOut>.post_host(id, Bytes.toWire<TIn>(input));
-        return WebWorker<TIn, TOut>(id);
+        return WebWorker<TIn, TOut>(id, wrapped);
     }
 
     // Capture-only entry: no wire argument. `TIn` is unused at the call site (pass any dummy type
@@ -72,7 +83,7 @@ public class WebWorker<TIn, TOut> {
         let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
         let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
         WebWorker<TIn, TOut>.post_host(id, "");
-        return WebWorker<TIn, TOut>(id);
+        return WebWorker<TIn, TOut>(id, wrapped);
     }
 
     public static fun spawn(body: fun(): Future<TOut>): WebWorker<TIn, TOut> {
@@ -81,7 +92,7 @@ public class WebWorker<TIn, TOut> {
         };
         let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
         WebWorker<TIn, TOut>.post_host(id, "");
-        return WebWorker<TIn, TOut>(id);
+        return WebWorker<TIn, TOut>(id, wrapped);
     }
 
     // Await the body's single result. After hard `terminate()`, the pending join settles.

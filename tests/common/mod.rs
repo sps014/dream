@@ -107,6 +107,8 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
 
     let out = Arc::new(Mutex::new(String::new()));
     let mut store = Store::new(&engine, out.clone());
+    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
+    store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
     linker
         .define(&mut store, "env", "memory", shared_mem.clone())

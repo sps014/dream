@@ -1,0 +1,30 @@
+// Capturing closures reclaim their environment when the last fun reference drops.
+// A non-escaping factory that builds and discards capturing lambdas must not grow live objects.
+// Work runs in a helper so each iteration's locals are released at helper return (loop-body
+// `let`s live until the enclosing function exits).
+
+import system;
+fun make_adder(n: int): fun(int): int {
+    return (x) => x + n;
+}
+
+fun once(i: int): void {
+    let f: fun(int): int = make_adder(i);
+    let _ = f(1);
+}
+
+fun main(): void {
+    // Warmup: intern strings / allocate once so the baseline is stable.
+    let warm: fun(int): int = make_adder(0);
+    warm(0);
+    warm = make_adder(0);
+
+    let base = Debug.live_objects();
+    let i = 0;
+    while (i < 50) {
+        once(i);
+        i = i + 1;
+    }
+    let delta = Debug.live_objects() - base;
+    System.println("live_delta=" + delta.to_string());
+}

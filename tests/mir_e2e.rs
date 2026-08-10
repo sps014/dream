@@ -75,6 +75,8 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
         .map_err(|e| format!("shared memory: {e:#}"))?;
     dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
     let mut store = Store::new(&engine, ());
+    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
+    store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
     linker
         .define(&mut store, "env", "memory", shared_mem.clone())

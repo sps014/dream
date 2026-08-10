@@ -1,7 +1,7 @@
 /target
 
 .idea/
-
+.cursor/
 site/
 
 # Generated WASM/GPU artifacts emitted by the compiler/tests (e.g. tests/cases, sample/interop,

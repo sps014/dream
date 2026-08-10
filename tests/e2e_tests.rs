@@ -40,6 +40,8 @@ const DEBUG_ONLY_CASES: &[&str] = &[
     "struct_container_rc",
     "value_union_option",
     "gc_complete",
+    "closure_env_reclaim",
+    "closure_env_escape",
 ];
 
 fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {

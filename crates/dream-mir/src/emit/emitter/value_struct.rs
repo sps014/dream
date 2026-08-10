@@ -128,7 +128,7 @@ impl Emitter<'_> {
 
     /// Drops the value struct `ty` at the `at` address (runs `del`, releases reference fields), if it
     /// needs glue.
-    fn emit_value_drop(&mut self, at: impl Fn(&mut Self), ty: TypeId) {
+    pub(super) fn emit_value_drop(&mut self, at: impl Fn(&mut Self), ty: TypeId) {
         if self.value_has_glue(ty) {
             if let Some(name) = self.value_name(ty) {
                 at(self);

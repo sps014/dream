@@ -22,6 +22,10 @@ impl Emitter<'_> {
                     let call = release_call(self.interner, self.layouts, decl.ty);
                     self.line(&format!("     (local.get ${i})"));
                     self.line(&format!("     (call {call})"));
+                } else if self.interner.is_value_type(decl.ty) && self.value_has_glue(decl.ty) {
+                    // Value params/locals live at a fixed frame address held in the local; drop glue
+                    // releases embedded refs retained when the frame took ownership.
+                    self.emit_value_drop(|s| s.line(&format!("     (local.get ${i})")), decl.ty);
                 }
             }
         }

@@ -93,6 +93,7 @@ pub(crate) fn emit_async_poll(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
     ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
+    value_glue: &HashSet<TypeId>,
     slots: &AsyncSlots,
     poll_sym: &str,
     user_local_count: usize,
@@ -100,10 +101,9 @@ pub(crate) fn emit_async_poll(
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
 ) -> String {
-    // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
-    // elsewhere); empty maps disable those paths without extra plumbing through the transform.
+    // Async bodies do not apply call-argument widening or value-struct shadow frames (frame storage
+    // lives in the Future); empty maps disable those paths without extra plumbing.
     let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
-    let value_glue: HashSet<TypeId> = HashSet::new();
     let global_tys: HashMap<u32, TypeId> = HashMap::new();
     // The poll body *is* the coroutine; completions release its own reference locals.
     let mut e = Emitter::new(
@@ -115,7 +115,7 @@ pub(crate) fn emit_async_poll(
         strings,
         tags,
         ftable,
-        &value_glue,
+        value_glue,
         &global_tys,
         Some(func),
         user_local_count,

@@ -133,13 +133,13 @@ fn is_value_place_copy(rv: &Rvalue) -> bool {
 
 /// The `$__vs_retain_<T>` symbol: retains (increments) every reference reachable *by value* inside a
 /// value struct after a byte-wise copy, so the copy owns its own references.
-pub(super) fn vs_retain_sym(name: &str) -> String {
+pub(crate) fn vs_retain_sym(name: &str) -> String {
     format!("$__vs_retain_{}", name)
 }
 
 /// The `$__vs_drop_<T>` symbol: runs `del()` (if any) then releases every reference reachable by
 /// value inside a value struct, when an owning value goes out of scope or is overwritten.
-pub(super) fn vs_drop_sym(name: &str) -> String {
+pub(crate) fn vs_drop_sym(name: &str) -> String {
     format!("$__vs_drop_{}", name)
 }
 

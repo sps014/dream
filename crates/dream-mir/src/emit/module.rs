@@ -266,6 +266,7 @@ pub fn emit_module_with_debug(
                 &strings,
                 &tags,
                 &ftable,
+                &value_glue,
                 *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
                 debug,
                 locate_panics,

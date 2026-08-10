@@ -1,0 +1,27 @@
+// Regression: async value(`struct`) params that embed references must retain those fields when
+// copied into the Future frame. Otherwise the caller can drop the original before the first poll
+// and leave the frame holding dangling pointers.
+
+import system;
+struct Named {
+    public name: string;
+    public n: int;
+
+    public constructor(name: string, n: int) {
+        this.name = name;
+        this.n = n;
+    }
+}
+
+async fun use_named(p: Named): string {
+    await Time.sleep(1);
+    return p.name + ":" + p.n;
+}
+
+async fun main(): void {
+    let a = Named("hello", 1);
+    let fut = use_named(a);
+    a = Named("gone", 2);
+    let r = await fut;
+    System.println(r);
+}

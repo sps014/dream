@@ -10,10 +10,10 @@
 
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
-    link_console_functions, link_crypto_functions, link_datetime_functions, link_file_functions,
-    link_gpu_functions, link_http_functions, link_math_functions, link_net_functions,
-    link_process_functions, link_text_functions, link_worker_functions, read_string_from_memory,
-    set_worker_module,
+    attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
+    link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
+    link_math_functions, link_net_functions, link_process_functions, link_text_functions,
+    link_worker_functions, read_string_from_memory, set_worker_module,
 };
 use rayon::prelude::*;
 use std::collections::BTreeSet;
@@ -56,9 +56,12 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
         .map_err(|e| format!("compile: {e:?}"))?;
 
     let wat = fs::read_to_string(&wat_path).map_err(|e| format!("read wat: {e}"))?;
+    attach_abi_from_wat_path(&wat_str);
     let _ = fs::remove_file(&wat_path);
     let _ = fs::remove_file(wat_path.with_extension("wasm"));
     let _ = fs::remove_file(wat_path.with_extension("abi.json"));
+    let _ = fs::remove_file(dream_file.with_extension("mir.abi.json"));
+    let _ = fs::remove_file(dream_file.with_extension("mir.wgsl"));
 
     let wasm = wat::parse_str(&wat).map_err(|e| format!("assemble: {e}"))?;
     // Make the module bytes available to `WebWorker` spawns on this thread.

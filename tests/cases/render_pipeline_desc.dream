@@ -35,8 +35,8 @@ async fun main(): void {
     let _samp = GpuSampler.create(1, 1, 1);
     let desc = GpuRenderPipelineDesc.mesh();
     let pipe = await GpuRenderPipeline.create_ex("mesh_vs", "mesh_fs", desc);
-    if (pipe.is_ok()) {
-        System.println("unexpected native pipeline");
+    if (pipe.is_err()) {
+        System.println("pipeline create failed");
         return;
     }
     System.println(depth.format);

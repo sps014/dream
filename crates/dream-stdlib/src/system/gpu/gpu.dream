@@ -156,19 +156,19 @@ public class Gpu {
         h: int
     ): void;
 
-    @web
+    @web @native
     @js("Dream", "gpuSurfaceFromCanvas")
     static extern fun surface_from_canvas(canvas_id: string): int;
 
-    @web
+    @web @native
     @js("Dream", "gpuSurfaceConfigure")
     static extern fun surface_configure(id: int, width: int, height: int): void;
 
-    @web
+    @web @native
     @js("Dream", "gpuSurfacePresent")
     static extern async fun surface_present(id: int): int;
 
-    @web
+    @web @native
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
@@ -189,7 +189,7 @@ public class Gpu {
         sample_count: int
     ): int;
 
-    @web
+    @web @native
     @js("Dream", "gpuRenderDraw")
     static extern async fun render_draw(
         surface_id: int,
@@ -203,7 +203,7 @@ public class Gpu {
         clear_a: float
     ): int;
 
-    @web
+    @web @native
     @js("Dream", "gpuRenderDrawEx")
     static extern async fun render_draw_ex(
         surface_id: int,
@@ -220,7 +220,7 @@ public class Gpu {
         load_op: int
     ): int;
 
-    @web
+    @web @native
     @js("Dream", "gpuRenderDrawIndexed")
     static extern async fun render_draw_indexed(
         surface_id: int,
@@ -235,7 +235,7 @@ public class Gpu {
         clear_a: float
     ): int;
 
-    @web
+    @web @native
     @js("Dream", "gpuRenderDrawIndexedEx")
     static extern async fun render_draw_indexed_ex(
         surface_id: int,

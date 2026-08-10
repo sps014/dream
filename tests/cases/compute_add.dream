@@ -10,14 +10,22 @@ fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int)
 }
 
 async fun main(): void {
-    let _ = await Gpu.try_init();
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
     let a = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
     let b = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
-    let _r = await Compute.run_1d("add", [a, b, out], 4);
-    // Native host stages buffers but does not execute WGSL; round-trip `a` proves write/read.
-    let ra = await a.read();
-    System.println(a.length);
-    System.println((int)ra[0]);
-    System.println((int)ra[3]);
+    let r = await Compute.run_1d("add", [a, b, out], 4);
+    if (r.is_err()) {
+        System.println("dispatch failed");
+        return;
+    }
+    let vals = await out.read();
+    System.println((int)vals[0]);
+    System.println((int)vals[1]);
+    System.println((int)vals[2]);
+    System.println((int)vals[3]);
 }

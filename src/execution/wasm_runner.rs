@@ -37,7 +37,8 @@ pub fn execute_wasm_bytes(wasm_or_wat: &[u8]) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
+    super::host::attach_abi_from_wat_path(wat_path);
     let wat_content = fs::read_to_string(wat_path)?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
     run_wasm_bytes(&wasm_bytes, capturing)

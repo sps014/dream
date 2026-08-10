@@ -5,10 +5,9 @@ top-level function with `@compute` and dispatch it through `system.gpu` — no b
 boilerplate for the common case.
 
 You can start with a one-kernel SAXPY, build a reaction–diffusion sim, or study the full
-fluid demo. Native `dream run` stages GPU buffers but does **not** execute WGSL; use a
-browser with WebGPU for real GPU results (see [stdlib GPU](../stdlib/gpu.md)).
-This dual-tier model (compile everywhere, execute in-browser) is intentional until
-a native wgpu host lands.
+fluid demo. Native `dream run` and the browser both execute WGSL via wgpu / WebGPU
+when a GPU adapter is available (see [stdlib GPU](../stdlib/gpu.md)).
+Headless environments without an adapter print `gpu unavailable` from `Gpu.try_init`.
 
 ## Quick start
 
@@ -35,7 +34,7 @@ async fun main(): void {
     let r = await Compute.run_1d("add", [a, b, out], 3);
     if (r.is_err()) { return; }
     let vals = await out.read();
-    System.println((int)vals[0]); // browser: 11
+    System.println((int)vals[0]); // 11 when a GPU adapter is available
 }
 ```
 

@@ -4,7 +4,7 @@ module system.gpu;
 
 public class GpuRenderPass {
     /// Blits `source` onto `surface` (fullscreen textured triangle).
-    @web
+    @web @native
     public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
         let code = await Gpu.render_blit(surface.id, source.id);
         if (code == 0) { return Result.Ok(true); }
@@ -12,7 +12,7 @@ public class GpuRenderPass {
     }
 
     /// Clears the surface (black) and draws `vertex_count` vertices with `pipeline`.
-    @web
+    @web @native
     public static async fun draw<T : unmanaged>(
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,
@@ -30,7 +30,7 @@ public class GpuRenderPass {
     }
 
     /// Like `draw`, with shader uniforms (`Uniforms.pack_f32` / `pack_i32`) and a clear color.
-    @web
+    @web @native
     public static async fun draw_ex<T : unmanaged>(
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,
@@ -54,7 +54,7 @@ public class GpuRenderPass {
 
     /// Draw with instancing, optional depth attachment, and load-op control.
     /// `depth_texture_id` is `-1` for no depth; `load_op` is `0` clear / `1` load.
-    @web
+    @web @native
     public static async fun draw_instanced<T : unmanaged>(
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,
@@ -85,7 +85,7 @@ public class GpuRenderPass {
     }
 
     /// Clears the surface and draws indexed geometry (indices are `int` → WebGPU `uint32`).
-    @web
+    @web @native
     public static async fun draw_indexed<T : unmanaged>(
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,
@@ -105,7 +105,7 @@ public class GpuRenderPass {
     }
 
     /// Like `draw_indexed`, with uniforms and clear color.
-    @web
+    @web @native
     public static async fun draw_indexed_ex<T : unmanaged>(
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,
@@ -130,7 +130,7 @@ public class GpuRenderPass {
     }
 
     /// Indexed draw with instancing, optional depth, and load-op control.
-    @web
+    @web @native
     public static async fun draw_indexed_instanced<T : unmanaged>(
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,

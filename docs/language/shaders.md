@@ -10,10 +10,10 @@ Mark top-level functions with `@vertex` / `@fragment`, link them with
 | Target | What runs |
 |--------|-----------|
 | Browser (`dream.js` + WebGPU) | Real WGSL compute + render |
-| Native `dream run` | Buffer/texture **staging only** — dispatch/draw do not execute WGSL |
+| Native `dream run` (wgpu) | Real WGSL compute + render; window present via winit |
 
-Author shaders and host code everywhere; execute GPU work in a browser (or a future
-native wgpu host). Golden tests cover compile + staging; interactive samples need WebGPU.
+Golden tests that dispatch kernels require a GPU adapter (e.g. Metal on macOS).
+Headless CI without an adapter should skip or expect `gpu unavailable` from `try_init`.
 
 ## Quick start
 

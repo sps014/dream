@@ -120,6 +120,30 @@ pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i3
     Ok(ptr)
 }
 
+/// Reads a Dream `int[]` at data pointer `ptr` into a `Vec<i32>`.
+/// Layout: `[count: i32][i32…]` (same prefix as `char[]`, 4-byte elements).
+pub(crate) fn read_arg_i32_array(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<Vec<i32>> {
+    let memory = required_memory(caller)?;
+    let data = shared_bytes(&memory);
+    if ptr < 0 {
+        return Ok(Vec::new());
+    }
+    let base = ptr as usize;
+    let Some(count) = read_len_prefix(data, base) else {
+        return Ok(Vec::new());
+    };
+    let start = base + LEN_PREFIX;
+    let need = count.saturating_mul(4);
+    let end = start.saturating_add(need).min(data.len());
+    let mut out = Vec::with_capacity(count);
+    let mut i = start;
+    while i + 4 <= end && out.len() < count {
+        out.push(i32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]));
+        i += 4;
+    }
+    Ok(out)
+}
+
 /// Reads a Dream `char[]` (byte array) at data pointer `ptr` into a `Vec<u8>` with a single bulk
 /// copy. Layout: `[count: i32][bytes...]` (char elements are 1 byte). No string round-trip, so
 /// this is binary-safe.

@@ -376,11 +376,10 @@ fun count(flags: GpuBuffer<int>, n: int): void {
 | Host | Behavior |
 |------|----------|
 | Browser (`dream.js`) | Real WebGPU when available |
-| Native (`dream run`) | CPU staging; dispatch/draw do not execute WGSL (no native wgpu host yet) |
+| Native (`dream run`) | Real wgpu compute + render; presents to a winit window |
 
 `GpuSurface.from_canvas`, `configure`, `present`, `GpuRenderPass.blit`, and draw helpers
-are `@web`-only — compiling for native or Node reports a compile error if those APIs
-are referenced. `GpuRenderPipeline.create` / `create_ex` are available on all targets for
-compile-time checks; native still returns an error at runtime (no WebGPU render path).
+are available on `@web` and `@native`. On native, `from_canvas(name)` opens a window titled
+`name`. Present needs a display; compute still works headless when an adapter exists.
 
 See [Compute shaders](../language/compute.md) and [Vertex & fragment shaders](../language/shaders.md).

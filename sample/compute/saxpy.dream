@@ -26,8 +26,6 @@ async fun main(): void {
         return;
     }
 
-    // Native host stages buffers but does not run WGSL — expect zeros after a no-op dispatch.
-    // Browser WebGPU fills `out` with 12, 24, 36, 48.
     let vals = await out.read();
     System.println((int)vals[0]);
     System.println((int)vals[1]);

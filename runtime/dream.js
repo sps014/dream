@@ -1657,32 +1657,65 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     // via storage; blit samples the same texture. Recreating when the flags differed
     // wiped GPU contents and produced a black canvas with no error.
     if (storage) t.storage = true;
+    const format = t.format || "rgba8unorm";
     const usage =
       GPUTextureUsage.TEXTURE_BINDING |
-      GPUTextureUsage.STORAGE_BINDING |
+      (format === "rgba8unorm" ? GPUTextureUsage.STORAGE_BINDING : 0) |
       GPUTextureUsage.COPY_DST |
-      GPUTextureUsage.COPY_SRC;
+      GPUTextureUsage.COPY_SRC |
+      (t.depth ? GPUTextureUsage.RENDER_ATTACHMENT : 0);
     if (t.texture) return t.texture;
-    t.texture = dev.createTexture({
-      size: [t.width, t.height],
-      format: "rgba8unorm",
+    const desc = {
+      size: [t.width, t.height, t.depth_or_layers || 1],
+      format,
       usage,
-    });
-    if (t.cpu) {
+      mipLevelCount: Math.max(1, t.mip_levels | 0 || 1),
+    };
+    if (t.dimension === "cube") {
+      desc.size = [t.width, t.height, 6];
+    }
+    t.texture = dev.createTexture(desc);
+    if (t.cpu && !t.depth) {
+      const bpp = format === "rgba16float" ? 8 : 4;
       dev.queue.writeTexture(
         { texture: t.texture },
         t.cpu,
-        { bytesPerRow: t.width * 4 },
+        { bytesPerRow: t.width * bpp },
         [t.width, t.height],
       );
     }
     return t.texture;
   }
 
+  async function ensureDepthTexture(dev, t) {
+    t.depth = true;
+    t.format = t.format || "depth24plus";
+    const usage =
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.RENDER_ATTACHMENT |
+      GPUTextureUsage.COPY_SRC;
+    if (t.texture) return t.texture;
+    t.texture = dev.createTexture({
+      size: [t.width, t.height],
+      format: t.format,
+      usage,
+    });
+    return t.texture;
+  }
+
   async function ensureSampler(dev, s) {
     if (s.sampler) return s.sampler;
-    const filter = s.filter === 1 ? "linear" : "nearest";
-    s.sampler = dev.createSampler({ magFilter: filter, minFilter: filter });
+    const filter = s.filter === 1 ? "linear" : s.filter === 2 ? "linear" : "nearest";
+    const address = ["clamp-to-edge", "repeat", "mirror-repeat"][s.address | 0] || "clamp-to-edge";
+    s.sampler = dev.createSampler({
+      magFilter: filter === "linear" ? "linear" : "nearest",
+      minFilter: filter === "linear" ? "linear" : "nearest",
+      mipmapFilter: s.mip_filter === 1 ? "linear" : "nearest",
+      addressModeU: address,
+      addressModeV: address,
+      addressModeW: address,
+      compare: s.compare || undefined,
+    });
     return s.sampler;
   }
 
@@ -2069,7 +2102,18 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
     gpuSamplerCreate: (filter) => {
       const id = nextId++;
-      samplers.set(id, { sampler: null, filter: filter | 0 });
+      samplers.set(id, { sampler: null, filter: filter | 0, address: 0, mip_filter: 0 });
+      return id;
+    },
+
+    gpuSamplerCreateEx: (filter, address, mipFilter) => {
+      const id = nextId++;
+      samplers.set(id, {
+        sampler: null,
+        filter: filter | 0,
+        address: address | 0,
+        mip_filter: mipFilter | 0,
+      });
       return id;
     },
 
@@ -2078,7 +2122,41 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       const w = Math.max(1, width | 0);
       const h = Math.max(1, height | 0);
       textures.set(id, {
-        texture: null, width: w, height: h, cpu: new Uint8Array(w * h * 4), storage: false,
+        texture: null, width: w, height: h, cpu: new Uint8Array(w * h * 4),
+        storage: false, format: "rgba8unorm", mip_levels: 1,
+      });
+      return id;
+    },
+
+    gpuTextureCreateDepth: (width, height) => {
+      const id = nextId++;
+      const w = Math.max(1, width | 0);
+      const h = Math.max(1, height | 0);
+      textures.set(id, {
+        texture: null, width: w, height: h, cpu: null,
+        storage: false, format: "depth24plus", depth: true, mip_levels: 1,
+      });
+      return id;
+    },
+
+    gpuTextureCreateRgba16Float: (width, height) => {
+      const id = nextId++;
+      const w = Math.max(1, width | 0);
+      const h = Math.max(1, height | 0);
+      textures.set(id, {
+        texture: null, width: w, height: h, cpu: new Uint8Array(w * h * 8),
+        storage: false, format: "rgba16float", mip_levels: 1,
+      });
+      return id;
+    },
+
+    gpuTextureCreateCubeRgba8: (size) => {
+      const id = nextId++;
+      const s = Math.max(1, size | 0);
+      textures.set(id, {
+        texture: null, width: s, height: s, cpu: new Uint8Array(s * s * 4 * 6),
+        storage: false, format: "rgba8unorm", dimension: "cube",
+        depth_or_layers: 6, mip_levels: 1,
       });
       return id;
     },
@@ -2316,10 +2394,24 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     },
 
     gpuRenderPipelineCreate: async (vertexName, fragmentName) => {
+      return await host.gpuRenderPipelineCreateEx(
+        vertexName, fragmentName, 0, 0, 0, 0, 0, 0, 0, 1,
+      );
+    },
+
+    gpuRenderPipelineCreateEx: async (
+      vertexName, fragmentName,
+      topology, cullMode, frontFace,
+      depthEnabled, depthWrite, depthCompare,
+      blendEnabled, sampleCount,
+    ) => {
       try {
         const vsName = String(vertexName);
         const fsName = String(fragmentName);
-        const cacheKey = `${vsName}\0${fsName}`;
+        const cacheKey = [
+          vsName, fsName, topology, cullMode, frontFace,
+          depthEnabled, depthWrite, depthCompare, blendEnabled, sampleCount,
+        ].join("\0");
         if (renderPipelineCache.has(cacheKey)) {
           return renderPipelineCache.get(cacheKey);
         }
@@ -2349,6 +2441,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           const vis = (visibility | fragVis) || (GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT);
           if (b.kind === "uniform") {
             bindEntries.push({ binding: b.binding, visibility: vis, buffer: { type: "uniform" } });
+          } else if (b.kind === "storage") {
+            bindEntries.push({
+              binding: b.binding,
+              visibility: vis,
+              buffer: { type: b.read_write ? "storage" : "read-only-storage" },
+            });
           } else if (b.kind === "sampler") {
             bindEntries.push({ binding: b.binding, visibility: vis, sampler: { type: "filtering" } });
           } else if (b.kind === "texture") {
@@ -2356,6 +2454,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
               binding: b.binding,
               visibility: vis,
               texture: { sampleType: "float" },
+            });
+          } else if (b.kind === "depth_texture") {
+            bindEntries.push({
+              binding: b.binding,
+              visibility: vis,
+              texture: { sampleType: "depth" },
             });
           } else if (b.kind === "storage_texture") {
             bindEntries.push({
@@ -2378,9 +2482,37 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         }));
         const stride = (vsMeta.vertex_stride | 0) || 0;
         const vertexBuffers = stride > 0 && attribs.length > 0
-          ? [{ arrayStride: stride, attributes: attribs }]
+          ? [{ arrayStride: stride, stepMode: "vertex", attributes: attribs }]
           : [];
-        const pipeline = await dev.createRenderPipelineAsync({
+        const topologies = [
+          "triangle-list", "triangle-strip", "line-list", "line-strip", "point-list",
+        ];
+        const cullModes = ["none", "front", "back"];
+        const frontFaces = ["ccw", "cw"];
+        const compares = [
+          "less", "less-equal", "greater", "greater-equal", "always", "never",
+        ];
+        const colorTargets = Math.max(1, (fsMeta.color_targets | 0) || 1);
+        const targets = [];
+        for (let i = 0; i < colorTargets; i++) {
+          const target = { format };
+          if (blendEnabled) {
+            target.blend = {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+            };
+          }
+          targets.push(target);
+        }
+        const desc = {
           layout,
           vertex: {
             module: vsModule,
@@ -2390,16 +2522,33 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           fragment: {
             module: fsModule,
             entryPoint: fsMeta.entry,
-            targets: [{ format }],
+            targets,
           },
-          primitive: { topology: "triangle-list" },
-        });
+          primitive: {
+            topology: topologies[topology | 0] || "triangle-list",
+            cullMode: cullModes[cullMode | 0] || "none",
+            frontFace: frontFaces[frontFace | 0] || "ccw",
+          },
+          multisample: { count: Math.max(1, sampleCount | 0) },
+        };
+        if (depthEnabled) {
+          desc.depthStencil = {
+            format: "depth24plus",
+            depthWriteEnabled: !!depthWrite,
+            depthCompare: compares[depthCompare | 0] || "less",
+          };
+        }
+        const pipeline = await dev.createRenderPipelineAsync(desc);
         const id = nextId++;
-        renderPipelines.set(id, { pipeline, vsMeta, fsMeta, bgl });
+        renderPipelines.set(id, {
+          pipeline, vsMeta, fsMeta, bgl,
+          depthEnabled: !!depthEnabled,
+          sampleCount: Math.max(1, sampleCount | 0),
+        });
         renderPipelineCache.set(cacheKey, id);
         return id;
       } catch (e) {
-        console.error("Dream gpuRenderPipelineCreate:", e);
+        console.error("Dream gpuRenderPipelineCreateEx:", e);
         return -(classifyErr(e) || ERR_OTHER);
       }
     },
@@ -2408,61 +2557,15 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       surfaceId, pipelineId, vertexBufferId, vertexCount,
       uniforms, clearR, clearG, clearB, clearA,
     ) => {
-      try {
-        const s = surfaces.get(surfaceId);
-        if (!s) throw new Error(`unknown GpuSurface ${surfaceId}`);
-        const rp = renderPipelines.get(pipelineId);
-        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
-        const dev = await ensureDevice();
-        if (!s.context) {
-          s.context = s.canvas.getContext("webgpu");
-          if (!s.context) throw new Error("canvas webgpu context unavailable");
-        }
-        if (!s.configured) {
-          s.context.configure({
-            device: dev,
-            format: navigator.gpu.getPreferredCanvasFormat(),
-            alphaMode: "opaque",
-          });
-          s.configured = true;
-        }
-        const view = s.context.getCurrentTexture().createView();
-        const encoder = dev.createCommandEncoder();
-        const pass = encoder.beginRenderPass({
-          colorAttachments: [{
-            view,
-            clearValue: {
-              r: +clearR || 0,
-              g: +clearG || 0,
-              b: +clearB || 0,
-              a: clearA === undefined || clearA === null ? 1 : +clearA,
-            },
-            loadOp: "clear",
-            storeOp: "store",
-          }],
-        });
-        pass.setPipeline(rp.pipeline);
-        const vb = buffers.get(vertexBufferId);
-        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
-          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
-          pass.setVertexBuffer(0, gpuVb);
-        }
-        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
-        if (bg) pass.setBindGroup(0, bg);
-        pass.draw(Math.max(0, vertexCount | 0));
-        pass.end();
-        dev.queue.submit([encoder.finish()]);
-        await dev.queue.onSubmittedWorkDone();
-        return 0;
-      } catch (e) {
-        console.error("Dream gpuRenderDraw:", e);
-        return classifyErr(e);
-      }
+      return await host.gpuRenderDrawEx(
+        surfaceId, pipelineId, vertexBufferId, vertexCount, 1,
+        uniforms, clearR, clearG, clearB, clearA, -1, 0,
+      );
     },
 
-    gpuRenderDrawIndexed: async (
-      surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount,
-      uniforms, clearR, clearG, clearB, clearA,
+    gpuRenderDrawEx: async (
+      surfaceId, pipelineId, vertexBufferId, vertexCount, instanceCount,
+      uniforms, clearR, clearG, clearB, clearA, depthTextureId, loadOp,
     ) => {
       try {
         const s = surfaces.get(surfaceId);
@@ -2484,7 +2587,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         }
         const view = s.context.getCurrentTexture().createView();
         const encoder = dev.createCommandEncoder();
-        const pass = encoder.beginRenderPass({
+        const passDesc = {
           colorAttachments: [{
             view,
             clearValue: {
@@ -2493,10 +2596,100 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
               b: +clearB || 0,
               a: clearA === undefined || clearA === null ? 1 : +clearA,
             },
-            loadOp: "clear",
+            loadOp: (loadOp | 0) === 1 ? "load" : "clear",
             storeOp: "store",
           }],
-        });
+        };
+        if (rp.depthEnabled && depthTextureId >= 0) {
+          const dt = textures.get(depthTextureId);
+          if (!dt) throw new Error(`unknown depth GpuTexture ${depthTextureId}`);
+          await ensureDepthTexture(dev, dt);
+          passDesc.depthStencilAttachment = {
+            view: dt.texture.createView(),
+            depthClearValue: 1.0,
+            depthLoadOp: (loadOp | 0) === 1 ? "load" : "clear",
+            depthStoreOp: "store",
+          };
+        }
+        const pass = encoder.beginRenderPass(passDesc);
+        pass.setPipeline(rp.pipeline);
+        const vb = buffers.get(vertexBufferId);
+        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
+          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
+          pass.setVertexBuffer(0, gpuVb);
+        }
+        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
+        if (bg) pass.setBindGroup(0, bg);
+        pass.draw(Math.max(0, vertexCount | 0), Math.max(1, instanceCount | 0));
+        pass.end();
+        dev.queue.submit([encoder.finish()]);
+        await dev.queue.onSubmittedWorkDone();
+        return 0;
+      } catch (e) {
+        console.error("Dream gpuRenderDrawEx:", e);
+        return classifyErr(e);
+      }
+    },
+
+    gpuRenderDrawIndexed: async (
+      surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount,
+      uniforms, clearR, clearG, clearB, clearA,
+    ) => {
+      return await host.gpuRenderDrawIndexedEx(
+        surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount, 1,
+        uniforms, clearR, clearG, clearB, clearA, -1, 0,
+      );
+    },
+
+    gpuRenderDrawIndexedEx: async (
+      surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount, instanceCount,
+      uniforms, clearR, clearG, clearB, clearA, depthTextureId, loadOp,
+    ) => {
+      try {
+        const s = surfaces.get(surfaceId);
+        if (!s) throw new Error(`unknown GpuSurface ${surfaceId}`);
+        const rp = renderPipelines.get(pipelineId);
+        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
+        const dev = await ensureDevice();
+        if (!s.context) {
+          s.context = s.canvas.getContext("webgpu");
+          if (!s.context) throw new Error("canvas webgpu context unavailable");
+        }
+        if (!s.configured) {
+          s.context.configure({
+            device: dev,
+            format: navigator.gpu.getPreferredCanvasFormat(),
+            alphaMode: "opaque",
+          });
+          s.configured = true;
+        }
+        const view = s.context.getCurrentTexture().createView();
+        const encoder = dev.createCommandEncoder();
+        const passDesc = {
+          colorAttachments: [{
+            view,
+            clearValue: {
+              r: +clearR || 0,
+              g: +clearG || 0,
+              b: +clearB || 0,
+              a: clearA === undefined || clearA === null ? 1 : +clearA,
+            },
+            loadOp: (loadOp | 0) === 1 ? "load" : "clear",
+            storeOp: "store",
+          }],
+        };
+        if (rp.depthEnabled && depthTextureId >= 0) {
+          const dt = textures.get(depthTextureId);
+          if (!dt) throw new Error(`unknown depth GpuTexture ${depthTextureId}`);
+          await ensureDepthTexture(dev, dt);
+          passDesc.depthStencilAttachment = {
+            view: dt.texture.createView(),
+            depthClearValue: 1.0,
+            depthLoadOp: (loadOp | 0) === 1 ? "load" : "clear",
+            depthStoreOp: "store",
+          };
+        }
+        const pass = encoder.beginRenderPass(passDesc);
         pass.setPipeline(rp.pipeline);
         const vb = buffers.get(vertexBufferId);
         if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
@@ -2509,13 +2702,13 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         pass.setIndexBuffer(gpuIb, "uint32");
         const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
         if (bg) pass.setBindGroup(0, bg);
-        pass.drawIndexed(Math.max(0, indexCount | 0));
+        pass.drawIndexed(Math.max(0, indexCount | 0), Math.max(1, instanceCount | 0));
         pass.end();
         dev.queue.submit([encoder.finish()]);
         await dev.queue.onSubmittedWorkDone();
         return 0;
       } catch (e) {
-        console.error("Dream gpuRenderDrawIndexed:", e);
+        console.error("Dream gpuRenderDrawIndexedEx:", e);
         return classifyErr(e);
       }
     },

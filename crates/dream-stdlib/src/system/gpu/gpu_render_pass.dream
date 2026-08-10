@@ -39,16 +39,46 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4
     ): Result<bool, GpuError> {
-        let code = await Gpu.render_draw(
+        return await GpuRenderPass.draw_instanced(
+            surface,
+            pipeline,
+            vertices,
+            vertex_count,
+            1,
+            uniforms,
+            clear,
+            -1,
+            0
+        );
+    }
+
+    /// Draw with instancing, optional depth attachment, and load-op control.
+    /// `depth_texture_id` is `-1` for no depth; `load_op` is `0` clear / `1` load.
+    @web
+    public static async fun draw_instanced<T : unmanaged>(
+        surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        vertex_count: int,
+        instance_count: int,
+        uniforms: byte[],
+        clear: GpuVec4,
+        depth_texture_id: int,
+        load_op: int
+    ): Result<bool, GpuError> {
+        let code = await Gpu.render_draw_ex(
             surface.id,
             pipeline.id,
             vertices.id,
             vertex_count,
+            instance_count,
             uniforms,
             clear.x,
             clear.y,
             clear.z,
-            clear.w
+            clear.w,
+            depth_texture_id,
+            load_op
         );
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw failed"));
@@ -85,17 +115,48 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4
     ): Result<bool, GpuError> {
-        let code = await Gpu.render_draw_indexed(
+        return await GpuRenderPass.draw_indexed_instanced(
+            surface,
+            pipeline,
+            vertices,
+            indices,
+            index_count,
+            1,
+            uniforms,
+            clear,
+            -1,
+            0
+        );
+    }
+
+    /// Indexed draw with instancing, optional depth, and load-op control.
+    @web
+    public static async fun draw_indexed_instanced<T : unmanaged>(
+        surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        indices: GpuBuffer<int>,
+        index_count: int,
+        instance_count: int,
+        uniforms: byte[],
+        clear: GpuVec4,
+        depth_texture_id: int,
+        load_op: int
+    ): Result<bool, GpuError> {
+        let code = await Gpu.render_draw_indexed_ex(
             surface.id,
             pipeline.id,
             vertices.id,
             indices.id,
             index_count,
+            instance_count,
             uniforms,
             clear.x,
             clear.y,
             clear.z,
-            clear.w
+            clear.w,
+            depth_texture_id,
+            load_op
         );
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw_indexed failed"));

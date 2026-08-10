@@ -7,20 +7,26 @@ struct Vertex {
 }
 
 struct VsOut {
-    public position: GpuVec4;
+    @builtin("position")
+    public clip: GpuVec4;
+    @interpolate("perspective")
     public color: GpuVec4;
 }
 
 @vertex
 fun tri_vs(v: Vertex): VsOut {
     let o = VsOut();
-    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.clip = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
     o.color = v.color;
     return o;
 }
 
 @fragment
 fun tri_fs(v: VsOut): GpuVec4 {
+    // `front_facing` is injected for every @fragment entry.
+    if (!front_facing) {
+        return GpuVec4.of(0.1, 0.1, 0.1, 1.0);
+    }
     return v.color;
 }
 
@@ -46,9 +52,11 @@ async fun main(): void {
     let surface = surface_r.unwrap_or(GpuSurface());
     surface.configure(800, 600);
 
-    let pipe_r = await GpuRenderPipeline.create("tri_vs", "tri_fs");
+    // Explicit pipeline state (still triangle-list / no depth for this demo).
+    let desc = GpuRenderPipelineDesc.defaults();
+    let pipe_r = await GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc);
     if (pipe_r.is_err()) {
-        System.println("GpuRenderPipeline.create failed");
+        System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
     let pipe = pipe_r.unwrap_or(GpuRenderPipeline());

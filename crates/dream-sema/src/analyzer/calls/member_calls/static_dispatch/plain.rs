@@ -157,7 +157,9 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         self.check_compute_call(&store_sig, method.position, diagnostics);
-        if type_name == "GpuRenderPipeline" && method.text == "create" {
+        if type_name == "GpuRenderPipeline"
+            && (method.text == "create" || method.text == "create_ex")
+        {
             self.check_render_pipeline_create(params, method.position, diagnostics);
         }
 

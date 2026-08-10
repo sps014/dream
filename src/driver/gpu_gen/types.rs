@@ -45,6 +45,8 @@ pub struct GpuShaderInfo {
     pub vertex_stride: u32,
     /// Dream type name of the VS return / FS first param interface struct (empty if none).
     pub interface_ty: String,
+    /// Fragment stage: number of `@location` color targets (1 for bare `GpuVec4` return).
+    pub color_targets: u32,
     pub wgsl: String,
 }
 

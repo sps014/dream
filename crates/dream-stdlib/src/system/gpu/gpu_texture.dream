@@ -1,11 +1,13 @@
 module system.gpu;
 
-// RGBA8 texture (storage / blit source).
+// RGBA / depth / cube textures for compute paint and render passes.
 
 public class GpuTexture {
     public id: int;
     public width: int;
     public height: int;
+    /// `"rgba8unorm"`, `"rgba16float"`, `"depth24plus"`, or `"cube-rgba8unorm"`.
+    public format: string;
 
     // Allocates an empty RGBA8 texture of `width`×`height`.
     public static fun rgba8(width: int, height: int): GpuTexture {
@@ -13,6 +15,37 @@ public class GpuTexture {
         t.id = Gpu.texture_create_rgba8(width, height);
         t.width = width;
         t.height = height;
+        t.format = "rgba8unorm";
+        return t;
+    }
+
+    /// Depth attachment texture (`depth24plus`) for mesh pipelines.
+    public static fun depth24(width: int, height: int): GpuTexture {
+        let t = GpuTexture();
+        t.id = Gpu.texture_create_depth(width, height);
+        t.width = width;
+        t.height = height;
+        t.format = "depth24plus";
+        return t;
+    }
+
+    /// HDR color texture (`rgba16float`) for post / bloom targets.
+    public static fun rgba16float(width: int, height: int): GpuTexture {
+        let t = GpuTexture();
+        t.id = Gpu.texture_create_rgba16float(width, height);
+        t.width = width;
+        t.height = height;
+        t.format = "rgba16float";
+        return t;
+    }
+
+    /// Cube map with six `size`×`size` RGBA8 faces.
+    public static fun cube_rgba8(size: int): GpuTexture {
+        let t = GpuTexture();
+        t.id = Gpu.texture_create_cube_rgba8(size);
+        t.width = size;
+        t.height = size;
+        t.format = "cube-rgba8unorm";
         return t;
     }
 

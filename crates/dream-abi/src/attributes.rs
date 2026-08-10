@@ -469,6 +469,54 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "Optional WGSL @location(N) override on a vertex-attribute or varying field (default: declaration order).",
     },
+    // WGSL `@builtin(name)` on a struct field (e.g. `@builtin("position")`, `@builtin("frag_depth")`).
+    AttributeSpec {
+        name: "builtin",
+        targets: &[AttributeTarget::Field],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Marks a shader I/O field as a WGSL builtin (e.g. `\"position\"`, `\"frag_depth\"`). A field named `position: GpuVec4` is still accepted as sugar for `@builtin(\"position\")`.",
+    },
+    // WGSL `@interpolate(mode)` on a varying field.
+    AttributeSpec {
+        name: "interpolate",
+        targets: &[AttributeTarget::Field],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "WGSL interpolation qualifier on a varying (`\"perspective\"`, `\"linear\"`, or `\"flat\"`).",
+    },
+    // Explicit bind-group index override (default group 0).
+    AttributeSpec {
+        name: "group",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::Int],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Optional WGSL `@group(N)` override on a shader resource parameter (default: 0).",
+    },
+    // Explicit binding index override within a group.
+    AttributeSpec {
+        name: "binding",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::Int],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Optional WGSL `@binding(N)` override on a shader resource parameter (default: auto-assigned).",
+    },
 ];
 
 /// True when a parameter carries `@readonly` (compute storage → WGSL `read`).
@@ -830,6 +878,44 @@ pub fn field_location_override(attributes: &[AttributeNode]) -> Option<u32> {
         .first()
         .and_then(|t| t.as_int_text())
         .and_then(|s| s.parse().ok())
+}
+
+/// Optional `@builtin("name")` on a struct field. `None` when absent or malformed.
+pub fn field_builtin_name(attributes: &[AttributeNode]) -> Option<String> {
+    let attr = attributes.iter().find(|a| a.name.text == "builtin")?;
+    attr.args.first().and_then(|t| t.as_string()).map(|s| s.to_string())
+}
+
+/// Optional `@interpolate("mode")` on a varying field. `None` when absent or malformed.
+pub fn field_interpolate_mode(attributes: &[AttributeNode]) -> Option<String> {
+    let attr = attributes.iter().find(|a| a.name.text == "interpolate")?;
+    attr.args.first().and_then(|t| t.as_string()).map(|s| s.to_string())
+}
+
+/// Optional `@group(N)` on a shader parameter. `None` when absent or malformed.
+pub fn param_group_override(attributes: &[AttributeNode]) -> Option<u32> {
+    let attr = attributes.iter().find(|a| a.name.text == "group")?;
+    attr.args
+        .first()
+        .and_then(|t| t.as_int_text())
+        .and_then(|s| s.parse().ok())
+}
+
+/// Optional `@binding(N)` on a shader parameter. `None` when absent or malformed.
+pub fn param_binding_override(attributes: &[AttributeNode]) -> Option<u32> {
+    let attr = attributes.iter().find(|a| a.name.text == "binding")?;
+    attr.args
+        .first()
+        .and_then(|t| t.as_int_text())
+        .and_then(|s| s.parse().ok())
+}
+
+/// True when a field is the clip-space position builtin (`@builtin("position")` or name `position`).
+pub fn field_is_position_builtin(name: &str, attributes: &[AttributeNode]) -> bool {
+    if let Some(b) = field_builtin_name(attributes) {
+        return b == "position";
+    }
+    name == "position"
 }
 
 /// Workgroup size from `@compute` / `@compute(x[, y[, z]])`. Defaults to `(64, 1, 1)`.

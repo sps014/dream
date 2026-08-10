@@ -33,5 +33,7 @@ Requires WebGPU. Build first — a missing `.wasm` is a 404.
 ## Notes
 
 - Fullscreen triangle + `@fragment` raymarch (32 height steps, 3/5 octaves).
+- Uses `@builtin("position")`, `@gpu` helpers, `GpuMath.saturate`, and
+  `GpuRenderPipeline.create_ex` with `GpuRenderPipelineDesc.overlay()`.
 - Camera / `SEA_TIME` / colors match the author’s Seascape.shader.
 - Canvas backing store uses `devicePixelRatio` (see `ocean.html`).

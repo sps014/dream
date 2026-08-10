@@ -273,6 +273,17 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         st.samplers.insert(id, filter);
         id
     })?;
+    linker.func_wrap(
+        "Dream",
+        "gpuSamplerCreateEx",
+        |filter: i32, _address: i32, _mip: i32| -> i32 {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let id = st.next_id;
+            st.next_id += 1;
+            st.samplers.insert(id, filter);
+            id
+        },
+    )?;
 
     linker.func_wrap("Dream", "gpuPassBegin", || -> i32 {
         let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
@@ -425,6 +436,47 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             id
         },
     )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuTextureCreateDepth",
+        |w: i32, h: i32| -> i32 {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let id = st.next_id;
+            st.next_id += 1;
+            let ww = w.max(1);
+            let hh = h.max(1);
+            // Staging only — depth has no CPU pixel buffer on native.
+            st.textures.insert(id, (ww, hh, Vec::new()));
+            id
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuTextureCreateRgba16Float",
+        |w: i32, h: i32| -> i32 {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let id = st.next_id;
+            st.next_id += 1;
+            let ww = w.max(1);
+            let hh = h.max(1);
+            st.textures
+                .insert(id, (ww, hh, vec![0u8; (ww * hh * 8) as usize]));
+            id
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuTextureCreateCubeRgba8",
+        |size: i32| -> i32 {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let id = st.next_id;
+            st.next_id += 1;
+            let s = size.max(1);
+            st.textures
+                .insert(id, (s, s, vec![0u8; (s * s * 4 * 6) as usize]));
+            id
+        },
+    )?;
 
     linker.func_wrap(
         "Dream",
@@ -507,6 +559,24 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
     )?;
     linker.func_wrap(
         "Dream",
+        "gpuRenderPipelineCreateEx",
+        |mut caller: Caller<'_, ()>,
+         _vs: i32,
+         _fs: i32,
+         _topology: i32,
+         _cull: i32,
+         _ff: i32,
+         _de: i32,
+         _dw: i32,
+         _dc: i32,
+         _be: i32,
+         _sc: i32|
+         -> Result<i32> {
+            resolve_host_future_i32(&mut caller, -1)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
         "gpuRenderDraw",
         |mut caller: Caller<'_, ()>,
          _sid: i32,
@@ -518,6 +588,26 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
          _cg: f32,
          _cb: f32,
          _ca: f32|
+         -> Result<i32> {
+            resolve_host_future_i32(&mut caller, 1)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuRenderDrawEx",
+        |mut caller: Caller<'_, ()>,
+         _sid: i32,
+         _pid: i32,
+         _vb: i32,
+         _n: i32,
+         _inst: i32,
+         _uniforms: i32,
+         _cr: f32,
+         _cg: f32,
+         _cb: f32,
+         _ca: f32,
+         _depth: i32,
+         _load: i32|
          -> Result<i32> {
             resolve_host_future_i32(&mut caller, 1)
         },
@@ -536,6 +626,27 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
          _cg: f32,
          _cb: f32,
          _ca: f32|
+         -> Result<i32> {
+            resolve_host_future_i32(&mut caller, 1)
+        },
+    )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuRenderDrawIndexedEx",
+        |mut caller: Caller<'_, ()>,
+         _sid: i32,
+         _pid: i32,
+         _vb: i32,
+         _ib: i32,
+         _n: i32,
+         _inst: i32,
+         _uniforms: i32,
+         _cr: f32,
+         _cg: f32,
+         _cb: f32,
+         _ca: f32,
+         _depth: i32,
+         _load: i32|
          -> Result<i32> {
             resolve_host_future_i32(&mut caller, 1)
         },

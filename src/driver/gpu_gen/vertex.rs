@@ -10,7 +10,9 @@ use super::layout::{
 use super::stmt::emit_stmts;
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuShaderInfo};
-use dream_abi::attributes::has_readonly_attr;
+use dream_abi::attributes::{
+    has_readonly_attr, param_binding_override, param_group_override,
+};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
@@ -197,12 +199,13 @@ pub(super) fn emit_vertex(
         vertex_layout,
         vertex_stride,
         interface_ty,
+        color_targets: 0,
         wgsl,
     }
 }
 
 fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, String> {
-    let locs = assign_locations(decl, false)?;
+    let locs = assign_locations(decl)?;
     let sname = escape_wgsl_ident(&decl.name.text);
     let mut s = format!("struct {sname} {{\n");
     for field in &decl.fields {
@@ -226,6 +229,7 @@ fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, Str
 pub(super) enum ResClass {
     Texture { storage: bool },
     Sampler,
+    Storage { elem: String },
     Uniform { ty: String },
 }
 
@@ -236,10 +240,31 @@ pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
             storage: !readonly,
         },
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ResClass::Sampler,
+        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
+            ResClass::Storage {
+                elem: dream_ty_to_wgsl(&args[0]),
+            }
+        }
         other => ResClass::Uniform {
             ty: dream_ty_to_wgsl(other),
         },
     }
+}
+
+fn next_binding_slot(param: &ParameterNode, binding_idx: &mut u32) -> (u32, u32) {
+    let group = param_group_override(&param.attributes).unwrap_or(0);
+    let binding = match param_binding_override(&param.attributes) {
+        Some(n) => n,
+        None => {
+            let n = *binding_idx;
+            *binding_idx += 1;
+            n
+        }
+    };
+    if param_binding_override(&param.attributes).is_some() {
+        *binding_idx = (*binding_idx).max(binding + 1);
+    }
+    (group, binding)
 }
 
 pub(super) fn emit_resource_param(
@@ -255,25 +280,26 @@ pub(super) fn emit_resource_param(
         ResClass::Texture { storage } => {
             let pname = param.name.text.clone();
             let wgsl_name = format!("{entry}_{pname}");
+            let (group, binding) = next_binding_slot(param, binding_idx);
             let (kind, decl) = if storage {
                 (
                     "storage_texture",
                     format!(
-                        "@group(0) @binding({binding_idx}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
+                        "@group({group}) @binding({binding}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
                     ),
                 )
             } else {
                 (
                     "texture",
                     format!(
-                        "@group(0) @binding({binding_idx}) var {wgsl_name}: texture_2d<f32>;\n"
+                        "@group({group}) @binding({binding}) var {wgsl_name}: texture_2d<f32>;\n"
                     ),
                 )
             };
             header.push_str(&decl);
             bindings.push(GpuBinding {
                 name: pname,
-                binding: *binding_idx,
+                binding,
                 kind,
                 wgsl_ty: if storage {
                     "texture_storage_2d<rgba8unorm, write>".into()
@@ -283,31 +309,48 @@ pub(super) fn emit_resource_param(
                 read_write: storage,
                 atomic: false,
             });
-            *binding_idx += 1;
         }
         ResClass::Sampler => {
             let pname = param.name.text.clone();
             let wgsl_name = format!("{entry}_{pname}");
+            let (group, binding) = next_binding_slot(param, binding_idx);
             header.push_str(&format!(
-                "@group(0) @binding({binding_idx}) var {wgsl_name}: sampler;\n"
+                "@group({group}) @binding({binding}) var {wgsl_name}: sampler;\n"
             ));
             bindings.push(GpuBinding {
                 name: pname,
-                binding: *binding_idx,
+                binding,
                 kind: "sampler",
                 wgsl_ty: "sampler".into(),
                 read_write: false,
                 atomic: false,
             });
-            *binding_idx += 1;
+        }
+        ResClass::Storage { elem } => {
+            let pname = param.name.text.clone();
+            let wgsl_name = format!("{entry}_{pname}");
+            let (group, binding) = next_binding_slot(param, binding_idx);
+            let elem_ty = escape_wgsl_ident(&elem);
+            header.push_str(&format!(
+                "@group({group}) @binding({binding}) var<storage, read> {wgsl_name}: array<{elem_ty}>;\n"
+            ));
+            bindings.push(GpuBinding {
+                name: pname,
+                binding,
+                kind: "storage",
+                wgsl_ty: elem,
+                read_write: false,
+                atomic: false,
+            });
         }
         ResClass::Uniform { ty } => {
             *has_uniform = true;
             let pname = param.name.text.clone();
             uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
+            let (_group, binding) = next_binding_slot(param, binding_idx);
             bindings.push(GpuBinding {
                 name: pname,
-                binding: *binding_idx,
+                binding,
                 kind: "uniform",
                 wgsl_ty: ty,
                 read_write: false,

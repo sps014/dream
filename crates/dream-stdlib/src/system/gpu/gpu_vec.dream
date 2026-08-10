@@ -65,3 +65,69 @@ public struct GpuVec4 {
         return v;
     }
 }
+
+/// 2×2 column-major float matrix (`mat2x2<f32>` in WGSL).
+public struct GpuMat2 {
+    public c0: GpuVec2;
+    public c1: GpuVec2;
+
+    public static fun of(c0: GpuVec2, c1: GpuVec2): GpuMat2 {
+        let m = GpuMat2();
+        m.c0 = c0;
+        m.c1 = c1;
+        return m;
+    }
+
+    public static fun identity(): GpuMat2 {
+        return GpuMat2.of(GpuVec2.of(1.0, 0.0), GpuVec2.of(0.0, 1.0));
+    }
+}
+
+/// 3×3 column-major float matrix (`mat3x3<f32>` in WGSL).
+public struct GpuMat3 {
+    public c0: GpuVec3;
+    public c1: GpuVec3;
+    public c2: GpuVec3;
+
+    public static fun of(c0: GpuVec3, c1: GpuVec3, c2: GpuVec3): GpuMat3 {
+        let m = GpuMat3();
+        m.c0 = c0;
+        m.c1 = c1;
+        m.c2 = c2;
+        return m;
+    }
+
+    public static fun identity(): GpuMat3 {
+        return GpuMat3.of(
+            GpuVec3.of(1.0, 0.0, 0.0),
+            GpuVec3.of(0.0, 1.0, 0.0),
+            GpuVec3.of(0.0, 0.0, 1.0)
+        );
+    }
+}
+
+/// 4×4 column-major float matrix (`mat4x4<f32>` in WGSL).
+public struct GpuMat4 {
+    public c0: GpuVec4;
+    public c1: GpuVec4;
+    public c2: GpuVec4;
+    public c3: GpuVec4;
+
+    public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4 {
+        let m = GpuMat4();
+        m.c0 = c0;
+        m.c1 = c1;
+        m.c2 = c2;
+        m.c3 = c3;
+        return m;
+    }
+
+    public static fun identity(): GpuMat4 {
+        return GpuMat4.of(
+            GpuVec4.of(1.0, 0.0, 0.0, 0.0),
+            GpuVec4.of(0.0, 1.0, 0.0, 0.0),
+            GpuVec4.of(0.0, 0.0, 1.0, 0.0),
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+}

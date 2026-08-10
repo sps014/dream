@@ -1,0 +1,46 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+@vertex
+fun mesh_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.color = GpuVec4.of(1.0, 1.0, 1.0, 1.0);
+    return o;
+}
+
+@fragment
+fun mesh_fs(v: VsOut): GpuVec4 {
+    return v.color;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+    let depth = GpuTexture.depth24(64, 64);
+    let hdr = GpuTexture.rgba16float(64, 64);
+    let cube = GpuTexture.cube_rgba8(16);
+    let _samp = GpuSampler.create(1, 1, 1);
+    let desc = GpuRenderPipelineDesc.mesh();
+    let pipe = await GpuRenderPipeline.create_ex("mesh_vs", "mesh_fs", desc);
+    if (pipe.is_ok()) {
+        System.println("unexpected native pipeline");
+        return;
+    }
+    System.println(depth.format);
+    System.println(hdr.format);
+    System.println(cube.format);
+    System.println("ok");
+}

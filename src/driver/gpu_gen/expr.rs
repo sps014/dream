@@ -141,26 +141,80 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             format!("textureSample({tex}, {samp}, vec2<f32>({u}, {v}))")
         }
         "of" => {
-            // GpuVecN.of(...) → vecN<f32>(...)
-            let n = args.len();
-            let args_s = coerce_all("f32");
-            let joined = args_s.join(", ");
-            match n {
-                2 => format!("vec2<f32>({joined})"),
-                3 => format!("vec3<f32>({joined})"),
-                4 => format!("vec4<f32>({joined})"),
-                _ => format!("vec4<f32>({joined})"),
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            let tys: Vec<String> = args.iter().map(|a| infer_wgsl_ty(a, ctx)).collect();
+            if !tys.is_empty() && tys.iter().all(|t| t.starts_with("vec")) {
+                let joined = args_s.join(", ");
+                match args.len() {
+                    2 => format!("mat2x2<f32>({joined})"),
+                    3 => format!("mat3x3<f32>({joined})"),
+                    4 => format!("mat4x4<f32>({joined})"),
+                    _ => format!("mat4x4<f32>({joined})"),
+                }
+            } else {
+                let n = args.len();
+                let args_s = coerce_all("f32");
+                let joined = args_s.join(", ");
+                match n {
+                    2 => format!("vec2<f32>({joined})"),
+                    3 => format!("vec3<f32>({joined})"),
+                    4 => format!("vec4<f32>({joined})"),
+                    _ => format!("vec4<f32>({joined})"),
+                }
             }
+        }
+        "identity" => {
+            // GpuMatN.identity() — arity inferred from call site is lost; default mat4.
+            // Prefer explicit column constructors when size matters; identity is sugar.
+            "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into()
+        }
+        "mul2" | "mul3" | "mul4" | "matmul4" => {
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            format!(
+                "({} * {})",
+                args_s.first().cloned().unwrap_or_else(|| "m".into()),
+                args_s.get(1).cloned().unwrap_or_else(|| "v".into())
+            )
+        }
+        "transpose4" => {
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            format!(
+                "transpose({})",
+                args_s.first().cloned().unwrap_or_else(|| "m".into())
+            )
+        }
+        "length2" | "length4" => {
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            format!(
+                "length({})",
+                args_s.first().cloned().unwrap_or_else(|| "v".into())
+            )
+        }
+        "normalize2" | "normalize4" => {
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            format!(
+                "normalize({})",
+                args_s.first().cloned().unwrap_or_else(|| "v".into())
+            )
+        }
+        "dot2" | "dot4" => {
+            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
+            format!(
+                "dot({}, {})",
+                args_s.first().cloned().unwrap_or_else(|| "a".into()),
+                args_s.get(1).cloned().unwrap_or_else(|| "b".into())
+            )
         }
         "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin" | "cos" | "tan"
         | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
-        | "reflect" | "mix" | "pow" | "exp" => {
+        | "reflect" | "mix" | "pow" | "exp" | "log" | "sign" | "saturate" | "step" | "smoothstep"
+        | "fma" | "inversesqrt" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
-            // Scalar helpers still coerce floats; vector ops pass through.
             let scalar = matches!(
                 name,
                 "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin"
                     | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "mix" | "pow" | "exp"
+                    | "log" | "sign" | "saturate" | "step" | "smoothstep" | "fma" | "inversesqrt"
             );
             let args_s = if scalar {
                 coerce_all("f32")
@@ -182,14 +236,20 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     "abs({})",
                     args_s.first().cloned().unwrap_or_else(|| "0.0".into())
                 ),
-                "clamp" => format!(
-                    "clamp({}, {}, {})",
+                "clamp" | "smoothstep" | "fma" => format!(
+                    "{}({}, {}, {})",
+                    name,
                     args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
                 ),
-                "atan2" => format!(
-                    "atan2({}, {})",
+                "saturate" => format!(
+                    "clamp({}, 0.0, 1.0)",
+                    args_s.first().cloned().unwrap_or_else(|| "0.0".into())
+                ),
+                "atan2" | "step" | "pow" => format!(
+                    "{}({}, {})",
+                    name,
                     args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into())
                 ),
@@ -199,12 +259,8 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
                 ),
-                "pow" => format!(
-                    "pow({}, {})",
-                    args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
-                    args_s.get(1).cloned().unwrap_or_else(|| "1.0".into())
-                ),
-                "normalize" | "length" | "cross" | "reflect" | "dot" | "exp" => {
+                "normalize" | "length" | "cross" | "reflect" | "dot" | "exp" | "log" | "sign"
+                | "inversesqrt" => {
                     format!("{}({})", name, args_s.join(", "))
                 }
                 other => format!(

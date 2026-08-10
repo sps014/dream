@@ -2,7 +2,7 @@ module system.gpu;
 
 /// Math helpers for GPU shaders (`@compute` / `@vertex` / `@fragment`).
 /// Inside shaders the WGSL emitter maps these method names to WGSL builtins
-/// (`sin`, `normalize`, `cross`, …). On the CPU they use host `Math` (stubs for vec ops).
+/// (`sin`, `normalize`, `cross`, …). On the CPU they use host `Math` (stubs for vec/mat ops).
 
 public class GpuMath {
     public static fun min(a: float, b: float): float {
@@ -33,6 +33,11 @@ public class GpuMath {
     public static fun sqrt(x: float): float {
         return (float)(Math.sqrt((double)x).unwrap_or(0.0d));
     }
+    public static fun inversesqrt(x: float): float {
+        let s = GpuMath.sqrt(x);
+        if (s == 0.0) { return 0.0; }
+        return 1.0 / s;
+    }
     public static fun sin(x: float): float {
         return (float)Math.sin((double)x);
     }
@@ -54,25 +59,67 @@ public class GpuMath {
     public static fun atan2(y: float, x: float): float {
         return (float)Math.atan2((double)y, (double)x);
     }
+    public static fun log(x: float): float {
+        // CPU stub — shaders map to WGSL `log`. Host Math has no ln.
+        if (x <= 0.0) { return 0.0; }
+        return GpuMath.pow(x, 0.0) - 1.0; // 0 for positive x; shader path uses real log
+    }
+    public static fun sign(x: float): float {
+        if (x > 0.0) { return 1.0; }
+        if (x < 0.0) { return 0.0 - 1.0; }
+        return 0.0;
+    }
+    public static fun saturate(x: float): float {
+        return GpuMath.clamp(x, 0.0, 1.0);
+    }
+    public static fun step(edge: float, x: float): float {
+        if (x < edge) { return 0.0; }
+        return 1.0;
+    }
+    public static fun smoothstep(edge0: float, edge1: float, x: float): float {
+        let t = GpuMath.saturate((x - edge0) / (edge1 - edge0));
+        return t * t * (3.0 - 2.0 * t);
+    }
+    public static fun fma(a: float, b: float, c: float): float {
+        return a * b + c;
+    }
 
-    /// Euclidean length of `v` (WGSL `length`).
+    public static fun length2(v: GpuVec2): float {
+        return GpuMath.sqrt(v.x * v.x + v.y * v.y);
+    }
     public static fun length(v: GpuVec3): float {
         return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     }
+    public static fun length4(v: GpuVec4): float {
+        return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+    }
 
-    /// Unit vector in the direction of `v` (WGSL `normalize`).
+    public static fun normalize2(v: GpuVec2): GpuVec2 {
+        let len = GpuMath.length2(v);
+        if (len < 0.000001) { return GpuVec2.of(1.0, 0.0); }
+        return GpuVec2.of(v.x / len, v.y / len);
+    }
     public static fun normalize(v: GpuVec3): GpuVec3 {
         let len = GpuMath.length(v);
         if (len < 0.000001) { return GpuVec3.of(0.0, 1.0, 0.0); }
         return GpuVec3.of(v.x / len, v.y / len, v.z / len);
     }
+    public static fun normalize4(v: GpuVec4): GpuVec4 {
+        let len = GpuMath.length4(v);
+        if (len < 0.000001) { return GpuVec4.of(0.0, 0.0, 0.0, 1.0); }
+        return GpuVec4.of(v.x / len, v.y / len, v.z / len, v.w / len);
+    }
 
-    /// Dot product (WGSL `dot`).
+    public static fun dot2(a: GpuVec2, b: GpuVec2): float {
+        return a.x * b.x + a.y * b.y;
+    }
     public static fun dot(a: GpuVec3, b: GpuVec3): float {
         return a.x * b.x + a.y * b.y + a.z * b.z;
     }
+    public static fun dot4(a: GpuVec4, b: GpuVec4): float {
+        return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    }
 
-    /// Cross product (WGSL `cross`).
     public static fun cross(a: GpuVec3, b: GpuVec3): GpuVec3 {
         return GpuVec3.of(
             a.y * b.z - a.z * b.y,
@@ -81,24 +128,64 @@ public class GpuMath {
         );
     }
 
-    /// Reflect incident `i` about normal `n` (WGSL `reflect`). Both should be normalized.
     public static fun reflect(i: GpuVec3, n: GpuVec3): GpuVec3 {
         let d = 2.0 * GpuMath.dot(i, n);
         return GpuVec3.of(i.x - n.x * d, i.y - n.y * d, i.z - n.z * d);
     }
 
-    /// Mix scalars (WGSL `mix`): `(1 - t) * a + t * b`.
     public static fun mix(a: float, b: float, t: float): float {
         return a * (1.0 - t) + b * t;
     }
 
-    /// Raise `x` to power `e` (WGSL `pow`).
     public static fun pow(x: float, e: float): float {
         return (float)Math.pow((double)x, (double)e);
     }
 
-    /// Natural exponential (WGSL `exp`). CPU stub approximates via `pow`.
     public static fun exp(x: float): float {
         return GpuMath.pow(2.718281828, x);
+    }
+
+    /// Matrix × vector (`mat4 * vec4` in WGSL).
+    public static fun mul4(m: GpuMat4, v: GpuVec4): GpuVec4 {
+        return GpuVec4.of(
+            m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z + m.c3.x * v.w,
+            m.c0.y * v.x + m.c1.y * v.y + m.c2.y * v.z + m.c3.y * v.w,
+            m.c0.z * v.x + m.c1.z * v.y + m.c2.z * v.z + m.c3.z * v.w,
+            m.c0.w * v.x + m.c1.w * v.y + m.c2.w * v.z + m.c3.w * v.w
+        );
+    }
+
+    public static fun mul3(m: GpuMat3, v: GpuVec3): GpuVec3 {
+        return GpuVec3.of(
+            m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z,
+            m.c0.y * v.x + m.c1.y * v.y + m.c2.y * v.z,
+            m.c0.z * v.x + m.c1.z * v.y + m.c2.z * v.z
+        );
+    }
+
+    public static fun mul2(m: GpuMat2, v: GpuVec2): GpuVec2 {
+        return GpuVec2.of(
+            m.c0.x * v.x + m.c1.x * v.y,
+            m.c0.y * v.x + m.c1.y * v.y
+        );
+    }
+
+    /// Matrix × matrix (`mat4 * mat4` in WGSL).
+    public static fun matmul4(a: GpuMat4, b: GpuMat4): GpuMat4 {
+        return GpuMat4.of(
+            GpuMath.mul4(a, b.c0),
+            GpuMath.mul4(a, b.c1),
+            GpuMath.mul4(a, b.c2),
+            GpuMath.mul4(a, b.c3)
+        );
+    }
+
+    public static fun transpose4(m: GpuMat4): GpuMat4 {
+        return GpuMat4.of(
+            GpuVec4.of(m.c0.x, m.c1.x, m.c2.x, m.c3.x),
+            GpuVec4.of(m.c0.y, m.c1.y, m.c2.y, m.c3.y),
+            GpuVec4.of(m.c0.z, m.c1.z, m.c2.z, m.c3.z),
+            GpuVec4.of(m.c0.w, m.c1.w, m.c2.w, m.c3.w)
+        );
     }
 }

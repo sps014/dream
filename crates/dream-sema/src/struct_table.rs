@@ -18,6 +18,10 @@ pub struct StructFieldInfo {
     pub is_unowned: bool,
     /// Optional `@location(N)` override for vertex attributes / varyings.
     pub location: Option<u32>,
+    /// Optional `@builtin("name")` for shader I/O (e.g. `position`, `frag_depth`).
+    pub builtin: Option<String>,
+    /// Optional `@interpolate("mode")` for varyings (`perspective` / `linear` / `flat`).
+    pub interpolate: Option<String>,
 }
 
 impl StructFieldInfo {
@@ -102,6 +106,8 @@ impl StructTable {
                     is_weak: field.is_weak,
                     is_unowned: field.is_unowned,
                     location: dream_abi::attributes::field_location_override(&field.attributes),
+                    builtin: dream_abi::attributes::field_builtin_name(&field.attributes),
+                    interpolate: dream_abi::attributes::field_interpolate_mode(&field.attributes),
                 },
             );
             current_offset += size;

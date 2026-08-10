@@ -82,7 +82,7 @@ Stdlib APIs live under `system.*` packages — `import system;` for console I/O,
 | **Memory** | Deterministic ARC — no GC pauses, no manual `free` |
 | **Concurrency** | `async`/`await` with an in-module cooperative scheduler; `WebWorker` for real parallelism |
 | **JS interop** | Dynamic `js` type, `extern fun`, callbacks both ways, optional tree-shaken `*.web.runtime.js` / `*.node.runtime.js` |
-| **GPU** | `@compute` kernels → WGSL + `system.gpu` (WebGPU) |
+| **GPU** | `@compute` / `@vertex` / `@fragment` → WGSL + `system.gpu` (WebGPU; native stages buffers) |
 | **Metaprogramming** | `@json` and source generators |
 | **Stdlib** | Collections, strings/regex, JSON, files, HTTP, logging, crypto, GPU |
 

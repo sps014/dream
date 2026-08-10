@@ -112,9 +112,14 @@ impl Index {
                     .insert("system.json".to_string());
             }
 
-            // `@compute` kernels need `system.gpu` (GpuId3, GpuBuffer, …) even without an import.
+            // GPU stages / `@gpu` helpers need `system.gpu` even without an import.
             if program.functions.iter().any(|f| {
-                f.attributes.iter().any(|a| a.name.text == "compute")
+                f.attributes.iter().any(|a| {
+                    matches!(
+                        a.name.text.as_str(),
+                        "compute" | "vertex" | "fragment" | "gpu"
+                    )
+                })
             }) {
                 acc.requested_std_packages
                     .insert("system.gpu".to_string());

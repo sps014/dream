@@ -106,8 +106,20 @@ public class Gpu {
     @js("Dream", "gpuSamplerCreate")
     static extern fun sampler_create(filter: int): int;
 
+    @js("Dream", "gpuSamplerCreateEx")
+    static extern fun sampler_create_ex(filter: int, address: int, mip_filter: int): int;
+
     @js("Dream", "gpuTextureCreateRgba8")
     static extern fun texture_create_rgba8(width: int, height: int): int;
+
+    @js("Dream", "gpuTextureCreateDepth")
+    static extern fun texture_create_depth(width: int, height: int): int;
+
+    @js("Dream", "gpuTextureCreateRgba16Float")
+    static extern fun texture_create_rgba16float(width: int, height: int): int;
+
+    @js("Dream", "gpuTextureCreateCubeRgba8")
+    static extern fun texture_create_cube_rgba8(size: int): int;
 
     @js("Dream", "gpuTextureWriteRgba")
     static extern async fun texture_write_rgba(
@@ -163,6 +175,20 @@ public class Gpu {
     @js("Dream", "gpuRenderPipelineCreate")
     static extern async fun render_pipeline_create(vertex: string, fragment: string): int;
 
+    @js("Dream", "gpuRenderPipelineCreateEx")
+    static extern async fun render_pipeline_create_ex(
+        vertex: string,
+        fragment: string,
+        topology: int,
+        cull_mode: int,
+        front_face: int,
+        depth_enabled: int,
+        depth_write: int,
+        depth_compare: int,
+        blend_enabled: int,
+        sample_count: int
+    ): int;
+
     @web
     @js("Dream", "gpuRenderDraw")
     static extern async fun render_draw(
@@ -178,6 +204,23 @@ public class Gpu {
     ): int;
 
     @web
+    @js("Dream", "gpuRenderDrawEx")
+    static extern async fun render_draw_ex(
+        surface_id: int,
+        pipeline_id: int,
+        vertex_buffer_id: int,
+        vertex_count: int,
+        instance_count: int,
+        uniforms: byte[],
+        clear_r: float,
+        clear_g: float,
+        clear_b: float,
+        clear_a: float,
+        depth_texture_id: int,
+        load_op: int
+    ): int;
+
+    @web
     @js("Dream", "gpuRenderDrawIndexed")
     static extern async fun render_draw_indexed(
         surface_id: int,
@@ -190,6 +233,24 @@ public class Gpu {
         clear_g: float,
         clear_b: float,
         clear_a: float
+    ): int;
+
+    @web
+    @js("Dream", "gpuRenderDrawIndexedEx")
+    static extern async fun render_draw_indexed_ex(
+        surface_id: int,
+        pipeline_id: int,
+        vertex_buffer_id: int,
+        index_buffer_id: int,
+        index_count: int,
+        instance_count: int,
+        uniforms: byte[],
+        clear_r: float,
+        clear_g: float,
+        clear_b: float,
+        clear_a: float,
+        depth_texture_id: int,
+        load_op: int
     ): int;
 
     @js("Dream", "gpuBufferAllocVertexBytes")

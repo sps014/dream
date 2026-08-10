@@ -423,15 +423,15 @@ impl<'a> Analyzer<'a> {
         match &function.return_type {
             Some(Type::Struct(tok, None)) => {
                 if let Some(info) = self.struct_table.get_struct(&tok.text) {
-                    let pos = info.fields.get("position");
-                    let ok = match pos {
-                        Some(f) => matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4"),
-                        None => false,
-                    };
+                    let ok = info.fields.iter().any(|(fname, f)| {
+                        let is_pos = f.builtin.as_deref() == Some("position") || fname == "position";
+                        is_pos
+                            && matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4")
+                    });
                     if !ok {
                         diagnostics.report_error(
                             format!(
-                                "@vertex shader '{}' return struct '{}' must have a 'position: GpuVec4' field",
+                                "@vertex shader '{}' return struct '{}' must have a position builtin (`position: GpuVec4` or `@builtin(\"position\") GpuVec4`)",
                                 function.name.text, tok.text
                             ),
                             Some(function.name.position),
@@ -451,7 +451,7 @@ impl<'a> Analyzer<'a> {
             _ => {
                 diagnostics.report_error(
                     format!(
-                        "@vertex shader '{}' must return a value struct with a 'position: GpuVec4' field",
+                        "@vertex shader '{}' must return a value struct with a position builtin",
                         function.name.text
                     ),
                     Some(function.name.position),
@@ -462,7 +462,7 @@ impl<'a> Analyzer<'a> {
             if !is_render_param_type(&p.type_) {
                 diagnostics.report_error(
                     format!(
-                        "@vertex shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuTexture, and GpuSampler are allowed",
+                        "@vertex shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, @readonly GpuBuffer, GpuTexture, and GpuSampler are allowed",
                         function.name.text,
                         p.name.text,
                         p.type_.get_type()
@@ -502,9 +502,68 @@ impl<'a> Analyzer<'a> {
         }
         match &function.return_type {
             Some(Type::Struct(tok, None)) if tok.text == "GpuVec4" => {}
+            Some(Type::Struct(tok, None)) => {
+                if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                    let mut has_color = false;
+                    for (fname, field) in &info.fields {
+                        if let Some(b) = field.builtin.as_deref() {
+                            if b != "frag_depth" {
+                                diagnostics.report_error(
+                                    format!(
+                                        "@fragment shader '{}' output field '{}' has unsupported @builtin(\"{b}\")",
+                                        function.name.text, fname
+                                    ),
+                                    Some(function.name.position),
+                                );
+                            } else if !matches!(&field.type_, Type::Float(_)) {
+                                diagnostics.report_error(
+                                    format!(
+                                        "@fragment shader '{}' frag_depth field '{}' must be float",
+                                        function.name.text, fname
+                                    ),
+                                    Some(function.name.position),
+                                );
+                            }
+                        } else {
+                            has_color = true;
+                            if !matches!(&field.type_, Type::Struct(t, None) if t.text == "GpuVec4")
+                            {
+                                diagnostics.report_error(
+                                    format!(
+                                        "@fragment shader '{}' color output '{}' must be GpuVec4",
+                                        function.name.text, fname
+                                    ),
+                                    Some(function.name.position),
+                                );
+                            }
+                        }
+                    }
+                    if !has_color {
+                        diagnostics.report_error(
+                            format!(
+                                "@fragment shader '{}' output struct '{}' needs at least one color @location field",
+                                function.name.text, tok.text
+                            ),
+                            Some(function.name.position),
+                        );
+                    }
+                    self.check_location_duplicates(info, diagnostics, function.name.position);
+                } else {
+                    diagnostics.report_error(
+                        format!(
+                            "@fragment shader '{}' return type '{}' is not a known struct",
+                            function.name.text, tok.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
+            }
             _ => {
                 diagnostics.report_error(
-                    format!("@fragment shader '{}' must return GpuVec4", function.name.text),
+                    format!(
+                        "@fragment shader '{}' must return GpuVec4 or an unmanaged output struct",
+                        function.name.text
+                    ),
                     Some(function.name.position),
                 );
             }
@@ -513,17 +572,16 @@ impl<'a> Analyzer<'a> {
             if let Type::Struct(tok, None) = &first.type_ {
                 if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
                     if let Some(info) = self.struct_table.get_struct(&tok.text) {
-                        let pos = info.fields.get("position");
-                        let ok = match pos {
-                            Some(f) => {
-                                matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4")
-                            }
-                            None => false,
-                        };
+                        let ok = info.fields.iter().any(|(fname, f)| {
+                            let is_pos =
+                                f.builtin.as_deref() == Some("position") || fname == "position";
+                            is_pos
+                                && matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4")
+                        });
                         if !ok {
                             diagnostics.report_error(
                                 format!(
-                                    "@fragment shader '{}' input struct '{}' must include 'position: GpuVec4'",
+                                    "@fragment shader '{}' input struct '{}' must include a position builtin",
                                     function.name.text, tok.text
                                 ),
                                 Some(first.name.position),
@@ -538,7 +596,7 @@ impl<'a> Analyzer<'a> {
             if !is_render_param_type(&p.type_) {
                 diagnostics.report_error(
                     format!(
-                        "@fragment shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuTexture, and GpuSampler are allowed",
+                        "@fragment shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, @readonly GpuBuffer, GpuTexture, and GpuSampler are allowed",
                         function.name.text,
                         p.name.text,
                         p.type_.get_type()
@@ -558,7 +616,7 @@ impl<'a> Analyzer<'a> {
         let mut used = indexmap::IndexMap::<u32, String>::new();
         let mut auto = 0u32;
         for (fname, field) in &info.fields {
-            if fname == "position" {
+            if field.builtin.is_some() || fname == "position" {
                 continue;
             }
             let loc = match field.location {
@@ -624,7 +682,8 @@ fn is_compute_param_type(ty: &Type) -> bool {
     }
 }
 
-/// Vertex/fragment parameters: like compute but no `GpuBuffer` storage (attrs/uniforms/textures).
+/// Vertex/fragment parameters: primitives, unmanaged value structs, textures/samplers,
+/// and read-only `GpuBuffer<T>` (storage).
 fn is_render_param_type(ty: &Type) -> bool {
     match ty {
         Type::Integer(_)
@@ -634,6 +693,9 @@ fn is_render_param_type(ty: &Type) -> bool {
         | Type::UInt(_)
         | Type::Long(_)
         | Type::ULong(_) => true,
+        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
+            is_compute_elem_type(&args[0])
+        }
         Type::Struct(tok, None) => {
             if matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
                 return true;

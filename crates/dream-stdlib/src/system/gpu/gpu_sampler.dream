@@ -1,21 +1,31 @@
 module system.gpu;
 
-// Sampling state for `@compute` texture reads (`textureSampleLevel`).
+// Sampling state for texture reads (`textureSample` / `textureSampleLevel`).
 
 public class GpuSampler {
     public id: int;
 
-    // Linear filtering sampler.
+    // Linear filtering sampler (clamp-to-edge).
     public static fun linear(): GpuSampler {
         let s = GpuSampler();
         s.id = Gpu.sampler_create(1);
         return s;
     }
 
-    // Nearest-neighbor filtering sampler.
+    // Nearest-neighbor filtering sampler (clamp-to-edge).
     public static fun nearest(): GpuSampler {
         let s = GpuSampler();
         s.id = Gpu.sampler_create(0);
+        return s;
+    }
+
+    /// Custom filter / address / mip mode.
+    /// `filter`: `0` nearest, `1` linear.
+    /// `address`: `0` clamp-to-edge, `1` repeat, `2` mirror-repeat.
+    /// `mip_filter`: `0` nearest, `1` linear.
+    public static fun create(filter: int, address: int, mip_filter: int): GpuSampler {
+        let s = GpuSampler();
+        s.id = Gpu.sampler_create_ex(filter, address, mip_filter);
         return s;
     }
 }

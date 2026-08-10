@@ -1,0 +1,59 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    @builtin("position")
+    public clip: GpuVec4;
+    @interpolate("flat")
+    public id: float;
+}
+
+struct FsOut {
+    @location(0)
+    public color: GpuVec4;
+    @location(1)
+    public aux: GpuVec4;
+}
+
+@vertex
+fun vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.clip = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.id = (float)vertex_index;
+    return o;
+}
+
+@fragment
+fun fs(v: VsOut): FsOut {
+    let o = FsOut();
+    let face: float = 0.0;
+    if (front_facing) {
+        face = 1.0;
+    } else {
+        face = 0.5;
+    }
+    o.color = GpuVec4.of(face, v.id, 0.0, 1.0);
+    let fx: float = frag_coord.x;
+    let fy: float = frag_coord.y;
+    o.aux = GpuVec4.of(fx, fy, 0.0, 1.0);
+    return o;
+}
+
+@gpu
+fun use_math(m: GpuMat4, v: GpuVec4): GpuVec4 {
+    let n = GpuMath.mul4(m, v);
+    return GpuMath.normalize4(n);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+    System.println("ok");
+}

@@ -612,6 +612,41 @@ impl Builder {
                 ty: Some("GpuVec4".to_string()),
                 is_main: self.is_main,
             });
+            self.decls.push(Decl {
+                name: "front_facing".to_string(),
+                kind: SymKind::Variable,
+                detail: "(fragment builtin) front_facing: bool".to_string(),
+                doc_comment: Some(
+                    "True when the fragment comes from a front-facing primitive.".to_string(),
+                ),
+                start: func.name.position.start,
+                end: func.name.position.end,
+                scope,
+                ty: Some("bool".to_string()),
+                is_main: self.is_main,
+            });
+            for (name, doc) in [
+                (
+                    "sample_index",
+                    "Sample index within a multisampled fragment (injected when referenced).",
+                ),
+                (
+                    "primitive_index",
+                    "Primitive index (requires WGSL `enable primitive_index`; injected when referenced).",
+                ),
+            ] {
+                self.decls.push(Decl {
+                    name: name.to_string(),
+                    kind: SymKind::Variable,
+                    detail: format!("(fragment builtin) {}: int", name),
+                    doc_comment: Some(doc.to_string()),
+                    start: func.name.position.start,
+                    end: func.name.position.end,
+                    scope,
+                    ty: Some("int".to_string()),
+                    is_main: self.is_main,
+                });
+            }
         }
         for stmt in func.body {
             self.walk_stmt(stmt, scope);

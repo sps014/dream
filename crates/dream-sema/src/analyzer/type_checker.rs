@@ -101,7 +101,12 @@ impl<'a> Analyzer<'a> {
                 super::synthetic_token(TokenKind::IdentifierToken, "GpuVec4"),
                 None,
             );
+            let i32ty = Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int"));
+            let boolty = Type::Boolean(super::synthetic_token(TokenKind::DataTypeToken, "bool"));
             let _ = param_table.add_symbol("frag_coord".to_string(), v4);
+            let _ = param_table.add_symbol("front_facing".to_string(), boolty);
+            let _ = param_table.add_symbol("sample_index".to_string(), i32ty.clone());
+            let _ = param_table.add_symbol("primitive_index".to_string(), i32ty);
         }
         Ok(param_table)
     }

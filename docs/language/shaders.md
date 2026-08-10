@@ -3,11 +3,17 @@
 Dream can compile ordinary-looking functions into **WebGPU vertex and fragment
 shaders** (WGSL), the same way [`@compute`](compute.md) becomes a compute kernel.
 Mark top-level functions with `@vertex` / `@fragment`, link them with
-`GpuRenderPipeline.create`, and draw through `GpuRenderPass.draw`.
+`GpuRenderPipeline.create` / `create_ex`, and draw through `GpuRenderPass`.
 
-Native `dream run` does **not** execute render pipelines; use a browser with
-WebGPU (see [stdlib GPU](../stdlib/gpu.md) and
-[`sample/graphics/triangle/`](https://github.com/sps014/dream/tree/main/sample/graphics/triangle)).
+## Execution model
+
+| Target | What runs |
+|--------|-----------|
+| Browser (`dream.js` + WebGPU) | Real WGSL compute + render |
+| Native `dream run` | Buffer/texture **staging only** — dispatch/draw do not execute WGSL |
+
+Author shaders and host code everywhere; execute GPU work in a browser (or a future
+native wgpu host). Golden tests cover compile + staging; interactive samples need WebGPU.
 
 ## Quick start
 
@@ -21,8 +27,9 @@ struct Vertex {
 }
 
 struct VsOut {
-    public position: GpuVec4; // reserved name → clip-space builtin
-    public color: GpuVec4;    // varying (location 0 by order)
+    public position: GpuVec4; // sugar for @builtin("position")
+    @interpolate("perspective")
+    public color: GpuVec4;
 }
 
 @vertex
@@ -48,110 +55,79 @@ let _ = await GpuRenderPass.draw(surface, pipe, verts, 3);
 let _ = await surface.present();
 ```
 
-## Attributes (minimal)
+Depth-tested mesh with blending / cull:
+
+```dream
+let desc = GpuRenderPipelineDesc.mesh();
+let pipe = await GpuRenderPipeline.create_ex("vs", "fs", desc);
+let depth = GpuTexture.depth24(width, height);
+let _ = await GpuRenderPass.draw_instanced(
+    surface, pipe, verts, vertex_count, instance_count,
+    uniforms, clear, depth.id, 0
+);
+```
+
+## Attributes
 
 | Need | Default | Optional |
 |------|---------|----------|
 | Stage | — | **`@vertex` / `@fragment` required** |
 | Shared helpers | — | **`@gpu`** on ordinary functions called from shaders |
 | Attribute / varying slots | Field order → `0, 1, 2…` | `@location(N)` to remap |
-| Clip position | Field named **`position: GpuVec4`** on the VS return struct | — |
-| Fragment color | Return **`GpuVec4`** | — |
+| Clip position | Field named **`position: GpuVec4`** | or `@builtin("position")` on any `GpuVec4` field |
+| Interpolation | perspective | `@interpolate("flat"\|"linear"\|"perspective")` |
+| Fragment color | Return **`GpuVec4`** | or an output struct with `@location` colors (+ optional `@builtin("frag_depth")`) |
+| Bindings | auto `@group(0)` | `@group(N)` / `@binding(N)` on resource params |
 
-Do not put `@location` / `@builtin` on the happy path unless you need a remap.
+## Fragment outputs (MRT)
+
+```dream
+struct FsOut {
+    @location(0) public color: GpuVec4;
+    @location(1) public aux: GpuVec4;
+}
+
+@fragment
+fun fs(v: VsOut): FsOut {
+    let o = FsOut();
+    o.color = v.color;
+    o.aux = GpuVec4.of(frag_coord.x, frag_coord.y, 0.0, 1.0);
+    return o;
+}
+```
+
+## Builtins
+
+- Vertex: `vertex_index`, `instance_index`
+- Fragment: `frag_coord`, `front_facing`; `sample_index` / `primitive_index` when referenced
+  (the latter emits `enable primitive_index;`)
 
 ## `@gpu` helpers
 
-Shaders may only call:
-
-- other `@compute` / `@vertex` / `@fragment` / `@gpu` functions,
-- `GpuMath` / `GpuVec*` builtins.
-
-Ordinary functions must be marked **`@gpu`** to be callable from a shader. Those helpers are
-emitted as WGSL `fn`s and have **no** CPU/WASM body — calling them from normal (non-GPU) code
-is a **compile error**.
+Shaders may only call other GPU stages / `@gpu` helpers and `GpuMath` / `GpuVec*` /
+`GpuMat*` builtins. Helpers are emitted as WGSL `fn`s and are **not** callable from CPU code.
 
 ```dream
 @gpu
 fun sea_octave(ux: float, uz: float, choppy: float): float {
-    // … GpuMath only …
-    return GpuMath.pow(1.0 - GpuMath.pow(mx * mz, 0.65), choppy);
-}
-
-@vertex
-fun sea_vs(v: Vertex, time: float): VsOut {
-    let h = sea_octave(/* … */); // ok — callee is @gpu
-    // …
-}
-
-fun main(): void {
-    // error: cannot call @gpu helper 'sea_octave' from CPU code
-    // let x = sea_octave(0.0, 0.0, 1.0);
+    return GpuMath.pow(1.0 - GpuMath.pow(0.5, 0.65), choppy);
 }
 ```
 
-Helpers must use shader-safe types (`float`, `GpuVec*`, …) and cannot be generic or declare
-`@workgroup` locals. Stage entry points (`@vertex` / `@fragment` / `@compute`) likewise cannot
-be called like CPU functions — use `GpuRenderPipeline.create` / `Compute.run`.
+Rules: top-level only; not generic/async/extern; explicit non-void return type.
+
+## Matrices
+
+`GpuMat2` / `GpuMat3` / `GpuMat4` (column-major) plus `GpuMath.mul4` / `matmul4` /
+`transpose4` map to WGSL `matN` ops inside shaders.
 
 ## Rules
 
 - Top-level only; not async, generic, or extern; body skipped for MIR/WASM (emitted as WGSL).
-- `@vertex` returns a value struct with exactly one `position: GpuVec4` plus varyings.
-- `@fragment` first parameter is that same interface struct; return type is `GpuVec4`.
-- Injected builtins: `vertex_index` / `instance_index` (`int`) in VS; `frag_coord` (`GpuVec4`) in FS.
-- Cannot call `@vertex` / `@fragment` like CPU functions — use `GpuRenderPipeline.create`.
-- When both names passed to `create` are **string literals**, the compiler checks that the
-  shaders exist, have the right stages, and share the same interface struct.
-
-## `@gpu` helpers
-
-Factor shared math out of stage functions with **`@gpu`**. Helpers are emitted as WGSL `fn`s
-when referenced from a shader (or another `@gpu` helper) and are **not** callable from ordinary
-CPU code (same rule as calling a stage entry point).
-
-```dream
-@gpu
-fun sea_noise(x: float, z: float): float {
-    return GpuMath.fract(GpuMath.sin(x * 127.1 + z * 311.7) * 43758.5453);
-}
-
-@vertex
-fun vs(...): VsOut {
-    let n = sea_noise(v.xz.x, v.xz.y); // ok
-    ...
-}
-
-fun main(): void {
-    let _ = sea_noise(0.0, 0.0); // error: cannot call @gpu helper from CPU code
-}
-```
-
-Rules:
-
-- Top-level only; not generic, async, or extern; body skipped for MIR/WASM.
-- May call other `@gpu` helpers and `Gpu` / `GpuMath` / `GpuVec*` builtins.
-- Must declare an explicit non-void return type (needed for WGSL `fn` emission).
-- See [`sample/graphics/ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean).
-
-## Vectors
-
-### `GpuVec2` / `GpuVec3` / `GpuVec4`
-
-Unmanaged float vectors in `system.gpu`. Inside `@vertex` / `@fragment` / `@compute` they
-lower to WGSL `vecN<f32>`. Layout for vertex buffers: 8 / 12 / 16 bytes (tight floats).
-
-```dream
-let p = GpuVec3.of(0.0, 1.0, 0.0);
-let c = GpuVec4.of(0.1, 0.4, 0.8, 1.0);
-```
-
-`GpuMath.normalize` / `dot` / `cross` / `length` / `reflect` / `mix` / `pow` map to WGSL
-builtins inside shaders.
-
-### `GpuId3`
-
-Integer XYZ id for `@compute` builtins (`global_id`, …).
+- `@vertex` returns a value struct with a position builtin plus varyings.
+- `@fragment` first parameter is usually that interface struct; return `GpuVec4` or an output struct.
+- When names passed to `create` / `create_ex` are **string literals**, the compiler checks stages
+  and matching interface types.
 
 ## Related
 

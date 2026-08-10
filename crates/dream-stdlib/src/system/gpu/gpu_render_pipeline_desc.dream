@@ -1,0 +1,61 @@
+module system.gpu;
+
+/// Fixed-function state for `GpuRenderPipeline.create_ex`.
+///
+/// Topology: `0` triangle-list (default), `1` triangle-strip, `2` line-list,
+/// `3` line-strip, `4` point-list.
+/// Cull: `0` none, `1` front, `2` back.
+/// Front face: `0` ccw, `1` cw.
+/// Depth compare: `0` less, `1` less-equal, `2` greater, `3` greater-equal, `4` always, `5` never.
+public struct GpuRenderPipelineDesc {
+    public topology: int;
+    public cull_mode: int;
+    public front_face: int;
+    public depth_enabled: bool;
+    public depth_write: bool;
+    public depth_compare: int;
+    public blend_enabled: bool;
+    public sample_count: int;
+
+    /// Defaults suitable for opaque triangle meshes with depth testing.
+    public static fun mesh(): GpuRenderPipelineDesc {
+        let d = GpuRenderPipelineDesc();
+        d.topology = 0;
+        d.cull_mode = 2;
+        d.front_face = 0;
+        d.depth_enabled = true;
+        d.depth_write = true;
+        d.depth_compare = 0;
+        d.blend_enabled = false;
+        d.sample_count = 1;
+        return d;
+    }
+
+    /// Defaults for unlit UI / overlays (no depth, alpha blending).
+    public static fun overlay(): GpuRenderPipelineDesc {
+        let d = GpuRenderPipelineDesc();
+        d.topology = 0;
+        d.cull_mode = 0;
+        d.front_face = 0;
+        d.depth_enabled = false;
+        d.depth_write = false;
+        d.depth_compare = 0;
+        d.blend_enabled = true;
+        d.sample_count = 1;
+        return d;
+    }
+
+    /// Bare triangle-list defaults (matches legacy `GpuRenderPipeline.create`).
+    public static fun defaults(): GpuRenderPipelineDesc {
+        let d = GpuRenderPipelineDesc();
+        d.topology = 0;
+        d.cull_mode = 0;
+        d.front_face = 0;
+        d.depth_enabled = false;
+        d.depth_write = false;
+        d.depth_compare = 0;
+        d.blend_enabled = false;
+        d.sample_count = 1;
+        return d;
+    }
+}

@@ -12,7 +12,8 @@ struct Vertex {
 }
 
 struct VsOut {
-    public position: GpuVec4;
+    @builtin("position")
+    public clip: GpuVec4;
     public pad: float;
 }
 
@@ -201,7 +202,7 @@ fun apply_euler(dir: GpuVec3, ax: float, ay: float, az: float): GpuVec3 {
 @vertex
 fun sea_vs(v: Vertex): VsOut {
     let o = VsOut();
-    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.clip = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
     o.pad = 0.0;
     return o;
 }
@@ -246,9 +247,9 @@ fun sea_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
     let cg: float = GpuMath.mix(sky.y, sea.y, mix_k);
     let cb: float = GpuMath.mix(sky.z, sea.z, mix_k);
 
-    cr = GpuMath.pow(GpuMath.max(cr, 0.0001), 0.65);
-    cg = GpuMath.pow(GpuMath.max(cg, 0.0001), 0.65);
-    cb = GpuMath.pow(GpuMath.max(cb, 0.0001), 0.65);
+    cr = GpuMath.pow(GpuMath.saturate(cr), 0.65);
+    cg = GpuMath.pow(GpuMath.saturate(cg), 0.65);
+    cb = GpuMath.pow(GpuMath.saturate(cb), 0.65);
     return GpuVec4.of(cr, cg, cb, 1.0);
 }
 
@@ -278,9 +279,10 @@ async fun main(): void {
     if (h < 360) { h = 1080; }
     surface.configure(w, h);
 
-    let pipe_r = await GpuRenderPipeline.create("sea_vs", "sea_fs");
+    let desc = GpuRenderPipelineDesc.overlay();
+    let pipe_r = await GpuRenderPipeline.create_ex("sea_vs", "sea_fs", desc);
     if (pipe_r.is_err()) {
-        System.println("GpuRenderPipeline.create failed");
+        System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
     let pipe = pipe_r.unwrap_or(GpuRenderPipeline());

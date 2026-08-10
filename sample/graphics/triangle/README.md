@@ -1,7 +1,8 @@
 # Colored triangle (`@vertex` / `@fragment`)
 
 Minimal programmable graphics sample: a Dream `@vertex` + `@fragment` pair draws a
-colored triangle to a canvas.
+colored triangle to a canvas. Uses `@builtin("position")`, `@interpolate`,
+`front_facing`, and `GpuRenderPipeline.create_ex`.
 
 ## Build
 
@@ -34,17 +35,11 @@ not execute render pipelines; use the browser path.
 
 ## Shader API (happy path)
 
-Only `@vertex` / `@fragment` are required. Locations are declaration order; clip
-position is the field named `position: GpuVec4`.
-
 ```dream
-struct Vertex {
-    public pos: GpuVec2;
-    public color: GpuVec4;
-}
-
 struct VsOut {
-    public position: GpuVec4;
+    @builtin("position")
+    public clip: GpuVec4;
+    @interpolate("perspective")
     public color: GpuVec4;
 }
 
@@ -55,6 +50,11 @@ fun tri_vs(v: Vertex): VsOut { /* … */ }
 fun tri_fs(v: VsOut): GpuVec4 {
     return v.color;
 }
+
+let desc = GpuRenderPipelineDesc.defaults();
+let pipe = await GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc);
 ```
+
+A field named `position: GpuVec4` is still accepted as sugar for `@builtin("position")`.
 
 See [Vertex & fragment shaders](../../docs/language/shaders.md) and [`system.gpu`](../../docs/stdlib/gpu.md).

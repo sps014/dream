@@ -4,8 +4,8 @@ use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
-    build_struct_field_tys, emit_interface_struct_wgsl, find_struct, has_position_gpuvec4,
-    struct_name_of,
+    build_struct_field_tys, emit_fragment_out_struct_wgsl, emit_interface_struct_wgsl, find_struct,
+    fragment_color_target_count, has_position_gpuvec4, struct_name_of,
 };
 use super::stmt::emit_stmts;
 use super::types::GpuShaderInfo;
@@ -33,13 +33,40 @@ pub(super) fn emit_fragment(
     let mut uniform_fields = String::new();
     let mut has_uniform = false;
     let mut vary_param: Option<(String, String)> = None;
+    let mut return_ty_wgsl = "@location(0) vec4<f32>".to_string();
+    let mut color_targets = 1u32;
 
-    // Return must be GpuVec4.
     match &func.return_type {
-        Some(Type::Struct(tok, None)) if tok.text == "GpuVec4" => {}
+        Some(Type::Struct(tok, None)) if tok.text == "GpuVec4" => {
+            return_ty_wgsl = "@location(0) vec4<f32>".to_string();
+            color_targets = 1;
+        }
+        Some(Type::Struct(tok, None)) => {
+            if let Some(decl) = find_struct(program, &tok.text) {
+                match emit_fragment_out_struct_wgsl(decl) {
+                    Ok((s, sname)) => {
+                        struct_header.push_str(&s);
+                        return_ty_wgsl = sname;
+                        color_targets = fragment_color_target_count(decl);
+                    }
+                    Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+                }
+            } else {
+                diagnostics.report_error(
+                    format!(
+                        "@fragment '{}' return type '{}' is not a known struct",
+                        name, tok.text
+                    ),
+                    Some(func.name.position),
+                );
+            }
+        }
         _ => {
             diagnostics.report_error(
-                format!("@fragment '{}' must return GpuVec4", name),
+                format!(
+                    "@fragment '{}' must return GpuVec4 or an unmanaged output struct",
+                    name
+                ),
                 Some(func.name.position),
             );
         }
@@ -53,7 +80,7 @@ pub(super) fn emit_fragment(
                     if !has_position_gpuvec4(decl) {
                         diagnostics.report_error(
                             format!(
-                                "@fragment '{}' input struct '{}' must include 'position: GpuVec4' (shared with the linked @vertex return)",
+                                "@fragment '{}' input struct '{}' must include a position builtin (field named `position: GpuVec4` or `@builtin(\"position\")`)",
                                 name, sname
                             ),
                             Some(first.name.position),
@@ -101,7 +128,13 @@ pub(super) fn emit_fragment(
     }
 
     if has_uniform {
-        finalize_uniforms(&entry, binding_idx, &uniform_fields, &mut header, &mut bindings);
+        finalize_uniforms(
+            &entry,
+            binding_idx,
+            &uniform_fields,
+            &mut header,
+            &mut bindings,
+        );
     }
 
     let struct_fields = build_struct_field_tys(program);
@@ -133,13 +166,26 @@ pub(super) fn emit_fragment(
 
     let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
 
+    let uses_sample_index = body_mentions(func.body, "sample_index");
+    let uses_primitive_index = body_mentions(func.body, "primitive_index");
+
     let mut wgsl = String::new();
+    if uses_primitive_index {
+        wgsl.push_str("enable primitive_index;\n\n");
+    }
     wgsl.push_str(&struct_header);
     wgsl.push_str(&helpers);
     wgsl.push_str(&header);
     wgsl.push('\n');
     wgsl.push_str(&format!("@fragment\nfn {entry}(\n"));
     wgsl.push_str("  @builtin(position) frag_coord: vec4<f32>,\n");
+    wgsl.push_str("  @builtin(front_facing) front_facing: bool,\n");
+    if uses_sample_index {
+        wgsl.push_str("  @builtin(sample_index) _sample_index: u32,\n");
+    }
+    if uses_primitive_index {
+        wgsl.push_str("  @builtin(primitive_index) _primitive_index: u32,\n");
+    }
     if let Some((ref vp, ref sname)) = vary_param {
         wgsl.push_str(&format!(
             "  {}: {},\n",
@@ -147,8 +193,13 @@ pub(super) fn emit_fragment(
             escape_wgsl_ident(sname)
         ));
     }
-    wgsl.push_str(") -> @location(0) vec4<f32> {\n");
-    // Remap Dream `frag_coord` uses; builtin param is already named frag_coord.
+    wgsl.push_str(&format!(") -> {return_ty_wgsl} {{\n"));
+    if uses_sample_index {
+        wgsl.push_str("  let sample_index = i32(_sample_index);\n");
+    }
+    if uses_primitive_index {
+        wgsl.push_str("  let primitive_index = i32(_primitive_index);\n");
+    }
     wgsl.push_str(&body);
     wgsl.push_str("}\n");
 
@@ -160,6 +211,12 @@ pub(super) fn emit_fragment(
         vertex_layout: Vec::new(),
         vertex_stride: 0,
         interface_ty,
+        color_targets,
         wgsl,
     }
+}
+
+fn body_mentions(stmts: &[dream_syntax::nodes::statement::StatementNode<'_>], name: &str) -> bool {
+    // Debug formatting includes `text: "ident"` for every identifier token in the tree.
+    format!("{stmts:?}").contains(&format!("text: \"{name}\""))
 }

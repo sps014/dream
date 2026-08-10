@@ -57,13 +57,14 @@ fn shaders_json(shaders: &[GpuShaderInfo]) -> String {
             })
             .collect();
         entries.push(format!(
-            "{{ \"name\": \"{}\", \"stage\": \"{}\", \"entry\": \"{}\", \"bindings\": [{binds}], \"vertex_layout\": [{}], \"vertex_stride\": {}, \"interface\": \"{}\", \"source\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"stage\": \"{}\", \"entry\": \"{}\", \"bindings\": [{binds}], \"vertex_layout\": [{}], \"vertex_stride\": {}, \"interface\": \"{}\", \"color_targets\": {}, \"source\": \"{}\" }}",
             json_escape(&sh.name),
             sh.stage,
             json_escape(&sh.entry),
             layout.join(", "),
             sh.vertex_stride,
             json_escape(&sh.interface_ty),
+            sh.color_targets,
             json_escape(&sh.wgsl)
         ));
     }

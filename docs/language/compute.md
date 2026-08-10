@@ -7,6 +7,8 @@ boilerplate for the common case.
 You can start with a one-kernel SAXPY, build a reaction–diffusion sim, or study the full
 fluid demo. Native `dream run` stages GPU buffers but does **not** execute WGSL; use a
 browser with WebGPU for real GPU results (see [stdlib GPU](../stdlib/gpu.md)).
+This dual-tier model (compile everywhere, execute in-browser) is intentional until
+a native wgpu host lands.
 
 ## Quick start
 

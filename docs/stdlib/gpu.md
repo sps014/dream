@@ -265,6 +265,10 @@ Creates an RGBA8 texture. Starting point for fluid/life-style demos that store c
 let tex = GpuTexture.rgba8(w, h);
 ```
 
+#### `GpuTexture.depth24(width, height)` / `rgba16float(...)` / `cube_rgba8(size)`
+
+Depth attachments for mesh pipelines, HDR color targets, and cube maps.
+
 #### `await write_rgba(pixels)` / `await write_rgba_at(...)` / `await read_rgba()`
 
 CPU ↔ texture pixel transfers (`byte[]` RGBA). Use `write_*` to seed from CPU; `read_rgba` sparingly for screenshots or debugging.
@@ -278,12 +282,13 @@ let pixels = await tex.read_rgba();
 
 GPU-side copies between a `GpuBuffer<byte>` and a texture. Prefer these over readback+rewrite when moving packed pixel data entirely on the GPU.
 
-#### `GpuSampler.linear()` / `nearest()`
+#### `GpuSampler.linear()` / `nearest()` / `create(filter, address, mip_filter)`
 
-Sampling state for compute. `linear` for smooth interpolation; `nearest` for exact texel fetches (cellular automata, integer grids).
+Sampling state. `linear` / `nearest` clamp-to-edge; `create` picks filter, address mode (`0` clamp / `1` repeat / `2` mirror), and mip filter.
 
 ```dream
 let samp = GpuSampler.linear();
+let wrap = GpuSampler.create(1, 1, 1);
 ```
 
 #### `GpuSurface.from_canvas(canvas_id)` / `configure(w, h)` / `await present()`
@@ -308,18 +313,21 @@ switch (GpuSurface.from_canvas("fluid")) {
 
 ## Vertex / fragment draw
 
-See [Vertex & fragment shaders](../language/shaders.md). Use `GpuVec2`/`GpuVec3`/`GpuVec4`,
+See [Vertex & fragment shaders](../language/shaders.md). Use `GpuVec2`/`GpuVec3`/`GpuVec4`/`GpuMat4`,
 `GpuBuffer<T>.vertex` / `vertex_from`, then:
 
-- `await GpuRenderPipeline.create(vertex, fragment)` — links named shaders (string literals checked at compile time)
-- `await GpuRenderPass.draw(surface, pipeline, vertices, count)` — `@web`
-- `await GpuRenderPass.draw_ex(..., uniforms, clear)` — uniforms via `Uniforms.pack_f32` + clear color
-- `await GpuRenderPass.draw_indexed` / `draw_indexed_ex` — indexed draws (`GpuBuffer<int>` → uint32)
+- `await GpuRenderPipeline.create(vertex, fragment)` — default triangle-list pipeline
+- `await GpuRenderPipeline.create_ex(vertex, fragment, desc)` — topology / cull / depth / blend / MSAA via `GpuRenderPipelineDesc`
+- `await GpuRenderPass.draw` / `draw_ex` / `draw_instanced` — `@web` (optional depth attachment + load-op)
+- `await GpuRenderPass.draw_indexed` / `draw_indexed_ex` / `draw_indexed_instanced` — indexed draws (`GpuBuffer<int>` → uint32)
 
 ```dream
+let desc = GpuRenderPipelineDesc.mesh();
+let pipe = await GpuRenderPipeline.create_ex("vs", "fs", desc);
+let depth = GpuTexture.depth24(w, h);
 let uniforms = Uniforms.pack_f32([time, cam_y, cam_z, aspect]);
-let _ = await GpuRenderPass.draw_indexed_ex(
-    surface, pipe, verts, indices, count, uniforms, sky
+let _ = await GpuRenderPass.draw_indexed_instanced(
+    surface, pipe, verts, indices, count, 1, uniforms, sky, depth.id, 0
 );
 let _ = await surface.present();
 ```
@@ -336,7 +344,7 @@ Use load/store for integer grid updates; sample when you need interpolation.
 
 Float math that lowers to WGSL builtins inside `@compute` bodies. Prefer these over host `Math.*` — host math is not available in kernels, and `GpuMath` keeps types as `float`.
 
-Available: `min`, `max`, `abs`, `clamp`, `floor`, `ceil`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`.
+Available: `min`, `max`, `abs`, `clamp`, `floor`, `ceil`, `fract`, `sqrt`, `inversesqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `log`, `exp`, `pow`, `sign`, `saturate`, `step`, `smoothstep`, `fma`, vector `length`/`normalize`/`dot`/`cross`/`reflect`/`mix`, and matrix `mul2`/`mul3`/`mul4`/`matmul4`/`transpose4`.
 
 ```dream
 @compute(64)
@@ -368,11 +376,11 @@ fun count(flags: GpuBuffer<int>, n: int): void {
 | Host | Behavior |
 |------|----------|
 | Browser (`dream.js`) | Real WebGPU when available |
-| Native (`dream run`) | CPU staging; dispatch no-ops WGSL |
+| Native (`dream run`) | CPU staging; dispatch/draw do not execute WGSL (no native wgpu host yet) |
 
-`GpuSurface.from_canvas`, `configure`, `present`, `GpuRenderPass.blit`, and `GpuRenderPass.draw` /
-`draw_indexed` are `@web`-only — compiling for native or Node reports a compile error if those APIs
-are referenced. `GpuRenderPipeline.create` is available on all targets for compile-time checks;
-native still returns an error at runtime (no WebGPU render path).
+`GpuSurface.from_canvas`, `configure`, `present`, `GpuRenderPass.blit`, and draw helpers
+are `@web`-only — compiling for native or Node reports a compile error if those APIs
+are referenced. `GpuRenderPipeline.create` / `create_ex` are available on all targets for
+compile-time checks; native still returns an error at runtime (no WebGPU render path).
 
-See [Compute shaders](../language/compute.md).
+See [Compute shaders](../language/compute.md) and [Vertex & fragment shaders](../language/shaders.md).

@@ -5,12 +5,30 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 
-use libffi::middle::{arg, Cif, CodePtr, Type};
+use libffi::middle::{arg, Cif, Closure, CodePtr, Type};
+use libffi::low::{ffi_cif, Callback as FfiCallback};
 use libloading::Library;
 use serde::Deserialize;
+use std::cell::Cell;
+use std::ffi::c_void;
 use wasmtime::*;
 
 use super::memory::{required_memory, shared_bytes, shared_bytes_mut};
+
+/// Set for the duration of a native C call so Dream `fun` callbacks can re-enter the current
+/// wasmtime [`Caller`]. Only valid while blocked inside `ffi_call`.
+thread_local! {
+    static ACTIVE_CALLER: Cell<*mut Caller<'static, ()>> = const { Cell::new(std::ptr::null_mut()) };
+}
+
+/// Userdata for a libffi closure that forwards into a Dream funcref-table entry.
+struct DreamCbData {
+    funcidx: u32,
+    /// WASM value kinds for each C arg: `"i32"`, `"i64"`, `"f32"`, `"f64"`, `"ptr"` (as i64).
+    arg_kinds: Vec<&'static str>,
+    /// `"i32"`, `"i64"`, `"void"`, …
+    ret_kind: &'static str,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 struct AbiFile {

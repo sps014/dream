@@ -158,18 +158,7 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
             "print_string",
             |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
                 let mem = c.get_export("memory").unwrap().into_shared_memory().unwrap();
-                let data = host::shared_bytes(&mem);
-                // Length-prefixed string: `[len: i32][utf8...][\0]` at the data pointer.
-                let base = ptr as usize;
-                let len = i32::from_le_bytes([
-                    data[base],
-                    data[base + 1],
-                    data[base + 2],
-                    data[base + 3],
-                ]) as usize;
-                let start = base + 4;
-                let end = (start + len).min(data.len());
-                let s = String::from_utf8_lossy(&data[start..end]).into_owned();
+                let s = host::read_string_from_memory(&mem, ptr);
                 c.data().lock().unwrap().push_str(&s);
             },
         )

@@ -57,6 +57,8 @@ fn worker_debug() -> Option<Arc<dyn WorkerDebug>> {
 
 const TAG_STRING: i32 = abi::TAG_STRING;
 const LEN_PREFIX: i32 = abi::LEN_PREFIX_SIZE as i32;
+const STRING_HEADER: i32 = abi::STRING_HEADER_SIZE as i32;
+const STRING_UTF8: usize = abi::STRING_UTF8_OFFSET as usize;
 
 /// A unit of work sent from the owner to a worker thread: which `fun(string): string` body to
 /// run (its function-table index plus closure environment word) and the message to run it with.
@@ -176,16 +178,21 @@ fn store_write_string(
 ) -> Option<i32> {
     let bytes = s.as_bytes();
     let ptr = malloc
-        .call(&mut *store, (LEN_PREFIX + bytes.len() as i32, TAG_STRING))
+        .call(
+            &mut *store,
+            (STRING_HEADER + bytes.len() as i32, TAG_STRING),
+        )
         .ok()?;
     let base = ptr as usize;
     let data = super::memory::shared_bytes_mut(memory);
-    if base + LEN_PREFIX as usize + bytes.len() > data.len() {
+    if base + STRING_UTF8 + bytes.len() > data.len() {
         return None;
     }
-    data[base..base + LEN_PREFIX as usize].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
-    data[base + LEN_PREFIX as usize..base + LEN_PREFIX as usize + bytes.len()]
-        .copy_from_slice(bytes);
+    data[base..base + LEN_PREFIX as usize]
+        .copy_from_slice(&(bytes.len() as i32).to_le_bytes());
+    data[base + LEN_PREFIX as usize..base + STRING_HEADER as usize]
+        .copy_from_slice(&(s.chars().count() as i32).to_le_bytes());
+    data[base + STRING_UTF8..base + STRING_UTF8 + bytes.len()].copy_from_slice(bytes);
     Some(ptr)
 }
 

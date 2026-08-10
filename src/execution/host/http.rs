@@ -61,10 +61,7 @@ where
     std::thread::spawn(move || {
         let _ = tx.send(f());
     });
-    match rx.recv_timeout(wall) {
-        Ok(out) => Some(out),
-        Err(_) => None,
-    }
+    rx.recv_timeout(wall).ok()
 }
 
 fn response_head(response: &reqwest::blocking::Response) -> String {

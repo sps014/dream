@@ -64,6 +64,7 @@ impl MirPass for Dse {
                     | Statement::Retain(_)
                     | Statement::Release(_)
                     | Statement::ForceFree(_)
+                    | Statement::ArrayElemsCopy { .. }
                     // A lock acquire/release is a cross-thread synchronization point: any store
                     // pending before it must be visible to another thread that may observe this
                     // object once the lock changes hands, so it is a barrier like every other

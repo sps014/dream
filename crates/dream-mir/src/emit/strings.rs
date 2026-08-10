@@ -67,10 +67,10 @@ pub(super) fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<
 
 /// Interns every string constant in the program to a data pointer, in first-appearance order
 /// (deterministic). Each string is a heap-object block
-/// `[size=0][tag=STRING][ref_count=1][len: i32][utf8]`; the mapped address points at the length
-/// word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at `ptr+4`, so it is a valid
-/// runtime string pointer. There is no NUL terminator (the length prefix makes it redundant). Blocks
-/// are laid out consecutively, 4-byte aligned.
+/// `[size=0][tag=STRING][ref_count=1][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
+/// points at the byte_len word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at
+/// `ptr+8`, so it is a valid runtime string pointer. There is no NUL terminator (the length prefix
+/// makes it redundant). Blocks are laid out consecutively, 4-byte aligned.
 ///
 /// When `locate_panics` is true (debug / debug-info builds), every checked site gets a unique
 /// file:line panic message. Release builds pass false and intern only the four shared base
@@ -138,8 +138,8 @@ pub(super) fn string_table(
         .chain(found);
     for s in found {
         if !map.contains_key(&s) {
-            // 12-byte heap header + 4-byte length prefix + utf8 bytes (no NUL terminator).
-            let total = HEAP_HEADER_SIZE + 4 + s.len() as u32;
+            // 12-byte heap header + 8-byte string header (byte_len + scalar_len) + utf8 bytes.
+            let total = HEAP_HEADER_SIZE + 8 + s.len() as u32;
             map.insert(s, block + HEAP_HEADER_SIZE);
             block += (total + 3) & !3;
         }
@@ -266,6 +266,20 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         }
         Statement::Print { arg, .. } => strings_in_operand(arg, out),
         Statement::ForceFree(o) => strings_in_operand(o, out),
+        Statement::ArrayElemsCopy {
+            dst,
+            dst_off,
+            src,
+            src_off,
+            count,
+            ..
+        } => {
+            strings_in_operand(dst, out);
+            strings_in_operand(dst_off, out);
+            strings_in_operand(src, out);
+            strings_in_operand(src_off, out);
+            strings_in_operand(count, out);
+        },
         Statement::LockAcquire(o) | Statement::LockRelease(o) => strings_in_operand(o, out),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
@@ -395,6 +409,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::IndirectCall { .. }
         | Statement::Print { .. }
         | Statement::ForceFree(_)
+        | Statement::ArrayElemsCopy { .. }
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
         | Statement::Nop
@@ -451,13 +466,19 @@ pub(super) fn strings_in_terminator(t: &Terminator, out: &mut Vec<String>) {
 }
 
 /// Escapes an interned string's full heap-block bytes as `\HH` pairs: the 12-byte header
-/// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the length prefix (`len` as a
-/// little-endian i32), then the utf8 bytes. No NUL terminator (the length prefix makes it redundant).
+/// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the string data header
+/// (`byte_len`, `scalar_len` as little-endian i32s), then the utf8 bytes. No NUL terminator.
 /// Written at the block start (the mapped address minus [`HEAP_HEADER_SIZE`]); the mapped address
-/// itself points at the length word.
+/// itself points at the byte_len word.
 pub(super) fn escape_data(s: &str) -> String {
     let mut out = String::new();
-    for word in [0_i32, STRING_TAG, 1, s.len() as i32] {
+    for word in [
+        0_i32,
+        STRING_TAG,
+        1,
+        s.len() as i32,
+        s.chars().count() as i32,
+    ] {
         for b in word.to_le_bytes() {
             let _ = write!(out, "\\{:02x}", b);
         }

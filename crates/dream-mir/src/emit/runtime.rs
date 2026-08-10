@@ -4,7 +4,11 @@ use super::*;
 /// `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
 /// `Debug.*` probes); under `--release` the placeholders expand to nothing so the hot allocation
 /// path carries no extra instructions.
-pub(super) fn runtime_prelude(debug: bool) -> String {
+///
+/// When `needs_threads` is false (no `WebWorker` / worker-pool host imports in the module), the
+/// allocator spinlock around `$malloc`/`$free` is also elided: a single-threaded instance never
+/// races on the free lists, so the atomic acquire/release is pure overhead.
+pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
     let (malloc_count, free_count) = if debug {
         (
             "global.get $live_objects\n    i32.const 1\n    i32.add\n    global.set $live_objects\n    \
@@ -14,9 +18,16 @@ pub(super) fn runtime_prelude(debug: bool) -> String {
     } else {
         ("", "")
     };
+    let (lock_acquire, lock_release) = if needs_threads {
+        ("call $__alloc_lock_acquire", "call $__alloc_lock_release")
+    } else {
+        ("", "")
+    };
     let mut out = RUNTIME_ALLOCATOR
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count)
+        .replace(";;@ALLOC_LOCK_ACQUIRE@", lock_acquire)
+        .replace(";;@ALLOC_LOCK_RELEASE@", lock_release)
         .replace(
             "{ALLOC_LOCK_ADDR}",
             &crate::abi::ALLOC_LOCK_ADDR.to_string(),
@@ -33,6 +44,23 @@ pub(super) fn runtime_prelude(debug: bool) -> String {
             .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string()),
     );
     out
+}
+
+/// True when this module imports any `WebWorker` / worker-pool host function. Only those programs
+/// share linear memory across instances, so only they need the allocator spinlock.
+pub(super) fn module_needs_threads(mir: &crate::Mir) -> bool {
+    mir.imports.iter().any(|imp| {
+        imp.module == "Dream"
+            && matches!(
+                imp.field.as_str(),
+                "workerSpawn"
+                    | "workerPost"
+                    | "workerRecv"
+                    | "workerTerminate"
+                    | "workerPoolSpawn"
+                    | "workerPoolDispatch"
+            )
+    })
 }
 
 /// Builds the `*_to_string` runtime (object formatters + generated `$bool_to_string` + the float/
@@ -64,12 +92,12 @@ pub(super) fn to_string_runtime(strings: &IndexMap<String, u32>) -> String {
 }
 
 /// The heap starts (8-byte aligned) above the interned string segment, never below the string base.
-/// Each interned string's mapped address points at its length word; its block extends `4 + len`
-/// bytes beyond that (the length prefix + utf8, no NUL terminator).
+/// Each interned string's mapped address points at its byte_len word; its block extends
+/// [`STRING_HEADER_SIZE`] + utf8 length beyond that (`[byte_len][scalar_len][utf8]`, no NUL).
 pub(super) fn heap_base(strings: &IndexMap<String, u32>) -> u32 {
     let end = strings
         .iter()
-        .map(|(s, addr)| addr + 4 + s.len() as u32)
+        .map(|(s, addr)| addr + crate::abi::STRING_HEADER_SIZE + s.len() as u32)
         .max()
         .unwrap_or(STRING_BASE);
     (end.max(STRING_BASE) + 7) & !7

@@ -911,11 +911,15 @@ fn lookup_json_error_span(
 #[cfg(feature = "native")]
 fn harness_wat_path() -> Result<String, String> {
     // Fingerprint harness + generator Dream sources so a stdlib edit invalidates the cache.
+    // Also fold string ABI constants + StringBuilder: a stale harness WAT with the old
+    // `[len][utf8@+4]` layout will fail host `read_string` after a string-layout change.
     let fingerprint = {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         let mut h = DefaultHasher::new();
         HARNESS_SOURCE.hash(&mut h);
+        dream_mir::abi::STRING_HEADER_SIZE.hash(&mut h);
+        dream_mir::abi::STRING_UTF8_OFFSET.hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
             .hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
@@ -926,6 +930,10 @@ fn harness_wat_path() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
         h.finish()
     };
     let entry = super::current_entry_file();

@@ -64,7 +64,8 @@ public ref struct Span<T> {
     }
 
     // Copies every element of `src` into this span starting at index 0. Traps if `src` is longer
-    // than this span.
+    // than this span. Reference elements go through ordinary assignment (retain/release); the
+    // unmanaged specialization below bulk-blits instead.
     public fun copy_from(src: Span<T>): void {
         if (src._length > this._length) {
             System.panic("Span copy_from overflow");
@@ -74,6 +75,14 @@ public ref struct Span<T> {
             this.array[this.offset + i] = src.array[src.offset + i];
             i = i + 1;
         }
+    }
+
+    // Unmanaged fast path: one `memory.copy` of `src._length * sizeof(T)` bytes.
+    public fun copy_from(src: Span<T>): void where T : unmanaged {
+        if (src._length > this._length) {
+            System.panic("Span copy_from overflow");
+        }
+        Buffer.elems_copy<T>(this.array, this.offset, src.array, src.offset, src._length);
     }
 
     // Fills every element of this span with `value`.
@@ -93,6 +102,13 @@ public ref struct Span<T> {
             result[i] = this.array[this.offset + i];
             i = i + 1;
         }
+        return result;
+    }
+
+    // Unmanaged fast path: allocate then bulk-blit.
+    public fun to_array(): T[] where T : unmanaged {
+        let result = Buffer.alloc<T>(this._length);
+        Buffer.elems_copy<T>(result, 0, this.array, this.offset, this._length);
         return result;
     }
 }

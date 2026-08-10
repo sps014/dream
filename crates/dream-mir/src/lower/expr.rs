@@ -195,6 +195,9 @@ impl Lowerer<'_> {
             HExprKind::ForceFree(_) => {
                 unreachable!("HExprKind::ForceFree is void-typed and only ever lowered as a bare statement in lower_stmt")
             }
+            HExprKind::ArrayElemsCopy { .. } => {
+                unreachable!("HExprKind::ArrayElemsCopy is void-typed and only ever lowered as a bare statement in lower_stmt")
+            }
             HExprKind::HashCode(e) => Rvalue::HashCode(self.lower_operand(e)),
             HExprKind::ToString(e) => Rvalue::ToString(self.lower_operand(e)),
             HExprKind::Concat(a, b) => Rvalue::Concat(self.lower_operand(a), self.lower_operand(b)),

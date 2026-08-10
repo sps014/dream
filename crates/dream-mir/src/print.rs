@@ -87,6 +87,22 @@ fn stmt(s: &Statement) -> String {
         Statement::DebugLine(line) => format!("dbg_line {}", line),
         Statement::SourceLine(line) => format!("src_line {}", line),
         Statement::ForceFree(o) => format!("force_free {}", operand(o)),
+        Statement::ArrayElemsCopy {
+            elem_ty,
+            dst,
+            dst_off,
+            src,
+            src_off,
+            count,
+        } => format!(
+            "array_elems_copy::<ty{}>({}, {}, {}, {}, {})",
+            elem_ty.0,
+            operand(dst),
+            operand(dst_off),
+            operand(src),
+            operand(src_off),
+            operand(count)
+        ),
         Statement::LockAcquire(o) => format!("lock_acquire {}", operand(o)),
         Statement::LockRelease(o) => format!("lock_release {}", operand(o)),
     }

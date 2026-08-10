@@ -1,13 +1,13 @@
 //! Scalar replacement of aggregates. A struct allocated with the implicit zero-initializing default
 //! constructor (`New { ctor: None }`) that never escapes — used only as the base of `obj.field`
-//! loads and stores, never read whole, passed to a call, returned, stored elsewhere, indexed, or
-//! reference-counted — has each of its fields promoted to a plain local. The allocation then becomes
-//! dead (removed here) and the field locals feed the scalar pipeline (prop / GVN / DCE).
+//! loads and stores, never read whole, passed to a call, returned, stored elsewhere, or indexed —
+//! has each of its fields promoted to a plain local. The allocation then becomes dead (removed
+//! here) and the field locals feed the scalar pipeline (prop / GVN / DCE).
 //!
-//! The escape analysis is deliberately strict: the *only* statements allowed to mention the object
-//! are its single `New` definition, field stores `obj.f = <op>`, and field loads `x = obj.f`. Any
-//! other appearance (including an RC `Retain`/`Release`, which every heap object normally has) aborts
-//! promotion, so the transform is always sound.
+//! RC `Retain`/`Release` on the object local itself are allowed and dropped during transform (the
+//! promoted scalars are no longer a heap object). Promotion is restricted to structs whose every
+//! *accessed* field is a non-reference type, so field stores cannot under-retain a heap value that
+//! lived only as a field of the eliminated object.
 
 use super::licm::{stmt_reads, terminator_reads};
 use super::MirPass;
@@ -48,6 +48,14 @@ fn promote_one(func: &mut MirFunction, interner: &TypeInterner) -> bool {
         if fields.is_empty() {
             continue;
         }
+        // Only unlock numeric / unmanaged helper structs: a reference-typed field store would leave
+        // the promoted local without the retain/release the heap object path would have done.
+        if fields
+            .values()
+            .any(|ty| interner.is_reference(*ty))
+        {
+            continue;
+        }
         transform(func, interner, o, &fields);
         return true;
     }
@@ -75,8 +83,8 @@ fn find_default_news(func: &MirFunction, interner: &TypeInterner) -> Vec<Local> 
         .collect()
 }
 
-/// Verifies `o` only appears in promotable field accesses and returns each accessed field's inferred
-/// type, or `None` if any use disqualifies it.
+/// Verifies `o` only appears in promotable field accesses (plus RC on `o` itself) and returns each
+/// accessed field's inferred type, or `None` if any use disqualifies it.
 fn classify(
     func: &MirFunction,
     interner: &TypeInterner,
@@ -104,6 +112,10 @@ fn classify(
                     // The destination's declared type is the field's type (authoritative).
                     fields.insert(*field, func.local_ty(*x));
                 }
+                // Heap RC on the object itself: dropped in `transform` once the allocation is gone.
+                Statement::Retain(Operand::Copy(Place::Local(l)))
+                | Statement::Release(Operand::Copy(Place::Local(l)))
+                    if *l == o => {}
                 // Any other mention of `o` disqualifies promotion.
                 _ => {
                     if stmt_mentions(stmt, o) {
@@ -120,7 +132,7 @@ fn classify(
 }
 
 /// Replaces `o` with one promoted local per field: the `New` becomes zero-inits and every field
-/// access is rewritten to the corresponding local.
+/// access is rewritten to the corresponding local. Matching `Retain`/`Release` of `o` are dropped.
 fn transform(
     func: &mut MirFunction,
     interner: &TypeInterner,
@@ -165,6 +177,9 @@ fn transform(
                         Rvalue::Use(Operand::Copy(Place::Local(promo[&field]))),
                     ));
                 }
+                Statement::Retain(Operand::Copy(Place::Local(l)))
+                | Statement::Release(Operand::Copy(Place::Local(l)))
+                    if l == o => {}
                 other => new_stmts.push(other),
             }
         }
@@ -299,6 +314,54 @@ mod tests {
     }
 
     #[test]
+    fn promotes_despite_retain_release() {
+        // Same as the basic case, plus Retain(o)/Release(o) that RC insertion would emit.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.int());
+        let o = b.new_temp(i.int());
+        let x = b.new_temp(i.int());
+        b.assign(
+            Place::Local(o),
+            Rvalue::New {
+                def: DefId(0),
+                ty: i.int(),
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(o))));
+        b.assign(
+            Place::Field { base: o, field: 0 },
+            Rvalue::Use(Operand::Const(Const::Int(7))),
+        );
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Copy(Place::Field { base: o, field: 0 })),
+        );
+        b.push(Statement::Release(Operand::Copy(Place::Local(o))));
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(x)))));
+        let mut func = b.finish();
+
+        assert!(
+            Sroa.run(&mut func, &i),
+            "Retain/Release on the object local must not block promotion"
+        );
+        let has_rc = func.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
+            matches!(
+                s,
+                Statement::Retain(_) | Statement::Release(_)
+            )
+        });
+        assert!(!has_rc, "object Retain/Release should be dropped with the New");
+        let has_new = func
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .any(|s| matches!(s, Statement::Assign(_, Rvalue::New { .. })));
+        assert!(!has_new, "the allocation should be gone");
+    }
+
+    #[test]
     fn does_not_promote_escaping_struct() {
         // o escapes by being returned whole.
         let i = TypeInterner::new();
@@ -322,6 +385,34 @@ mod tests {
         assert!(
             !Sroa.run(&mut func, &i),
             "escaping struct must not be promoted"
+        );
+    }
+
+    #[test]
+    fn does_not_promote_reference_field() {
+        // A store of a string into a field must block promotion (would under-retain).
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.int());
+        let o = b.new_temp(i.int());
+        let s = b.new_temp(i.string());
+        b.assign(
+            Place::Local(o),
+            Rvalue::New {
+                def: DefId(0),
+                ty: i.int(),
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Field { base: o, field: 0 },
+            Rvalue::Use(Operand::Copy(Place::Local(s))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(
+            !Sroa.run(&mut func, &i),
+            "reference-typed fields must not be promoted"
         );
     }
 }

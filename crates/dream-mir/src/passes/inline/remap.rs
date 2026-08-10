@@ -220,6 +220,20 @@ fn remap_stmt(s: &mut Statement, base: u32) {
         }
         Statement::Print { arg, .. } => remap_operand(arg, base),
         Statement::ForceFree(o) => remap_operand(o, base),
+        Statement::ArrayElemsCopy {
+            dst,
+            dst_off,
+            src,
+            src_off,
+            count,
+            ..
+        } => {
+            remap_operand(dst, base);
+            remap_operand(dst_off, base);
+            remap_operand(src, base);
+            remap_operand(src_off, base);
+            remap_operand(count, base);
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => remap_operand(o, base),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }

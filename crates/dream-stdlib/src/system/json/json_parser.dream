@@ -1,35 +1,26 @@
 module system.json;
 
-// Byte-cursor recursive-descent JSON parser.
-// Reads UTF-8 via `Span<byte>` indexing (O(1)). `Span` is a `ref struct` and cannot be stored as a
-// class field, so the payload lives in a `byte[]` and is viewed with `Span.of` for each access.
+// Byte-cursor recursive-descent JSON parser over the input string's UTF-8 bytes
+// (`byte_at` / `byte_size`) — no intermediate `byte[]` copy.
 internal class JsonParser {
-    bytes: byte[];
+    text: string;
     pos: int;
 
-    public constructor(bytes: byte[], pos: int) {
-        this.bytes = bytes;
+    public constructor(text: string, pos: int) {
+        this.text = text;
         this.pos = pos;
     }
 
-    fun span(): Span<byte> {
-        return Span<byte>.of(this.bytes);
-    }
-
     fun len(): int {
-        return this.bytes.length;
+        return this.text.byte_size();
     }
 
     fun b(): int {
-        return (int)this.span().get(this.pos);
+        return this.text.byte_at(this.pos);
     }
 
     fun b_at(i: int): int {
-        return (int)this.span().get(i);
-    }
-
-    fun is_cont(c: int): bool {
-        return (c >= 128) && (c < 192);
+        return this.text.byte_at(i);
     }
 
     public fun skip_ws(): void {
@@ -71,47 +62,6 @@ internal class JsonParser {
         return 0 - 1;
     }
 
-    // Decode one UTF-8 scalar at `pos` and advance. Invalid sequences become U+FFFD.
-    fun next_utf8_scalar(): int {
-        let c0 = this.b();
-        if (c0 < 128) {
-            this.pos = this.pos + 1;
-            return c0;
-        }
-        if ((c0 >= 194) && (c0 < 224) && ((this.pos + 1) < this.len())) {
-            let c1 = this.b_at(this.pos + 1);
-            if (this.is_cont(c1)) {
-                this.pos = this.pos + 2;
-                return ((c0 - 192) * 64) + (c1 - 128);
-            }
-        }
-        if ((c0 >= 224) && (c0 < 240) && ((this.pos + 2) < this.len())) {
-            let c1 = this.b_at(this.pos + 1);
-            let c2 = this.b_at(this.pos + 2);
-            if (this.is_cont(c1) && this.is_cont(c2)) {
-                let cp = ((c0 - 224) * 4096) + ((c1 - 128) * 64) + (c2 - 128);
-                if ((cp < 55296) || (cp > 57343)) {
-                    this.pos = this.pos + 3;
-                    return cp;
-                }
-            }
-        }
-        if ((c0 >= 240) && (c0 < 245) && ((this.pos + 3) < this.len())) {
-            let c1b = this.b_at(this.pos + 1);
-            let c2b = this.b_at(this.pos + 2);
-            let c3 = this.b_at(this.pos + 3);
-            if (this.is_cont(c1b) && this.is_cont(c2b) && this.is_cont(c3)) {
-                let cp4 = ((c0 - 240) * 262144) + ((c1b - 128) * 4096) + ((c2b - 128) * 64) + (c3 - 128);
-                if ((cp4 >= 65536) && (cp4 <= 1114111)) {
-                    this.pos = this.pos + 4;
-                    return cp4;
-                }
-            }
-        }
-        this.pos = this.pos + 1;
-        return 65533;
-    }
-
     fun read_hex4(): int {
         let cp = 0;
         let k = 0;
@@ -130,24 +80,20 @@ internal class JsonParser {
         return cp;
     }
 
-    fun ensure_cps(cps: int[], n: int): int[] {
-        if (n < cps.length) {
-            return cps;
-        }
-        let grown = Buffer.alloc<int>(cps.length * 2);
+    // 10^exp for small non-negative exponents (JSON numbers).
+    fun pow10(exp: int): double {
+        let r = 1.0d;
         let i = 0;
-        while (i < n) {
-            grown[i] = cps[i];
+        while (i < exp) {
+            r = r * 10.0d;
             i = i + 1;
         }
-        return grown;
+        return r;
     }
 
     public fun parse_string(): string {
         this.pos = this.pos + 1; // opening quote
-        // Accumulate Unicode scalars in `int[]` (not `StringBuilder`: `char[]` stores one byte).
-        let cps = Buffer.alloc<int>(32);
-        let n = 0;
+        let sb = StringBuilder();
         let going = true;
         while (going == true) {
             if (this.pos >= this.len()) {
@@ -209,44 +155,103 @@ internal class JsonParser {
                             cp = e;
                             this.pos = this.pos + 1;
                         }
-                        cps = this.ensure_cps(cps, n);
-                        cps[n] = cp;
-                        n = n + 1;
+                        sb.append_char((char)cp);
                     }
                 } else {
-                    let scalar = this.next_utf8_scalar();
-                    cps = this.ensure_cps(cps, n);
-                    cps[n] = scalar;
-                    n = n + 1;
+                    // Bulk-copy unescaped UTF-8 until `"` or `\`.
+                    let run_start = this.pos;
+                    let scanning = true;
+                    while (scanning == true) {
+                        if (this.pos >= this.len()) {
+                            scanning = false;
+                        } else {
+                            let b = this.b();
+                            if ((b == 34) || (b == 92)) {
+                                scanning = false;
+                            } else {
+                                this.pos = this.pos + 1;
+                            }
+                        }
+                    }
+                    sb.append_utf8_slice(this.text, run_start, this.pos - run_start);
                 }
             }
         }
-        let s = string.alloc(n);
-        let k = 0;
-        while (k < n) {
-            string.set(s, k, (char)cps[k]);
-            k = k + 1;
-        }
-        return s;
+        return sb.build();
     }
 
     public fun parse_number(): JsonValue {
-        let sb = StringBuilder();
-        let going = true;
-        while (going == true) {
-            if (this.pos >= this.len()) {
-                going = false;
+        let sign = 1.0d;
+        if ((this.pos < this.len()) && (this.b() == 45)) {
+            sign = 0.0d - 1.0d;
+            this.pos = this.pos + 1;
+        } else if ((this.pos < this.len()) && (this.b() == 43)) {
+            this.pos = this.pos + 1;
+        }
+
+        let value = 0.0d;
+        while (this.pos < this.len()) {
+            let c = this.b();
+            if ((c >= 48) && (c <= 57)) {
+                value = value * 10.0d + (double)(c - 48);
+                this.pos = this.pos + 1;
             } else {
+                break;
+            }
+        }
+
+        if ((this.pos < this.len()) && (this.b() == 46)) {
+            this.pos = this.pos + 1;
+            let frac = 0.0d;
+            let frac_digits = 0;
+            while (this.pos < this.len()) {
                 let c = this.b();
-                if (((c >= 48) && (c <= 57)) || (c == 45) || (c == 43) || (c == 46) || (c == 101) || (c == 69)) {
-                    sb.append_char((char)c);
+                if ((c >= 48) && (c <= 57)) {
+                    frac = frac * 10.0d + (double)(c - 48);
+                    frac_digits = frac_digits + 1;
                     this.pos = this.pos + 1;
                 } else {
-                    going = false;
+                    break;
+                }
+            }
+            if (frac_digits > 0) {
+                value = value + frac / this.pow10(frac_digits);
+            }
+        }
+
+        if (this.pos < this.len()) {
+            let ec = this.b();
+            if ((ec == 101) || (ec == 69)) {
+                this.pos = this.pos + 1;
+                let esign = 1;
+                if (this.pos < this.len()) {
+                    let s = this.b();
+                    if (s == 45) {
+                        esign = 0 - 1;
+                        this.pos = this.pos + 1;
+                    } else if (s == 43) {
+                        this.pos = this.pos + 1;
+                    }
+                }
+                let exp = 0;
+                while (this.pos < this.len()) {
+                    let c = this.b();
+                    if ((c >= 48) && (c <= 57)) {
+                        exp = exp * 10 + (c - 48);
+                        this.pos = this.pos + 1;
+                    } else {
+                        break;
+                    }
+                }
+                if (esign > 0) {
+                    value = value * this.pow10(exp);
+                } else {
+                    value = value / this.pow10(exp);
                 }
             }
         }
-        return JsonValue.number(double.parse(sb.build()).unwrap_or(0.0d));
+
+        return JsonValue.number(sign * value);
     }
 
     public fun parse_array(): JsonValue {

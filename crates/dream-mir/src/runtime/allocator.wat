@@ -63,12 +63,12 @@
 
 (func $malloc (param $size i32) (param $tag i32) (result i32)
     (local $result i32)
-    call $__alloc_lock_acquire
+    ;;@ALLOC_LOCK_ACQUIRE@
     local.get $size
     local.get $tag
     call $__malloc_locked
     local.set $result
-    call $__alloc_lock_release
+    ;;@ALLOC_LOCK_RELEASE@
     local.get $result
 )
 
@@ -256,10 +256,10 @@
     local.get $ptr
     i32.eqz
     br_if 0
-    call $__alloc_lock_acquire
+    ;;@ALLOC_LOCK_ACQUIRE@
     local.get $ptr
     call $__free_locked
-    call $__alloc_lock_release
+    ;;@ALLOC_LOCK_RELEASE@
 )
 
 ;; Body of `$free`, executed only while `$__alloc_lock_acquire` is held.
@@ -267,17 +267,26 @@
     (local $block_start i32)
     (local $idx i32)
     (local $head_addr i32)
+    (local $size i32)
     local.get $ptr
     i32.eqz
     br_if 0
-    ;;@DEBUG_FREE_COUNT@
     local.get $ptr
     i32.const 12
     i32.sub
     local.set $block_start
-    ;; recover the size class from the stored block size (large -> slot 9)
+    ;; Interned/static string blocks store `size=0` in the heap header (see emit `escape_data`).
+    ;; They must never enter the free list — a spurious `$release` of a string literal would otherwise
+    ;; hand the data-section bytes to a later `$malloc` and corrupt constants in place.
     local.get $block_start
     i32.load
+    local.set $size
+    local.get $size
+    i32.eqz
+    br_if 0
+    ;;@DEBUG_FREE_COUNT@
+    ;; recover the size class from the stored block size (large -> slot 9)
+    local.get $size
     call $size_class
     local.set $idx
     local.get $idx

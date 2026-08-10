@@ -37,6 +37,22 @@ impl<'a> Analyzer<'a> {
         // Collect the mangled name + full parameter list (with the implicit `this`) of each method so
         // overloaded methods can be registered under their signature-mangled *emitted* names in a
         // second pass, once the whole overload set for this target is known.
+        //
+        // When a `where`-constrained method is satisfied for this instantiation, it wins over an
+        // unconstrained twin with the same name + parameter types (e.g. `Span.copy_from` keeps the
+        // element loop for reference `T`, and the unmanaged specialization that bulk-blits).
+        let specialized_keys: std::collections::HashSet<(String, Vec<String>)> = methods
+            .iter()
+            .filter(|m| {
+                !m.where_constraints.is_empty()
+                    && self.extension_constraints_satisfied(&m.where_constraints, bindings)
+            })
+            .map(|m| {
+                let name = accessor_member_name(m);
+                let params: Vec<String> = m.parameters.iter().map(|p| p.type_.get_type()).collect();
+                (name, params)
+            })
+            .collect();
         let mut registered: Vec<(String, Vec<Type>)> = Vec::new();
         for method in methods {
             // Conditional methods (`fun sort(): void where T : Comparable<T>`) only attach when
@@ -47,6 +63,20 @@ impl<'a> Analyzer<'a> {
             {
                 continue;
             }
+            let member_name = accessor_member_name(method);
+            if method.where_constraints.is_empty() {
+                let key = (
+                    member_name.clone(),
+                    method
+                        .parameters
+                        .iter()
+                        .map(|p| p.type_.get_type())
+                        .collect::<Vec<_>>(),
+                );
+                if specialized_keys.contains(&key) {
+                    continue;
+                }
+            }
             // Validate object-protocol overrides once (on the non-monomorphized declaration).
             if bindings.is_empty() {
                 self.validate_protocol_override(method, diagnostics);
@@ -55,7 +85,6 @@ impl<'a> Analyzer<'a> {
             // Property accessors (`get`/`set`) are registered under a `$`-tagged internal name that a
             // user identifier can never spell, so `obj.prop`/`obj.prop = v` resolve to them without a
             // regular method (or the indexer `get`/`set` hooks) ever colliding.
-            let member_name = accessor_member_name(method);
             let mangled_name = method_fn(target_type_str, &member_name);
             // Unlike the object-protocol/accessor checks above, `@operator`/`@cast` registration
             // runs for every monomorphization (not gated on `bindings.is_empty()`): a generic

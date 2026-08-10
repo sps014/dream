@@ -1,11 +1,12 @@
 ;; String payload layout (at the data pointer `ptr`, i.e. heap block + 12):
-;;   [ptr+0]        byte length : i32
-;;   [ptr+4 .. +len] utf8 bytes
+;;   [ptr+0]        byte length  : i32
+;;   [ptr+4]        scalar length: i32  (Unicode scalar / code-point count, cached)
+;;   [ptr+8 ..]     utf8 bytes
 ;; There is no NUL terminator: the length prefix makes it redundant, and every consumer (strlen,
 ;; string_eq, hashing, host interop) is length-driven. The 12-byte heap header ([size][tag][ref_count])
 ;; still lives at ptr-12 and is unchanged, so malloc/free/retain/release/object_tag are unaffected.
 ;; `size()` / `char_at` / iteration use Unicode scalar (code point) indices; `byte_size` / `byte_at`
-;; expose raw UTF-8 byte access.
+;; expose raw UTF-8 byte access. `$str_scalar_len` is O(1) via the cached word at ptr+4.
 
 ;; Byte length of the UTF-8 payload (O(1)).
 (func $str_byte_size (param $ptr i32) (result i32)
@@ -23,7 +24,7 @@
 (func $utf8_width_at (param $ptr i32) (param $off i32) (result i32)
     (local $b i32)
     local.get $ptr
-    i32.const 4
+    i32.const 8
     i32.add
     local.get $off
     i32.add
@@ -69,7 +70,7 @@
     (local $b3 i32)
     (local $base i32)
     local.get $ptr
-    i32.const 4
+    i32.const 8
     i32.add
     local.set $base
     local.get $base
@@ -193,7 +194,7 @@
 (func $utf8_encode_at (param $ptr i32) (param $off i32) (param $cp i32) (result i32)
     (local $base i32)
     local.get $ptr
-    i32.const 4
+    i32.const 8
     i32.add
     local.set $base
     local.get $cp
@@ -324,14 +325,20 @@
     i32.const 4
 )
 
-;; Counts Unicode scalars in the UTF-8 payload.
+;; Cached Unicode scalar count (O(1)).
 (func $str_scalar_len (param $ptr i32) (result i32)
-    (local $byte_len i32)
+    local.get $ptr
+    i32.const 4
+    i32.add
+    i32.load
+)
+
+;; Counts Unicode scalars in a raw UTF-8 byte range starting at `base` (not a string data pointer).
+(func $utf8_scalar_count (param $base i32) (param $byte_len i32) (result i32)
     (local $off i32)
     (local $count i32)
-    local.get $ptr
-    call $str_byte_size
-    local.set $byte_len
+    (local $b i32)
+    (local $w i32)
     i32.const 0
     local.set $off
     i32.const 0
@@ -342,10 +349,43 @@
             local.get $byte_len
             i32.ge_u
             br_if $done
+            local.get $base
             local.get $off
-            local.get $ptr
+            i32.add
+            i32.load8_u
+            local.set $b
+            local.get $b
+            i32.const 0x80
+            i32.lt_u
+            if
+                i32.const 1
+                local.set $w
+            else
+                local.get $b
+                i32.const 0xE0
+                i32.and
+                i32.const 0xC0
+                i32.eq
+                if
+                    i32.const 2
+                    local.set $w
+                else
+                    local.get $b
+                    i32.const 0xF0
+                    i32.and
+                    i32.const 0xE0
+                    i32.eq
+                    if
+                        i32.const 3
+                        local.set $w
+                    else
+                        i32.const 4
+                        local.set $w
+                    end
+                end
+            end
             local.get $off
-            call $utf8_width_at
+            local.get $w
             i32.add
             local.set $off
             local.get $count
@@ -399,87 +439,64 @@
 (func $concat_strings (param $str1 i32) (param $str2 i32) (result i32)
     (local $len1 i32)
     (local $len2 i32)
+    (local $sc1 i32)
+    (local $sc2 i32)
     (local $new_ptr i32)
-    (local $i i32)
     local.get $str1
     call $strlen
     local.set $len1
     local.get $str2
     call $strlen
     local.set $len2
-  ;; size = 4 (length prefix) + len1 + len2
+    local.get $str1
+    call $str_scalar_len
+    local.set $sc1
+    local.get $str2
+    call $str_scalar_len
+    local.set $sc2
+  ;; size = 8 (byte_len + scalar_len) + len1 + len2
     local.get $len1
     local.get $len2
     i32.add
-    i32.const 4
+    i32.const 8
     i32.add
     i32.const {TAG_STRING}
     call $malloc
     local.set $new_ptr
-  ;; store the combined length at [new_ptr]
+  ;; store combined byte_len at [new_ptr]
     local.get $new_ptr
     local.get $len1
     local.get $len2
     i32.add
     i32.store
-  ;; copy str1's bytes to new_ptr+4+i
-    i32.const 0
-    local.set $i
-    (block $end1
-        (loop $start1
-            local.get $i
-            local.get $len1
-            i32.eq
-            br_if $end1
-            local.get $new_ptr
-            i32.const 4
-            i32.add
-            local.get $i
-            i32.add
-            local.get $str1
-            i32.const 4
-            i32.add
-            local.get $i
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get $i
-            i32.const 1
-            i32.add
-            local.set $i
-            br $start1
-        )
-    )
-  ;; copy str2's bytes to new_ptr+4+len1+i
-    i32.const 0
-    local.set $i
-    (block $end2
-        (loop $start2
-            local.get $i
-            local.get $len2
-            i32.eq
-            br_if $end2
-            local.get $new_ptr
-            i32.const 4
-            i32.add
-            local.get $len1
-            i32.add
-            local.get $i
-            i32.add
-            local.get $str2
-            i32.const 4
-            i32.add
-            local.get $i
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get $i
-            i32.const 1
-            i32.add
-            local.set $i
-            br $start2
-        )
-    )
+  ;; store combined scalar_len at [new_ptr+4]
+    local.get $new_ptr
+    i32.const 4
+    i32.add
+    local.get $sc1
+    local.get $sc2
+    i32.add
+    i32.store
+  ;; memory.copy str1 payload -> new_ptr+8
+    local.get $new_ptr
+    i32.const 8
+    i32.add
+    local.get $str1
+    i32.const 8
+    i32.add
+    local.get $len1
+    memory.copy
+  ;; memory.copy str2 payload -> new_ptr+8+len1
+    local.get $new_ptr
+    i32.const 8
+    i32.add
+    local.get $len1
+    i32.add
+    local.get $str2
+    i32.const 8
+    i32.add
+    local.get $len2
+    memory.copy
     local.get $new_ptr
 )
 
@@ -553,7 +570,7 @@
         i32.const 0
         return
     end
-  ;; compare the $len char bytes at a+4+i / b+4+i (no NUL sentinel needed)
+  ;; compare the $len utf8 bytes at a+8+i / b+8+i (no NUL sentinel needed)
     i32.const 0
     local.set $i
     (block $done
@@ -563,13 +580,13 @@
             i32.ge_u
             br_if $done
             local.get $a
-            i32.const 4
+            i32.const 8
             i32.add
             local.get $i
             i32.add
             i32.load8_u
             local.get $b
-            i32.const 4
+            i32.const 8
             i32.add
             local.get $i
             i32.add
@@ -604,7 +621,7 @@
 ;; Unchecked byte read; call sites emit a byte-index bounds check first.
 (func $byte_at (param $ptr i32) (param $i i32) (result i32)
     local.get $ptr
-    i32.const 4
+    i32.const 8
     i32.add
     local.get $i
     i32.add
@@ -617,7 +634,7 @@
     local.get $n
     i32.const 4
     i32.mul
-    i32.const 4
+    i32.const 8
     i32.add
     i32.const {TAG_STRING}
     call $malloc
@@ -625,6 +642,86 @@
     local.get $p
     i32.const 0
     i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    i32.const 0
+    i32.store
+    local.get $p
+)
+
+;; Builds a string from a `byte[]` data pointer (`[count:i32][payload...]`). Empty/null-safe.
+(func $string_from_utf8 (param $bytes i32) (result i32)
+    (local $count i32)
+    (local $scalars i32)
+    (local $p i32)
+    local.get $bytes
+    i32.eqz
+    if
+        i32.const 8
+        i32.const {TAG_STRING}
+        call $malloc
+        local.set $p
+        local.get $p
+        i32.const 0
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
+        i32.const 0
+        i32.store
+        local.get $p
+        return
+    end
+    local.get $bytes
+    i32.load
+    local.set $count
+    local.get $count
+    i32.eqz
+    if
+        i32.const 8
+        i32.const {TAG_STRING}
+        call $malloc
+        local.set $p
+        local.get $p
+        i32.const 0
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
+        i32.const 0
+        i32.store
+        local.get $p
+        return
+    end
+    local.get $bytes
+    i32.const 4
+    i32.add
+    local.get $count
+    call $utf8_scalar_count
+    local.set $scalars
+    local.get $count
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $p
+    local.get $p
+    local.get $count
+    i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $scalars
+    i32.store
+    local.get $p
+    i32.const 8
+    i32.add
+    local.get $bytes
+    i32.const 4
+    i32.add
+    local.get $count
+    memory.copy
     local.get $p
 )
 
@@ -636,8 +733,6 @@
     (local $new_w i32)
     (local $byte_len i32)
     (local $tail i32)
-    (local $dst i32)
-    (local $src i32)
     local.get $ptr
     call $str_scalar_len
     local.set $scalar_len
@@ -646,6 +741,33 @@
     i32.gt_u
     if
         unreachable
+    end
+    ;; UTF-8 encoded width of `c` (without writing).
+    local.get $c
+    i32.const 0x80
+    i32.lt_u
+    if
+        i32.const 1
+        local.set $new_w
+    else
+        local.get $c
+        i32.const 0x800
+        i32.lt_u
+        if
+            i32.const 2
+            local.set $new_w
+        else
+            local.get $c
+            i32.const 0x10000
+            i32.lt_u
+            if
+                i32.const 3
+                local.set $new_w
+            else
+                i32.const 4
+                local.set $new_w
+            end
+        end
     end
     local.get $i
     local.get $scalar_len
@@ -658,10 +780,17 @@
         local.get $byte_len
         local.get $c
         call $utf8_encode_at
-        local.set $new_w
+        drop
         local.get $ptr
         local.get $byte_len
         local.get $new_w
+        i32.add
+        i32.store
+        local.get $ptr
+        i32.const 4
+        i32.add
+        local.get $scalar_len
+        i32.const 1
         i32.add
         i32.store
         return
@@ -674,81 +803,135 @@
     local.get $byte_off
     call $utf8_width_at
     local.set $old_w
-    local.get $ptr
-    local.get $byte_off
-    local.get $c
-    call $utf8_encode_at
-    local.set $new_w
     local.get $old_w
     local.get $new_w
-    i32.eq
+    i32.ne
     if
         local.get $ptr
+        call $str_byte_size
+        local.set $byte_len
+        local.get $byte_len
         local.get $byte_off
-        local.get $c
-        call $utf8_encode_at
-        drop
-        return
+        i32.sub
+        local.get $old_w
+        i32.sub
+        local.set $tail
+        ;; memory.copy handles overlapping regions like memmove.
+        local.get $ptr
+        i32.const 8
+        i32.add
+        local.get $byte_off
+        i32.add
+        local.get $new_w
+        i32.add
+        local.get $ptr
+        i32.const 8
+        i32.add
+        local.get $byte_off
+        i32.add
+        local.get $old_w
+        i32.add
+        local.get $tail
+        memory.copy
+        local.get $ptr
+        local.get $byte_len
+        local.get $new_w
+        i32.add
+        local.get $old_w
+        i32.sub
+        i32.store
     end
-    local.get $ptr
-    call $str_byte_size
-    local.set $byte_len
-    local.get $byte_len
-    local.get $byte_off
-    i32.sub
-    local.get $old_w
-    i32.sub
-    local.set $tail
-    local.get $byte_off
-    local.get $new_w
-    i32.add
-    local.set $dst
-    local.get $byte_off
-    local.get $old_w
-    i32.add
-    local.set $src
-    (block $shift_done
-        (loop $shift
-            local.get $tail
-            i32.eqz
-            br_if $shift_done
-            local.get $ptr
-            i32.const 4
-            i32.add
-            local.get $dst
-            i32.add
-            local.get $ptr
-            i32.const 4
-            i32.add
-            local.get $src
-            i32.add
-            i32.load8_u
-            i32.store8
-            local.get $dst
-            i32.const 1
-            i32.add
-            local.set $dst
-            local.get $src
-            i32.const 1
-            i32.add
-            local.set $src
-            local.get $tail
-            i32.const 1
-            i32.sub
-            local.set $tail
-            br $shift
-        )
-    )
     local.get $ptr
     local.get $byte_off
     local.get $c
     call $utf8_encode_at
     drop
-    local.get $ptr
-    local.get $byte_len
-    local.get $new_w
+)
+
+(func $string_from_utf8_prefix (param $bytes i32) (param $len i32) (result i32)
+    (local $count i32)
+    (local $scalars i32)
+    (local $p i32)
+    local.get $bytes
+    i32.eqz
+    if
+        i32.const 8
+        i32.const {TAG_STRING}
+        call $malloc
+        local.set $p
+        local.get $p
+        i32.const 0
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
+        i32.const 0
+        i32.store
+        local.get $p
+        return
+    end
+    local.get $bytes
+    i32.load
+    local.set $count
+    local.get $len
+    i32.const 0
+    i32.lt_s
+    if
+        i32.const 0
+        local.set $len
+    end
+    local.get $len
+    local.get $count
+    i32.gt_s
+    if
+        local.get $count
+        local.set $len
+    end
+    local.get $len
+    i32.eqz
+    if
+        i32.const 8
+        i32.const {TAG_STRING}
+        call $malloc
+        local.set $p
+        local.get $p
+        i32.const 0
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
+        i32.const 0
+        i32.store
+        local.get $p
+        return
+    end
+    local.get $bytes
+    i32.const 4
     i32.add
-    local.get $old_w
-    i32.sub
+    local.get $len
+    call $utf8_scalar_count
+    local.set $scalars
+    local.get $len
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $p
+    local.get $p
+    local.get $len
     i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $scalars
+    i32.store
+    local.get $p
+    i32.const 8
+    i32.add
+    local.get $bytes
+    i32.const 4
+    i32.add
+    local.get $len
+    memory.copy
+    local.get $p
 )

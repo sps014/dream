@@ -42,8 +42,14 @@ const TAG_STRING: i32 = abi::TAG_STRING;
 /// `[count: i32][bytes...]` at the data pointer.
 const TAG_ARRAY: i32 = abi::TAG_ARRAY;
 
-/// Byte size of the length/count prefix at a string/array data pointer (`[len:i32][payload...]`).
+/// Byte size of the length/count prefix at an array data pointer (`[len:i32][payload...]`).
 const LEN_PREFIX: usize = abi::LEN_PREFIX_SIZE as usize;
+
+/// Byte size of a string's data header `[byte_len:i32][scalar_len:i32]` before utf8 bytes.
+const STRING_HEADER: usize = abi::STRING_HEADER_SIZE as usize;
+
+/// Offset of utf8 bytes from a string data pointer.
+const STRING_UTF8: usize = abi::STRING_UTF8_OFFSET as usize;
 
 /// Reads the little-endian length/count prefix at `base` in `data`, returning `None` if `base` is
 /// out of range or the prefix is negative. Shared by the string and byte-array readers so a
@@ -57,9 +63,10 @@ fn read_len_prefix(data: &[u8], base: usize) -> Option<usize> {
     (len >= 0).then_some(len as usize)
 }
 
-/// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout: `[len: i32][utf8...]`,
-/// so the length prefix gives the byte count directly (no NUL terminator). A negative or
-/// out-of-bounds pointer yields an empty string rather than panicking.
+/// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout:
+/// `[byte_len: i32][scalar_len: i32][utf8...]`, so the length prefix gives the byte count directly
+/// (no NUL terminator). A negative or out-of-bounds pointer yields an empty string rather than
+/// panicking.
 pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
     let data = shared_bytes(memory);
     if ptr < 0 {
@@ -69,7 +76,7 @@ pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
     let Some(len) = read_len_prefix(data, base) else {
         return String::new();
     };
-    let start = base + LEN_PREFIX;
+    let start = base + STRING_UTF8;
     let end = start.saturating_add(len).min(data.len());
     String::from_utf8_lossy(&data[start..end]).into_owned()
 }
@@ -102,21 +109,23 @@ pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<S
 }
 
 /// Allocates `s` as a Dream `string` inside the module's linear memory by calling its exported
-/// `malloc`, storing the length prefix, and copying the UTF-8 bytes at `ptr+4`. Returns the data
-/// pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`). Used by host functions that
-/// return strings. Layout: `[len: i32][utf8...]` (no NUL terminator).
+/// `malloc`, storing `[byte_len][scalar_len]`, and copying the UTF-8 bytes at `ptr+8`. Returns the
+/// data pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`). Used by host functions
+/// that return strings. Layout: `[byte_len: i32][scalar_len: i32][utf8...]` (no NUL terminator).
 pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i32> {
     let malloc = required_malloc(caller)?;
     let bytes = s.as_bytes();
     let ptr = malloc.call(
         &mut *caller,
-        (LEN_PREFIX as i32 + bytes.len() as i32, TAG_STRING),
+        (STRING_HEADER as i32 + bytes.len() as i32, TAG_STRING),
     )?;
     let memory = required_memory(caller)?;
     let start = ptr as usize;
     let data = shared_bytes_mut(&memory);
     data[start..start + LEN_PREFIX].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
-    data[start + LEN_PREFIX..start + LEN_PREFIX + bytes.len()].copy_from_slice(bytes);
+    data[start + LEN_PREFIX..start + STRING_HEADER]
+        .copy_from_slice(&(s.chars().count() as i32).to_le_bytes());
+    data[start + STRING_UTF8..start + STRING_UTF8 + bytes.len()].copy_from_slice(bytes);
     Ok(ptr)
 }
 

@@ -19,6 +19,20 @@ public class Buffer {
     @unsafe
     static extern fun realloc<T>(arr: T[], new_len: int): T[];
 
+    // Bulk-copies `count` unmanaged elements from `src[src_off..]` into `dst[dst_off..]`. The
+    // emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only
+    // for blittable `T` (no ARC retain on the copied slots). `@unsafe` because the compiler does
+    // not check that the ranges fit inside either array's allocated length.
+    @intrinsic("array_elems_copy")
+    @unsafe
+    static extern fun elems_copy<T : unmanaged>(
+        dst: T[],
+        dst_off: int,
+        src: T[],
+        src_off: int,
+        count: int
+    ): void;
+
     // Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference
     // counting entirely. Any other live reference to the same block (including `arr` itself, if
     // read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot

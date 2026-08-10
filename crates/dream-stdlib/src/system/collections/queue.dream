@@ -25,10 +25,17 @@ public class Queue<T> : Collection<T> {
             new_cap = sequence_min_capacity();
         }
         let next = Buffer.alloc<T>(new_cap);
-        let i = 0;
-        while (i < this.count) {
-            next[i] = this.items[(this.head + i) % old_cap];
-            i = i + 1;
+        // Linearize the ring into `[0, count)` with at most two contiguous Span copies (handles
+        // wrap-around without an element loop).
+        let first = this.count;
+        let avail = old_cap - this.head;
+        if (first > avail) {
+            first = avail;
+        }
+        Span<T>(next, 0, first).copy_from(Span<T>(this.items, this.head, first));
+        let rest = this.count - first;
+        if (rest > 0) {
+            Span<T>(next, first, rest).copy_from(Span<T>(this.items, 0, rest));
         }
         this.items = next;
         this.head = 0;

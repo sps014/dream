@@ -283,6 +283,16 @@ pub enum HExprKind {
         array: Box<HExpr>,
         new_len: Box<HExpr>,
     },
+    /// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` (`@unsafe`) — bulk blit of
+    /// `count` unmanaged `T` elements. Node type is `void`.
+    ArrayElemsCopy {
+        elem_ty: TypeId,
+        dst: Box<HExpr>,
+        dst_off: Box<HExpr>,
+        src: Box<HExpr>,
+        src_off: Box<HExpr>,
+        count: Box<HExpr>,
+    },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — immediately returns `array`'s backing block to the
     /// allocator via `$free`, bypassing reference counting. Any other live reference to the same
     /// block is left dangling; safe only when the caller holds the sole reference. Node type is

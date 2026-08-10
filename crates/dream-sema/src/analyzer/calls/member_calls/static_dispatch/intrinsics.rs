@@ -6,15 +6,15 @@ use super::*;
 use dream_abi::intrinsics;
 use dream_syntax::nodes::types::is_unknown_type_name;
 
-fn json_collection_ser_fn(mangled: &str) -> Option<String> {
-    json_collection_adapter(mangled, true)
+fn json_collection_write_fn(mangled: &str) -> Option<String> {
+    json_collection_adapter(mangled, "write")
 }
 
 fn json_collection_de_fn(mangled: &str) -> Option<String> {
-    json_collection_adapter(mangled, false)
+    json_collection_adapter(mangled, "de")
 }
 
-fn json_collection_adapter(mangled: &str, serialize: bool) -> Option<String> {
+fn json_collection_adapter(mangled: &str, kind: &str) -> Option<String> {
     let base = mangled.trim_end_matches('?');
     let is_collection = base.ends_with("[]")
         || base.starts_with("List_")
@@ -25,11 +25,7 @@ fn json_collection_adapter(mangled: &str, serialize: bool) -> Option<String> {
         return None;
     }
     let suffix = base.replace("[]", "__arr");
-    let method = if serialize {
-        format!("__col_ser_{}", suffix)
-    } else {
-        format!("__col_de_{}", suffix)
-    };
+    let method = format!("__col_{}_{}", kind, suffix);
     Some(dream_types::method_fn("Json", &method))
 }
 
@@ -171,6 +167,56 @@ impl<'a> Analyzer<'a> {
             let new_len = args.next().flatten();
             self.hir_set_array_realloc(&element, array, new_len);
             return Ok(Type::Array(Box::new(element)));
+        }
+
+        // `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` (`@unsafe`): bulk blit of
+        // unmanaged array elements via `memory.copy` (emitter supplies `sizeof(T)`).
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::ArrayElemsCopy)
+        {
+            self.check_unsafe_intrinsic_call(
+                "Buffer.elems_copy",
+                template,
+                method.position,
+                diagnostics,
+            );
+            self.check_runtime_intrinsic_call(
+                "Buffer.elems_copy",
+                template,
+                method.position,
+                diagnostics,
+            );
+            let element = match generic_args.as_ref().and_then(|g| g.first()) {
+                Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                None => {
+                    diagnostics.report_error(
+                        "'Buffer.elems_copy' requires a type argument, e.g. Buffer.elems_copy<int>(…)"
+                            .to_string(),
+                        Some(method.position),
+                    );
+                    Type::Unknown
+                }
+            };
+            if !self.is_unresolved_generic_type(&element) {
+                self.require_unmanaged(&element, "Buffer.elems_copy", &method.position, diagnostics);
+            }
+            if params_types.len() != 5 {
+                diagnostics.report_error(
+                    format!(
+                        "'Buffer.elems_copy' expects exactly 5 arguments (dst, dst_off, src, src_off, count), got {}",
+                        params_types.len()
+                    ),
+                    Some(method.position),
+                );
+            }
+            let mut args = arg_hirs.into_iter();
+            let dst = args.next().flatten();
+            let dst_off = args.next().flatten();
+            let src = args.next().flatten();
+            let src_off = args.next().flatten();
+            let count = args.next().flatten();
+            self.hir_set_array_elems_copy(&element, dst, dst_off, src, src_off, count);
+            return Ok(Type::Void);
         }
 
         // `Buffer.free<T>(arr)` (`@unsafe`): unconditionally returns `arr`'s backing block to the
@@ -342,11 +388,14 @@ impl<'a> Analyzer<'a> {
         }
 
         // `Json.serialize<T>(v)` / `Json.deserialize<T>(text)`: the `@json` derive emits
-        // `<T>.to_json()` / `<T>.from_json()` (see `driver::generate` / Dream `JsonGenerator`), and `Json.stringify` /
-        // `Json.parse` are ordinary static methods. Expand the intrinsic into that composition so
-        // the whole thing lowers through MIR as ordinary calls.
+        // `<T>.write_json(sb)` / `<T>.from_json()` (see `driver::generate` / Dream `JsonGenerator`),
+        // and `Json.parse` is an ordinary static method. Expand the intrinsic into that composition
+        // so the whole thing lowers through MIR as ordinary calls.
         let json_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);
         if json_op == Some(intrinsics::IntrinsicOp::JsonSerialize) {
+            use dream_hir::{Binding, HExpr, HExprKind};
+            use dream_types::{constructor_fn, DefKind};
+
             let named = |name: &str| -> Type {
                 let mut t = method.clone();
                 t.text = name.to_string();
@@ -357,19 +406,44 @@ impl<'a> Analyzer<'a> {
                 .map(|s| s.trim_end_matches('?').to_string())
                 .unwrap_or_default();
             let value = arg_hirs.into_iter().next().flatten();
-            let to_json_call = if let Some(adapter) = json_collection_ser_fn(&struct_name) {
-                adapter
+            let sb_ty = named("StringBuilder");
+            let string_ty = named("string");
+            let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
+            let ctor = self
+                .type_ctx
+                .defs
+                .lookup(DefKind::Function, &constructor_fn("StringBuilder"));
+            let int_ty = self.type_ctx.interner.int();
+            let capacity = HExpr::new(int_ty, HExprKind::IntLit(16));
+            self.hir_set_new("StringBuilder", ctor, vec![Some(capacity)], &sb_ty);
+            let new_sb = self.hir_take();
+            if let Some(local) = sb_local {
+                self.hir_assign_local_id(local, new_sb);
+                let sb_ty_id = self.type_ctx.lower(&sb_ty);
+                let sb_read = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
+                let write_call = if let Some(adapter) = json_collection_write_fn(&struct_name) {
+                    adapter
+                } else {
+                    method_fn(&struct_name, "write_json")
+                };
+                self.hir_set_call(
+                    &write_call,
+                    vec![value, Some(sb_read)],
+                    &Type::Void,
+                );
+                let write_hir = self.hir_take();
+                self.hir_expr_stmt(write_hir);
+                let sb_read2 = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
+                self.hir_set_call(
+                    &method_fn("StringBuilder", "build"),
+                    vec![Some(sb_read2)],
+                    &string_ty,
+                );
             } else {
-                method_fn(&struct_name, "to_json")
-            };
-            self.hir_set_call(
-                &to_json_call,
-                vec![value],
-                &named("JsonValue"),
-            );
-            let to_json = self.hir_take();
-            self.hir_set_call("Json_stringify", vec![to_json], &named("string"));
-            return Ok(named("string"));
+                self.hir_fail();
+                self.hir_none();
+            }
+            return Ok(string_ty);
         }
         if json_op == Some(intrinsics::IntrinsicOp::JsonDeserialize) {
             use dream_hir::{Binding, HExpr, HExprKind};

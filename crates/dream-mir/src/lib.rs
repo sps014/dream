@@ -213,6 +213,16 @@ pub enum Statement {
     /// pass — an inert, order-preserving barrier — purely so scanning the pre-emission MIR for panic
     /// call sites (which tracks the same marker) sees the same line the backend will.
     SourceLine(u32),
+    /// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` (`@unsafe`) — bulk
+    /// `memory.copy` of `count` unmanaged elements. Void-typed, so a statement (not an `Rvalue`).
+    ArrayElemsCopy {
+        elem_ty: TypeId,
+        dst: Operand,
+        dst_off: Operand,
+        src: Operand,
+        src_off: Operand,
+        count: Operand,
+    },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditionally `$free`s `array`'s backing block via the
     /// allocator, bypassing reference counting. Modeled as a statement (not an `Rvalue`) since it
     /// has no result — `Buffer.free` is typed `void`.

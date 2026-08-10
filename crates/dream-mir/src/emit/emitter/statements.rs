@@ -159,6 +159,41 @@ impl Emitter<'_> {
                 self.emit_operand(o);
                 self.line("     (call $free)");
             }
+            Statement::ArrayElemsCopy {
+                elem_ty,
+                dst,
+                dst_off,
+                src,
+                src_off,
+                count,
+            } => {
+                // `memory.copy(dst+4+dst_off*esize, src+4+src_off*esize, count*esize)`.
+                let (esize, _) = scalar_size(self.interner, *elem_ty);
+                self.emit_operand(dst);
+                self.line("     (local.set $__obj) ;; dst array");
+                self.emit_operand(src);
+                self.line("     (local.set $__src) ;; src array");
+                self.emit_operand(count);
+                self.line("     (local.set $__len) ;; element count");
+                self.line("     (local.get $__obj)");
+                self.line("     (i32.const 4)");
+                self.line("     (i32.add)");
+                self.emit_operand(dst_off);
+                self.line(&format!("     (i32.const {})", esize));
+                self.line("     (i32.mul)");
+                self.line("     (i32.add) ;; dst payload + offset");
+                self.line("     (local.get $__src)");
+                self.line("     (i32.const 4)");
+                self.line("     (i32.add)");
+                self.emit_operand(src_off);
+                self.line(&format!("     (i32.const {})", esize));
+                self.line("     (i32.mul)");
+                self.line("     (i32.add) ;; src payload + offset");
+                self.line("     (local.get $__len)");
+                self.line(&format!("     (i32.const {})", esize));
+                self.line("     (i32.mul) ;; byte count");
+                self.line("     (memory.copy)");
+            }
             Statement::LockAcquire(o) => {
                 self.emit_lock_addr(o);
                 self.line("     (call $__lock_acquire)");

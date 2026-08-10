@@ -210,7 +210,7 @@ pub fn emit_module_with_debug(
         }
     }
 
-    out.push_str(&runtime_prelude(debug));
+    out.push_str(&runtime_prelude(debug, module_needs_threads(mir)));
     out.push('\n');
     out.push_str(RUNTIME_WEAK);
     out.push('\n');

@@ -140,14 +140,15 @@ class DreamInstance {
   }
 
   /**
-   * Reads a Dream string at `ptr` (a data pointer). Layout: `[len: i32][utf8...]`, so the length
-   * prefix gives the byte count directly (no NUL terminator).
+   * Reads a Dream string at `ptr` (a data pointer). Layout:
+   * `[byte_len: i32][scalar_len: i32][utf8...]`, so the length prefix gives the byte count
+   * directly (no NUL terminator).
    */
   readString(ptr) {
     if (!ptr) return "";
     const bytes = this.bytes;
     const len = this.view.getInt32(ptr, true);
-    const start = ptr + 4;
+    const start = ptr + 8;
     // `TextDecoder.decode` rejects views backed by a `SharedArrayBuffer` (linear memory is always
     // shared now — see `makeLinearMemory`), so copy the slice into a plain, non-shared buffer first.
     return new TextDecoder("utf-8").decode(bytes.slice(start, start + len));
@@ -156,17 +157,20 @@ class DreamInstance {
   /**
    * Allocates a Dream string block for `str` and returns its data pointer, so JS-implemented
    * extern functions can return strings back into Dream. Requires the module to export `malloc`.
-   * Layout: `[len: i32][utf8...]` (no NUL terminator).
+   * Layout: `[byte_len: i32][scalar_len: i32][utf8...]` (no NUL terminator).
    */
   writeString(str) {
     if (typeof this.exports.malloc !== "function") {
       throw new Error("module does not export `malloc`; cannot allocate a string");
     }
     const encoded = new TextEncoder().encode(str);
-    const ptr = this.exports.malloc(4 + encoded.length, TAGS.STRING);
+    // `Array.from` yields Unicode scalar values (surrogate pairs become one element).
+    const scalarLen = Array.from(str).length;
+    const ptr = this.exports.malloc(8 + encoded.length, TAGS.STRING);
     const bytes = this.bytes;
-    this.view.setInt32(ptr, encoded.length, true); // length prefix
-    bytes.set(encoded, ptr + 4);
+    this.view.setInt32(ptr, encoded.length, true); // byte_len
+    this.view.setInt32(ptr + 4, scalarLen, true); // scalar_len
+    bytes.set(encoded, ptr + 8);
     return ptr;
   }
 

@@ -372,6 +372,29 @@ impl Lowerer<'_> {
                     let o = self.lower_operand(array);
                     self.b.push(Statement::ForceFree(o));
                 }
+                // `Buffer.elems_copy<T>(…)` (`@unsafe`) — void bulk blit; same statement form.
+                HExprKind::ArrayElemsCopy {
+                    elem_ty,
+                    dst,
+                    dst_off,
+                    src,
+                    src_off,
+                    count,
+                } => {
+                    let dst = self.lower_operand(dst);
+                    let dst_off = self.lower_operand(dst_off);
+                    let src = self.lower_operand(src);
+                    let src_off = self.lower_operand(src_off);
+                    let count = self.lower_operand(count);
+                    self.b.push(Statement::ArrayElemsCopy {
+                        elem_ty: *elem_ty,
+                        dst,
+                        dst_off,
+                        src,
+                        src_off,
+                        count,
+                    });
+                }
                 // `print`/`println` lower to a dedicated statement the backend maps to `print_*`.
                 HExprKind::Print { arg, newline } => {
                     let ty = arg.ty;

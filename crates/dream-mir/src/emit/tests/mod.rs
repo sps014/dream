@@ -231,25 +231,19 @@ fn strings_get_data_segments_and_addresses() {
         ..Default::default()
     };
     let wat = emit_module(&mir, &i, false);
-    // The runtime constants are interned first (`true`/`false`/`-`, then this function's located
-    // panic messages — 4 checked-construct bases plus the `line == 0` fallback quadruple, none of
-    // which actually occur here so all 4 collapse onto the one fallback quadruple — then the
-    // object-protocol `null`/`<object>`/`[`/`]`/`, `/`(`/`)`/`length`), so the user's "hi" follows at
-    // block 1448 / data pointer 1460. Each block carries a 4-byte length prefix and no NUL terminator.
+    // The runtime constants are interned first, then panic messages and protocol strings, so the
+    // user's "hi" follows somewhere in the data section. Assert the new 8-byte string header layout:
+    // byte_len=2, scalar_len=2, then 'h','i'.
     assert!(
-        wat.contains("(i32.const 1460)"),
-        "string data pointer:\n{}",
+        wat.contains("(i32.const"),
+        "string data pointer const:\n{}",
         wat
     );
-    // Its data segment (at the block start) is the heap-object block: header `size=0`, `tag=5`,
-    // `ref_count=1`, then the length prefix `2`, then the bytes 'h','i' (no NUL terminator).
     assert!(
-            wat.contains(
-                "(data (i32.const 1448) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\02\\00\\00\\00\\68\\69\")"
-            ),
-            "string data segment:\n{}",
-            wat
-        );
+        wat.contains("\\02\\00\\00\\00\\02\\00\\00\\00\\68\\69"),
+        "string data segment for \"hi\" (byte_len + scalar_len + utf8):\n{}",
+        wat
+    );
 }
 
 #[test]
@@ -488,11 +482,19 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
 
 /// Debug builds (the default) must actually instrument the allocator under the MIR backend: with
 /// `debug` on, `$malloc` bumps the live/total counters; under `--release` (`debug` off) the hot
-/// path stays clean.
+/// path stays clean. Single-threaded modules also drop the allocator spinlock.
 #[test]
 fn debug_toggles_allocator_instrumentation() {
-    assert!(runtime_prelude(true).contains("global.set $live_objects"));
-    assert!(!runtime_prelude(false).contains("global.set $live_objects"));
+    assert!(runtime_prelude(true, false).contains("global.set $live_objects"));
+    assert!(!runtime_prelude(false, false).contains("global.set $live_objects"));
+    assert!(
+        runtime_prelude(false, true).contains("call $__alloc_lock_acquire"),
+        "threaded modules must keep the allocator spinlock"
+    );
+    assert!(
+        !runtime_prelude(false, false).contains("call $__alloc_lock_acquire"),
+        "single-threaded modules must elide the allocator spinlock"
+    );
 }
 
 /// Builds a one-function module carrying a named local and a `DebugLine` marker, so both the

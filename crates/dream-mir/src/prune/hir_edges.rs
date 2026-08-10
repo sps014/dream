@@ -181,6 +181,20 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(array, out);
             hir_expr_edges(new_len, out);
         }
+        K::ArrayElemsCopy {
+            dst,
+            dst_off,
+            src,
+            src_off,
+            count,
+            ..
+        } => {
+            hir_expr_edges(dst, out);
+            hir_expr_edges(dst_off, out);
+            hir_expr_edges(src, out);
+            hir_expr_edges(src_off, out);
+            hir_expr_edges(count, out);
+        }
         K::ArrayLit { elems, .. } | K::Tuple { elems } => {
             for el in elems {
                 hir_expr_edges(el, out);

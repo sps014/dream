@@ -104,6 +104,20 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         }
         Statement::Print { arg, .. } => subst_operand(arg, known),
         Statement::ForceFree(o) => subst_operand(o, known),
+        Statement::ArrayElemsCopy {
+            dst,
+            dst_off,
+            src,
+            src_off,
+            count,
+            ..
+        } => {
+            subst_operand(dst, known)
+                | subst_operand(dst_off, known)
+                | subst_operand(src, known)
+                | subst_operand(src_off, known)
+                | subst_operand(count, known)
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => subst_operand(o, known),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => false,
     }

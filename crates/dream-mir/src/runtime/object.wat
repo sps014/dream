@@ -80,7 +80,7 @@
     (local $c i32)
     i32.const -2128831035
     local.set $h
-    ;; length prefix at [p]; chars at p+4
+    ;; byte_len at [p]; utf8 at p+8
     local.get $p
     i32.load
     local.set $len
@@ -93,7 +93,7 @@
             i32.ge_u
             br_if $done
             local.get $p
-            i32.const 4
+            i32.const 8
             i32.add
             local.get $i
             i32.add
@@ -129,9 +129,9 @@
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
-    ;; $d is the char data pointer (past the 4-byte length prefix)
+    ;; $d is the utf8 payload pointer (past the 8-byte string header)
     local.get $p
-    i32.const 4
+    i32.const 8
     i32.add
     local.set $d
     local.get $v
@@ -141,6 +141,11 @@
         i32.const 48
         i32.store8
         local.get $p
+        i32.const 1
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
         i32.const 1
         i32.store
         local.get $p
@@ -212,6 +217,11 @@
     local.get $p
     local.get $i
     i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $i
+    i32.store
     i32.const 0
     local.set $start
     local.get $i
@@ -272,18 +282,23 @@
 )
 (func $char_to_string (param $v i32) (result i32)
     (local $p i32)
-    ;; 4-byte length prefix + 1 char byte
-    i32.const 5
+    ;; 8-byte string header + 1 char byte
+    i32.const 9
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
-    ;; length = 1
+    ;; byte_len = 1, scalar_len = 1
     local.get $p
     i32.const 1
     i32.store
-    ;; char at p+4
     local.get $p
     i32.const 4
+    i32.add
+    i32.const 1
+    i32.store
+    ;; char at p+8
+    local.get $p
+    i32.const 8
     i32.add
     local.get $v
     i32.store8
@@ -388,7 +403,7 @@
     call $malloc
     local.set $p
     local.get $p
-    i32.const 4
+    i32.const 8
     i32.add
     local.set $d
     local.get $v
@@ -398,6 +413,11 @@
         i32.const 48
         i32.store8
         local.get $p
+        i32.const 1
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
         i32.const 1
         i32.store
         local.get $p
@@ -470,6 +490,11 @@
     local.get $p
     local.get $i
     i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $i
+    i32.store
     i32.const 0
     local.set $start
     local.get $i
@@ -527,7 +552,7 @@
     call $malloc
     local.set $p
     local.get $p
-    i32.const 4
+    i32.const 8
     i32.add
     local.set $d
     local.get $v
@@ -537,6 +562,11 @@
         i32.const 48
         i32.store8
         local.get $p
+        i32.const 1
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
         i32.const 1
         i32.store
         local.get $p
@@ -573,6 +603,11 @@
         )
     )
     local.get $p
+    local.get $i
+    i32.store
+    local.get $p
+    i32.const 4
+    i32.add
     local.get $i
     i32.store
     i32.const 0

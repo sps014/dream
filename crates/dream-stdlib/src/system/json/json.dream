@@ -31,19 +31,12 @@ public class Json {
         return sb.build();
     }
 
-    // Parses `text` into a dynamic `JsonValue` tree.
+    // Parses `text` into a dynamic `JsonValue` tree (no intermediate byte[] copy).
     public static fun parse(text: string): Result<JsonValue, ParseError> {
         if (text.is_empty()) {
             return Result.Err(ParseError.invalid("empty JSON input"));
         }
-        let n = text.byte_size();
-        let bytes = Buffer.alloc<byte>(n);
-        let i = 0;
-        while (i < n) {
-            bytes[i] = (byte)text.byte_at(i);
-            i = i + 1;
-        }
-        let parser = JsonParser(bytes, 0);
+        let parser = JsonParser(text, 0);
         let value = parser.parse_value();
         if (parser.at_end() == false) {
             return Result.Err(ParseError.invalid("trailing characters after JSON value"));
@@ -52,7 +45,31 @@ public class Json {
     }
 
 
-    // --- internal serialization helpers -----------------------------------------------------
+    // --- serialization helpers (also used by `@json` `write_json` methods) -------------------
+
+    public static fun write_string(sb: StringBuilder, s: string): void {
+        Json._json_escape_into(sb, s);
+    }
+
+    public static fun write_bool(sb: StringBuilder, b: bool): void {
+        if (b == true) {
+            sb.append("true");
+        } else {
+            sb.append("false");
+        }
+    }
+
+    public static fun write_null(sb: StringBuilder): void {
+        sb.append("null");
+    }
+
+    public static fun write_int(sb: StringBuilder, n: int): void {
+        sb.append(n.to_string());
+    }
+
+    public static fun write_number(sb: StringBuilder, n: double): void {
+        sb.append(Json._json_number(n));
+    }
 
     static fun _append_hex4(sb: StringBuilder, value: int): void {
         let digits = Buffer.alloc<int>(4);
@@ -73,41 +90,58 @@ public class Json {
     }
 
     // Appends a quoted, escaped JSON string to `sb`.
-    static fun _json_escape_into(sb: StringBuilder, s: string): void {
+    // Safe ASCII / UTF-8 runs are bulk-copied; only `"`, `\`, and controls take the slow path.
+    public static fun _json_escape_into(sb: StringBuilder, s: string): void {
         sb.append_char('"');
-        let n = s.length;
+        let n = s.byte_size();
         let i = 0;
         while (i < n) {
-            let c = s.char_at(i);
-            let cp = c.to_int();
-            if (c == '"') {
+            let run_start = i;
+            let scanning = true;
+            while (scanning == true) {
+                if (i >= n) {
+                    scanning = false;
+                } else {
+                    let b = s.byte_at(i);
+                    // Escape `"`, `\`, and ASCII controls; pass through the rest (incl. UTF-8).
+                    if ((b < 32) || (b == 34) || (b == 92)) {
+                        scanning = false;
+                    } else {
+                        i = i + 1;
+                    }
+                }
+            }
+            if (i > run_start) {
+                sb.append_utf8_slice(s, run_start, i - run_start);
+            }
+            if (i >= n) {
+                break;
+            }
+            let b = s.byte_at(i);
+            if (b == 34) {
                 sb.append_char('\\');
                 sb.append_char('"');
-            } else if (c == '\\') {
+            } else if (b == 92) {
                 sb.append_char('\\');
                 sb.append_char('\\');
-            } else if (c == '\n') {
+            } else if (b == 10) {
                 sb.append_char('\\');
                 sb.append_char('n');
-            } else if (c == '\t') {
+            } else if (b == 9) {
                 sb.append_char('\\');
                 sb.append_char('t');
-            } else if (c == '\r') {
+            } else if (b == 13) {
                 sb.append_char('\\');
                 sb.append_char('r');
-            } else if ((cp >= 32) && (cp <= 126)) {
-                sb.append_char(c);
-            } else if (cp <= 65535) {
-                sb.append("\\u");
-                Json._append_hex4(sb, cp);
+            } else if (b == 8) {
+                sb.append_char('\\');
+                sb.append_char('b');
+            } else if (b == 12) {
+                sb.append_char('\\');
+                sb.append_char('f');
             } else {
-                let u = cp - 65536;
-                let hi = 55296 + (u / 1024);
-                let lo = 56320 + (u % 1024);
                 sb.append("\\u");
-                Json._append_hex4(sb, hi);
-                sb.append("\\u");
-                Json._append_hex4(sb, lo);
+                Json._append_hex4(sb, b);
             }
             i = i + 1;
         }
@@ -150,11 +184,12 @@ public class Json {
         if (k == 4) {
             sb.append_char('[');
             let i = 0;
-            while (i < v.items.length) {
+            let n = v.length;
+            while (i < n) {
                 if (i > 0) {
                     sb.append_char(',');
                 }
-                Json._json_stringify_into(sb, v.items.get(i).unwrap_or(JsonValue.none()));
+                Json._json_stringify_into(sb, v.at(i).unwrap_or(JsonValue.none()));
                 i = i + 1;
             }
             sb.append_char(']');
@@ -163,14 +198,15 @@ public class Json {
         if (k == 5) {
             sb.append_char('{');
             let i = 0;
-            while (i < v.obj_keys.length) {
+            let n = v.length;
+            while (i < n) {
                 if (i > 0) {
                     sb.append_char(',');
                 }
-                let key = v.obj_keys.get(i).unwrap_or("");
+                let key = v.key_at(i).unwrap_or("");
                 Json._json_escape_into(sb, key);
                 sb.append_char(':');
-                Json._json_stringify_into(sb, v.get(key).unwrap_or(JsonValue.none()));
+                Json._json_stringify_into(sb, v.value_at(i).unwrap_or(JsonValue.none()));
                 i = i + 1;
             }
             sb.append_char('}');
@@ -192,18 +228,19 @@ public class Json {
     static fun _json_stringify_pretty_into(sb: StringBuilder, v: JsonValue, indent: int, depth: int): void {
         let k = v.kind;
         if (k == 4) {
-            if (v.items.length == 0) {
+            let n = v.length;
+            if (n == 0) {
                 sb.append("[]");
                 return;
             }
             sb.append("[\n");
             let i = 0;
-            while (i < v.items.length) {
+            while (i < n) {
                 if (i > 0) {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));
-                Json._json_stringify_pretty_into(sb, v.items.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                Json._json_stringify_pretty_into(sb, v.at(i).unwrap_or(JsonValue.none()), indent, depth + 1);
                 i = i + 1;
             }
             sb.append_char('\n');
@@ -212,21 +249,22 @@ public class Json {
             return;
         }
         if (k == 5) {
-            if (v.obj_keys.length == 0) {
+            let n = v.length;
+            if (n == 0) {
                 sb.append("{}");
                 return;
             }
             sb.append("{\n");
             let i = 0;
-            while (i < v.obj_keys.length) {
+            while (i < n) {
                 if (i > 0) {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));
-                let key = v.obj_keys.get(i).unwrap_or("");
+                let key = v.key_at(i).unwrap_or("");
                 Json._json_escape_into(sb, key);
                 sb.append(": ");
-                Json._json_stringify_pretty_into(sb, v.get(key).unwrap_or(JsonValue.none()), indent, depth + 1);
+                Json._json_stringify_pretty_into(sb, v.value_at(i).unwrap_or(JsonValue.none()), indent, depth + 1);
                 i = i + 1;
             }
             sb.append_char('\n');

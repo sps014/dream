@@ -2,26 +2,32 @@ module system.json;
 
 // Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are
 // acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check.
+//
+// Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only;
+// objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
 @allow_cycle
 public class JsonValue {
     public kind: int;
     public bool_val: bool;
     public num_val: double;
     public str_val: string;
-    public items: List<JsonValue>;
+    public items: Option<List<JsonValue>>;
     // Insertion-ordered keys for objects (stringify order).
-    public obj_keys: List<string>;
+    public obj_keys: Option<List<string>>;
+    // Values parallel to `obj_keys` (avoids map re-hash during stringify).
+    obj_vals: Option<List<JsonValue>>;
     // O(1) object field lookup.
-    obj_map: Map<string, JsonValue>;
+    obj_map: Option<Map<string, JsonValue>>;
 
     public constructor(
         kind: int,
         bool_val: bool,
         num_val: double,
         str_val: string,
-        items: List<JsonValue>,
-        obj_keys: List<string>,
-        obj_map: Map<string, JsonValue>
+        items: Option<List<JsonValue>>,
+        obj_keys: Option<List<string>>,
+        obj_vals: Option<List<JsonValue>>,
+        obj_map: Option<Map<string, JsonValue>>
     ) {
         this.kind = kind;
         this.bool_val = bool_val;
@@ -29,31 +35,32 @@ public class JsonValue {
         this.str_val = str_val;
         this.items = items;
         this.obj_keys = obj_keys;
+        this.obj_vals = obj_vals;
         this.obj_map = obj_map;
     }
 
-    // Allocates a fresh JsonValue.
-    static fun _new(k: int): JsonValue {
-        return JsonValue(k, false, 0.0d, "", List<JsonValue>(), List<string>(), Map<string, JsonValue>());
+    // Scalar / null: no List or Map allocation.
+    static fun _scalar(k: int, bool_val: bool, num_val: double, str_val: string): JsonValue {
+        let none_items: Option<List<JsonValue>> = Option.None;
+        let none_keys: Option<List<string>> = Option.None;
+        let none_vals: Option<List<JsonValue>> = Option.None;
+        let none_map: Option<Map<string, JsonValue>> = Option.None;
+        return JsonValue(k, bool_val, num_val, str_val, none_items, none_keys, none_vals, none_map);
     }
 
     // A new null JSON value.
     public static fun none(): JsonValue {
-        return JsonValue._new(0);
+        return JsonValue._scalar(0, false, 0.0d, "");
     }
 
     // A new boolean JSON value.
     public static fun boolean(b: bool): JsonValue {
-        let v = JsonValue._new(1);
-        v.bool_val = b;
-        return v;
+        return JsonValue._scalar(1, b, 0.0d, "");
     }
 
     // A new number JSON value.
     public static fun number(n: double): JsonValue {
-        let v = JsonValue._new(2);
-        v.num_val = n;
-        return v;
+        return JsonValue._scalar(2, false, n, "");
     }
 
     // A new number JSON value from int.
@@ -63,19 +70,30 @@ public class JsonValue {
 
     // A new string JSON value.
     public static fun from_string(s: string): JsonValue {
-        let v = JsonValue._new(3);
-        v.str_val = s;
-        return v;
+        return JsonValue._scalar(3, false, 0.0d, s);
     }
 
-    // A new empty JSON array.
+    // A new empty JSON array (allocates only the items list).
     public static fun array(): JsonValue {
-        return JsonValue._new(4);
+        let none_keys: Option<List<string>> = Option.None;
+        let none_vals: Option<List<JsonValue>> = Option.None;
+        let none_map: Option<Map<string, JsonValue>> = Option.None;
+        return JsonValue(4, false, 0.0d, "", Option.Some(List<JsonValue>()), none_keys, none_vals, none_map);
     }
 
-    // A new empty JSON object.
+    // A new empty JSON object (allocates keys, parallel values, and map).
     public static fun dict(): JsonValue {
-        return JsonValue._new(5);
+        let none_items: Option<List<JsonValue>> = Option.None;
+        return JsonValue(
+            5,
+            false,
+            0.0d,
+            "",
+            none_items,
+            Option.Some(List<string>()),
+            Option.Some(List<JsonValue>()),
+            Option.Some(Map<string, JsonValue>())
+        );
     }
 
     // The kind of JSON value.
@@ -132,49 +150,103 @@ public class JsonValue {
 
     // True if the object has the given key.
     public fun has(key: string): bool {
-        return this.obj_map.contains(key);
+        return switch (this.obj_map) {
+            Some(m) => m.contains(key),
+            None => false,
+        };
     }
 
     // The value for `key`, or `None`.
     @get_indexer
     public fun get(key: string): Option<JsonValue> {
-        return this.obj_map.get(key);
+        return switch (this.obj_map) {
+            Some(m) => m.get(key),
+            None => Option.None,
+        };
     }
 
-    // Sets the value for `key`.
+    // Sets the value for `key` (objects only).
     @set_indexer
     public fun set(key: string, value: JsonValue): void {
-        if (this.obj_map.contains(key) == false) {
-            this.obj_keys.push(key);
+        switch (this.obj_map) {
+            Some(m) => {
+                switch (this.obj_keys) {
+                    Some(keys) => {
+                        switch (this.obj_vals) {
+                            Some(vals) => {
+                                if (m.contains(key) == false) {
+                                    keys.push(key);
+                                    vals.push(value);
+                                } else {
+                                    switch (keys.index_of(key)) {
+                                        Some(idx) => {
+                                            vals.set(idx, value);
+                                        },
+                                        None => { },
+                                    }
+                                }
+                                m.set(key, value);
+                            },
+                            None => { },
+                        }
+                    },
+                    None => { },
+                }
+            },
+            None => { },
         }
-        this.obj_map.set(key, value);
     }
 
     // The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
-        return this.obj_keys.get(index);
+        return switch (this.obj_keys) {
+            Some(keys) => keys.get(index),
+            None => Option.None,
+        };
     }
 
-    // The keys of the object.
+    // The object value at insertion index `index`, or `None`.
+    public fun value_at(index: int): Option<JsonValue> {
+        return switch (this.obj_vals) {
+            Some(vals) => vals.get(index),
+            None => Option.None,
+        };
+    }
+
+    // The keys of the object (empty list when not an object).
     public fun keys(): List<string> {
-        return this.obj_keys;
+        return this.obj_keys.unwrap_or(List<string>());
     }
 
     // The array element at `index`, or `None`.
     public fun at(index: int): Option<JsonValue> {
-        return this.items.get(index);
+        return switch (this.items) {
+            Some(items) => items.get(index),
+            None => Option.None,
+        };
     }
 
     // Appends a value to the array.
     public fun push(value: JsonValue): void {
-        this.items.push(value);
+        switch (this.items) {
+            Some(items) => {
+                items.push(value);
+            },
+            None => { },
+        }
     }
 
-    // Element count for arrays/objects.
+    // Element count for arrays/objects (0 for scalars).
     public get length(): int {
         if (this.kind == 5) {
-            return this.obj_keys.length;
+            return switch (this.obj_keys) {
+                Some(keys) => keys.length,
+                None => 0,
+            };
         }
-        return this.items.length;
+        return switch (this.items) {
+            Some(items) => items.length,
+            None => 0,
+        };
     }
 }

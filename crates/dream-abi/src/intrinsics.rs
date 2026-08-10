@@ -105,6 +105,10 @@ pub const ATTR_SLEEP: &str = "sleep";
 /// `String.alloc(n)` / `String.set(s, i, c)` — low-level string buffer primitives.
 pub const ATTR_STRING_ALLOC: &str = "string_alloc";
 pub const ATTR_STRING_SET: &str = "string_set";
+/// `string.from_utf8(bytes)` — build a string from a full `byte[]` UTF-8 payload.
+pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
+/// `string.from_utf8_prefix(bytes, len)` — build a string from the first `len` bytes of a `byte[]`.
+pub const ATTR_STRING_FROM_UTF8_PREFIX: &str = "string_from_utf8_prefix";
 /// `Debug.free_list_head()` — allocator introspection for tests.
 pub const ATTR_DEBUG_FREE_LIST: &str = "debug_get_free_list_head";
 /// `Debug.heap_ptr()` — current bump-pointer (heap high-water mark).
@@ -123,6 +127,9 @@ pub const ATTR_FROM_BYTES: &str = "from_bytes";
 /// `Buffer.realloc<T>(arr, new_len)` — in-place `$realloc`-based grow/shrink of an array's
 /// backing block.
 pub const ATTR_ARRAY_REALLOC: &str = "array_realloc";
+/// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` — bulk `memory.copy` of `count`
+/// unmanaged elements between two `T[]` payloads (emitter expands `T`'s byte size).
+pub const ATTR_ARRAY_ELEMS_COPY: &str = "array_elems_copy";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
 pub const ATTR_FORCE_FREE: &str = "force_free";
@@ -147,6 +154,8 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_SLEEP,
     ATTR_STRING_ALLOC,
     ATTR_STRING_SET,
+    ATTR_STRING_FROM_UTF8,
+    ATTR_STRING_FROM_UTF8_PREFIX,
     ATTR_DEBUG_FREE_LIST,
     ATTR_DEBUG_HEAP_PTR,
     ATTR_DEBUG_LIVE_OBJECTS,
@@ -155,6 +164,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_TO_BYTES,
     ATTR_FROM_BYTES,
     ATTR_ARRAY_REALLOC,
+    ATTR_ARRAY_ELEMS_COPY,
     ATTR_FORCE_FREE,
     ATTR_WIRE_ENCODE,
     ATTR_WIRE_DECODE,
@@ -189,6 +199,10 @@ pub enum IntrinsicOp {
     StringAlloc,
     /// `String.set(s, i, c)` — write char `c` at index `i` of buffer `s`.
     StringSet,
+    /// `string.from_utf8(bytes)` — build a string from a full `byte[]` UTF-8 payload.
+    StringFromUtf8,
+    /// `string.from_utf8_prefix(bytes, len)` — build a string from a UTF-8 byte prefix.
+    StringFromUtf8Prefix,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
     /// `Debug.heap_ptr()` — current bump-pointer value.
@@ -205,6 +219,8 @@ pub enum IntrinsicOp {
     FromBytes,
     /// `Buffer.realloc<T>(arr, new_len)` (`@unsafe`) — in-place `$realloc`-based grow/shrink.
     ArrayRealloc,
+    /// `Buffer.elems_copy<T>(…)` (`@unsafe`) — bulk blit of unmanaged array elements.
+    ArrayElemsCopy,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
     /// `Bytes.toWire<T>(v)` — encode a `WebWorker`-safe `T` (a `string`, or an `unmanaged` value)
@@ -230,6 +246,8 @@ impl IntrinsicOp {
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,
             ATTR_STRING_SET => IntrinsicOp::StringSet,
+            ATTR_STRING_FROM_UTF8 => IntrinsicOp::StringFromUtf8,
+            ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
             ATTR_DEBUG_FREE_LIST => IntrinsicOp::DebugFreeList,
             ATTR_DEBUG_HEAP_PTR => IntrinsicOp::DebugHeapPtr,
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,
@@ -238,6 +256,7 @@ impl IntrinsicOp {
             ATTR_TO_BYTES => IntrinsicOp::ToBytes,
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,
+            ATTR_ARRAY_ELEMS_COPY => IntrinsicOp::ArrayElemsCopy,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,

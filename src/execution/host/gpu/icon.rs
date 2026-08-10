@@ -1,11 +1,31 @@
-//! Load `[package].icon` from a nearby `dream.toml` and decode a winit window icon from disk.
-//! The icon stays a linked project file — never embedded into the binary.
+//! App window icon: packaged PNG bytes (single-file `dreamer pack`) or a linked
+//! `[package].icon` path next to `dream.toml` (`dream run` from a project tree).
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use winit::window::Icon;
 
-/// Walk upward from cwd looking for `dream.toml`, then resolve `package.icon`.
+static PACKAGED_ICON_PNG: OnceLock<&'static [u8]> = OnceLock::new();
+
+/// Install PNG bytes baked into a packed `dream-runner` executable. Call once before running wasm.
+pub fn set_packaged_app_icon(png: &'static [u8]) {
+    if png.is_empty() {
+        return;
+    }
+    let _ = PACKAGED_ICON_PNG.set(png);
+}
+
+/// Prefer packaged (single-file) icon; otherwise load `[package].icon` from disk.
 pub fn load_window_icon() -> Option<Icon> {
+    if let Some(bytes) = PACKAGED_ICON_PNG.get().copied() {
+        return match icon_from_png_bytes(bytes) {
+            Ok(icon) => Some(icon),
+            Err(e) => {
+                eprintln!("Dream: failed to decode packaged app icon: {e}");
+                None
+            }
+        };
+    }
     let path = resolve_icon_path()?;
     match icon_from_png_path(&path) {
         Ok(icon) => Some(icon),

@@ -55,10 +55,26 @@ pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
             format!("{pkg_name}-{dream_triple}")
         };
         let dest = pack_dir.join(&out_name);
-        build_runner(&dream_root, &wasm_path, rust_triple, &dest)?;
+        let icon_path = resolve_package_icon(&workspace);
+        build_runner(&dream_root, &wasm_path, icon_path.as_deref(), rust_triple, &dest)?;
         println!("packed {}", dest.display());
     }
     Ok(())
+}
+
+fn resolve_package_icon(workspace: &Workspace) -> Option<PathBuf> {
+    let rel = workspace.manifest.package.icon.as_ref()?;
+    let path = workspace.root.join(rel);
+    if path.is_file() {
+        Some(path)
+    } else {
+        eprintln!(
+            "warning: package.icon '{}' not found at {}; packing without an app icon",
+            rel,
+            path.display()
+        );
+        None
+    }
 }
 
 fn resolve_pack_targets(args: &[String]) -> Result<Vec<(String, String)>> {
@@ -181,6 +197,7 @@ fn find_dream_workspace_root() -> Option<PathBuf> {
 fn build_runner(
     dream_root: &Path,
     wasm_path: &Path,
+    icon_path: Option<&Path>,
     rust_triple: &str,
     dest: &Path,
 ) -> Result<()> {
@@ -196,6 +213,10 @@ fn build_runner(
             "--manifest-path",
         ])
         .arg(dream_root.join("Cargo.toml"));
+
+    if let Some(icon) = icon_path {
+        cmd.env("DREAM_EMBEDDED_ICON", icon);
+    }
 
     if rust_triple != host_triple {
         cmd.arg("--target").arg(rust_triple);

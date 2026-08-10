@@ -52,7 +52,7 @@ entry = "src/main.dream"        # required for bin; forbidden for lib
 license = "MIT"
 keywords = ["http", "json"]         # optional; used by dreamer search / the registry site
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
-icon = "assets/icon.png"        # optional; linked PNG path relative to dream.toml (not embedded)
+icon = "assets/icon.png"        # optional PNG; packed into single-file exe by `dreamer pack`
 
 [dependencies]
 http-utils = "1.2"                                    # semver requirement, resolved from a registry
@@ -85,10 +85,10 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
   Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
   native. Combinations are allowed; see `dreamer run` below for how the host is chosen.
-- `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory). On native,
-  `dream run` loads that file from disk when a GPU window is created (winit window icon). On web,
-  `dreamer serve` maps `/favicon.ico` to the same file and scaffolds may add a `<link rel="icon">`.
-  The icon is **never** embedded into packed executables — it stays a normal project file.
+- `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory).
+  - **`dream run`**: loads the file from disk when a GPU window is created.
+  - **`dreamer pack`**: copies the PNG into the single-file native executable so no `assets/`
+    folder is required next to the `.exe`. Web still uses a static file / favicon link.
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).
 - Package names must start with a letter and may contain ASCII letters, digits, `-`, `_`, and `.`.
@@ -226,15 +226,16 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
 | `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` (and `[package].icon` PNG if set) in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree` | Print the resolved dependency tree from `dream.lock`. |
 
 ### Native `dreamer pack`
 
-Produces a single native executable per selected platform by embedding the release `.wasm` in the
-workspace `dream-runner` crate (wasmtime + the same host ABI as `dream run`).
+Produces a single native executable per selected platform by embedding the release `.wasm` (and
+`[package].icon` PNG when set) in the workspace `dream-runner` crate (wasmtime + the same host ABI as
+`dream run`). No project `assets/` folder is required next to the packed binary.
 
 ```bash
 dreamer pack                         # host → target/pack/<name>-<os>-<arch>

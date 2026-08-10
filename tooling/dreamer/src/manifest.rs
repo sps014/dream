@@ -192,8 +192,9 @@ pub struct PackageMeta {
     /// defaults to native wasmtime execution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<String>,
-    /// Optional app icon path relative to the manifest directory (PNG). Linked file only — never
-    /// embedded into packed executables.
+    /// Optional app icon path relative to the manifest directory (PNG).
+    /// - `dream run`: loaded from disk next to `dream.toml`.
+    /// - `dreamer pack`: PNG bytes are copied into the single-file exe (no sidecar assets folder).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
 }

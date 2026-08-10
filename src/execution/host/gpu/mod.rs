@@ -13,6 +13,8 @@ mod state;
 mod surface;
 mod textures;
 
+pub use icon::set_packaged_app_icon;
+
 use std::path::Path;
 use std::time::Instant;
 

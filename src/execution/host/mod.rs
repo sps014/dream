@@ -29,7 +29,7 @@ pub use console::{enable_ansi_support, link_console_functions};
 pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;
 pub use file::link_file_functions;
-pub use gpu::{attach_abi_from_wat_path, link_gpu_functions};
+pub use gpu::{attach_abi_from_wat_path, link_gpu_functions, set_packaged_app_icon};
 pub use http::link_http_functions;
 pub use math::link_math_functions;
 pub use memory::{

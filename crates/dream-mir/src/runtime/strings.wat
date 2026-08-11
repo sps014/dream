@@ -537,6 +537,7 @@
 (func $string_eq (param $a i32) (param $b i32) (result i32)
     (local $len i32)
     (local $i i32)
+    (local $words i32)
   ;; identical pointers (covers the both-null case) are trivially equal
     local.get $a
     local.get $b
@@ -570,15 +571,57 @@
         i32.const 0
         return
     end
-  ;; compare the $len utf8 bytes at a+8+i / b+8+i (no NUL sentinel needed)
+  ;; `memory.compare` is NOT available in our WASM target — word-wise i32 loads + byte tail.
+    local.get $len
+    i32.const 2
+    i32.shr_u
+    local.set $words
     i32.const 0
     local.set $i
-    (block $done
-        (loop $cmp
+    (block $words_done
+        (loop $word_cmp
+            local.get $i
+            local.get $words
+            i32.ge_u
+            br_if $words_done
+            local.get $a
+            i32.const 8
+            i32.add
+            local.get $i
+            i32.const 2
+            i32.shl
+            i32.add
+            i32.load
+            local.get $b
+            i32.const 8
+            i32.add
+            local.get $i
+            i32.const 2
+            i32.shl
+            i32.add
+            i32.load
+            i32.ne
+            if
+                i32.const 0
+                return
+            end
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $word_cmp
+        )
+    )
+    local.get $words
+    i32.const 2
+    i32.shl
+    local.set $i
+    (block $tail_done
+        (loop $tail
             local.get $i
             local.get $len
             i32.ge_u
-            br_if $done
+            br_if $tail_done
             local.get $a
             i32.const 8
             i32.add
@@ -600,10 +643,156 @@
             i32.const 1
             i32.add
             local.set $i
-            br $cmp
+            br $tail
         )
     )
     i32.const 1
+)
+
+;; Scalar-indexed substring: clamp `[start, end)`, map to UTF-8 byte offsets, then one
+;; `malloc` + `memory.copy`. Null `ptr` yields an empty string with zeroed headers.
+(func $string_substring (param $ptr i32) (param $start i32) (param $end i32) (result i32)
+    (local $sc i32)
+    (local $s i32)
+    (local $e i32)
+    (local $byte_start i32)
+    (local $byte_end i32)
+    (local $byte_len i32)
+    (local $scalars i32)
+    (local $p i32)
+    local.get $ptr
+    i32.eqz
+    if
+        i32.const 8
+        i32.const {TAG_STRING}
+        call $malloc
+        local.set $p
+        local.get $p
+        i32.const 0
+        i32.store
+        local.get $p
+        i32.const 4
+        i32.add
+        i32.const 0
+        i32.store
+        local.get $p
+        return
+    end
+    local.get $ptr
+    call $str_scalar_len
+    local.set $sc
+    local.get $start
+    local.set $s
+    local.get $s
+    i32.const 0
+    i32.lt_s
+    if
+        i32.const 0
+        local.set $s
+    end
+    local.get $s
+    local.get $sc
+    i32.gt_u
+    if
+        local.get $sc
+        local.set $s
+    end
+    local.get $end
+    local.set $e
+    local.get $e
+    i32.const 0
+    i32.lt_s
+    if
+        i32.const 0
+        local.set $e
+    end
+    local.get $e
+    local.get $sc
+    i32.gt_u
+    if
+        local.get $sc
+        local.set $e
+    end
+    local.get $e
+    local.get $s
+    i32.lt_u
+    if
+        local.get $s
+        local.set $e
+    end
+    local.get $ptr
+    local.get $s
+    call $utf8_scalar_byte_offset
+    local.set $byte_start
+    local.get $ptr
+    local.get $e
+    call $utf8_scalar_byte_offset
+    local.set $byte_end
+    local.get $byte_end
+    local.get $byte_start
+    i32.sub
+    local.set $byte_len
+    local.get $e
+    local.get $s
+    i32.sub
+    local.set $scalars
+    local.get $byte_len
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $p
+    local.get $p
+    local.get $byte_len
+    i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $scalars
+    i32.store
+    local.get $byte_len
+    i32.eqz
+    if
+        local.get $p
+        return
+    end
+    local.get $p
+    i32.const 8
+    i32.add
+    local.get $ptr
+    i32.const 8
+    i32.add
+    local.get $byte_start
+    i32.add
+    local.get $byte_len
+    memory.copy
+    local.get $p
+)
+
+;; Bulk-copy `count` UTF-8 bytes from string `src` into `byte[]` `dst`.
+;; Source payload is at src+8; destination array payload is at dst+4.
+(func $string_copy_utf8 (param $dst i32) (param $dst_off i32) (param $src i32) (param $src_off i32) (param $count i32)
+    local.get $count
+    i32.eqz
+    br_if 0
+    local.get $dst
+    i32.eqz
+    br_if 0
+    local.get $src
+    i32.eqz
+    br_if 0
+    local.get $dst
+    i32.const 4
+    i32.add
+    local.get $dst_off
+    i32.add
+    local.get $src
+    i32.const 8
+    i32.add
+    local.get $src_off
+    i32.add
+    local.get $count
+    memory.copy
 )
 
 ;; Unchecked scalar read; call sites emit a scalar-index bounds check first.

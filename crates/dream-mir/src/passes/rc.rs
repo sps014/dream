@@ -20,15 +20,16 @@
 //! arguments are not retained — a self-consistent ABI: callee-owns-none-of-its-params,
 //! caller-owns-the-result.
 //!
-//! [`RcElision`] cancels redundant adjacent `Retain`/`Release` pairs on the same operand,
-//! the payoff once propagation/inlining bring a retain and its matching release together.
+//! [`RcElision`] cancels redundant `Retain`/`Release` pairs on the same operand along straight-line
+//! unique-pred `Goto` chains (not only within a single basic block), the payoff once
+//! propagation/inlining bring a retain and its matching release together.
 
 use super::MirPass;
 use crate::{
-    Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+    BlockId, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::TypeInterner;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 pub struct RcInsertion;
 
@@ -53,6 +54,10 @@ impl MirPass for RcInsertion {
         // released *after* the rvalue is evaluated (the rvalue's container store retains it), not
         // before — otherwise a `+0` old value is freed and then reused mid-evaluation. Such cases
         // stash the old pointer in a synthetic temp and release it after the store.
+        //
+        // Last-use "move" (skip retain + null source) is intentionally not done here: a static
+        // last-use ordinal is wrong inside loops (the same copy runs every iteration), and nulling
+        // the source breaks nested `for`/`while` that re-read the local on later iterations.
         let local_types: Vec<dream_types::TypeId> = func.locals.iter().map(|d| d.ty).collect();
         let mut extra_locals: Vec<LocalDecl> = Vec::new();
         let temp_base = func.locals.len() as u32;
@@ -162,11 +167,6 @@ impl MirPass for RcInsertion {
     }
 }
 
-/// True if the rvalue is a *borrow* that must be retained when bound to an owning local, as opposed
-/// to a freshly-owned value (call/new/array literal) that already carries its `+1`. Two cases: a
-/// copy of an existing reference place, and an interned string literal (which lives at a baseline
-/// refcount of 1 in the string pool, so a binding that will later be released must first retain it
-/// to keep the shared literal alive).
 /// True if `local` is read anywhere in `rvalue` (as a plain operand or through a field/index base).
 /// Used to detect self-referential reassignments (`x = f(x)`) whose old value must outlive the
 /// rvalue's evaluation.
@@ -258,6 +258,11 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
     hit
 }
 
+/// True if the rvalue is a *borrow* that must be retained when bound to an owning local, as opposed
+/// to a freshly-owned value (call/new/array literal) that already carries its `+1`. Two cases: a
+/// copy of an existing reference place, and an interned string literal (which lives at a baseline
+/// refcount of 1 in the string pool, so a binding that will later be released must first retain it
+/// to keep the shared literal alive).
 fn is_borrowed_copy(rvalue: &Rvalue, interner: &TypeInterner) -> bool {
     match rvalue {
         Rvalue::Use(Operand::Copy(_))
@@ -315,6 +320,39 @@ fn is_pure_rvalue(rvalue: &Rvalue) -> bool {
     )
 }
 
+/// True when `b` is the unique successor of a unique predecessor that ends in `Goto(b)` — i.e. the
+/// middle/end of a straight-line Goto chain, not a region head.
+fn is_goto_chain_continuation(func: &MirFunction, preds: &[Vec<BlockId>], b: BlockId) -> bool {
+    let p = &preds[b.0 as usize];
+    if p.len() != 1 {
+        return false;
+    }
+    let pred = p[0];
+    matches!(
+        func.blocks[pred.0 as usize].terminator,
+        Terminator::Goto(t) if t == b
+    )
+}
+
+/// Straight-line region starting at `start`: follow `Goto` edges while the successor has exactly
+/// that block as its unique predecessor.
+fn goto_chain(func: &MirFunction, preds: &[Vec<BlockId>], start: BlockId) -> Vec<BlockId> {
+    let mut chain = vec![start];
+    let mut cur = start;
+    loop {
+        match func.blocks[cur.0 as usize].terminator {
+            Terminator::Goto(next)
+                if preds[next.0 as usize].len() == 1 && preds[next.0 as usize][0] == cur =>
+            {
+                chain.push(next);
+                cur = next;
+            }
+            _ => break,
+        }
+    }
+    chain
+}
+
 pub struct RcElision;
 
 impl MirPass for RcElision {
@@ -323,10 +361,9 @@ impl MirPass for RcElision {
     }
 
     /// Cancels a `Retain(x)`/`Release(x)` pair on the same identity `x` even when separated by a
-    /// *provably side-effect-free* run of statements in the same block (a basic block has no
-    /// internal branches, so this is a straight-line forward sweep, not a general dataflow
-    /// fixpoint) — generalizing the old strictly-adjacent-pair cancellation to also catch e.g. a
-    /// retain/release separated by an unrelated arithmetic assignment or a `println`.
+    /// *provably side-effect-free* run of statements along a unique-pred `Goto` chain (straight-line
+    /// CFG region) — generalizing single-BB cancellation to also catch pairs split across empty
+    /// fall-through blocks after CFG splits.
     ///
     /// The refcount an object carries at any point is not purely internal bookkeeping — it is
     /// observable, both directly (`Debug.ref_count`/`Debug.live_objects`) and indirectly (a `del()`
@@ -337,62 +374,106 @@ impl MirPass for RcElision {
     /// (possibly aliased) object is treated as a hard barrier: it flushes every pending `Retain`,
     /// rather than trying to prove per-key which ones are actually affected. Only a small, clearly
     /// safe whitelist — a plain-local assignment from a pure, call-free [`Rvalue`] (arithmetic,
-    /// `Select`, a bare `Use`), `Print`, and the two debug-line markers — is allowed to pass through
-    /// untouched. This keeps the pass sound while still reaching past pure "noise" statements that
-    /// copy-prop/inlining commonly leave between a retain and its matching release.
+    /// `Select`, a bare `Use`), `Print`, `Nop`, and the two debug-line markers — is allowed to pass
+    /// through untouched. This keeps the pass sound while still reaching past pure "noise"
+    /// statements that copy-prop/inlining commonly leave between a retain and its matching release.
     fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+        let preds = super::cfg::predecessors(func);
+        let n = func.blocks.len();
+        let mut visited = vec![false; n];
         let mut changed = false;
-        for block in &mut func.blocks {
-            let n = block.stmts.len();
-            let mut keep = vec![true; n];
-            let mut block_changed = false;
-            let mut pending: std::collections::HashMap<RcKey, Vec<usize>> =
-                std::collections::HashMap::new();
-            for i in 0..n {
-                match &block.stmts[i] {
-                    Statement::Retain(op) => {
-                        if let Some(key) = RcKey::of(op) {
-                            pending.entry(key).or_default().push(i);
-                        }
-                    }
-                    Statement::Release(op) => {
-                        if let Some(key) = RcKey::of(op) {
-                            if let Some(stack) = pending.get_mut(&key) {
-                                if let Some(retain_idx) = stack.pop() {
-                                    keep[retain_idx] = false;
-                                    keep[i] = false;
-                                    block_changed = true;
-                                    continue;
-                                }
-                            }
-                        }
-                        // An unmatched (or differently-keyed) `Release` may drop the last count of
-                        // an object some *other* pending key aliases — not provably safe to ignore.
-                        pending.clear();
-                    }
-                    Statement::Assign(Place::Local(dst), rvalue) if is_pure_rvalue(rvalue) => {
-                        let key = RcKey::Local(*dst);
-                        pending.remove(&key);
-                    }
-                    Statement::Print { .. }
-                    | Statement::DebugLine(_)
-                    | Statement::SourceLine(_) => {}
-                    _ => {
-                        // Anything else (a call, an allocation, a container store, a field/index
-                        // write, ...) may itself retain/release/inspect an object reachable through
-                        // some other pending key by aliasing — flush everything conservatively.
-                        pending.clear();
-                    }
-                }
+        for bi in 0..n {
+            if visited[bi] {
+                continue;
             }
-            if block_changed {
-                let mut kept = keep.iter();
-                block.stmts.retain(|_| *kept.next().unwrap());
+            let start = BlockId(bi as u32);
+            if is_goto_chain_continuation(func, &preds, start) {
+                continue;
+            }
+            let chain = goto_chain(func, &preds, start);
+            for &b in &chain {
+                visited[b.0 as usize] = true;
+            }
+            if elide_region(func, &chain) {
                 changed = true;
             }
         }
         changed
     }
+}
+
+/// Runs the retain/release cancel sweep across the concatenated statements of `chain`.
+fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
+    let mut locs: Vec<(usize, usize)> = Vec::new();
+    for &b in chain {
+        let bi = b.0 as usize;
+        for si in 0..func.blocks[bi].stmts.len() {
+            locs.push((bi, si));
+        }
+    }
+    let n = locs.len();
+    let mut keep = vec![true; n];
+    let mut region_changed = false;
+    let mut pending: std::collections::HashMap<RcKey, Vec<usize>> =
+        std::collections::HashMap::new();
+    for i in 0..n {
+        let (bi, si) = locs[i];
+        match &func.blocks[bi].stmts[si] {
+            Statement::Retain(op) => {
+                if let Some(key) = RcKey::of(op) {
+                    pending.entry(key).or_default().push(i);
+                }
+            }
+            Statement::Release(op) => {
+                if let Some(key) = RcKey::of(op) {
+                    if let Some(stack) = pending.get_mut(&key) {
+                        if let Some(retain_idx) = stack.pop() {
+                            keep[retain_idx] = false;
+                            keep[i] = false;
+                            region_changed = true;
+                            continue;
+                        }
+                    }
+                }
+                // An unmatched (or differently-keyed) `Release` may drop the last count of
+                // an object some *other* pending key aliases — not provably safe to ignore.
+                pending.clear();
+            }
+            Statement::Assign(Place::Local(dst), rvalue) if is_pure_rvalue(rvalue) => {
+                let key = RcKey::Local(*dst);
+                pending.remove(&key);
+            }
+            Statement::Print { .. }
+            | Statement::DebugLine(_)
+            | Statement::SourceLine(_)
+            | Statement::Nop => {}
+            _ => {
+                // Anything else (a call, an allocation, a container store, a field/index
+                // write, ...) may itself retain/release/inspect an object reachable through
+                // some other pending key by aliasing — flush everything conservatively.
+                pending.clear();
+            }
+        }
+    }
+    if !region_changed {
+        return false;
+    }
+    // Rebuild each touched block, dropping cancelled statements.
+    let mut drop_at: BTreeMap<usize, HashSet<usize>> = BTreeMap::new();
+    for (i, &(bi, si)) in locs.iter().enumerate() {
+        if !keep[i] {
+            drop_at.entry(bi).or_default().insert(si);
+        }
+    }
+    for (bi, drop_set) in drop_at {
+        let mut idx = 0;
+        func.blocks[bi].stmts.retain(|_| {
+            let keep_stmt = !drop_set.contains(&idx);
+            idx += 1;
+            keep_stmt
+        });
+    }
+    true
 }
 
 #[cfg(test)]
@@ -502,18 +583,39 @@ mod tests {
     }
 
     #[test]
+    fn elides_across_goto_chain() {
+        // Retain(x); goto mid; goto end; Release(x) — unique-pred Goto chain is straight-line, so
+        // the pair cancels across empty intermediate blocks.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let x = b.new_local(i.string(), Some("x".into()));
+        let mid = b.new_block();
+        let end = b.new_block();
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Goto(mid));
+        b.switch_to(mid);
+        b.terminate(Terminator::Goto(end));
+        b.switch_to(end);
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcElision.run(&mut func, &i));
+        assert!(func.blocks.iter().all(|bb| bb.stmts.is_empty()));
+    }
+
+    #[test]
     fn inserts_retain_on_borrowed_copy() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("f", i.void());
-        let s = b.new_local(i.string(), Some("s".into()));
+        let s = b.new_param(i.string(), Some("s".into()));
         let t = b.new_local(i.string(), Some("t".into()));
-        // t = s   (borrowed copy of a reference)
+        // t = s   (borrowed copy of a parameter)
         b.assign(Place::Local(t), Rvalue::Use(Operand::Copy(Place::Local(s))));
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &i));
-        // Rule 1 gives `release t (old); assign; retain t`; Rule 3 then releases both owned reference
-        // locals (`s`, `t`) at the `Return`.
+        // Rule 1 gives `release t (old); assign; retain t`; Rule 3 releases owned `t` at Return.
+        // Parameter `s` is not released.
         let kinds: Vec<&str> = func.blocks[0]
             .stmts
             .iter()
@@ -524,10 +626,7 @@ mod tests {
                 _ => "other",
             })
             .collect();
-        assert_eq!(
-            kinds,
-            vec!["release", "assign", "retain", "release", "release"]
-        );
+        assert_eq!(kinds, vec!["release", "assign", "retain", "release"]);
     }
 
     #[test]

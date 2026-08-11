@@ -203,14 +203,14 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.count == 0;
     }
 
-    // Removes all entries.
+    // Removes all entries, keeping the current capacity for reuse.
     public fun clear(): void {
-        this.keys = Buffer.alloc<K>(hash_min_capacity());
-        this.values = Buffer.alloc<V>(hash_min_capacity());
-        this.states = Buffer.alloc<int>(hash_min_capacity());
+        let c = this.cap;
+        this.keys = Buffer.alloc<K>(c);
+        this.values = Buffer.alloc<V>(c);
+        this.states = Buffer.alloc<int>(c);
         this.count = 0;
         this.used = 0;
-        this.cap = hash_min_capacity();
     }
 
     // Gets all keys.

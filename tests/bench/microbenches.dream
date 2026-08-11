@@ -1,0 +1,232 @@
+import system;
+import system.collections;
+import system.text;
+
+// Microbench suite for ARC / string / collection / allocator hot paths.
+// Run: `dream --release run tests/bench/microbenches.dream`
+// Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
+
+fun report(name: string, nanos: long, iters: int): void {
+    let per = nanos / (long)iters;
+    System.println(
+        "bench " + name
+            + " ns_total=" + nanos.to_string()
+            + " iters=" + iters.to_string()
+            + " ns_per_op=" + per.to_string()
+    );
+}
+
+fun sink_int(x: int): int {
+    return x;
+}
+
+fun sink_string(s: string): int {
+    return s.byte_size();
+}
+
+fun bench_arc_locals(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        // Short-lived heap refs: assign/copy stress retain/release without cycles.
+        let a = "n" + i.to_string();
+        let b = a;
+        let c = b;
+        acc = acc + c.byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    report("arc_locals", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_string_concat(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let s = "hello" + i.to_string() + "world";
+        acc = acc + s.byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    report("string_concat", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_string_eq(iters: int): void {
+    let a = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let b = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let c = "abcdefghijklmnopqrstuvwxyz0123456780";
+    let sw = Stopwatch();
+    let hits = 0;
+    let i = 0;
+    while (i < iters) {
+        if (a == b) {
+            hits = hits + 1;
+        }
+        if (a == c) {
+            hits = hits - 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("string_eq", sw.elapsed_nanos(), iters);
+    sink_int(hits);
+}
+
+fun bench_char_scan(iters: int): void {
+    let s = "The quick brown fox jumps over the lazy dog. 0123456789";
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let n = s.length;
+        let j = 0;
+        while (j < n) {
+            acc = acc + (int)s.char_at(j);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("char_scan", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_substring(iters: int): void {
+    let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let sub = s.substring(5, 40);
+        acc = acc + sub.byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    report("substring", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_list_push(iters: int): void {
+    let sw = Stopwatch();
+    let list = List<int>(iters);
+    let i = 0;
+    while (i < iters) {
+        list.push(i);
+        i = i + 1;
+    }
+    sw.stop();
+    report("list_push", sw.elapsed_nanos(), iters);
+    sink_int(list.length);
+}
+
+fun bench_list_insert_mid(iters: int): void {
+    let n = 256;
+    let rounds = iters / n;
+    if (rounds < 1) {
+        rounds = 1;
+    }
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < rounds) {
+        let list = List<int>(n);
+        let i = 0;
+        while (i < n) {
+            list.insert(list.length / 2, i);
+            i = i + 1;
+        }
+        r = r + 1;
+    }
+    sw.stop();
+    report("list_insert_mid", sw.elapsed_nanos(), rounds * n);
+}
+
+fun bench_map_get_set(iters: int): void {
+    let map = Map<int, int>(iters);
+    let sw = Stopwatch();
+    let i = 0;
+    while (i < iters) {
+        map.set(i, i * 3);
+        i = i + 1;
+    }
+    let acc = 0;
+    i = 0;
+    while (i < iters) {
+        acc = acc + map.get(i).unwrap_or(0);
+        i = i + 1;
+    }
+    sw.stop();
+    report("map_get_set", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_map_clear_reuse(iters: int): void {
+    let map = Map<int, int>(1024);
+    let rounds = 64;
+    let per = iters / rounds;
+    if (per < 1) {
+        per = 1;
+    }
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < rounds) {
+        let i = 0;
+        while (i < per) {
+            map.set(i, i);
+            i = i + 1;
+        }
+        map.clear();
+        r = r + 1;
+    }
+    sw.stop();
+    report("map_clear_reuse", sw.elapsed_nanos(), rounds * per);
+    sink_int(map.capacity());
+}
+
+fun bench_alloc_churn(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let buf = Buffer.alloc<int>(64);
+        buf[0] = i;
+        acc = acc + buf[0];
+        i = i + 1;
+    }
+    sw.stop();
+    report("alloc_churn", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_string_builder(iters: int): void {
+    let chunk = "abcdefghijklmnopqrstuvwxyz";
+    let sw = Stopwatch();
+    let sb = StringBuilder(iters * chunk.byte_size());
+    let i = 0;
+    while (i < iters) {
+        sb.append(chunk);
+        i = i + 1;
+    }
+    let built = sb.build();
+    sw.stop();
+    report("string_builder", sw.elapsed_nanos(), iters);
+    sink_string(built);
+}
+
+fun main(): void {
+    let scale = 20000;
+    bench_arc_locals(scale);
+    bench_string_concat(scale);
+    bench_string_eq(scale * 5);
+    bench_char_scan(scale / 10);
+    bench_substring(scale);
+    bench_list_push(scale);
+    bench_list_insert_mid(scale);
+    bench_map_get_set(scale);
+    bench_map_clear_reuse(scale);
+    bench_alloc_churn(scale);
+    bench_string_builder(scale / 5);
+}

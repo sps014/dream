@@ -55,19 +55,9 @@ extend string : Comparable<string> {
         return StringIterator(this);
     }
 
-    // Gets a substring from start to end.
+    // Gets a substring from start to end (UTF-8 byte-slice copy).
     public fun substring(start: int, end: int): string {
-        let len = end - start;
-        if (len < 0) {
-            len = 0;
-        }
-        let result = string.alloc(len);
-        let i = 0;
-        while (i < len) {
-            string.set(result, i, this.char_at(start + i));
-            i = i + 1;
-        }
-        return result;
+        return string.substring_raw(this, start, end);
     }
 
     // The index of the first occurrence of `target`, or `None`.

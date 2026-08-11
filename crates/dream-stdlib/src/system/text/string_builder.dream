@@ -84,18 +84,18 @@ public class StringBuilder {
     }
 
     // Appends `byte_len` UTF-8 bytes starting at byte index `start` of `text`.
-    // Scalar count is derived from UTF-8 lead bytes (non-continuation).
+    // Bytes are bulk-copied; scalar count is derived from UTF-8 lead bytes (non-continuation).
     public fun append_utf8_slice(text: string, start: int, byte_len: int): void {
         if (byte_len <= 0) {
             return;
         }
         this.ensure(byte_len);
+        string.copy_utf8(this.bytes, this.count, text, start, byte_len);
+        this.count = this.count + byte_len;
         let i = 0;
         let sc = 0;
         while (i < byte_len) {
             let b = text.byte_at(start + i);
-            this.bytes[this.count] = (byte)b;
-            this.count = this.count + 1;
             // Continuation bytes are 10xxxxxx (128..191); every other byte starts a scalar.
             if ((b < 128) || (b >= 192)) {
                 sc = sc + 1;

@@ -18,4 +18,12 @@ extend string {
     // Builds a string from the first `len` bytes of `bytes` (clamped to the array length).
     @intrinsic("string_from_utf8_prefix")
     static extern fun from_utf8_prefix(bytes: byte[], len: int): string;
+
+    // Scalar-indexed substring via one UTF-8 byte-range copy (`$string_substring`).
+    @intrinsic("string_substring")
+    static extern fun substring_raw(s: string, start: int, end: int): string;
+
+    // Bulk-copies `count` UTF-8 bytes from `src` into `dst` at `dst_off`.
+    @intrinsic("string_copy_utf8")
+    static extern fun copy_utf8(dst: byte[], dst_off: int, src: string, src_off: int, count: int): void;
 }

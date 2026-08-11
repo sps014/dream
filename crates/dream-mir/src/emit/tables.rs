@@ -290,12 +290,13 @@ pub(super) fn emit_interface_dispatch(
         0
     };
 
-    // Concrete method symbol -> its `$__ft` slot (the function's position in `mir.functions`).
+    // Concrete method symbol -> its `$__ft` slot. Matches [`func_table`]: index 0 is the reserved
+    // null funcref sentinel, so MIR function `i` lives at table index `i + 1`.
     let by_symbol: HashMap<&str, usize> = mir
         .functions
         .iter()
         .enumerate()
-        .map(|(i, f)| (f.name.as_str(), i))
+        .map(|(i, f)| (f.name.as_str(), i + 1))
         .collect();
 
     // One dense [num_tags * method_count] table per interface, filled from each class's impl.

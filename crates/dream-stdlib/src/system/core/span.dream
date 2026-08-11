@@ -66,9 +66,18 @@ public ref struct Span<T> {
     // Copies every element of `src` into this span starting at index 0. Traps if `src` is longer
     // than this span. Reference elements go through ordinary assignment (retain/release); the
     // unmanaged specialization below bulk-blits instead.
+    // Same-array rightward shifts copy high-to-low so overlapping regions stay correct (memmove).
     public fun copy_from(src: Span<T>): void {
         if (src._length > this._length) {
             System.panic("Span copy_from overflow");
+        }
+        if ((this.array == src.array) && (this.offset > src.offset)) {
+            let i = src._length;
+            while (i > 0) {
+                i = i - 1;
+                this.array[this.offset + i] = src.array[src.offset + i];
+            }
+            return;
         }
         let i = 0;
         while (i < src._length) {

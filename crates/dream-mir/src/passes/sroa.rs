@@ -96,12 +96,14 @@ fn classify(
             match stmt {
                 // The single `New` definition itself: allowed, contributes no field.
                 Statement::Assign(Place::Local(d), Rvalue::New { .. }) if *d == o => {}
-                // Field store `o.f = <op>` (op must not itself mention `o`).
-                Statement::Assign(Place::Field { base, field }, Rvalue::Use(op)) if *base == o => {
-                    if operand_mentions(op, o) {
+                // Field store `o.f = <pure>` (rvalue must not itself mention `o`).
+                Statement::Assign(Place::Field { base, field }, rv)
+                    if *base == o && is_pure_field_store(rv) =>
+                {
+                    if rvalue_mentions(rv, o) {
                         return None;
                     }
-                    let ty = operand_ty(func, interner, op);
+                    let ty = rvalue_store_ty(func, interner, rv);
                     fields.entry(*field).or_insert(ty);
                 }
                 // Field load `x = o.f`.
@@ -197,6 +199,14 @@ fn zero_for(interner: &TypeInterner, ty: TypeId) -> Const {
     }
 }
 
+/// Pure field stores SROA accepts: no calls/allocations that would observe the object identity.
+fn is_pure_field_store(rv: &Rvalue) -> bool {
+    matches!(
+        rv,
+        Rvalue::Use(_) | Rvalue::Select { .. } | Rvalue::Binary(..) | Rvalue::Unary(..)
+    )
+}
+
 /// A representative interned type for an operand (used to type a field local from its stored value).
 fn operand_ty(func: &MirFunction, interner: &TypeInterner, op: &Operand) -> TypeId {
     match op {
@@ -211,11 +221,38 @@ fn operand_ty(func: &MirFunction, interner: &TypeInterner, op: &Operand) -> Type
     }
 }
 
+/// Field-local type inferred from a pure store rvalue.
+fn rvalue_store_ty(func: &MirFunction, interner: &TypeInterner, rv: &Rvalue) -> TypeId {
+    match rv {
+        Rvalue::Use(op) | Rvalue::Unary(_, op) => operand_ty(func, interner, op),
+        Rvalue::Binary(_, a, _) => operand_ty(func, interner, a),
+        Rvalue::Select { then_val, .. } => operand_ty(func, interner, then_val),
+        _ => interner.int(),
+    }
+}
+
 fn operand_mentions(op: &Operand, o: Local) -> bool {
     match op {
         Operand::Copy(Place::Local(l)) => *l == o,
         Operand::Copy(Place::Field { base, .. }) | Operand::Copy(Place::Index { base, .. }) => {
             *base == o
+        }
+        _ => false,
+    }
+}
+
+fn rvalue_mentions(rv: &Rvalue, o: Local) -> bool {
+    match rv {
+        Rvalue::Use(op) | Rvalue::Unary(_, op) => operand_mentions(op, o),
+        Rvalue::Binary(_, a, b) => operand_mentions(a, o) || operand_mentions(b, o),
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => {
+            operand_mentions(cond, o)
+                || operand_mentions(then_val, o)
+                || operand_mentions(else_val, o)
         }
         _ => false,
     }

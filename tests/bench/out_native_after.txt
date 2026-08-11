@@ -1,0 +1,12 @@
+warning: unknown name subsection with id 3 at 35255
+bench arc_locals ns_total=1795834 iters=20000 ns_per_op=89
+bench string_concat ns_total=2488750 iters=20000 ns_per_op=124
+bench string_eq ns_total=1246042 iters=100000 ns_per_op=12
+bench char_scan ns_total=10941792 iters=2000 ns_per_op=5470
+bench substring ns_total=3614083 iters=20000 ns_per_op=180
+bench list_push ns_total=367083 iters=20000 ns_per_op=18
+bench list_insert_mid ns_total=3440959 iters=19968 ns_per_op=172
+bench map_get_set ns_total=2619583 iters=20000 ns_per_op=130
+bench map_clear_reuse ns_total=1316666 iters=19968 ns_per_op=65
+bench alloc_churn ns_total=1007417 iters=20000 ns_per_op=50
+bench string_builder ns_total=1754000 iters=4000 ns_per_op=438

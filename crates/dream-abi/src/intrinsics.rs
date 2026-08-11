@@ -109,6 +109,10 @@ pub const ATTR_STRING_SET: &str = "string_set";
 pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
 /// `string.from_utf8_prefix(bytes, len)` — build a string from the first `len` bytes of a `byte[]`.
 pub const ATTR_STRING_FROM_UTF8_PREFIX: &str = "string_from_utf8_prefix";
+/// `string.substring_raw(s, start, end)` — UTF-8 byte-slice substring (scalar indices).
+pub const ATTR_STRING_SUBSTRING: &str = "string_substring";
+/// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk copy UTF-8 bytes into a `byte[]`.
+pub const ATTR_STRING_COPY_UTF8: &str = "string_copy_utf8";
 /// `Debug.free_list_head()` — allocator introspection for tests.
 pub const ATTR_DEBUG_FREE_LIST: &str = "debug_get_free_list_head";
 /// `Debug.heap_ptr()` — current bump-pointer (heap high-water mark).
@@ -156,6 +160,8 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_STRING_SET,
     ATTR_STRING_FROM_UTF8,
     ATTR_STRING_FROM_UTF8_PREFIX,
+    ATTR_STRING_SUBSTRING,
+    ATTR_STRING_COPY_UTF8,
     ATTR_DEBUG_FREE_LIST,
     ATTR_DEBUG_HEAP_PTR,
     ATTR_DEBUG_LIVE_OBJECTS,
@@ -203,6 +209,10 @@ pub enum IntrinsicOp {
     StringFromUtf8,
     /// `string.from_utf8_prefix(bytes, len)` — build a string from a UTF-8 byte prefix.
     StringFromUtf8Prefix,
+    /// `string.substring_raw(s, start, end)` — UTF-8 byte-slice substring (scalar indices).
+    StringSubstring,
+    /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk UTF-8 copy into a `byte[]`.
+    StringCopyUtf8,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
     /// `Debug.heap_ptr()` — current bump-pointer value.
@@ -248,6 +258,8 @@ impl IntrinsicOp {
             ATTR_STRING_SET => IntrinsicOp::StringSet,
             ATTR_STRING_FROM_UTF8 => IntrinsicOp::StringFromUtf8,
             ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
+            ATTR_STRING_SUBSTRING => IntrinsicOp::StringSubstring,
+            ATTR_STRING_COPY_UTF8 => IntrinsicOp::StringCopyUtf8,
             ATTR_DEBUG_FREE_LIST => IntrinsicOp::DebugFreeList,
             ATTR_DEBUG_HEAP_PTR => IntrinsicOp::DebugHeapPtr,
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,

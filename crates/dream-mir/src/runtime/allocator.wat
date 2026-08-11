@@ -1,20 +1,25 @@
 ;; --- Segregated free-list (slab) allocator -------------------------------------------------------
 ;;
-;; `$malloc`/`$free` are O(1): each request is mapped to a power-of-two size class and served from a
-;; per-class free list (no scanning). The only scanned path is the rare "large object" list for
-;; requests bigger than the largest size class.
+;; `$malloc`/`$free` are O(1) for every fixed size class: each request is mapped to a power-of-two
+;; size class and served from a per-class free list (no scanning). The only scanned path is the
+;; rare "huge" list for requests bigger than the largest fixed class (65536-byte blocks).
 ;;
-;; Free-list heads live in a fixed, zero-initialized low-memory table (so every list starts empty):
-;;   slot i  @  4 + i*4   for i in 0..8  -> size class with block size (1 << (i+4)): 16,32,...,4096
-;;   slot 9  @  40                       -> large-object list (blocks larger than 4096 bytes)
+;; Free-list heads live in a fixed, zero-initialized low-memory table (so every list starts empty).
+;; Layout is constrained by `abi.rs`: `ALLOC_LOCK_ADDR=44`, `HEAP_PTR_ADDR=48`, and
+;; `THREAD_ID_COUNTER_ADDR=52` occupy those words — freelist heads must NOT land on 44/48/52.
+;;
+;;   idx 0..8   @  4 + idx*4              -> O(1) classes 16,32,...,4096
+;;   idx 9..12  @  56 + (idx-9)*4         -> O(1) large classes 8192,16384,32768,65536
+;;   idx > 12   @  72                     -> first-fit huge list (blocks larger than 65536)
+;;
 ;; Low memory [0,1024) is otherwise unused (interned strings, itables and the heap all live >= 1024).
 ;;
 ;; Heap block layout is unchanged: [size:i32][tag:i32][ref_count:i32], data at block+12. While a
 ;; block sits on a free list, block+4 (the tag word) holds the next-free pointer; block+0 keeps the
 ;; block size, so `$free` can recover the size class in O(1).
 
-;; Maps a total block size (header included) to its size-class index. Returns >= 9 for sizes that
-;; exceed the largest class (the "large object" path). Index = ceil(log2(size)) - 4.
+;; Maps a total block size (header included) to its size-class index. Returns > 12 for sizes that
+;; exceed the largest fixed class (the "huge object" path). Index = ceil(log2(size)) - 4.
 ;;
 ;; The size is first clamped up to the smallest block (16 bytes). This keeps the class math correct
 ;; by construction: for any size < 16, ceil(log2(size)) - 4 would be negative (e.g. 8 bytes ->
@@ -35,6 +40,35 @@
     i32.sub
     i32.clz
     i32.sub
+)
+
+;; Address of the free-list head for size-class index `idx` (see file header for the layout).
+(func $freelist_head_addr (param $idx i32) (result i32)
+    local.get $idx
+    i32.const 8
+    i32.le_s
+    if
+        local.get $idx
+        i32.const 2
+        i32.shl
+        i32.const 4
+        i32.add
+        return
+    end
+    local.get $idx
+    i32.const 12
+    i32.le_s
+    if
+        local.get $idx
+        i32.const 9
+        i32.sub
+        i32.const 2
+        i32.shl
+        i32.const 56
+        i32.add
+        return
+    end
+    i32.const 72
 )
 
 ;; Acquires the cross-thread allocator spinlock at `ALLOC_LOCK_ADDR` ({ALLOC_LOCK_ADDR}): every
@@ -98,14 +132,14 @@
     local.set $idx
 
     local.get $idx
-    i32.const 8
+    i32.const 12
     i32.gt_s
     (if
         (then
-            ;; ---- large object: first-fit over the single large list (slot 9 @ 40) ----
+            ;; ---- huge object: first-fit over the single huge list (head @ 72) ----
             local.get $size
             local.set $alloc_size
-            i32.const 40
+            i32.const 72
             local.set $head_addr
             local.get $head_addr
             i32.load
@@ -125,7 +159,7 @@
                     i32.ge_s
                     (if
                         (then
-                            ;; unlink `curr` from the large list
+                            ;; unlink `curr` from the huge list
                             local.get $curr
                             i32.const 4
                             i32.add
@@ -154,7 +188,7 @@
             )
         )
         (else
-            ;; ---- small size class: fixed block size, O(1) pop from slot `idx` ----
+            ;; ---- fixed size class (idx 0..12): O(1) pop from the class head ----
             i32.const 1
             local.get $idx
             i32.const 4
@@ -162,10 +196,7 @@
             i32.shl
             local.set $alloc_size
             local.get $idx
-            i32.const 2
-            i32.shl
-            i32.const 4
-            i32.add
+            call $freelist_head_addr
             local.set $head_addr
             local.get $head_addr
             i32.load
@@ -285,19 +316,12 @@
     i32.eqz
     br_if 0
     ;;@DEBUG_FREE_COUNT@
-    ;; recover the size class from the stored block size (large -> slot 9)
+    ;; recover the size class from the stored block size and push onto that class's list
     local.get $size
     call $size_class
     local.set $idx
     local.get $idx
-    i32.const 8
-    i32.gt_s
-    (if (then i32.const 9 local.set $idx))
-    local.get $idx
-    i32.const 2
-    i32.shl
-    i32.const 4
-    i32.add
+    call $freelist_head_addr
     local.set $head_addr
     ;; push the block onto its class list: block.next = *head_addr; *head_addr = block
     local.get $block_start

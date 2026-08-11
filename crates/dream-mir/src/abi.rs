@@ -85,9 +85,10 @@ pub const STRING_BASE: u32 = 1024;
 
 // -- Cross-thread allocator coordination (linear memory is `shared`, see `execution::host::shared_memory`) --
 //
-// The segregated free-list table occupies bytes [4, 44) (`runtime/allocator.wat`'s slot table: 8
-// size-class heads + 1 large-object head). Two more coordination words are reserved right after it,
-// both well below `STRING_BASE` (1024) so they can never collide with static data:
+// The segregated free-list table occupies bytes [4, 44) for size-class heads 0..8
+// (`runtime/allocator.wat`), plus large-class heads at 56+ (idx 9..12) and the huge-list head at 72.
+// Two more coordination words are reserved at 44/48 — deliberately *not* overlapping freelist
+// heads — both well below `STRING_BASE` (1024) so they can never collide with static data:
 //
 // - `ALLOC_LOCK_ADDR`: a spinlock (0 = free, 1 = held) serializing every `$malloc`/`$free` body. The
 //   owner instance and every `WebWorker` instance of the same module import the *same*

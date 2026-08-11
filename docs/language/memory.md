@@ -142,3 +142,11 @@ fun caller(): void {
 `@unsafe` is purely a caller-side gate, checked at every call site (not just where the callee is declared): calling an `@unsafe` function/method from ordinary code is a compile-time error, exactly like calling an `unsafe fn` from safe code in Rust. Marking your own function `@unsafe` propagates the same restriction to *its* callers — the attribute has to be threaded all the way up to wherever the unsafe operation is actually justified.
 
 What `@unsafe` does **not** do: it does not insert runtime checks, and it does not verify the specific contract of the operation you're calling (e.g. that a `Buffer.realloc`'d array has exactly one owner, or that a freed `Pointer<T>` is never read again). It is a documented promise from the author, not a proof — the same trade-off manual memory management makes in every language that offers it.
+
+## Performance notes
+
+- Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop — one growable UTF-8 buffer, one final `build()`.
+- Use `byte_size` / `byte_at` / byte-oriented helpers when you don't need scalar indices; scalar `char_at` / `substring` still work, but `substring` now copies a UTF-8 byte slice once instead of per-scalar `set`.
+- `List` / `Map` / `Set` `clear()` keeps capacity (List reallocates a same-capacity buffer so managed elements release; Map/Set rebuild empty tables at the current `cap`).
+- `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release).
+- The compiler's ARC passes can elide retain/release pairs along straight-line CFG regions; prefer clear ownership so elision has an easy cancel pattern.

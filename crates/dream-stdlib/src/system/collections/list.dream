@@ -133,8 +133,10 @@ public class List<T> : IndexedCollection<T> {
         return Option.None;
     }
 
-    // Logically empties the list.
+    // Empties the list, reallocating a same-capacity buffer so managed elements are released
+    // while capacity is preserved for reuse.
     public fun clear(): void {
+        this.items = Buffer.alloc<T>(this.items.length);
         this.count = 0;
     }
 
@@ -147,10 +149,12 @@ public class List<T> : IndexedCollection<T> {
         if (this.count == this.items.length) {
             this.grow();
         }
-        let i = this.count;
-        while (i > index) {
-            this.items[i] = this.items[i - 1];
-            i = i - 1;
+        let n = this.count - index;
+        if (n > 0) {
+            // Unmanaged `T` bulk-blits via `Span.copy_from`'s where-overload (`memory.copy`);
+            // managed `T` goes through element assignment. Do not add where-overloads on List
+            // methods themselves — that breaks interface tables.
+            Span<T>(this.items, index + 1, n).copy_from(Span<T>(this.items, index, n));
         }
         this.items[index] = value;
         this.count = this.count + 1;
@@ -163,10 +167,9 @@ public class List<T> : IndexedCollection<T> {
         if ((index < 0) || (index >= this.count)) {
             return false;
         }
-        let i = index;
-        while (i < this.count - 1) {
-            this.items[i] = this.items[i + 1];
-            i = i + 1;
+        let n = this.count - index - 1;
+        if (n > 0) {
+            Span<T>(this.items, index, n).copy_from(Span<T>(this.items, index + 1, n));
         }
         this.count = this.count - 1;
         return true;

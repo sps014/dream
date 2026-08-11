@@ -931,6 +931,8 @@ fn harness_wat_path() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/runtime/strings.wat").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/runtime/allocator.wat").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);

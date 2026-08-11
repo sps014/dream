@@ -356,9 +356,42 @@ impl Emitter<'_> {
     /// the previous occupant, stores the new value with the slot's width, retains a stored borrowed
     /// reference, then releases the stashed old reference (deferred so self-referential writes stay
     /// sound).
+    ///
+    /// For a *borrowed* reference store (`Use(Copy(_))` / `Use(Const::Str(_))`), identity-elides when
+    /// the new pointer equals the old occupant: stash old → `$__rel`, new → `$__src`, and only
+    /// store+retain+release when `$__rel != $__src`.
     fn emit_place_store(&mut self, ty: TypeId, addr: impl Fn(&mut Self), rvalue: &Rvalue) {
         if self.interner.is_value_type(ty) {
             self.emit_value_store(addr, ty, rvalue);
+            return;
+        }
+        let borrowed_ref = self.interner.is_reference(ty)
+            && matches!(
+                rvalue,
+                Rvalue::Use(Operand::Copy(_)) | Rvalue::Use(Operand::Const(Const::Str(_)))
+            );
+        if borrowed_ref {
+            addr(self);
+            self.line("     (i32.load)");
+            self.line("     (local.set $__rel)");
+            self.emit_rvalue(rvalue);
+            self.line("     (local.set $__src)");
+            self.line("     (local.get $__rel)");
+            self.line("     (local.get $__src)");
+            self.line("     (i32.ne)");
+            self.line("     (if (then");
+            addr(self);
+            self.line("       (local.get $__src)");
+            self.line(&format!("       ({})", self.store_instr(ty)));
+            self.line("       (local.get $__src)");
+            self.line(&format!(
+                "       (call {})",
+                retain_call(self.interner, ty)
+            ));
+            let release = release_call(self.interner, self.layouts, ty);
+            self.line("       (local.get $__rel)");
+            self.line(&format!("       (call {})", release));
+            self.line("     ))");
             return;
         }
         let stash = self.stash_old_ref(ty, &addr);

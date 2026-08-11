@@ -723,6 +723,13 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
         .get_mut(&texture_id)
         .ok_or_else(|| format!("unknown texture {texture_id}"))?;
     let mut tex_gpu_recreated = false;
+    if tex.dirty_cpu && tex.mip_levels > 1 {
+        tex.mip_levels = 1;
+        if let Some(gpu) = tex.gpu.take() {
+            gpu.destroy();
+        }
+        tex.view = None;
+    }
     if tex.gpu.is_none() {
         let usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_DST
@@ -735,7 +742,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
                 height: tex.height.max(1),
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
+            mip_level_count: tex.mip_levels.max(1),
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: tex.format,

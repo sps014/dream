@@ -545,6 +545,14 @@ fn ensure_texture(
         if t.gpu.is_some() && !t.dirty_cpu {
             return Ok(());
         }
+        if t.dirty_cpu && t.mip_levels > 1 {
+            // Base pixels changed; drop stale higher mips before recreate/upload.
+            t.mip_levels = 1;
+            if let Some(gpu) = t.gpu.take() {
+                gpu.destroy();
+            }
+            t.view = None;
+        }
         if t.gpu.is_none() {
             let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_DST
@@ -560,7 +568,7 @@ fn ensure_texture(
                     height: t.height.max(1),
                     depth_or_array_layers: t.layers.max(1),
                 },
-                mip_level_count: 1,
+                mip_level_count: t.mip_levels.max(1),
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: t.format,

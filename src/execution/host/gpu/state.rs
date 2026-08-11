@@ -30,6 +30,9 @@ pub struct TexEntry {
     pub storage: bool,
     pub depth: bool,
     pub layers: u32,
+    /// GPU mip chain length. `1` until `texture_generate_mipmaps`; recreate paths must honor this
+    /// so a later `ensure_texture` / blit does not wipe the chain back to a single level.
+    pub mip_levels: u32,
     pub dirty_cpu: bool,
 }
 

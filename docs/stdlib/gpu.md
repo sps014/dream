@@ -312,7 +312,7 @@ let wrap = GpuSampler.create(GpuFilterMode.Linear, GpuAddressMode.Repeat, GpuFil
 #### `copy_from` / `generate_mipmaps` / `destroy`
 
 - `tex.copy_from(src, src_x, src_y, dst_x, dst_y, w, h)` — texture↔texture copy
-- `tex.generate_mipmaps()` — rgba8 mip chain (CPU box-filter + upload)
+- `tex.generate_mipmaps()` — rgba8 mip chain (CPU box-filter + upload). Native and JS both persist `mip_levels` across lazy recreate; rewriting the base level (CPU write / copy) resets the chain until you call this again.
 - `destroy()` on buffers, textures, samplers, pipelines, and surfaces releases the host resource
 
 #### `GpuRenderPass.draw_to(color, depth, …)`

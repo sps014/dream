@@ -76,10 +76,24 @@ fn texture_create(
             storage: false,
             depth,
             layers,
+            mip_levels: 1,
             dirty_cpu: true,
         },
     );
     id
+}
+
+/// Base-level CPU content changed: drop any mip chain so the next GPU create uses a single level.
+/// Callers must re-run `generate_mipmaps` if filtered sampling is needed again.
+pub(crate) fn note_cpu_content_change(tex: &mut TexEntry) {
+    if tex.mip_levels > 1 {
+        tex.mip_levels = 1;
+        if let Some(gpu) = tex.gpu.take() {
+            gpu.destroy();
+        }
+        tex.view = None;
+    }
+    tex.dirty_cpu = true;
 }
 
 pub fn texture_write_rgba(id: i32, pixels: Vec<u8>, x: i32, y: i32, w: i32, h: i32) -> i32 {
@@ -104,7 +118,7 @@ pub fn texture_write_rgba(id: i32, pixels: Vec<u8>, x: i32, y: i32, w: i32, h: i
             tex.cpu[dst_i..dst_i + n].copy_from_slice(&pixels[src..src + n]);
         }
     }
-    tex.dirty_cpu = true;
+    note_cpu_content_change(tex);
     0
 }
 
@@ -138,7 +152,7 @@ pub fn texture_copy_from_buffer(
     let take = end.saturating_sub(off).min(tex.cpu.len());
     if take > 0 {
         tex.cpu[..take].copy_from_slice(&src[off..off + take]);
-        tex.dirty_cpu = true;
+        note_cpu_content_change(tex);
     }
 }
 
@@ -236,9 +250,9 @@ pub fn texture_copy(
         );
         queue.submit(Some(encoder.finish()));
         st.invalidate_blit_tex(dst_id);
-        if let Some(dst) = st.textures.get_mut(&dst_id) {
-            dst.dirty_cpu = false;
-        }
+        // Level 0 changed on a possibly multi-mip destination — collapse to a single-mip GPU
+        // texture so filtered sampling never sees stale higher levels.
+        collapse_dst_mips_after_level0_gpu_write(&mut st, dst_id, device, queue);
         return;
     }
 
@@ -255,9 +269,83 @@ pub fn texture_copy(
                 dst.cpu[dob..dob + row_bytes].copy_from_slice(&src_cpu[so..so + row_bytes]);
             }
         }
-        dst.dirty_cpu = true;
+        note_cpu_content_change(dst);
     }
     st.invalidate_blit_tex(dst_id);
+}
+
+/// After a GPU write to mip 0 only, rebuild `dst` as a single-mip texture (copying level 0)
+/// when it previously had a longer chain.
+fn collapse_dst_mips_after_level0_gpu_write(
+    st: &mut super::state::GpuState,
+    dst_id: i32,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+) {
+    let Some(dst) = st.textures.get_mut(&dst_id) else {
+        return;
+    };
+    if dst.mip_levels <= 1 {
+        dst.dirty_cpu = false;
+        return;
+    }
+    let Some(old) = dst.gpu.take() else {
+        note_cpu_content_change(dst);
+        return;
+    };
+    let width = dst.width.max(1);
+    let height = dst.height.max(1);
+    let layers = dst.layers.max(1);
+    let format = dst.format;
+    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
+        | wgpu::TextureUsages::COPY_DST
+        | wgpu::TextureUsages::COPY_SRC
+        | wgpu::TextureUsages::RENDER_ATTACHMENT;
+    if dst.storage {
+        usage |= wgpu::TextureUsages::STORAGE_BINDING;
+    }
+    let new_tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("dream-tex-base"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: layers,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage,
+        view_formats: &[],
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("dream-collapse-mips"),
+    });
+    encoder.copy_texture_to_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &old,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyTextureInfo {
+            texture: &new_tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.submit(Some(encoder.finish()));
+    old.destroy();
+    dst.view = Some(new_tex.create_view(&wgpu::TextureViewDescriptor::default()));
+    dst.gpu = Some(new_tex);
+    dst.mip_levels = 1;
+    dst.dirty_cpu = false;
 }
 
 /// Builds a full mip chain for an rgba8unorm texture via CPU box-filter downsample and
@@ -362,6 +450,7 @@ pub fn texture_generate_mipmaps(id: i32) -> i32 {
     }
     tex.view = Some(gpu.create_view(&wgpu::TextureViewDescriptor::default()));
     tex.gpu = Some(gpu);
+    tex.mip_levels = mip_count;
     tex.dirty_cpu = false;
     st.invalidate_blit_tex(id);
     0

@@ -2642,6 +2642,15 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           const srcOff = row * pw * 4;
           t.cpu.set(src.subarray(srcOff, srcOff + pw * 4), dstOff);
         }
+        // Base level changed — drop any mip chain so the next ensure recreates single-level.
+        if ((t.mip_levels | 0) > 1) {
+          t.mip_levels = 1;
+          if (t.texture) {
+            try { t.texture.destroy(); } catch (_) {}
+            t.texture = null;
+            t.view = null;
+          }
+        }
         const dev = await ensureDevice();
         await ensureTexture(dev, t, t.storage);
         dev.queue.writeTexture(

@@ -1,0 +1,14 @@
+import system.webview;
+
+async fun main() {
+    switch (WebView.create("Hello", 1024, 768)) {
+        Ok(view) => {
+            switch (view.load_url("https://example.com")) {
+                Ok(_) => {},
+                Err(e) => System.println(e.message()),
+            }
+            await view.run();
+        },
+        Err(e) => System.println(e.message()),
+    }
+}

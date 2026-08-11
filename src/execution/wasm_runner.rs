@@ -2,9 +2,9 @@ use super::host::{
     attach_c_abi_from_json, attach_c_abi_from_wat_path, enable_ansi_support, link_c_ffi_imports,
     link_console_functions, link_crypto_functions, link_datetime_functions, link_ffi_helpers,
     link_file_functions, link_gpu_functions, link_http_functions, link_math_functions,
-    link_net_functions, link_process_functions, link_text_functions, link_worker_functions,
-    read_string_from_memory, set_worker_module, set_worker_runtime, shared_memory_for,
-    threaded_wasm_config,
+    link_net_functions, link_process_functions, link_text_functions, link_webview_functions,
+    link_worker_functions, read_string_from_memory, set_worker_module, set_worker_runtime,
+    shared_memory_for, threaded_wasm_config,
 };
 use std::cell::RefCell;
 use std::fs;
@@ -234,6 +234,7 @@ pub fn link_runtime_host_functions(linker: &mut Linker<()>) -> Result<()> {
     link_text_functions(linker)?;
     link_worker_functions(linker)?;
     link_gpu_functions(linker)?;
+    link_webview_functions(linker)?;
     #[cfg(feature = "c-ffi")]
     link_ffi_helpers(linker)?;
     linker.func_wrap("env", "strlen", |_: i32| -> i32 { 0 })?;

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Counter</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    #n { font-size: 2rem; }
+    button { font-size: 1.25rem; padding: 0.4rem 0.8rem; }
+    #err { color: #b00020; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1 id="n">…</h1>
+  <button id="plus" type="button">+</button>
+  <pre id="err"></pre>
+  <script>
+    function showErr(s) {
+      document.getElementById("err").textContent = String(s);
+    }
+    function setCount(body) {
+      var c = JSON.parse(body);
+      document.getElementById("n").textContent = String(c.value);
+    }
+    function boot(attempt) {
+      if (!window.Dream || !Dream.__dream_webview) {
+        if (attempt < 40) {
+          setTimeout(function () { boot(attempt + 1); }, 50);
+        } else {
+          showErr("Dream bridge missing");
+        }
+        return;
+      }
+      if (!window.ipc || !window.ipc.postMessage) {
+        showErr("window.ipc missing");
+        return;
+      }
+      Dream.on("count", setCount);
+      document.getElementById("plus").onclick = function () {
+        Dream.emit("inc", JSON.stringify({ by: 1 }));
+      };
+      Dream.invoke("get_count", "{}").then(setCount).catch(function (e) {
+        showErr(e && e.message ? e.message : e);
+      });
+    }
+    boot(0);
+  </script>
+</body>
+</html>

@@ -115,6 +115,7 @@ nav:
       - Logging: stdlib/logging.md
       - Testing: stdlib/testing.md
       - Process: stdlib/process.md
+      - WebView: stdlib/webview.md
     - I/O:
       - File I/O: stdlib/file.md
       - HTTP: stdlib/http.md

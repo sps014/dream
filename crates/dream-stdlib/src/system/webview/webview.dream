@@ -1,0 +1,494 @@
+module system.webview;
+
+// Native desktop WebView (wry). `@native` only — other hosts report unsupported.
+
+internal class WebViewOnEntry {
+    public channel: string;
+    public fire: fun(string): void;
+
+    public constructor(channel: string, fire: fun(string): void) {
+        this.channel = channel;
+        this.fire = fire;
+    }
+}
+
+internal class WebViewServeEntry {
+    public channel: string;
+    public fire: fun(string): string;
+
+    public constructor(channel: string, fire: fun(string): string) {
+        this.channel = channel;
+        this.fire = fire;
+    }
+}
+
+internal class WebViewOnBytesEntry {
+    public channel: string;
+    public fire: fun(byte[]): void;
+
+    public constructor(channel: string, fire: fun(byte[]): void) {
+        this.channel = channel;
+        this.fire = fire;
+    }
+}
+
+internal class WebViewServeBytesEntry {
+    public channel: string;
+    public fire: fun(byte[]): byte[];
+
+    public constructor(channel: string, fire: fun(byte[]): byte[]) {
+        this.channel = channel;
+        this.fire = fire;
+    }
+}
+
+public class WebView {
+    public id: int;
+    _on: List<WebViewOnEntry>;
+    _serve: List<WebViewServeEntry>;
+    _on_bytes: List<WebViewOnBytesEntry>;
+    _serve_bytes: List<WebViewServeBytesEntry>;
+
+    constructor(id: int) {
+        this.id = id;
+        this._on = List<WebViewOnEntry>();
+        this._serve = List<WebViewServeEntry>();
+        this._on_bytes = List<WebViewOnBytesEntry>();
+        this._serve_bytes = List<WebViewServeBytesEntry>();
+    }
+
+    @native
+    @js("Dream", "webviewCreate")
+    static extern fun host_create(title: string, width: int, height: int): int;
+
+    @native
+    @js("Dream", "webviewLoadUrl")
+    static extern fun host_load_url(id: int, url: string): int;
+
+    @native
+    @js("Dream", "webviewLoadHtml")
+    static extern fun host_load_html(id: int, html: string): int;
+
+    @native
+    @js("Dream", "webviewLoadFile")
+    static extern fun host_load_file(id: int, path: string): int;
+
+    @native
+    @js("Dream", "webviewClose")
+    static extern fun host_close(id: int): void;
+
+    @native
+    @js("Dream", "webviewCloseRequested")
+    static extern fun host_close_requested(id: int): bool;
+
+    @native
+    @js("Dream", "webviewTick")
+    static extern fun host_tick(id: int): char[];
+
+    @native
+    @js("Dream", "webviewPoll")
+    static extern fun host_poll(id: int): char[];
+
+    @native
+    @js("Dream", "webviewReply")
+    static extern fun host_reply(id: int, reply_id: int, body: string): void;
+
+    @native
+    @js("Dream", "webviewReplyErr")
+    static extern fun host_reply_err(id: int, reply_id: int, message: string): void;
+
+    @native
+    @js("Dream", "webviewReplyBytes")
+    static extern fun host_reply_bytes(id: int, reply_id: int, body: byte[]): void;
+
+    @native
+    @js("Dream", "webviewEmit")
+    static extern fun host_emit(id: int, channel: string, body: string): void;
+
+    @native
+    @js("Dream", "webviewEmitBytes")
+    static extern fun host_emit_bytes(id: int, channel: string, body: byte[]): void;
+
+    @native
+    @js("Dream", "webviewEval")
+    static extern async fun host_eval(id: int, js: string): char[];
+
+    @native
+    public static fun create(title: string, width: int, height: int): Result<WebView, WebViewError> {
+        let id = WebView.host_create(title, width, height);
+        if (id < 0) {
+            return Result.Err(WebViewError.unavailable("WebView.create failed"));
+        }
+        return Result.Ok(WebView(id));
+    }
+
+    @native
+    public fun load_url(url: string): Result<bool, WebViewError> {
+        let code = WebView.host_load_url(this.id, url);
+        if (code != 0) {
+            return Result.Err(WebViewError.failed("load_url failed"));
+        }
+        return Result.Ok(true);
+    }
+
+    @native
+    public fun load_html(html: string): Result<bool, WebViewError> {
+        let code = WebView.host_load_html(this.id, html);
+        if (code != 0) {
+            return Result.Err(WebViewError.failed("load_html failed"));
+        }
+        return Result.Ok(true);
+    }
+
+    @native
+    public fun load_file(path: string): Result<bool, WebViewError> {
+        let code = WebView.host_load_file(this.id, path);
+        if (code != 0) {
+            return Result.Err(WebViewError.failed("load_file failed"));
+        }
+        return Result.Ok(true);
+    }
+
+    fun upsert_on(channel: string, fire: fun(string): void): void {
+        let i = 0;
+        while (i < this._on.length) {
+            let entry = this._on.get(i).unwrap_or(WebViewOnEntry(channel, fire));
+            if (entry.channel == channel) {
+                entry.fire = fire;
+                return;
+            }
+            i = i + 1;
+        }
+        this._on.push(WebViewOnEntry(channel, fire));
+    }
+
+    fun upsert_serve(channel: string, fire: fun(string): string): void {
+        let i = 0;
+        while (i < this._serve.length) {
+            let entry = this._serve.get(i).unwrap_or(WebViewServeEntry(channel, fire));
+            if (entry.channel == channel) {
+                entry.fire = fire;
+                return;
+            }
+            i = i + 1;
+        }
+        this._serve.push(WebViewServeEntry(channel, fire));
+    }
+
+    fun upsert_on_bytes(channel: string, fire: fun(byte[]): void): void {
+        let i = 0;
+        while (i < this._on_bytes.length) {
+            let entry = this._on_bytes.get(i).unwrap_or(WebViewOnBytesEntry(channel, fire));
+            if (entry.channel == channel) {
+                entry.fire = fire;
+                return;
+            }
+            i = i + 1;
+        }
+        this._on_bytes.push(WebViewOnBytesEntry(channel, fire));
+    }
+
+    fun upsert_serve_bytes(channel: string, fire: fun(byte[]): byte[]): void {
+        let i = 0;
+        while (i < this._serve_bytes.length) {
+            let entry = this._serve_bytes.get(i).unwrap_or(WebViewServeBytesEntry(channel, fire));
+            if (entry.channel == channel) {
+                entry.fire = fire;
+                return;
+            }
+            i = i + 1;
+        }
+        this._serve_bytes.push(WebViewServeBytesEntry(channel, fire));
+    }
+
+    @native
+    public fun on<T>(channel: string, handler: fun(T): void): void {
+        this.upsert_on(channel, (body: string) => {
+            switch (Json.deserialize<T>(body)) {
+                Ok(value) => {
+                    handler(value);
+                },
+                Err(e) => {
+                    System.println("WebView.on deserialize failed: " + e.message());
+                },
+            }
+        });
+    }
+
+    @native
+    public fun serve<Req, Res>(channel: string, handler: fun(Req): Res): void {
+        this.upsert_serve(channel, (body: string) => {
+            return switch (Json.deserialize<Req>(body)) {
+                Ok(req) => Json.serialize(handler(req)),
+                Err(e) => "__dream_webview_parse__:" + e.message(),
+            };
+        });
+    }
+
+    @native
+    public fun emit<T>(channel: string, value: T): void {
+        WebView.emit_on(this.id, channel, value);
+    }
+
+    @native
+    public static fun emit_on<T>(id: int, channel: string, value: T): void {
+        WebView.host_emit(id, channel, Json.serialize(value));
+    }
+
+    @native
+    public fun on_bytes(channel: string, handler: fun(byte[]): void): void {
+        this.upsert_on_bytes(channel, handler);
+    }
+
+    @native
+    public fun serve_bytes(channel: string, handler: fun(byte[]): byte[]): void {
+        this.upsert_serve_bytes(channel, handler);
+    }
+
+    @native
+    public fun emit_bytes(channel: string, data: byte[]): void {
+        WebView.emit_bytes_on(this.id, channel, data);
+    }
+
+    @native
+    public static fun emit_bytes_on(id: int, channel: string, data: byte[]): void {
+        WebView.host_emit_bytes(id, channel, data);
+    }
+
+    @native
+    public fun on_raw<T : unmanaged>(channel: string, handler: fun(T[]): void): void {
+        this.upsert_on_bytes(channel, (body: byte[]) => {
+            if (body.length == 0) {
+                handler(Buffer.alloc<T>(0));
+                return;
+            }
+            let scratch = Buffer.alloc<T>(1);
+            let stride = Bytes.of(scratch[0]).length;
+            if (stride <= 0) {
+                handler(Buffer.alloc<T>(0));
+                return;
+            }
+            let count = body.length / stride;
+            let out = Buffer.alloc<T>(count);
+            let i = 0;
+            while (i < count) {
+                let slice = Buffer.alloc<byte>(stride);
+                let j = 0;
+                while (j < stride) {
+                    slice[j] = body[i * stride + j];
+                    j = j + 1;
+                }
+                out[i] = Bytes.to<T>(slice);
+                i = i + 1;
+            }
+            handler(out);
+        });
+    }
+
+    @native
+    public fun serve_raw<TIn : unmanaged, TOut : unmanaged>(
+        channel: string,
+        handler: fun(TIn[]): TOut[]
+    ): void {
+        this.upsert_serve_bytes(channel, (body: byte[]) => {
+            let input = Buffer.alloc<TIn>(0);
+            if (body.length > 0) {
+                let scratch = Buffer.alloc<TIn>(1);
+                let stride = Bytes.of(scratch[0]).length;
+                if (stride > 0) {
+                    let count = body.length / stride;
+                    input = Buffer.alloc<TIn>(count);
+                    let i = 0;
+                    while (i < count) {
+                        let slice = Buffer.alloc<byte>(stride);
+                        let j = 0;
+                        while (j < stride) {
+                            slice[j] = body[i * stride + j];
+                            j = j + 1;
+                        }
+                        input[i] = Bytes.to<TIn>(slice);
+                        i = i + 1;
+                    }
+                }
+            }
+            let values = handler(input);
+            if (values.length == 0) {
+                return Buffer.alloc<byte>(0);
+            }
+            let stride_out = Bytes.of(values[0]).length;
+            let out = Buffer.alloc<byte>(values.length * stride_out);
+            let i = 0;
+            while (i < values.length) {
+                let eb = Bytes.of(values[i]);
+                let j = 0;
+                while (j < stride_out) {
+                    out[i * stride_out + j] = eb[j];
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return out;
+        });
+    }
+
+    @native
+    public fun emit_raw<T : unmanaged>(channel: string, values: T[]): void {
+        WebView.emit_raw_on(this.id, channel, values);
+    }
+
+    @native
+    public static fun emit_raw_on<T : unmanaged>(id: int, channel: string, values: T[]): void {
+        if (values.length == 0) {
+            WebView.emit_bytes_on(id, channel, Buffer.alloc<byte>(0));
+            return;
+        }
+        let stride = Bytes.of(values[0]).length;
+        let out = Buffer.alloc<byte>(values.length * stride);
+        let i = 0;
+        while (i < values.length) {
+            let eb = Bytes.of(values[i]);
+            let j = 0;
+            while (j < stride) {
+                out[i * stride + j] = eb[j];
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        WebView.emit_bytes_on(id, channel, out);
+    }
+
+    @native
+    public async fun run(): void {
+        // `host_tick` pumps AppKit (~16ms) and returns `closed\\n` + IPC poll payload.
+        while (true) {
+            let raw = WebView.host_tick(this.id);
+            let reader = WebViewWireReader(raw);
+            let closed = int.parse(reader.read_line()).unwrap_or(1);
+            this.dispatch_from(reader);
+            if (closed != 0) {
+                return;
+            }
+            await Time.delay(0);
+        }
+    }
+
+    @native
+    public fun close(): void {
+        WebView.host_close(this.id);
+    }
+
+    @native
+    public async fun eval(js: string): Result<string, WebViewError> {
+        let raw = await WebView.host_eval(this.id, js);
+        let reader = WebViewWireReader(raw);
+        let code = int.parse(reader.read_line()).unwrap_or(1);
+        let payload = Encoding.utf8_decode(reader.read_remaining_bytes());
+        if (code != 0) {
+            return Result.Err(WebViewError.failed(payload));
+        }
+        return Result.Ok(payload);
+    }
+
+    static fun run_on(fire: fun(string): void, body: string): void {
+        fire(body);
+    }
+
+    static fun run_serve(fire: fun(string): string, body: string): string {
+        return fire(body);
+    }
+
+    static fun run_on_bytes(fire: fun(byte[]): void, body: byte[]): void {
+        fire(body);
+    }
+
+    static fun run_serve_bytes(fire: fun(byte[]): byte[], body: byte[]): byte[] {
+        return fire(body);
+    }
+
+    fun dispatch(): void {
+        let raw = WebView.host_poll(this.id);
+        let reader = WebViewWireReader(raw);
+        this.dispatch_from(reader);
+    }
+
+    fun dispatch_from(reader: WebViewWireReader): void {
+        let count = int.parse(reader.read_line()).unwrap_or(0);
+        let i = 0;
+        let prefix = "__dream_webview_parse__:";
+        while (i < count) {
+            let kind = int.parse(reader.read_line()).unwrap_or(0);
+            let reply_id = int.parse(reader.read_line()).unwrap_or(0);
+            let channel = reader.read_line();
+            let body_len = int.parse(reader.read_line()).unwrap_or(0);
+            let body_bytes = reader.read_bytes(body_len);
+            if (kind == 0) {
+                let body = Encoding.utf8_decode(body_bytes);
+                let hi = 0;
+                while (hi < this._on.length) {
+                    let entry = this._on.get(hi).unwrap_or(WebViewOnEntry(channel, (b: string) => {}));
+                    if (entry.channel == channel) {
+                        WebView.run_on(entry.fire, body);
+                        hi = this._on.length;
+                    } else {
+                        hi = hi + 1;
+                    }
+                }
+            }
+            if (kind == 1) {
+                let body = Encoding.utf8_decode(body_bytes);
+                let found = false;
+                let hi = 0;
+                while (hi < this._serve.length) {
+                    let entry = this._serve.get(hi).unwrap_or(WebViewServeEntry(channel, (b: string) => b));
+                    if (entry.channel == channel) {
+                        let out = WebView.run_serve(entry.fire, body);
+                        if (out.starts_with(prefix)) {
+                            let msg = out.substring(prefix.length, out.length);
+                            WebView.host_reply_err(this.id, reply_id, msg);
+                        } else {
+                            WebView.host_reply(this.id, reply_id, out);
+                        }
+                        found = true;
+                        hi = this._serve.length;
+                    } else {
+                        hi = hi + 1;
+                    }
+                }
+                if (found == false) {
+                    WebView.host_reply_err(this.id, reply_id, "no handler for channel: " + channel);
+                }
+            }
+            if (kind == 2) {
+                let hi = 0;
+                while (hi < this._on_bytes.length) {
+                    let entry = this._on_bytes.get(hi).unwrap_or(WebViewOnBytesEntry(channel, (b: byte[]) => {}));
+                    if (entry.channel == channel) {
+                        WebView.run_on_bytes(entry.fire, body_bytes);
+                        hi = this._on_bytes.length;
+                    } else {
+                        hi = hi + 1;
+                    }
+                }
+            }
+            if (kind == 3) {
+                let found = false;
+                let hi = 0;
+                while (hi < this._serve_bytes.length) {
+                    let entry = this._serve_bytes.get(hi).unwrap_or(WebViewServeBytesEntry(channel, (b: byte[]) => b));
+                    if (entry.channel == channel) {
+                        let out = WebView.run_serve_bytes(entry.fire, body_bytes);
+                        WebView.host_reply_bytes(this.id, reply_id, out);
+                        found = true;
+                        hi = this._serve_bytes.length;
+                    } else {
+                        hi = hi + 1;
+                    }
+                }
+                if (found == false) {
+                    WebView.host_reply_err(this.id, reply_id, "no handler for channel: " + channel);
+                }
+            }
+            i = i + 1;
+        }
+    }
+}

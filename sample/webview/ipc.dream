@@ -1,0 +1,72 @@
+import system.webview;
+import system.json;
+import system.io;
+
+@json
+class Inc {
+    public by: int;
+
+    public constructor(by: int) {
+        this.by = by;
+    }
+}
+
+@json
+class Count {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+@json
+class Empty {
+    public constructor() {}
+}
+
+class CounterState {
+    public count: int;
+
+    public constructor() {
+        this.count = 0;
+    }
+}
+
+async fun main() {
+    let state = CounterState();
+    let ui = "ui/index.html";
+    if (File.exists(ui) == false) {
+        ui = "sample/webview/ui/index.html";
+    }
+    if (File.exists(ui) == false) {
+        System.println("ui/index.html not found (run from repo root or sample/webview)");
+        return;
+    }
+
+    switch (WebView.create("Counter", 480, 320)) {
+        Ok(view) => {
+            let id = view.id;
+            view.on<Inc>("inc", (msg) => {
+                state.count = state.count + msg.by;
+                System.println("inc -> " + state.count.to_string());
+                WebView.emit_on(id, "count", Count(state.count));
+            });
+            view.serve<Empty, Count>("get_count", (_req) => {
+                System.println("get_count -> " + state.count.to_string());
+                return Count(state.count);
+            });
+
+            switch (view.load_file(ui)) {
+                Ok(_) => {},
+                Err(e) => {
+                    System.println(e.message());
+                    return;
+                },
+            }
+
+            await view.run();
+        },
+        Err(e) => System.println(e.message()),
+    }
+}

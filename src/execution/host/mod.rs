@@ -27,6 +27,7 @@ mod net;
 mod process;
 mod shared_memory;
 mod text;
+mod webview;
 mod worker;
 
 pub use console::{enable_ansi_support, link_console_functions};
@@ -47,6 +48,7 @@ pub use memory::{
 pub use net::link_net_functions;
 pub use process::link_process_functions;
 pub use text::link_text_functions;
+pub use webview::link_webview_functions;
 pub use shared_memory::{shared_memory_for, threaded_wasm_config};
 pub use worker::{
     link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
@@ -77,6 +79,7 @@ mod contract_tests {
         include_str!("process.rs"),
         include_str!("text.rs"),
         include_str!("worker.rs"),
+        include_str!("webview/mod.rs"),
     ];
 
     /// Extracts the field name in each `"<HOST_MODULE>", "<name>"` pair, tolerating the line break
@@ -142,6 +145,7 @@ mod contract_tests {
         include_str!("../../../runtime/src/hosts/console_process.js"),
         include_str!("../../../runtime/src/hosts/datetime_text.js"),
         include_str!("../../../runtime/src/hosts/net_sockets.js"),
+        include_str!("../../../runtime/src/hosts/webview.js"),
         include_str!("../../../runtime/src/workers.js"),
     ];
 

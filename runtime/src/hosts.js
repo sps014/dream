@@ -6,6 +6,7 @@ import { makeGpuHost } from "./hosts/gpu.js";
 import { makeConsoleProcessHost } from "./hosts/console_process.js";
 import { makeDatetimeTextHost } from "./hosts/datetime_text.js";
 import { makeNetSocketsHost } from "./hosts/net_sockets.js";
+import { makeWebviewHost } from "./hosts/webview.js";
 
 /**
  * Full built-in `Dream` host module (every optional chunk). Selective runtimes compose a subset
@@ -21,6 +22,7 @@ export function defaultDreamModule(getInstance) {
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
     ...makeNetSocketsHost(),
+    ...makeWebviewHost(),
   };
 }
 
@@ -33,4 +35,5 @@ export {
   makeConsoleProcessHost,
   makeDatetimeTextHost,
   makeNetSocketsHost,
+  makeWebviewHost,
 };

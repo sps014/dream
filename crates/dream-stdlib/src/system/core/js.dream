@@ -214,9 +214,6 @@ extend js {
     @node @web
     @js("Dream", "jsIsNull")
     static extern fun host_is_null(target: js): bool;
-    @node @web
-    @js("Dream", "jsRelease")
-    static extern fun host_release(target: js): void;
 
     // --- ergonomic instance API (resolved before dynamic dispatch, so these names are safe) --
 
@@ -242,11 +239,5 @@ extend js {
     @node @web
     public fun is_null(): bool {
         return js.host_is_null(this);
-    }
-
-    // Releases the host-side handle. Use for long-lived references to avoid leaking them.
-    @node @web
-    public fun release(): void {
-        js.host_release(this);
     }
 }

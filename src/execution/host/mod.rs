@@ -148,6 +148,10 @@ mod contract_tests {
     /// Internal JS-only keys that are not `@js` imports (ABI attach hooks, etc.).
     const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
 
+    /// Host keys emitted by the WAT backend for `js` handle RC (`$js_retain` / `$js_release`), not
+    /// declared as Dream stdlib `@js` bridges — ownership is inserted by the RC pass.
+    const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
+
     /// Extracts keys from the primary host factory object in a source file: the last `return {`
     /// on its own line (`make*Host` pattern) or `const host = {` (GPU). Earlier helper
     /// `return {` blocks (e.g. inside GPU bind-group builders) are ignored. Nested objects use
@@ -223,6 +227,9 @@ mod contract_tests {
         for internal in JS_HOST_INTERNAL_KEYS {
             js_keys.remove(*internal);
         }
+        for emitted in COMPILER_EMITTED_JS_RC {
+            js_keys.remove(*emitted);
+        }
 
         assert!(
             !js_keys.is_empty(),
@@ -230,7 +237,9 @@ mod contract_tests {
         );
 
         let js_only: Vec<&String> = js_keys.difference(&declared).collect();
-        let prelude_only: Vec<&String> = declared.difference(&js_keys).collect();
+        let mut prelude_only: Vec<&String> = declared.difference(&js_keys).collect();
+        // Compiler-emitted RC imports are host-only; they must not appear as orphaned prelude decls.
+        prelude_only.retain(|n| !COMPILER_EMITTED_JS_RC.contains(&n.as_str()));
         assert!(
             js_only.is_empty() && prelude_only.is_empty(),
             "JS Dream host keys and prelude `@js(\"Dream\", …)` declarations have drifted.\n\

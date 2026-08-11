@@ -2,12 +2,14 @@ use super::*;
 
 /// The `$release_*` symbol that deep-releases a reference value of `ty` (chosen *statically* from the
 /// declared type): structs/unions call their generated per-type release, reference-element arrays
-/// their element-typed array release, and everything else (strings, scalar arrays, boxed primitives)
-/// drops one reference via the generic runtime. `object`-typed values route through the tag-dispatched
-/// `$release_object` since their concrete type is unknown until runtime. Callers guard on
-/// [`TypeInterner::is_reference`] first, so non-reference types never reach here.
+/// their element-typed array release, `js` handles call the host `$js_release`, and everything else
+/// (strings, scalar arrays, boxed primitives) drops one reference via the generic runtime.
+/// `object`-typed values route through the tag-dispatched `$release_object` since their concrete
+/// type is unknown until runtime. Callers guard on [`TypeInterner::is_rc_tracked`] (or
+/// [`TypeInterner::is_reference`] for heap-only sites) first.
 pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: TypeId) -> String {
     match interner.kind(ty) {
+        TyKind::Js => "$js_release".to_string(),
         TyKind::Struct(..) | TyKind::Union(..) => {
             if let Some(l) = layouts.structs.get(&ty) {
                 format!("$release_{}", l.name)
@@ -17,7 +19,11 @@ pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: T
                 "$release_object".to_string()
             }
         }
-        TyKind::Array(e) if interner.is_reference(*e) || interner.is_value_type(*e) => {
+        TyKind::Array(e)
+            if interner.is_reference(*e)
+                || interner.is_value_type(*e)
+                || matches!(interner.kind(*e), TyKind::Js) =>
+        {
             format!("$release_array_t{}", e.0)
         }
         // An interface-typed value is a concrete tagged object; release it through the
@@ -29,12 +35,15 @@ pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: T
     }
 }
 
-/// The retain symbol for a reference value of `ty`: `@shared class` instances (may be captured
-/// into another `WebWorker` thread and retained/released concurrently — see `lock`/point 4 in the
-/// shared-memory-WebWorkers plan) go through `$retain_shared` (atomic RMW increment); every other
-/// reference type keeps the plain, non-atomic `$retain` fast path.
+/// The retain symbol for a reference value of `ty`: `js` handles go through the host `$js_retain`;
+/// `@shared class` instances (may be captured into another `WebWorker` thread and retained/released
+/// concurrently — see `lock`/point 4 in the shared-memory-WebWorkers plan) go through
+/// `$retain_shared` (atomic RMW increment); every other reference type keeps the plain, non-atomic
+/// `$retain` fast path.
 pub(super) fn retain_call(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    if interner.is_shared_type(ty) {
+    if matches!(interner.kind(ty), TyKind::Js) {
+        "$js_retain"
+    } else if interner.is_shared_type(ty) {
         "$retain_shared"
     } else {
         "$retain"
@@ -222,7 +231,7 @@ pub(super) fn emit_release_funcs(
         for f in layout
             .fields
             .iter()
-            .filter(|f| interner.is_reference(f.ty) && !f.is_weak && !f.is_unowned)
+            .filter(|f| interner.is_rc_tracked(f.ty) && !f.is_weak && !f.is_unowned)
         {
             emit_release_ref_field(out, "    ", f, interner, &mir.layouts);
         }
@@ -258,7 +267,7 @@ pub(super) fn emit_release_funcs(
             let ref_fields: Vec<&dream_hir::FieldLayout> = v
                 .fields
                 .iter()
-                .filter(|f| interner.is_reference(f.ty))
+                .filter(|f| interner.is_rc_tracked(f.ty))
                 .collect();
             if ref_fields.is_empty() {
                 continue;
@@ -296,12 +305,12 @@ pub(super) fn emit_release_funcs(
         out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
     }
 
-    // One array release per reference- or value-element array type; the element type is known
+    // One array release per reference-, js-, or value-element array type; the element type is known
     // statically at the call site, so array releases (unlike `$release_object`) can recurse into
-    // their elements. Reference elements are released by loaded pointer; inline value-struct elements
-    // are dropped in place via their drop-glue at the element address.
+    // their elements. Reference/`js` elements are released by loaded pointer/handle; inline
+    // value-struct elements are dropped in place via their drop-glue at the element address.
     for elem in array_elem_types(mir, interner) {
-        let is_ref = interner.is_reference(elem);
+        let is_ref = interner.is_rc_tracked(elem);
         let is_value = interner.is_value_type(elem);
         if !is_ref && !is_value {
             continue;

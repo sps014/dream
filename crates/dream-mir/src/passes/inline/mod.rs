@@ -257,7 +257,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // previous execution (double-free / use-after-free). Emitting the reset in the site block runs it
     // once per entry into the inlined region, matching the callee's once-at-entry zeroing.
     for (i, decl) in g_locals.iter().enumerate() {
-        if !params.contains(&(i as u32)) && interner.is_reference(decl.ty) {
+        if !params.contains(&(i as u32)) && interner.is_rc_tracked(decl.ty) {
             f.blocks[site.block].stmts.push(Statement::Assign(
                 Place::Local(Local(local_base + i as u32)),
                 Rvalue::Use(Operand::Const(Const::Null)),

@@ -56,6 +56,17 @@ mod tests {
             i.is_reference(fun),
             "fun(...) values are ARC-managed funcboxes"
         );
+        let js = i.js();
+        assert!(
+            !i.is_reference(js),
+            "js is a host handle id, not a Dream heap pointer"
+        );
+        assert!(
+            i.is_rc_tracked(js),
+            "js ownership is tracked via host retain/release"
+        );
+        assert!(i.is_rc_tracked(i.string()));
+        assert!(!i.is_rc_tracked(i.int()));
     }
 
     #[test]

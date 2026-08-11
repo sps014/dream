@@ -25,6 +25,4 @@ fun main(): void {
 
     // Mutate the object back on the JS side (bool auto-marshals into `js`).
     config.touched = true;
-
-    config.release();
 }

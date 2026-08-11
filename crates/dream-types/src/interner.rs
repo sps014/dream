@@ -265,6 +265,15 @@ impl TypeInterner {
         self.kind(id).is_reference()
     }
 
+    /// True if the RC pass tracks ownership of `id` (heap references and `js` handles). Value
+    /// structs/unions are not RC-tracked as envelopes (same carve-outs as [`Self::is_reference`]).
+    pub fn is_rc_tracked(&self, id: TypeId) -> bool {
+        if self.is_reference(id) {
+            return true;
+        }
+        matches!(self.kind(id), TyKind::Js)
+    }
+
     /// Iterates every interned type as `(id, kind)` in interning order (deterministic). Used by the
     /// backend to enumerate, e.g., all function types that need a `call_indirect` signature.
     pub fn iter_kinds(&self) -> impl Iterator<Item = (TypeId, &TyKind)> {

@@ -28,12 +28,13 @@ argument, or returning a typed value — where Dream converts automatically:
 let count: int = config.count;   // js -> int here
 ```
 
-A `js` value is not a Dream heap object, so it is never reference-counted. Dream will not free it
-for you.
+A `js` value is not a Dream heap object (no ARC header in linear memory), but its **host-side
+handle is reference-counted** the same way heap values are: the compiler inserts retain/release, and
+when the last Dream owner drops the handle the host registry entry is freed so the JS value can be
+collected. See [Memory Management](memory.md).
 
-!!! warning "Release long-lived handles"
-    Call `.release()` when you are done with a handle you hold for a while. Short-lived handles
-    used within a function and then dropped do not need this.
+You do **not** call a manual release API — scope exit, reassignment, and container teardown free
+handles automatically.
 
 ## Getting a `js` value
 
@@ -123,7 +124,6 @@ convert explicitly:
 | --- | --- |
 | `to_int()` / `to_double()` / `to_bool()` / `to_str()` | the matching Dream primitive |
 | `is_null()` | `true` if the value is `null` or `undefined` |
-| `release()` | drops the host-side handle |
 
 ## Awaiting JS Promises
 

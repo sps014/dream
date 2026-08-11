@@ -47,10 +47,10 @@ impl Emitter<'_> {
             }
             Statement::Release(o) => {
                 // Deep release by the operand's declared type: structs/unions/reference arrays run
-                // their generated `$release_<...>` (freeing fields + `del()`); other references fall
-                // back to the generic/tag-dispatched runtime.
+                // their generated `$release_<...>`; `js` handles call `$js_release`; other
+                // references fall back to the generic/tag-dispatched runtime.
                 let ty = self.operand_ty(o);
-                let call = if self.interner.is_reference(ty) {
+                let call = if self.interner.is_rc_tracked(ty) {
                     release_call(self.interner, self.layouts, ty)
                 } else {
                     "$release_generic".to_string()
@@ -365,7 +365,7 @@ impl Emitter<'_> {
             self.emit_value_store(addr, ty, rvalue);
             return;
         }
-        let borrowed_ref = self.interner.is_reference(ty)
+        let borrowed_ref = self.interner.is_rc_tracked(ty)
             && matches!(
                 rvalue,
                 Rvalue::Use(Operand::Copy(_)) | Rvalue::Use(Operand::Const(Const::Str(_)))
@@ -614,12 +614,13 @@ impl Emitter<'_> {
         self.retain_container_value(value_ty, value);
     }
 
-    /// Emits a `$retain` of a reference value being stored into a container (struct field, array
-    /// element, or union payload), so the container owns its own reference count. A no-op for
-    /// non-reference values and for non-place operands (constants/null; `$retain` also null-guards).
+    /// Emits a `$retain` / `$js_retain` of an RC-tracked value being stored into a container (struct
+    /// field, array element, or union payload), so the container owns its own reference count. A
+    /// no-op for non-tracked values and for non-place operands (constants/null; retain also
+    /// null-guards).
     pub(super) fn retain_container_value(&mut self, value_ty: TypeId, value: &Operand) {
         let borrowed = matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
-        if self.interner.is_reference(value_ty) && borrowed {
+        if self.interner.is_rc_tracked(value_ty) && borrowed {
             self.emit_operand(value);
             self.line(&format!(
                 "     (call {})",
@@ -628,13 +629,13 @@ impl Emitter<'_> {
         }
     }
 
-    /// Before a reference field/element is overwritten, load and stash its previous occupant into the
-    /// `$__rel` scratch so it can be released *after* the new value is stored (a deferred release keeps
-    /// self-referential reassignments like `n.next = f(n.next)` sound). `emit_addr` pushes the slot's
-    /// address. Returns `true` when a value was stashed (the slot is a reference). A no-op for
-    /// non-reference slots, and releasing a null previous value (fresh field) is a runtime no-op.
+    /// Before an RC-tracked field/element is overwritten, load and stash its previous occupant into
+    /// the `$__rel` scratch so it can be released *after* the new value is stored (a deferred
+    /// release keeps self-referential reassignments like `n.next = f(n.next)` sound). `emit_addr`
+    /// pushes the slot's address. Returns `true` when a value was stashed. A no-op for non-tracked
+    /// slots, and releasing a null previous value (fresh field) is a runtime no-op.
     fn stash_old_ref(&mut self, ty: TypeId, emit_addr: impl Fn(&mut Self)) -> bool {
-        if !self.interner.is_reference(ty) {
+        if !self.interner.is_rc_tracked(ty) {
             return false;
         }
         emit_addr(self);

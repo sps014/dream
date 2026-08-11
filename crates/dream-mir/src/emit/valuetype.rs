@@ -188,7 +188,7 @@ fn needs_glue(
         if let Some(u) = mir.layouts.unions.get(&ty) {
             for v in &u.variants {
                 for f in &v.fields {
-                    if interner.is_reference(f.ty)
+                    if interner.is_rc_tracked(f.ty)
                         || (interner.is_value_type(f.ty)
                             && needs_glue(f.ty, mir, interner, fn_names, out, visiting))
                     {
@@ -209,7 +209,7 @@ fn needs_glue(
     };
     let mut needs = fn_names.contains(format!("{}_del", layout.name).as_str());
     for f in &layout.fields {
-        if interner.is_reference(f.ty)
+        if interner.is_rc_tracked(f.ty)
             || (interner.is_value_type(f.ty)
                 && needs_glue(f.ty, mir, interner, fn_names, out, visiting))
         {
@@ -276,7 +276,7 @@ pub(super) fn emit_value_glue(
                     .fields
                     .iter()
                     .filter(|f| {
-                        interner.is_reference(f.ty)
+                        interner.is_rc_tracked(f.ty)
                             || (interner.is_value_type(f.ty) && glue.contains(&f.ty))
                     })
                     .collect();
@@ -321,7 +321,7 @@ fn emit_field_glue(
             let _ = write!(out, " (i32.const {}) (i32.add)", f.offset);
         }
     };
-    if interner.is_reference(f.ty) {
+    if interner.is_rc_tracked(f.ty) {
         addr(out);
         match op {
             GlueOp::Retain => {

@@ -42,7 +42,7 @@ impl MirPass for RcInsertion {
         let local_is_ref: Vec<bool> = func
             .locals
             .iter()
-            .map(|d| interner.is_reference(d.ty))
+            .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
         let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
         let is_owned_ref =
@@ -120,7 +120,7 @@ impl MirPass for RcInsertion {
         let owned_locals: Vec<u32> = (0..func.locals.len() as u32)
             .filter(|i| is_owned_ref(*i))
             .collect();
-        let ret_is_ref = interner.is_reference(func.ret);
+        let ret_is_ref = interner.is_rc_tracked(func.ret);
         let mut spills: Vec<LocalDecl> = Vec::new();
         let next_local = func.locals.len() as u32;
         for block in &mut func.blocks {
@@ -280,10 +280,10 @@ fn is_borrowed_copy(rvalue: &Rvalue, interner: &TypeInterner) -> bool {
         // funcbox (or other owner) still holds the +1. Treating it as owned would let the callee's
         // scope-exit release steal that count and free the env out from under the closure.
         Rvalue::Cast(Operand::Copy(_), from, to) => {
-            if !interner.is_reference(*to) {
+            if !interner.is_rc_tracked(*to) {
                 return false;
             }
-            interner.is_reference(*from)
+            interner.is_rc_tracked(*from)
                 || matches!(interner.kind(*from), dream_types::TyKind::Prim(dream_types::PrimTy::Int))
         }
         _ => false,
@@ -616,6 +616,31 @@ mod tests {
         assert!(RcInsertion.run(&mut func, &i));
         // Rule 1 gives `release t (old); assign; retain t`; Rule 3 releases owned `t` at Return.
         // Parameter `s` is not released.
+        let kinds: Vec<&str> = func.blocks[0]
+            .stmts
+            .iter()
+            .map(|s| match s {
+                Statement::Release(_) => "release",
+                Statement::Assign(..) => "assign",
+                Statement::Retain(_) => "retain",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(kinds, vec!["release", "assign", "retain", "release"]);
+    }
+
+    #[test]
+    fn inserts_retain_on_borrowed_js_copy() {
+        // `js` is RC-tracked via the host registry: a borrowed copy into an owned local must
+        // retain, and the owned local must release at scope exit (same ownership rules as strings).
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let s = b.new_param(i.js(), Some("s".into()));
+        let t = b.new_local(i.js(), Some("t".into()));
+        b.assign(Place::Local(t), Rvalue::Use(Operand::Copy(Place::Local(s))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &i));
         let kinds: Vec<&str> = func.blocks[0]
             .stmts
             .iter()

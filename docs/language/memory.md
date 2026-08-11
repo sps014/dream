@@ -11,6 +11,8 @@ Dream manages heap memory with **Automatic Reference Counting (ARC)**. You never
 
 Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored on the stack or inline inside other objects — no heap allocation.
 
+`js` handles are not Dream heap objects, but the compiler still tracks ownership and releases them through the host registry when the last Dream owner drops (same retain/release rules as heap references). See [The `js` type](js-type.md).
+
 ## How it works
 
 Every heap object tracks how many references point to it. The compiler inserts `retain` and `release` for you:
@@ -18,6 +20,8 @@ Every heap object tracks how many references point to it. The compiler inserts `
 - When a variable goes out of scope, its reference is released.
 - Reassigning a variable releases the value it held before.
 - When a count reaches zero, the object is freed immediately (its `del` destructor runs first, if it has one).
+
+The same ownership rules apply to `js` values: each Dream owner holds one host-side count; when it hits zero the handle is unregistered.
 
 ```dream
 fun make_list(): int[] {

@@ -438,8 +438,10 @@ pub fn emit_module_with_debug(
 }
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which
-/// `print`/`println` lower to) followed by user `extern fun` interop imports. Call sites reference
-/// each import's internal `$name`; the `module`/`field` pair names the host binding.
+/// `print`/`println` lower to) followed by user `extern fun` interop imports. When any Dream `js*`
+/// bridge is imported, also emit `$js_retain` / `$js_release` for host-side handle RC (compiler-
+/// emitted — not declared in the stdlib prelude). Call sites reference each import's internal
+/// `$name`; the `module`/`field` pair names the host binding.
 pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeInterner) {
     for (name, param) in [
         ("print_string", "i32"),
@@ -454,7 +456,12 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
             crate::abi::ENV_MODULE
         );
     }
+    let needs_js_rc = mir.imports.iter().any(|imp| imp.field.starts_with("js"));
     for imp in &mir.imports {
+        // Compiler-emitted `$js_retain`/`$js_release` below replace any stdlib `jsRelease` extern.
+        if imp.field == "jsRelease" || imp.field == "jsRetain" {
+            continue;
+        }
         let params: String = imp
             .params
             .iter()
@@ -481,6 +488,16 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
             out,
             "(import \"{}\" \"{}\" (func ${}{}{}))",
             imp.module, imp.field, imp.name, params, result
+        );
+    }
+    if needs_js_rc {
+        let _ = writeln!(
+            out,
+            "(import \"Dream\" \"jsRetain\" (func $js_retain (param i32)))"
+        );
+        let _ = writeln!(
+            out,
+            "(import \"Dream\" \"jsRelease\" (func $js_release (param i32)))"
         );
     }
 }

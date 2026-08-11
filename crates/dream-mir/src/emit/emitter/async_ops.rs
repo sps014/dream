@@ -18,7 +18,7 @@ impl Emitter<'_> {
                 .enumerate()
                 .take(self.async_user_locals)
             {
-                if self.interner.is_reference(decl.ty) {
+                if self.interner.is_rc_tracked(decl.ty) {
                     let call = release_call(self.interner, self.layouts, decl.ty);
                     self.line(&format!("     (local.get ${i})"));
                     self.line(&format!("     (call {call})"));

@@ -80,8 +80,10 @@ class DreamInstance {
     this.exports = instance.exports;
     this.memory = instance.exports.memory;
     // JS-object handle registry backing the Dream `js` type. A `js` value crosses the boundary
-    // as a small i32 id; the host keeps the real JS value here. Id 0 is reserved for null.
-    this._jsHandles = new Map(); // id -> JS value
+    // as a small i32 id; the host keeps the real JS value here with a Dream-owned refcount.
+    // Id 0 is reserved for null. `registerHandle` / `retainValue` / `releaseValue` keep the count
+    // in sync with MIR `Retain`/`Release` so the entry is dropped when the last owner releases.
+    this._jsHandles = new Map(); // id -> { value, count }
     this._jsIds = new Map(); // JS value -> id (identity for objects, value for primitives)
     this._jsNextId = 1;
     this._jsFreeIds = [];
@@ -91,13 +93,20 @@ class DreamInstance {
     this._callbackWrappers = new Map();
   }
 
-  /** Registers a JS value, returning its `js` handle id (0 for null/undefined). Idempotent per value. */
+  /**
+   * Registers a JS value, returning its `js` handle id (0 for null/undefined).
+   * Each call hands Dream a +1: a fresh entry starts at count 1; an existing identity bumps count.
+   */
   registerHandle(value) {
     if (value === null || value === undefined) return 0;
     const existing = this._jsIds.get(value);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      const entry = this._jsHandles.get(existing);
+      entry.count += 1;
+      return existing;
+    }
     const id = this._jsFreeIds.length ? this._jsFreeIds.pop() : this._jsNextId++;
-    this._jsHandles.set(id, value);
+    this._jsHandles.set(id, { value, count: 1 });
     this._jsIds.set(value, id);
     return id;
   }
@@ -105,14 +114,26 @@ class DreamInstance {
   /** Resolves a `js` handle id back to its JS value (null for id 0 / unknown). */
   derefHandle(id) {
     if (!id) return null;
-    return this._jsHandles.has(id) ? this._jsHandles.get(id) : null;
+    const entry = this._jsHandles.get(id);
+    return entry ? entry.value : null;
   }
 
-  /** Releases the handle for `value` so its id can be reused and the JS value can be collected. */
+  /** Bumps the host refcount for an already-registered value (Dream `Retain` of a borrowed `js`). */
+  retainValue(value) {
+    if (value === null || value === undefined) return;
+    const id = this._jsIds.get(value);
+    if (id === undefined) return;
+    this._jsHandles.get(id).count += 1;
+  }
+
+  /** Drops one Dream ownership of `value`; deletes the registry entry when the count hits 0. */
   releaseValue(value) {
     if (value === null || value === undefined) return;
     const id = this._jsIds.get(value);
     if (id === undefined) return;
+    const entry = this._jsHandles.get(id);
+    entry.count -= 1;
+    if (entry.count > 0) return;
     this._jsHandles.delete(id);
     this._jsIds.delete(value);
     this._jsFreeIds.push(id);
@@ -761,6 +782,7 @@ function makeJsHost(getInstance) {
     jsAsBool: (target) => !!target,
     jsAsString: (target) => (target == null ? "" : String(target)),
     jsIsNull: (target) => target === null || target === undefined,
+    jsRetain: (target) => getInstance().retainValue(target),
     jsRelease: (target) => getInstance().releaseValue(target),
     jsFunc: (handler) => handler,
     jsFunc0: (handler) => handler,

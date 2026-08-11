@@ -127,7 +127,7 @@ fn async_slots(func: &MirFunction, interner: &TypeInterner) -> (AsyncSlots, i32)
             cursor += size as i32;
         } else {
             cursor += SLOT_SIZE;
-            if interner.is_reference(ty) {
+            if interner.is_rc_tracked(ty) {
                 ref_locals.push(*local_idx);
             }
         }
@@ -251,9 +251,14 @@ pub fn emit_async_function(
             continue;
         }
         let wt = wasm_ty_of(interner, body.locals[idx].ty);
-        if interner.is_reference(body.locals[idx].ty) {
+        if interner.is_rc_tracked(body.locals[idx].ty) {
             let _ = writeln!(out, " local.get ${idx}");
-            out.push_str(" call $retain\n");
+            let retain = match interner.kind(body.locals[idx].ty) {
+                dream_types::TyKind::Js => "$js_retain",
+                _ if interner.is_shared_type(body.locals[idx].ty) => "$retain_shared",
+                _ => "$retain",
+            };
+            let _ = writeln!(out, " call {retain}");
         }
         let _ = writeln!(
             out,

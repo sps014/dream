@@ -116,6 +116,7 @@ export function makeJsHost(getInstance) {
     jsAsBool: (target) => !!target,
     jsAsString: (target) => (target == null ? "" : String(target)),
     jsIsNull: (target) => target === null || target === undefined,
+    jsRetain: (target) => getInstance().retainValue(target),
     jsRelease: (target) => getInstance().releaseValue(target),
     jsFunc: (handler) => handler,
     jsFunc0: (handler) => handler,

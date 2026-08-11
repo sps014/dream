@@ -208,6 +208,22 @@ Same as `run_2d`, then binds an extra uniform blob (after the extent i32s). Use 
 
 Explicit buffer / texture / sampler id lists when binding order is not a plain `GpuBuffer[]` — e.g. kernels that mix storage buffers with sampled textures.
 
+Prefer [`GpuBindList`](#gpubindlist) + `Compute.run` / `ComputePass.dispatch_bind` so call sites do not leak `.id` arrays.
+
+#### `GpuBindList.begin()` / `.buffer(b)` / `.texture(t)` / `.sampler(s)`
+
+Typed binding builder. Append resources in ABI order, then:
+
+```dream
+let binds = GpuBindList.begin().buffer(u).buffer(v).texture(tex);
+let r = await Compute.run("rd_paint", binds, n, n, 1, Buffer.alloc<byte>(0));
+// or: pass.dispatch_bind("rd_paint", binds, n, n, 1, empty_u);
+```
+
+#### `Uniforms.pack<T>(value)` / `pack_i32` / `pack_f32`
+
+`pack` blittable unmanaged scalars/structs via `Bytes.of`. Prefer it when the uniform block matches a Dream value struct.
+
 #### `await Compute.dispatch_indirect(name, buffers, indirect: GpuBuffer<int>)`
 
 `dispatchWorkgroupsIndirect` — workgroup counts come from a GPU buffer (3× u32). Use when a prior kernel decides how much work the next pass needs.
@@ -286,12 +302,22 @@ GPU-side copies between a `GpuBuffer<byte>` and a texture. Prefer these over rea
 
 #### `GpuSampler.linear()` / `nearest()` / `create(filter, address, mip_filter)`
 
-Sampling state. `linear` / `nearest` clamp-to-edge; `create` picks filter, address mode (`0` clamp / `1` repeat / `2` mirror), and mip filter.
+Sampling state. `linear` / `nearest` clamp-to-edge; `create` takes `GpuFilterMode` / `GpuAddressMode` enums.
 
 ```dream
 let samp = GpuSampler.linear();
-let wrap = GpuSampler.create(1, 1, 1);
+let wrap = GpuSampler.create(GpuFilterMode.Linear, GpuAddressMode.Repeat, GpuFilterMode.Linear);
 ```
+
+#### `copy_from` / `generate_mipmaps` / `destroy`
+
+- `tex.copy_from(src, src_x, src_y, dst_x, dst_y, w, h)` — texture↔texture copy
+- `tex.generate_mipmaps()` — rgba8 mip chain (CPU box-filter + upload)
+- `destroy()` on buffers, textures, samplers, pipelines, and surfaces releases the host resource
+
+#### `GpuRenderPass.draw_to(color, depth, …)`
+
+Programmable draw into an offscreen `GpuTexture` (optional `Option<GpuTexture>` depth) instead of the swapchain. Then `blit` / sample as usual.
 
 #### `GpuSurface.from_canvas` / `create` / `configure` / `await present()`
 
@@ -381,8 +407,9 @@ See [Vertex & fragment shaders](../language/shaders.md). Use `GpuVec2`/`GpuVec3`
 
 - `await GpuRenderPipeline.create(vertex, fragment)` — default triangle-list pipeline
 - `await GpuRenderPipeline.create_ex(vertex, fragment, desc)` — topology / cull / depth / blend / MSAA via `GpuRenderPipelineDesc`
-- `await GpuRenderPass.draw` / `draw_ex` / `draw_instanced` — `@web` (optional depth attachment + load-op)
+- `await GpuRenderPass.draw` / `draw_ex` / `draw_instanced` — `@web` / `@native` (optional `Option<GpuTexture>` depth + `GpuLoadOp`)
 - `await GpuRenderPass.draw_indexed` / `draw_indexed_ex` / `draw_indexed_instanced` — indexed draws (`GpuBuffer<int>` → uint32)
+- `await GpuRenderPass.draw_to` — offscreen color texture target (+ optional depth)
 
 ```dream
 let desc = GpuRenderPipelineDesc.mesh();
@@ -390,7 +417,7 @@ let pipe = await GpuRenderPipeline.create_ex("vs", "fs", desc);
 let depth = GpuTexture.depth24(w, h);
 let uniforms = Uniforms.pack_f32([time, cam_y, cam_z, aspect]);
 let _ = await GpuRenderPass.draw_indexed_instanced(
-    surface, pipe, verts, indices, count, 1, uniforms, sky, depth.id, 0
+    surface, pipe, verts, indices, count, 1, uniforms, sky, Option.Some(depth), GpuLoadOp.Clear
 );
 let _ = await surface.present();
 ```

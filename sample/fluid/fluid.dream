@@ -260,7 +260,6 @@ async fun main(): void {
     System.println("fluid gpu — ComputePass Stam + paint");
 
     let empty_u = Buffer.alloc<byte>(0);
-    let no_samplers = Buffer.alloc<int>(0);
     let dens_decay_u = Uniforms.pack_f32([0.996]);
     let vel_decay_u = Uniforms.pack_f32([0.995]);
 
@@ -340,16 +339,8 @@ async fun main(): void {
         pass.dispatch_uniforms("decay_field", [dens_tmp], n, n, 1, dens_decay_u);
         pass.dispatch_uniforms("decay_field", [vx_tmp], n, n, 1, vel_decay_u);
         pass.dispatch_uniforms("decay_field", [vy_tmp], n, n, 1, vel_decay_u);
-        pass.dispatch_resources(
-            "paint",
-            [dens_tmp.id, vx_tmp.id, vy_tmp.id],
-            [tex.id],
-            no_samplers,
-            n,
-            n,
-            1,
-            empty_u
-        );
+        let paint = GpuBindList.begin().buffer(dens_tmp).buffer(vx_tmp).buffer(vy_tmp).texture(tex);
+        pass.dispatch_bind("paint", paint, n, n, 1, empty_u);
         let sub = await pass.submit();
         if (sub.is_err()) {
             System.println("ComputePass.submit failed");

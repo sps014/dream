@@ -1,21 +1,19 @@
 module system.gpu;
 
-/// Unmanaged float vectors for `@vertex` / `@fragment` (and CPU-side packing).
-///
-/// These lower to WGSL `vec2<f32>` / `vec3<f32>` / `vec4<f32>` inside GPU shaders.
-/// Prefer `GpuVecN.of(...)` when constructing values in a shader body.
-///
-/// Layout (for `GpuBuffer` / vertex attributes): tightly packed floats, no SIMD padding —
-/// `GpuVec2` = 8 bytes, `GpuVec3` = 12 bytes, `GpuVec4` = 16 bytes.
+// Unmanaged float vectors for `@vertex` / `@fragment` (and CPU-side packing).
+// These lower to WGSL `vec2<f32>` / `vec3<f32>` / `vec4<f32>` inside GPU shaders.
+// Prefer `GpuVecN.of(...)` when constructing values in a shader body.
+// Layout (for `GpuBuffer` / vertex attributes): tightly packed floats, no SIMD padding —
+// `GpuVec2` = 8 bytes, `GpuVec3` = 12 bytes, `GpuVec4` = 16 bytes.
 
-/// Two-component float vector (`vec2<f32>` in WGSL).
+// Two-component float vector (`vec2<f32>` in WGSL).
 public struct GpuVec2 {
-    /// X component.
+    // X component.
     public x: float;
-    /// Y component.
+    // Y component.
     public y: float;
 
-    /// Builds `(x, y)`.
+    // Builds `(x, y)`.
     public static fun of(x: float, y: float): GpuVec2 {
         let v = GpuVec2();
         v.x = x;
@@ -24,16 +22,16 @@ public struct GpuVec2 {
     }
 }
 
-/// Three-component float vector (`vec3<f32>` in WGSL). Common for positions and normals.
+// Three-component float vector (`vec3<f32>` in WGSL). Common for positions and normals.
 public struct GpuVec3 {
-    /// X component.
+    // X component.
     public x: float;
-    /// Y component.
+    // Y component.
     public y: float;
-    /// Z component.
+    // Z component.
     public z: float;
 
-    /// Builds `(x, y, z)`.
+    // Builds `(x, y, z)`.
     public static fun of(x: float, y: float, z: float): GpuVec3 {
         let v = GpuVec3();
         v.x = x;
@@ -43,19 +41,19 @@ public struct GpuVec3 {
     }
 }
 
-/// Four-component float vector (`vec4<f32>` in WGSL). Used for clip-space `position`,
-/// colors (`rgba`), and fragment outputs.
+// Four-component float vector (`vec4<f32>` in WGSL). Used for clip-space `position`,
+// colors (`rgba`), and fragment outputs.
 public struct GpuVec4 {
-    /// X / R component.
+    // X / R component.
     public x: float;
-    /// Y / G component.
+    // Y / G component.
     public y: float;
-    /// Z / B component.
+    // Z / B component.
     public z: float;
-    /// W / A component.
+    // W / A component.
     public w: float;
 
-    /// Builds `(x, y, z, w)`.
+    // Builds `(x, y, z, w)`.
     public static fun of(x: float, y: float, z: float, w: float): GpuVec4 {
         let v = GpuVec4();
         v.x = x;
@@ -66,11 +64,14 @@ public struct GpuVec4 {
     }
 }
 
-/// 2×2 column-major float matrix (`mat2x2<f32>` in WGSL).
+// 2×2 column-major float matrix (`mat2x2<f32>` in WGSL).
 public struct GpuMat2 {
+    // First column.
     public c0: GpuVec2;
+    // Second column.
     public c1: GpuVec2;
 
+    // Builds a matrix from column vectors.
     public static fun of(c0: GpuVec2, c1: GpuVec2): GpuMat2 {
         let m = GpuMat2();
         m.c0 = c0;
@@ -78,17 +79,22 @@ public struct GpuMat2 {
         return m;
     }
 
+    // 2×2 identity matrix.
     public static fun identity(): GpuMat2 {
         return GpuMat2.of(GpuVec2.of(1.0, 0.0), GpuVec2.of(0.0, 1.0));
     }
 }
 
-/// 3×3 column-major float matrix (`mat3x3<f32>` in WGSL).
+// 3×3 column-major float matrix (`mat3x3<f32>` in WGSL).
 public struct GpuMat3 {
+    // First column.
     public c0: GpuVec3;
+    // Second column.
     public c1: GpuVec3;
+    // Third column.
     public c2: GpuVec3;
 
+    // Builds a matrix from column vectors.
     public static fun of(c0: GpuVec3, c1: GpuVec3, c2: GpuVec3): GpuMat3 {
         let m = GpuMat3();
         m.c0 = c0;
@@ -97,6 +103,7 @@ public struct GpuMat3 {
         return m;
     }
 
+    // 3×3 identity matrix.
     public static fun identity(): GpuMat3 {
         return GpuMat3.of(
             GpuVec3.of(1.0, 0.0, 0.0),
@@ -106,13 +113,18 @@ public struct GpuMat3 {
     }
 }
 
-/// 4×4 column-major float matrix (`mat4x4<f32>` in WGSL).
+// 4×4 column-major float matrix (`mat4x4<f32>` in WGSL).
 public struct GpuMat4 {
+    // First column.
     public c0: GpuVec4;
+    // Second column.
     public c1: GpuVec4;
+    // Third column.
     public c2: GpuVec4;
+    // Fourth column.
     public c3: GpuVec4;
 
+    // Builds a matrix from column vectors.
     public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4 {
         let m = GpuMat4();
         m.c0 = c0;
@@ -122,6 +134,7 @@ public struct GpuMat4 {
         return m;
     }
 
+    // 4×4 identity matrix.
     public static fun identity(): GpuMat4 {
         return GpuMat4.of(
             GpuVec4.of(1.0, 0.0, 0.0, 0.0),

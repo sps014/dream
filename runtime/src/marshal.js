@@ -1,5 +1,31 @@
 import { isFunType, stripSuffix } from "./core.js";
 
+// Heap tags for boxed primitives (mirrors `crates/dream-mir/src/abi.rs`). Only the 64-bit
+// numeric tags are needed here — a `long`/`ulong` result from an `extern async` has to be boxed
+// so the `F_RESULT` slot (i32) can carry its pointer.
+const TAG_LONG = 8;
+const TAG_ULONG = 10;
+
+/**
+ * Boxes a 64-bit numeric result into a Dream heap block matching `$box_long`/`$box_ulong` in
+ * `runtime/object.wat`. Returns the block's data pointer, which is what `F_RESULT` stores.
+ * Called from `wrapAsyncImport` for `extern async fun ...: long | ulong` returns; a synchronous
+ * `long`-returning extern uses the WASM i64 signature directly and needs no boxing.
+ */
+function boxLong64(inst, value, tag) {
+  if (typeof inst.exports.malloc !== "function") {
+    throw new Error("module does not export `malloc`; cannot box a `long` async result");
+  }
+  const ptr = inst.exports.malloc(8, tag);
+  const big = typeof value === "bigint" ? value : BigInt(value == null ? 0 : value);
+  if (tag === TAG_ULONG) {
+    inst.view.setBigUint64(ptr, big < 0n ? 0n : big, true);
+  } else {
+    inst.view.setBigInt64(ptr, big, true);
+  }
+  return ptr;
+}
+
 /** Marshals raw WASM argument values into JS values per the parameter type names. */
 export function marshalArgs(inst, params, rawArgs) {
   if (!params) return rawArgs;
@@ -95,6 +121,14 @@ export const FUTURE_SLOTS_SIZE = 56; // F_SLOTS: a host future has no saved-loca
 export function wrapAsyncImport(getInstance, fn, signature) {
   const params = signature ? signature.params : null;
   const result = signature ? signature.result : null;
+  // `long`/`ulong` async returns cross the future boundary as boxed heap pointers because
+  // `F_RESULT` is a single i32; a bare BigInt would fail wasm's i32 coercion.
+  const resultBase = typeof result === "string" ? stripSuffix(result) : result;
+  const boxTag = resultBase === "long"
+    ? TAG_LONG
+    : resultBase === "ulong"
+      ? TAG_ULONG
+      : null;
 
   return (...rawArgs) => {
     const inst = getInstance();
@@ -104,18 +138,21 @@ export function wrapAsyncImport(getInstance, fn, signature) {
     }
     const args = marshalArgs(inst, params, rawArgs);
     const future = exports.__dream_new_future(FUTURE_SLOTS_SIZE, -1, FUTURE_KIND_HOST);
+    const settle = (rawResult) => {
+      const marshaled = boxTag != null
+        ? boxLong64(inst, rawResult, boxTag)
+        : marshalResult(inst, result, rawResult);
+      exports.__dream_resolve(future, marshaled);
+      exports.__dream_run_loop();
+    };
     Promise.resolve(fn(...args)).then(
-      (value) => {
-        exports.__dream_resolve(future, marshalResult(inst, result, value));
-        exports.__dream_run_loop();
-      },
+      (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a
         // zero/null result (a `null` `js` handle for a `js` result) so the scheduler is not left
         // hanging, and surface the reason on the console for diagnosis.
         console.error("Dream: awaited JS promise rejected:", err);
-        exports.__dream_resolve(future, marshalResult(inst, result, null));
-        exports.__dream_run_loop();
+        settle(null);
       },
     );
     return future;

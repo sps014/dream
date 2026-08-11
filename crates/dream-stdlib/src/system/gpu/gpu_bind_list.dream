@@ -1,0 +1,95 @@
+module system.gpu;
+
+// Builder for mixed compute bindings (buffers / textures / samplers) without raw id arrays.
+// Append resources in ABI binding order, then pass to `Compute.run` / `ComputePass.dispatch_bind`.
+public class GpuBindList {
+    _buffers: int[];
+    _textures: int[];
+    _samplers: int[];
+    _bc: int;
+    _tc: int;
+    _sc: int;
+
+    // Starts an empty binding list.
+    public static fun begin(): GpuBindList {
+        let b = GpuBindList();
+        b._buffers = Buffer.alloc<int>(8);
+        b._textures = Buffer.alloc<int>(4);
+        b._samplers = Buffer.alloc<int>(4);
+        b._bc = 0;
+        b._tc = 0;
+        b._sc = 0;
+        return b;
+    }
+
+    fun grow_int(arr: int[], need: int): int[] {
+        if (need <= arr.length) { return arr; }
+        let n = arr.length;
+        if (n < 1) { n = 1; }
+        while (n < need) { n = n * 2; }
+        let out = Buffer.alloc<int>(n);
+        let i = 0;
+        while (i < arr.length) {
+            out[i] = arr[i];
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Appends a storage/vertex buffer handle (ABI buffer binding order).
+    public fun buffer<T : unmanaged>(buf: GpuBuffer<T>): GpuBindList {
+        this._buffers = this.grow_int(this._buffers, this._bc + 1);
+        this._buffers[this._bc] = buf.id;
+        this._bc = this._bc + 1;
+        return this;
+    }
+
+    // Appends a texture handle (ABI texture binding order).
+    public fun texture(tex: GpuTexture): GpuBindList {
+        this._textures = this.grow_int(this._textures, this._tc + 1);
+        this._textures[this._tc] = tex.id;
+        this._tc = this._tc + 1;
+        return this;
+    }
+
+    // Appends a sampler handle (ABI sampler binding order).
+    public fun sampler(samp: GpuSampler): GpuBindList {
+        this._samplers = this.grow_int(this._samplers, this._sc + 1);
+        this._samplers[this._sc] = samp.id;
+        this._sc = this._sc + 1;
+        return this;
+    }
+
+    // Snapshot of buffer ids for host dispatch.
+    public fun buffer_ids(): int[] {
+        let out = Buffer.alloc<int>(this._bc);
+        let i = 0;
+        while (i < this._bc) {
+            out[i] = this._buffers[i];
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Snapshot of texture ids for host dispatch.
+    public fun texture_ids(): int[] {
+        let out = Buffer.alloc<int>(this._tc);
+        let i = 0;
+        while (i < this._tc) {
+            out[i] = this._textures[i];
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Snapshot of sampler ids for host dispatch.
+    public fun sampler_ids(): int[] {
+        let out = Buffer.alloc<int>(this._sc);
+        let i = 0;
+        while (i < this._sc) {
+            out[i] = this._samplers[i];
+            i = i + 1;
+        }
+        return out;
+    }
+}

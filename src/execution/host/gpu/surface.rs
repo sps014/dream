@@ -435,6 +435,27 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
     id
 }
 
+pub fn destroy(id: i32) {
+    let mut st = lock_state();
+    if let Some(mut entry) = st.surfaces.shift_remove(&id) {
+        // Drop any acquired swapchain frame first so its `Drop` doesn't race with `surface` teardown.
+        entry.pending_frame = None;
+        if let Some(color) = entry.color.take() {
+            color.destroy();
+        }
+        if let Some(depth) = entry.depth.take() {
+            depth.destroy();
+        }
+        // Dropping the surface + window unregisters winit resources; hiding avoids a lingering
+        // window if the platform delays the drop.
+        if let Some(window) = entry.window.as_ref() {
+            window.set_visible(false);
+        }
+        drop(entry.surface.take());
+        drop(entry.window.take());
+    }
+}
+
 pub fn configure(id: i32, width: i32, height: i32) {
     let mut st = lock_state();
     if st.surfaces.get(&id).is_none() {
@@ -705,7 +726,8 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
     if tex.gpu.is_none() {
         let usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::COPY_SRC;
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::RENDER_ATTACHMENT;
         tex.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
             label: Some("dream-blit-src"),
             size: wgpu::Extent3d {

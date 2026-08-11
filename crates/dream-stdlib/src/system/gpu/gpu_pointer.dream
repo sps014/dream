@@ -1,16 +1,21 @@
 module system.gpu;
 
-/// Latched pointer state for a `GpuSurface` (pixels in surface/client space).
+// Latched pointer state for a `GpuSurface` (pixels in surface/client space).
 public struct GpuPointer {
+    // Cursor X in surface/client pixels.
     public x: float;
+    // Cursor Y in surface/client pixels.
     public y: float;
-    /// Delta since the previous `pointer()` read (cleared by the host on each read).
+    // Delta since the previous `pointer()` read (cleared by the host on each read).
     public dx: float;
+    // Delta since the previous `pointer()` read (cleared by the host on each read).
     public dy: float;
-    /// Bit0 = primary, bit1 = secondary, bit2 = middle.
+    // Bit0 = primary, bit1 = secondary, bit2 = middle.
     public buttons: int;
+    // True while any tracked button is held.
     public down: bool;
+    // True while the pointer is inside the surface client area.
     public inside: bool;
-    /// Primary tracked pointer id, or `-1` if none.
+    // Primary tracked pointer id, or `-1` if none.
     public pointer_id: int;
 }

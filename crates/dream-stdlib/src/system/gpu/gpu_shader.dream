@@ -1,8 +1,8 @@
 module system.gpu;
 
 // Raw WGSL shader handle (escape hatch).
-
 public class GpuShader {
+    // Host shader module / pipeline handle id.
     public id: int;
 
     // Compiles WGSL `source` and binds entry point `entry`.

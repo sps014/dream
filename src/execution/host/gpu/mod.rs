@@ -17,17 +17,21 @@ mod textures;
 pub use icon::set_packaged_app_icon;
 
 use std::path::Path;
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use wasmtime::*;
 
 use super::memory::{
-    read_arg_bytes, read_arg_i32_array, read_arg_string, resolve_host_future_bytes,
-    write_i32_array_to_memory, write_string_to_memory,
+    read_arg_bytes, read_arg_i32_array, read_arg_string, required_malloc, required_memory,
+    resolve_host_future_bytes, shared_bytes_mut, write_i32_array_to_memory, write_string_to_memory,
 };
 use dream_mir::abi as mir_abi;
 use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 use state::lock_state;
+
+/// Process-wide monotonic origin for `gpuTimestamp`, mirroring `datetime::timeNowNanos`.
+static GPU_TIME_ORIGIN: OnceLock<Instant> = OnceLock::new();
 
 fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) -> Result<()> {
     let func = caller
@@ -54,6 +58,24 @@ fn resolve_host_future_i32(caller: &mut Caller<'_, ()>, value: i32) -> Result<i3
 
 fn resolve_host_future_void(caller: &mut Caller<'_, ()>) -> Result<i32> {
     resolve_host_future_i32(caller, 0)
+}
+
+/// Resolves a host future whose Dream-level result type is `long` / `ulong`.
+///
+/// The future's `F_RESULT` slot is an `i32` (per the async ABI), so a 64-bit value has to be
+/// heap-boxed with `TAG_LONG` (matches `$box_long` in `runtime/object.wat`) and the *pointer*
+/// stored as the settled result. This is the mirror of the boxing `wrapAsyncImport` performs
+/// on the JS side for a `long`-returning `extern async`.
+fn resolve_host_future_long(caller: &mut Caller<'_, ()>, value: i64) -> Result<i32> {
+    let malloc = required_malloc(caller)?;
+    let ptr = malloc.call(&mut *caller, (8, mir_abi::TAG_LONG))?;
+    {
+        let memory = required_memory(caller)?;
+        let data = shared_bytes_mut(&memory);
+        let base = ptr as usize;
+        data[base..base + 8].copy_from_slice(&value.to_le_bytes());
+    }
+    resolve_host_future_i32(caller, ptr)
 }
 
 /// Load sibling `.abi.json` `gpu` section into this thread's GPU state (for `dream run` / e2e).
@@ -116,9 +138,11 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         "Dream",
         "gpuTimestamp",
         |mut caller: Caller<'_, ()>| -> Result<i32> {
-            // Nanoseconds truncated into i32 slot — full i64 host path is not wired.
-            let _ = Instant::now();
-            resolve_host_future_i32(&mut caller, 0)
+            // Monotonic nanoseconds from a process-lifetime origin (same idea as `timeNowNanos`),
+            // boxed as `long` so `F_RESULT`'s i32 slot carries the pointer to the 64-bit value.
+            let origin = GPU_TIME_ORIGIN.get_or_init(Instant::now);
+            let nanos = origin.elapsed().as_nanos() as i64;
+            resolve_host_future_long(&mut caller, nanos)
         },
     )?;
 
@@ -168,6 +192,9 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             buffers::copy(src_id, dst_id, src_off, dst_off, size);
         },
     )?;
+    linker.func_wrap("Dream", "gpuBufferDestroy", |id: i32| {
+        buffers::destroy(id);
+    })?;
 
     linker.func_wrap(
         "Dream",
@@ -316,6 +343,22 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             textures::texture_copy_to_buffer(tex_id, buf_id, byte_offset, x, y, w, h);
         },
     )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuTextureCopy",
+        |src: i32, dst: i32, sx: i32, sy: i32, dx: i32, dy: i32, w: i32, h: i32| {
+            textures::texture_copy(src, dst, sx, sy, dx, dy, w, h);
+        },
+    )?;
+    linker.func_wrap("Dream", "gpuTextureGenerateMipmaps", |id: i32| -> i32 {
+        textures::texture_generate_mipmaps(id)
+    })?;
+    linker.func_wrap("Dream", "gpuTextureDestroy", |id: i32| {
+        textures::texture_destroy(id);
+    })?;
+    linker.func_wrap("Dream", "gpuSamplerDestroy", |id: i32| {
+        textures::sampler_destroy(id);
+    })?;
 
     linker.func_wrap(
         "Dream",
@@ -526,6 +569,35 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             resolve_host_future_i32(&mut caller, code)
         },
     )?;
+    linker.func_wrap(
+        "Dream",
+        "gpuRenderDrawTo",
+        |mut caller: Caller<'_, ()>,
+         color_tex: i32,
+         pid: i32,
+         vb: i32,
+         n: i32,
+         inst: i32,
+         uniforms: i32,
+         cr: f32,
+         cg: f32,
+         cb: f32,
+         ca: f32,
+         depth: i32,
+         load: i32|
+         -> Result<i32> {
+            let u = read_arg_bytes(&mut caller, uniforms)?;
+            let code =
+                render::draw_to(color_tex, pid, vb, n, inst, &u, [cr, cg, cb, ca], depth, load);
+            resolve_host_future_i32(&mut caller, code)
+        },
+    )?;
+    linker.func_wrap("Dream", "gpuRenderPipelineDestroy", |id: i32| {
+        render::pipeline_destroy(id);
+    })?;
+    linker.func_wrap("Dream", "gpuSurfaceDestroy", |id: i32| {
+        surface::destroy(id);
+    })?;
     linker.func_wrap(
         "Dream",
         "gpuRenderDrawIndexedEx",

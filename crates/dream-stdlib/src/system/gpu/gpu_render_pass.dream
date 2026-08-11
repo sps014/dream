@@ -1,9 +1,8 @@
 module system.gpu;
 
-/// Fixed-function blit plus programmable draw helpers for `@vertex` / `@fragment` pipelines.
-
+// Fixed-function blit plus programmable draw helpers for `@vertex` / `@fragment` pipelines.
 public class GpuRenderPass {
-    /// Blits `source` onto `surface` (fullscreen textured triangle).
+    // Blits `source` onto `surface` (fullscreen textured triangle).
     @web @native
     public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
         let code = await Gpu.render_blit(surface.id, source.id);
@@ -11,7 +10,7 @@ public class GpuRenderPass {
         return Result.Err(GpuError.from_code(code, "blit failed"));
     }
 
-    /// Clears the surface (black) and draws `vertex_count` vertices with `pipeline`.
+    // Clears the surface (black) and draws `vertex_count` vertices with `pipeline`.
     @web @native
     public static async fun draw<T : unmanaged>(
         surface: GpuSurface,
@@ -29,7 +28,7 @@ public class GpuRenderPass {
         );
     }
 
-    /// Like `draw`, with shader uniforms (`Uniforms.pack_f32` / `pack_i32`) and a clear color.
+    // Like `draw`, with shader uniforms (`Uniforms.pack` / `pack_f32`) and a clear color.
     @web @native
     public static async fun draw_ex<T : unmanaged>(
         surface: GpuSurface,
@@ -39,6 +38,7 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4
     ): Result<bool, GpuError> {
+        let no_depth: Option<GpuTexture> = Option.None;
         return await GpuRenderPass.draw_instanced(
             surface,
             pipeline,
@@ -47,13 +47,12 @@ public class GpuRenderPass {
             1,
             uniforms,
             clear,
-            -1,
-            0
+            no_depth,
+            GpuLoadOp.Clear
         );
     }
 
-    /// Draw with instancing, optional depth attachment, and load-op control.
-    /// `depth_texture_id` is `-1` for no depth; `load_op` is `0` clear / `1` load.
+    // Draw with instancing, optional depth attachment, and load-op control.
     @web @native
     public static async fun draw_instanced<T : unmanaged>(
         surface: GpuSurface,
@@ -63,9 +62,14 @@ public class GpuRenderPass {
         instance_count: int,
         uniforms: byte[],
         clear: GpuVec4,
-        depth_texture_id: int,
-        load_op: int
+        depth: Option<GpuTexture>,
+        load_op: GpuLoadOp
     ): Result<bool, GpuError> {
+        let depth_id = switch (depth) {
+            Some(t) => t.id,
+            None => -1,
+        };
+        let load: int = load_op;
         let code = await Gpu.render_draw_ex(
             surface.id,
             pipeline.id,
@@ -77,14 +81,14 @@ public class GpuRenderPass {
             clear.y,
             clear.z,
             clear.w,
-            depth_texture_id,
-            load_op
+            depth_id,
+            load
         );
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw failed"));
     }
 
-    /// Clears the surface and draws indexed geometry (indices are `int` → WebGPU `uint32`).
+    // Clears the surface and draws indexed geometry (indices are `int` → WebGPU `uint32`).
     @web @native
     public static async fun draw_indexed<T : unmanaged>(
         surface: GpuSurface,
@@ -104,7 +108,7 @@ public class GpuRenderPass {
         );
     }
 
-    /// Like `draw_indexed`, with uniforms and clear color.
+    // Like `draw_indexed`, with uniforms and clear color.
     @web @native
     public static async fun draw_indexed_ex<T : unmanaged>(
         surface: GpuSurface,
@@ -115,6 +119,7 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4
     ): Result<bool, GpuError> {
+        let no_depth: Option<GpuTexture> = Option.None;
         return await GpuRenderPass.draw_indexed_instanced(
             surface,
             pipeline,
@@ -124,12 +129,12 @@ public class GpuRenderPass {
             1,
             uniforms,
             clear,
-            -1,
-            0
+            no_depth,
+            GpuLoadOp.Clear
         );
     }
 
-    /// Indexed draw with instancing, optional depth, and load-op control.
+    // Indexed draw with instancing, optional depth, and load-op control.
     @web @native
     public static async fun draw_indexed_instanced<T : unmanaged>(
         surface: GpuSurface,
@@ -140,9 +145,14 @@ public class GpuRenderPass {
         instance_count: int,
         uniforms: byte[],
         clear: GpuVec4,
-        depth_texture_id: int,
-        load_op: int
+        depth: Option<GpuTexture>,
+        load_op: GpuLoadOp
     ): Result<bool, GpuError> {
+        let depth_id = switch (depth) {
+            Some(t) => t.id,
+            None => -1,
+        };
+        let load: int = load_op;
         let code = await Gpu.render_draw_indexed_ex(
             surface.id,
             pipeline.id,
@@ -155,10 +165,46 @@ public class GpuRenderPass {
             clear.y,
             clear.z,
             clear.w,
-            depth_texture_id,
-            load_op
+            depth_id,
+            load
         );
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw_indexed failed"));
+    }
+
+    // Draws into an offscreen color texture (optional depth), not the swapchain.
+    @web @native
+    public static async fun draw_to<T : unmanaged>(
+        color: GpuTexture,
+        depth: Option<GpuTexture>,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        vertex_count: int,
+        instance_count: int,
+        uniforms: byte[],
+        clear: GpuVec4,
+        load_op: GpuLoadOp
+    ): Result<bool, GpuError> {
+        let depth_id = switch (depth) {
+            Some(t) => t.id,
+            None => -1,
+        };
+        let load: int = load_op;
+        let code = await Gpu.render_draw_to(
+            color.id,
+            pipeline.id,
+            vertices.id,
+            vertex_count,
+            instance_count,
+            uniforms,
+            clear.x,
+            clear.y,
+            clear.z,
+            clear.w,
+            depth_id,
+            load
+        );
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "draw_to failed"));
     }
 }

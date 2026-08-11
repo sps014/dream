@@ -1,6 +1,6 @@
 module system.gpu;
 
-/// Physical keyboard codes (UI Events `KeyboardEvent.code` / winit `KeyCode` Debug names).
+// Physical keyboard codes (UI Events `KeyboardEvent.code` / winit `KeyCode` Debug names).
 public enum KeyCode {
     Unknown,
     Escape,
@@ -105,7 +105,7 @@ public enum KeyCode {
     NumpadEnter,
 }
 
-/// UI Events / host physical code string for a `KeyCode`.
+// UI Events / host physical code string for a `KeyCode`.
 public fun key_code_name(code: KeyCode): string {
     if (code == KeyCode.Escape) { return "Escape"; }
     if (code == KeyCode.Space) { return "Space"; }
@@ -210,7 +210,7 @@ public fun key_code_name(code: KeyCode): string {
     return "Unidentified";
 }
 
-/// Map a host physical code string to `KeyCode` (`Unknown` if unrecognized).
+// Map a host physical code string to `KeyCode` (`Unknown` if unrecognized).
 public fun key_code_from_name(name: string): KeyCode {
     if (name == "Escape") { return KeyCode.Escape; }
     if (name == "Space") { return KeyCode.Space; }

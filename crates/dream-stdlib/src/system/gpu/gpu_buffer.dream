@@ -129,6 +129,13 @@ public struct GpuBuffer<T : unmanaged> {
         );
     }
 
+    // Releases the host buffer resource.
+    public fun destroy(): void {
+        Gpu.buffer_destroy(this._id);
+        this._id = -1;
+        this._length = 0;
+    }
+
     static fun decode(bytes: byte[], count: int, stride: int): T[] {
         let out = Buffer.alloc<T>(count);
         for (let i = 0; i < count; i = i + 1) {

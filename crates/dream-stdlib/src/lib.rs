@@ -421,6 +421,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/gpu_buffer.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_enums.dream",
+                include_str!("system/gpu/gpu_enums.dream"),
+            ),
+            (
                 "<std>/system/gpu/gpu_swap.dream",
                 include_str!("system/gpu/gpu_swap.dream"),
             ),
@@ -433,6 +437,18 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/gpu_shader.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_sampler.dream",
+                include_str!("system/gpu/gpu_sampler.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_texture.dream",
+                include_str!("system/gpu/gpu_texture.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_bind_list.dream",
+                include_str!("system/gpu/gpu_bind_list.dream"),
+            ),
+            (
                 "<std>/system/gpu/compute.dream",
                 include_str!("system/gpu/compute.dream"),
             ),
@@ -443,14 +459,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/gpu/compute_pass.dream",
                 include_str!("system/gpu/compute_pass.dream"),
-            ),
-            (
-                "<std>/system/gpu/gpu_sampler.dream",
-                include_str!("system/gpu/gpu_sampler.dream"),
-            ),
-            (
-                "<std>/system/gpu/gpu_texture.dream",
-                include_str!("system/gpu/gpu_texture.dream"),
             ),
             (
                 "<std>/system/gpu/gpu_pointer.dream",

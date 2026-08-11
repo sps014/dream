@@ -314,6 +314,277 @@ fn render_layout_entry(b: &GpuBindingMeta) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
+pub fn pipeline_destroy(id: i32) {
+    let mut st = lock_state();
+    st.render_pipes.shift_remove(&id);
+}
+
+/// Draws into an offscreen rgba8 / rgba16-float color texture (not the swapchain).
+///
+/// Mirrors [`draw_ex`] end-to-end but sources the color view from the texture registered under
+/// `color_texture_id` instead of an acquired swapchain frame. The target texture must be created
+/// with `RENDER_ATTACHMENT` usage (`texture_create_rgba8` / `texture_create_rgba16float` set it
+/// unconditionally so a "draw offscreen then blit" pattern always works).
+pub fn draw_to(
+    color_texture_id: i32,
+    pipeline_id: i32,
+    vertex_buffer_id: i32,
+    vertex_count: i32,
+    instance_count: i32,
+    uniforms: &[u8],
+    clear: [f32; 4],
+    depth_texture_id: i32,
+    load_op: i32,
+) -> i32 {
+    match draw_to_inner(
+        color_texture_id,
+        pipeline_id,
+        vertex_buffer_id,
+        vertex_count,
+        instance_count,
+        uniforms,
+        clear,
+        depth_texture_id,
+        load_op,
+    ) {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("Dream gpuRenderDrawTo: {e}");
+            classify_err(&e)
+        }
+    }
+}
+
+fn draw_to_inner(
+    color_texture_id: i32,
+    pipeline_id: i32,
+    vertex_buffer_id: i32,
+    vertex_count: i32,
+    instance_count: i32,
+    uniforms: &[u8],
+    clear: [f32; 4],
+    depth_texture_id: i32,
+    load_op: i32,
+) -> Result<(), String> {
+    let mut st = lock_state();
+    if !st.ready {
+        return Err("GPU not initialized".into());
+    }
+    let device = st.device.as_ref().unwrap().clone();
+    let queue = st.queue.as_ref().unwrap().clone();
+    let (depth_enabled, pipeline_format) = {
+        let rp = st
+            .render_pipes
+            .get(&pipeline_id)
+            .ok_or_else(|| format!("unknown pipeline {pipeline_id}"))?;
+        (rp.depth_enabled, rp.format)
+    };
+
+    // Ensure the color texture exists with RENDER_ATTACHMENT usage. `texture_create_rgba8` and
+    // `texture_create_rgba16float` include the flag, so this branch only trips when the caller
+    // passed a wrong id or a compute-storage texture that was never grown for render use.
+    let (color_view, color_format) = {
+        let tex = st
+            .textures
+            .get_mut(&color_texture_id)
+            .ok_or_else(|| format!("unknown color texture {color_texture_id}"))?;
+        if tex.depth {
+            return Err("validation: color target cannot be a depth texture".into());
+        }
+        if tex.gpu.is_none() {
+            let usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST
+                | if tex.format == wgpu::TextureFormat::Rgba8Unorm {
+                    wgpu::TextureUsages::STORAGE_BINDING
+                } else {
+                    wgpu::TextureUsages::empty()
+                };
+            tex.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("dream-draw-to-color"),
+                size: wgpu::Extent3d {
+                    width: tex.width.max(1),
+                    height: tex.height.max(1),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: tex.format,
+                usage,
+                view_formats: &[],
+            }));
+            tex.view = None;
+        }
+        let gpu = tex.gpu.as_ref().unwrap();
+        let view = if let Some(v) = tex.view.as_ref() {
+            v.clone()
+        } else {
+            let v = gpu.create_view(&Default::default());
+            tex.view = Some(v.clone());
+            v
+        };
+        (view, tex.format)
+    };
+
+    // Ensure pipeline color format matches the target so wgpu doesn't reject the pass.
+    if pipeline_format != color_format {
+        return Err(format!(
+            "validation: pipeline color format {:?} does not match draw target {:?}",
+            pipeline_format, color_format
+        ));
+    }
+
+    if let Some(entry) = st.buffers.get_mut(&vertex_buffer_id) {
+        super::buffers::ensure_gpu_buffer(
+            &device,
+            &queue,
+            entry,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        )?;
+    }
+
+    let depth_view = if depth_enabled && depth_texture_id >= 0 {
+        if let Some(t) = st.textures.get_mut(&depth_texture_id) {
+            if t.gpu.is_none() {
+                t.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("dream-draw-to-depth"),
+                    size: wgpu::Extent3d {
+                        width: t.width.max(1),
+                        height: t.height.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                }));
+            }
+        }
+        st.textures
+            .get(&depth_texture_id)
+            .and_then(|t| t.gpu.as_ref())
+            .map(|t| t.create_view(&Default::default()))
+    } else {
+        None
+    };
+
+    let load = if load_op == 1 {
+        wgpu::LoadOp::Load
+    } else {
+        wgpu::LoadOp::Clear(wgpu::Color {
+            r: clear[0] as f64,
+            g: clear[1] as f64,
+            b: clear[2] as f64,
+            a: clear[3] as f64,
+        })
+    };
+
+    let uniform_bindings = st
+        .render_pipes
+        .get(&pipeline_id)
+        .map(|rp| rp.uniform_bindings.clone())
+        .unwrap_or_default();
+    let needs_bg = !uniform_bindings.is_empty()
+        && st
+            .render_pipes
+            .get(&pipeline_id)
+            .and_then(|rp| rp.bgl.as_ref())
+            .is_some();
+    if needs_bg {
+        let mut bytes = [0u8; 256];
+        let n = uniforms.len().min(256);
+        if n > 0 {
+            bytes[..n].copy_from_slice(&uniforms[..n]);
+        }
+        let ub = st
+            .render_pipes
+            .get(&pipeline_id)
+            .and_then(|rp| rp.uniform_buf.as_ref())
+            .ok_or_else(|| "missing persistent draw uniform buffer".to_string())?;
+        queue.write_buffer(ub, 0, &bytes);
+    }
+
+    let rp = st.render_pipes.get(&pipeline_id).unwrap();
+    let bg = if needs_bg {
+        let bgl = rp.bgl.as_ref().unwrap();
+        let ub = rp.uniform_buf.as_ref().unwrap();
+        let entries: Vec<wgpu::BindGroupEntry<'_>> = uniform_bindings
+            .iter()
+            .map(|binding| wgpu::BindGroupEntry {
+                binding: *binding,
+                resource: ub.as_entire_binding(),
+            })
+            .collect();
+        Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("dream-draw-to-bg"),
+            layout: bgl,
+            entries: &entries,
+        }))
+    } else {
+        None
+    };
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("dream-draw-to"),
+    });
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("dream-draw-to-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &color_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: depth_view.as_ref().map(|dv| {
+                wgpu::RenderPassDepthStencilAttachment {
+                    view: dv,
+                    depth_ops: Some(wgpu::Operations {
+                        load: if load_op == 1 {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(1.0)
+                        },
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        pass.set_pipeline(&rp.pipeline);
+        if let Some(bg) = &bg {
+            pass.set_bind_group(0, bg, &[]);
+        }
+        if let Some(vb) = st.buffers.get(&vertex_buffer_id).and_then(|b| b.gpu.as_ref()) {
+            pass.set_vertex_buffer(0, vb.slice(..));
+        }
+        let instances = instance_count.max(1) as u32;
+        pass.draw(0..vertex_count.max(0) as u32, 0..instances);
+    }
+    queue.submit(Some(encoder.finish()));
+    st.invalidate_blit_tex(color_texture_id);
+    // The rendered texture is authoritative on the GPU side now; clear the CPU-dirty flag so
+    // subsequent reads pull from GPU.
+    if let Some(tex) = st.textures.get_mut(&color_texture_id) {
+        tex.dirty_cpu = false;
+    }
+    let _ = device.poll(wgpu::Maintain::Poll);
+    if let Some(e) = drain_uncaptured() {
+        st.set_last_error(e.clone());
+        return Err(e);
+    }
+    Ok(())
+}
+
 pub fn draw_ex(
     surface_id: i32,
     pipeline_id: i32,

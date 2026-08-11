@@ -103,6 +103,15 @@ pub fn read_bytes_at(id: i32, byte_offset: i32, n: i32) -> Result<Vec<u8>, Strin
     Ok(out)
 }
 
+pub fn destroy(id: i32) {
+    let mut st = lock_state();
+    if let Some(entry) = st.buffers.shift_remove(&id) {
+        if let Some(gpu) = entry.gpu {
+            gpu.destroy();
+        }
+    }
+}
+
 pub fn copy(src_id: i32, dst_id: i32, src_off: i32, dst_off: i32, size: i32) {
     let mut st = lock_state();
     let n = size.max(0) as u64;

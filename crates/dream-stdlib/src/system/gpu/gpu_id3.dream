@@ -1,13 +1,12 @@
 module system.gpu;
 
-/// Three-component integer id used by `@compute` builtins (`global_id`, `local_id`,
-/// `workgroup_id`, `num_workgroups`). Each field is a workgroup / thread coordinate.
-
+// Three-component integer id used by `@compute` builtins (`global_id`, `local_id`,
+// `workgroup_id`, `num_workgroups`). Each field is a workgroup / thread coordinate.
 public struct GpuId3 {
-    /// X index.
+    // X index.
     public x: int;
-    /// Y index.
+    // Y index.
     public y: int;
-    /// Z index.
+    // Z index.
     public z: int;
 }

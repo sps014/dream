@@ -1,0 +1,20 @@
+module system.gpu;
+
+// Color attachment load operation for draw helpers (matches host `load_op` ints).
+public enum GpuLoadOp {
+    Clear = 0,
+    Load = 1,
+}
+
+// Mag/min filter for `GpuSampler.create` (matches host filter ints).
+public enum GpuFilterMode {
+    Nearest = 0,
+    Linear = 1,
+}
+
+// Address mode for `GpuSampler.create` (matches host address ints).
+public enum GpuAddressMode {
+    ClampToEdge = 0,
+    Repeat = 1,
+    MirrorRepeat = 2,
+}

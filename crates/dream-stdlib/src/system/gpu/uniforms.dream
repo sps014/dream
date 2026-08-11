@@ -1,8 +1,12 @@
 module system.gpu;
 
-// Pack little-endian scalar uniforms for `Compute.run_*` extra uniform blobs.
-
+// Pack little-endian uniforms for `Compute.run_*` / draw helpers.
 public class Uniforms {
+    // Packs a blittable unmanaged value (scalar or struct) as raw little-endian bytes.
+    public static fun pack<T : unmanaged>(value: T): byte[] {
+        return Bytes.of(value);
+    }
+
     // Packs `int` values as little-endian i32 bytes.
     public static fun pack_i32(values: int[]): byte[] {
         let out = Buffer.alloc<byte>(values.length * 4);

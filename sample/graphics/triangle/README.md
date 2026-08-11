@@ -16,6 +16,17 @@ building — a missing `.wasm` is a 404.
 
 ## Run
 
+### Native (wgpu)
+
+```bash
+cargo run -- run sample/graphics/triangle/triangle.dream
+```
+
+Native `dream run` executes real WGSL compute and render pipelines via wgpu and presents
+through a winit window.
+
+### Browser (WebGPU)
+
 Serve the **sample directory** (uses `./triangle.web.runtime.js` + `./triangle.wasm`):
 
 ```bash
@@ -30,8 +41,7 @@ npx serve .
 # open http://localhost:3000/sample/graphics/triangle/triangle.html
 ```
 
-Requires a WebGPU browser (Chrome/Edge). Native `dream run` stages buffers but does
-not execute render pipelines; use the browser path.
+Requires a WebGPU browser (Chrome/Edge). Build with `--runtime --web` first (see above).
 
 ## Shader API (happy path)
 

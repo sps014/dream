@@ -63,7 +63,7 @@ let pipe = await GpuRenderPipeline.create_ex("vs", "fs", desc);
 let depth = GpuTexture.depth24(width, height);
 let _ = await GpuRenderPass.draw_instanced(
     surface, pipe, verts, vertex_count, instance_count,
-    uniforms, clear, depth.id, 0
+    uniforms, clear, Option.Some(depth), GpuLoadOp.Clear
 );
 ```
 

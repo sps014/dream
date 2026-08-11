@@ -3,7 +3,6 @@ module system.gpu;
 // WebGPU compute + present. Auto-loaded when any `@compute` kernel is present.
 
 // Failure from GPU init / dispatch / present.
-
 public class GpuError : Error {
     _code: string;
     _message: string;

@@ -1,8 +1,8 @@
 module system.gpu;
 
 // Sampling state for texture reads (`textureSample` / `textureSampleLevel`).
-
 public class GpuSampler {
+    // Host sampler handle id.
     public id: int;
 
     // Linear filtering sampler (clamp-to-edge).
@@ -19,13 +19,23 @@ public class GpuSampler {
         return s;
     }
 
-    /// Custom filter / address / mip mode.
-    /// `filter`: `0` nearest, `1` linear.
-    /// `address`: `0` clamp-to-edge, `1` repeat, `2` mirror-repeat.
-    /// `mip_filter`: `0` nearest, `1` linear.
-    public static fun create(filter: int, address: int, mip_filter: int): GpuSampler {
+    // Custom filter / address / mip mode (named enums; host ints match discriminants).
+    public static fun create(
+        filter: GpuFilterMode,
+        address: GpuAddressMode,
+        mip_filter: GpuFilterMode
+    ): GpuSampler {
+        let f: int = filter;
+        let a: int = address;
+        let m: int = mip_filter;
         let s = GpuSampler();
-        s.id = Gpu.sampler_create_ex(filter, address, mip_filter);
+        s.id = Gpu.sampler_create_ex(f, a, m);
         return s;
+    }
+
+    // Releases the host sampler resource.
+    public fun destroy(): void {
+        Gpu.sampler_destroy(this.id);
+        this.id = -1;
     }
 }

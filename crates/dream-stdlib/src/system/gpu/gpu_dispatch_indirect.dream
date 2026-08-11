@@ -2,10 +2,12 @@ module system.gpu;
 
 // Indirect dispatch workgroup counts (12 bytes / 3×u32) for `Compute.dispatch_indirect`.
 // Values are workgroup counts (not thread extents).
-
 public struct GpuDispatchIndirect {
+    // Workgroup count in X.
     public x: int;
+    // Workgroup count in Y.
     public y: int;
+    // Workgroup count in Z.
     public z: int;
 
     // Builds an indirect-args buffer of three i32 workgroup counts.

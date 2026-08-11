@@ -205,7 +205,6 @@ async fun run_browser(n: int): void {
     // Fingerprint / coral Gray–Scott (Du, Dv, feed, kill).
     let step_u = Uniforms.pack_f32([0.21, 0.105, 0.026, 0.051]);
     let empty_u = Buffer.alloc<byte>(0);
-    let no_samplers = Buffer.alloc<int>(0);
     let steps_per_frame = 14;
 
     System.println("reaction-diffusion gpu — Gray-Scott");
@@ -234,16 +233,8 @@ async fun run_browser(n: int): void {
             }
             s = s + 1;
         }
-        pass.dispatch_resources(
-            "rd_paint",
-            [u.id, v.id],
-            [tex.id],
-            no_samplers,
-            n,
-            n,
-            1,
-            empty_u
-        );
+        let paint = GpuBindList.begin().buffer(u).buffer(v).texture(tex);
+        pass.dispatch_bind("rd_paint", paint, n, n, 1, empty_u);
         let sub = await pass.submit();
         if (sub.is_err()) {
             System.println("ComputePass.submit failed");

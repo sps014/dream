@@ -1,7 +1,6 @@
 module system.gpu;
 
 // Device lifecycle, host bridges, kernel barriers / atomics / texture builtins.
-
 public class Gpu {
     @js("Dream", "gpuIsAvailable")
     static extern fun is_available_host(): bool;
@@ -305,6 +304,55 @@ public class Gpu {
         load_op: int
     ): int;
 
+    // Draws into an offscreen color texture (not the swapchain).
+    @web @native
+    @js("Dream", "gpuRenderDrawTo")
+    static extern async fun render_draw_to(
+        color_texture_id: int,
+        pipeline_id: int,
+        vertex_buffer_id: int,
+        vertex_count: int,
+        instance_count: int,
+        uniforms: byte[],
+        clear_r: float,
+        clear_g: float,
+        clear_b: float,
+        clear_a: float,
+        depth_texture_id: int,
+        load_op: int
+    ): int;
+
+    @js("Dream", "gpuBufferDestroy")
+    static extern fun buffer_destroy(id: int): void;
+
+    @js("Dream", "gpuTextureDestroy")
+    static extern fun texture_destroy(id: int): void;
+
+    @js("Dream", "gpuSamplerDestroy")
+    static extern fun sampler_destroy(id: int): void;
+
+    @js("Dream", "gpuRenderPipelineDestroy")
+    static extern fun render_pipeline_destroy(id: int): void;
+
+    @web @native
+    @js("Dream", "gpuSurfaceDestroy")
+    static extern fun surface_destroy(id: int): void;
+
+    @js("Dream", "gpuTextureCopy")
+    static extern fun texture_copy(
+        src_id: int,
+        dst_id: int,
+        src_x: int,
+        src_y: int,
+        dst_x: int,
+        dst_y: int,
+        width: int,
+        height: int
+    ): void;
+
+    @js("Dream", "gpuTextureGenerateMipmaps")
+    static extern fun texture_generate_mipmaps(id: int): int;
+
     @js("Dream", "gpuBufferAllocVertexBytes")
     static extern fun buffer_alloc_vertex_bytes(n: int): int;
 
@@ -343,14 +391,18 @@ public class Gpu {
     // Storage memory barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
     public static fun storage_barrier(): void {}
 
-    // Atomic helpers (WGSL `atomic*` inside `@compute`; CPU stubs return 0 / no-op).
+    // WGSL `atomicLoad` on a storage-buffer element; CPU stub returns `0`.
     public static fun atomic_load(buf: GpuBuffer<int>, i: int): int { return 0; }
+    // WGSL `atomicStore`; CPU stub is a no-op.
     public static fun atomic_store(buf: GpuBuffer<int>, i: int, v: int): void {}
+    // WGSL `atomicAdd`; returns the previous value (CPU stub returns `0`).
     public static fun atomic_add(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicExchange`; returns the previous value (CPU stub returns `0`).
     public static fun atomic_exchange(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
 
-    // Texture builtins for `@compute` (mapped to WGSL; CPU stubs are no-ops / zeros).
+    // WGSL `textureLoad` (texel fetch) for `@compute`; CPU stub returns `0`.
     public static fun texture_load(tex: GpuTexture, x: int, y: int): float { return 0.0; }
+    // WGSL `textureStore` for `@compute`; CPU stub is a no-op.
     public static fun texture_store(
         tex: GpuTexture,
         x: int,
@@ -360,6 +412,7 @@ public class Gpu {
         b: float,
         a: float
     ): void {}
+    // WGSL `textureSampleLevel` for `@compute`; CPU stub returns `0`.
     public static fun texture_sample_level(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -367,8 +420,7 @@ public class Gpu {
         v: float,
         level: float
     ): float { return 0.0; }
-
-    // Fragment texture sample (WGSL `textureSample`; CPU stub returns zeros).
+    // WGSL `textureSample` for `@fragment`; CPU stub returns zeros.
     public static fun texture_sample(
         tex: GpuTexture,
         samp: GpuSampler,

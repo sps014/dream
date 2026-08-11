@@ -1,9 +1,8 @@
 module system.gpu;
 
 // High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
-
 public class Compute {
-    // Dispatches `kernel` over a 1D grid of size `n`.
+    // Dispatches `kernel` over a 1D grid of size `n` (float storage buffers only).
     public static async fun run_1d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -12,7 +11,7 @@ public class Compute {
         return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0));
     }
 
-    // Dispatches `kernel` over a 2D grid of size `w`×`h`.
+    // Dispatches `kernel` over a 2D grid of size `w`×`h` (float storage buffers only).
     public static async fun run_2d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -33,7 +32,7 @@ public class Compute {
         return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms);
     }
 
-    // Dispatches `kernel` over a 3D grid with optional uniforms.
+    // Dispatches `kernel` over a 3D grid with optional uniforms (float storage buffers only).
     public static async fun run_3d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -58,6 +57,27 @@ public class Compute {
         );
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
+    }
+
+    // Dispatches with a typed `GpuBindList` (mixed buffers / textures / samplers).
+    public static async fun run(
+        kernel: string,
+        resources: GpuBindList,
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): Result<bool, GpuError> {
+        return await Compute.run_resources(
+            kernel,
+            resources.buffer_ids(),
+            resources.texture_ids(),
+            resources.sampler_ids(),
+            sx,
+            sy,
+            sz,
+            uniforms
+        );
     }
 
     // Dispatches with explicit buffer / texture / sampler resource ids (ABI binding order).
@@ -100,6 +120,24 @@ public class Compute {
             ids,
             Buffer.alloc<int>(0),
             Buffer.alloc<int>(0),
+            args.id,
+            0
+        );
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "indirect dispatch failed: " + kernel));
+    }
+
+    // Indirect dispatch with a typed `GpuBindList`.
+    public static async fun dispatch_indirect_bind(
+        kernel: string,
+        resources: GpuBindList,
+        args: GpuBuffer<int>
+    ): Result<bool, GpuError> {
+        let code = await Gpu.dispatch_indirect(
+            kernel,
+            resources.buffer_ids(),
+            resources.texture_ids(),
+            resources.sampler_ids(),
             args.id,
             0
         );

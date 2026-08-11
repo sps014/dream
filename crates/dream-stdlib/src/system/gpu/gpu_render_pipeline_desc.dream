@@ -1,23 +1,30 @@
 module system.gpu;
 
-/// Fixed-function state for `GpuRenderPipeline.create_ex`.
-///
-/// Topology: `0` triangle-list (default), `1` triangle-strip, `2` line-list,
-/// `3` line-strip, `4` point-list.
-/// Cull: `0` none, `1` front, `2` back.
-/// Front face: `0` ccw, `1` cw.
-/// Depth compare: `0` less, `1` less-equal, `2` greater, `3` greater-equal, `4` always, `5` never.
+// Fixed-function state for `GpuRenderPipeline.create_ex`.
+// Topology: `0` triangle-list (default), `1` triangle-strip, `2` line-list,
+// `3` line-strip, `4` point-list.
+// Cull: `0` none, `1` front, `2` back.
+// Front face: `0` ccw, `1` cw.
+// Depth compare: `0` less, `1` less-equal, `2` greater, `3` greater-equal, `4` always, `5` never.
 public struct GpuRenderPipelineDesc {
+    // Primitive topology code (see type comment).
     public topology: int;
+    // Face culling mode (see type comment).
     public cull_mode: int;
+    // Front-face winding (see type comment).
     public front_face: int;
+    // When true, depth testing is enabled.
     public depth_enabled: bool;
+    // When true, passing fragments write depth.
     public depth_write: bool;
+    // Depth compare function code (see type comment).
     public depth_compare: int;
+    // When true, alpha blending is enabled on the color target.
     public blend_enabled: bool;
+    // MSAA sample count (`1` = no multisample).
     public sample_count: int;
 
-    /// Defaults suitable for opaque triangle meshes with depth testing.
+    // Defaults suitable for opaque triangle meshes with depth testing.
     public static fun mesh(): GpuRenderPipelineDesc {
         let d = GpuRenderPipelineDesc();
         d.topology = 0;
@@ -31,7 +38,7 @@ public struct GpuRenderPipelineDesc {
         return d;
     }
 
-    /// Defaults for unlit UI / overlays (no depth, alpha blending).
+    // Defaults for unlit UI / overlays (no depth, alpha blending).
     public static fun overlay(): GpuRenderPipelineDesc {
         let d = GpuRenderPipelineDesc();
         d.topology = 0;
@@ -45,7 +52,7 @@ public struct GpuRenderPipelineDesc {
         return d;
     }
 
-    /// Bare triangle-list defaults (matches legacy `GpuRenderPipeline.create`).
+    // Bare triangle-list defaults (matches legacy `GpuRenderPipeline.create`).
     public static fun defaults(): GpuRenderPipelineDesc {
         let d = GpuRenderPipelineDesc();
         d.topology = 0;

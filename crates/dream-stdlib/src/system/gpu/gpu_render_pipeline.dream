@@ -1,18 +1,17 @@
 module system.gpu;
 
 // Render pipeline linking a `@vertex` + `@fragment` pair.
-
 public class GpuRenderPipeline {
+    // Host render-pipeline handle id.
     public id: int;
 
     // Compiles and caches a render pipeline for the named Dream shaders.
-    // Not `@web`-only so string-literal pairing can be checked at compile time on every target;
-    // native hosts still return an error code (no WebGPU device).
+    // Available on web and native (`dream run` / wgpu); string-literal pairing is checked at compile time.
     public static async fun create(vertex: string, fragment: string): Result<GpuRenderPipeline, GpuError> {
         return await GpuRenderPipeline.create_ex(vertex, fragment, GpuRenderPipelineDesc.defaults());
     }
 
-    /// Like `create`, with fixed-function state (topology, cull, depth, blend, MSAA).
+    // Like `create`, with fixed-function state (topology, cull, depth, blend, MSAA).
     public static async fun create_ex(
         vertex: string,
         fragment: string,
@@ -42,5 +41,11 @@ public class GpuRenderPipeline {
         let p = GpuRenderPipeline();
         p.id = id;
         return Result.Ok(p);
+    }
+
+    // Releases the host pipeline resource.
+    public fun destroy(): void {
+        Gpu.render_pipeline_destroy(this.id);
+        this.id = -1;
     }
 }

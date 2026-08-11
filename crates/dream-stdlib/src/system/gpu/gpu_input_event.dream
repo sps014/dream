@@ -1,6 +1,6 @@
 module system.gpu;
 
-/// Queued input events drained by `GpuSurface.poll_events` (web + native).
+// Queued input events drained by `GpuSurface.poll_events` (web + native).
 public enum GpuInputEvent {
     PointerDown(x: float, y: float, button: int, pointer_id: int),
     PointerUp(x: float, y: float, button: int, pointer_id: int),
@@ -9,7 +9,7 @@ public enum GpuInputEvent {
     PointerLeave(x: float, y: float, pointer_id: int),
     PointerCancel(pointer_id: int),
     Wheel(dx: float, dy: float, x: float, y: float),
-    /// `code` is physical; `key` is the typed glyph when available.
+    // `code` is physical; `key` is the typed glyph when available.
     KeyDown(code: KeyCode, key: string, repeat: bool),
     KeyUp(code: KeyCode, key: string),
     TextInput(text: string),

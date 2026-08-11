@@ -422,6 +422,32 @@ class DreamInstance {
 }
 
 // ----- marshal.js -----
+// Heap tags for boxed primitives (mirrors `crates/dream-mir/src/abi.rs`). Only the 64-bit
+// numeric tags are needed here — a `long`/`ulong` result from an `extern async` has to be boxed
+// so the `F_RESULT` slot (i32) can carry its pointer.
+const TAG_LONG = 8;
+const TAG_ULONG = 10;
+
+/**
+ * Boxes a 64-bit numeric result into a Dream heap block matching `$box_long`/`$box_ulong` in
+ * `runtime/object.wat`. Returns the block's data pointer, which is what `F_RESULT` stores.
+ * Called from `wrapAsyncImport` for `extern async fun ...: long | ulong` returns; a synchronous
+ * `long`-returning extern uses the WASM i64 signature directly and needs no boxing.
+ */
+function boxLong64(inst, value, tag) {
+  if (typeof inst.exports.malloc !== "function") {
+    throw new Error("module does not export `malloc`; cannot box a `long` async result");
+  }
+  const ptr = inst.exports.malloc(8, tag);
+  const big = typeof value === "bigint" ? value : BigInt(value == null ? 0 : value);
+  if (tag === TAG_ULONG) {
+    inst.view.setBigUint64(ptr, big < 0n ? 0n : big, true);
+  } else {
+    inst.view.setBigInt64(ptr, big, true);
+  }
+  return ptr;
+}
+
 /** Marshals raw WASM argument values into JS values per the parameter type names. */
 function marshalArgs(inst, params, rawArgs) {
   if (!params) return rawArgs;
@@ -517,6 +543,14 @@ const FUTURE_SLOTS_SIZE = 56; // F_SLOTS: a host future has no saved-locals regi
 function wrapAsyncImport(getInstance, fn, signature) {
   const params = signature ? signature.params : null;
   const result = signature ? signature.result : null;
+  // `long`/`ulong` async returns cross the future boundary as boxed heap pointers because
+  // `F_RESULT` is a single i32; a bare BigInt would fail wasm's i32 coercion.
+  const resultBase = typeof result === "string" ? stripSuffix(result) : result;
+  const boxTag = resultBase === "long"
+    ? TAG_LONG
+    : resultBase === "ulong"
+      ? TAG_ULONG
+      : null;
 
   return (...rawArgs) => {
     const inst = getInstance();
@@ -526,18 +560,21 @@ function wrapAsyncImport(getInstance, fn, signature) {
     }
     const args = marshalArgs(inst, params, rawArgs);
     const future = exports.__dream_new_future(FUTURE_SLOTS_SIZE, -1, FUTURE_KIND_HOST);
+    const settle = (rawResult) => {
+      const marshaled = boxTag != null
+        ? boxLong64(inst, rawResult, boxTag)
+        : marshalResult(inst, result, rawResult);
+      exports.__dream_resolve(future, marshaled);
+      exports.__dream_run_loop();
+    };
     Promise.resolve(fn(...args)).then(
-      (value) => {
-        exports.__dream_resolve(future, marshalResult(inst, result, value));
-        exports.__dream_run_loop();
-      },
+      (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a
         // zero/null result (a `null` `js` handle for a `js` result) so the scheduler is not left
         // hanging, and surface the reason on the console for diagnosis.
         console.error("Dream: awaited JS promise rejected:", err);
-        exports.__dream_resolve(future, marshalResult(inst, result, null));
-        exports.__dream_run_loop();
+        settle(null);
       },
     );
     return future;
@@ -2423,6 +2460,14 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       for (let i = 0; i < slice.length; i++) out[i] = slice[i];
       return out;
     },
+    gpuBufferDestroy: (id) => {
+      const b = buffers.get(id);
+      if (!b) return;
+      buffers.delete(id);
+      if (b.gpuBuffer) {
+        try { b.gpuBuffer.destroy(); } catch (_) {}
+      }
+    },
     gpuBufferCopy: (srcId, dstId, srcOffset, dstOffset, size) => {
       const src = buffers.get(srcId);
       const dst = buffers.get(dstId);
@@ -2737,6 +2782,154 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       );
       device.queue.submit([encoder.finish()]);
       b.cpu = null;
+    },
+
+    gpuTextureDestroy: (id) => {
+      const t = textures.get(id);
+      if (!t) return;
+      textures.delete(id);
+      if (t.texture) {
+        try { t.texture.destroy(); } catch (_) {}
+      }
+    },
+    gpuSamplerDestroy: (id) => {
+      samplers.delete(id);
+    },
+    gpuTextureCopy: (srcId, dstId, srcX, srcY, dstX, dstY, width, height) => {
+      const src = textures.get(srcId);
+      const dst = textures.get(dstId);
+      if (!src || !dst) return;
+      if (src.depth || dst.depth) return;
+      if ((src.format || "rgba8unorm") !== (dst.format || "rgba8unorm")) return;
+      const bpp = (src.format || "rgba8unorm") === "rgba16float" ? 8 : 4;
+      const sx = Math.max(0, srcX | 0);
+      const sy = Math.max(0, srcY | 0);
+      const dx = Math.max(0, dstX | 0);
+      const dy = Math.max(0, dstY | 0);
+      let w = Math.max(0, width | 0);
+      let h = Math.max(0, height | 0);
+      w = Math.min(w, Math.max(0, src.width - sx), Math.max(0, dst.width - dx));
+      h = Math.min(h, Math.max(0, src.height - sy), Math.max(0, dst.height - dy));
+      if (w === 0 || h === 0) return;
+      if (device && src.texture && dst.texture) {
+        const encoder = device.createCommandEncoder();
+        encoder.copyTextureToTexture(
+          { texture: src.texture, origin: [sx, sy, 0] },
+          { texture: dst.texture, origin: [dx, dy, 0] },
+          [w, h, 1],
+        );
+        device.queue.submit([encoder.finish()]);
+        dst.cpu = null;
+        return;
+      }
+      // CPU shadow fallback.
+      if (!(src.cpu instanceof Uint8Array)) return;
+      if (!(dst.cpu instanceof Uint8Array)) {
+        dst.cpu = new Uint8Array(dst.width * dst.height * bpp);
+      }
+      const strideSrc = src.width * bpp;
+      const strideDst = dst.width * bpp;
+      const rowBytes = w * bpp;
+      for (let row = 0; row < h; row++) {
+        const so = (sy + row) * strideSrc + sx * bpp;
+        const doff = (dy + row) * strideDst + dx * bpp;
+        dst.cpu.set(src.cpu.subarray(so, so + rowBytes), doff);
+      }
+    },
+    gpuTextureGenerateMipmaps: (id) => {
+      const t = textures.get(id);
+      if (!t) return ERR_OTHER;
+      if (t.depth) return ERR_VALIDATION;
+      if ((t.format || "rgba8unorm") !== "rgba8unorm") return ERR_VALIDATION;
+      const width = Math.max(1, t.width | 0);
+      const height = Math.max(1, t.height | 0);
+      const mipCount = Math.floor(Math.log2(Math.max(width, height))) + 1;
+      // Compute CPU mip levels once via box filter. `ensureTexture` recreates the GPU texture
+      // when `mip_levels` changes; we then upload each level into its own subresource.
+      if (!(t.cpu instanceof Uint8Array) || t.cpu.byteLength < width * height * 4) {
+        t.cpu = new Uint8Array(width * height * 4);
+      }
+      const levels = [t.cpu];
+      let prev = t.cpu;
+      let prevW = width;
+      let prevH = height;
+      for (let level = 1; level < mipCount; level++) {
+        const nextW = Math.max(1, prevW >> 1);
+        const nextH = Math.max(1, prevH >> 1);
+        const next = new Uint8Array(nextW * nextH * 4);
+        for (let y = 0; y < nextH; y++) {
+          for (let x = 0; x < nextW; x++) {
+            const sx0 = Math.min(x * 2, prevW - 1);
+            const sx1 = Math.min(x * 2 + 1, prevW - 1);
+            const sy0 = Math.min(y * 2, prevH - 1);
+            const sy1 = Math.min(y * 2 + 1, prevH - 1);
+            for (let c = 0; c < 4; c++) {
+              const a = prev[(sy0 * prevW + sx0) * 4 + c];
+              const b = prev[(sy0 * prevW + sx1) * 4 + c];
+              const cc = prev[(sy1 * prevW + sx0) * 4 + c];
+              const d = prev[(sy1 * prevW + sx1) * 4 + c];
+              next[(y * nextW + x) * 4 + c] = ((a + b + cc + d + 2) >>> 2) & 0xff;
+            }
+          }
+        }
+        levels.push(next);
+        prev = next;
+        prevW = nextW;
+        prevH = nextH;
+      }
+      t.mip_levels = mipCount;
+      // Force ensureTexture to recreate with the new mip count; the caller will re-encode
+      // the texture on next use (via runDispatch, buildRenderBindGroup, or ensureBlit).
+      if (t.texture) {
+        try { t.texture.destroy(); } catch (_) {}
+        t.texture = null;
+      }
+      if (device) {
+        const usage =
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.STORAGE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.RENDER_ATTACHMENT;
+        t.texture = device.createTexture({
+          size: [width, height, 1],
+          format: "rgba8unorm",
+          usage,
+          mipLevelCount: mipCount,
+        });
+        let mipW = width;
+        let mipH = height;
+        for (let level = 0; level < mipCount; level++) {
+          device.queue.writeTexture(
+            { texture: t.texture, mipLevel: level },
+            levels[level],
+            { bytesPerRow: mipW * 4 },
+            [mipW, mipH],
+          );
+          mipW = Math.max(1, mipW >> 1);
+          mipH = Math.max(1, mipH >> 1);
+        }
+      }
+      return 0;
+    },
+    gpuRenderPipelineDestroy: (id) => {
+      const rp = renderPipelines.get(id);
+      if (!rp) return;
+      renderPipelines.delete(id);
+      // Remove any cache entries pointing at this pipeline so a subsequent create can rebuild.
+      for (const [k, v] of renderPipelineCache) {
+        if (v === id) renderPipelineCache.delete(k);
+      }
+    },
+    gpuSurfaceDestroy: (id) => {
+      const s = surfaces.get(id);
+      if (!s) return;
+      surfaces.delete(id);
+      // WebGPU canvas contexts are unconfigured by dropping the surface record; the canvas
+      // element itself is owned by the page and stays untouched. Reset the flag so a later
+      // re-registration reconfigures cleanly.
+      s.configured = false;
+      s.context = null;
     },
 
     gpuSurfaceFromCanvas: (canvasId) => {
@@ -3125,6 +3318,91 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         return 0;
       } catch (e) {
         console.error("Dream gpuRenderDrawEx:", e);
+        return classifyErr(e);
+      }
+    },
+
+    gpuRenderDrawTo: async (
+      colorTextureId, pipelineId, vertexBufferId, vertexCount, instanceCount,
+      uniforms, clearR, clearG, clearB, clearA, depthTextureId, loadOp,
+    ) => {
+      try {
+        const target = textures.get(colorTextureId);
+        if (!target) throw new Error(`unknown color GpuTexture ${colorTextureId}`);
+        if (target.depth) throw new Error("validation: color target cannot be a depth texture");
+        const rp = renderPipelines.get(pipelineId);
+        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
+        const dev = await ensureDevice();
+        // The target texture must have RENDER_ATTACHMENT. `ensureTexture` doesn't set it, so we
+        // recreate up-front if missing — cheap given draw targets are typically stable.
+        if (!target.texture) {
+          const usage =
+            GPUTextureUsage.TEXTURE_BINDING |
+            GPUTextureUsage.RENDER_ATTACHMENT |
+            GPUTextureUsage.COPY_DST |
+            GPUTextureUsage.COPY_SRC |
+            ((target.format || "rgba8unorm") === "rgba8unorm"
+              ? GPUTextureUsage.STORAGE_BINDING
+              : 0);
+          target.texture = dev.createTexture({
+            size: [target.width, target.height, target.depth_or_layers || 1],
+            format: target.format || "rgba8unorm",
+            usage,
+            mipLevelCount: Math.max(1, (target.mip_levels | 0) || 1),
+          });
+          if (target.cpu) {
+            const bpp = (target.format || "rgba8unorm") === "rgba16float" ? 8 : 4;
+            dev.queue.writeTexture(
+              { texture: target.texture },
+              target.cpu,
+              { bytesPerRow: target.width * bpp },
+              [target.width, target.height],
+            );
+          }
+        }
+        const view = target.texture.createView();
+        const encoder = dev.createCommandEncoder();
+        const passDesc = {
+          colorAttachments: [{
+            view,
+            clearValue: {
+              r: +clearR || 0,
+              g: +clearG || 0,
+              b: +clearB || 0,
+              a: clearA === undefined || clearA === null ? 1 : +clearA,
+            },
+            loadOp: (loadOp | 0) === 1 ? "load" : "clear",
+            storeOp: "store",
+          }],
+        };
+        if (rp.depthEnabled && depthTextureId >= 0) {
+          const dt = textures.get(depthTextureId);
+          if (!dt) throw new Error(`unknown depth GpuTexture ${depthTextureId}`);
+          await ensureDepthTexture(dev, dt);
+          passDesc.depthStencilAttachment = {
+            view: dt.texture.createView(),
+            depthClearValue: 1.0,
+            depthLoadOp: (loadOp | 0) === 1 ? "load" : "clear",
+            depthStoreOp: "store",
+          };
+        }
+        const pass = encoder.beginRenderPass(passDesc);
+        pass.setPipeline(rp.pipeline);
+        const vb = buffers.get(vertexBufferId);
+        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
+          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
+          pass.setVertexBuffer(0, gpuVb);
+        }
+        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
+        if (bg) pass.setBindGroup(0, bg);
+        pass.draw(Math.max(0, vertexCount | 0), Math.max(1, instanceCount | 0));
+        pass.end();
+        dev.queue.submit([encoder.finish()]);
+        await dev.queue.onSubmittedWorkDone();
+        target.cpu = null;
+        return 0;
+      } catch (e) {
+        console.error("Dream gpuRenderDrawTo:", e);
         return classifyErr(e);
       }
     },

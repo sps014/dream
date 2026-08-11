@@ -1,12 +1,14 @@
 module system.gpu;
 
 // RGBA / depth / cube textures for compute paint and render passes.
-
 public class GpuTexture {
+    // Host texture handle id.
     public id: int;
+    // Width in texels (cube edge length for cube maps).
     public width: int;
+    // Height in texels (cube edge length for cube maps).
     public height: int;
-    /// `"rgba8unorm"`, `"rgba16float"`, `"depth24plus"`, or `"cube-rgba8unorm"`.
+    // `"rgba8unorm"`, `"rgba16float"`, `"depth24plus"`, or `"cube-rgba8unorm"`.
     public format: string;
 
     // Allocates an empty RGBA8 texture of `width`×`height`.
@@ -19,7 +21,7 @@ public class GpuTexture {
         return t;
     }
 
-    /// Depth attachment texture (`depth24plus`) for mesh pipelines.
+    // Depth attachment texture (`depth24plus`) for mesh pipelines.
     public static fun depth24(width: int, height: int): GpuTexture {
         let t = GpuTexture();
         t.id = Gpu.texture_create_depth(width, height);
@@ -29,7 +31,7 @@ public class GpuTexture {
         return t;
     }
 
-    /// HDR color texture (`rgba16float`) for post / bloom targets.
+    // HDR color texture (`rgba16float`) for post / bloom targets.
     public static fun rgba16float(width: int, height: int): GpuTexture {
         let t = GpuTexture();
         t.id = Gpu.texture_create_rgba16float(width, height);
@@ -39,7 +41,7 @@ public class GpuTexture {
         return t;
     }
 
-    /// Cube map with six `size`×`size` RGBA8 faces.
+    // Cube map with six `size`×`size` RGBA8 faces.
     public static fun cube_rgba8(size: int): GpuTexture {
         let t = GpuTexture();
         t.id = Gpu.texture_create_cube_rgba8(size);
@@ -82,5 +84,23 @@ public class GpuTexture {
     // GPU-side copy of the full texture into a byte buffer (must hold width×height×4 bytes).
     public fun copy_to_buffer(dst: GpuBuffer<byte>, byte_offset: int): void {
         Gpu.texture_copy_to_buffer(this.id, dst.id, byte_offset, 0, 0, this.width, this.height);
+    }
+
+    // GPU-side copy from `src` into this texture at `(dst_x, dst_y)`.
+    public fun copy_from(src: GpuTexture, src_x: int, src_y: int, dst_x: int, dst_y: int, w: int, h: int): void {
+        Gpu.texture_copy(src.id, this.id, src_x, src_y, dst_x, dst_y, w, h);
+    }
+
+    // Generates mip levels for this texture (rgba8); returns `Err` when unsupported.
+    public fun generate_mipmaps(): Result<bool, GpuError> {
+        let code = Gpu.texture_generate_mipmaps(this.id);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "generate_mipmaps failed"));
+    }
+
+    // Releases the host texture resource.
+    public fun destroy(): void {
+        Gpu.texture_destroy(this.id);
+        this.id = -1;
     }
 }

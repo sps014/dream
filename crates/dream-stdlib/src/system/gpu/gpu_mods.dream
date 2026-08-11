@@ -1,10 +1,13 @@
 module system.gpu;
 
-/// Keyboard modifier latches for a `GpuSurface`.
+// Keyboard modifier latches for a `GpuSurface`.
 public struct GpuMods {
+    // Shift key held.
     public shift: bool;
+    // Control key held.
     public ctrl: bool;
+    // Alt / Option key held.
     public alt: bool;
-    /// Cmd on macOS / Windows key on PC.
+    // Cmd on macOS / Windows key on PC.
     public meta: bool;
 }

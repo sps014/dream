@@ -1,25 +1,29 @@
 module system.gpu;
 
-/// Math helpers for GPU shaders (`@compute` / `@vertex` / `@fragment`).
-/// Inside shaders the WGSL emitter maps these method names to WGSL builtins
-/// (`sin`, `normalize`, `cross`, …). On the CPU they use host `Math` (stubs for vec/mat ops).
-
+// Math helpers for GPU shaders (`@compute` / `@vertex` / `@fragment`).
+// Inside shaders the WGSL emitter maps these method names to WGSL builtins
+// (`sin`, `normalize`, `cross`, …). On the CPU they use host `Math` (stubs for some vec/mat ops).
 public class GpuMath {
+    // Smaller of two floats (WGSL `min`).
     public static fun min(a: float, b: float): float {
         if (a < b) { return a; }
         return b;
     }
+    // Larger of two floats (WGSL `max`).
     public static fun max(a: float, b: float): float {
         if (a > b) { return a; }
         return b;
     }
+    // Absolute value (WGSL `abs`).
     public static fun abs(a: float): float {
         if (a < 0.0) { return 0.0 - a; }
         return a;
     }
+    // Clamps `x` into `[lo, hi]` (WGSL `clamp`).
     public static fun clamp(x: float, lo: float, hi: float): float {
         return GpuMath.max(lo, GpuMath.min(x, hi));
     }
+    // Greatest integer ≤ `x` as float (WGSL `floor`).
     public static fun floor(x: float): float {
         return (float)Math.floor((double)x);
     }
@@ -27,99 +31,125 @@ public class GpuMath {
     public static fun fract(x: float): float {
         return x - GpuMath.floor(x);
     }
+    // Smallest integer ≥ `x` as float (WGSL `ceil`).
     public static fun ceil(x: float): float {
         return (float)Math.ceil((double)x);
     }
+    // Square root; non-finite inputs become `0` on CPU (WGSL `sqrt`).
     public static fun sqrt(x: float): float {
         return (float)(Math.sqrt((double)x).unwrap_or(0.0d));
     }
+    // Reciprocal square root; returns `0` when `sqrt(x)` is zero (WGSL `inverseSqrt`).
     public static fun inversesqrt(x: float): float {
         let s = GpuMath.sqrt(x);
         if (s == 0.0) { return 0.0; }
         return 1.0 / s;
     }
+    // Sine in radians (WGSL `sin`).
     public static fun sin(x: float): float {
         return (float)Math.sin((double)x);
     }
+    // Cosine in radians (WGSL `cos`).
     public static fun cos(x: float): float {
         return (float)Math.cos((double)x);
     }
+    // Tangent in radians (WGSL `tan`).
     public static fun tan(x: float): float {
         return (float)Math.tan((double)x);
     }
+    // Arcsine in radians (WGSL `asin`).
     public static fun asin(x: float): float {
         return (float)Math.asin((double)x);
     }
+    // Arccosine in radians (WGSL `acos`).
     public static fun acos(x: float): float {
         return (float)Math.acos((double)x);
     }
+    // Arctangent in radians (WGSL `atan`).
     public static fun atan(x: float): float {
         return (float)Math.atan((double)x);
     }
+    // Two-argument arctangent of `y`/`x` in radians (WGSL `atan2`).
     public static fun atan2(y: float, x: float): float {
         return (float)Math.atan2((double)y, (double)x);
     }
+    // Natural log (WGSL `log`). CPU body is a stub — use only inside shaders.
     public static fun log(x: float): float {
         // CPU stub — shaders map to WGSL `log`. Host Math has no ln.
         if (x <= 0.0) { return 0.0; }
         return GpuMath.pow(x, 0.0) - 1.0; // 0 for positive x; shader path uses real log
     }
+    // Sign of `x`: −1, 0, or 1 (WGSL `sign`).
     public static fun sign(x: float): float {
         if (x > 0.0) { return 1.0; }
         if (x < 0.0) { return 0.0 - 1.0; }
         return 0.0;
     }
+    // Clamps `x` into `[0, 1]` (WGSL `saturate` / `clamp(x, 0, 1)`).
     public static fun saturate(x: float): float {
         return GpuMath.clamp(x, 0.0, 1.0);
     }
+    // Heaviside step: `0` if `x < edge`, else `1` (WGSL `step`).
     public static fun step(edge: float, x: float): float {
         if (x < edge) { return 0.0; }
         return 1.0;
     }
+    // Hermite smoothstep between `edge0` and `edge1` (WGSL `smoothstep`).
     public static fun smoothstep(edge0: float, edge1: float, x: float): float {
         let t = GpuMath.saturate((x - edge0) / (edge1 - edge0));
         return t * t * (3.0 - 2.0 * t);
     }
+    // Fused multiply-add `a * b + c` (WGSL `fma`).
     public static fun fma(a: float, b: float, c: float): float {
         return a * b + c;
     }
 
+    // Euclidean length of a `GpuVec2` (WGSL `length`).
     public static fun length2(v: GpuVec2): float {
         return GpuMath.sqrt(v.x * v.x + v.y * v.y);
     }
+    // Euclidean length of a `GpuVec3` (WGSL `length`).
     public static fun length(v: GpuVec3): float {
         return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     }
+    // Euclidean length of a `GpuVec4` (WGSL `length`).
     public static fun length4(v: GpuVec4): float {
         return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
     }
 
+    // Unit `GpuVec2`; near-zero input yields `(1, 0)` on CPU (WGSL `normalize`).
     public static fun normalize2(v: GpuVec2): GpuVec2 {
         let len = GpuMath.length2(v);
         if (len < 0.000001) { return GpuVec2.of(1.0, 0.0); }
         return GpuVec2.of(v.x / len, v.y / len);
     }
+    // Unit `GpuVec3`; near-zero input yields `(0, 1, 0)` on CPU (WGSL `normalize`).
     public static fun normalize(v: GpuVec3): GpuVec3 {
         let len = GpuMath.length(v);
         if (len < 0.000001) { return GpuVec3.of(0.0, 1.0, 0.0); }
         return GpuVec3.of(v.x / len, v.y / len, v.z / len);
     }
+    // Unit `GpuVec4`; near-zero input yields `(0, 0, 0, 1)` on CPU (WGSL `normalize`).
     public static fun normalize4(v: GpuVec4): GpuVec4 {
         let len = GpuMath.length4(v);
         if (len < 0.000001) { return GpuVec4.of(0.0, 0.0, 0.0, 1.0); }
         return GpuVec4.of(v.x / len, v.y / len, v.z / len, v.w / len);
     }
 
+    // Dot product of two `GpuVec2`s (WGSL `dot`).
     public static fun dot2(a: GpuVec2, b: GpuVec2): float {
         return a.x * b.x + a.y * b.y;
     }
+    // Dot product of two `GpuVec3`s (WGSL `dot`).
     public static fun dot(a: GpuVec3, b: GpuVec3): float {
         return a.x * b.x + a.y * b.y + a.z * b.z;
     }
+    // Dot product of two `GpuVec4`s (WGSL `dot`).
     public static fun dot4(a: GpuVec4, b: GpuVec4): float {
         return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     }
 
+    // Cross product of two `GpuVec3`s (WGSL `cross`).
     public static fun cross(a: GpuVec3, b: GpuVec3): GpuVec3 {
         return GpuVec3.of(
             a.y * b.z - a.z * b.y,
@@ -128,24 +158,28 @@ public class GpuMath {
         );
     }
 
+    // Reflects incident `i` about unit normal `n` (WGSL `reflect`).
     public static fun reflect(i: GpuVec3, n: GpuVec3): GpuVec3 {
         let d = 2.0 * GpuMath.dot(i, n);
         return GpuVec3.of(i.x - n.x * d, i.y - n.y * d, i.z - n.z * d);
     }
 
+    // Linear blend `a * (1 - t) + b * t` (WGSL `mix`).
     public static fun mix(a: float, b: float, t: float): float {
         return a * (1.0 - t) + b * t;
     }
 
+    // Power `x^e` (WGSL `pow`).
     public static fun pow(x: float, e: float): float {
         return (float)Math.pow((double)x, (double)e);
     }
 
+    // Exponential `e^x` via `pow` on CPU (WGSL `exp`).
     public static fun exp(x: float): float {
         return GpuMath.pow(2.718281828, x);
     }
 
-    /// Matrix × vector (`mat4 * vec4` in WGSL).
+    // Matrix × vector (`mat4 * vec4` in WGSL).
     public static fun mul4(m: GpuMat4, v: GpuVec4): GpuVec4 {
         return GpuVec4.of(
             m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z + m.c3.x * v.w,
@@ -155,6 +189,7 @@ public class GpuMath {
         );
     }
 
+    // Matrix × vector (`mat3 * vec3` in WGSL).
     public static fun mul3(m: GpuMat3, v: GpuVec3): GpuVec3 {
         return GpuVec3.of(
             m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z,
@@ -163,6 +198,7 @@ public class GpuMath {
         );
     }
 
+    // Matrix × vector (`mat2 * vec2` in WGSL).
     public static fun mul2(m: GpuMat2, v: GpuVec2): GpuVec2 {
         return GpuVec2.of(
             m.c0.x * v.x + m.c1.x * v.y,
@@ -170,7 +206,7 @@ public class GpuMath {
         );
     }
 
-    /// Matrix × matrix (`mat4 * mat4` in WGSL).
+    // Matrix × matrix (`mat4 * mat4` in WGSL).
     public static fun matmul4(a: GpuMat4, b: GpuMat4): GpuMat4 {
         return GpuMat4.of(
             GpuMath.mul4(a, b.c0),
@@ -180,6 +216,7 @@ public class GpuMath {
         );
     }
 
+    // Transpose of a `GpuMat4` (WGSL `transpose`).
     public static fun transpose4(m: GpuMat4): GpuMat4 {
         return GpuMat4.of(
             GpuVec4.of(m.c0.x, m.c1.x, m.c2.x, m.c3.x),

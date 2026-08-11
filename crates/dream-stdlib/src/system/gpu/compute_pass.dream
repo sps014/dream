@@ -1,7 +1,6 @@
 module system.gpu;
 
 // Batched compute submits: record several dispatches, then one `submit` (single queue submit).
-
 public class ComputePass {
     _id: int;
 
@@ -49,6 +48,27 @@ public class ComputePass {
         );
     }
 
+    // Records a dispatch with a typed `GpuBindList` (mixed buffers / textures / samplers).
+    public fun dispatch_bind(
+        kernel: string,
+        resources: GpuBindList,
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): void {
+        this.dispatch_resources(
+            kernel,
+            resources.buffer_ids(),
+            resources.texture_ids(),
+            resources.sampler_ids(),
+            sx,
+            sy,
+            sz,
+            uniforms
+        );
+    }
+
     // Records a dispatch with explicit buffer / texture / sampler resource ids (ABI binding order).
     public fun dispatch_resources(
         kernel: string,
@@ -89,6 +109,23 @@ public class ComputePass {
             ids,
             Buffer.alloc<int>(0),
             Buffer.alloc<int>(0),
+            args.id,
+            0
+        );
+    }
+
+    // Records an indirect dispatch with a typed `GpuBindList`.
+    public fun dispatch_indirect_bind(
+        kernel: string,
+        resources: GpuBindList,
+        args: GpuBuffer<int>
+    ): void {
+        Gpu.pass_dispatch_indirect(
+            this._id,
+            kernel,
+            resources.buffer_ids(),
+            resources.texture_ids(),
+            resources.sampler_ids(),
             args.id,
             0
         );

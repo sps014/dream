@@ -32,7 +32,7 @@ async fun main(): void {
     let depth = GpuTexture.depth24(64, 64);
     let hdr = GpuTexture.rgba16float(64, 64);
     let cube = GpuTexture.cube_rgba8(16);
-    let _samp = GpuSampler.create(1, 1, 1);
+    let _samp = GpuSampler.create(GpuFilterMode.Linear, GpuAddressMode.Repeat, GpuFilterMode.Linear);
     let desc = GpuRenderPipelineDesc.mesh();
     let pipe = await GpuRenderPipeline.create_ex("mesh_vs", "mesh_fs", desc);
     if (pipe.is_err()) {

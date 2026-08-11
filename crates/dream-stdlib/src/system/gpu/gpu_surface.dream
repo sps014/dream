@@ -1,8 +1,8 @@
 module system.gpu;
 
 // Canvas / native-window swapchain + polled input (web and native).
-
 public class GpuSurface {
+    // Host surface / window handle id.
     public id: int;
 
     // Creates a surface bound to the DOM canvas with id `canvas_id` (browser),
@@ -115,5 +115,12 @@ public class GpuSurface {
     @web @native
     public fun poll_events(): GpuInputEvent[] {
         return GpuInputCodec.decode_events(Gpu.surface_poll_events(this.id));
+    }
+
+    // Releases the host surface / window resource.
+    @web @native
+    public fun destroy(): void {
+        Gpu.surface_destroy(this.id);
+        this.id = -1;
     }
 }

@@ -96,6 +96,26 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.match_token(TokenKind::RefToken);
             }
 
+            // Contextual `take`/`borrow`, same rule as [`parse_formal_parameters`].
+            let (is_take, is_borrow) = if !is_ref
+                && self.current_token().kind == TokenKind::IdentifierToken
+                && self.peek_token(1).kind == TokenKind::IdentifierToken
+            {
+                match self.current_token().text.as_str() {
+                    crate::nodes::function::TAKE_PARAM => {
+                        self.match_token(TokenKind::IdentifierToken);
+                        (true, false)
+                    }
+                    crate::nodes::function::BORROW_PARAM => {
+                        self.match_token(TokenKind::IdentifierToken);
+                        (false, true)
+                    }
+                    _ => (false, false),
+                }
+            } else {
+                (false, false)
+            };
+
             let param = self.match_token(TokenKind::IdentifierToken);
 
             let param_type = if self.current_token().kind == TokenKind::ColonToken {
@@ -105,17 +125,33 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Type::Unknown
             };
 
-            if is_ref {
+            let ownership_modifier = if is_ref {
+                Some("ref")
+            } else if is_take {
+                Some("take")
+            } else if is_borrow {
+                Some("borrow")
+            } else {
+                None
+            };
+
+            if let Some(modifier) = ownership_modifier {
                 if self.current_token().kind == TokenKind::EqualToken {
                     self.diagnostics.report_error(
                         format!(
-                            "'ref' parameter '{}' cannot have a default value",
-                            param.text
+                            "'{}' parameter '{}' cannot have a default value",
+                            modifier, param.text
                         ),
                         Some(param.position),
                     );
                 }
-                params.push(ParameterNode::by_ref(param, param_type));
+                if is_ref {
+                    params.push(ParameterNode::by_ref(param, param_type));
+                } else if is_take {
+                    params.push(ParameterNode::take(param, param_type));
+                } else {
+                    params.push(ParameterNode::borrow(param, param_type));
+                }
             } else {
                 let default = if self.current_token().kind == TokenKind::EqualToken {
                     self.match_token(TokenKind::EqualToken);

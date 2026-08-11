@@ -129,6 +129,9 @@ pub struct LocalDecl {
     /// inliner when remapping a callee `this`/`ref` into the caller so [`ValueFrame`] keeps it as a
     /// borrow. Meaningless (and always `false`) for a local whose type is not a value struct.
     pub is_ref: bool,
+    /// True for a `take` parameter: the callee owns the incoming +1 (released at scope exit unless
+    /// transferred into a container without a second retain). Always `false` for non-params.
+    pub is_take: bool,
     /// Owning value local whose destructor runs via explicit [`Statement::ValueDrop`] (inliner
     /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
     /// shadow-stack slot; excluded from [`ValueFrame`] teardown so it is not double-dropped.
@@ -520,6 +523,8 @@ pub struct Callee {
     pub def: DefId,
     pub args: Vec<TypeId>,
     pub ret: TypeId,
+    /// Per-argument `take` flags from the callee declaration (empty = none).
+    pub take_params: Vec<bool>,
 }
 
 #[cfg(test)]
@@ -548,12 +553,14 @@ mod tests {
                     name: "a".into(),
                     ty: int,
                     is_ref: false,
+                    is_take: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
                     is_ref: false,
+                    is_take: false,
                 },
             ],
             ret: int,

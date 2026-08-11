@@ -88,6 +88,7 @@ mod tests {
             def: DefId(1),
             args: vec![interner.int()],
             ret,
+            take_params: vec![],
         }
     }
 

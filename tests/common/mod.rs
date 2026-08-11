@@ -3,6 +3,8 @@
 //! Dream source stubs (`SYSTEM_STUB`/`JS_STUB`/`ASYNC_STUB`). The `emission_tests` and
 //! `analysis_tests` sibling modules `use super::harness::*` to reach these.
 
+#![allow(dead_code)]
+
 use dream::execution::host;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::Hir;
@@ -176,7 +178,21 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
     captured
 }
 
-/// Like [`emit_hir_to_wat`] but emits the full self-contained module (imports, memory, runtime,
+/// Compiles through the production-like MIR pipeline: RC insertion, module optimize (inline), then
+/// the default per-function pass manager (includes `RcElision`). Returns full-module WAT.
+pub fn emit_hir_to_module_optimized(code: &str) -> String {
+    compile_test_pipeline(code, |hir, interner| {
+        let mut mir = dream_mir::lower::lower_program(hir, interner);
+        dream_mir::passes::optimize_module(&mut mir, interner);
+        let pm = dream_mir::passes::PassManager::default_pipeline();
+        for f in &mut mir.functions {
+            pm.run(f, interner);
+        }
+        dream_mir::emit::emit_module(&mir, interner, false)
+    })
+}
+
+/// Like [`emit_hir_to_module`] but emits the full self-contained module (imports, memory, runtime,
 /// exports) via `emit_module`, so import/scaffold concerns can be asserted and assembled.
 pub fn emit_hir_to_module(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {

@@ -388,11 +388,17 @@ impl Emitter<'_> {
             self.emit_value_store(addr, ty, rvalue);
             return;
         }
+        let take_transfer = matches!(
+            rvalue,
+            Rvalue::Use(Operand::Copy(Place::Local(l)))
+                if self.func.locals.get(l.0 as usize).is_some_and(|d| d.is_take)
+        );
         let borrowed_ref = self.interner.is_rc_tracked(ty)
             && matches!(
                 rvalue,
                 Rvalue::Use(Operand::Copy(_)) | Rvalue::Use(Operand::Const(Const::Str(_)))
-            );
+            )
+            && !take_transfer;
         if borrowed_ref {
             addr(self);
             self.line("     (i32.load)");
@@ -639,9 +645,19 @@ impl Emitter<'_> {
 
     /// Emits a `$retain` / `$js_retain` of an RC-tracked value being stored into a container (struct
     /// field, array element, or union payload), so the container owns its own reference count. A
-    /// no-op for non-tracked values and for non-place operands (constants/null; retain also
-    /// null-guards).
+    /// no-op for non-tracked values and non-place operands. For a **`take` parameter** of an
+    /// RC-tracked type, ownership transfers with the store: skip retain and null the local so the
+    /// function-exit `Release` is a no-op (otherwise the container and the param would both drop).
     pub(super) fn retain_container_value(&mut self, value_ty: TypeId, value: &Operand) {
+        if let Operand::Copy(Place::Local(l)) = value {
+            if self.func.locals.get(l.0 as usize).is_some_and(|d| d.is_take)
+                && self.interner.is_rc_tracked(value_ty)
+            {
+                self.line("     (i32.const 0)");
+                self.line(&format!("     (local.set ${})", l.0));
+                return;
+            }
+        }
         let borrowed = matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
         if self.interner.is_rc_tracked(value_ty) && borrowed {
             self.emit_operand(value);

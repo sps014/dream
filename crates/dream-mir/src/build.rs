@@ -59,6 +59,7 @@ impl FunctionBuilder {
             ty,
             name,
             is_ref: false,
+            is_take: false,
             manual_drop: false,
         });
         id
@@ -81,6 +82,13 @@ impl FunctionBuilder {
     pub fn new_ref_param(&mut self, ty: TypeId, name: Option<String>) -> Local {
         let l = self.new_param(ty, name);
         self.locals[l.0 as usize].is_ref = true;
+        l
+    }
+
+    /// Declares a `take` parameter: the callee owns the incoming reference count.
+    pub fn new_take_param(&mut self, ty: TypeId, name: Option<String>) -> Local {
+        let l = self.new_param(ty, name);
+        self.locals[l.0 as usize].is_take = true;
         l
     }
 

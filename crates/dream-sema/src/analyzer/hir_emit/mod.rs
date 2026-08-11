@@ -273,6 +273,7 @@ impl<'a> Analyzer<'a> {
                     name: param.name.text.clone(),
                     ty: box_tid,
                     is_ref: true,
+                    is_take: false,
                 });
                 self.hir.boxed.insert(param.name.text.clone(), elem_ty);
                 continue;
@@ -286,6 +287,7 @@ impl<'a> Analyzer<'a> {
                 name: param.name.text.clone(),
                 ty,
                 is_ref: false,
+                is_take: param.is_take,
             });
         }
 

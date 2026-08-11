@@ -251,11 +251,33 @@ impl<'a, 'b> Parser<'a, 'b> {
             let attributes = self.parse_attributes();
 
             // A `ref name: T` parameter: the callee shares the caller's storage. Mutually
-            // exclusive with variadic/default, enforced below.
+            // exclusive with take/borrow/variadic/default, enforced below. `ref` is a real keyword.
             let is_ref = self.current_token().kind == TokenKind::RefToken;
             if is_ref {
                 self.match_token(TokenKind::RefToken);
             }
+
+            // Contextual `take`/`borrow` modifiers: only when followed by another identifier
+            // (the parameter name), so `fun take(...)` / `let take = …` stay ordinary idents.
+            // Same modifier slot as `ref` — mutually exclusive by construction.
+            let (is_take, is_borrow) = if !is_ref
+                && self.current_token().kind == TokenKind::IdentifierToken
+                && self.peek_token(1).kind == TokenKind::IdentifierToken
+            {
+                match self.current_token().text.as_str() {
+                    crate::nodes::function::TAKE_PARAM => {
+                        self.match_token(TokenKind::IdentifierToken);
+                        (true, false)
+                    }
+                    crate::nodes::function::BORROW_PARAM => {
+                        self.match_token(TokenKind::IdentifierToken);
+                        (false, true)
+                    }
+                    _ => (false, false),
+                }
+            } else {
+                (false, false)
+            };
 
             // A trailing variadic parameter: `...name: T[]`. Must be the last parameter and
             // carries no default (an omitted variadic simply collects zero elements).
@@ -271,14 +293,26 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let param_type = self.parse_type()?;
 
-            if is_ref && is_variadic {
-                self.diagnostics.report_error(
-                    format!(
-                        "parameter '{}' cannot be both 'ref' and variadic",
-                        param.text
-                    ),
-                    Some(param.position),
-                );
+            let ownership_modifier = if is_ref {
+                Some("ref")
+            } else if is_take {
+                Some("take")
+            } else if is_borrow {
+                Some("borrow")
+            } else {
+                None
+            };
+
+            if let Some(modifier) = ownership_modifier {
+                if is_variadic {
+                    self.diagnostics.report_error(
+                        format!(
+                            "parameter '{}' cannot be both '{}' and variadic",
+                            param.text, modifier
+                        ),
+                        Some(param.position),
+                    );
+                }
             }
 
             if is_variadic {
@@ -309,17 +343,24 @@ impl<'a, 'b> Parser<'a, 'b> {
                         Some(param.position),
                     );
                 }
-                if is_ref {
+                if let Some(modifier) = ownership_modifier {
                     if self.current_token().kind == TokenKind::EqualToken {
                         self.diagnostics.report_error(
                             format!(
-                                "'ref' parameter '{}' cannot have a default value",
-                                param.text
+                                "'{}' parameter '{}' cannot have a default value",
+                                modifier, param.text
                             ),
                             Some(param.position),
                         );
                     }
-                    params.push(ParameterNode::by_ref(param, param_type).with_attributes(attributes));
+                    let node = if is_ref {
+                        ParameterNode::by_ref(param, param_type)
+                    } else if is_take {
+                        ParameterNode::take(param, param_type)
+                    } else {
+                        ParameterNode::borrow(param, param_type)
+                    };
+                    params.push(node.with_attributes(attributes));
                 } else {
                     // Optional default value: `= <literal>`. Restricted to constant literals so no
                     // evaluation is needed at the call site.

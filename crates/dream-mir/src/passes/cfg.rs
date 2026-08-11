@@ -1,11 +1,12 @@
 //! Shared control-flow analyses for the optimization passes: predecessors, a dominator tree
-//! (Cooper-Harvey-Kennedy), and natural-loop / back-edge detection. Kept pass-agnostic so LICM,
-//! loop unrolling, and any future structural pass share one implementation.
+//! (Cooper-Harvey-Kennedy), postdominators (dominators on the reverse CFG), and natural-loop /
+//! back-edge detection. Kept pass-agnostic so LICM, loop unrolling, RC elision, and any future
+//! structural pass share one implementation.
 //!
 //! Determinism: every result is indexed by block position or held in ordered containers, and blocks
 //! are always visited in their `Vec` order, so two runs produce identical output.
 
-use crate::{BlockId, MirFunction};
+use crate::{BlockId, MirFunction, Terminator};
 use std::collections::BTreeSet;
 
 /// Predecessor lists indexed by block position. Only edges among the function's blocks are
@@ -112,6 +113,137 @@ impl DomTree {
             }
         }
     }
+}
+
+/// Immediate postdominator of every block. Built as dominators of the reverse CFG with a synthetic
+/// exit that every function-exit terminator edges to. `a` postdominates `b` when every path from
+/// `b` to a function exit passes through `a`.
+pub(crate) struct PostDomTree {
+    /// Immediate postdominator per block; `None` for the synthetic exit and unreachable-from-exit
+    /// blocks. Real blocks that only exit through `Return`/`Unreachable`/… postdominate themselves
+    /// via the chain ending at the synthetic exit.
+    ipdom: Vec<Option<BlockId>>,
+    /// Reverse-postorder index on the reverse CFG (exit-first). `u32::MAX` = unreachable from exit.
+    rpo_index: Vec<u32>,
+    /// Synthetic exit block id (`blocks.len()`), not a real MIR block.
+    exit: BlockId,
+}
+
+impl PostDomTree {
+    pub(crate) fn new(func: &MirFunction) -> PostDomTree {
+        let n = func.blocks.len();
+        let exit = BlockId(n as u32);
+        // Reverse CFG: forward edge `a → b` becomes `b → a`. Dominators of that graph (rooted at a
+        // synthetic exit) are postdominators of the original. Keep both successor and predecessor
+        // lists — DFS walks successors; Cooper–Harvey–Kennedy needs predecessors.
+        let mut rev_succs: Vec<Vec<BlockId>> = vec![Vec::new(); n + 1];
+        let mut rev_preds: Vec<Vec<BlockId>> = vec![Vec::new(); n + 1];
+        for (i, block) in func.blocks.iter().enumerate() {
+            let b = BlockId(i as u32);
+            let succs = block.terminator.successors();
+            if succs.is_empty() || is_exit_terminator(&block.terminator) {
+                // b → exit (forward) ⇒ exit → b (reverse)
+                rev_succs[exit.0 as usize].push(b);
+                rev_preds[b.0 as usize].push(exit);
+            }
+            for s in succs {
+                // b → s (forward) ⇒ s → b (reverse)
+                rev_succs[s.0 as usize].push(b);
+                rev_preds[b.0 as usize].push(s);
+            }
+        }
+
+        let mut visited = vec![false; n + 1];
+        let mut post = Vec::with_capacity(n + 1);
+        let mut stack: Vec<(BlockId, usize)> = vec![(exit, 0)];
+        visited[exit.0 as usize] = true;
+        while let Some((b, cursor)) = stack.last().copied() {
+            let succs = &rev_succs[b.0 as usize];
+            if cursor < succs.len() {
+                stack.last_mut().unwrap().1 += 1;
+                let s = succs[cursor];
+                if !visited[s.0 as usize] {
+                    visited[s.0 as usize] = true;
+                    stack.push((s, 0));
+                }
+            } else {
+                post.push(b);
+                stack.pop();
+            }
+        }
+        post.reverse();
+        let mut rpo_index = vec![u32::MAX; n + 1];
+        for (i, b) in post.iter().enumerate() {
+            rpo_index[b.0 as usize] = i as u32;
+        }
+
+        let mut idom: Vec<Option<BlockId>> = vec![None; n + 1];
+        idom[exit.0 as usize] = Some(exit);
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for &b in &post {
+                if b == exit {
+                    continue;
+                }
+                let mut new_idom: Option<BlockId> = None;
+                for &p in &rev_preds[b.0 as usize] {
+                    if idom[p.0 as usize].is_none() {
+                        continue;
+                    }
+                    new_idom = Some(match new_idom {
+                        None => p,
+                        Some(cur) => intersect(&idom, &rpo_index, p, cur),
+                    });
+                }
+                if idom[b.0 as usize] != new_idom {
+                    idom[b.0 as usize] = new_idom;
+                    changed = true;
+                }
+            }
+        }
+
+        PostDomTree {
+            ipdom: idom,
+            rpo_index,
+            exit,
+        }
+    }
+
+    /// True if `a` postdominates `b` (every path from `b` to a function exit passes through `a`).
+    pub(crate) fn postdominates(&self, a: BlockId, b: BlockId) -> bool {
+        if a == b {
+            return true;
+        }
+        if (b.0 as usize) >= self.rpo_index.len() || self.rpo_index[b.0 as usize] == u32::MAX {
+            return false;
+        }
+        let mut cur = b;
+        loop {
+            match self.ipdom[cur.0 as usize] {
+                Some(next) if next != cur => {
+                    if next == a {
+                        return true;
+                    }
+                    if next == self.exit {
+                        return false;
+                    }
+                    cur = next;
+                }
+                _ => return false,
+            }
+        }
+    }
+}
+
+fn is_exit_terminator(t: &Terminator) -> bool {
+    matches!(
+        t,
+        Terminator::Return(_)
+            | Terminator::Unreachable
+            | Terminator::AsyncComplete(_)
+            | Terminator::TailCall { .. }
+    )
 }
 
 /// Walks two dominator-tree fingers toward the entry until they meet (CHK `intersect`).
@@ -248,5 +380,35 @@ mod tests {
             !dom.dominates(BlockId(2), BlockId(3)),
             "body does not dominate after"
         );
+    }
+
+    #[test]
+    fn postdominator_diamond_join() {
+        // entry -> then|else -> join -> return
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let then_blk = b.new_block();
+        let else_blk = b.new_block();
+        let join = b.new_block();
+        b.terminate(Terminator::If {
+            cond: Operand::Const(Const::Bool(true)),
+            then_blk,
+            else_blk,
+        });
+        b.switch_to(then_blk);
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(else_blk);
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(join);
+        b.terminate(Terminator::Return(None));
+        let func = b.finish();
+        let pdom = PostDomTree::new(&func);
+        assert!(
+            pdom.postdominates(join, BlockId(0)),
+            "join postdominates entry"
+        );
+        assert!(pdom.postdominates(join, then_blk));
+        assert!(pdom.postdominates(join, else_blk));
+        assert!(!pdom.postdominates(then_blk, BlockId(0)));
     }
 }

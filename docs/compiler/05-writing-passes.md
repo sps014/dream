@@ -76,7 +76,7 @@ Function-local `MirPass`es:
 - **`SimplifyCfg` (`simplify_cfg.rs`)** — folds `If{cond: Const(bool), ..}` into a `Goto` and threads jumps through empty blocks, exposing unreachable blocks for DCE.
 - **`Tco` (`tco.rs`)** — tail-call optimization.
 - **`Dce` (`dce.rs`)** — two kinds: drop blocks unreachable from `entry` (reachability over `Terminator::successors`), and remove assignments to never-read locals *when the rvalue is pure* (a `Call`/`New` may have side effects and must stay).
-- **`RcElision` / `RcInsertion` (`rc.rs`)** — `RcInsertion` conservatively inserts `Retain`/`Release`; `RcElision` cancels cancelling `Retain`/`Release` pairs along straight-line regions, including unique-predecessor **`Goto` chains**, not only within a single basic block. Correctness rule: **never make a program under-retain.** When unsure, RcInsertion keeps the retain; RcElision only removes a pair it can prove is cancelling across those safe regions.
+- **`RcElision` / `RcInsertion` (`rc/`)** — `RcInsertion` conservatively inserts `Retain`/`Release` and applies a narrow **last-use move** (owned local → owned local copy outside loops when the source is dead). `RcElision` cancels cancelling pairs along unique-predecessor **`Goto` chains**, across **transparent diamonds** (both arms barrier-free), and across **transparent natural loops**. Correctness rule: **never make a program under-retain.** When unsure, RcInsertion keeps the retain; RcElision only removes a pair it can prove is cancelling. See [Swift-like ARC roadmap](./11-swift-like-arc-roadmap.md).
 
 The one shipped `ModulePass` is **`Inliner` (`inline/`)**:
 

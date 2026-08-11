@@ -381,6 +381,8 @@ pub const CONTEXTUAL_KEYWORDS: &[&str] = &[
     "this",
     crate::nodes::function::GET_ACCESSOR,
     crate::nodes::function::SET_ACCESSOR,
+    crate::nodes::function::TAKE_PARAM,
+    crate::nodes::function::BORROW_PARAM,
     crate::nodes::types::CONSTRUCTOR_NAME,
     crate::nodes::types::DESTRUCTOR_NAME,
 ];

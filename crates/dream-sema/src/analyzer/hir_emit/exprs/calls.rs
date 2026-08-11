@@ -4,6 +4,15 @@
 use super::*;
 
 impl<'a> Analyzer<'a> {
+    /// Per-parameter `take` flags for a function/method registered under `name` (empty if unknown).
+    pub(in crate::analyzer) fn take_params_for(&self, name: &str) -> Vec<bool> {
+        self.function_table
+            .functions
+            .get(name)
+            .map(|f| f.is_take.clone())
+            .unwrap_or_default()
+    }
+
     /// Records the HIR for a direct free-function call `name(args)`. Resolves `name` to its function
     /// `DefId`; if it is not a registered (non-generic, non-overloaded) function or any argument is
     /// not representable, the call is dropped from HIR coverage (enclosing function may fail
@@ -27,10 +36,12 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
+        let take_params = self.take_params_for(name);
         let callee = Callee {
             def,
             instance: vec![],
             ret: ret_ty,
+            take_params,
         };
         self.hir.last = Some(HExpr::new(
             ret_ty,
@@ -161,6 +172,7 @@ impl<'a> Analyzer<'a> {
             def: new_def,
             instance: vec![],
             ret: box_ty,
+        take_params: vec![],
         };
         Some(HExpr::new(
             box_ty,
@@ -188,6 +200,7 @@ impl<'a> Analyzer<'a> {
                     def,
                     instance: vec![],
                     ret: int_ty,
+                take_params: vec![],
                 },
                 args: vec![boxed],
             },
@@ -221,6 +234,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance: vec![],
                 ret: ret_ty,
+            take_params: vec![],
             })),
         );
         self.hir.last = self.build_funcbox(raw, None, func_ty);
@@ -255,6 +269,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance: vec![],
                 ret: ret_ty,
+            take_params: vec![],
             })),
         );
         let env_int = HExpr::new(int_ty, HExprKind::Cast(Box::new(env_cell)));
@@ -327,6 +342,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance: vec![],
                 ret: ret_ty,
+            take_params: vec![],
             })),
         );
         let env_int = HExpr::new(int_ty, HExprKind::Cast(Box::new(array_read())));
@@ -360,6 +376,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance,
                 ret: ret_ty,
+            take_params: vec![],
             })),
         );
         self.hir.last = self.build_funcbox(raw, None, func_ty);
@@ -466,6 +483,7 @@ impl<'a> Analyzer<'a> {
                     def: env_def,
                     instance: vec![],
                     ret: int_ty,
+                take_params: vec![],
                 },
                 args: vec![box_expr.clone()],
             },
@@ -485,6 +503,7 @@ impl<'a> Analyzer<'a> {
                     def: funcidx_def,
                     instance: vec![],
                     ret: int_ty,
+                take_params: vec![],
                 },
                 args: vec![box_expr],
             },
@@ -566,6 +585,7 @@ impl<'a> Analyzer<'a> {
             def,
             instance,
             ret: ret_ty,
+        take_params: vec![],
         };
         self.hir.last = Some(HExpr::new(
             ret_ty,
@@ -677,10 +697,12 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
+        let take_params = self.take_params_for(mangled);
         let callee = Callee {
             def,
             instance: vec![],
             ret: ret_ty,
+            take_params,
         };
         self.hir.last = Some(HExpr::new(
             ret_ty,
@@ -719,10 +741,12 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
+        let take_params = self.take_params_for(base_name);
         let callee = Callee {
             def,
             instance,
             ret: ret_ty,
+            take_params,
         };
         self.hir.last = Some(HExpr::new(
             ret_ty,

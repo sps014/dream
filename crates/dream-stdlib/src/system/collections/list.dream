@@ -50,7 +50,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Appends a value to the end, growing if necessary.
-    public fun push(value: T): void {
+    public fun push(take value: T): void {
         if (this.count == this.items.length) {
             this.grow();
         }

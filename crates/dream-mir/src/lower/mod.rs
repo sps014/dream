@@ -117,6 +117,8 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     for p in &func.params {
         let l = if p.is_ref {
             b.new_ref_param(p.ty, Some(p.name.clone()))
+        } else if p.is_take {
+            b.new_take_param(p.ty, Some(p.name.clone()))
         } else {
             b.new_param(p.ty, Some(p.name.clone()))
         };
@@ -492,6 +494,7 @@ mod tests {
                 name: "x".into(),
                 ty: int,
                 is_ref: false,
+                is_take: false,
             }],
             ret: int,
             locals: vec![],

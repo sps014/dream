@@ -21,6 +21,8 @@ pub struct Callee {
     pub def: DefId,
     pub instance: Vec<TypeId>,
     pub ret: TypeId,
+    /// Per-argument `take` flags aligned with the callee's declared parameters (empty = none).
+    pub take_params: Vec<bool>,
 }
 
 /// Structured statements. Control flow is preserved (lowered to a CFG only in MIR).
@@ -390,12 +392,14 @@ mod tests {
                     name: "a".into(),
                     ty: int,
                     is_ref: false,
+                    is_take: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
                     is_ref: false,
+                    is_take: false,
                 },
             ],
             ret: int,

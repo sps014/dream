@@ -23,9 +23,19 @@ pub struct ParameterNode {
     pub is_variadic: bool,
     /// True for a `ref name: T` parameter: the callee shares the caller's storage instead of
     /// receiving a copy, so writes inside the body are visible to the caller. Mutually exclusive
-    /// with `default`/`is_variadic` (enforced by the parser). Call sites must pass a matching
-    /// `ref` argument (`ExpressionNode::RefArgument`).
+    /// with `default`/`is_variadic`/`is_take`/`is_borrow` (enforced by the parser). Call sites
+    /// must pass a matching `ref` argument (`ExpressionNode::RefArgument`).
     pub is_ref: bool,
+    /// True for a `take name: T` parameter: the callee takes ownership of the caller's +1 (the
+    /// argument is moved). Mutually exclusive with `ref`/`borrow`/`default`/`is_variadic`
+    /// (enforced by the parser). `take` is a contextual keyword — only reserved in this modifier
+    /// slot — so `let take = …` and `fun take(…)` remain valid.
+    pub is_take: bool,
+    /// True for an explicit `borrow name: T` parameter: documents the default borrow ABI (callee
+    /// borrows; caller keeps ownership). Semantically identical to an unmarked parameter.
+    /// Mutually exclusive with `ref`/`take`/`default`/`is_variadic` (enforced by the parser).
+    /// Like `take`, `borrow` is contextual — not a full lexer keyword.
+    pub is_borrow: bool,
 }
 
 impl ParameterNode {
@@ -38,6 +48,8 @@ impl ParameterNode {
             default: None,
             is_variadic: false,
             is_ref: false,
+            is_take: false,
+            is_borrow: false,
         }
     }
 
@@ -50,6 +62,8 @@ impl ParameterNode {
             default,
             is_variadic: false,
             is_ref: false,
+            is_take: false,
+            is_borrow: false,
         }
     }
 
@@ -62,6 +76,8 @@ impl ParameterNode {
             default: None,
             is_variadic: true,
             is_ref: false,
+            is_take: false,
+            is_borrow: false,
         }
     }
 
@@ -74,6 +90,36 @@ impl ParameterNode {
             default: None,
             is_variadic: false,
             is_ref: true,
+            is_take: false,
+            is_borrow: false,
+        }
+    }
+
+    /// Creates a `take name: T` parameter node (ownership transfer).
+    pub fn take(name: SyntaxToken, type_: Type) -> ParameterNode {
+        ParameterNode {
+            attributes: Vec::new(),
+            name,
+            type_,
+            default: None,
+            is_variadic: false,
+            is_ref: false,
+            is_take: true,
+            is_borrow: false,
+        }
+    }
+
+    /// Creates a `borrow name: T` parameter node (explicit default borrow ABI).
+    pub fn borrow(name: SyntaxToken, type_: Type) -> ParameterNode {
+        ParameterNode {
+            attributes: Vec::new(),
+            name,
+            type_,
+            default: None,
+            is_variadic: false,
+            is_ref: false,
+            is_take: false,
+            is_borrow: true,
         }
     }
 
@@ -97,6 +143,10 @@ pub enum AccessorKind {
 pub const GET_ACCESSOR: &str = "get";
 /// Contextual keyword introducing a setter accessor.
 pub const SET_ACCESSOR: &str = "set";
+/// Contextual keyword for a `take name: T` ownership-transfer parameter modifier.
+pub const TAKE_PARAM: &str = "take";
+/// Contextual keyword for an explicit `borrow name: T` parameter modifier (default ABI).
+pub const BORROW_PARAM: &str = "borrow";
 
 impl AccessorKind {
     /// Classifies a member-leading identifier as an accessor keyword. `get`/`set` are contextual

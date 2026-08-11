@@ -114,6 +114,8 @@ Do not implement these (decision record: `docs/compiler/10-stack-alloc-and-mono-
 - **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`@stack` on unions is shipped and unrelated.)
 - **Size-class-keyed unmanaged monomorphization** — mono stays `(DefId, args)`; `unmanaged` stdlib code uses runtime `esize`, not a compiler size-class key.
 
+Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/compiler/11-swift-like-arc-roadmap.md`.
+
 Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll functions keep `$__pc` + `br_table` (suspend/resume).
 
 ## Error handling model

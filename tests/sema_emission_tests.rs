@@ -1033,6 +1033,7 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
             def: add_def,
             args: vec![],
             ret: int,
+        take_params: vec![],
         }),
     );
     mb.assign(

@@ -119,7 +119,7 @@ flowchart LR
 ```
 
 - `RcInsertion` runs once, module-wide, *before* inlining and the per-function pipeline. It conservatively inserts a `Retain` when a reference is copied/escapes and a `Release` when it dies.
-- `RcElision` (in the per-function pipeline) cancels redundant adjacent `Retain`/`Release` pairs the other passes expose.
+- `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Swift-like ARC roadmap](./11-swift-like-arc-roadmap.md)).
 
 See [05-writing-passes.md](./05-writing-passes.md) for the details, including why RC must be inserted before inlining.
 

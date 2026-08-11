@@ -417,6 +417,7 @@ impl<'a> Analyzer<'a> {
         let mut expected_params = store_sig.parameters.clone();
         let mut expected_defaults = store_sig.defaults.clone();
         let mut expected_is_ref = store_sig.is_ref.clone();
+        let mut expected_is_take = store_sig.is_take.clone();
 
         // Remove 'this' from the expected params check since we supply it implicitly
         if !expected_params.is_empty() {
@@ -427,6 +428,9 @@ impl<'a> Analyzer<'a> {
         }
         if !expected_is_ref.is_empty() {
             expected_is_ref.remove(0);
+        }
+        if !expected_is_take.is_empty() {
+            expected_is_take.remove(0);
         }
         self.validate_ref_arguments(
             &format!("method '{}'", method.text),

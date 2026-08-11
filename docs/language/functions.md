@@ -186,13 +186,45 @@ Rules:
   The variadic parameter itself cannot be passed by name (there is one calling convention: bare
   `T` values, not a pre-built array).
 
-## Pass by reference (`ref`)
+## Ownership transfer (`take`) and explicit borrow (`borrow`)
 
-A parameter marked `ref name: T` shares the caller's storage instead of receiving a copy: writes
-to it inside the callee are visible to the caller once the call returns (and, for anything the
-caller can still observe concurrently — a captured local, see below — immediately). This mirrors
-C#'s `ref`: the modifier is required on **both** the declaration and every call site, so nothing
-about a call's aliasing behavior is implicit.
+Parameters may carry a short ownership modifier in the same slot as `ref`. These are
+*contextual* — `take` and `borrow` are not reserved as names elsewhere (`let take = 1` and
+`fun take(...)` stay valid).
+
+| Modifier | Meaning |
+|----------|---------|
+| *(none)* or `borrow` | Callee borrows; caller keeps ownership (the default) |
+| `take` | Callee takes ownership of the argument; the caller must not use that value afterward |
+| `ref` | Existing mutable place alias — unchanged |
+
+```dream
+fun sink(take s: string): void {
+    // `s` is owned here; storing it does not need an extra retain.
+}
+
+fun peek(borrow s: string): void {
+    println(s);
+}
+
+fun demo() {
+    let a = "hi";
+    sink(a);       // moves `a` into the sink (caller must not use `a` afterward)
+    // Use-after-take is not yet diagnosed flow-sensitively; treat it as caller discipline.
+
+    let b = "yo";
+    peek(b);       // borrow — `b` still usable
+    peek(b);
+}
+```
+
+`List.push` takes ownership of the pushed element:
+
+```dream
+let xs = List<string>();
+let s = "item";
+xs.push(s);        // `s` is moved into the list
+```
 
 ```dream
 fun swap(ref a: int, ref b: int): void {

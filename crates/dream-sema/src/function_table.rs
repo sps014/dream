@@ -563,6 +563,10 @@ pub struct FunctionTableInfo {
     /// name: T`, requiring the call site to pass a matching `ref` argument (see
     /// `Analyzer::analyze_ref_argument`). Always all-`false` for synthesized/stdlib entries.
     pub is_ref: Vec<bool>,
+    /// Per-parameter `take` flag, parallel to `parameters`: true when the declaration is `take
+    /// name: T` (ownership transfer). Always all-`false` for synthesized/stdlib entries.
+    /// Explicit `borrow` is the default ABI and does not need a table flag.
+    pub is_take: Vec<bool>,
     /// Per-parameter constant-literal default values, parallel to `parameters`. `None` means the
     /// parameter is required. Defaults are always trailing (enforced by the parser), so a call may
     /// omit the trailing defaulted arguments and the analyzer substitutes these literals.
@@ -617,6 +621,7 @@ impl FunctionTableInfo {
     ) -> FunctionTableInfo {
         let defaults = vec![None; parameters.len()];
         let is_ref = vec![false; parameters.len()];
+        let is_take = vec![false; parameters.len()];
         let param_names = Vec::new();
         FunctionTableInfo {
             name,
@@ -626,6 +631,7 @@ impl FunctionTableInfo {
             param_names,
             is_variadic: false,
             is_ref,
+            is_take,
             defaults,
             is_async: false,
             is_static: false,
@@ -649,6 +655,7 @@ impl FunctionTableInfo {
         let mut param_names: Vec<String> = vec![];
         let mut defaults: Vec<Option<Type>> = vec![];
         let mut is_ref: Vec<bool> = vec![];
+        let mut is_take: Vec<bool> = vec![];
         for i in func.parameters.iter() {
             let j = i.clone();
             parameters.push(j.type_.get_type());
@@ -656,6 +663,7 @@ impl FunctionTableInfo {
             param_names.push(j.name.text);
             defaults.push(j.default);
             is_ref.push(j.is_ref);
+            is_take.push(j.is_take);
         }
         let intrinsic_name = dream_abi::intrinsics::intrinsic_key(&func.attributes);
         let is_variadic = func
@@ -668,6 +676,7 @@ impl FunctionTableInfo {
         info.param_names = param_names;
         info.is_variadic = is_variadic;
         info.is_ref = is_ref;
+        info.is_take = is_take;
         info.defaults = defaults;
         info.is_async = func.is_async;
         info.is_static = func.is_static;

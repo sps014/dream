@@ -9,7 +9,7 @@ on:
       - "scripts/install.sh"
       - "scripts/install.ps1"
       - "mkdocs.yml"
-      - "requirements-docs.txt"
+      - "docs/requirements-docs.txt"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -32,10 +32,10 @@ jobs:
         with:
           python-version: "3.x"
           cache: pip
-          cache-dependency-path: requirements-docs.txt
+          cache-dependency-path: docs/requirements-docs.txt
 
       - name: Install MkDocs and Material theme
-        run: pip install -r requirements-docs.txt
+        run: pip install -r docs/requirements-docs.txt
 
       - name: Build docs
         run: |

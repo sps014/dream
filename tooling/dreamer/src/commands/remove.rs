@@ -2,8 +2,8 @@ use crate::workspace::Workspace;
 use anyhow::{bail, Result};
 use std::path::Path;
 
-pub fn run(start_dir: &Path, name: &str) -> Result<()> {
-    let mut workspace = Workspace::discover(start_dir)?;
+pub fn run(start_dir: &Path, name: &str, package: Option<&str>) -> Result<()> {
+    let mut workspace = Workspace::discover_package(start_dir, package)?;
 
     let removed_dep = workspace.manifest.dependencies.remove(name).is_some();
     let removed_dev = workspace.manifest.dev_dependencies.remove(name).is_some();
@@ -11,7 +11,7 @@ pub fn run(start_dir: &Path, name: &str) -> Result<()> {
         bail!(
             "'{}' is not a dependency of {}",
             name,
-            workspace.manifest.package.name
+            workspace.manifest.package()?.name
         );
     }
     workspace.save_manifest()?;

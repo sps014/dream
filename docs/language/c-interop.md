@@ -169,11 +169,11 @@ dependencies without re-parsing sources.
 
 ## End-to-end example
 
-The [`sample/sqlite/`](../../sample/sqlite) folder contains two runnable samples:
+The `sample/sqlite/` folder contains two runnable samples:
 
-- [`raw.dream`](../../sample/sqlite/raw.dream) — direct `@c` bindings to libsqlite3, opening an
+- `raw.dream` — direct `@c` bindings to libsqlite3, opening an
   in-memory database and executing DDL/DML.
-- [`db.dream`](../../sample/sqlite/db.dream) — a small `Database` class that creates `./demo.db` in
+- `db.dream` — a small `Database` class that creates `./demo.db` in
   the process working directory, inserts rows, and prints `SELECT` results via a C callback that
   uses `dream_ffi.read_ptr` / `dream_ffi.read_cstring` to read host `char**` values.
 

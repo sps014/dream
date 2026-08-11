@@ -1,0 +1,11 @@
+[package]
+name = "cli"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"
+targets = ["native"]
+description = "CLI app that depends on the shared workspace member"
+
+[dependencies]
+# version + path: local develop via path; publishable with the version req
+shared = { version = "0.1.0", path = "../../packages/shared" }

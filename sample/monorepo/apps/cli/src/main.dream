@@ -1,0 +1,6 @@
+import shared;
+import system;
+
+fun main(): void {
+    System.println(greet("monorepo"));
+}

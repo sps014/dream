@@ -5,13 +5,13 @@ use anyhow::{bail, Result};
 use std::path::Path;
 use std::process::Command;
 
-pub fn run(start_dir: &Path, release: bool) -> Result<()> {
+pub fn run(start_dir: &Path, release: bool, package: Option<&str>) -> Result<()> {
     super::install::run(start_dir)?;
-    let workspace = Workspace::discover(start_dir)?;
+    let workspace = Workspace::discover_package(start_dir, package)?;
     compile_entry(&workspace, release, None)
 }
 
-/// Compile the workspace root, optionally restricting JS runtime emission to `only`
+/// Compile the package root, optionally restricting JS runtime emission to `only`
 /// (used by `dreamer run` for a single selected host). When `only` is `None`, emit every
 /// JS host listed in `package.targets`.
 ///
@@ -24,13 +24,14 @@ pub fn compile_entry(
 ) -> Result<()> {
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;
+    let pkg = workspace.manifest.package()?;
 
     let mut cmd = Command::new(&dream_bin);
     if release {
         cmd.arg("--release");
     }
 
-    match workspace.manifest.package.package_type {
+    match pkg.package_type {
         PackageType::Lib => {
             cmd.arg("--crate-type");
             cmd.arg("lib");
@@ -44,22 +45,12 @@ pub fn compile_entry(
     let want_web = match only {
         Some(RunTarget::Web) => true,
         Some(_) => false,
-        None => workspace
-            .manifest
-            .package
-            .targets
-            .iter()
-            .any(|t| t == "web"),
+        None => pkg.targets.iter().any(|t| t == "web"),
     };
     let want_node = match only {
         Some(RunTarget::Node) => true,
         Some(_) => false,
-        None => workspace
-            .manifest
-            .package
-            .targets
-            .iter()
-            .any(|t| t == "node"),
+        None => pkg.targets.iter().any(|t| t == "node"),
     };
 
     if want_web || want_node {

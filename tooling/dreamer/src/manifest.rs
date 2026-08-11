@@ -148,9 +148,21 @@ pub fn resolve_run_target(targets: &[String], explicit: Option<&str>) -> Result<
     }
 }
 
+/// `[workspace]` table for a multi-package repo root (explicit member paths only).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkspaceMeta {
+    #[serde(default)]
+    pub members: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
-    pub package: PackageMeta,
+    /// Present on package manifests; absent on a virtual workspace root (`[workspace]` only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<PackageMeta>,
+    /// Present on a workspace root (virtual or root-package + members).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceMeta>,
     #[serde(default)]
     pub dependencies: BTreeMap<String, Dependency>,
     #[serde(default, rename = "dev-dependencies")]
@@ -265,6 +277,11 @@ impl Dependency {
         }
     }
 
+    /// Path dependency with no version — fine for local monorepo develop, not publishable.
+    pub fn is_path_only(&self) -> bool {
+        self.path().is_some() && self.version_req().is_none() && self.git().is_none()
+    }
+
     pub fn to_toml_value(&self) -> toml::Value {
         match self {
             Dependency::Version(v) => toml::Value::String(v.clone()),
@@ -352,7 +369,7 @@ impl Manifest {
     /// Create a `bin` package manifest with the given entry point.
     pub fn new(name: String, version: String, entry: String) -> Self {
         Manifest {
-            package: PackageMeta {
+            package: Some(PackageMeta {
                 name,
                 version,
                 package_type: PackageType::Bin,
@@ -364,7 +381,8 @@ impl Manifest {
                 keywords: Vec::new(),
                 targets: Vec::new(),
                 icon: None,
-            },
+            }),
+            workspace: None,
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
@@ -375,7 +393,7 @@ impl Manifest {
     /// Create a `lib` package manifest (no entry).
     pub fn new_lib(name: String, version: String) -> Self {
         Manifest {
-            package: PackageMeta {
+            package: Some(PackageMeta {
                 name,
                 version,
                 package_type: PackageType::Lib,
@@ -387,12 +405,52 @@ impl Manifest {
                 keywords: Vec::new(),
                 targets: Vec::new(),
                 icon: None,
-            },
+            }),
+            workspace: None,
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
             registries: BTreeMap::new(),
         }
+    }
+
+    /// Virtual workspace root (`[workspace]` only, no `[package]`).
+    pub fn new_workspace(members: Vec<String>) -> Self {
+        Manifest {
+            package: None,
+            workspace: Some(WorkspaceMeta { members }),
+            dependencies: BTreeMap::new(),
+            dev_dependencies: BTreeMap::new(),
+            scripts: BTreeMap::new(),
+            registries: BTreeMap::new(),
+        }
+    }
+
+    /// Package metadata; errors if this is a virtual workspace root.
+    pub fn package(&self) -> Result<&PackageMeta> {
+        self.package.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "this dream.toml is a virtual workspace root (no [package]); pass -p <name> \
+                 to select a member"
+            )
+        })
+    }
+
+    pub fn package_mut(&mut self) -> Result<&mut PackageMeta> {
+        self.package.as_mut().ok_or_else(|| {
+            anyhow::anyhow!(
+                "this dream.toml is a virtual workspace root (no [package]); pass -p <name> \
+                 to select a member"
+            )
+        })
+    }
+
+    pub fn is_workspace_root(&self) -> bool {
+        self.workspace.is_some()
+    }
+
+    pub fn is_virtual_workspace(&self) -> bool {
+        self.workspace.is_some() && self.package.is_none()
     }
 
     pub fn load(path: &Path) -> Result<Manifest> {
@@ -405,38 +463,68 @@ impl Manifest {
     }
 
     pub fn validate(&self) -> Result<()> {
-        validate_package_name(&self.package.name)?;
-        Version::parse(&self.package.version).with_context(|| {
+        if self.package.is_none() && self.workspace.is_none() {
+            bail!("dream.toml must contain [package] and/or [workspace]");
+        }
+        if let Some(ws) = &self.workspace {
+            if ws.members.is_empty() {
+                bail!("[workspace].members must list at least one package path");
+            }
+            for member in &ws.members {
+                let trimmed = member.trim();
+                if trimmed.is_empty() {
+                    bail!("[workspace].members entries must not be empty");
+                }
+                if Path::new(trimmed).is_absolute() {
+                    bail!(
+                        "[workspace].members entry '{}' must be relative to the workspace root",
+                        trimmed
+                    );
+                }
+                if trimmed.contains('*') || trimmed.contains('?') {
+                    bail!(
+                        "[workspace].members entry '{}' must be an explicit path (globs are not \
+                         supported)",
+                        trimmed
+                    );
+                }
+            }
+        }
+        let Some(pkg) = &self.package else {
+            return Ok(());
+        };
+        validate_package_name(&pkg.name)?;
+        Version::parse(&pkg.version).with_context(|| {
             format!(
                 "package '{}' has invalid version '{}' (expected semver, e.g. '1.2.3')",
-                self.package.name, self.package.version
+                pkg.name, pkg.version
             )
         })?;
-        match self.package.package_type {
+        match pkg.package_type {
             PackageType::Bin => {
-                let entry = self.package.entry.as_deref().unwrap_or("").trim();
+                let entry = pkg.entry.as_deref().unwrap_or("").trim();
                 if entry.is_empty() {
                     bail!(
                         "package '{}' is type = \"bin\" and requires a non-empty entry \
                          (e.g. entry = \"src/main.dream\")",
-                        self.package.name
+                        pkg.name
                     );
                 }
             }
             PackageType::Lib => {
-                if let Some(entry) = &self.package.entry {
+                if let Some(entry) = &pkg.entry {
                     if !entry.trim().is_empty() {
                         bail!(
                             "package '{}' is type = \"lib\" and must not set entry \
                              (libraries are imported via src/<name>.dream)",
-                            self.package.name
+                            pkg.name
                         );
                     }
                 }
             }
         }
         let mut seen = Vec::new();
-        for t in &self.package.targets {
+        for t in &pkg.targets {
             let parsed = RunTarget::parse(t)?;
             if seen.contains(&parsed) {
                 bail!(
@@ -446,7 +534,7 @@ impl Manifest {
             }
             seen.push(parsed);
         }
-        if let Some(icon) = &self.package.icon {
+        if let Some(icon) = &pkg.icon {
             validate_relative_asset_path(icon, "package.icon")?;
         }
         Ok(())
@@ -460,13 +548,50 @@ impl Manifest {
         Ok(())
     }
 
-    /// Walks upward from `start_dir` looking for the nearest `dream.toml`, mirroring how Cargo
-    /// discovers the enclosing project root from any subdirectory.
+    /// Walks upward from `start_dir` looking for the nearest `dream.toml`.
     pub fn find_project_root(start_dir: &Path) -> Option<PathBuf> {
         let mut dir = Some(start_dir.to_path_buf());
         while let Some(d) = dir {
             if d.join(MANIFEST_FILE_NAME).is_file() {
                 return Some(d);
+            }
+            dir = d.parent().map(Path::to_path_buf);
+        }
+        None
+    }
+
+    /// Nearest ancestor `dream.toml` that declares `[package]`.
+    pub fn find_package_root(start_dir: &Path) -> Option<PathBuf> {
+        let mut dir = Some(start_dir.to_path_buf());
+        while let Some(d) = dir {
+            let candidate = d.join(MANIFEST_FILE_NAME);
+            if candidate.is_file() {
+                if let Ok(text) = std::fs::read_to_string(&candidate) {
+                    if let Ok(m) = toml::from_str::<Manifest>(&text) {
+                        if m.package.is_some() {
+                            return Some(d);
+                        }
+                    }
+                }
+            }
+            dir = d.parent().map(Path::to_path_buf);
+        }
+        None
+    }
+
+    /// Nearest ancestor `dream.toml` that declares `[workspace]`.
+    pub fn find_workspace_root(start_dir: &Path) -> Option<PathBuf> {
+        let mut dir = Some(start_dir.to_path_buf());
+        while let Some(d) = dir {
+            let candidate = d.join(MANIFEST_FILE_NAME);
+            if candidate.is_file() {
+                if let Ok(text) = std::fs::read_to_string(&candidate) {
+                    if let Ok(m) = toml::from_str::<Manifest>(&text) {
+                        if m.workspace.is_some() {
+                            return Some(d);
+                        }
+                    }
+                }
             }
             dir = d.parent().map(Path::to_path_buf);
         }
@@ -540,10 +665,10 @@ mod tests {
         manifest.save(&path).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
-        assert_eq!(loaded.package.name, "myapp");
-        assert_eq!(loaded.package.package_type, PackageType::Bin);
+        assert_eq!(loaded.package().unwrap().name, "myapp");
+        assert_eq!(loaded.package().unwrap().package_type, PackageType::Bin);
         assert_eq!(
-            loaded.package.entry.as_deref(),
+            loaded.package().unwrap().entry.as_deref(),
             Some("src/main.dream")
         );
         assert_eq!(loaded.dependencies.len(), 2);
@@ -574,18 +699,21 @@ mod tests {
             "0.1.0".to_string(),
             "src/main.dream".to_string(),
         );
-        manifest.package.icon = Some("assets/icon.png".into());
+        manifest.package_mut().unwrap().icon = Some("assets/icon.png".into());
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join(MANIFEST_FILE_NAME);
         manifest.save(&path).unwrap();
         let loaded = Manifest::load(&path).unwrap();
-        assert_eq!(loaded.package.icon.as_deref(), Some("assets/icon.png"));
+        assert_eq!(
+            loaded.package().unwrap().icon.as_deref(),
+            Some("assets/icon.png")
+        );
 
-        manifest.package.icon = Some("../escape.png".into());
+        manifest.package_mut().unwrap().icon = Some("../escape.png".into());
         assert!(manifest.validate().is_err());
-        manifest.package.icon = Some("/abs/icon.png".into());
+        manifest.package_mut().unwrap().icon = Some("/abs/icon.png".into());
         assert!(manifest.validate().is_err());
-        manifest.package.icon = Some("".into());
+        manifest.package_mut().unwrap().icon = Some("".into());
         assert!(manifest.validate().is_err());
     }
 
@@ -596,7 +724,7 @@ mod tests {
             "0.1.0".to_string(),
             "src/main.dream".to_string(),
         );
-        manifest.package.targets = vec!["browser".to_string()];
+        manifest.package_mut().unwrap().targets = vec!["browser".to_string()];
         assert!(manifest.validate().is_err());
     }
 
@@ -607,26 +735,26 @@ mod tests {
             "0.1.0".to_string(),
             "src/main.dream".to_string(),
         );
-        manifest.package.targets = vec!["native".into(), "web".into()];
+        manifest.package_mut().unwrap().targets = vec!["native".into(), "web".into()];
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join(MANIFEST_FILE_NAME);
         manifest.save(&path).unwrap();
         let loaded = Manifest::load(&path).unwrap();
-        assert_eq!(loaded.package.targets, vec!["native", "web"]);
+        assert_eq!(loaded.package().unwrap().targets, vec!["native", "web"]);
     }
 
     #[test]
     fn lib_rejects_entry_and_bin_requires_it() {
         let mut lib = Manifest::new_lib("http-utils".into(), "0.1.0".into());
         assert!(lib.validate().is_ok());
-        lib.package.entry = Some("src/main.dream".into());
+        lib.package_mut().unwrap().entry = Some("src/main.dream".into());
         assert!(lib.validate().is_err());
 
         let mut bin = Manifest::new("myapp".into(), "0.1.0".into(), "src/main.dream".into());
         assert!(bin.validate().is_ok());
-        bin.package.entry = None;
+        bin.package_mut().unwrap().entry = None;
         assert!(bin.validate().is_err());
-        bin.package.entry = Some(String::new());
+        bin.package_mut().unwrap().entry = Some(String::new());
         assert!(bin.validate().is_err());
     }
 
@@ -637,8 +765,8 @@ mod tests {
         let path = tmp.path().join(MANIFEST_FILE_NAME);
         manifest.save(&path).unwrap();
         let loaded = Manifest::load(&path).unwrap();
-        assert_eq!(loaded.package.package_type, PackageType::Lib);
-        assert!(loaded.package.entry.is_none());
+        assert_eq!(loaded.package().unwrap().package_type, PackageType::Lib);
+        assert!(loaded.package().unwrap().entry.is_none());
     }
 
     #[test]
@@ -693,5 +821,42 @@ mod tests {
     fn no_project_root_found_returns_none() {
         let tmp = tempfile::tempdir().unwrap();
         assert_eq!(Manifest::find_project_root(tmp.path()), None);
+    }
+
+    #[test]
+    fn round_trips_virtual_workspace() {
+        let manifest = Manifest::new_workspace(vec![
+            "packages/shared".into(),
+            "apps/cli".into(),
+        ]);
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(MANIFEST_FILE_NAME);
+        manifest.save(&path).unwrap();
+        let loaded = Manifest::load(&path).unwrap();
+        assert!(loaded.is_virtual_workspace());
+        assert_eq!(
+            loaded.workspace.as_ref().unwrap().members,
+            vec!["packages/shared", "apps/cli"]
+        );
+        assert!(loaded.package().is_err());
+    }
+
+    #[test]
+    fn finds_package_root_skipping_virtual_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        Manifest::new_workspace(vec!["apps/cli".into()])
+            .save(&tmp.path().join(MANIFEST_FILE_NAME))
+            .unwrap();
+        let cli = tmp.path().join("apps").join("cli");
+        std::fs::create_dir_all(cli.join("src")).unwrap();
+        Manifest::new("cli".into(), "0.1.0".into(), "src/main.dream".into())
+            .save(&cli.join(MANIFEST_FILE_NAME))
+            .unwrap();
+        let nested = cli.join("src");
+        assert_eq!(Manifest::find_package_root(&nested), Some(cli));
+        assert_eq!(
+            Manifest::find_workspace_root(&nested),
+            Some(tmp.path().to_path_buf())
+        );
     }
 }

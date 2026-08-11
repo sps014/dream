@@ -214,7 +214,7 @@ Explicit buffer / texture / sampler id lists when binding order is not a plain `
 
 #### `await Compute.run_shader(shader, ...)`
 
-Runs a raw [`GpuShader`](#gpushaderfrom_wgsl) instead of a Dream `@compute` name. Escape hatch for hand-written WGSL.
+Runs a raw [`GpuShader`](#gpushaderfrom_wgslsource-entry) instead of a Dream `@compute` name. Escape hatch for hand-written WGSL.
 
 #### `Uniforms.pack_i32(values)` / `pack_f32(values)`
 

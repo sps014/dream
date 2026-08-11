@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-pub fn run(start_dir: &Path) -> Result<()> {
-    let workspace = Workspace::discover(start_dir)?;
+pub fn run(start_dir: &Path, package: Option<&str>) -> Result<()> {
+    let workspace = Workspace::discover_package(start_dir, package)?;
     let lockfile = Lockfile::load_if_exists(&workspace.lockfile_path())?
         .context("no dream.lock found; run `dreamer install` first")?;
 
@@ -15,10 +15,8 @@ pub fn run(start_dir: &Path) -> Result<()> {
         .map(|p| (p.name.as_str(), p))
         .collect();
 
-    println!(
-        "{} {}",
-        workspace.manifest.package.name, workspace.manifest.package.version
-    );
+    let pkg = workspace.manifest.package()?;
+    println!("{} {}", pkg.name, pkg.version);
 
     let all_deps = workspace.manifest.all_dependencies(true);
     let mut top_level: Vec<&str> = all_deps.keys().map(String::as_str).collect();

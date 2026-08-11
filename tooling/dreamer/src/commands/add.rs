@@ -14,16 +14,18 @@ pub fn run(
     branch: Option<String>,
     rev: Option<String>,
     dev: bool,
+    package: Option<&str>,
 ) -> Result<()> {
     if path.is_some() && git.is_some() {
         bail!("a dependency cannot have both --path and --git");
     }
 
-    let mut workspace = Workspace::discover(start_dir)?;
+    let mut workspace = Workspace::discover_package(start_dir, package)?;
 
     let dependency = if let Some(path) = path {
         Dependency::Detailed(DetailedDependency {
             path: Some(path),
+            version,
             ..Default::default()
         })
     } else if let Some(git) = git {
@@ -32,6 +34,7 @@ pub fn run(
             tag,
             branch,
             rev,
+            version,
             ..Default::default()
         })
     } else {

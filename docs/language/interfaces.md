@@ -237,7 +237,7 @@ Every numeric primitive plus `char` and `string` already implements `Comparable`
 
 - **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality.
 - **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operators.md#operator-overloading) for a different symbol is unaffected.
-- **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections.md#sorting).
+- **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections.md#sorting-and-search).
 
 Both interfaces work with [value structs](classes-structs.md). When the concrete type is known, calls are direct. Assigning a value struct to a bare interface variable boxes it for dynamic dispatch:
 

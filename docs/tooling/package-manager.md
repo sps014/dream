@@ -219,17 +219,17 @@ registry version selection. Conflicting requirements produce a clear error namin
 | Command | Effect |
 |---|---|
 | `dreamer init [name] [--lib] [--runtime native,web,node] [--dir <path>]` | Scaffold `dream.toml` + source stub (`src/main.dream` for bins, `src/<name>.dream` for `--lib`), `.gitignore` (`dream_packages/`, `target/`), and (when `--runtime` includes them) `index.html` / `run.mjs` linked to stable `target/web/` / `target/node/` aliases. |
-| `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>]] [--dev]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
-| `dreamer remove <name>` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
-| `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. |
+| `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>]] [--dev] [-p <name>]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
+| `dreamer remove <name> [-p <name>]` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
+| `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. In a `[workspace]`, installs all members into the root lock/`dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
-| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
-| `dreamer test [--release] [--filter <substr>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` (and `[package].icon` PNG if set) in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
-| `dreamer publish [--registry <url>] [--token <tok>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). |
+| `dreamer build [--release] [-p <name>]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
+| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
+| `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
+| `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package and embed its `.wasm` (and `[package].icon` PNG if set) in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
-| `dreamer tree` | Print the resolved dependency tree from `dream.lock`. |
+| `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
 
 ### Native `dreamer pack`
 
@@ -266,6 +266,76 @@ Per host:
 
 Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
 alias paths the scaffolds already reference.
+
+## Workspaces (monorepos)
+
+A repo can hold multiple packages behind one root `dream.toml`:
+
+```toml
+# repo root
+[workspace]
+members = ["packages/shared", "apps/cli"]
+```
+
+Each member keeps a normal package `dream.toml` (with `[package]`). Path deps between members work
+as today:
+
+```toml
+# apps/cli/dream.toml
+[package]
+name = "cli"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"
+targets = ["native"]
+
+[dependencies]
+shared = { version = "0.1.0", path = "../../packages/shared" }
+```
+
+Behavior:
+
+- One `dream.lock` and one `dream_packages/` at the **workspace root**.
+- `dreamer install` (from the root or any member) resolves **all** members’ deps into that shared
+  install, then symlinks each member’s `dream_packages/` → the root so the compiler/LSP keep
+  working with no special config.
+- Package selection: inside a member directory, commands target that package; at the virtual
+  workspace root, pass `-p` / `--package <name>` for `build` / `run` / `test` / `pack` / `publish`
+  / `add` / `remove` / `tree`.
+
+```bash
+dreamer install
+dreamer run -p cli
+cd apps/cli && dreamer run          # same package, no -p
+dreamer publish -p shared           # one package at a time
+```
+
+**Runtime host** vs **pack triple** (unchanged naming):
+
+- `package.targets` / `dreamer run --target native|web|node` — which host runs the app
+- `dreamer pack --target macos-arm64` — which OS/arch executable to embed
+
+### LSP
+
+No extra setup. The language server already uses the nearest member `dream.toml` (lib vs bin
+CodeLens) and that member’s `dream_packages/` symlink for import completion.
+
+### Publishing from a monorepo
+
+Publish is always a **single member** (`dreamer publish -p shared`, or `cd` into the member). The
+tarball still contains only that package’s `dream.toml` + `src/` + README — not siblings.
+
+Path-only deps (`shared = { path = "..." }` with no version) cannot be resolved by registry
+consumers; `dreamer publish` errors and asks you to write:
+
+```toml
+shared = { version = "0.1.0", path = "../../packages/shared" }
+```
+
+Install still prefers the path locally; the published index records the version requirement.
+Publish leaf libraries before apps that depend on them.
+
+See `sample/monorepo/` for a complete layout.
 
 ## Walkthrough
 

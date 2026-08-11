@@ -1,0 +1,6 @@
+[package]
+name = "shared"
+version = "0.1.0"
+type = "lib"
+edition = "2026"
+description = "Shared helpers for the monorepo sample"

@@ -6,9 +6,27 @@ use crate::workspace::Workspace;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
-pub fn run(start_dir: &Path, registry_url: Option<String>, token: Option<String>) -> Result<()> {
-    let workspace = Workspace::discover(start_dir)?;
+pub fn run(
+    start_dir: &Path,
+    registry_url: Option<String>,
+    token: Option<String>,
+    package: Option<&str>,
+) -> Result<()> {
+    let workspace = Workspace::discover_package(start_dir, package)?;
     workspace.manifest.validate()?;
+    let pkg = workspace.manifest.package()?;
+
+    for (dep_name, dep) in &workspace.manifest.dependencies {
+        if dep.is_path_only() {
+            bail!(
+                "cannot publish '{}': dependency '{}' is path-only. Add a version for the \
+                 registry, e.g. {dep_name} = {{ version = \"{}\", path = \"...\" }}",
+                pkg.name,
+                dep_name,
+                "0.1.0"
+            );
+        }
+    }
 
     let url = match registry_url {
         Some(u) => u,
@@ -18,10 +36,7 @@ pub fn run(start_dir: &Path, registry_url: Option<String>, token: Option<String>
             .context("no registry configured (pass --registry or set [registries] default)")?,
     };
 
-    let tarball_path = fetch::cache_dir().join(format!(
-        "{}-{}.tar.gz",
-        workspace.manifest.package.name, workspace.manifest.package.version
-    ));
+    let tarball_path = fetch::cache_dir().join(format!("{}-{}.tar.gz", pkg.name, pkg.version));
     let bytes = fetch::package_project(&workspace.root, &tarball_path)?;
     if bytes.len() > MAX_TARBALL_BYTES {
         bail!(
@@ -44,16 +59,12 @@ pub fn run(start_dir: &Path, registry_url: Option<String>, token: Option<String>
         })
         .collect();
 
-    let pkg = &workspace.manifest.package;
     let entry = IndexEntry {
         name: pkg.name.clone(),
         vers: pkg.version.clone(),
         deps,
         cksum,
-        tarball: format!(
-            "dl/{}/{}-{}.tar.gz",
-            pkg.name, pkg.name, pkg.version
-        ),
+        tarball: format!("dl/{}/{}-{}.tar.gz", pkg.name, pkg.name, pkg.version),
         description: pkg.description.clone(),
         authors: pkg.authors.clone(),
         license: pkg.license.clone(),

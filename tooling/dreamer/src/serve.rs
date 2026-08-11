@@ -231,7 +231,7 @@ fn handle_request(root: &Path, request: Request) -> Result<()> {
 fn package_icon_rel(root: &Path) -> Option<String> {
     let manifest = root.join(crate::manifest::MANIFEST_FILE_NAME);
     let m = crate::manifest::Manifest::load(&manifest).ok()?;
-    let icon = m.package.icon?;
+    let icon = m.package?.icon?;
     let path = root.join(&icon);
     path.is_file().then_some(icon)
 }

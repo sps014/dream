@@ -48,9 +48,16 @@ enum Cmd {
         /// Add under [dev-dependencies] instead of [dependencies].
         #[arg(long)]
         dev: bool,
+        /// Workspace member package name (required at a virtual workspace root).
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
     },
     /// Remove a dependency from dream.toml and dream_packages/.
-    Remove { name: String },
+    Remove {
+        name: String,
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
+    },
     /// Resolve dream.toml into dream.lock and materialize dream_packages/.
     Install,
     /// Re-resolve dependencies to the latest compatible versions.
@@ -64,6 +71,8 @@ enum Cmd {
         /// override the default `-Os` level with dream's `-O` flags if needed).
         #[arg(long)]
         release: bool,
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
     },
     /// Install dependencies, then run the project on the resolved host from dream.toml.
     Run {
@@ -76,6 +85,8 @@ enum Cmd {
         /// TCP port for `--target web` (default 8787). Reuses/restarts the previous project server.
         #[arg(long, value_name = "PORT")]
         port: Option<u16>,
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
         /// Extra arguments forwarded to the native program or `node run.mjs`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -88,6 +99,8 @@ enum Cmd {
         /// Only run `@test` functions whose names contain this substring.
         #[arg(long, value_name = "SUBSTR")]
         filter: Option<String>,
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
     },
     /// Package the current project and publish it to a registry.
     Publish {
@@ -97,17 +110,24 @@ enum Cmd {
         /// Publish token (GitHub Contents API). Falls back to DREAM_REGISTRY_TOKEN / GITHUB_TOKEN.
         #[arg(long)]
         token: Option<String>,
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
     },
     /// Build a native single-file executable embedding the project's release wasm.
     Pack {
         /// Pack triple (`linux-x64`, `macos-arm64`, …) or `all`. Repeatable; default = host.
         #[arg(long = "target", value_name = "TRIPLE")]
         targets: Vec<String>,
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
     },
     /// Search a registry for packages by name.
     Search { query: String },
     /// Print the resolved dependency tree from dream.lock.
-    Tree,
+    Tree {
+        #[arg(short = 'p', long = "package", value_name = "NAME")]
+        package: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -143,22 +163,49 @@ fn main() -> ExitCode {
             branch,
             rev,
             dev,
-        } => commands::add::run(&cwd, name, version, path, git, tag, branch, rev, dev),
-        Cmd::Remove { name } => commands::remove::run(&cwd, &name),
+            package,
+        } => commands::add::run(
+            &cwd,
+            name,
+            version,
+            path,
+            git,
+            tag,
+            branch,
+            rev,
+            dev,
+            package.as_deref(),
+        ),
+        Cmd::Remove { name, package } => {
+            commands::remove::run(&cwd, &name, package.as_deref())
+        }
         Cmd::Install => commands::install::run(&cwd),
         Cmd::Update { name } => commands::update::run(&cwd, name),
-        Cmd::Build { release } => commands::build::run(&cwd, release),
+        Cmd::Build { release, package } => {
+            commands::build::run(&cwd, release, package.as_deref())
+        }
         Cmd::Run {
             target,
             release,
             port,
+            package,
             args,
-        } => commands::run::run(&cwd, target, release, port, &args),
-        Cmd::Test { release, filter } => commands::test::run(&cwd, release, filter),
-        Cmd::Publish { registry, token } => commands::publish::run(&cwd, registry, token),
-        Cmd::Pack { targets } => commands::pack::run(&cwd, &targets),
+        } => commands::run::run(&cwd, target, release, port, &args, package.as_deref()),
+        Cmd::Test {
+            release,
+            filter,
+            package,
+        } => commands::test::run(&cwd, release, filter, package.as_deref()),
+        Cmd::Publish {
+            registry,
+            token,
+            package,
+        } => commands::publish::run(&cwd, registry, token, package.as_deref()),
+        Cmd::Pack { targets, package } => {
+            commands::pack::run(&cwd, &targets, package.as_deref())
+        }
         Cmd::Search { query } => commands::search::run(&cwd, &query),
-        Cmd::Tree => commands::tree::run(&cwd),
+        Cmd::Tree { package } => commands::tree::run(&cwd, package.as_deref()),
     };
 
     match result {

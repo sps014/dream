@@ -1,0 +1,7 @@
+version = 1
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+source = "path+/Users/shivendra/Desktop/Projects/Dream/sample/monorepo/packages/shared"
+dependencies = []

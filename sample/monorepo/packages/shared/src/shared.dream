@@ -1,0 +1,5 @@
+import system;
+
+public fun greet(name: string): string {
+    return "hello, " + name;
+}

@@ -10,16 +10,18 @@ pub fn run(
     release: bool,
     port: Option<u16>,
     extra_args: &[String],
+    package: Option<&str>,
 ) -> Result<()> {
     super::install::run(start_dir)?;
-    let workspace = Workspace::discover(start_dir)?;
-    if workspace.manifest.package.package_type == PackageType::Lib {
+    let workspace = Workspace::discover_package(start_dir, package)?;
+    let pkg = workspace.manifest.package()?;
+    if pkg.package_type == PackageType::Lib {
         bail!(
             "package '{}' is type = \"lib\" and is not runnable (use dreamer build to typecheck)",
-            workspace.manifest.package.name
+            pkg.name
         );
     }
-    let host = resolve_run_target(&workspace.manifest.package.targets, target.as_deref())?;
+    let host = resolve_run_target(&pkg.targets, target.as_deref())?;
 
     match host {
         RunTarget::Native => run_native(&workspace, release, extra_args),

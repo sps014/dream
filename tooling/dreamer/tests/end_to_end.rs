@@ -106,6 +106,7 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
         None,
         None,
         false,
+        None,
     )
     .unwrap();
 
@@ -119,6 +120,7 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
         None,
         None,
         false,
+        None,
     )
     .unwrap();
 
@@ -200,6 +202,7 @@ fn build_compiles_a_project_using_an_installed_dependency() {
         None,
         None,
         false,
+        None,
     )
     .unwrap();
 
@@ -209,7 +212,7 @@ fn build_compiles_a_project_using_an_installed_dependency() {
     )
     .unwrap();
 
-    commands::build::run(&project_dir, false).unwrap();
+    commands::build::run(&project_dir, false, None).unwrap();
     assert!(
         project_dir.join("target").join("debug").join("main.wat").is_file(),
         "expected artifacts under target/debug/"
@@ -230,7 +233,7 @@ fn init_runtime_scaffolds_web_and_node_hosts() {
     .unwrap();
 
     let manifest = Manifest::load(&project_dir.join("dream.toml")).unwrap();
-    assert_eq!(manifest.package.targets, vec!["web", "node"]);
+    assert_eq!(manifest.package().unwrap().targets, vec!["web", "node"]);
     assert!(project_dir.join("index.html").is_file());
     assert!(project_dir.join("run.mjs").is_file());
 
@@ -272,11 +275,11 @@ fn init_lib_has_no_entry_and_run_rejects() {
     .unwrap();
 
     let manifest = Manifest::load(&project_dir.join("dream.toml")).unwrap();
-    assert_eq!(manifest.package.package_type, PackageType::Lib);
-    assert!(manifest.package.entry.is_none());
+    assert_eq!(manifest.package().unwrap().package_type, PackageType::Lib);
+    assert!(manifest.package().unwrap().entry.is_none());
     assert!(project_dir.join("src").join("http_utils.dream").is_file());
 
-    let err = commands::run::run(&project_dir, None, false, None, &[]).unwrap_err();
+    let err = commands::run::run(&project_dir, None, false, None, &[], None).unwrap_err();
     assert!(err.to_string().contains("not runnable"));
 }
 
@@ -297,7 +300,7 @@ fn build_refreshes_web_and_node_aliases() {
     )
     .unwrap();
 
-    commands::build::run(&project_dir, false).unwrap();
+    commands::build::run(&project_dir, false, None).unwrap();
     assert!(project_dir.join("target/debug/main.wasm").is_file());
     assert!(project_dir.join("target/web/main.wasm").is_file());
     assert!(project_dir
@@ -312,7 +315,7 @@ fn build_refreshes_web_and_node_aliases() {
     let web_wasm = std::fs::read(project_dir.join("target/web/main.wasm")).unwrap();
     assert_eq!(debug_wasm, web_wasm);
 
-    commands::build::run(&project_dir, true).unwrap();
+    commands::build::run(&project_dir, true, None).unwrap();
     assert!(project_dir.join("target/release/main.wasm").is_file());
     let release_wasm = std::fs::read(project_dir.join("target/release/main.wasm")).unwrap();
     let web_wasm_after = std::fs::read(project_dir.join("target/web/main.wasm")).unwrap();
@@ -332,7 +335,7 @@ fn build_lib_writes_under_target_debug() {
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join("mylib");
     commands::init::run(&project_dir, Some("mylib".to_string()), None, true).unwrap();
-    commands::build::run(&project_dir, false).unwrap();
+    commands::build::run(&project_dir, false, None).unwrap();
     assert!(project_dir
         .join("target")
         .join("debug")
@@ -350,12 +353,12 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     let tmp = tempfile::tempdir().unwrap();
     let lib_dir = tmp.path().join("libpack");
     commands::init::run(&lib_dir, Some("libpack".to_string()), None, true).unwrap();
-    assert!(commands::pack::run(&lib_dir, &[]).is_err());
+    assert!(commands::pack::run(&lib_dir, &[], None).is_err());
 
     let bin_dir = tmp.path().join("binpack");
     commands::init::run(&bin_dir, Some("binpack".to_string()), None, false).unwrap();
     // Pack builds dream-runner via cargo; needs the Dream workspace (discovered from the dream bin).
-    if let Err(e) = commands::pack::run(&bin_dir, &[]) {
+    if let Err(e) = commands::pack::run(&bin_dir, &[], None) {
         eprintln!("pack skipped/failed (may need DREAM_REPO / full workspace): {e:#}");
         return;
     }
@@ -368,5 +371,87 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         !entries.is_empty(),
         "expected at least one packed binary under {}",
         pack_dir.display()
+    );
+}
+
+#[test]
+fn workspace_install_shares_lock_and_packages_symlink() {
+    prefer_workspace_dream();
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("mono");
+    let shared = root.join("packages").join("shared");
+    let cli = root.join("apps").join("cli");
+    std::fs::create_dir_all(shared.join("src")).unwrap();
+    std::fs::create_dir_all(cli.join("src")).unwrap();
+
+    Manifest::new_workspace(vec![
+        "packages/shared".into(),
+        "apps/cli".into(),
+    ])
+    .save(&root.join("dream.toml"))
+    .unwrap();
+
+    Manifest::new_lib("shared".into(), "0.1.0".into())
+        .save(&shared.join("dream.toml"))
+        .unwrap();
+    std::fs::write(
+        shared.join("src").join("shared.dream"),
+        "public fun greet(name: string): string {\n    return \"hello, \" + name;\n}\n",
+    )
+    .unwrap();
+
+    let mut cli_manifest = Manifest::new("cli".into(), "0.1.0".into(), "src/main.dream".into());
+    cli_manifest.dependencies.insert(
+        "shared".into(),
+        dreamer::manifest::Dependency::Detailed(dreamer::manifest::DetailedDependency {
+            version: Some("0.1.0".into()),
+            path: Some("../../packages/shared".into()),
+            ..Default::default()
+        }),
+    );
+    cli_manifest.save(&cli.join("dream.toml")).unwrap();
+    std::fs::write(
+        cli.join("src").join("main.dream"),
+        "import shared;\nimport system;\n\nfun main(): void {\n    System.println(greet(\"mono\"));\n}\n",
+    )
+    .unwrap();
+
+    // Install from workspace root.
+    commands::install::run(&root).unwrap();
+    assert!(root.join("dream.lock").is_file());
+    assert!(root.join("dream_packages").join("shared").join("src").join("shared.dream").is_file());
+    let member_pkgs = cli.join("dream_packages");
+    assert!(
+        member_pkgs.is_symlink() || member_pkgs.is_dir(),
+        "member should get dream_packages symlink/dir"
+    );
+    assert!(
+        member_pkgs.join("shared").join("src").join("shared.dream").is_file(),
+        "symlink should resolve to shared package sources"
+    );
+
+    // -p required at virtual root; works from member cwd.
+    assert!(commands::build::run(&root, false, None).is_err());
+    if dreamer::dream_bin::locate().is_ok() {
+        commands::build::run(&root, false, Some("cli")).unwrap();
+        assert!(cli.join("target").join("debug").join("main.wat").is_file());
+        commands::build::run(&cli, false, None).unwrap();
+    }
+
+    // Publish rejects path-only; version+path is ok to attempt (file registry).
+    let mut path_only = Manifest::new("cli".into(), "0.1.0".into(), "src/main.dream".into());
+    path_only.dependencies.insert(
+        "shared".into(),
+        dreamer::manifest::Dependency::Detailed(dreamer::manifest::DetailedDependency {
+            path: Some("../../packages/shared".into()),
+            ..Default::default()
+        }),
+    );
+    path_only.save(&cli.join("dream.toml")).unwrap();
+    let err = commands::publish::run(&cli, Some("file:///tmp/unused".into()), None, None)
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("path-only"),
+        "expected path-only publish error, got: {err:#}"
     );
 }

@@ -68,9 +68,9 @@ pub fn run(
     } else {
         Manifest::new(name.clone(), "0.1.0".to_string(), source_rel.clone())
     };
-    manifest.package.targets = targets.iter().map(|t| t.as_str().to_string()).collect();
+    manifest.package_mut()?.targets = targets.iter().map(|t| t.as_str().to_string()).collect();
     debug_assert_eq!(
-        manifest.package.package_type,
+        manifest.package().unwrap().package_type,
         if as_lib {
             PackageType::Lib
         } else {
@@ -154,7 +154,7 @@ fn write_index_html(dir: &Path) -> Result<()> {
     }
     let icon_link = match Manifest::load(&dir.join(MANIFEST_FILE_NAME))
         .ok()
-        .and_then(|m| m.package.icon)
+        .and_then(|m| m.package.and_then(|p| p.icon))
     {
         Some(icon) => format!("    <link rel=\"icon\" href=\"{}\" />\n", icon),
         None => "    <link rel=\"icon\" href=\"/favicon.ico\" />\n".to_string(),

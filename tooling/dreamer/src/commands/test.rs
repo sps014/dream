@@ -5,9 +5,14 @@ use anyhow::{bail, Result};
 use std::path::Path;
 use std::process::Command;
 
-pub fn run(start_dir: &Path, release: bool, filter: Option<String>) -> Result<()> {
+pub fn run(
+    start_dir: &Path,
+    release: bool,
+    filter: Option<String>,
+    package: Option<&str>,
+) -> Result<()> {
     super::install::run(start_dir)?;
-    let workspace = Workspace::discover(start_dir)?;
+    let workspace = Workspace::discover_package(start_dir, package)?;
     let tests_dir = workspace.root.join("tests");
     if !tests_dir.is_dir() {
         bail!(
@@ -32,10 +37,7 @@ pub fn run(start_dir: &Path, release: bool, filter: Option<String>) -> Result<()
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
     if !status.success() {
-        bail!(
-            "tests failed (exit code {:?})",
-            status.code()
-        );
+        bail!("tests failed (exit code {:?})", status.code());
     }
     Ok(())
 }

@@ -16,14 +16,15 @@ const PACK_TRIPLES: &[(&str, &str)] = &[
     ("windows-arm64", "aarch64-pc-windows-msvc"),
 ];
 
-pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
+pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> Result<()> {
     super::install::run(start_dir)?;
-    let workspace = Workspace::discover(start_dir)?;
-    if workspace.manifest.package.package_type == PackageType::Lib {
+    let workspace = Workspace::discover_package(start_dir, package)?;
+    let pkg = workspace.manifest.package()?;
+    if pkg.package_type == PackageType::Lib {
         bail!(
             "package '{}' is type = \"lib\" and cannot be packed (only bin packages produce \
              native executables)",
-            workspace.manifest.package.name
+            pkg.name
         );
     }
 
@@ -49,7 +50,7 @@ pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
     std::fs::create_dir_all(&pack_dir)
         .with_context(|| format!("creating {}", pack_dir.display()))?;
 
-    let pkg_name = &workspace.manifest.package.name;
+    let pkg_name = pkg.name.clone();
     for (dream_triple, rust_triple) in &triples {
         let out_name = if dream_triple.starts_with("windows-") {
             format!("{pkg_name}-{dream_triple}.exe")
@@ -74,7 +75,7 @@ pub fn run(start_dir: &Path, target_args: &[String]) -> Result<()> {
 }
 
 fn resolve_package_icon(workspace: &Workspace) -> Option<PathBuf> {
-    let rel = workspace.manifest.package.icon.as_ref()?;
+    let rel = workspace.manifest.package.as_ref()?.icon.as_ref()?;
     let path = workspace.root.join(rel);
     if path.is_file() {
         Some(path)

@@ -82,12 +82,24 @@ pub fn resolve(
     include_dev: bool,
     preferred: &BTreeMap<String, String>,
 ) -> Result<Vec<ResolvedPackage>> {
+    resolve_many(&[(project_dir.to_path_buf(), manifest.clone())], include_dev, preferred)
+}
+
+/// Union-resolve dependencies from every `(dir, manifest)` pair (workspace members). Path deps
+/// are resolved relative to each member's directory; registry requirements accumulate globally.
+pub fn resolve_many(
+    members: &[(PathBuf, Manifest)],
+    include_dev: bool,
+    preferred: &BTreeMap<String, String>,
+) -> Result<Vec<ResolvedPackage>> {
     let mut resolver = Resolver {
         preferred: preferred.clone(),
         ..Resolver::default()
     };
-    for (name, dep) in manifest.all_dependencies(include_dev) {
-        resolver.queue_dependency(&name, &dep, project_dir, manifest)?;
+    for (dir, manifest) in members {
+        for (name, dep) in manifest.all_dependencies(include_dev) {
+            resolver.queue_dependency(&name, &dep, dir, manifest)?;
+        }
     }
     resolver.run()?;
     Ok(resolver.resolved.into_values().collect())
@@ -178,11 +190,13 @@ impl Resolver {
         };
 
         let child_deps = dep_manifest.all_dependencies(false);
+        let pkg_name = dep_manifest.package()?.name.clone();
+        let pkg_version = dep_manifest.package()?.version.clone();
         self.resolved.insert(
-            dep_manifest.package.name.clone(),
+            pkg_name.clone(),
             ResolvedPackage {
-                name: dep_manifest.package.name.clone(),
-                version: dep_manifest.package.version.clone(),
+                name: pkg_name,
+                version: pkg_version,
                 source,
                 dependencies: child_deps.keys().cloned().collect(),
             },

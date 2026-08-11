@@ -2,6 +2,11 @@
 //! a constant or a copy of another local has its later reads replaced by the source value. The
 //! analysis is reset at block boundaries (no cross-block dataflow), which keeps it simple and sound
 //! without SSA phi handling.
+//!
+//! Value-struct locals are excluded: their WASM locals hold *addresses* of shadow-frame slots, and an
+//! Owning `Assign` deep-copies into a distinct slot. Propagating the address would make two MIR
+//! locals share one slot, so a later `ValueDrop` / frame teardown of the source would free the
+//! destination's storage too.
 
 use super::MirPass;
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
@@ -15,13 +20,18 @@ impl MirPass for CopyConstProp {
         "copy-const-prop"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        let value_local: Vec<bool> = func
+            .locals
+            .iter()
+            .map(|d| interner.is_value_type(d.ty))
+            .collect();
         let mut changed = false;
         for block in &mut func.blocks {
             let mut known: HashMap<Local, Operand> = HashMap::new();
             for stmt in &mut block.stmts {
                 changed |= subst_stmt_reads(stmt, &known);
-                update_known(stmt, &mut known);
+                update_known(stmt, &mut known, &value_local);
             }
             changed |= subst_terminator_reads(&mut block.terminator, &known);
         }
@@ -104,6 +114,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         }
         Statement::Print { arg, .. } => subst_operand(arg, known),
         Statement::ForceFree(o) => subst_operand(o, known),
+        Statement::ValueDrop(_) => false,
         Statement::ArrayElemsCopy {
             dst,
             dst_off,
@@ -214,16 +225,27 @@ pub(super) fn subst_terminator_reads(t: &mut Terminator, known: &HashMap<Local, 
 }
 
 /// Updates the known-value map after a statement executes.
-pub(super) fn update_known(stmt: &Statement, known: &mut HashMap<Local, Operand>) {
+pub(super) fn update_known(
+    stmt: &Statement,
+    known: &mut HashMap<Local, Operand>,
+    value_local: &[bool],
+) {
+    let is_value = |l: Local| value_local.get(l.0 as usize).copied().unwrap_or(false);
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
         // The destination's old value is gone, and any entry that *copied* it is now stale.
         invalidate(*dest, known);
         if let Rvalue::Use(op @ (Operand::Const(_) | Operand::Copy(Place::Local(_)))) = rvalue {
-            known.insert(*dest, op.clone());
+            let value_typed = is_value(*dest)
+                || matches!(op, Operand::Copy(Place::Local(src)) if is_value(*src));
+            if !value_typed {
+                known.insert(*dest, op.clone());
+            }
         }
     } else if let Statement::Assign(_, _) = stmt {
         // Stores through field/index/global may alias; be conservative and keep only consts.
         known.retain(|_, v| matches!(v, Operand::Const(_)));
+    } else if let Statement::ValueDrop(l) = stmt {
+        invalidate(*l, known);
     }
     // Calls may mutate through references; constants stay valid, copies of locals are kept (locals
     // are not aliased by value here).

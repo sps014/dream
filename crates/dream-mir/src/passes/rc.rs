@@ -86,6 +86,7 @@ impl MirPass for RcInsertion {
                             ty: local_types[dest.0 as usize],
                             name: None,
                             is_ref: false,
+                            manual_drop: false,
                         });
                         out.push(Statement::Assign(
                             Place::Local(tmp),
@@ -139,6 +140,7 @@ impl MirPass for RcInsertion {
                     ty: func.ret,
                     name: None,
                     is_ref: false,
+                    manual_drop: false,
                 });
                 block
                     .stmts

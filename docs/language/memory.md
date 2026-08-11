@@ -152,5 +152,5 @@ What `@unsafe` does **not** do: it does not insert runtime checks, and it does n
 - Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop — one growable UTF-8 buffer, one final `build()`.
 - Use `byte_size` / `byte_at` / byte-oriented helpers when you don't need scalar indices; scalar `char_at` / `substring` still work, but `substring` now copies a UTF-8 byte slice once instead of per-scalar `set`.
 - `List` / `Map` / `Set` `clear()` keeps capacity (List reallocates a same-capacity buffer so managed elements release; Map/Set rebuild empty tables at the current `cap`).
-- `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release).
+- `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release). Under `--release`, the inliner erases small `Span` / value-struct method call boundaries (including into `List.insert` / `push_all`), so those hot paths compile down to the same WAT as hand-written bulk copies.
 - The compiler's ARC passes can elide retain/release pairs along straight-line CFG regions; prefer clear ownership so elision has an easy cancel pattern.

@@ -165,7 +165,7 @@ use valuetype::*;
 use wasm_types::*;
 use wat_dce::*;
 
-pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym};
+pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym, ValueFrame, ValueLocalKind};
 
 // The external API of the backend, at the historical `crate::emit::…` paths.
 pub use debug_map::DebugModule;

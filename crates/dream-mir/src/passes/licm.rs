@@ -298,6 +298,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
         }
         Statement::Print { arg, .. } => operand_reads(arg, f),
         Statement::ForceFree(o) => operand_reads(o, f),
+        Statement::ValueDrop(l) => f(*l),
         Statement::ArrayElemsCopy {
             dst,
             dst_off,

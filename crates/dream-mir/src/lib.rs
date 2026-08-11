@@ -125,9 +125,14 @@ pub struct LocalDecl {
     pub name: Option<String>,
     /// True for a `ref` parameter whose value-struct-typed slot (see
     /// `src/mir/emit/valuetype.rs::ValueFrame`) must alias the caller's storage in place rather than
-    /// take a private copy — the same treatment the `this` receiver already gets. Meaningless (and
-    /// always `false`) for a local whose type is not a value struct.
+    /// take a private copy — the same treatment the `this` receiver already gets. Also set by the
+    /// inliner when remapping a callee `this`/`ref` into the caller so [`ValueFrame`] keeps it as a
+    /// borrow. Meaningless (and always `false`) for a local whose type is not a value struct.
     pub is_ref: bool,
+    /// Owning value local whose destructor runs via explicit [`Statement::ValueDrop`] (inliner
+    /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
+    /// shadow-stack slot; excluded from [`ValueFrame`] teardown so it is not double-dropped.
+    pub manual_drop: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -235,6 +240,11 @@ pub enum Statement {
     /// Releases one level of the reentrant lock word acquired by a matching
     /// [`Statement::LockAcquire`].
     LockRelease(Operand),
+    /// Runs value-struct / value-union drop glue for an owning local (`$__vs_drop_<T>`), then zeros
+    /// its shadow-stack slot. Used by the inliner so spliced callee locals are torn down at the
+    /// inlined continuation rather than the caller's function exit (see [`LocalDecl::manual_drop`]).
+    /// Side-effecting: passes must not delete it.
+    ValueDrop(Local),
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.

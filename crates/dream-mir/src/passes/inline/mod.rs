@@ -5,14 +5,16 @@
 //! are bound to the argument operands, and every callee `Return` becomes a jump to a continuation
 //! block (assigning the returned value into the call's destination first).
 //!
-//! Inlining runs as a [`ModulePass`] *before* per-function `RcInsertion`, so the merged body gets
-//! reference-counting and the local optimization pipeline uniformly — no cross-function RC reasoning
-//! is needed. Only direct `Call`s to synchronous, non-recursive functions are inlined; constructors
-//! (`New`), indirect/interface calls, and address-taken-only edges are left alone.
+//! Inlining runs as a [`ModulePass`] *after* module-wide `RcInsertion` (see `optimize_module_opts`):
+//! each callee already carries its scope-exit `Release`s, so splicing copies those lifetimes to the
+//! inlined continuation. Value-struct teardown is emitter-side for standalone functions; the inliner
+//! inserts [`Statement::ValueDrop`] at each remapped return→continuation edge so owning value locals
+//! still die at the call site (not the caller's frame exit). Call-result dests are forced Owning
+//! (`__vret`) so the return `Assign` deep-copies rather than Borrow-rebinding a synthetic temp.
 
 use super::ModulePass;
 use crate::{
-    BasicBlock, BlockId, Const, Local, Operand, Place, Rvalue, Statement, Terminator,
+    BasicBlock, BlockId, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::{DefId, TypeId, TypeInterner};
 use std::collections::{HashMap, HashSet};
@@ -27,9 +29,9 @@ use remap::{arg_type, remap_block, wasm_kind, WasmKind};
 type FnKey = (DefId, Vec<TypeId>);
 
 /// A callee small enough to always inline: at most this many statements across all its blocks.
-const MAX_INLINE_STMTS: usize = 24;
+const MAX_INLINE_STMTS: usize = 48;
 /// ...and at most this many blocks.
-const MAX_INLINE_BLOCKS: usize = 6;
+const MAX_INLINE_BLOCKS: usize = 10;
 /// Stop inlining into a caller once it has grown past this many blocks, to bound code blow-up.
 const CALLER_BLOCK_CAP: usize = 4096;
 /// Safety cap on inlines performed into a single function per `run` (defends against any unforeseen
@@ -176,13 +178,8 @@ fn eligible(
     if g.params.len() != args.len() || g.blocks.is_empty() {
         return false;
     }
-    // Value-struct locals are torn down by the *emitter* at the function's frame teardown (shadow
-    // stack), not via MIR `Release` statements. Inlining such a callee would relocate that teardown to
-    // the caller's scope exit, changing when destructors run (deterministic destruction is
-    // observable). Skip callees that own any value-type local or parameter.
-    if g.locals.iter().any(|d| interner.is_value_type(d.ty)) {
-        return false;
-    }
+    // Value-struct locals are OK: remapped borrows (`this`/`ref`/alias temps) stay aliases;
+    // owning/param value locals get `manual_drop` + `ValueDrop` at each inlined return.
     // A call widens each argument to the callee's parameter WASM type at the boundary (e.g. `int` ->
     // `double`). Inlining replaces that with a binding, which must carry the same widening. We can only
     // emit the widening `Cast` when the argument's type is known. If a parameter's WASM type is wider
@@ -205,6 +202,31 @@ fn eligible(
     small || single_use
 }
 
+/// Remaps a callee [`LocalDecl`] into the caller using the callee's [`ValueFrame`] classification:
+/// borrows stay aliases (`is_ref`); Param/Owning get `manual_drop` so call-site [`Statement::ValueDrop`]
+/// owns teardown (caller frame exit must not drop them again).
+fn remap_local_decl(
+    decl: &LocalDecl,
+    kind: Option<crate::emit::ValueLocalKind>,
+) -> LocalDecl {
+    let mut d = decl.clone();
+    match kind {
+        Some(crate::emit::ValueLocalKind::Borrow) => {
+            d.is_ref = true;
+            d.manual_drop = false;
+        }
+        Some(crate::emit::ValueLocalKind::Param | crate::emit::ValueLocalKind::Owning) => {
+            d.manual_drop = true;
+            d.is_ref = false;
+            if d.name.is_none() {
+                d.name = Some("__vinl".into());
+            }
+        }
+        None => {}
+    }
+    d
+}
+
 /// Performs the inline described by `site` into function `fi`.
 fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeInterner) {
     // Clone the callee's shape before mutating the caller (they share `mir.functions`).
@@ -218,10 +240,29 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
         )
     };
 
+    // Classify value locals on the *callee* before remapping — borrow aliases must not be
+    // reclassified as owning in the caller. Locals already marked `manual_drop` (from a prior
+    // inline into this callee) keep their existing `ValueDrop` in the remapped body; do not drop
+    // them again at this site's continuation.
+    let callee_frame = crate::emit::ValueFrame::compute(&mir.functions[site.callee], interner);
+    let local_base = mir.functions[fi].locals.len() as u32;
+    let drop_locals: Vec<Local> = g_locals
+        .iter()
+        .enumerate()
+        .filter(|(i, d)| {
+            !d.manual_drop
+                && matches!(
+                    callee_frame.kind(Local(*i as u32)),
+                    Some(crate::emit::ValueLocalKind::Param | crate::emit::ValueLocalKind::Owning)
+                )
+        })
+        .map(|(i, _)| Local(local_base + i as u32))
+        .collect();
+
     let f = &mut mir.functions[fi];
-    let local_base = f.locals.len() as u32;
-    for decl in &g_locals {
-        f.locals.push(decl.clone());
+    for (i, decl) in g_locals.iter().enumerate() {
+        f.locals
+            .push(remap_local_decl(decl, callee_frame.kind(Local(i as u32))));
     }
     let block_base = f.blocks.len() as u32;
     let cont_id = BlockId(block_base + g_blocks.len() as u32);
@@ -267,11 +308,23 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     f.blocks[site.block].terminator = Terminator::Goto(BlockId(block_base + g_entry.0));
 
     // Append the renumbered callee blocks, turning `Return`s into jumps to `cont`.
+    // Force call-result dests Owning so the return Assign deep-copies before ValueDrop frees sources.
     for mut bb in g_blocks {
         remap_block(&mut bb, local_base, block_base);
         match std::mem::replace(&mut bb.terminator, Terminator::Goto(cont_id)) {
             Terminator::Return(op) | Terminator::AsyncComplete(op) => {
                 if let (Some(dest), Some(o)) = (&site.dest, op) {
+                    if let Place::Local(d) = &dest {
+                        let d_ty = f.local_ty(*d);
+                        if interner.is_value_type(d_ty) {
+                            let decl = &mut f.locals[d.0 as usize];
+                            if decl.name.is_none() {
+                                decl.name = Some("__vret".into());
+                            }
+                            decl.is_ref = false;
+                            decl.manual_drop = false;
+                        }
+                    }
                     bb.stmts
                         .push(Statement::Assign(dest.clone(), Rvalue::Use(o)));
                 }
@@ -280,9 +333,14 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
         }
         f.blocks.push(bb);
     }
-    // The continuation carries the caller's original post-call statements + terminator.
+    // Continuation: drop inlined owning value locals (call-site lifetime), then the caller's tail.
+    let mut cont_stmts: Vec<Statement> = drop_locals
+        .into_iter()
+        .map(Statement::ValueDrop)
+        .collect();
+    cont_stmts.extend(tail);
     f.blocks.push(BasicBlock {
-        stmts: tail,
+        stmts: cont_stmts,
         terminator: orig_term,
     });
 }
@@ -351,6 +409,145 @@ mod tests {
             )
         });
         assert!(!has_call, "call to callee should have been inlined away");
+    }
+
+    /// Value-struct callee with an owning local: inlining inserts `ValueDrop` and marks the
+    /// remapped local `manual_drop` (so frame teardown will not double-drop).
+    #[test]
+    fn inlines_value_callee_with_owning_local() {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let vs_def = ctx.register(DefKind::Struct, "Point", vec![]);
+        ctx.defs.mark_value(vs_def);
+        ctx.interner.mark_value_def(vs_def);
+        let point = ctx.interner.struct_ty(vs_def, vec![]);
+        ctx.interner.set_value_layout(point, 8, 4);
+
+        let callee_def = ctx.register(DefKind::Function, "make", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+
+        let callee = {
+            let mut b = FunctionBuilder::new("make", int);
+            b.set_def(callee_def, vec![]);
+            let p = b.new_local(point, Some("p".into()));
+            b.assign(
+                Place::Local(p),
+                Rvalue::Use(Operand::Copy(Place::Local(p))),
+            );
+            b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(1)))));
+            b.finish()
+        };
+        let caller = {
+            let mut b = FunctionBuilder::new("caller", int);
+            b.set_def(caller_def, vec![]);
+            let r = b.new_temp(int);
+            b.assign(
+                Place::Local(r),
+                Rvalue::Call {
+                    callee: crate::Callee {
+                        def: callee_def,
+                        args: vec![],
+                        ret: int,
+                    },
+                    args: vec![],
+                },
+            );
+            b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(r)))));
+            b.finish()
+        };
+
+        let mut mir = crate::Mir {
+            functions: vec![callee, caller],
+            ..Default::default()
+        };
+        assert!(Inliner.run(&mut mir, &ctx.interner));
+        let caller: &MirFunction = mir.functions.iter().find(|f| f.name == "caller").unwrap();
+        let has_call = caller.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
+            matches!(
+                s,
+                Statement::Call { .. } | Statement::Assign(_, Rvalue::Call { .. })
+            )
+        });
+        assert!(!has_call, "call to value callee should have been inlined away");
+        assert!(
+            caller
+                .locals
+                .iter()
+                .any(|d| d.name.as_deref() == Some("p") && d.manual_drop && d.ty == point),
+            "owning value local should be remapped with manual_drop"
+        );
+        assert!(
+            caller
+                .blocks
+                .iter()
+                .flat_map(|b| &b.stmts)
+                .any(|s| matches!(s, Statement::ValueDrop(_))),
+            "inlined owning value local must get ValueDrop at the continuation"
+        );
+    }
+
+    /// Method-style callee whose only value local is `this` (borrow): inlines with `this` as `is_ref`.
+    #[test]
+    fn inlines_this_borrow_without_value_drop() {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let vs_def = ctx.register(DefKind::Struct, "Span", vec![]);
+        ctx.defs.mark_value(vs_def);
+        ctx.interner.mark_value_def(vs_def);
+        let span = ctx.interner.struct_ty(vs_def, vec![]);
+        ctx.interner.set_value_layout(span, 12, 4);
+
+        let callee_def = ctx.register(DefKind::Function, "len", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+
+        let callee = {
+            let mut b = FunctionBuilder::new("len", int);
+            b.set_def(callee_def, vec![]);
+            let this = b.new_param(span, Some("this".into()));
+            let _ = this;
+            b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+            b.finish()
+        };
+        let caller = {
+            let mut b = FunctionBuilder::new("caller", int);
+            b.set_def(caller_def, vec![]);
+            let s = b.new_local(span, Some("s".into()));
+            let r = b.new_temp(int);
+            b.assign(
+                Place::Local(r),
+                Rvalue::Call {
+                    callee: crate::Callee {
+                        def: callee_def,
+                        args: vec![],
+                        ret: int,
+                    },
+                    args: vec![Operand::Copy(Place::Local(s))],
+                },
+            );
+            b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(r)))));
+            b.finish()
+        };
+
+        let mut mir = crate::Mir {
+            functions: vec![callee, caller],
+            ..Default::default()
+        };
+        assert!(Inliner.run(&mut mir, &ctx.interner));
+        let caller: &MirFunction = mir.functions.iter().find(|f| f.name == "caller").unwrap();
+        let has_call = caller.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
+            matches!(
+                s,
+                Statement::Call { .. } | Statement::Assign(_, Rvalue::Call { .. })
+            )
+        });
+        assert!(!has_call, "call should have been inlined");
+        assert!(
+            caller
+                .locals
+                .iter()
+                .any(|d| d.is_ref && d.name.as_deref() == Some("this")),
+            "remapped this must stay is_ref"
+        );
     }
 
     /// A directly self-recursive function must not be inlined into itself.

@@ -144,6 +144,9 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
         }
         Statement::Print { arg, .. } => read_operand(arg, read),
         Statement::ForceFree(o) => read_operand(o, read),
+        Statement::ValueDrop(l) => {
+            read.insert(*l);
+        }
         Statement::ArrayElemsCopy {
             dst,
             dst_off,

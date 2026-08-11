@@ -235,6 +235,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_operand(count, base);
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => remap_operand(o, base),
+        Statement::ValueDrop(l) => remap_local(l, base),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }

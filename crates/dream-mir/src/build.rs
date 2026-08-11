@@ -59,6 +59,7 @@ impl FunctionBuilder {
             ty,
             name,
             is_ref: false,
+            manual_drop: false,
         });
         id
     }

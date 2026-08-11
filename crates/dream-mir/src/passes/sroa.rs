@@ -149,6 +149,7 @@ fn transform(
             ty,
             name: None,
             is_ref: false,
+            manual_drop: false,
         });
         promo.insert(field, l);
     }

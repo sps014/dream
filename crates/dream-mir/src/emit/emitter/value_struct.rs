@@ -333,7 +333,7 @@ impl Emitter<'_> {
     /// Emits the scope-exit teardown of a function's shadow frame: drop each owning value local, then
     /// restore `$__sp`. A no-op for functions with no value frame.
     pub(super) fn emit_frame_teardown(&mut self) {
-        for (local, _) in self.frame.owning_slots() {
+        for (local, _) in self.frame.teardown_slots(self.func) {
             let ty = self.func.local_ty(local);
             let l0 = local.0;
             self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);

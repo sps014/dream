@@ -71,6 +71,7 @@ impl MirPass for Dse {
                     // memory-observing statement.
                     | Statement::LockAcquire(_)
                     | Statement::LockRelease(_)
+                    | Statement::ValueDrop(_)
                     | Statement::Panic(_) => pending.clear(),
                     // A debug line-hook is an observable host call: it must see every prior store, so
                     // it forgets all pending (still-eliminable) stores.

@@ -367,6 +367,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
         }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
         Statement::ForceFree(o) => collect_global_reads_operand(o, out),
+        Statement::ValueDrop(_) => {}
         Statement::ArrayElemsCopy {
             dst,
             dst_off,

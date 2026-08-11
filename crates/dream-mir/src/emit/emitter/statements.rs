@@ -202,6 +202,29 @@ impl Emitter<'_> {
                 self.emit_lock_addr(o);
                 self.line("     (call $__lock_release)");
             }
+            Statement::ValueDrop(local) => {
+                let ty = self.func.local_ty(*local);
+                debug_assert!(
+                    self.interner.is_value_type(ty),
+                    "ValueDrop on non-value local"
+                );
+                let l0 = local.0;
+                self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
+                // Null RC fields so loop re-entry into an inlined region (value_store's pre-drop)
+                // only releases null. Nested inlines must not emit a second `ValueDrop` for the
+                // same local (the inliner skips already-`manual_drop` locals when collecting).
+                if let Some(layout) = self.layouts.get(ty) {
+                    for f in &layout.fields {
+                        if self.interner.is_rc_tracked(f.ty) {
+                            self.line(&format!("     (local.get ${})", l0));
+                            if f.offset > 0 {
+                                self.line(&format!("     (i32.const {}) (i32.add)", f.offset));
+                            }
+                            self.line("     (i32.const 0) (i32.store)");
+                        }
+                    }
+                }
+            }
         }
     }
 

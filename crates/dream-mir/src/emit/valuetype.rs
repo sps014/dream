@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Ownership classification of a value(`struct`)-typed local, driving shadow-frame codegen.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum ValueLocalKind {
+pub(crate) enum ValueLocalKind {
     /// A value parameter. It arrives as an `i32` pointer to the *caller's* value; to preserve copy
     /// semantics the callee owns a private copy, so it gets a frame slot initialized by copying the
     /// incoming bytes (retaining reference fields) on entry, and is dropped at scope exit.
@@ -30,7 +30,7 @@ pub(super) enum ValueLocalKind {
 }
 
 /// Per-function shadow-frame layout for inline value(`struct`) locals.
-pub(super) struct ValueFrame {
+pub(crate) struct ValueFrame {
     /// Byte offset within the frame of each owning value local's storage.
     slots: HashMap<Local, u32>,
     /// Ownership classification of every value-struct local (others are absent).
@@ -63,18 +63,19 @@ impl ValueFrame {
                 continue;
             }
             let local = Local(i as u32);
-            let kind = if i < param_count {
-                // The receiver `this` is borrowed in place (methods/constructors mutate the caller's
-                // instance), so it takes no private copy; other value params are copied for value
-                // semantics. A `ref` parameter (backed by a value-struct box, see
-                // `Analyzer::ref_box_type`) is likewise borrowed in place: the incoming pointer *is*
-                // the caller's box, aliased rather than copied, so writes through it are visible back
-                // to the caller.
-                if decl.name.as_deref() == Some("this") || decl.is_ref {
-                    ValueLocalKind::Borrow
-                } else {
-                    ValueLocalKind::Param
-                }
+            let kind = if decl.manual_drop {
+                // Inliner-owned slots: must stay Owning so drop/fill target the private frame slot,
+                // never a borrowed address the emitter might otherwise infer from defs.
+                ValueLocalKind::Owning
+            } else if decl.is_ref || decl.name.as_deref() == Some("this") {
+                // `ref` params and method `this` alias the caller's storage. The inliner also sets
+                // `is_ref` when remapping those into the caller so they stay borrows after ceasing
+                // to be formal parameters.
+                ValueLocalKind::Borrow
+            } else if i < param_count {
+                // A value param arrives as a pointer to the caller's value; the callee owns a
+                // private copy (frame slot + entry copy + scope-exit drop).
+                ValueLocalKind::Param
             } else {
                 let alias = decl.name.is_none()
                     && defs
@@ -112,11 +113,20 @@ impl ValueFrame {
     }
 
     /// Every value local that owns a frame slot (params and owning locals), with its frame offset,
-    /// ordered by offset (deterministic emission). These are the locals dropped at scope exit.
+    /// ordered by offset (deterministic emission). These are the locals dropped at scope exit,
+    /// except those with [`crate::LocalDecl::manual_drop`] (see [`Self::teardown_slots`]).
     pub fn owning_slots(&self) -> Vec<(Local, u32)> {
         let mut v: Vec<(Local, u32)> = self.slots.iter().map(|(l, o)| (*l, *o)).collect();
         v.sort_by_key(|(_, o)| *o);
         v
+    }
+
+    /// Owning slots that still need frame-exit drop glue (excludes inliner `manual_drop` locals).
+    pub fn teardown_slots(&self, func: &MirFunction) -> Vec<(Local, u32)> {
+        self.owning_slots()
+            .into_iter()
+            .filter(|(l, _)| !func.locals[l.0 as usize].manual_drop)
+            .collect()
     }
 }
 

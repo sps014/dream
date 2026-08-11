@@ -78,7 +78,11 @@ Function-local `MirPass`es:
 - **`Dce` (`dce.rs`)** — two kinds: drop blocks unreachable from `entry` (reachability over `Terminator::successors`), and remove assignments to never-read locals *when the rvalue is pure* (a `Call`/`New` may have side effects and must stay).
 - **`RcElision` / `RcInsertion` (`rc.rs`)** — `RcInsertion` conservatively inserts `Retain`/`Release`; `RcElision` cancels cancelling `Retain`/`Release` pairs along straight-line regions, including unique-predecessor **`Goto` chains**, not only within a single basic block. Correctness rule: **never make a program under-retain.** When unsure, RcInsertion keeps the retain; RcElision only removes a pair it can prove is cancelling across those safe regions.
 
-The one shipped `ModulePass` is **`Inliner` (`inline/`)**.
+The one shipped `ModulePass` is **`Inliner` (`inline/`)**:
+
+- **Eligibility:** direct calls to sync, non-recursive, non-entry callees. Small callees (≤48 statements and ≤10 blocks) always inline; a single-use, non-address-taken callee inlines regardless of size. Async bodies, recursive SCCs, `New`/indirect/interface calls, and wide-arg sites with unknown argument types are skipped.
+- **Value types:** callees with value-struct / `ref struct` locals are inlinable. Remapped `this` / `ref` / alias temps stay borrows (`LocalDecl::is_ref`). Owning and by-value param value locals get `LocalDecl::manual_drop` and a MIR `Statement::ValueDrop` at each remapped return→continuation edge (nulling RC fields afterward so loop re-entry is safe). Locals already marked `manual_drop` from a prior inline are not dropped again when their enclosing function is inlined. Call-result dests are forced Owning (`__vret`) so the return `Assign` deep-copies instead of Borrow-rebinding. `ValueFrame` treats `manual_drop` as always-Owning so the emitter never reclassifies those slots as borrows.
+- **Why this matters:** stdlib leaves like `Span.copy_from` (and callers such as `List.insert` on unmanaged `T`) collapse to open-coded `memory.copy` under `--release` once the Span call layer is erased.
 
 ## Tutorial: reconstruct the `Algebraic` pass
 

@@ -1,0 +1,11 @@
+bench arc_locals ns_total=3248959 iters=20000 ns_per_op=162
+bench string_concat ns_total=3389500 iters=20000 ns_per_op=169
+bench string_eq ns_total=1520500 iters=100000 ns_per_op=15
+bench char_scan ns_total=12928417 iters=2000 ns_per_op=6464
+bench substring ns_total=4131542 iters=20000 ns_per_op=206
+bench list_push ns_total=392958 iters=20000 ns_per_op=19
+bench list_insert_mid ns_total=3155916 iters=19968 ns_per_op=158
+bench map_get_set ns_total=2481333 iters=20000 ns_per_op=124
+bench map_clear_reuse ns_total=1652834 iters=19968 ns_per_op=82
+bench alloc_churn ns_total=668708 iters=20000 ns_per_op=33
+bench string_builder ns_total=1654000 iters=4000 ns_per_op=413

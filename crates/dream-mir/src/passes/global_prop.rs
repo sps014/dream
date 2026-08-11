@@ -23,11 +23,16 @@ impl MirPass for GlobalProp {
         "global-prop"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
         let n = func.blocks.len();
         if n == 0 {
             return false;
         }
+        let value_local: Vec<bool> = func
+            .locals
+            .iter()
+            .map(|d| interner.is_value_type(d.ty))
+            .collect();
         let preds = cfg::predecessors(func);
         let rpo = cfg::reverse_postorder(func);
 
@@ -46,7 +51,7 @@ impl MirPass for GlobalProp {
                 };
                 let mut st = in_state.clone();
                 for stmt in &func.block(b).stmts {
-                    update_known(stmt, &mut st);
+                    update_known(stmt, &mut st, &value_local);
                 }
                 if !facts_eq(&st, &exit[bi]) {
                     exit[bi] = st;
@@ -63,7 +68,7 @@ impl MirPass for GlobalProp {
             let block = func.block_mut(b);
             for stmt in &mut block.stmts {
                 rewrote |= subst_stmt_reads(stmt, &st);
-                update_known(stmt, &mut st);
+                update_known(stmt, &mut st, &value_local);
             }
             rewrote |= subst_terminator_reads(&mut block.terminator, &st);
         }

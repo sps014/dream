@@ -105,6 +105,7 @@ fn stmt(s: &Statement) -> String {
         ),
         Statement::LockAcquire(o) => format!("lock_acquire {}", operand(o)),
         Statement::LockRelease(o) => format!("lock_release {}", operand(o)),
+        Statement::ValueDrop(l) => format!("value_drop _{}", l.0),
     }
 }
 

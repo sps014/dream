@@ -19,8 +19,8 @@ extend string {
     @intrinsic("string_from_utf8_prefix")
     static extern fun from_utf8_prefix(bytes: byte[], len: int): string;
 
-    // Scalar-indexed substring via one UTF-8 byte-range copy (`$string_substring`).
-    @intrinsic("string_substring")
+    // Scalar-indexed substring via one UTF-8 byte-range copy (`$string_substring_raw`).
+    @intrinsic("string_substring_raw")
     static extern fun substring_raw(s: string, start: int, end: int): string;
 
     // Bulk-copies `count` UTF-8 bytes from `src` into `dst` at `dst_off`.

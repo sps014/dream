@@ -110,7 +110,9 @@ pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
 /// `string.from_utf8_prefix(bytes, len)` — build a string from the first `len` bytes of a `byte[]`.
 pub const ATTR_STRING_FROM_UTF8_PREFIX: &str = "string_from_utf8_prefix";
 /// `string.substring_raw(s, start, end)` — UTF-8 byte-slice substring (scalar indices).
-pub const ATTR_STRING_SUBSTRING: &str = "string_substring";
+/// Key is `string_substring_raw` (not `string_substring`) so it does not collide with the
+/// mangled instance method `string.substring` → `$string_substring`.
+pub const ATTR_STRING_SUBSTRING: &str = "string_substring_raw";
 /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk copy UTF-8 bytes into a `byte[]`.
 pub const ATTR_STRING_COPY_UTF8: &str = "string_copy_utf8";
 /// `Debug.free_list_head()` — allocator introspection for tests.

@@ -651,7 +651,7 @@
 
 ;; Scalar-indexed substring: clamp `[start, end)`, map to UTF-8 byte offsets, then one
 ;; `malloc` + `memory.copy`. Null `ptr` yields an empty string with zeroed headers.
-(func $string_substring (param $ptr i32) (param $start i32) (param $end i32) (result i32)
+(func $string_substring_raw (param $ptr i32) (param $start i32) (param $end i32) (result i32)
     (local $sc i32)
     (local $s i32)
     (local $e i32)

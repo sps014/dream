@@ -5,7 +5,8 @@
 ;; Older gens and LOH mark-sweep then sliding-compact (HEAP_PTR shrinks; freelists cleared).
 ;; Write barriers record older→younger slots in the remembered set. Concurrent GC is later.
 
-;; Trace mode: 0 = Gen0 update (forward nursery slots), 1 = mark children.
+;; Trace mode: 0 = Gen0 update (forward nursery slots), 1 = mark children, 2 = old compact
+;; (rewrite forwarded old pointers only; never evacuate).
 (global $gc_trace_mode (mut i32) (i32.const 0))
 ;; Immutable-after-init copies of the shared-memory GC bounds/table bases. Linear memory stays
 ;; the source of truth for workers; `$__gc_cache_bounds` hydrates these per instance so hot
@@ -316,26 +317,56 @@
         call $__gc_in_nursery
         i32.eqz
         if (result i32)
-            ;; Old-space compact stows the final data pointer in the size word.
+            ;; Compact forwarding lives only on old-space FROM objects. Integers / interned
+            ;; strings / other non-heap i32s must not be treated as headers (ptr-12 OOB).
             local.get $ptr
             i32.const 12
-            i32.sub
-            local.set $block
-            local.get $block
-            i32.const 8
-            i32.add
-            i32.load
-            local.set $meta
-            local.get $meta
-            i32.const {GC_META_FORWARDED}
-            i32.and
+            i32.lt_u
             if (result i32)
-                local.get $block
-                i32.load
+                local.get $ptr
             else
                 local.get $ptr
+                i32.const 12
+                i32.sub
+                local.set $block
+                local.get $block
+                global.get $__gc_old_start
+                i32.lt_u
+                if (result i32)
+                    local.get $ptr
+                else
+                    local.get $block
+                    i32.const {HEAP_PTR_ADDR}
+                    i32.load
+                    i32.ge_u
+                    if (result i32)
+                        local.get $ptr
+                    else
+                        local.get $block
+                        i32.const 8
+                        i32.add
+                        i32.load
+                        local.set $meta
+                        local.get $meta
+                        i32.const {GC_META_FORWARDED}
+                        i32.and
+                        if (result i32)
+                            local.get $block
+                            i32.load
+                        else
+                            local.get $ptr
+                        end
+                    end
+                end
             end
         else
+            ;; Compact (mode 2) must not evacuate: that would bump HEAP_PTR into to-space.
+            global.get $gc_trace_mode
+            i32.const 2
+            i32.eq
+            if (result i32)
+                local.get $ptr
+            else
             local.get $ptr
             i32.const 12
             i32.sub
@@ -418,6 +449,7 @@
                     local.get $new_ptr
                 end
             end
+            end
         end
     end
 )
@@ -492,15 +524,32 @@
     i32.load
     local.set $v
     local.get $v
-    call $gc_forward
-    local.set $n
-    local.get $n
-    local.get $v
-    i32.ne
+    i32.eqz
+    br_if 0
+    global.get $gc_trace_mode
+    i32.const 2
+    i32.eq
     if
-        local.get $slot
+        local.get $v
+        call $gc_forward
+        local.set $n
         local.get $n
-        i32.store
+        local.get $v
+        i32.ne
+        if
+            local.get $slot
+            local.get $n
+            i32.store
+        end
+    else
+        local.get $v
+        call $__gc_in_nursery
+        if
+            local.get $slot
+            local.get $v
+            call $gc_forward
+            i32.store
+        end
     end
 )
 
@@ -867,18 +916,24 @@
     i32.eqz
     br_if 0
     local.get $ptr
+    i32.const 12
+    i32.lt_u
+    br_if 0
+    local.get $ptr
     call $__gc_in_nursery
     if
-        ;; should have been forwarded already in a full collect that did Gen0 first
-        local.get $ptr
-        call $gc_forward
-        drop
+        ;; Gen0 already ran in a full collect. A nursery address here is a stale slot
+        ;; (abandoned bump region), not a live object — do not evacuate it into old space.
         return
     end
     local.get $ptr
     i32.const 12
     i32.sub
     local.set $block
+    local.get $block
+    global.get $__gc_old_start
+    i32.lt_u
+    br_if 0
     local.get $block
     i32.const 8
     i32.add
@@ -1155,212 +1210,11 @@
     )
 )
 
-(func $gc_align4 (param $n i32) (result i32)
-    local.get $n
-    i32.const 3
-    i32.add
-    i32.const -4
-    i32.and
-)
-
-(func $gc_ensure_mem (param $need i32)
-    local.get $need
-    memory.size
-    i32.const 16
-    i32.shl
-    i32.gt_u
-    if
-        local.get $need
-        i32.const 65535
-        i32.add
-        i32.const 16
-        i32.shr_u
-        memory.size
-        i32.sub
-        memory.grow
-        i32.const -1
-        i32.eq
-        (if (then unreachable))
-    end
-)
-
-(func $gc_clear_freelists
-    (local $i i32)
-    i32.const 0
-    local.set $i
-    (loop $c
-        local.get $i
-        i32.const 14
-        i32.ge_s
-        br_if 1
-        local.get $i
-        call $freelist_head_addr
-        i32.const 0
-        i32.store
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $c
-    )
-)
-
-;; Sliding compact of old/LOH into `[OLD_START, dest)`. Live objects are copied to a to-space
-;; at `HEAP_PTR`, pointers rewritten to their *final* addresses, then the to-space is slid down.
-;; Returns 1 if any live object moved (mutator must reload); 0 if already packed.
 (func $gc_compact_old (result i32)
-    (local $p i32)
-    (local $end i32)
-    (local $size i32)
-    (local $meta i32)
-    (local $dest i32)
-    (local $tospace i32)
-    (local $to i32)
-    (local $aligned i32)
-    (local $moved i32)
-    (local $old_start i32)
-    i32.const {OLD_START_ADDR}
-    i32.load
-    local.set $old_start
-    local.get $old_start
-    local.set $p
-    local.get $old_start
-    local.set $dest
-    i32.const {HEAP_PTR_ADDR}
-    i32.load
-    local.set $end
-    local.get $end
-    local.set $tospace
-    local.get $end
-    local.get $end
-    local.get $old_start
-    i32.sub
-    i32.add
-    call $gc_ensure_mem
-    local.get $tospace
-    local.set $to
+    ;; Sliding compact is not enabled: rewriting old-space pointers corrupted
+    ;; Regex/NFA graphs (index OOB in RegexVM_add_to_threadq). Mark-sweep + freelist
+    ;; remains; HEAP_PTR does not shrink. Concurrent GC is still later.
     i32.const 0
-    local.set $moved
-    (block $walk_done
-    (loop $walk
-        local.get $p
-        local.get $end
-        i32.ge_u
-        br_if $walk_done
-        local.get $p
-        i32.load
-        local.set $size
-        local.get $size
-        i32.eqz
-        if
-            local.get $p
-            i32.const 16
-            i32.add
-            local.set $p
-            br $walk
-        end
-        local.get $size
-        call $gc_align4
-        local.set $aligned
-        local.get $p
-        i32.const 8
-        i32.add
-        i32.load
-        local.set $meta
-        local.get $meta
-        i32.const {GC_META_FREE}
-        i32.and
-        if
-            local.get $p
-            local.get $aligned
-            i32.add
-            local.set $p
-            br $walk
-        end
-        local.get $to
-        local.get $p
-        local.get $size
-        memory.copy
-        local.get $p
-        local.get $dest
-        i32.const 12
-        i32.add
-        i32.store
-        local.get $p
-        i32.const 8
-        i32.add
-        local.get $meta
-        i32.const {GC_META_FORWARDED}
-        i32.or
-        i32.store
-        local.get $p
-        local.get $dest
-        i32.ne
-        if
-            i32.const 1
-            local.set $moved
-        end
-        local.get $to
-        local.get $aligned
-        i32.add
-        local.set $to
-        local.get $dest
-        local.get $aligned
-        i32.add
-        local.set $dest
-        local.get $p
-        local.get $aligned
-        i32.add
-        local.set $p
-        br $walk
-    )
-    )
-    i32.const 0
-    global.set $gc_trace_mode
-    local.get $tospace
-    local.set $p
-    (block $fix_done
-    (loop $fix
-        local.get $p
-        local.get $to
-        i32.ge_u
-        br_if $fix_done
-        local.get $p
-        i32.load
-        local.set $size
-        local.get $size
-        i32.eqz
-        if
-            local.get $p
-            i32.const 16
-            i32.add
-            local.set $p
-            br $fix
-        end
-        local.get $p
-        i32.const 12
-        i32.add
-        call $gc_trace_evacuated
-        local.get $p
-        local.get $size
-        call $gc_align4
-        i32.add
-        local.set $p
-        br $fix
-    )
-    )
-    call $gc_scan_roots
-    local.get $old_start
-    local.get $tospace
-    local.get $dest
-    local.get $old_start
-    i32.sub
-    memory.copy
-    i32.const {HEAP_PTR_ADDR}
-    local.get $dest
-    i32.store
-    call $gc_clear_freelists
-    local.get $moved
 )
 
 (func $gc_enqueue_finalizer (param $ptr i32)

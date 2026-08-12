@@ -206,6 +206,7 @@ impl Emitter<'_> {
                     self.line("     (local.set $__obj)");
                     self.emit_mark_obj_young();
                     if self.type_has_del(*ty) {
+                        self.line("     (i32.const 1) (global.set $__gc_finalize_live)");
                         self.line("     (local.get $__obj) (i32.const 4) (i32.sub)");
                         self.line("     (local.get $__obj) (i32.const 4) (i32.sub) (i32.load)");
                         self.line(&format!(

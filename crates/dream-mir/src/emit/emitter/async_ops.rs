@@ -134,12 +134,7 @@ impl Emitter<'_> {
         }
 
         self.emit_gc_root_prologue();
-        self.line(&format!(
-            " (i32.const {}) (i32.load) (local.set $__gc_epoch)",
-            crate::abi::GC_EPOCH_ADDR
-        ));
-
-        // Blocks that are an await's `resume` target, mapped to the local its result binds to (if any).
+        self.line(" (global.get $__gc_epoch) (local.set $__gc_epoch)");
         let mut resume_binds: HashMap<u32, Option<crate::Local>> = HashMap::new();
         for block in &self.func.blocks {
             if let Terminator::Await { dest, resume, .. } = &block.terminator {

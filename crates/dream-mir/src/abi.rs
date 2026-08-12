@@ -68,7 +68,9 @@ pub const GC_META_FREE: u32 = 1 << 7;
 pub const LOH_THRESHOLD: u32 = 85 * 1024;
 
 /// Gen0 nursery size in bytes (fixed region at heap base; copying collector).
-pub const NURSERY_SIZE: u32 = 1024 * 1024;
+/// 2 MiB keeps typical microbench churn (substring / concat) inside one nursery
+/// so Gen0 does not run mid-loop; still small enough for web/gamedev pauses.
+pub const NURSERY_SIZE: u32 = 2 * 1024 * 1024;
 
 /// Maximum number of GC root slots in the shadow root table (scanned at safepoints).
 pub const GC_ROOT_TABLE_CAP: u32 = 4096;

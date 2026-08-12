@@ -66,6 +66,9 @@ Triggers:
 - Gen0 full or `GC_REQUEST_ADDR` (remset overflow) → `$malloc` runs `$__gc_collect_locked`.
 - Kind 0 = Gen0 only. Kind 1 = Gen0 then old/LOH mark-sweep when `GC_OLD_BYTES` meets
   `GC_GEN1_THRESHOLD` (2 MiB) **or** the remset overflowed.
+- Gen0 does **not** walk old space unless the remset overflowed (`$gc_forward` already
+  traces evacuated objects). The dead-nursery walk (finalizers / `weak` / `js` handles)
+  is skipped when none of those are live in the nursery.
 - `Debug.gc_collect` / `$gc_collect_full` is kind 2 (same old-space sweep as kind 1 today).
 
 Prefer short Gen0 pauses (gamedev + web). Incremental / concurrent GC is **post-merge**.
@@ -106,7 +109,7 @@ Every heap store of a reference (field / index / box):
 
 ## Nursery sizing
 
-Default [`NURSERY_SIZE`](../../crates/dream-mir/src/abi.rs) is **1 MiB**. Remset overflow
+Default [`NURSERY_SIZE`](../../crates/dream-mir/src/abi.rs) is **2 MiB**. Remset overflow
 must not drop edges (see above); blittable arrays use `TAG_FLAT_ARRAY` so Gen0 does not
 treat `int[]` payloads as pointers; heap field stores compute the place address **after**
 `$malloc` so evacuated bases are reloaded first.

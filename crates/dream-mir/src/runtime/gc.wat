@@ -17,6 +17,11 @@
 (global $__gc_remset_table (mut i32) (i32.const 0))
 (global $__gc_card_table (mut i32) (i32.const 0))
 (global $__gc_remset_last (mut i32) (i32.const 0))
+(global $__gc_nursery_bump (mut i32) (i32.const 0))
+;; Non-zero if this nursery allocated an object with a `del` finalizer.
+(global $__gc_finalize_live (mut i32) (i32.const 0))
+(global $__gc_epoch (mut i32) (i32.const 0))
+(global $__gc_request (mut i32) (i32.const 0))
 
 (func $__gc_cache_bounds
     i32.const {NURSERY_START_ADDR}
@@ -37,6 +42,9 @@
     i32.const {GC_CARD_TABLE_PTR_ADDR}
     i32.load
     global.set $__gc_card_table
+    i32.const {NURSERY_BUMP_ADDR}
+    i32.load
+    global.set $__gc_nursery_bump
 )
 
 (func $__gc_meta_gen (param $meta i32) (result i32)
@@ -269,6 +277,8 @@
         i32.const {GC_REQUEST_ADDR}
         i32.const 1
         i32.store
+        i32.const 1
+        global.set $__gc_request
         local.get $slot
         global.set $__gc_remset_last
         return
@@ -572,9 +582,17 @@
     (local $meta i32)
     (local $overflow i32)
     (local $full i32)
+    ;; `$gc_forward` already DFS-traces each evacuated object. Walking all of old
+    ;; space looking for MARK bits is only required when the remset overflowed and
+    ;; dirty cards (or a full old walk) must recover missed old→young edges.
     i32.const {GC_REMSET_OVERFLOW_ADDR}
     i32.load
     local.set $overflow
+    local.get $overflow
+    i32.eqz
+    if
+        return
+    end
     i32.const 0
     local.set $full
     local.get $overflow
@@ -670,11 +688,21 @@
     i32.const {GC_FINALIZER_HEAD_ADDR}
     i32.const 0
     i32.store
+    ;; Dead-nursery walk is O(allocated Gen0). Skip it when this module has no `js`
+    ;; fields / `del` finalizers and no live `weak` watchers — bump-reset is enough.
+    global.get $weak_list_head
+    global.get $__gc_finalize_live
+    i32.or
+    i32.const {GC_DEAD_NURSERY_NEEDED}
+    i32.or
+    i32.eqz
+    if
+        return
+    end
     i32.const {NURSERY_START_ADDR}
     i32.load
     local.set $p
-    i32.const {NURSERY_BUMP_ADDR}
-    i32.load
+    global.get $__gc_nursery_bump
     local.set $end
     (loop $scan
         local.get $p
@@ -754,15 +782,25 @@
 )
 
 (func $gc_collect_gen0
+    (local $overflow i32)
     i32.const {GC_REQUEST_ADDR}
     i32.const 1
     i32.store
+    i32.const 1
+    global.set $__gc_request
     i32.const 0
     global.set $gc_trace_mode
+    i32.const {GC_REMSET_OVERFLOW_ADDR}
+    i32.load
+    local.set $overflow
     call $gc_scan_roots
     call $gc_scan_remset
     call $gc_scan_old_for_young
     call $gc_finalize_dead_nursery
+    i32.const 0
+    global.set $__gc_finalize_live
+    global.get $__gc_nursery_start
+    global.set $__gc_nursery_bump
     i32.const {NURSERY_BUMP_ADDR}
     global.get $__gc_nursery_start
     i32.store
@@ -774,19 +812,28 @@
     i32.store
     i32.const 0
     global.set $__gc_remset_last
-    global.get $__gc_card_table
+    local.get $overflow
+    if
+        global.get $__gc_card_table
+        i32.const 0
+        i32.const {GC_CARD_TABLE_BYTES}
+        memory.fill
+    end
     i32.const 0
-    i32.const {GC_CARD_TABLE_BYTES}
-    memory.fill
+    global.set $__gc_request
     i32.const {GC_REQUEST_ADDR}
     i32.const 0
     i32.store
     i32.const {GC_EPOCH_ADDR}
-    i32.const {GC_EPOCH_ADDR}
     i32.load
     i32.const 1
     i32.add
+    local.set $overflow
+    i32.const {GC_EPOCH_ADDR}
+    local.get $overflow
     i32.store
+    local.get $overflow
+    global.set $__gc_epoch
 )
 
 ;; Mark bit helpers for older gens.
@@ -1178,6 +1225,7 @@
 )
 
 (func $gc_collect_old
+    (local $epoch i32)
     i32.const 1
     global.set $gc_trace_mode
     call $gc_clear_marks_old
@@ -1191,11 +1239,15 @@
     i32.const 0
     i32.store
     i32.const {GC_EPOCH_ADDR}
-    i32.const {GC_EPOCH_ADDR}
     i32.load
     i32.const 1
     i32.add
+    local.set $epoch
+    i32.const {GC_EPOCH_ADDR}
+    local.get $epoch
     i32.store
+    local.get $epoch
+    global.set $__gc_epoch
 )
 
 ;; kind: 0 = Gen0 only, 1 = Gen0+Gen1, 2 = full (Gen0+old+LOH). Caller must hold alloc lock.
@@ -1383,8 +1435,7 @@
     i32.const {LOH_THRESHOLD}
     i32.ge_u
     if
-        i32.const {GC_REQUEST_ADDR}
-        i32.load
+        global.get $__gc_request
         i32.const {GC_OLD_BYTES_ADDR}
         i32.load
         i32.const {GC_GEN1_THRESHOLD}
@@ -1412,15 +1463,13 @@
     i32.const 12
     i32.add
     local.set $size
-    i32.const {NURSERY_BUMP_ADDR}
-    i32.load
+    global.get $__gc_nursery_bump
     local.set $bump
     global.get $__gc_nursery_end
     local.set $end
     i32.const 0
     local.set $need
-    i32.const {GC_REQUEST_ADDR}
-    i32.load
+    global.get $__gc_request
     if
         i32.const 1
         local.set $need
@@ -1438,8 +1487,7 @@
     if
         call $__gc_collect_kind
         call $__gc_collect_locked
-        i32.const {NURSERY_BUMP_ADDR}
-        i32.load
+        global.get $__gc_nursery_bump
         local.set $bump
         local.get $bump
         local.get $size
@@ -1459,11 +1507,13 @@
     end
     local.get $bump
     local.set $block
-    i32.const {NURSERY_BUMP_ADDR}
     local.get $block
     local.get $size
     i32.add
-    i32.store
+    local.set $bump
+    local.get $bump
+    global.set $__gc_nursery_bump
+    ;;@NURSERY_BUMP_COMMIT@
     ;; Header: [size][tag][gc_meta] with Gen0 gen bits.
     local.get $block
     local.get $size
@@ -1503,6 +1553,8 @@
     i32.const {NURSERY_BUMP_ADDR}
     local.get $heap_base
     i32.store
+    local.get $heap_base
+    global.set $__gc_nursery_bump
     local.get $heap_base
     i32.const {NURSERY_SIZE}
     i32.add
@@ -1591,9 +1643,15 @@
     i32.const {GC_REQUEST_ADDR}
     i32.const 0
     i32.store
+    i32.const 0
+    global.set $__gc_request
     i32.const {GC_EPOCH_ADDR}
     i32.const 0
     i32.store
+    i32.const 0
+    global.set $__gc_epoch
+    i32.const 0
+    global.set $__gc_finalize_live
     call $__gc_cache_bounds
     global.get $__gc_card_table
     i32.const 0

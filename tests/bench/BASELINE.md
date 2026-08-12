@@ -4,10 +4,41 @@ Recorded with `dream --release run tests/bench/microbenches.dream` after the ARC
 cutover (`docs/compiler/12-tiered-gc.md`). Absolute values vary by host — use relative
 deltas. Re-run via `./scripts/run-microbenches.sh`.
 
-## Snapshot (2026-08-13, native wasmtime)
+## Snapshot (2026-08-13, native wasmtime, 3 consecutive runs)
 
-Nursery = 1 MiB. Regex Pike-VM reused per `Regex`; SOA thread queues; UTF-8 byte walk;
-first-class skip for unanchored CharClass bodies.
+Nursery = 2 MiB. Gen0 skips the old-space walk unless the remset overflowed; skips the
+dead-nursery walk unless `weak` / `del` / `js` fields are live. Mutator bump/epoch/request
+are WASM globals (no linear-memory load on the malloc fast path).
+
+Warm runs (2–3) vs ARC-era reference:
+
+| Bench | ARC | run2 | run3 | vs ARC |
+|-------|----:|-----:|-----:|--------|
+| list_clear_reuse | ~9 | 8 | 7 | faster |
+| map_clear_reuse | ~46 | 38 | 33 | faster |
+| list_insert_mid | ~96 | 123 | 105 | close (run3) |
+| substring | ~127 | 184 | 146 | close (run3) |
+
+Full run 3 (quiet, after warmup):
+
+| Bench | ns_per_op |
+|-------|----------:|
+| list_push | 7 |
+| list_clear_reuse | 7 |
+| string_eq | 14 |
+| alloc_churn | 24 |
+| map_clear_reuse | 33 |
+| gc_locals | 53 |
+| scratch_arena | 70 |
+| map_get_set | 79 |
+| char_scan | 756 |
+| string_concat | 110 |
+| list_insert_mid | 105 |
+| substring | 146 |
+| string_builder | 355 |
+| regex_find | 8.2k |
+
+### Prior snapshot (2026-08-13, regex NFA pass)
 
 | Bench | ns_per_op | notes |
 |-------|----------:|-------|
@@ -24,33 +55,12 @@ first-class skip for unanchored CharClass bodies.
 | substring | 215 | |
 | string_builder | 382 | |
 | char_scan | 920 | |
-| **regex_find** | **9.6k** | was ~36k (VM reuse + skip + byte walk) |
-
-`regex_find` is the large win this pass (~3.7×). Other rows are noise vs the previous snapshot.
-
-### Prior snapshot (2026-08-12, string/remset pass)
-
-| Bench | ns_per_op | notes |
-|-------|----------:|-------|
-| list_push | 8 | |
-| list_clear_reuse | 9 | |
-| string_eq | 16 | |
-| alloc_churn | 32 | |
-| map_clear_reuse | 38 | |
-| gc_locals | 78 | |
-| scratch_arena | 81 | |
-| map_get_set | 89 | |
-| list_insert_mid | 115 | |
-| string_concat | 142 | |
-| substring | 159 | |
-| string_builder | 408 | |
-| char_scan | 867 | was ~4.1k |
-| regex_find | 36k | |
+| regex_find | 9.6k | |
 
 ### ARC-era reference (historical)
 
 | Bench | ns_per_op (approx) | notes |
-|-------|-------------------:-------|
+|-------|-------------------:|-------|
 | list_clear_reuse | ~9 | ARC + clear reuse |
 | map_clear_reuse | ~46 | |
 | list_insert_mid | ~96 | |

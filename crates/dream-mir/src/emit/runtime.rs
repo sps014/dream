@@ -8,7 +8,12 @@ use super::*;
 /// When `needs_threads` is false (no `WebWorker` / worker-pool host imports in the module), the
 /// allocator spinlock around `$malloc`/`$free`/`$gc_collect_*` is also elided: a single-threaded
 /// instance never races on the free lists, so the atomic acquire/release is pure overhead.
-pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u32) -> String {
+pub(super) fn runtime_prelude(
+    debug: bool,
+    needs_threads: bool,
+    empty_string: u32,
+    dead_nursery: bool,
+) -> String {
     let (malloc_count, free_count) = if debug {
         (
             "global.get $live_objects\n    i32.const 1\n    i32.add\n    global.set $live_objects\n    \
@@ -22,6 +27,11 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u3
         ("call $__alloc_lock_acquire", "call $__alloc_lock_release")
     } else {
         ("", "")
+    };
+    let bump_commit = if needs_threads {
+        "i32.const {NURSERY_BUMP_ADDR}\n    local.get $bump\n    i32.store"
+    } else {
+        ""
     };
     let mut out = RUNTIME_ALLOCATOR
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
@@ -43,6 +53,8 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u3
         lock_release,
         malloc_count,
         free_count,
+        dead_nursery,
+        bump_commit,
     ));
     out.push('\n');
     // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
@@ -63,11 +75,14 @@ fn substitute_gc_runtime(
     lock_release: &str,
     malloc_count: &str,
     free_count: &str,
+    dead_nursery: bool,
+    bump_commit: &str,
 ) -> String {
     use crate::abi as a;
     RUNTIME_GC
         .replace(";;@ALLOC_LOCK_ACQUIRE@", lock_acquire)
         .replace(";;@ALLOC_LOCK_RELEASE@", lock_release)
+        .replace(";;@NURSERY_BUMP_COMMIT@", bump_commit)
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count)
         .replace("{ALLOC_LOCK_ADDR}", &a::ALLOC_LOCK_ADDR.to_string())
@@ -85,6 +100,10 @@ fn substitute_gc_runtime(
         .replace("{GC_GEN_LOH}", &a::GC_GEN_LOH.to_string())
         .replace("{LOH_THRESHOLD}", &a::LOH_THRESHOLD.to_string())
         .replace("{NURSERY_SIZE}", &a::NURSERY_SIZE.to_string())
+        .replace(
+            "{GC_DEAD_NURSERY_NEEDED}",
+            if dead_nursery { "1" } else { "0" },
+        )
         .replace("{NURSERY_BUMP_ADDR}", &a::NURSERY_BUMP_ADDR.to_string())
         .replace("{NURSERY_START_ADDR}", &a::NURSERY_START_ADDR.to_string())
         .replace("{NURSERY_END_ADDR}", &a::NURSERY_END_ADDR.to_string())

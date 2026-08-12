@@ -218,6 +218,7 @@ pub fn emit_module_with_debug(
         debug,
         module_needs_threads(mir),
         strings[""],
+        module_has_js_fields(mir, interner),
     ));
     out.push('\n');
     out.push_str(RUNTIME_WEAK);
@@ -556,6 +557,35 @@ fn module_needs_js_host(mir: &crate::Mir, interner: &TypeInterner) -> bool {
     if mir.imports.iter().any(|imp| imp.field.starts_with("js")) {
         return true;
     }
+    let is_js = |t: TypeId| matches!(interner.kind(t), TyKind::Js);
+    for f in &mir.functions {
+        if f.locals.iter().any(|d| is_js(d.ty)) {
+            return true;
+        }
+    }
+    if mir.globals.iter().any(|g| is_js(g.ty)) {
+        return true;
+    }
+    for layout in mir.layouts.structs.values() {
+        if layout.fields.iter().any(|f| is_js(f.ty)) {
+            return true;
+        }
+    }
+    for layout in mir.layouts.unions.values() {
+        if layout
+            .variants
+            .iter()
+            .any(|v| v.fields.iter().any(|f| is_js(f.ty)))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Gen0 must walk dead nursery objects when a heap `js` field might live there.
+/// `weak` watchers and `del` finalizers are tracked at run time.
+fn module_has_js_fields(mir: &crate::Mir, interner: &TypeInterner) -> bool {
     let is_js = |t: TypeId| matches!(interner.kind(t), TyKind::Js);
     for f in &mir.functions {
         if f.locals.iter().any(|d| is_js(d.ty)) {

@@ -388,10 +388,7 @@ impl Emitter<'_> {
         self.emit_value_frame_prologue();
         self.emit_gc_root_prologue();
         if needs_reload {
-            self.line(&format!(
-                "     (i32.const {}) (i32.load) (local.set $__gc_epoch)",
-                crate::abi::GC_EPOCH_ADDR
-            ));
+            self.line("     (global.get $__gc_epoch) (local.set $__gc_epoch)");
         }
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
         if let Some(dbg) = self.debug_fn {
@@ -469,10 +466,9 @@ impl Emitter<'_> {
         if !self.gc_frame_active && !self.has_ref_globals {
             return;
         }
-        self.line(&format!(
-            "     (i32.const {}) (i32.load) (local.get $__gc_epoch) (i32.ne) (if (then",
-            crate::abi::GC_EPOCH_ADDR
-        ));
+        self.line(
+            "     (global.get $__gc_epoch) (local.get $__gc_epoch) (i32.ne) (if (then",
+        );
         if self.gc_frame_active {
             let root_locals = self.gc_root_locals.clone();
             for li in root_locals {
@@ -484,10 +480,7 @@ impl Emitter<'_> {
         if self.has_ref_globals {
             self.line("       (call $__gc_reload_globals)");
         }
-        self.line(&format!(
-            "       (i32.const {}) (i32.load) (local.set $__gc_epoch)",
-            crate::abi::GC_EPOCH_ADDR
-        ));
+        self.line("       (global.get $__gc_epoch) (local.set $__gc_epoch)");
         self.line("     ))");
     }
 

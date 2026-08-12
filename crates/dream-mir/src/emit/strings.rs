@@ -282,6 +282,18 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(count, out);
         },
         Statement::LockAcquire(o) | Statement::LockRelease(o) => strings_in_operand(o, out),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            strings_in_operand(dest, out);
+            strings_in_operand(lhs, out);
+            strings_in_operand(rhs, out);
+            strings_in_operand(index, out);
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -298,12 +310,13 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
 fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
     fn in_place(p: &Place, out: &mut Vec<&'static str>) {
         match p {
-            Place::Index { index, .. } => {
-                out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
+            Place::Index { index, unchecked, .. } => {
+                if !unchecked {
+                    out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
+                }
                 in_operand(index, out);
             }
-            // Field reads no longer emit a located unowned-null panic (unowned was removed).
-            Place::Field { .. } => {}
+            Place::Field { .. } | Place::Deref { .. } => {}
             Place::Local(_) | Place::Global(_) => {}
         }
     }
@@ -408,6 +421,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::ArrayElemsCopy { .. }
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
+        | Statement::SimdF32x4 { .. }
         | Statement::ValueDrop(_)
         | Statement::Nop
         | Statement::DebugLine(_)

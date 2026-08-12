@@ -190,10 +190,10 @@ impl Lowerer<'_> {
         let elem_local = self.mir_local(elem);
         self.b.assign(
             Place::Local(elem_local),
-            Rvalue::Use(Operand::Copy(Place::Index {
-                base: arr_local,
-                index: Box::new(Operand::Copy(Place::Local(idx))),
-            })),
+            Rvalue::Use(Operand::Copy(Place::index_unchecked(
+                arr_local,
+                Operand::Copy(Place::Local(idx)),
+            ))),
         );
         self.lower_block(body);
         if !self.b.is_terminated() {

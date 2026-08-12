@@ -385,6 +385,18 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
         Statement::LockAcquire(o) | Statement::LockRelease(o) => {
             collect_global_reads_operand(o, out)
         }
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            collect_global_reads_operand(dest, out);
+            collect_global_reads_operand(lhs, out);
+            collect_global_reads_operand(rhs, out);
+            collect_global_reads_operand(index, out);
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -482,7 +494,7 @@ fn collect_global_reads_operand(op: &Operand, out: &mut HashSet<Global>) {
                 out.insert(*g);
             }
             Place::Index { index, .. } => collect_global_reads_operand(index, out),
-            Place::Local(_) | Place::Field { .. } => {}
+            Place::Local(_) | Place::Field { .. } | Place::Deref { .. } => {}
         }
     }
 }

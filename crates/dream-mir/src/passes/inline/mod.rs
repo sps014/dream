@@ -29,12 +29,12 @@ use remap::{arg_type, remap_block, wasm_kind, WasmKind};
 type FnKey = (DefId, Vec<TypeId>);
 
 /// A callee small enough to always inline: at most this many statements across all its blocks.
-const MAX_INLINE_STMTS: usize = 24;
+const MAX_INLINE_STMTS: usize = 64;
 /// ...and at most this many blocks.
-const MAX_INLINE_BLOCKS: usize = 6;
+const MAX_INLINE_BLOCKS: usize = 16;
 /// Stop inlining into a caller once it would exceed this many blocks. Relooper can fall back to
 /// `$__pc`/`br_table` on very large CFGs; keep a cap so huge stdlib methods stay as calls.
-const CALLER_BLOCK_CAP: usize = 48;
+const CALLER_BLOCK_CAP: usize = 96;
 /// Safety cap on inlines performed into a single function per `run` (defends against any unforeseen
 /// non-termination; the DAG-only inlining should terminate well before this).
 const MAX_INLINES_PER_FN: usize = 4096;
@@ -197,8 +197,14 @@ fn eligible(
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let small = stmt_count <= MAX_INLINE_STMTS && g.blocks.len() <= MAX_INLINE_BLOCKS;
-    let _ = call_counts;
-    if !small || addr_taken.contains(key) {
+    let single_use = call_counts.get(key).copied().unwrap_or(0) <= 1 && !addr_taken.contains(key);
+    if addr_taken.contains(key) {
+        return false;
+    }
+    if !small && !single_use {
+        return false;
+    }
+    if single_use && stmt_count > 128 {
         return false;
     }
     caller.blocks.len().saturating_add(g.blocks.len()) <= CALLER_BLOCK_CAP

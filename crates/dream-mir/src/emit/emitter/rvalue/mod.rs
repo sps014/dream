@@ -127,7 +127,7 @@ impl Emitter<'_> {
                 } else {
                     self.emit_call_args(callee, args);
                     self.line(&format!("     (call ${sym})"));
-                    self.emit_gc_reload_after_call();
+                    self.emit_gc_reload_after_direct_call(callee);
                 }
             }
             Rvalue::IndirectCall { target, sig, args } => {
@@ -237,7 +237,11 @@ impl Emitter<'_> {
                             ret: self.interner.void(),
                         });
                         self.line(&format!("     (call ${})", sym));
-                        self.emit_gc_reload_after_call();
+                        self.emit_gc_reload_after_direct_call(&crate::Callee {
+                            def: *ctor,
+                            args: vec![],
+                            ret: self.interner.void(),
+                        });
                         self.emit_pop_obj_root();
                         self.line("     (local.get $__obj)");
                     } else {

@@ -12,6 +12,7 @@ struct ModuleTables {
     tags: HashMap<TypeId, i32>,
     ftable: HashMap<(DefId, Vec<TypeId>), usize>,
     value_glue: std::collections::HashSet<TypeId>,
+    non_safepoint: std::collections::HashSet<(DefId, Vec<TypeId>)>,
 }
 
 /// Derives the shared [`ModuleTables`] for `mir`.
@@ -26,6 +27,7 @@ fn build_tables(mir: &crate::Mir, interner: &TypeInterner, locate_panics: bool) 
         tags: struct_tags(mir),
         ftable: func_table(mir),
         value_glue: value_glue_types(mir, interner),
+        non_safepoint: non_safepoint_functions(mir),
     }
 }
 
@@ -39,6 +41,7 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
         tags,
         ftable,
         value_glue,
+        non_safepoint,
     } = build_tables(mir, interner, true);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
     let mut out = String::new();
@@ -54,6 +57,7 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
             &ftable,
             &value_glue,
             &global_tys,
+            &non_safepoint,
             false,
             true,
             None,
@@ -89,6 +93,7 @@ pub fn emit_module_with_debug(
         tags,
         ftable,
         value_glue,
+        non_safepoint,
     } = build_tables(mir, interner, locate_panics);
     let value_trace = value_trace_types(mir, interner);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
@@ -282,6 +287,7 @@ pub fn emit_module_with_debug(
                 debug,
                 locate_panics,
                 debug_fn,
+                &non_safepoint,
             ));
         } else {
             let debug_fn = dbg_by_symbol.get(func_symbol(f).as_str()).copied();
@@ -296,6 +302,7 @@ pub fn emit_module_with_debug(
                 &ftable,
                 &value_glue,
                 &global_tys,
+                &non_safepoint,
                 debug,
                 locate_panics,
                 debug_fn,

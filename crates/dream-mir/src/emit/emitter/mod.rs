@@ -12,7 +12,7 @@
 //! - [`rvalue`]: `Rvalue` (expression) emission (split out previously).
 
 use super::*;
-use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE};
+use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
 use crate::emit::valuetype::{value_gc_ref_offsets, ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
@@ -38,6 +38,7 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &HashMap::new(),
         &HashSet::new(),
         &empty_globals,
+        &HashSet::new(),
         false,
         true,
         None,
@@ -56,6 +57,7 @@ pub(super) fn emit_function_with(
     func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
     value_glue: &HashSet<TypeId>,
     global_tys: &HashMap<u32, TypeId>,
+    non_safepoint: &HashSet<(DefId, Vec<TypeId>)>,
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
@@ -71,6 +73,7 @@ pub(super) fn emit_function_with(
         func_table,
         value_glue,
         global_tys,
+        non_safepoint,
         None,
         0,
         debug,
@@ -97,6 +100,7 @@ pub(crate) fn emit_async_poll(
     slots: &AsyncSlots,
     poll_sym: &str,
     user_local_count: usize,
+    non_safepoint: &HashSet<(DefId, Vec<TypeId>)>,
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
@@ -117,6 +121,7 @@ pub(crate) fn emit_async_poll(
         ftable,
         value_glue,
         &global_tys,
+        non_safepoint,
         Some(func),
         user_local_count,
         debug,
@@ -178,6 +183,8 @@ struct Emitter<'a> {
     gc_frame_active: bool,
     /// Module has at least one reference-typed global that `$__gc_reload_globals` must refresh.
     has_ref_globals: bool,
+    /// Functions that cannot reach a GC safepoint; direct calls to them skip root reloads.
+    non_safepoint: &'a HashSet<(DefId, Vec<TypeId>)>,
     /// When `true`, `$__obj_rg` holds the root-table index of the object currently under
     /// construction (`Rvalue::New`'s allocated block). Emitting a nested Dream call inside the
     /// construction must reload `$__obj` from this index — see
@@ -202,6 +209,7 @@ impl<'a> Emitter<'a> {
         func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
         value_glue: &'a HashSet<TypeId>,
         global_tys: &'a HashMap<u32, TypeId>,
+        non_safepoint: &'a HashSet<(DefId, Vec<TypeId>)>,
         async_parent: Option<&'a MirFunction>,
         async_user_locals: usize,
         debug: bool,
@@ -225,7 +233,11 @@ impl<'a> Emitter<'a> {
         }
         gc_slot_root_offs.sort_unstable();
         gc_slot_root_offs.dedup();
-        let may_safepoint = function_may_safepoint(func);
+        let may_safepoint = if non_safepoint.contains(&(func.def, func.instance.clone())) {
+            false
+        } else {
+            function_may_safepoint(func)
+        };
         let gc_frame_active = may_safepoint
             && (!gc_root_locals.is_empty() || !gc_slot_root_offs.is_empty());
         let has_ref_globals = global_tys
@@ -258,6 +270,7 @@ impl<'a> Emitter<'a> {
             may_safepoint,
             gc_frame_active,
             has_ref_globals,
+            non_safepoint,
             obj_construction_root: false,
             scratch,
         }
@@ -499,6 +512,16 @@ impl Emitter<'_> {
         self.emit_reload_obj_root();
     }
 
+    pub(super) fn emit_gc_reload_after_direct_call(&mut self, callee: &crate::Callee) {
+        if self
+            .non_safepoint
+            .contains(&(callee.def, callee.args.clone()))
+        {
+            return;
+        }
+        self.emit_gc_reload_after_call();
+    }
+
     /// Push the freshly allocated `$__obj` into the root table and remember its index in
     /// `$__obj_rg`. Callers use [`Self::emit_reload_obj_root`] to reload `$__obj` after any
     /// intermediate safepoint (typically a user constructor call), and
@@ -599,9 +622,11 @@ impl Emitter<'_> {
     /// Pushes the address of `base[index]` (`base + 4 + index * elem_size`) onto the stack. The
     /// length occupies the first word, so element 0 is at offset 4. Checked: traps via `$dream_panic`
     /// if `index` is out of range (see [`Self::emit_bounds_check`]).
-    fn elem_addr(&mut self, base: crate::Local, elem_ty: TypeId, index: &Operand) {
+    fn elem_addr(&mut self, base: crate::Local, elem_ty: TypeId, index: &Operand, unchecked: bool) {
         let (size, _) = scalar_size(self.interner, elem_ty);
-        self.emit_bounds_check(|s| s.line(&format!("     (local.get ${})", base.0)), index);
+        if !unchecked {
+            self.emit_bounds_check(|s| s.line(&format!("     (local.get ${})", base.0)), index);
+        }
         self.line(&format!("     (local.get ${})", base.0));
         self.line("     (i32.const 4)");
         self.line("     (i32.add)");
@@ -697,14 +722,24 @@ impl Emitter<'_> {
                     );
                 }
             }
-            Operand::Copy(Place::Index { base, index }) => {
+            Operand::Copy(Place::Index {
+                base,
+                index,
+                unchecked,
+            }) => {
                 if let Some(ety) = self.array_elem_ty(*base) {
-                    self.elem_addr(*base, ety, index);
+                    self.elem_addr(*base, ety, index, *unchecked);
                     if !self.interner.is_value_type(ety) {
                         self.line(&format!("     ({})", self.load_instr(ety)));
                     }
                 } else {
                     crate::internal_error!("missing array element type for read (base {:?})", base);
+                }
+            }
+            Operand::Copy(Place::Deref { ptr, elem_ty }) => {
+                self.line(&format!("     (local.get ${})", ptr.0));
+                if !self.interner.is_value_type(*elem_ty) {
+                    self.line(&format!("     ({})", self.load_instr(*elem_ty)));
                 }
             }
         }
@@ -736,6 +771,7 @@ impl Emitter<'_> {
             Operand::Copy(Place::Index { base, .. }) => self
                 .array_elem_ty(*base)
                 .unwrap_or_else(|| self.func.local_ty(*base)),
+            Operand::Copy(Place::Deref { elem_ty, .. }) => *elem_ty,
             Operand::Copy(Place::Global(_)) => self.interner.int(),
             Operand::Const(Const::Long(_)) => self.interner.long(),
             Operand::Const(Const::Float(_)) => self.interner.double(),
@@ -913,66 +949,12 @@ fn scan_place_store(
                 _ => {}
             }
         }
-    }
-}
-
-fn function_may_safepoint(func: &MirFunction) -> bool {
-    for block in &func.blocks {
-        for stmt in &block.stmts {
-            if stmt_may_safepoint(stmt) {
-                return true;
+        Place::Deref { elem_ty, .. } => {
+            if interner.is_reference(*elem_ty) || matches!(interner.kind(*elem_ty), TyKind::Js) {
+                n.slot = true;
+                n.src = true;
+                n.rel = true;
             }
         }
-        if term_may_safepoint(&block.terminator) {
-            return true;
-        }
     }
-    false
-}
-
-fn stmt_may_safepoint(stmt: &Statement) -> bool {
-    match stmt {
-        Statement::Assign(_, rv) => rvalue_may_safepoint(rv),
-        Statement::Call { .. }
-        | Statement::JsCall { .. }
-        | Statement::InterfaceCall { .. }
-        | Statement::IndirectCall { .. }
-        | Statement::ValueDrop(_) => true,
-        Statement::Panic(_)
-        | Statement::Print { .. }
-        | Statement::Nop
-        | Statement::DebugLine(_)
-        | Statement::SourceLine(_)
-        | Statement::ArrayElemsCopy { .. }
-        | Statement::ForceFree(_)
-        | Statement::LockAcquire(_)
-        | Statement::LockRelease(_) => false,
-    }
-}
-
-fn term_may_safepoint(term: &Terminator) -> bool {
-    matches!(
-        term,
-        Terminator::TailCall { .. } | Terminator::Await { .. } | Terminator::AsyncComplete(_)
-    )
-}
-
-fn rvalue_may_safepoint(rv: &Rvalue) -> bool {
-    matches!(
-        rv,
-        Rvalue::Call { .. }
-            | Rvalue::IndirectCall { .. }
-            | Rvalue::InterfaceCall { .. }
-            | Rvalue::JsCall { .. }
-            | Rvalue::New { .. }
-            | Rvalue::UnionNew { .. }
-            | Rvalue::ArrayLit { .. }
-            | Rvalue::ArrayNew { .. }
-            | Rvalue::ArrayRealloc { .. }
-            | Rvalue::Concat(_, _)
-            | Rvalue::ToString(_)
-            | Rvalue::ToBytes { .. }
-            | Rvalue::FromBytes { .. }
-            | Rvalue::Cast(_, _, _)
-    )
 }

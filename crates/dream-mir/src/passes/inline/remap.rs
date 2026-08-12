@@ -82,10 +82,11 @@ fn remap_place(p: &mut Place, base: u32) {
     match p {
         Place::Local(l) => remap_local(l, base),
         Place::Field { base: b, .. } => remap_local(b, base),
-        Place::Index { base: b, index } => {
+        Place::Index { base: b, index, .. } => {
             remap_local(b, base);
             remap_operand(index, base);
         }
+        Place::Deref { ptr, .. } => remap_local(ptr, base),
         Place::Global(_) => {}
     }
 }
@@ -235,6 +236,18 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_operand(count, base);
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => remap_operand(o, base),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            remap_operand(dest, base);
+            remap_operand(lhs, base);
+            remap_operand(rhs, base);
+            remap_operand(index, base);
+        }
         Statement::ValueDrop(l) => remap_local(l, base),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }

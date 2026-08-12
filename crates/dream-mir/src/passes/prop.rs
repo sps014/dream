@@ -136,6 +136,18 @@ pub(super) fn subst_stmt_reads(
                 | subst_operand(count, known)
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => subst_operand(o, known),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            subst_operand(dest, known)
+                | subst_operand(lhs, known)
+                | subst_operand(rhs, known)
+                | subst_operand(index, known)
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => false,
     }
 }

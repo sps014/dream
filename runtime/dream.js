@@ -552,7 +552,7 @@ function wrapInPlaceByteArrayFill(getInstance, fillBytes) {
 
 // Future heap kinds/sizes (mirrors src/mir/async_emit.rs).
 const FUTURE_KIND_HOST = 1;
-const FUTURE_SLOTS_SIZE = 56; // F_SLOTS: a host future has no saved-locals region.
+const FUTURE_SLOTS_SIZE = 64; // F_SLOTS: a host future has no saved-locals region.
 
 /**
  * Wraps an `extern async` import. The JS implementation returns a Promise; the wrapper

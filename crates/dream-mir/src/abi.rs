@@ -52,7 +52,8 @@ pub const GC_GEN_LOH: u32 = 3;
 
 /// Object is marked reachable in the current collection.
 pub const GC_META_MARK: u32 = 1 << 2;
-/// Object was evacuated; the size word holds the forwarding data pointer (block+12 of new home).
+/// Object was evacuated. Gen0 stows the new data pointer in the tag word; old-space compact
+/// stows it in the size word. The FORWARDED bit is set in either case.
 pub const GC_META_FORWARDED: u32 = 1 << 3;
 /// Type has a `del` finalizer; enqueue when found unreachable.
 pub const GC_META_FINALIZE: u32 = 1 << 4;

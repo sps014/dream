@@ -235,6 +235,14 @@ pub enum Statement {
     /// Releases one level of the reentrant lock word acquired by a matching
     /// [`Statement::LockAcquire`].
     LockRelease(Operand),
+    /// `out[i..i+4] = a[i..i+4] ⊕ b[i..i+4]` for `float[]` (WASM `v128` / `f32x4`).
+    SimdF32x4 {
+        op: crate::BinOp,
+        dest: Operand,
+        lhs: Operand,
+        rhs: Operand,
+        index: Operand,
+    },
     /// Runs value-struct / value-union drop glue for an owning local (`$__vs_drop_<T>`), then zeros
     /// its shadow-stack slot. Used by the inliner so spliced callee locals are torn down at the
     /// inlined continuation rather than the caller's function exit (see [`LocalDecl::manual_drop`]).
@@ -319,11 +327,36 @@ pub enum Place {
         base: Local,
         field: usize,
     },
-    /// `base[index]`.
+    /// `base[index]`. `unchecked` is set by ABC / foreach lowering when `index` is already proven
+    /// in range, so emit skips the `$dream_panic` bounds check.
     Index {
         base: Local,
         index: Box<Operand>,
+        unchecked: bool,
     },
+    /// `ptr` already holds the byte address of an array element (IV strength reduction).
+    Deref {
+        ptr: Local,
+        elem_ty: TypeId,
+    },
+}
+
+impl Place {
+    pub fn index(base: Local, index: Operand) -> Self {
+        Place::Index {
+            base,
+            index: Box::new(index),
+            unchecked: false,
+        }
+    }
+
+    pub fn index_unchecked(base: Local, index: Operand) -> Self {
+        Place::Index {
+            base,
+            index: Box::new(index),
+            unchecked: true,
+        }
+    }
 }
 
 /// A readable value: a local/global read or a constant. (All complex computation is an [`Rvalue`].)

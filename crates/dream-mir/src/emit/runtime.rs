@@ -67,6 +67,8 @@ pub(super) fn runtime_prelude(
             .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
             .replace("{STRING_EMPTY}", &empty_string.to_string()),
     );
+    out.push('\n');
+    out.push_str(RUNTIME_SIMD);
     out
 }
 

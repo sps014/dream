@@ -1,0 +1,9 @@
+import system;
+
+fun main(): void {
+    let s = "hi";
+    for (let c in s.chars()) {
+        System.print(c);
+    }
+    System.print('\n');
+}

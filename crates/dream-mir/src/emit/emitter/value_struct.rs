@@ -88,11 +88,16 @@ impl Emitter<'_> {
                     self.field_addr(*base, off);
                 }
             }
-            Place::Index { base, index } => {
+            Place::Index {
+                base,
+                index,
+                unchecked,
+            } => {
                 if let Some(ety) = self.array_elem_ty(*base) {
-                    self.elem_addr(*base, ety, index);
+                    self.elem_addr(*base, ety, index, *unchecked);
                 }
             }
+            Place::Deref { ptr, .. } => self.line(&format!("     (local.get ${})", ptr.0)),
             Place::Global(g) => self.line(&format!("     (global.get $g{})", g.0)),
         }
     }

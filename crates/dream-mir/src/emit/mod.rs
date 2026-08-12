@@ -71,6 +71,7 @@ const RUNTIME_GC: &str = include_str!("../runtime/gc.wat");
 /// The fixed string runtime (`$str_scalar_len`/`$str_byte_size`/`$char_at`/`$byte_at`/`$string_eq`/`$concat_strings`/…).
 /// Self-contained given the allocator + memory.
 const RUNTIME_STRINGS: &str = include_str!("../runtime/strings.wat");
+const RUNTIME_SIMD: &str = include_str!("../runtime/simd.wat");
 
 /// The object runtime: box/unbox/hash plus the integer-family `*_to_string` formatters
 /// (`$int_to_string`/`$long_to_string`/`$byte_to_string`/…). `{TAG_*}` placeholders are substituted.
@@ -147,6 +148,7 @@ pub mod debug_map;
 mod emitter;
 mod js_marshal;
 mod module;
+mod safepoint;
 mod protocol;
 mod release;
 mod runtime;
@@ -163,6 +165,7 @@ use emitter::*;
 use js_marshal::*;
 use protocol::*;
 use release::*;
+use safepoint::*;
 use runtime::*;
 use strings::*;
 use tables::*;

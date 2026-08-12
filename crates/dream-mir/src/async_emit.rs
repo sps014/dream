@@ -17,11 +17,13 @@ use std::fmt::Write;
 
 pub(crate) const F_STATE: i32 = 0;
 pub(crate) const F_RESULT: i32 = 8;
+/// Inline `i64`/`f32`/`f64` async result (avoids heap boxing into `F_RESULT`'s `i32` slot).
+pub(crate) const F_WIDE: i32 = 56;
 pub(crate) const F_AWAITING: i32 = 20;
 /// Byte size of a `Future` frame's fixed header region (locals are appended past it). Shared with
 /// the emitter's `sleep` intrinsic and the host bridge (`execution/host/http.rs`,
 /// `runtime/dream.js`), which allocate host futures of exactly this size.
-pub const F_SLOTS: i32 = 56;
+pub const F_SLOTS: i32 = 64;
 const KIND_TASK: i32 = 0;
 /// `Future.kind` for a host-driven future (timer / HTTP / extern async): settled by the host via
 /// `__dream_resolve` rather than by re-polling Dream code.
@@ -179,6 +181,7 @@ pub fn emit_async_function(
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
+    non_safepoint: &HashSet<(dream_types::DefId, Vec<TypeId>)>,
 ) -> String {
     let hir = func.hir_fn.as_ref().unwrap_or_else(|| {
         crate::internal_error!(
@@ -282,6 +285,7 @@ pub fn emit_async_function(
         &slots,
         &poll_symbol(func),
         user_local_count,
+        non_safepoint,
         debug,
         locate_panics,
         debug_fn,

@@ -162,6 +162,7 @@ fn place_local(p: &Place) -> Option<u32> {
     match p {
         Place::Local(l) => Some(l.0),
         Place::Field { base, .. } | Place::Index { base, .. } => Some(base.0),
+        Place::Deref { ptr, .. } => Some(ptr.0),
         Place::Global(_) => None,
     }
 }
@@ -186,6 +187,9 @@ fn stmt_uses(s: &Statement) -> Vec<u32> {
         Statement::Assign(place, rv) => {
             if let Place::Field { base, .. } | Place::Index { base, .. } = place {
                 u.push(base.0);
+            }
+            if let Place::Deref { ptr, .. } = place {
+                u.push(ptr.0);
             }
             rvalue_uses(rv, &mut u);
         }
@@ -272,6 +276,19 @@ fn stmt_uses(s: &Statement) -> Vec<u32> {
             }
         }
         Statement::ValueDrop(local) => u.push(local.0),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            for o in [dest, lhs, rhs, index] {
+                if let Some(l) = operand_local(o) {
+                    u.push(l);
+                }
+            }
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
     u

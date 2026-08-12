@@ -20,7 +20,7 @@ roots and write barriers become the correctness surface instead.
 
 1. **Custom GC in linear memory** — keep `i32` data pointers; no WasmGC proposal types.
 2. **C# workstation shape** — Gen0 nursery → Gen1 → Gen2 + **LOH**; ephemeral collections first.
-3. **Stop-the-world**, precise mark (copying nursery; mark-sweep older gens and LOH).
+3. **Stop-the-world**, precise mark (copying nursery; mark-sweep then sliding compact for older gens and LOH).
 4. **Big bang** — no ARC shims, dual paths, or “legacy” retain/release fallbacks.
 5. **`del()` is a finalizer** — run after an object is found unreachable (not guaranteed prompt).
 6. **`weak` stays**; **`unowned` is deleted** (dangling under GC is unsafe with no upside).
@@ -54,12 +54,13 @@ Unmanaged `@unsafe` `Buffer` / `Pointer` blocks bypass the GC (manual `$malloc`/
 | Space | Alloc | Collect | Promote |
 |-------|--------|---------|---------|
 | **Gen0** | Thread-local bump nursery | Copying evacuate survivors | → Gen1 |
-| **Gen1** | Survivors only | Mark-sweep (promote marked → Gen2) | → Gen2 |
-| **Gen2** | Long-lived survivors | Mark-sweep | stays |
-| **LOH** | Payload ≥ `LOH_THRESHOLD` (~85 KiB) | Mark-sweep (no copy) | stays |
+| **Gen1** | Survivors only | Mark-sweep then compact (promote marked → Gen2) | → Gen2 |
+| **Gen2** | Long-lived survivors | Mark-sweep then compact | stays |
+| **LOH** | Payload ≥ `LOH_THRESHOLD` (~85 KiB) | Mark-sweep then compact | stays |
 
-Older gens are **mark-sweep** onto the segregated freelist (not mark-compact). `HEAP_PTR` is a
-high-water mark and does not shrink.
+Older gens **mark-sweep** dead objects onto the freelist, then **sliding-compact** survivors so
+`HEAP_PTR` shrinks and the freelist is cleared. Immortal interned strings live in the data
+segment, not old space. Concurrent / incremental GC remains **post-merge**.
 
 Triggers:
 
@@ -133,15 +134,21 @@ stack is a raw `i32` pointer. During a Gen0 collection the collector updates the
 refreshed before use. The emitter therefore reloads roots after every safepoint:
 
 - After `$malloc`, `$realloc`, `$concat_strings` (allocation).
-- After every direct, interface, indirect, and JS call (nested Dream mutator may allocate).
+- After every interface, indirect, and JS call, and after direct calls to functions that
+  may allocate (leaf AOT-proven callees skip the reload).
 - After a `Rvalue::New` constructor call — the object under construction is rooted through
   `$__obj_rg` for the duration of the call and reloaded from the root table afterward.
 - Reload always ends in `$__gc_reload_globals`, which forwards each reference-typed module
   global from its `$__grootN` root slot back into `$gN` before the mutator resumes.
 
-Reloads are gated on [`GC_EPOCH_ADDR`](../../crates/dream-mir/src/abi.rs): Gen0 and old
-collections bump the epoch; each function caches the last-seen value in `$__gc_epoch` and
-skips the reload body when unchanged (load + compare on the no-collect fast path).
+Reloads are gated on [`GC_EPOCH_ADDR`](../../crates/dream-mir/src/abi.rs): Gen0 collections always
+bump the epoch; old-space collections bump it only when sliding compact actually moved an object
+(already-packed old space is a no-op for the mutator). Each function caches the last-seen value in
+`$__gc_epoch` and skips the reload body when unchanged (load + compare on the no-collect fast path).
+
+Direct calls to functions the AOT pipeline proves cannot allocate or reach a safepoint skip the
+reload entirely (and those leaf functions omit the root-table prologue). Indirect, interface, and
+JS calls still reload.
 
 MIR call arguments are already materialized operands (`local.get` / const), so they cannot
 allocate while sitting on the WASM operand stack; the callee prologue roots params after

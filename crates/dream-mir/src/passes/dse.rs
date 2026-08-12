@@ -69,6 +69,7 @@ impl MirPass for Dse {
                     // memory-observing statement.
                     | Statement::LockAcquire(_)
                     | Statement::LockRelease(_)
+                    | Statement::SimdF32x4 { .. }
                     | Statement::ValueDrop(_)
                     | Statement::Panic(_) => pending.clear(),
                     // A debug line-hook is an observable host call: it must see every prior store, so
@@ -123,13 +124,14 @@ fn place_key(place: &Place) -> Option<PKey> {
     match place {
         Place::Field { base, field } => Some(PKey::Field(*base, *field)),
         Place::Global(g) => Some(PKey::Global(*g)),
-        Place::Index { base, index } => match index.as_ref() {
+        Place::Index { base, index, .. } => match index.as_ref() {
             Operand::Const(Const::Int(v)) | Operand::Const(Const::Long(v)) => {
                 Some(PKey::IndexConst(*base, *v))
             }
             Operand::Copy(Place::Local(l)) => Some(PKey::IndexLocal(*base, *l)),
             _ => None,
         },
+        Place::Deref { ptr, .. } => Some(PKey::IndexLocal(*ptr, *ptr)),
         Place::Local(_) => None,
     }
 }
@@ -137,7 +139,7 @@ fn place_key(place: &Place) -> Option<PKey> {
 fn is_memory_place(place: &Place) -> bool {
     matches!(
         place,
-        Place::Field { .. } | Place::Index { .. } | Place::Global(_)
+        Place::Field { .. } | Place::Index { .. } | Place::Deref { .. } | Place::Global(_)
     )
 }
 
@@ -163,7 +165,9 @@ fn rvalue_touches_memory(rv: &Rvalue) -> bool {
 fn operand_touches_memory(op: &Operand) -> bool {
     matches!(
         op,
-        Operand::Copy(Place::Field { .. }) | Operand::Copy(Place::Index { .. })
+        Operand::Copy(Place::Field { .. })
+            | Operand::Copy(Place::Index { .. })
+            | Operand::Copy(Place::Deref { .. })
     )
 }
 

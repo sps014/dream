@@ -381,7 +381,10 @@ internal class RegexVM {
 
         let matched: Option<int[]> = Option.None;
         let pos = start;
-        let byte_off = this.scalar_to_byte(input, start);
+        let byte_off = 0;
+        if (start != 0) {
+            byte_off = this.scalar_to_byte(input, start);
+        }
         let going = true;
         while (going) {
             if (clist.count == 0) {

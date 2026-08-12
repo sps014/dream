@@ -189,7 +189,7 @@ fn is_value_place_copy(rv: &Rvalue) -> bool {
     matches!(
         rv,
         Rvalue::Use(Operand::Copy(
-            Place::Local(_) | Place::Field { .. } | Place::Index { .. }
+            Place::Local(_) | Place::Field { .. } | Place::Index { .. } | Place::Deref { .. }
         ))
     )
 }

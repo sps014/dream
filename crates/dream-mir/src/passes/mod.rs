@@ -1,14 +1,18 @@
 //! The MIR optimization pass manager and passes.
 
 mod algebraic;
+mod abc;
+mod autovec;
 mod cfg;
 mod clear_dead_gc;
 mod const_fold;
 mod dce;
+mod devirt;
 mod dse;
 mod global_prop;
 mod gvn;
 mod inline;
+mod iv;
 mod licm;
 mod loop_unroll;
 mod prop;
@@ -17,15 +21,19 @@ mod simplify_cfg;
 mod sroa;
 mod tco;
 
+pub use abc::Abc;
 pub use algebraic::Algebraic;
+pub use autovec::Autovec;
 pub use clear_dead_gc::ClearDeadGcRoots;
 pub use const_fold::ConstFold;
 pub(crate) use dce::is_pure;
 pub use dce::Dce;
+pub use devirt::Devirt;
 pub use dse::Dse;
 pub use global_prop::GlobalProp;
 pub use gvn::Gvn;
 pub use inline::Inliner;
+pub use iv::IvCanon;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
@@ -83,6 +91,9 @@ impl PassManager {
         pm.add(Algebraic);
         pm.add(Gvn);
         pm.add(Licm);
+        pm.add(Abc);
+        pm.add(IvCanon);
+        pm.add(Autovec);
         pm.add(LoopUnroll);
         pm.add(Sroa);
         pm.add(Dse);
@@ -145,11 +156,10 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
     if !inline {
-        // Still expand simple ctors so a later opt pipeline (if any) can SROA; debug builds skip
-        // Sroa itself, so this is a no-op for codegen shape there beyond removing the ctor call.
         let _ = ExpandSimpleCtors.run(mir, interner);
         return;
     }
+    let _ = Devirt.run(mir, interner);
     let inliner = Inliner;
     for _ in 0..MAX_ROUNDS {
         let changed = inliner.run(mir, interner);
@@ -159,6 +169,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
         if !changed {
             break;
         }
+        let _ = Devirt.run(mir, interner);
     }
     // After inlining, lower simple user-ctors to `New { ctor: None }` + field stores so per-function
     // SROA can promote non-escaping Acc(n)-style instances.

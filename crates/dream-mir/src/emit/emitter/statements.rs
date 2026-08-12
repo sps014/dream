@@ -45,7 +45,7 @@ impl Emitter<'_> {
                 let sym = self.callee_symbol(callee);
                 self.emit_call_args(callee, args);
                 self.line(&format!("     (call ${})", sym));
-                self.emit_gc_reload_after_call();
+                self.emit_gc_reload_after_direct_call(callee);
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
                     self.line("     (drop)");
                 }
@@ -140,6 +140,27 @@ impl Emitter<'_> {
             // Emits nothing: just remembers the line so a following automatic runtime check can
             // attribute its panic message to it (see `Emitter::current_line`/`Emitter::emit_panic`).
             Statement::SourceLine(line) => self.current_line = *line,
+            Statement::SimdF32x4 {
+                op,
+                dest,
+                lhs,
+                rhs,
+                index,
+            } => {
+                let simd_op = match op {
+                    BinOp::Add => "f32x4.add",
+                    BinOp::Sub => "f32x4.sub",
+                    BinOp::Mul => "f32x4.mul",
+                    _ => "f32x4.add",
+                };
+                self.emit_f32x4_addr(dest, index);
+                self.emit_f32x4_addr(lhs, index);
+                self.line("     (v128.load)");
+                self.emit_f32x4_addr(rhs, index);
+                self.line("     (v128.load)");
+                self.line(&format!("     ({simd_op})"));
+                self.line("     (v128.store)");
+            }
             Statement::ForceFree(o) => {
                 self.emit_operand(o);
                 self.line("     (call $free)");
@@ -367,11 +388,16 @@ impl Emitter<'_> {
                     );
                 }
             }
-            Place::Index { base, index } => {
+            Place::Index {
+                base,
+                index,
+                unchecked,
+            } => {
                 if let Some(ety) = self.array_elem_ty(*base) {
                     let b = *base;
                     let idx = index.clone();
-                    self.emit_place_store(ety, move |s| s.elem_addr(b, ety, &idx), rvalue);
+                    let uc = *unchecked;
+                    self.emit_place_store(ety, move |s| s.elem_addr(b, ety, &idx, uc), rvalue);
                 } else {
                     crate::internal_error!(
                         "missing array element type for store (base {:?})",
@@ -379,7 +405,22 @@ impl Emitter<'_> {
                     );
                 }
             }
+            Place::Deref { ptr, elem_ty } => {
+                let p = *ptr;
+                let ety = *elem_ty;
+                self.emit_place_store(ety, move |s| s.line(&format!("     (local.get ${})", p.0)), rvalue);
+            }
         }
+    }
+
+    fn emit_f32x4_addr(&mut self, arr: &Operand, index: &Operand) {
+        self.emit_operand(arr);
+        self.line("     (i32.const 4)");
+        self.line("     (i32.add)");
+        self.emit_operand(index);
+        self.line("     (i32.const 2)");
+        self.line("     (i32.shl)");
+        self.line("     (i32.add)");
     }
 
     /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`.

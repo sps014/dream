@@ -2,8 +2,8 @@
 ;;
 ;; See docs/compiler/12-tiered-gc.md and abi.rs. Heap header: [size][tag][gc_meta], data at +12.
 ;; Gen0 is a fixed bump nursery at heap base; survivors evacuate into old space (Gen1).
-;; Older gens and LOH use mark-sweep into the segregated freelist. Write barriers record
-;; older→younger slots in the remembered set.
+;; Older gens and LOH mark-sweep then sliding-compact (HEAP_PTR shrinks; freelists cleared).
+;; Write barriers record older→younger slots in the remembered set. Concurrent GC is later.
 
 ;; Trace mode: 0 = Gen0 update (forward nursery slots), 1 = mark children.
 (global $gc_trace_mode (mut i32) (i32.const 0))
@@ -316,7 +316,25 @@
         call $__gc_in_nursery
         i32.eqz
         if (result i32)
+            ;; Old-space compact stows the final data pointer in the size word.
             local.get $ptr
+            i32.const 12
+            i32.sub
+            local.set $block
+            local.get $block
+            i32.const 8
+            i32.add
+            i32.load
+            local.set $meta
+            local.get $meta
+            i32.const {GC_META_FORWARDED}
+            i32.and
+            if (result i32)
+                local.get $block
+                i32.load
+            else
+                local.get $ptr
+            end
         else
             local.get $ptr
             i32.const 12
@@ -469,17 +487,21 @@
 ;; Trace/update one heap reference slot during Gen0 collection.
 (func $gc_update_slot (param $slot i32)
     (local $v i32)
+    (local $n i32)
     local.get $slot
     i32.load
     local.set $v
     local.get $v
-    call $__gc_in_nursery
-    i32.eqz
-    br_if 0
-    local.get $slot
-    local.get $v
     call $gc_forward
-    i32.store
+    local.set $n
+    local.get $n
+    local.get $v
+    i32.ne
+    if
+        local.get $slot
+        local.get $n
+        i32.store
+    end
 )
 
 (func $gc_scan_roots
@@ -1133,6 +1155,214 @@
     )
 )
 
+(func $gc_align4 (param $n i32) (result i32)
+    local.get $n
+    i32.const 3
+    i32.add
+    i32.const -4
+    i32.and
+)
+
+(func $gc_ensure_mem (param $need i32)
+    local.get $need
+    memory.size
+    i32.const 16
+    i32.shl
+    i32.gt_u
+    if
+        local.get $need
+        i32.const 65535
+        i32.add
+        i32.const 16
+        i32.shr_u
+        memory.size
+        i32.sub
+        memory.grow
+        i32.const -1
+        i32.eq
+        (if (then unreachable))
+    end
+)
+
+(func $gc_clear_freelists
+    (local $i i32)
+    i32.const 0
+    local.set $i
+    (loop $c
+        local.get $i
+        i32.const 14
+        i32.ge_s
+        br_if 1
+        local.get $i
+        call $freelist_head_addr
+        i32.const 0
+        i32.store
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $c
+    )
+)
+
+;; Sliding compact of old/LOH into `[OLD_START, dest)`. Live objects are copied to a to-space
+;; at `HEAP_PTR`, pointers rewritten to their *final* addresses, then the to-space is slid down.
+;; Returns 1 if any live object moved (mutator must reload); 0 if already packed.
+(func $gc_compact_old (result i32)
+    (local $p i32)
+    (local $end i32)
+    (local $size i32)
+    (local $meta i32)
+    (local $dest i32)
+    (local $tospace i32)
+    (local $to i32)
+    (local $aligned i32)
+    (local $moved i32)
+    (local $old_start i32)
+    i32.const {OLD_START_ADDR}
+    i32.load
+    local.set $old_start
+    local.get $old_start
+    local.set $p
+    local.get $old_start
+    local.set $dest
+    i32.const {HEAP_PTR_ADDR}
+    i32.load
+    local.set $end
+    local.get $end
+    local.set $tospace
+    local.get $end
+    local.get $end
+    local.get $old_start
+    i32.sub
+    i32.add
+    call $gc_ensure_mem
+    local.get $tospace
+    local.set $to
+    i32.const 0
+    local.set $moved
+    (block $walk_done
+    (loop $walk
+        local.get $p
+        local.get $end
+        i32.ge_u
+        br_if $walk_done
+        local.get $p
+        i32.load
+        local.set $size
+        local.get $size
+        i32.eqz
+        if
+            local.get $p
+            i32.const 16
+            i32.add
+            local.set $p
+            br $walk
+        end
+        local.get $size
+        call $gc_align4
+        local.set $aligned
+        local.get $p
+        i32.const 8
+        i32.add
+        i32.load
+        local.set $meta
+        local.get $meta
+        i32.const {GC_META_FREE}
+        i32.and
+        if
+            local.get $p
+            local.get $aligned
+            i32.add
+            local.set $p
+            br $walk
+        end
+        local.get $to
+        local.get $p
+        local.get $size
+        memory.copy
+        local.get $p
+        local.get $dest
+        i32.const 12
+        i32.add
+        i32.store
+        local.get $p
+        i32.const 8
+        i32.add
+        local.get $meta
+        i32.const {GC_META_FORWARDED}
+        i32.or
+        i32.store
+        local.get $p
+        local.get $dest
+        i32.ne
+        if
+            i32.const 1
+            local.set $moved
+        end
+        local.get $to
+        local.get $aligned
+        i32.add
+        local.set $to
+        local.get $dest
+        local.get $aligned
+        i32.add
+        local.set $dest
+        local.get $p
+        local.get $aligned
+        i32.add
+        local.set $p
+        br $walk
+    )
+    )
+    i32.const 0
+    global.set $gc_trace_mode
+    local.get $tospace
+    local.set $p
+    (block $fix_done
+    (loop $fix
+        local.get $p
+        local.get $to
+        i32.ge_u
+        br_if $fix_done
+        local.get $p
+        i32.load
+        local.set $size
+        local.get $size
+        i32.eqz
+        if
+            local.get $p
+            i32.const 16
+            i32.add
+            local.set $p
+            br $fix
+        end
+        local.get $p
+        i32.const 12
+        i32.add
+        call $gc_trace_evacuated
+        local.get $p
+        local.get $size
+        call $gc_align4
+        i32.add
+        local.set $p
+        br $fix
+    )
+    )
+    call $gc_scan_roots
+    local.get $old_start
+    local.get $tospace
+    local.get $dest
+    local.get $old_start
+    i32.sub
+    memory.copy
+    i32.const {HEAP_PTR_ADDR}
+    local.get $dest
+    i32.store
+    call $gc_clear_freelists
+    local.get $moved
+)
+
 (func $gc_enqueue_finalizer (param $ptr i32)
     ;; Side list: reuse first payload word temporarily? Prefer a linked list via a dedicated
     ;; header in a small external queue node. For v1, call `$gc_run_finalizer` immediately
@@ -1238,16 +1468,19 @@
     i32.const {GC_OLD_BYTES_ADDR}
     i32.const 0
     i32.store
-    i32.const {GC_EPOCH_ADDR}
-    i32.load
-    i32.const 1
-    i32.add
-    local.set $epoch
-    i32.const {GC_EPOCH_ADDR}
-    local.get $epoch
-    i32.store
-    local.get $epoch
-    global.set $__gc_epoch
+    call $gc_compact_old
+    if
+        i32.const {GC_EPOCH_ADDR}
+        i32.load
+        i32.const 1
+        i32.add
+        local.set $epoch
+        i32.const {GC_EPOCH_ADDR}
+        local.get $epoch
+        i32.store
+        local.get $epoch
+        global.set $__gc_epoch
+    end
 )
 
 ;; kind: 0 = Gen0 only, 1 = Gen0+Gen1, 2 = full (Gen0+old+LOH). Caller must hold alloc lock.

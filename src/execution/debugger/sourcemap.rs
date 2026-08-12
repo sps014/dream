@@ -37,9 +37,6 @@ pub struct VarInfo {
 pub struct FnInfo {
     pub id: u32,
     pub name: String,
-    /// Index into [`SourceMap::files`]. Retained for completeness (frames track file per-hook).
-    #[allow(dead_code)]
-    pub file: u32,
     pub vars: Vec<VarInfo>,
 }
 
@@ -50,9 +47,6 @@ pub struct SourceMap {
     pub functions: Vec<FnInfo>,
     /// The recursive type table; variables and fields index into it.
     pub types: Vec<TypeDesc>,
-    /// Spill-pool width; informational (the emitter sizes the globals, the debugger reads by index).
-    #[allow(dead_code)]
-    pub global_pool: u32,
     /// `func_id -> index into functions`.
     by_id: HashMap<u32, usize>,
 }
@@ -65,7 +59,6 @@ impl SourceMap {
         let v: Value =
             serde_json::from_str(&text).map_err(|e| format!("invalid debug map JSON: {}", e))?;
 
-        let global_pool = v.get("globalPool").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
         let files: Vec<String> = v
             .get("files")
             .and_then(|x| x.as_array())
@@ -91,7 +84,6 @@ impl SourceMap {
                     .and_then(|x| x.as_str())
                     .unwrap_or("")
                     .to_string();
-                let file = f.get("file").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
                 let mut vars = Vec::new();
                 if let Some(vs) = f.get("vars").and_then(|x| x.as_array()) {
                     for var in vs {
@@ -106,12 +98,7 @@ impl SourceMap {
                         });
                     }
                 }
-                functions.push(FnInfo {
-                    id,
-                    name,
-                    file,
-                    vars,
-                });
+                functions.push(FnInfo { id, name, vars });
             }
         }
 
@@ -125,7 +112,6 @@ impl SourceMap {
             files,
             functions,
             types,
-            global_pool,
             by_id,
         })
     }

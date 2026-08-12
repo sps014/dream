@@ -46,9 +46,6 @@ struct ExternMeta {
     result: String,
     #[serde(default)]
     kind: String,
-    #[allow(dead_code)]
-    #[serde(default)]
-    lib: String,
     #[serde(default)]
     symbol: String,
 }
@@ -56,12 +53,6 @@ struct ExternMeta {
 #[derive(Debug, Clone, Deserialize)]
 struct StructMeta {
     size: u32,
-    #[allow(dead_code)]
-    #[serde(default)]
-    align: u32,
-    #[allow(dead_code)]
-    #[serde(default)]
-    packed: bool,
 }
 
 struct CAbiState {

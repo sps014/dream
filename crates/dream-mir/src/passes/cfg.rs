@@ -1,12 +1,11 @@
 //! Shared control-flow analyses for the optimization passes: predecessors, a dominator tree
-//! (Cooper-Harvey-Kennedy), postdominators (dominators on the reverse CFG), and natural-loop /
-//! back-edge detection. Kept pass-agnostic so LICM, loop unrolling, RC elision, and any future
-//! structural pass share one implementation.
+//! (Cooper-Harvey-Kennedy), and natural-loop / back-edge detection. Kept pass-agnostic so LICM,
+//! loop unrolling, and any future structural pass share one implementation.
 //!
 //! Determinism: every result is indexed by block position or held in ordered containers, and blocks
 //! are always visited in their `Vec` order, so two runs produce identical output.
 
-use crate::{BlockId, MirFunction, Terminator};
+use crate::{BlockId, MirFunction};
 use std::collections::BTreeSet;
 
 /// Predecessor lists indexed by block position. Only edges among the function's blocks are
@@ -380,35 +379,5 @@ mod tests {
             !dom.dominates(BlockId(2), BlockId(3)),
             "body does not dominate after"
         );
-    }
-
-    #[test]
-    fn postdominator_diamond_join() {
-        // entry -> then|else -> join -> return
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.void());
-        let then_blk = b.new_block();
-        let else_blk = b.new_block();
-        let join = b.new_block();
-        b.terminate(Terminator::If {
-            cond: Operand::Const(Const::Bool(true)),
-            then_blk,
-            else_blk,
-        });
-        b.switch_to(then_blk);
-        b.terminate(Terminator::Goto(join));
-        b.switch_to(else_blk);
-        b.terminate(Terminator::Goto(join));
-        b.switch_to(join);
-        b.terminate(Terminator::Return(None));
-        let func = b.finish();
-        let pdom = PostDomTree::new(&func);
-        assert!(
-            pdom.postdominates(join, BlockId(0)),
-            "join postdominates entry"
-        );
-        assert!(pdom.postdominates(join, then_blk));
-        assert!(pdom.postdominates(join, else_blk));
-        assert!(!pdom.postdominates(then_blk, BlockId(0)));
     }
 }

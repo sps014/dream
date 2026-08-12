@@ -8,6 +8,7 @@ use super::layout::{
 use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
+use super::vertex::next_binding_slot;
 use dream_abi::attributes::{compute_workgroup_size, has_readonly_attr};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::expression::ExpressionNode;
@@ -66,7 +67,13 @@ pub(super) fn emit_kernel(
 ) -> GpuKernelInfo {
     let name = func.name.text.clone();
     let entry = format!("dream_{}", name);
-    let workgroup = compute_workgroup_size(&func.attributes);
+    let workgroup = match compute_workgroup_size(&func.attributes) {
+        Ok(w) => w,
+        Err(e) => {
+            diagnostics.report_error(e, Some(func.name.position));
+            (64, 1, 1)
+        }
+    };
     let atomic_bufs = collect_atomic_buffer_names(func.body);
 
     let mut bindings = Vec::new();
@@ -105,40 +112,53 @@ pub(super) fn emit_kernel(
                     escape_wgsl_ident(&elem)
                 };
                 let wgsl_name = format!("{entry}_{pname}");
+                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                    Ok(slot) => slot,
+                    Err(e) => {
+                        diagnostics.report_error(e, Some(param.name.position));
+                        continue;
+                    }
+                };
                 header.push_str(&format!(
-                    "@group(0) @binding({binding_idx}) var<storage, {access}> {wgsl_name}: array<{elem_ty}>;\n"
+                    "@group({group}) @binding({binding}) var<storage, {access}> {wgsl_name}: array<{elem_ty}>;\n"
                 ));
                 bindings.push(GpuBinding {
                     name: pname,
-                    binding: binding_idx,
+                    binding,
                     kind: "storage",
                     wgsl_ty: elem,
                     read_write,
                     atomic,
                 });
-                binding_idx += 1;
             }
             ParamClass::Texture { storage } => {
                 let wgsl_name = format!("{entry}_{pname}");
+                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                    Ok(slot) => slot,
+                    Err(e) => {
+                        diagnostics.report_error(e, Some(param.name.position));
+                        continue;
+                    }
+                };
                 let (kind, decl) = if storage {
                     (
                         "storage_texture",
                         format!(
-                            "@group(0) @binding({binding_idx}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
+                            "@group({group}) @binding({binding}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
                         ),
                     )
                 } else {
                     (
                         "texture",
                         format!(
-                            "@group(0) @binding({binding_idx}) var {wgsl_name}: texture_2d<f32>;\n"
+                            "@group({group}) @binding({binding}) var {wgsl_name}: texture_2d<f32>;\n"
                         ),
                     )
                 };
                 header.push_str(&decl);
                 bindings.push(GpuBinding {
                     name: pname,
-                    binding: binding_idx,
+                    binding,
                     kind,
                     wgsl_ty: if storage {
                         "texture_storage_2d<rgba8unorm, write>".into()
@@ -148,22 +168,27 @@ pub(super) fn emit_kernel(
                     read_write: storage,
                     atomic: false,
                 });
-                binding_idx += 1;
             }
             ParamClass::Sampler => {
                 let wgsl_name = format!("{entry}_{pname}");
+                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                    Ok(slot) => slot,
+                    Err(e) => {
+                        diagnostics.report_error(e, Some(param.name.position));
+                        continue;
+                    }
+                };
                 header.push_str(&format!(
-                    "@group(0) @binding({binding_idx}) var {wgsl_name}: sampler;\n"
+                    "@group({group}) @binding({binding}) var {wgsl_name}: sampler;\n"
                 ));
                 bindings.push(GpuBinding {
                     name: pname,
-                    binding: binding_idx,
+                    binding,
                     kind: "sampler",
                     wgsl_ty: "sampler".into(),
                     read_write: false,
                     atomic: false,
                 });
-                binding_idx += 1;
             }
             ParamClass::Uniform { ty } => {
                 has_uniform = true;
@@ -216,19 +241,19 @@ pub(super) fn emit_kernel(
         scopes: RefCell::new(vec![scopes]),
         struct_fields: &struct_fields,
         helper_returns: &helper_returns,
+        kernel: &func.name.text,
+        diagnostics: RefCell::new(diagnostics),
     };
 
     let mut workgroup_decls = String::new();
     let mut body = String::new();
-    reject_gpu_nameof(func.body, diagnostics, &func.name.text);
+    reject_gpu_nameof(func.body, &ctx);
     emit_stmts(
         func.body,
         &mut body,
         &mut workgroup_decls,
         1,
         &ctx,
-        diagnostics,
-        &func.name.text,
     );
 
     let mut wgsl = String::new();

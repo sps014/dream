@@ -284,7 +284,18 @@ impl<'a, 'b> Parser<'a, 'b> {
                     self.match_token(TokenKind::OpenParenthesisToken);
                     let ntok = self.current_token().clone();
                     self.next_token();
-                    size = ntok.text.parse().unwrap_or(64);
+                    match crate::number::parse_u32_literal(&ntok.text) {
+                        Some(n) => size = n,
+                        None => {
+                            self.diagnostics.report_error(
+                                format!(
+                                    "'@workgroup' size '{}' is not a valid integer",
+                                    ntok.text
+                                ),
+                                Some(ntok.position),
+                            );
+                        }
+                    }
                     self.match_token(TokenKind::CloseParenthesisToken);
                 }
                 self.match_token(TokenKind::LetToken);

@@ -4,7 +4,6 @@ use super::context::EmitCtx;
 use super::expr::{coerce_expr_to_wgsl_ty, emit_call, emit_expr};
 use super::ident::escape_wgsl_ident;
 use super::ty::{dream_ty_to_wgsl, infer_wgsl_ty};
-use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::statement::StatementNode;
 use dream_text::text_span::TextSpan;
@@ -45,28 +44,22 @@ pub(super) fn emit_stmts(
     wg: &mut String,
     indent: usize,
     ctx: &EmitCtx<'_>,
-    diagnostics: &mut DiagnosticBag,
-    kernel: &str,
 ) {
     ctx.push_scope();
     for s in stmts {
-        emit_stmt(s, out, wg, indent, ctx, diagnostics, kernel);
+        emit_stmt(s, out, wg, indent, ctx);
     }
     ctx.pop_scope();
 }
 
 /// Report `nameof(...)` in GPU shader bodies (`string` is illegal in WGSL).
-pub(super) fn reject_gpu_nameof(
-    stmts: &[StatementNode<'_>],
-    diagnostics: &mut DiagnosticBag,
-    kernel: &str,
-) {
+pub(super) fn reject_gpu_nameof(stmts: &[StatementNode<'_>], ctx: &EmitCtx<'_>) {
     for s in stmts {
-        scan_stmt_nameof(s, diagnostics, kernel);
+        scan_stmt_nameof(s, ctx);
     }
 }
 
-fn scan_stmt_nameof(stmt: &StatementNode<'_>, diagnostics: &mut DiagnosticBag, kernel: &str) {
+fn scan_stmt_nameof(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
     match stmt {
         StatementNode::ExpressionStatement(e)
         | StatementNode::AwaitStmt(e)
@@ -74,80 +67,80 @@ fn scan_stmt_nameof(stmt: &StatementNode<'_>, diagnostics: &mut DiagnosticBag, k
         | StatementNode::Assignment(_, e)
         | StatementNode::Declaration(_, _, e, _)
         | StatementNode::TupleDeclaration { init: e, .. } => {
-            scan_expr_nameof(e, diagnostics, kernel)
+            scan_expr_nameof(e, ctx)
         }
         StatementNode::IndexAssignment(a, i, v) => {
-            scan_expr_nameof(a, diagnostics, kernel);
-            scan_expr_nameof(i, diagnostics, kernel);
-            scan_expr_nameof(v, diagnostics, kernel);
+            scan_expr_nameof(a, ctx);
+            scan_expr_nameof(i, ctx);
+            scan_expr_nameof(v, ctx);
         }
         StatementNode::MemberAssignment(r, _, v) => {
-            scan_expr_nameof(r, diagnostics, kernel);
-            scan_expr_nameof(v, diagnostics, kernel);
+            scan_expr_nameof(r, ctx);
+            scan_expr_nameof(v, ctx);
         }
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
-                scan_expr_nameof(a, diagnostics, kernel);
+                scan_expr_nameof(a, ctx);
             }
         }
         StatementNode::MethodInvocation(r, _, _, args) => {
-            scan_expr_nameof(r, diagnostics, kernel);
+            scan_expr_nameof(r, ctx);
             for a in args {
-                scan_expr_nameof(a, diagnostics, kernel);
+                scan_expr_nameof(a, ctx);
             }
         }
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-            scan_expr_nameof(cond, diagnostics, kernel);
-            reject_gpu_nameof(then_b, diagnostics, kernel);
+            scan_expr_nameof(cond, ctx);
+            reject_gpu_nameof(then_b, ctx);
             for (c, body) in elifs {
-                scan_expr_nameof(c, diagnostics, kernel);
-                reject_gpu_nameof(body, diagnostics, kernel);
+                scan_expr_nameof(c, ctx);
+                reject_gpu_nameof(body, ctx);
             }
             if let Some(eb) = else_b {
-                reject_gpu_nameof(eb, diagnostics, kernel);
+                reject_gpu_nameof(eb, ctx);
             }
         }
         StatementNode::While(cond, body) => {
-            scan_expr_nameof(cond, diagnostics, kernel);
-            reject_gpu_nameof(body, diagnostics, kernel);
+            scan_expr_nameof(cond, ctx);
+            reject_gpu_nameof(body, ctx);
         }
         StatementNode::DoWhile(body, cond) => {
-            reject_gpu_nameof(body, diagnostics, kernel);
-            scan_expr_nameof(cond, diagnostics, kernel);
+            reject_gpu_nameof(body, ctx);
+            scan_expr_nameof(cond, ctx);
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
-                scan_stmt_nameof(i, diagnostics, kernel);
+                scan_stmt_nameof(i, ctx);
             }
             if let Some(c) = cond {
-                scan_expr_nameof(c, diagnostics, kernel);
+                scan_expr_nameof(c, ctx);
             }
             if let Some(s) = step {
-                scan_stmt_nameof(s, diagnostics, kernel);
+                scan_stmt_nameof(s, ctx);
             }
-            reject_gpu_nameof(body, diagnostics, kernel);
+            reject_gpu_nameof(body, ctx);
         }
         StatementNode::Switch(subj, cases, default) => {
-            scan_expr_nameof(subj, diagnostics, kernel);
+            scan_expr_nameof(subj, ctx);
             for (labels, body) in cases {
                 for lit in labels {
-                    scan_expr_nameof(lit, diagnostics, kernel);
+                    scan_expr_nameof(lit, ctx);
                 }
-                reject_gpu_nameof(body, diagnostics, kernel);
+                reject_gpu_nameof(body, ctx);
             }
             if let Some(db) = default {
-                reject_gpu_nameof(db, diagnostics, kernel);
+                reject_gpu_nameof(db, ctx);
             }
         }
         StatementNode::Lock(e, body) => {
-            scan_expr_nameof(e, diagnostics, kernel);
-            reject_gpu_nameof(body, diagnostics, kernel);
+            scan_expr_nameof(e, ctx);
+            reject_gpu_nameof(body, ctx);
         }
         StatementNode::ForEach(_, e, _, _, body) => {
-            scan_expr_nameof(e, diagnostics, kernel);
-            reject_gpu_nameof(body, diagnostics, kernel);
+            scan_expr_nameof(e, ctx);
+            reject_gpu_nameof(body, ctx);
         }
-        StatementNode::Labeled(_, inner) => scan_stmt_nameof(inner, diagnostics, kernel),
+        StatementNode::Labeled(_, inner) => scan_stmt_nameof(inner, ctx),
         StatementNode::WorkgroupDecl(..)
         | StatementNode::Return(None)
         | StatementNode::Break(_)
@@ -155,24 +148,25 @@ fn scan_stmt_nameof(stmt: &StatementNode<'_>, diagnostics: &mut DiagnosticBag, k
     }
 }
 
-fn scan_expr_nameof(expr: &ExpressionNode<'_>, diagnostics: &mut DiagnosticBag, kernel: &str) {
+fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
     match expr {
         ExpressionNode::NameOf(tok, _) => {
-            diagnostics.report_error(
+            ctx.report_error(
                 format!(
-                    "GPU shader '{kernel}' cannot use nameof(...); nameof yields string, which is not allowed in shaders — keep it on the CPU host"
+                    "GPU shader '{}' cannot use nameof(...); nameof yields string, which is not allowed in shaders — keep it on the CPU host",
+                    ctx.kernel
                 ),
                 Some(tok.position),
             );
         }
         ExpressionNode::Binary(l, _, r) | ExpressionNode::IndexAccess(l, r) => {
-            scan_expr_nameof(l, diagnostics, kernel);
-            scan_expr_nameof(r, diagnostics, kernel);
+            scan_expr_nameof(l, ctx);
+            scan_expr_nameof(r, ctx);
         }
         ExpressionNode::Ternary(c, t, e) => {
-            scan_expr_nameof(c, diagnostics, kernel);
-            scan_expr_nameof(t, diagnostics, kernel);
-            scan_expr_nameof(e, diagnostics, kernel);
+            scan_expr_nameof(c, ctx);
+            scan_expr_nameof(t, ctx);
+            scan_expr_nameof(e, ctx);
         }
         ExpressionNode::Unary(_, e)
         | ExpressionNode::IncDec { target: e, .. }
@@ -183,47 +177,47 @@ fn scan_expr_nameof(expr: &ExpressionNode<'_>, diagnostics: &mut DiagnosticBag, 
         | ExpressionNode::Await(_, e)
         | ExpressionNode::Try(e)
         | ExpressionNode::NamedArg(_, e)
-        | ExpressionNode::RefArgument(_, e) => scan_expr_nameof(e, diagnostics, kernel),
+        | ExpressionNode::RefArgument(_, e) => scan_expr_nameof(e, ctx),
         ExpressionNode::FunctionCall(_, _, args)
         | ExpressionNode::ArrayLiteral(_, args)
         | ExpressionNode::TupleLiteral(_, args)
         | ExpressionNode::SetLiteral(_, args) => {
             for a in args {
-                scan_expr_nameof(a, diagnostics, kernel);
+                scan_expr_nameof(a, ctx);
             }
         }
         ExpressionNode::Call(c, _, args) | ExpressionNode::MethodCall(c, _, _, args) => {
-            scan_expr_nameof(c, diagnostics, kernel);
+            scan_expr_nameof(c, ctx);
             for a in args {
-                scan_expr_nameof(a, diagnostics, kernel);
+                scan_expr_nameof(a, ctx);
             }
         }
         ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
-                scan_expr_nameof(k, diagnostics, kernel);
-                scan_expr_nameof(v, diagnostics, kernel);
+                scan_expr_nameof(k, ctx);
+                scan_expr_nameof(v, ctx);
             }
         }
         ExpressionNode::Switch(_, subj, arms) => {
-            scan_expr_nameof(subj, diagnostics, kernel);
+            scan_expr_nameof(subj, ctx);
             for arm in arms {
                 if let Some(g) = &arm.guard {
-                    scan_expr_nameof(g, diagnostics, kernel);
+                    scan_expr_nameof(g, ctx);
                 }
                 match &arm.body {
                     dream_syntax::nodes::SwitchArmBody::Expr(e) => {
-                        scan_expr_nameof(e, diagnostics, kernel)
+                        scan_expr_nameof(e, ctx)
                     }
                     dream_syntax::nodes::SwitchArmBody::Block(stmts) => {
-                        reject_gpu_nameof(stmts, diagnostics, kernel)
+                        reject_gpu_nameof(stmts, ctx)
                     }
                 }
             }
         }
         ExpressionNode::Lambda(l) => match &l.body {
-            dream_syntax::nodes::LambdaBody::Expr(e) => scan_expr_nameof(e, diagnostics, kernel),
+            dream_syntax::nodes::LambdaBody::Expr(e) => scan_expr_nameof(e, ctx),
             dream_syntax::nodes::LambdaBody::Block(stmts) => {
-                reject_gpu_nameof(stmts, diagnostics, kernel)
+                reject_gpu_nameof(stmts, ctx)
             }
         },
         ExpressionNode::Literal(_)
@@ -243,8 +237,6 @@ fn emit_stmt(
     wg: &mut String,
     indent: usize,
     ctx: &EmitCtx<'_>,
-    diagnostics: &mut DiagnosticBag,
-    kernel: &str,
 ) {
     let p = pad(indent);
     match stmt {
@@ -372,16 +364,16 @@ fn emit_stmt(
         },
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             out.push_str(&format!("{}if ({}) {{\n", p, emit_expr(cond, ctx)));
-            emit_stmts(then_b, out, wg, indent + 1, ctx, diagnostics, kernel);
+            emit_stmts(then_b, out, wg, indent + 1, ctx);
             out.push_str(&format!("{}}}\n", p));
             for (c, body) in elifs {
                 out.push_str(&format!("{}else if ({}) {{\n", p, emit_expr(c, ctx)));
-                emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
+                emit_stmts(body, out, wg, indent + 1, ctx);
                 out.push_str(&format!("{}}}\n", p));
             }
             if let Some(eb) = else_b {
                 out.push_str(&format!("{}else {{\n", p));
-                emit_stmts(eb, out, wg, indent + 1, ctx, diagnostics, kernel);
+                emit_stmts(eb, out, wg, indent + 1, ctx);
                 out.push_str(&format!("{}}}\n", p));
             }
         }
@@ -392,12 +384,12 @@ fn emit_stmt(
                 p,
                 emit_expr(cond, ctx)
             ));
-            emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
+            emit_stmts(body, out, wg, indent + 1, ctx);
             out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::DoWhile(body, cond) => {
             out.push_str(&format!("{}loop {{\n", p));
-            emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
+            emit_stmts(body, out, wg, indent + 1, ctx);
             out.push_str(&format!(
                 "{}  if (!({})) {{ break; }}\n",
                 p,
@@ -407,7 +399,7 @@ fn emit_stmt(
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
-                emit_stmt(i, out, wg, indent, ctx, diagnostics, kernel);
+                emit_stmt(i, out, wg, indent, ctx);
             }
             out.push_str(&format!("{}loop {{\n", p));
             if let Some(c) = cond {
@@ -417,15 +409,15 @@ fn emit_stmt(
                     emit_expr(c, ctx)
                 ));
             }
-            emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
+            emit_stmts(body, out, wg, indent + 1, ctx);
             if let Some(s) = step {
-                emit_stmt(s, out, wg, indent + 1, ctx, diagnostics, kernel);
+                emit_stmt(s, out, wg, indent + 1, ctx);
             }
             out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::Break(_) => out.push_str(&format!("{}break;\n", p)),
         StatementNode::Continue(_) => out.push_str(&format!("{}continue;\n", p)),
-        StatementNode::Labeled(_, inner) => emit_stmt(inner, out, wg, indent, ctx, diagnostics, kernel),
+        StatementNode::Labeled(_, inner) => emit_stmt(inner, out, wg, indent, ctx),
         StatementNode::Switch(subject, cases, default) => {
             // Lower to if-else chain (WGSL switch is more limited).
             let sub = emit_expr(subject, ctx);
@@ -438,21 +430,39 @@ fn emit_stmt(
                 let kw = if first { "if" } else { "else if" };
                 first = false;
                 out.push_str(&format!("{}{} ({}) {{\n", p, kw, conds.join(" || ")));
-                emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
+                emit_stmts(body, out, wg, indent + 1, ctx);
                 out.push_str(&format!("{}}}\n", p));
             }
             if let Some(db) = default {
                 out.push_str(&format!("{}else {{\n", p));
-                emit_stmts(db, out, wg, indent + 1, ctx, diagnostics, kernel);
+                emit_stmts(db, out, wg, indent + 1, ctx);
                 out.push_str(&format!("{}}}\n", p));
             }
         }
-        StatementNode::FunctionInvocation(name, _, args)
-        | StatementNode::MethodInvocation(_, name, _, args) => {
+        StatementNode::FunctionInvocation(name, type_args, args)
+        | StatementNode::MethodInvocation(_, name, type_args, args) => {
+            if type_args.as_ref().is_some_and(|a| !a.is_empty()) {
+                ctx.report_error(
+                    format!(
+                        "GPU shader '{}' does not support generic type arguments on calls",
+                        ctx.kernel
+                    ),
+                    Some(name.position),
+                );
+            }
             let call = emit_call(&name.text, args, ctx);
             out.push_str(&format!("{}{};\n", p, call));
         }
         StatementNode::ExpressionStatement(e) => {
+            if let ExpressionNode::IncDec {
+                is_inc, target, ..
+            } = e
+            {
+                let place = emit_expr(target, ctx);
+                let op = if *is_inc { "+" } else { "-" };
+                out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
+                return;
+            }
             out.push_str(&format!("{}{};\n", p, emit_expr(e, ctx)));
         }
         StatementNode::ForEach(..)
@@ -466,9 +476,10 @@ fn emit_stmt(
                 StatementNode::TupleDeclaration { .. } => "tuple declaration",
                 _ => "statement",
             };
-            diagnostics.report_error(
+            ctx.report_error(
                 format!(
-                    "GPU shader '{kernel}' contains unsupported {kind}; remove it or rewrite with supported control flow"
+                    "GPU shader '{}' contains unsupported {kind}; remove it or rewrite with supported control flow",
+                    ctx.kernel
                 ),
                 stmt_span(stmt),
             );

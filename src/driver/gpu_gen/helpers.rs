@@ -351,21 +351,15 @@ fn emit_one_helper(
         scopes: RefCell::new(scopes),
         struct_fields,
         helper_returns,
+        kernel: name,
+        diagnostics: RefCell::new(diagnostics),
     };
     let mut body = String::new();
     let mut wg = String::new();
-    reject_gpu_nameof(func.body, diagnostics, name);
-    emit_stmts(
-        func.body,
-        &mut body,
-        &mut wg,
-        1,
-        &ctx,
-        diagnostics,
-        name,
-    );
+    reject_gpu_nameof(func.body, &ctx);
+    emit_stmts(func.body, &mut body, &mut wg, 1, &ctx);
     if !wg.is_empty() {
-        diagnostics.report_error(
+        ctx.report_error(
             format!("GPU helper '{name}' cannot declare @workgroup locals"),
             Some(func.name.position),
         );

@@ -2,6 +2,8 @@
 
 use super::ident::escape_wgsl_ident;
 use super::types::GpuBinding;
+use dream_diagnostics::DiagnosticBag;
+use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use std::cell::RefCell;
 
@@ -19,9 +21,27 @@ pub(super) struct EmitCtx<'a> {
     pub(super) struct_fields: &'a IndexMap<String, IndexMap<String, String>>,
     /// `@gpu` helper name → WGSL return type (for unannotated `let` inference).
     pub(super) helper_returns: &'a IndexMap<String, String>,
+    /// Dream function name, used in GPU diagnostic messages.
+    pub(super) kernel: &'a str,
+    pub(super) diagnostics: RefCell<&'a mut DiagnosticBag>,
 }
 
 impl EmitCtx<'_> {
+    pub(super) fn report_error(&self, message: String, span: Option<TextSpan>) {
+        self.diagnostics.borrow_mut().report_error(message, span);
+    }
+
+    pub(super) fn unsupported_expr(&self, kind: &str, span: Option<TextSpan>) -> String {
+        self.report_error(
+            format!(
+                "GPU shader '{}' contains unsupported {kind}; remove it or rewrite with supported expressions",
+                self.kernel
+            ),
+            span,
+        );
+        "0".into()
+    }
+
     pub(super) fn mangle(&self, dream_name: &str) -> String {
         format!("{}_{}", self.prefix, dream_name)
     }

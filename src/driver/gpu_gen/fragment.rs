@@ -47,7 +47,10 @@ pub(super) fn emit_fragment(
                     Ok((s, sname)) => {
                         struct_header.push_str(&s);
                         return_ty_wgsl = sname;
-                        color_targets = fragment_color_target_count(decl);
+                        match fragment_color_target_count(decl) {
+                            Ok(n) => color_targets = n,
+                            Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+                        }
                     }
                     Err(e) => diagnostics.report_error(e, Some(func.name.position)),
                 }
@@ -103,7 +106,7 @@ pub(super) fn emit_fragment(
             false
         };
         if !consumed {
-            emit_resource_param(
+            if let Err(e) = emit_resource_param(
                 first,
                 &entry,
                 &mut header,
@@ -111,12 +114,14 @@ pub(super) fn emit_fragment(
                 &mut binding_idx,
                 &mut uniform_fields,
                 &mut has_uniform,
-            );
+            ) {
+                diagnostics.report_error(e, Some(first.name.position));
+            }
         }
     }
 
     for param in param_iter {
-        emit_resource_param(
+        if let Err(e) = emit_resource_param(
             param,
             &entry,
             &mut header,
@@ -124,7 +129,9 @@ pub(super) fn emit_fragment(
             &mut binding_idx,
             &mut uniform_fields,
             &mut has_uniform,
-        );
+        ) {
+            diagnostics.report_error(e, Some(param.name.position));
+        }
     }
 
     if has_uniform {
@@ -153,27 +160,22 @@ pub(super) fn emit_fragment(
     if let Some((ref vp, ref sname)) = vary_param {
         scopes[0].insert(vp.clone(), sname.clone());
     }
-    let ctx = EmitCtx {
-        prefix: &entry,
-        bindings: &bindings,
-        workgroup_names: &[],
-        scopes: RefCell::new(scopes),
-        struct_fields: &struct_fields,
-        helper_returns: &helper_returns,
-    };
-
     let mut workgroup_decls = String::new();
     let mut body = String::new();
-    reject_gpu_nameof(func.body, diagnostics, &func.name.text);
-    emit_stmts(
-        func.body,
-        &mut body,
-        &mut workgroup_decls,
-        1,
-        &ctx,
-        diagnostics,
-        &func.name.text,
-    );
+    {
+        let ctx = EmitCtx {
+            prefix: &entry,
+            bindings: &bindings,
+            workgroup_names: &[],
+            scopes: RefCell::new(scopes),
+            struct_fields: &struct_fields,
+            helper_returns: &helper_returns,
+            kernel: &func.name.text,
+            diagnostics: RefCell::new(diagnostics),
+        };
+        reject_gpu_nameof(func.body, &ctx);
+        emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
+    }
 
     let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
 

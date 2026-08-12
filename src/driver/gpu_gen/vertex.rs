@@ -11,7 +11,7 @@ use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuShaderInfo};
 use dream_abi::attributes::{
-    has_readonly_attr, param_binding_override, param_group_override,
+    has_named_attr, has_readonly_attr, param_binding_override, param_group_override,
 };
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
@@ -72,7 +72,7 @@ pub(super) fn emit_vertex(
         };
         if !consumed {
             // First param is a resource/uniform, not vertex attrs.
-            emit_resource_param(
+            if let Err(e) = emit_resource_param(
                 first,
                 &entry,
                 &mut header,
@@ -80,12 +80,14 @@ pub(super) fn emit_vertex(
                 &mut binding_idx,
                 &mut uniform_fields,
                 &mut has_uniform,
-            );
+            ) {
+                diagnostics.report_error(e, Some(first.name.position));
+            }
         }
     }
 
     for param in param_iter {
-        emit_resource_param(
+        if let Err(e) = emit_resource_param(
             param,
             &entry,
             &mut header,
@@ -93,7 +95,9 @@ pub(super) fn emit_vertex(
             &mut binding_idx,
             &mut uniform_fields,
             &mut has_uniform,
-        );
+        ) {
+            diagnostics.report_error(e, Some(param.name.position));
+        }
     }
 
     if has_uniform {
@@ -143,27 +147,22 @@ pub(super) fn emit_vertex(
     if let Some((ref vp, ref sname)) = vertex_param {
         scopes[0].insert(vp.clone(), sname.clone());
     }
-    let ctx = EmitCtx {
-        prefix: &entry,
-        bindings: &bindings,
-        workgroup_names: &[],
-        scopes: RefCell::new(scopes),
-        struct_fields: &struct_fields,
-        helper_returns: &helper_returns,
-    };
-
     let mut workgroup_decls = String::new();
     let mut body = String::new();
-    reject_gpu_nameof(func.body, diagnostics, &func.name.text);
-    emit_stmts(
-        func.body,
-        &mut body,
-        &mut workgroup_decls,
-        1,
-        &ctx,
-        diagnostics,
-        &func.name.text,
-    );
+    {
+        let ctx = EmitCtx {
+            prefix: &entry,
+            bindings: &bindings,
+            workgroup_names: &[],
+            scopes: RefCell::new(scopes),
+            struct_fields: &struct_fields,
+            helper_returns: &helper_returns,
+            kernel: &func.name.text,
+            diagnostics: RefCell::new(diagnostics),
+        };
+        reject_gpu_nameof(func.body, &ctx);
+        emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
+    }
 
     let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
 
@@ -254,10 +253,28 @@ pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
     }
 }
 
-fn next_binding_slot(param: &ParameterNode, binding_idx: &mut u32) -> (u32, u32) {
-    let group = param_group_override(&param.attributes).unwrap_or(0);
+pub(super) fn next_binding_slot(
+    param: &ParameterNode,
+    binding_idx: &mut u32,
+) -> Result<(u32, u32), String> {
+    let group = if has_named_attr(&param.attributes, "group") {
+        param_group_override(&param.attributes).ok_or_else(|| {
+            format!(
+                "invalid @group on parameter '{}'; expected an integer literal",
+                param.name.text
+            )
+        })?
+    } else {
+        0
+    };
     let binding = match param_binding_override(&param.attributes) {
         Some(n) => n,
+        None if has_named_attr(&param.attributes, "binding") => {
+            return Err(format!(
+                "invalid @binding on parameter '{}'; expected an integer literal",
+                param.name.text
+            ));
+        }
         None => {
             let n = *binding_idx;
             *binding_idx += 1;
@@ -267,7 +284,7 @@ fn next_binding_slot(param: &ParameterNode, binding_idx: &mut u32) -> (u32, u32)
     if param_binding_override(&param.attributes).is_some() {
         *binding_idx = (*binding_idx).max(binding + 1);
     }
-    (group, binding)
+    Ok((group, binding))
 }
 
 pub(super) fn emit_resource_param(
@@ -278,12 +295,12 @@ pub(super) fn emit_resource_param(
     binding_idx: &mut u32,
     uniform_fields: &mut String,
     has_uniform: &mut bool,
-) {
+) -> Result<(), String> {
     match classify_resource(param) {
         ResClass::Texture { storage } => {
             let pname = param.name.text.clone();
             let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx);
+            let (group, binding) = next_binding_slot(param, binding_idx)?;
             let (kind, decl) = if storage {
                 (
                     "storage_texture",
@@ -316,7 +333,7 @@ pub(super) fn emit_resource_param(
         ResClass::Sampler => {
             let pname = param.name.text.clone();
             let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx);
+            let (group, binding) = next_binding_slot(param, binding_idx)?;
             header.push_str(&format!(
                 "@group({group}) @binding({binding}) var {wgsl_name}: sampler;\n"
             ));
@@ -332,7 +349,7 @@ pub(super) fn emit_resource_param(
         ResClass::Storage { elem } => {
             let pname = param.name.text.clone();
             let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx);
+            let (group, binding) = next_binding_slot(param, binding_idx)?;
             let elem_ty = escape_wgsl_ident(&elem);
             header.push_str(&format!(
                 "@group({group}) @binding({binding}) var<storage, read> {wgsl_name}: array<{elem_ty}>;\n"
@@ -350,7 +367,7 @@ pub(super) fn emit_resource_param(
             *has_uniform = true;
             let pname = param.name.text.clone();
             uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
-            let (_group, binding) = next_binding_slot(param, binding_idx);
+            let (_group, binding) = next_binding_slot(param, binding_idx)?;
             bindings.push(GpuBinding {
                 name: pname,
                 binding,
@@ -361,6 +378,7 @@ pub(super) fn emit_resource_param(
             });
         }
     }
+    Ok(())
 }
 
 pub(super) fn finalize_uniforms(

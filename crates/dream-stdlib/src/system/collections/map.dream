@@ -203,12 +203,21 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.count == 0;
     }
 
-    // Removes all entries, keeping the current capacity for reuse.
+    // Removes all entries, keeping the current capacity. Occupied key/value slots are zeroed so
+    // managed entries release; probe `states` are reset in place (no triple `Buffer.alloc`).
     public fun clear(): void {
         let c = this.cap;
-        this.keys = Buffer.alloc<K>(c);
-        this.values = Buffer.alloc<V>(c);
-        this.states = Buffer.alloc<int>(c);
+        let zk = Buffer.alloc<K>(1);
+        let zv = Buffer.alloc<V>(1);
+        let i = 0;
+        while (i < c) {
+            if (this.states[i] == hash_slot_occupied()) {
+                this.keys[i] = zk[0];
+                this.values[i] = zv[0];
+            }
+            this.states[i] = hash_slot_empty();
+            i = i + 1;
+        }
         this.count = 0;
         this.used = 0;
     }

@@ -1,0 +1,20 @@
+import system;
+
+fun main(): void {
+    let arena = ScratchArena(1024);
+    let round = 0;
+    while (round < 3) {
+        let a = arena.alloc_ints(4);
+        let i = 0;
+        while (i < a.length) {
+            a[i] = round * 10 + i;
+            i = i + 1;
+        }
+        System.println(a[0]);
+        System.println(a[3]);
+        System.println(arena.remaining());
+        arena.reset();
+        System.println(arena.remaining());
+        round = round + 1;
+    }
+}

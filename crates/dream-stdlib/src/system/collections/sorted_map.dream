@@ -71,21 +71,21 @@ public class SortedMap<K : Comparable<K>, V> {
         let idx = this.locate(key);
         if (idx >= 0) {
             this.values_arr[idx] = value;
-            return;
+        } else {
+            let insert_at = 0 - idx - 1;
+            if (this.count == this.keys_arr.length) {
+                this.grow();
+            }
+            let i = this.count;
+            while (i > insert_at) {
+                this.keys_arr[i] = this.keys_arr[i - 1];
+                this.values_arr[i] = this.values_arr[i - 1];
+                i = i - 1;
+            }
+            this.keys_arr[insert_at] = key;
+            this.values_arr[insert_at] = value;
+            this.count = this.count + 1;
         }
-        let insert_at = 0 - idx - 1;
-        if (this.count == this.keys_arr.length) {
-            this.grow();
-        }
-        let i = this.count;
-        while (i > insert_at) {
-            this.keys_arr[i] = this.keys_arr[i - 1];
-            this.values_arr[i] = this.values_arr[i - 1];
-            i = i - 1;
-        }
-        this.keys_arr[insert_at] = key;
-        this.values_arr[insert_at] = value;
-        this.count = this.count + 1;
     }
 
     // Gets the value for a key, or `None`.

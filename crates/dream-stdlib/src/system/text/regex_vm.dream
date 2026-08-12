@@ -18,12 +18,30 @@ internal class RegexVM {
     ngroup: int;
     multiline: bool;
     table: RegexSubTable;
+    // SOA thread queues + epsilon stack (parallel pcs / caps), reused across steps via `clear`.
+    stack_pcs: List<int>;
+    stack_caps: List<int[]>;
+    clist_pcs: List<int>;
+    clist_caps: List<int[]>;
+    nlist_pcs: List<int>;
+    nlist_caps: List<int[]>;
+    // Reused visit-mark / init-capture buffers (grown if a larger program needs more slots).
+    on_list: int[];
+    init_caps: int[];
 
     public constructor(borrow prog: RegexInst[], ngroup: int, multiline: bool, borrow table: RegexSubTable) {
         this.prog = prog;
         this.ngroup = ngroup;
         this.multiline = multiline;
         this.table = table;
+        this.stack_pcs = List<int>();
+        this.stack_caps = List<int[]>();
+        this.clist_pcs = List<int>();
+        this.clist_caps = List<int[]>();
+        this.nlist_pcs = List<int>();
+        this.nlist_caps = List<int[]>();
+        this.on_list = Buffer.alloc<int>(0);
+        this.init_caps = Buffer.alloc<int>(0);
     }
 
     // Whether a lookaround assertion holds at `pos`. Lookahead runs the sub-program anchored at
@@ -66,11 +84,7 @@ internal class RegexVM {
     fun copy_caps(src: int[]): int[] {
         let n = src.length;
         let dst = Buffer.alloc<int>(n);
-        let i = 0;
-        while (i < n) {
-            dst[i] = src[i];
-            i = i + 1;
-        }
+        Buffer.elems_copy<int>(dst, 0, src, 0, n);
         return dst;
     }
 
@@ -148,16 +162,31 @@ internal class RegexVM {
 
     // Follows every epsilon transition (Nop/Alt/Capture/EmptyWidth) reachable from `start_pc`
     // without consuming input, appending the real (CharClass/Match) instructions it reaches to
-    // `threads`, in priority order (earlier alternatives first — the same order a backtracker
-    // would explore them in). `on_list`/`gen` deduplicate: an instruction already added during
-    // this generation is skipped, so a cyclic epsilon graph (e.g. `(a*)*`) can't loop forever and
-    // a lower-priority path never overrides a higher-priority one that reached the same state.
-    fun add_to_threadq(threads: List<RegexThread>, on_list: int[], gen: int, start_pc: int, pos: int, borrow input: string, len: int, start_caps: int[]): void {
-        let stack = List<RegexAddFrame>();
-        stack.push(RegexAddFrame(start_pc, start_caps));
-        while (stack.length > 0) {
-            let frame = stack.pop().unwrap_or(RegexAddFrame(0 - 1, start_caps));
-            let pc = frame.pc;
+    // `out_pcs`/`out_caps`, in priority order (earlier alternatives first — the same order a
+    // backtracker would explore them in). `on_list`/`gen` deduplicate: an instruction already
+    // added during this generation is skipped, so a cyclic epsilon graph (e.g. `(a*)*`) can't
+    // loop forever and a lower-priority path never overrides a higher-priority one that reached
+    // the same state.
+    fun add_to_threadq(
+        out_pcs: List<int>,
+        out_caps: List<int[]>,
+        on_list: int[],
+        gen: int,
+        start_pc: int,
+        pos: int,
+        borrow input: string,
+        len: int,
+        start_caps: int[]
+    ): void {
+        let sp = this.stack_pcs;
+        let sc = this.stack_caps;
+        sp.clear();
+        sc.clear();
+        sp.push(start_pc);
+        sc.push(start_caps);
+        while (sp.length > 0) {
+            let pc = sp.pop().unwrap_or(0 - 1);
+            let caps = sc.pop().unwrap_or(start_caps);
             if (pc < 0) {
                 // Never actually hit: only the pop-on-empty fallback above produces pc < 0.
             } else if (on_list[pc] == gen) {
@@ -166,30 +195,37 @@ internal class RegexVM {
                 on_list[pc] = gen;
                 let inst = this.prog[pc];
                 if (inst.opcode == RegexOp.Nop) {
-                    stack.push(RegexAddFrame(inst.out, frame.caps));
+                    sp.push(inst.out);
+                    sc.push(caps);
                 } else if (inst.opcode == RegexOp.Alt) {
                     // Push the lower-priority branch first so the higher-priority one (`out`) is
                     // popped — and its whole epsilon-closure explored — first, matching the order
                     // a recursive depth-first walk would visit them in.
-                    stack.push(RegexAddFrame(inst.out1, frame.caps));
-                    stack.push(RegexAddFrame(inst.out, frame.caps));
+                    sp.push(inst.out1);
+                    sc.push(caps);
+                    sp.push(inst.out);
+                    sc.push(caps);
                 } else if (inst.opcode == RegexOp.Capture) {
-                    let updated = this.copy_caps(frame.caps);
+                    let updated = this.copy_caps(caps);
                     if ((inst.cap >= 0) && (inst.cap < updated.length)) {
                         updated[inst.cap] = pos;
                     }
-                    stack.push(RegexAddFrame(inst.out, updated));
+                    sp.push(inst.out);
+                    sc.push(updated);
                 } else if (inst.opcode == RegexOp.EmptyWidth) {
                     if (this.empty_ok(inst.empty_kind, pos, input, len)) {
-                        stack.push(RegexAddFrame(inst.out, frame.caps));
+                        sp.push(inst.out);
+                        sc.push(caps);
                     }
                 } else if (inst.opcode == RegexOp.Look) {
                     if (this.look_holds(inst, pos, input, len)) {
-                        stack.push(RegexAddFrame(inst.out, frame.caps));
+                        sp.push(inst.out);
+                        sc.push(caps);
                     }
                 } else {
                     // CharClass or Match: a real thread, recorded in priority order.
-                    threads.push(RegexThread(pc, frame.caps));
+                    out_pcs.push(pc);
+                    out_caps.push(caps);
                 }
             }
         }
@@ -202,13 +238,19 @@ internal class RegexVM {
     public fun find(borrow input: string, start: int): Option<RegexMatch> {
         let len = input.length;
         let ncap = 2 * (this.ngroup + 1);
-        let on_list = Buffer.alloc<int>(this.prog.length);
+        if (this.on_list.length < this.prog.length) {
+            this.on_list = Buffer.alloc<int>(this.prog.length);
+        }
+        let on_list = this.on_list;
         let i0 = 0;
-        while (i0 < on_list.length) {
+        while (i0 < this.prog.length) {
             on_list[i0] = 0 - 1;
             i0 = i0 + 1;
         }
-        let init_caps = Buffer.alloc<int>(ncap);
+        if (this.init_caps.length < ncap) {
+            this.init_caps = Buffer.alloc<int>(ncap);
+        }
+        let init_caps = this.init_caps;
         let j0 = 0;
         while (j0 < ncap) {
             init_caps[j0] = 0 - 1;
@@ -216,37 +258,62 @@ internal class RegexVM {
         }
 
         let gen = 1;
-        let clist = List<RegexThread>();
-        this.add_to_threadq(clist, on_list, gen, 0, start, input, len, init_caps);
+        let clist_pcs = this.clist_pcs;
+        let clist_caps = this.clist_caps;
+        let nlist_pcs = this.nlist_pcs;
+        let nlist_caps = this.nlist_caps;
+        clist_pcs.clear();
+        clist_caps.clear();
+        nlist_pcs.clear();
+        nlist_caps.clear();
+        this.add_to_threadq(clist_pcs, clist_caps, on_list, gen, 0, start, input, len, init_caps);
 
         let matched: Option<int[]> = Option.None;
         let pos = start;
         let going = true;
         while (going) {
-            if (clist.length == 0) {
+            if (clist_pcs.length == 0) {
                 going = false;
             } else {
-                let nlist = List<RegexThread>();
+                nlist_pcs.clear();
+                nlist_caps.clear();
                 gen = gen + 1;
                 let k = 0;
                 let stop = false;
-                while ((k < clist.length) && (stop == false)) {
-                    let t = clist.get(k).unwrap_or(RegexThread(0, init_caps));
-                    let inst = this.prog[t.pc];
+                while ((k < clist_pcs.length) && (stop == false)) {
+                    let pc = clist_pcs.get(k).unwrap_or(0);
+                    let caps = clist_caps.get(k).unwrap_or(init_caps);
+                    let inst = this.prog[pc];
                     if (inst.opcode == RegexOp.CharClass) {
                         if (pos < len) {
                             let c = input.char_at(pos);
                             if (this.char_matches(inst, c)) {
-                                this.add_to_threadq(nlist, on_list, gen, inst.out, pos + 1, input, len, t.caps);
+                                this.add_to_threadq(
+                                    nlist_pcs,
+                                    nlist_caps,
+                                    on_list,
+                                    gen,
+                                    inst.out,
+                                    pos + 1,
+                                    input,
+                                    len,
+                                    caps
+                                );
                             }
                         }
                     } else if (inst.opcode == RegexOp.Match) {
-                        matched = Option.Some(t.caps);
+                        matched = Option.Some(caps);
                         stop = true; // lower-priority threads still queued this round can't beat it
                     }
                     k = k + 1;
                 }
-                clist = nlist;
+                // Swap queues so the next generation reuses the previous clist's capacity.
+                let swap_pcs = clist_pcs;
+                let swap_caps = clist_caps;
+                clist_pcs = nlist_pcs;
+                clist_caps = nlist_caps;
+                nlist_pcs = swap_pcs;
+                nlist_caps = swap_caps;
                 if (pos >= len) {
                     going = false;
                 } else {

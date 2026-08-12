@@ -37,6 +37,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/pointer.dream"),
             ),
             (
+                "<std>/system/core/scratch_arena.dream",
+                include_str!("system/core/scratch_arena.dream"),
+            ),
+            (
                 "<std>/system/core/closure.dream",
                 include_str!("system/core/closure.dream"),
             ),
@@ -329,14 +333,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/text/regex_parser.dream",
                 include_str!("system/text/regex_parser.dream"),
-            ),
-            (
-                "<std>/system/text/regex_thread.dream",
-                include_str!("system/text/regex_thread.dream"),
-            ),
-            (
-                "<std>/system/text/regex_add_frame.dream",
-                include_str!("system/text/regex_add_frame.dream"),
             ),
             (
                 "<std>/system/text/regex_match.dream",

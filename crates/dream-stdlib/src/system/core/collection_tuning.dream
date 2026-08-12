@@ -24,8 +24,8 @@ public fun hash_slot_occupied(): int { return 1; }
 // A hash-table probe slot held a key/value that was since removed: probing must continue past it
 // (unlike an empty slot), but the slot is available for reuse by a future insert.
 public fun hash_slot_tombstone(): int { return 2; }
-// Smallest hash-table backing-array capacity (already a power of 2); also the capacity `clear()`
-// resets to.
+// Smallest hash-table backing-array capacity (already a power of 2). `Map`/`Set.clear` keep the
+// current capacity and reuse buffers rather than shrinking back to this floor.
 public fun hash_min_capacity(): int { return 8; }
 // `Set`/`Map` grow when `(used + 1) * hash_load_factor_denom() >= capacity * hash_load_factor_num()`,
 // i.e. before the table would exceed 3/4 full, keeping the average probe length short.

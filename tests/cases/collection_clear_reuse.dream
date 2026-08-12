@@ -1,0 +1,44 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let xs = List<int>();
+    let round = 0;
+    while (round < 3) {
+        xs.push(round);
+        xs.push(round + 10);
+        System.println(xs.length);
+        System.println(xs.get(0).unwrap_or(-1));
+        xs.clear();
+        System.println(xs.length);
+        System.println(xs.capacity());
+        round = round + 1;
+    }
+
+    let m = Map<int, int>();
+    m.set(1, 10);
+    m.set(2, 20);
+    System.println(m.length);
+    m.clear();
+    System.println(m.length);
+    m.set(3, 30);
+    System.println(m.get(3).unwrap_or(-1));
+
+    let s = Set<int>();
+    s.add(7);
+    s.add(8);
+    System.println(s.length);
+    s.clear();
+    System.println(s.length);
+    s.add(9);
+    System.println(s.contains(9));
+
+    let names = List<string>();
+    names.push("a");
+    names.push("b");
+    System.println(names.length);
+    names.clear();
+    System.println(names.length);
+    names.push("c");
+    System.println(names.get(0).unwrap_or(""));
+}

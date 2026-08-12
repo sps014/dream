@@ -1,5 +1,6 @@
 //! Scalar replacement of aggregates. A struct allocated with the implicit zero-initializing default
-//! constructor (`New { ctor: None }`) that never escapes — used only as the base of `obj.field`
+//! constructor (`New { ctor: None }`) — or a user constructor that has been lowered to the same
+//! shape by [`ExpandSimpleCtors`] — that never escapes — used only as the base of `obj.field`
 //! loads and stores, never read whole, passed to a call, returned, stored elsewhere, or indexed —
 //! has each of its fields promoted to a plain local. The allocation then becomes dead (removed
 //! here) and the field locals feed the scalar pipeline (prop / GVN / DCE).
@@ -10,11 +11,11 @@
 //! lived only as a field of the eliminated object.
 
 use super::licm::{stmt_reads, terminator_reads};
-use super::MirPass;
+use super::{MirPass, ModulePass};
 use crate::{
-    Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+    Const, Local, LocalDecl, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
-use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
+use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use std::collections::BTreeMap;
 
 pub struct Sroa;
@@ -36,6 +37,211 @@ impl MirPass for Sroa {
         }
         changed
     }
+}
+
+/// Rewrites `o = New { ctor: Some(C), args }` into `o = New { ctor: None }` plus direct field
+/// stores when `C` is a straight-line initializer that only writes non-ref fields of `this` from
+/// parameters/constants. Enables silent SROA on short-lived `Acc(n)`-style instances without
+/// `@stack` class syntax.
+pub struct ExpandSimpleCtors;
+
+impl ModulePass for ExpandSimpleCtors {
+    fn name(&self) -> &'static str {
+        "expand-simple-ctors"
+    }
+
+    fn run(&self, mir: &mut Mir, interner: &TypeInterner) -> bool {
+        // Snapshot ctor bodies first — we only read them while rewriting callers.
+        let ctor_inits: BTreeMap<DefId, Vec<(usize, CtorInit)>> = {
+            let mut map = BTreeMap::new();
+            for f in &mir.functions {
+                if let Some(inits) = analyze_simple_ctor(f, interner) {
+                    map.insert(f.def, inits);
+                }
+            }
+            map
+        };
+        if ctor_inits.is_empty() {
+            return false;
+        }
+        let mut changed = false;
+        for f in &mut mir.functions {
+            changed |= expand_in_function(f, &ctor_inits);
+        }
+        changed
+    }
+}
+
+/// How a simple ctor initializes one field of `this`.
+#[derive(Clone, Debug)]
+enum CtorInit {
+    /// `this.f = params[param_index]` (param 0 is `this`, so user args start at 1).
+    Param(usize),
+    Const(Const),
+}
+
+fn analyze_simple_ctor(
+    ctor: &MirFunction,
+    interner: &TypeInterner,
+) -> Option<Vec<(usize, CtorInit)>> {
+    if ctor.params.is_empty() || ctor.is_async || ctor.blocks.len() != 1 {
+        return None;
+    }
+    let this = ctor.params[0];
+    let block = &ctor.blocks[0];
+    if !matches!(
+        block.terminator,
+        Terminator::Return(None) | Terminator::Return(Some(_))
+    ) {
+        // Constructors return void; tolerate either encoding.
+        return None;
+    }
+    if matches!(block.terminator, Terminator::Return(Some(ref op)) if operand_mentions(op, this)) {
+        return None;
+    }
+    let mut inits: Vec<(usize, CtorInit)> = Vec::new();
+    let mut assigned: BTreeMap<usize, ()> = BTreeMap::new();
+    for stmt in &block.stmts {
+        match stmt {
+            Statement::Assign(Place::Field { base, field }, rv) if *base == this => {
+                if assigned.contains_key(field) {
+                    return None; // not a straight initializer
+                }
+                let ty = rvalue_store_ty(ctor, interner, rv);
+                if interner.is_reference(ty) {
+                    return None;
+                }
+                let init = match rv {
+                    Rvalue::Use(Operand::Const(c)) => CtorInit::Const(c.clone()),
+                    Rvalue::Use(Operand::Copy(Place::Local(p))) => {
+                        let pi = ctor.params.iter().position(|q| q == p)?;
+                        if pi == 0 {
+                            return None; // this.f = this
+                        }
+                        CtorInit::Param(pi)
+                    }
+                    _ => return None,
+                };
+                assigned.insert(*field, ());
+                inits.push((*field, init));
+            }
+            Statement::Retain(_) | Statement::Release(_) => {
+                // RC on ctor params/this is inserted before this pass; ignore RC of non-this, but
+                // any mention of `this` besides field stores disqualifies.
+                if stmt_mentions(stmt, this) {
+                    // Retain/Release(this) alone is fine — object still exists after expansion.
+                    if !matches!(
+                        stmt,
+                        Statement::Retain(Operand::Copy(Place::Local(l)))
+                            | Statement::Release(Operand::Copy(Place::Local(l)))
+                            if *l == this
+                    ) {
+                        return None;
+                    }
+                }
+            }
+            _ => {
+                if stmt_mentions(stmt, this) {
+                    return None;
+                }
+                // Reject effectful / complex bodies even when they don't mention this.
+                match stmt {
+                    Statement::Assign(_, rv) if is_pure_field_store(rv) => {}
+                    Statement::Assign(_, _) => return None,
+                    Statement::Call { .. }
+                    | Statement::JsCall { .. }
+                    | Statement::IndirectCall { .. }
+                    | Statement::InterfaceCall { .. }
+                    | Statement::Panic(_)
+                    | Statement::ValueDrop(_) => return None,
+                    _ => {}
+                }
+            }
+        }
+    }
+    if inits.is_empty() {
+        return None;
+    }
+    Some(inits)
+}
+
+fn expand_in_function(
+    func: &mut MirFunction,
+    ctor_inits: &BTreeMap<DefId, Vec<(usize, CtorInit)>>,
+) -> bool {
+    let mut changed = false;
+    for block in &mut func.blocks {
+        let mut new_stmts: Vec<Statement> = Vec::with_capacity(block.stmts.len());
+        for stmt in block.stmts.drain(..) {
+            match stmt {
+                Statement::Assign(
+                    Place::Local(o),
+                    Rvalue::New {
+                        def,
+                        ty,
+                        ctor: Some(ctor_def),
+                        args,
+                    },
+                ) => {
+                    let Some(inits) = ctor_inits.get(&ctor_def) else {
+                        new_stmts.push(Statement::Assign(
+                            Place::Local(o),
+                            Rvalue::New {
+                                def,
+                                ty,
+                                ctor: Some(ctor_def),
+                                args,
+                            },
+                        ));
+                        continue;
+                    };
+                    // params[0]=this; New.args[i] binds params[i+1].
+                    let ok = inits.iter().all(|(_, init)| match init {
+                        CtorInit::Const(_) => true,
+                        CtorInit::Param(pi) => *pi >= 1 && (*pi - 1) < args.len(),
+                    });
+                    if !ok {
+                        new_stmts.push(Statement::Assign(
+                            Place::Local(o),
+                            Rvalue::New {
+                                def,
+                                ty,
+                                ctor: Some(ctor_def),
+                                args,
+                            },
+                        ));
+                        continue;
+                    }
+                    new_stmts.push(Statement::Assign(
+                        Place::Local(o),
+                        Rvalue::New {
+                            def,
+                            ty,
+                            ctor: None,
+                            args: vec![],
+                        },
+                    ));
+                    for (field, init) in inits {
+                        let rv = match init {
+                            CtorInit::Const(c) => Rvalue::Use(Operand::Const(c.clone())),
+                            CtorInit::Param(pi) => Rvalue::Use(args[pi - 1].clone()),
+                        };
+                        new_stmts.push(Statement::Assign(
+                            Place::Field {
+                                base: o,
+                                field: *field,
+                            },
+                            rv,
+                        ));
+                    }
+                    changed = true;
+                }
+                other => new_stmts.push(other),
+            }
+        }
+        block.stmts = new_stmts;
+    }
+    changed
 }
 
 fn promote_one(func: &mut MirFunction, interner: &TypeInterner) -> bool {
@@ -304,7 +510,7 @@ fn place_mentions(place: &Place, o: Local) -> bool {
 mod tests {
     use super::*;
     use crate::build::FunctionBuilder;
-    use crate::{DefId, Rvalue};
+    use crate::{DefId, Mir, Rvalue};
 
     #[test]
     fn promotes_non_escaping_struct() {
@@ -454,5 +660,73 @@ mod tests {
             !Sroa.run(&mut func, &i),
             "reference-typed fields must not be promoted"
         );
+    }
+
+    #[test]
+    fn expands_simple_ctor_then_promotes() {
+        // Ctor: this.0 = n; Caller: o = new C(7); x = o.0; return x;
+        let i = TypeInterner::new();
+        let ctor_def = DefId(1);
+        let class_def = DefId(2);
+
+        let mut ctor_b = FunctionBuilder::new("C.constructor", i.void());
+        ctor_b.set_def(ctor_def, vec![]);
+        let this = ctor_b.new_param(i.int(), Some("this".into()));
+        let n = ctor_b.new_param(i.int(), Some("n".into()));
+        ctor_b.assign(
+            Place::Field {
+                base: this,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Copy(Place::Local(n))),
+        );
+        ctor_b.terminate(Terminator::Return(None));
+        let ctor = ctor_b.finish();
+
+        let mut caller_b = FunctionBuilder::new("f", i.int());
+        let o = caller_b.new_temp(i.int());
+        let x = caller_b.new_temp(i.int());
+        caller_b.assign(
+            Place::Local(o),
+            Rvalue::New {
+                def: class_def,
+                ty: i.int(),
+                ctor: Some(ctor_def),
+                args: vec![Operand::Const(Const::Int(7))],
+            },
+        );
+        caller_b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Copy(Place::Field { base: o, field: 0 })),
+        );
+        caller_b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(x)))));
+        let caller = caller_b.finish();
+
+        let mut mir = Mir {
+            functions: vec![ctor, caller],
+            ..Mir::default()
+        };
+        assert!(
+            ExpandSimpleCtors.run(&mut mir, &i),
+            "simple ctor New should expand"
+        );
+        let caller = &mut mir.functions[1];
+        let has_ctor_new = caller.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
+            matches!(
+                s,
+                Statement::Assign(_, Rvalue::New { ctor: Some(_), .. })
+            )
+        });
+        assert!(!has_ctor_new, "ctor should be cleared from New");
+        assert!(
+            Sroa.run(caller, &i),
+            "expanded non-escaping instance should promote"
+        );
+        let has_new = caller
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .any(|s| matches!(s, Statement::Assign(_, Rvalue::New { .. })));
+        assert!(!has_new, "allocation should be gone after SROA");
     }
 }

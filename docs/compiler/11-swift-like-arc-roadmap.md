@@ -42,3 +42,23 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - String SSO, `@stack` classes, value-struct `List`/`Map`/`Set`
 - Atomic RC by default
 - CPU SIMD language surface / Dream-owned tiered JIT
+
+## Beat GC(C# like) gen0 throughput (shipped levers)
+
+ARC alone removes RC *tax*; beating a generational GC still needs fewer heap hits and amortized
+`$malloc`. These are the active levers (no SSO / `@stack` class / value collections):
+
+1. **Silent SROA** — including post–simple-user-ctor expand (`ExpandSimpleCtors`): non-escaping
+   instances with only non-ref field accesses promote to locals (`crates/dream-mir/src/passes/sroa.rs`).
+2. **Clear-and-reuse** — `List`/`Map`/`Set.clear` keep capacity and zero live slots in place
+   (no capacity-sized realloc). Prefer `clear` + refill over `new` each batch.
+3. **ScratchArena** — bump `Span<int>` from one owned slab; `reset()` rewinds (`system.core`).
+4. **Contiguous / SOA hot paths** — regex Pike-VM uses parallel `List<int>` / `List<int[]>`
+   thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
+5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
+   [`functions.md`](../language/functions.md)).
+
+Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
+shapes; `new` + share a class graph every iteration will not.
+
+Measure: `./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](../../tests/bench/BASELINE.md).

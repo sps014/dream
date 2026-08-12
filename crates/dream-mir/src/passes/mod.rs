@@ -31,7 +31,7 @@ pub use prop::CopyConstProp;
 pub use rc::{RcElision, RcInsertion};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
-pub use sroa::Sroa;
+pub use sroa::{ExpandSimpleCtors, Sroa};
 pub use tco::Tco;
 
 use super::{Mir, MirFunction};
@@ -168,6 +168,9 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     let _rc_inserted = true;
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
     if !inline {
+        // Still expand simple ctors so a later opt pipeline (if any) can SROA; debug builds skip
+        // Sroa itself, so this is a no-op for codegen shape there beyond removing the ctor call.
+        let _ = ExpandSimpleCtors.run(mir, interner);
         return;
     }
     let inliner = Inliner;
@@ -180,4 +183,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
             break;
         }
     }
+    // After inlining, lower simple user-ctors to `New { ctor: None }` + field stores so per-function
+    // SROA can promote non-escaping Acc(n)-style instances.
+    let _ = ExpandSimpleCtors.run(mir, interner);
 }

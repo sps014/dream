@@ -201,6 +201,62 @@ fun bench_alloc_churn(iters: int): void {
     sink_int(acc);
 }
 
+fun bench_list_clear_reuse(iters: int): void {
+    let buf = List<int>(64);
+    let rounds = 64;
+    let per = iters / rounds;
+    if (per < 1) {
+        per = 1;
+    }
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < rounds) {
+        let i = 0;
+        while (i < per) {
+            buf.push(i);
+            i = i + 1;
+        }
+        buf.clear();
+        r = r + 1;
+    }
+    sw.stop();
+    report("list_clear_reuse", sw.elapsed_nanos(), rounds * per);
+    sink_int(buf.capacity());
+}
+
+fun bench_scratch_arena(iters: int): void {
+    let arena = ScratchArena(1 << 16);
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let s = arena.alloc_ints(32);
+        s[0] = i;
+        acc = acc + s[0];
+        arena.reset();
+        i = i + 1;
+    }
+    sw.stop();
+    report("scratch_arena", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_regex_find(iters: int): void {
+    let re = Regex("\\d+", "g");
+    let hay = "abc123def456ghi789xyz";
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let m = re.match(hay);
+        acc = acc + m.length;
+        i = i + 1;
+    }
+    sw.stop();
+    report("regex_find", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
 fun bench_string_builder(iters: int): void {
     let chunk = "abcdefghijklmnopqrstuvwxyz";
     let sw = Stopwatch();
@@ -227,6 +283,9 @@ fun main(): void {
     bench_list_insert_mid(scale);
     bench_map_get_set(scale);
     bench_map_clear_reuse(scale);
+    bench_list_clear_reuse(scale);
     bench_alloc_churn(scale);
+    bench_scratch_arena(scale);
+    bench_regex_find(scale / 10);
     bench_string_builder(scale / 5);
 }

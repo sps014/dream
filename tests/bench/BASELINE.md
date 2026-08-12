@@ -21,19 +21,19 @@ in our WASM assembler target).
 | list_insert_mid | ~170 | ~3× faster |
 | map_clear_reuse | ~65 | ~1.6× faster |
 
-## After (value-type inlining)
+## After (beat-GC levers: clear reuse / SROA ctor expand / ScratchArena / regex SOA)
 
-Release inliner splices value-struct / `Span` callees (`ValueDrop` at continuation; nested inlines
-skip already-`manual_drop` locals). On `List<int>.insert`, the `Span.copy_from` call layer is gone
-(`memory.copy` open-coded; see `tests/inline_value_types_test.rs`).
+| Bench | ns_per_op (approx) | notes |
+|-------|-------------------:|-------|
+| list_clear_reuse | ~9 | in-place clear, capacity kept |
+| map_clear_reuse | ~46 | states/slots zeroed in place |
+| scratch_arena | ~41 | bump + reset vs alloc_churn ~22 (different shape) |
+| regex_find | ~33k | SOA queues + reused mark/caps buffers |
+| list_insert_mid | ~96 | improved vs prior ~158 |
+| substring | ~127 | |
 
-| Bench | ns_per_op (approx) | vs ARC snapshot |
-|-------|-------------------:|----------------:|
-| list_insert_mid | ~158 | slight win / noise |
-| list_push | ~19 | comparable |
-| substring | ~206 | comparable |
+Raw log: `out/native.txt` (from `./scripts/run-microbenches.sh`).
 
-Raw logs: `out_native_baseline.txt`, `out_native_after.txt`, `out_native_value_inline.txt`
 
 ```bash
 ./scripts/run-microbenches.sh

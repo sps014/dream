@@ -104,8 +104,13 @@ public class List<T> : IndexedCollection<T> {
         if (this.count == 0) {
             return Option.None;
         }
-        let last = this.items[this.count - 1];
-        this.count = this.count - 1;
+        let i = this.count - 1;
+        let last = this.items[i];
+        // Zero the slot after copying out. Needed for value structs with reference fields: a bare
+        // `count--` would leave a second owner in dead capacity and double-release on the next
+        // overwrite or when the backing array is dropped.
+        this.items[i] = Buffer.alloc<T>(1)[0];
+        this.count = i;
         return Option.Some(last);
     }
 
@@ -133,10 +138,18 @@ public class List<T> : IndexedCollection<T> {
         return Option.None;
     }
 
-    // Empties the list, reallocating a same-capacity buffer so managed elements are released
-    // while capacity is preserved for reuse.
+    // Empties the list while keeping the backing buffer. Live slots are overwritten with a zero
+    // value so reference fields inside value-struct elements (and class elements) release
+    // immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).
     public fun clear(): void {
-        this.items = Buffer.alloc<T>(this.items.length);
+        if (this.count > 0) {
+            let z = Buffer.alloc<T>(1);
+            let i = 0;
+            while (i < this.count) {
+                this.items[i] = z[0];
+                i = i + 1;
+            }
+        }
         this.count = 0;
     }
 

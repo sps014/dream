@@ -28,11 +28,7 @@ internal class RegexBacktrackVM {
     fun copy_caps(src: int[]): int[] {
         let n = src.length;
         let dst = Buffer.alloc<int>(n);
-        let i = 0;
-        while (i < n) {
-            dst[i] = src[i];
-            i = i + 1;
-        }
+        Buffer.elems_copy<int>(dst, 0, src, 0, n);
         return dst;
     }
 

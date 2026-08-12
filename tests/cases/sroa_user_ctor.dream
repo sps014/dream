@@ -1,0 +1,16 @@
+import system;
+
+class Acc {
+    public n: int;
+    public constructor(n: int) {
+        this.n = n;
+    }
+}
+
+fun main(): void {
+    let a = Acc(7);
+    System.println(a.n);
+    let b = Acc(3);
+    let c = Acc(4);
+    System.println(b.n + c.n);
+}

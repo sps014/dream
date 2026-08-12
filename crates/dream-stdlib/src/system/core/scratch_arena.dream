@@ -1,0 +1,51 @@
+module system.core;
+
+// Bump-pointer scratch slab for short-lived unmanaged batches (parse/match/fill loops).
+// `reset()` rewinds the cursor without returning memory to the OS — like a gen0 nursery for
+// blittable scratch, not a replacement for long-lived ARC graphs.
+//
+// Capacity is specified in bytes and rounded down to a whole number of `int` slots (the bump
+// unit). Overflow traps; grow by constructing a larger arena.
+public class ScratchArena {
+    ints: int[];
+    used: int;
+
+    // Allocates a zeroed slab of `capacity_bytes / 4` ints (at least one).
+    public constructor(capacity_bytes: int) {
+        let n = capacity_bytes / 4;
+        if (n < 1) {
+            n = 1;
+        }
+        this.ints = Buffer.alloc<int>(n);
+        this.used = 0;
+    }
+
+    // Number of ints still available before the next `reset`.
+    public fun remaining(): int {
+        return this.ints.length - this.used;
+    }
+
+    // Total int capacity of the slab.
+    public fun capacity(): int {
+        return this.ints.length;
+    }
+
+    // Bump-allocates `n` ints and returns a `Span` over them. Does not zero the span (callers that
+    // need zeros should write them); prior contents after `reset` may be stale.
+    public fun alloc_ints(n: int): Span<int> {
+        if (n < 0) {
+            System.panic("ScratchArena.alloc_ints: negative count");
+        }
+        if (this.used + n > this.ints.length) {
+            System.panic("ScratchArena overflow");
+        }
+        let start = this.used;
+        this.used = this.used + n;
+        return Span<int>(this.ints, start, n);
+    }
+
+    // Rewinds the bump cursor; the slab stays allocated.
+    public fun reset(): void {
+        this.used = 0;
+    }
+}

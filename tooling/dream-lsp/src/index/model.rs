@@ -380,14 +380,46 @@ pub(crate) fn is_ident_byte(b: u8) -> bool {
     b == b'_' || b.is_ascii_alphanumeric()
 }
 
+/// Snippet insert text for a payload enum variant. `detail` looks like
+/// `Shape.Circle(radius: float)` or `Result.Ok(T)`; unit variants (`Color.Red = 0`) return `None`.
+pub fn enum_member_snippet(name: &str, detail: &str) -> Option<String> {
+    let open = detail.find('(')?;
+    let close = detail.rfind(')')?;
+    if close <= open {
+        return None;
+    }
+    let inside = detail[open + 1..close].trim();
+    if inside.is_empty() {
+        return Some(format!("{name}($0)"));
+    }
+    let fields: Vec<&str> = inside
+        .split(',')
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect();
+    if fields.is_empty() {
+        return Some(format!("{name}($0)"));
+    }
+    let placeholders: Vec<String> = fields
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            let label = field.split(':').next().unwrap_or(field).trim();
+            format!("${{{}:{}}}", i + 1, label)
+        })
+        .collect();
+    Some(format!("{name}({})", placeholders.join(", ")))
+}
+
 /// Language keywords offered as completion proposals: every reserved word (`KEYWORDS`) plus the
 /// contextual keywords that are only reserved in specific positions (`CONTEXTUAL_KEYWORDS`, e.g.
-/// `this`/`get`/`set`/`constructor`/`del`). `borrow` and `ref` are full keywords in `KEYWORDS`.
-/// Re-exported from `dream-syntax` (the parser's own source of truth) rather than hand-duplicated
-/// here, which is what previously let this list drift out of sync with the parser.
+/// `this`/`get`/`set`/`constructor`/`del`). Soft specials (`sizeof`/`nameof`) are included so
+/// they appear in the keyword dump without becoming reserved lexer tokens. `borrow` and `ref`
+/// are full keywords in `KEYWORDS`. Re-exported from `dream-syntax` rather than hand-duplicated.
 pub fn keywords() -> impl Iterator<Item = &'static str> {
     dream::syntax::token::token_kind::KEYWORDS
         .iter()
         .chain(dream::syntax::token::token_kind::CONTEXTUAL_KEYWORDS)
+        .chain(dream::syntax::token::token_kind::SOFT_SPECIALS)
         .copied()
 }

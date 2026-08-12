@@ -12,6 +12,12 @@
     "onLanguage:dream"
   ],
   "contributes": {
+    "configurationDefaults": {
+      "[dream]": {
+        "editor.defaultFormatter": "dream-lang.dream-lang",
+        "editor.formatOnSave": false
+      }
+    },
     "configuration": {
       "title": "Dream",
       "properties": {
@@ -283,6 +289,12 @@
     ],
     "commands": [
       {
+        "command": "dream.formatDocument",
+        "title": "Format Document",
+        "category": "Dream",
+        "icon": "$(symbol-key)"
+      },
+      {
         "command": "dream.runFile",
         "title": "Run File",
         "category": "Dream",
@@ -331,6 +343,11 @@
       ],
       "editor/context": [
         {
+          "command": "dream.formatDocument",
+          "when": "resourceLangId == dream",
+          "group": "dream@0"
+        },
+        {
           "command": "dream.runFile",
           "when": "resourceLangId == dream",
           "group": "dream@1"
@@ -352,6 +369,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "dream.formatDocument",
+          "when": "editorLangId == dream"
+        },
         {
           "command": "dream.runFile",
           "when": "editorLangId == dream"

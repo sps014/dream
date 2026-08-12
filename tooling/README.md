@@ -24,7 +24,7 @@ The `dream-lsp` server provides the following capabilities:
 - **Code Actions**: Auto-import quick fixes for unresolved names.
 - **CodeLens**: Run / Debug lenses on `main` (skipped for `type = "lib"` packages).
 - **Inlay Hints**: Inferred variable types and parameter-name hints at call sites.
-- **Formatting**: Brace-depth indentation (preserves line content; not a full pretty-printer).
+- **Formatting**: Token-stream pretty-printer (indent, spacing around operators/commas/colons, blank lines between top-level decls). Comments are preserved via lexer trivia; this is not a lossy AST round-trip. The VS Code extension sets `[dream].editor.defaultFormatter` to this extension so **Format Document** works without manual config. Rebuild/reinstall `dream-lsp` after formatter changes (`source ./use-toolchain.sh` from the repo root) so Cursor/VS Code pick up the current server binary.
 
 Documents are synced **incrementally** (only the changed range is applied) and the symbol index is **cached per document version**, so repeated navigation on an unchanged file is free.
 

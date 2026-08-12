@@ -34,8 +34,9 @@ pub fn is_member_completion_context(text: &str, offset: usize) -> bool {
 }
 
 /// True when completion is inside a switch arm pattern / `case` label (enum variants only).
+/// Member access inside an arm (`case Color.|`) is not switch-arm context.
 pub fn is_switch_arm_completion_context(text: &str, offset: usize) -> bool {
-    switch_arm_subject(text, offset).is_some()
+    !is_member_completion_context(text, offset) && switch_arm_subject(text, offset).is_some()
 }
 
 /// If `offset` is inside an unquoted `import <path>` statement, returns
@@ -683,12 +684,8 @@ impl Index {
                 .collect();
         }
 
-        // Pattern-matching / `case` switch arms: suggest variants of the subject enum/union.
-        if let Some(subject) = switch_arm_subject(text, offset) {
-            return self.switch_arm_completions(&subject, scope, offset, text, offset);
-        }
-
-        // Detect `receiver.<partial>` by scanning back over an identifier and a dot.
+        // Detect `receiver.<partial>` before switch-arm so `case Color.|` uses member
+        // completions (bare `Red`) instead of qualified `Color.Red` labels.
         let mut i = offset;
         while i > 0 && is_ident_byte(bytes[i - 1]) {
             i -= 1;
@@ -724,6 +721,11 @@ impl Index {
             }
 
             return self.member_completions(receiver, scope, recv_start);
+        }
+
+        // Pattern-matching / `case` switch arms: suggest variants of the subject enum/union.
+        if let Some(subject) = switch_arm_subject(text, offset) {
+            return self.switch_arm_completions(&subject, scope, offset, text, offset);
         }
 
         let mut out = Vec::new();
@@ -806,26 +808,34 @@ impl Index {
 
     /// Members available on `receiver`, resolved by type. If `receiver` is a variable/parameter
     /// (including `this`) whose type is a known struct, only that struct's fields and methods are
-    /// offered. If `receiver` names an enum, its members are offered. A bare class/struct name
-    /// only offers **static** methods (instance methods require a value receiver).
+    /// offered. If `receiver` names an enum type (and is not a shadowed local), its variants and
+    /// static methods are offered. A bare class/struct name only offers **static** methods.
     fn member_completions(
         &self,
         receiver: &str,
         scope: usize,
         before: usize,
     ) -> Vec<(String, SymKind, String, Option<String>)> {
-        // `Type.` / `Color.` static or enum access: the receiver itself names a struct or enum.
+        // Locals / params win over a same-named enum type (`let Color = …; Color.`).
+        if let Some(decl) = self.resolve(receiver, scope, before) {
+            if matches!(decl.kind, SymKind::Variable | SymKind::Param) {
+                return match &decl.ty {
+                    Some(ty) => {
+                        let base = ty.trim_end_matches('?').trim_end_matches("[]");
+                        self.members_of_struct(base, /*static_only*/ false)
+                    }
+                    // In-scope local with unknown type: never fall through to the enum type.
+                    None => Vec::new(),
+                };
+            }
+        }
+
         if self
             .decls
             .iter()
             .any(|d| d.kind == SymKind::Enum && d.name == receiver)
         {
-            return self.members_of_enum(receiver);
-        }
-
-        if let Some(ty) = self.variable_type(receiver, scope, before) {
-            let base = ty.trim_end_matches('?').trim_end_matches("[]");
-            return self.members_of_struct(base, /*static_only*/ false);
+            return self.members_of_enum_type(receiver);
         }
 
         // A bare class/struct/interface/type name used as a receiver (e.g. static `Point.` / `js.`).
@@ -887,6 +897,30 @@ impl Index {
                 )
             })
             .collect()
+    }
+
+    /// Variants plus static methods on a bare enum type name (`Color.` / `Option.`).
+    fn members_of_enum_type(&self, name: &str) -> Vec<(String, SymKind, String, Option<String>)> {
+        let mut out = self.members_of_enum(name);
+        out.extend(
+            self.decls
+                .iter()
+                .filter(|d| {
+                    d.kind == SymKind::Method
+                        && d.scope == GLOBAL
+                        && detail_belongs_to(&d.detail, name)
+                        && detail_is_static_method(&d.detail)
+                })
+                .map(|d| {
+                    (
+                        d.name.clone(),
+                        d.kind,
+                        d.detail.clone(),
+                        d.doc_comment.clone(),
+                    )
+                }),
+        );
+        out
     }
 
     /// Variants for a switch arm, filtered by any partial identifier already typed.

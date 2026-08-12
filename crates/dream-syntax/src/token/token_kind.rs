@@ -367,6 +367,7 @@ pub const KEYWORDS: &[&str] = &[
     "default",
     "ref",
     "borrow",
+    "lock",
     "int",
     "float",
     "double",
@@ -376,6 +377,11 @@ pub const KEYWORDS: &[&str] = &[
     "void",
     "object",
 ];
+
+/// Soft specials: identifiers that are *not* reserved words, but parse as dedicated forms when
+/// followed by `(` (`sizeof(T)`, `nameof(path)`). Listed here for LSP completion / highlighting
+/// without making them lexer keywords (a user may still declare a function named `sizeof`).
+pub const SOFT_SPECIALS: &[&str] = &["sizeof", "nameof"];
 
 /// Contextual keywords: identifiers that are reserved *only* in specific grammar positions (a
 /// property accessor, a method name, `this` as a receiver) and so remain a plain `IdentifierToken`
@@ -458,6 +464,7 @@ mod tests {
             "default",
             "ref",
             "borrow",
+            "lock",
             "int",
             "float",
             "double",
@@ -475,8 +482,25 @@ mod tests {
         }
         assert_eq!(
             KEYWORDS.len(),
-            47,
+            48,
             "a keyword token was added/removed; update both this list and KEYWORDS"
         );
+    }
+
+    #[test]
+    fn soft_specials_lex_as_identifiers() {
+        for &word in SOFT_SPECIALS {
+            let mut lexer = TokenKind::lexer(word);
+            let kind = lexer
+                .next()
+                .unwrap_or_else(|| panic!("'{}' did not lex at all", word))
+                .unwrap_or_else(|_| panic!("'{}' lexed as an invalid token", word));
+            assert_eq!(
+                kind,
+                TokenKind::IdentifierToken,
+                "'{}' must remain a plain identifier (not a reserved keyword)",
+                word
+            );
+        }
     }
 }

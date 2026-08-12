@@ -103,14 +103,16 @@ pub fn lex_category(kind: TokenKind) -> Option<LexCategory> {
     Some(match kind {
         DataTypeToken => LexCategory::Type,
         NumberToken => LexCategory::Number,
-        StringToken | InterpolatedStringToken | CharToken => LexCategory::String,
+        StringToken | CharToken => LexCategory::String,
         BooleanToken => LexCategory::Keyword,
         IfToken | ElseToken | ForToken | WhileToken | DoToken | ReturnToken | BreakToken
         | ContinueToken | LetToken | ConstToken | FunToken | StaticToken | ImportToken
         | PublicToken | ExternToken | ClassToken | StructToken | UnmanagedToken | ExtendToken
         | IsToken | InToken | EnumToken | TypeToken | SwitchToken | CaseToken | DefaultToken
         | SealedToken | InterfaceToken | AsyncToken | AwaitToken | InternalToken | ModuleToken
-        | AsToken | RefToken | WeakToken | UnownedToken | LockToken => LexCategory::Keyword,
+        | AsToken | RefToken | BorrowToken | WeakToken | UnownedToken | LockToken => {
+            LexCategory::Keyword
+        }
         PlusToken
         | MinusToken
         | SlashToken

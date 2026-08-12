@@ -783,6 +783,9 @@ async function pickRuntimeTarget(): Promise<void> {
 
 function registerBuildModeCommands(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
+        vscode.commands.registerCommand('dream.formatDocument', () =>
+            vscode.commands.executeCommand('editor.action.formatDocument')
+        ),
         vscode.commands.registerCommand('dream.setBuildMode', () => pickBuildMode()),
         vscode.commands.registerCommand('dream.setOptimizeLevel', () => pickOptimizeLevel()),
         vscode.commands.registerCommand('dream.setRuntimeTarget', () => pickRuntimeTarget())
@@ -926,7 +929,10 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'dream' }],
+        documentSelector: [
+            { scheme: 'file', language: 'dream' },
+            { scheme: 'untitled', language: 'dream' }
+        ],
         outputChannel: outputChannel
     };
 
@@ -943,6 +949,9 @@ export async function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine('Starting client...');
         await client.start();
         outputChannel.appendLine('Client started successfully.');
+        outputChannel.appendLine(
+            'Document formatting: token-stream pretty-printer via textDocument/formatting.'
+        );
     } catch (err) {
         outputChannel.appendLine(`Failed to start client: ${err}`);
         vscode.window.showErrorMessage(

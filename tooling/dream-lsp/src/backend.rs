@@ -771,6 +771,13 @@ impl LanguageServer for Backend {
                             } else {
                                 (None, None)
                             }
+                        } else if kind == index::SymKind::EnumMember {
+                            match index::enum_member_snippet(&label, &detail) {
+                                Some(snippet) => {
+                                    (Some(snippet), Some(InsertTextFormat::SNIPPET))
+                                }
+                                None => (None, None),
+                            }
                         } else {
                             (None, None)
                         };

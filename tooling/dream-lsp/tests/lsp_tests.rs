@@ -61,7 +61,7 @@ fun main(): void {
 }
 
 #[test]
-fn formatting_reindents_by_brace_depth() {
+fn formatting_pretty_prints_by_brace_depth() {
     let src = "fun main(): void {\nlet x: int = 1;\nif (x > 0) {\nprintln(x);\n}\n}\n";
     let formatted = dream_lsp::format::format(src);
 
@@ -271,6 +271,139 @@ fun f(c: Color): void {
             && names.contains(&"Color.Blue"),
         "expected qualified Color.* after case, got {names:?}"
     );
+}
+
+#[test]
+fn enum_type_member_completions() {
+    let harness = TestHarness::new(
+        r#"
+enum Color { Red, Green, Blue }
+fun f(): void {
+    let c = Color.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Red") && names.contains(&"Green") && names.contains(&"Blue"),
+        "expected Color variants after Color., got {names:?}"
+    );
+    assert!(
+        !names.iter().any(|n| n.starts_with("Color.")),
+        "member completion must use bare variant names, got {names:?}"
+    );
+}
+
+#[test]
+fn switch_case_dot_uses_member_completions() {
+    let harness = TestHarness::new(
+        r#"
+enum Color { Red, Green, Blue }
+fun f(c: Color): void {
+    switch (c) {
+        case Color.|
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Red") && names.contains(&"Green") && names.contains(&"Blue"),
+        "case Color.| must offer bare variants, got {names:?}"
+    );
+    assert!(
+        !names.contains(&"Color.Red"),
+        "must not double-qualify, got {names:?}"
+    );
+}
+
+#[test]
+fn enum_name_shadowed_by_local_prefers_value_members() {
+    let harness = TestHarness::new(
+        r#"
+class Box { public value: int; }
+enum Color { Red, Green }
+fun f(): void {
+    let Color: Box = new Box();
+    Color.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"value"),
+        "shadowed Color. should complete Box fields, got {names:?}"
+    );
+    assert!(
+        !names.contains(&"Red") && !names.contains(&"Green"),
+        "must not offer enum variants when local shadows type, got {names:?}"
+    );
+}
+
+#[test]
+fn enum_type_completions_include_static_methods() {
+    let harness = TestHarness::new(
+        r#"
+enum Color {
+    Red,
+    Green,
+    public static fun from_int(n: int): Color { return Color.Red; }
+}
+fun f(): void {
+    Color.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Red") && names.contains(&"from_int"),
+        "Color. should offer variants and static methods, got {names:?}"
+    );
+}
+
+#[test]
+fn enum_member_payload_snippet() {
+    let snippet = dream_lsp::index::enum_member_snippet(
+        "Circle",
+        "Shape.Circle(radius: float)",
+    );
+    assert_eq!(snippet.as_deref(), Some("Circle(${1:radius})"));
+
+    let unit = dream_lsp::index::enum_member_snippet("Red", "Color.Red = 0");
+    assert_eq!(unit, None);
+
+    let harness = TestHarness::new(
+        r#"
+enum Shape {
+    Circle(radius: float),
+    Empty,
+}
+fun f(): void {
+    let s = Shape.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let circle = comps.iter().find(|(n, ..)| n == "Circle").expect("Circle");
+    assert_eq!(
+        dream_lsp::index::enum_member_snippet(&circle.0, &circle.2).as_deref(),
+        Some("Circle(${1:radius})")
+    );
+}
+
+#[test]
+fn soft_specials_and_lock_in_keyword_completions() {
+    let harness = TestHarness::new("fun main(): void {\n    |\n}\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(names.contains(&"sizeof"), "missing sizeof, got subset");
+    assert!(names.contains(&"nameof"), "missing nameof");
+    assert!(names.contains(&"lock"), "missing lock");
+    assert!(names.contains(&"borrow"), "missing borrow");
 }
 
 #[test]

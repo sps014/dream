@@ -37,7 +37,7 @@ public class Url {
         if (text.is_empty()) {
             return Result.Err(ParseError.invalid("empty URL"));
         }
-        let scheme = "";
+        let scheme = string.empty;
         let rest = text;
         let scheme_end = text.index_of(':');
         switch (scheme_end) {
@@ -50,7 +50,7 @@ public class Url {
             None => { },
         }
 
-        let fragment = "";
+        let fragment = string.empty;
         let hash = rest.index_of('#');
         switch (hash) {
             Some(idx) => {
@@ -60,7 +60,7 @@ public class Url {
             None => { },
         }
 
-        let query = "";
+        let query = string.empty;
         let q = rest.index_of('?');
         switch (q) {
             Some(idx) => {
@@ -71,7 +71,7 @@ public class Url {
         }
 
         let host = rest;
-        let path = "";
+        let path = string.empty;
         let slash = rest.index_of('/');
         switch (slash) {
             Some(idx) => {

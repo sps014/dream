@@ -41,9 +41,9 @@ public class CodeBuilder {
 
     static fun _spaces(n: int): string {
         if (n <= 0) {
-            return "";
+            return string.empty;
         }
-        let s = "";
+        let s = string.empty;
         let i = 0;
         while (i < n) {
             s = s + " ";

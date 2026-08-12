@@ -102,7 +102,7 @@ public class HttpResponse {
     // The value of response header `name`.
     public fun header(name: string): string {
         this.scan();
-        return this.headers.get(name).unwrap_or("");
+        return this.headers.get(name).unwrap_or(string.empty);
     }
 
     // The response body as UTF-8 text.

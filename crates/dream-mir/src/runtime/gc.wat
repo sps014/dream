@@ -15,6 +15,8 @@
 (global $__gc_old_start (mut i32) (i32.const 0))
 (global $__gc_root_table (mut i32) (i32.const 0))
 (global $__gc_remset_table (mut i32) (i32.const 0))
+(global $__gc_card_table (mut i32) (i32.const 0))
+(global $__gc_remset_last (mut i32) (i32.const 0))
 
 (func $__gc_cache_bounds
     i32.const {NURSERY_START_ADDR}
@@ -32,6 +34,9 @@
     i32.const {GC_REMSET_TABLE_PTR_ADDR}
     i32.load
     global.set $__gc_remset_table
+    i32.const {GC_CARD_TABLE_PTR_ADDR}
+    i32.load
+    global.set $__gc_card_table
 )
 
 (func $__gc_meta_gen (param $meta i32) (result i32)
@@ -141,6 +146,90 @@
     i32.store
 )
 
+(func $__gc_dirty_card (param $slot i32)
+    (local $idx i32)
+    local.get $slot
+    global.get $__gc_old_start
+    i32.sub
+    i32.const {GC_CARD_SHIFT}
+    i32.shr_u
+    local.set $idx
+    local.get $idx
+    i32.const {GC_CARD_TABLE_BYTES}
+    i32.ge_u
+    br_if 0
+    global.get $__gc_card_table
+    local.get $idx
+    i32.add
+    i32.const 1
+    i32.store8
+)
+
+;; True when any card overlapping `[block, block+size)` is dirty. Out-of-coverage blocks
+;; report dirty so overflow scans never skip them.
+(func $__gc_block_on_dirty_card (param $block i32) (param $size i32) (result i32)
+    (local $start i32)
+    (local $end i32)
+    (local $i i32)
+    local.get $block
+    global.get $__gc_old_start
+    i32.sub
+    i32.const {GC_CARD_SHIFT}
+    i32.shr_u
+    local.set $start
+    local.get $block
+    local.get $size
+    i32.add
+    i32.const 1
+    i32.sub
+    global.get $__gc_old_start
+    i32.sub
+    i32.const {GC_CARD_SHIFT}
+    i32.shr_u
+    local.set $end
+    local.get $start
+    i32.const {GC_CARD_TABLE_BYTES}
+    i32.ge_u
+    if
+        i32.const 1
+        return
+    end
+    local.get $end
+    i32.const {GC_CARD_TABLE_BYTES}
+    i32.ge_u
+    if
+        i32.const {GC_CARD_TABLE_BYTES}
+        i32.const 1
+        i32.sub
+        local.set $end
+    end
+    local.get $start
+    local.set $i
+    (loop $cards
+        local.get $i
+        local.get $end
+        i32.gt_u
+        if
+            i32.const 0
+            return
+        end
+        global.get $__gc_card_table
+        local.get $i
+        i32.add
+        i32.load8_u
+        if
+            i32.const 1
+            return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $cards
+    )
+    i32.const 0
+)
+
 (func $write_barrier (param $slot i32) (param $new_val i32)
     (local $count i32)
     local.get $new_val
@@ -159,6 +248,12 @@
     global.get $__gc_nursery_end
     i32.ge_u
     br_if 0
+    local.get $slot
+    global.get $__gc_remset_last
+    i32.eq
+    br_if 0
+    local.get $slot
+    call $__gc_dirty_card
     i32.const {GC_REMSET_COUNT_ADDR}
     i32.load
     local.set $count
@@ -166,16 +261,16 @@
     i32.const {GC_REMEMBERED_CAP}
     i32.ge_u
     if
-        ;; Remset full: keep every existing entry. Flag overflow so Gen0 walks all live
-        ;; old/LOH objects for young pointers. Never wipe the count (that dropped edges and
-        ;; left dangling nursery refs in Maps after nursery reset). The next nursery-full
-        ;; collect drains via `$__gc_collect_locked` (overflow scan covers unrecorded edges).
+        ;; Remset full: keep every existing entry. Flag overflow so Gen0 walks dirty cards
+        ;; (or all live old/LOH when the heap exceeds card coverage). Never wipe the count.
         i32.const {GC_REMSET_OVERFLOW_ADDR}
         i32.const 1
         i32.store
         i32.const {GC_REQUEST_ADDR}
         i32.const 1
         i32.store
+        local.get $slot
+        global.set $__gc_remset_last
         return
     end
     global.get $__gc_remset_table
@@ -190,6 +285,8 @@
     i32.const 1
     i32.add
     i32.store
+    local.get $slot
+    global.set $__gc_remset_last
 )
 
 ;; Forward a nursery pointer: if already forwarded return the new data ptr; else copy into old
@@ -465,7 +562,8 @@
 
 ;; After evacuating via roots/remset, walk old/LOH for remaining young refs.
 ;; Always updates MARKED survivors (just evacuated). When the remset overflowed, also
-;; walks every live (non-free) old block — remset alone is incomplete.
+;; traces live old blocks that overlap a dirty card — or every live block if the old
+;; heap extends past card-table coverage.
 (func $gc_scan_old_for_young
     (local $p i32)
     (local $end i32)
@@ -473,9 +571,24 @@
     (local $size i32)
     (local $meta i32)
     (local $overflow i32)
+    (local $full i32)
     i32.const {GC_REMSET_OVERFLOW_ADDR}
     i32.load
     local.set $overflow
+    i32.const 0
+    local.set $full
+    local.get $overflow
+    if
+        i32.const {HEAP_PTR_ADDR}
+        i32.load
+        global.get $__gc_old_start
+        i32.sub
+        i32.const {GC_CARD_TABLE_BYTES}
+        i32.const {GC_CARD_SHIFT}
+        i32.shl
+        i32.gt_u
+        local.set $full
+    end
     i32.const {OLD_START_ADDR}
     i32.load
     local.set $p
@@ -511,16 +624,29 @@
         i32.and
         i32.eqz
         if
-            local.get $overflow
             local.get $meta
             i32.const {GC_META_MARK}
             i32.and
+            local.get $full
             i32.or
             if
                 local.get $block
                 i32.const 12
                 i32.add
                 call $gc_trace_evacuated
+            else
+                local.get $overflow
+                if
+                    local.get $block
+                    local.get $size
+                    call $__gc_block_on_dirty_card
+                    if
+                        local.get $block
+                        i32.const 12
+                        i32.add
+                        call $gc_trace_evacuated
+                    end
+                end
             end
         end
         local.get $p
@@ -646,6 +772,12 @@
     i32.const {GC_REMSET_OVERFLOW_ADDR}
     i32.const 0
     i32.store
+    i32.const 0
+    global.set $__gc_remset_last
+    global.get $__gc_card_table
+    i32.const 0
+    i32.const {GC_CARD_TABLE_BYTES}
+    memory.fill
     i32.const {GC_REQUEST_ADDR}
     i32.const 0
     i32.store
@@ -1217,20 +1349,51 @@
     i32.add
 )
 
+(func $__gc_collect_kind (result i32)
+    i32.const {GC_OLD_BYTES_ADDR}
+    i32.load
+    i32.const {GC_GEN1_THRESHOLD}
+    i32.ge_u
+    if
+        i32.const 1
+        return
+    end
+    i32.const {GC_REMSET_OVERFLOW_ADDR}
+    i32.load
+    if
+        i32.const 1
+        return
+    end
+    i32.const 0
+)
+
 ;; Managed allocator (exported as `$malloc`): fast Gen0 bump into the nursery; large payloads go
-;; straight to LOH. Nursery full → ephemeral collect then retry, else Gen1. The lock is held for
-;; the whole path so `$__gc_collect_locked` must not re-acquire it.
+;; straight to LOH. Nursery full or `GC_REQUEST` → collect then retry, else Gen1. Kind 1 (old
+;; mark-sweep) runs when old-space growth hits the threshold or the remset overflowed. The lock
+;; is held for the whole path so `$__gc_collect_locked` must not re-acquire it.
 (func $malloc (param $payload i32) (param $tag i32) (result i32)
     (local $size i32)
     (local $block i32)
     (local $bump i32)
     (local $end i32)
+    (local $need i32)
     ;;@ALLOC_LOCK_ACQUIRE@
     ;; Large object: skip the nursery entirely.
     local.get $payload
     i32.const {LOH_THRESHOLD}
     i32.ge_u
     if
+        i32.const {GC_REQUEST_ADDR}
+        i32.load
+        i32.const {GC_OLD_BYTES_ADDR}
+        i32.load
+        i32.const {GC_GEN1_THRESHOLD}
+        i32.ge_u
+        i32.or
+        if
+            call $__gc_collect_kind
+            call $__gc_collect_locked
+        end
         local.get $payload
         local.get $tag
         i32.const {GC_GEN_LOH}
@@ -1249,21 +1412,31 @@
     i32.const 12
     i32.add
     local.set $size
-    ;; Try nursery bump. Remset overflow sets `GC_REQUEST_ADDR` but is still correct if we
-    ;; wait until the nursery fills: `$gc_scan_old_for_young` covers unrecorded old→young edges.
     i32.const {NURSERY_BUMP_ADDR}
     i32.load
     local.set $bump
     global.get $__gc_nursery_end
     local.set $end
+    i32.const 0
+    local.set $need
+    i32.const {GC_REQUEST_ADDR}
+    i32.load
+    if
+        i32.const 1
+        local.set $need
+    end
     local.get $bump
     local.get $size
     i32.add
     local.get $end
     i32.gt_u
     if
-        ;; Nursery full: ephemeral collect (Gen0), then retry.
-        i32.const 0
+        i32.const 1
+        local.set $need
+    end
+    local.get $need
+    if
+        call $__gc_collect_kind
         call $__gc_collect_locked
         i32.const {NURSERY_BUMP_ADDR}
         i32.load
@@ -1366,6 +1539,13 @@
     i32.shl
     i32.add
     local.set $tables
+    i32.const {GC_CARD_TABLE_PTR_ADDR}
+    local.get $tables
+    i32.store
+    local.get $tables
+    i32.const {GC_CARD_TABLE_BYTES}
+    i32.add
+    local.set $tables
     ;; ensure pages
     local.get $tables
     memory.size
@@ -1400,6 +1580,8 @@
     i32.const {GC_REMSET_OVERFLOW_ADDR}
     i32.const 0
     i32.store
+    i32.const 0
+    global.set $__gc_remset_last
     i32.const {GC_FINALIZER_HEAD_ADDR}
     i32.const 0
     i32.store
@@ -1413,4 +1595,8 @@
     i32.const 0
     i32.store
     call $__gc_cache_bounds
+    global.get $__gc_card_table
+    i32.const 0
+    i32.const {GC_CARD_TABLE_BYTES}
+    memory.fill
 )

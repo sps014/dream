@@ -4,6 +4,7 @@ module system.collections;
 public class Set<T> : Collection<T> {
     keys: T[];
     states: int[];
+    defaults: T[];
     count: int;
     used: int;
     cap: int;
@@ -17,6 +18,7 @@ public class Set<T> : Collection<T> {
         this.cap = c;
         this.keys = Buffer.alloc<T>(c);
         this.states = Buffer.alloc<int>(c);
+        this.defaults = Buffer.alloc<T>(1);
         this.count = 0;
         this.used = 0;
     }
@@ -167,6 +169,7 @@ public class Set<T> : Collection<T> {
         let i = this.find(value);
         if (i >= 0) {
             this.states[i] = hash_slot_tombstone();
+            this.keys[i] = this.defaults[0];
             this.count = this.count - 1;
             return true;
         }
@@ -182,7 +185,7 @@ public class Set<T> : Collection<T> {
     // are not traced after `states` reset; unmanaged payloads skip that walk.
     public fun clear(): void {
         let c = this.cap;
-        gc_clear_occupied(this.keys, this.states, c);
+        gc_clear_occupied(this.keys, this.states, c, this.defaults);
         let i = 0;
         while (i < c) {
             this.states[i] = hash_slot_empty();

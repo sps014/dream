@@ -1,0 +1,37 @@
+import system;
+import system.collections;
+
+// Overflow the remembered set with distinct old→young stores into a LOH `List` buffer,
+// then churn the nursery. Card-table overflow scan must keep every young string reachable.
+fun main(): void {
+    let n = 70000;
+    let xs = List<string>(n);
+    let i = 0;
+    while (i < n) {
+        xs.push("v" + i.to_string());
+        i = i + 1;
+    }
+    let junk = 0;
+    let j = 0;
+    while (j < 400) {
+        junk = junk + ("x" + j.to_string()).byte_size();
+        j = j + 1;
+    }
+    sink_int(junk);
+    Debug.gc_collect();
+    let ok = 0;
+    i = 0;
+    while (i < n) {
+        if (xs.get(i).unwrap_or("") == ("v" + i.to_string())) {
+            ok = ok + 1;
+        }
+        i = i + 1;
+    }
+    System.println(ok.to_string());
+}
+
+fun sink_int(x: int): void {
+    if (x < 0) {
+        System.println("neg");
+    }
+}

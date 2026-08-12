@@ -6,6 +6,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     values: V[];
     states: int[];
     defaults: V[];
+    key_defaults: K[];
     count: int;
     used: int;
     cap: int;
@@ -21,6 +22,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.values = Buffer.alloc<V>(c);
         this.states = Buffer.alloc<int>(c);
         this.defaults = Buffer.alloc<V>(1);
+        this.key_defaults = Buffer.alloc<K>(1);
         this.count = 0;
         this.used = 0;
     }
@@ -198,6 +200,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let i = this.find(key);
         if (i >= 0) {
             this.states[i] = hash_slot_tombstone();
+            this.keys[i] = this.key_defaults[0];
             this.values[i] = this.defaults[0];
             this.count = this.count - 1;
             return true;
@@ -214,8 +217,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // they are not traced after `states` reset; unmanaged payloads skip that walk.
     public fun clear(): void {
         let c = this.cap;
-        gc_clear_occupied(this.keys, this.states, c);
-        gc_clear_occupied(this.values, this.states, c);
+        gc_clear_occupied(this.keys, this.states, c, this.key_defaults);
+        gc_clear_occupied(this.values, this.states, c, this.defaults);
         let i = 0;
         while (i < c) {
             this.states[i] = hash_slot_empty();

@@ -94,7 +94,7 @@ const RUNTIME_SYNC: &str = include_str!("../runtime/sync.wat");
 /// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
 /// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is
 /// always self-contained, regardless of which literals the program itself uses.
-const RUNTIME_STR_CONSTS: [&str; 3] = ["true", "false", "-"];
+const RUNTIME_STR_CONSTS: [&str; 4] = ["", "true", "false", "-"];
 
 /// The fixed, compile-time-constant panic messages for the automatic runtime checks (bounds,
 /// division by zero, bad cast). v1 does not interpolate the actual out-of-range index/length or

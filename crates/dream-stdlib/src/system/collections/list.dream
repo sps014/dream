@@ -13,6 +13,7 @@ fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
 public class List<T> : IndexedCollection<T> {
     items: T[];
     count: int;
+    blank: T[];
 
     // Allocates an empty list with an initial backing buffer capacity (defaults to 8).
     public constructor(capacity: int = 8) {
@@ -21,6 +22,7 @@ public class List<T> : IndexedCollection<T> {
             c = sequence_min_capacity();
         }
         this.items = Buffer.alloc<T>(c);
+        this.blank = Buffer.alloc<T>(1);
         this.count = 0;
     }
 
@@ -106,10 +108,7 @@ public class List<T> : IndexedCollection<T> {
         }
         let i = this.count - 1;
         let last = this.items[i];
-        // Zero the slot after copying out. Needed for value structs with reference fields: a bare
-        // `count--` would leave a second owner in dead capacity and double-release on the next
-        // overwrite or when the backing array is dropped.
-        this.items[i] = Buffer.alloc<T>(1)[0];
+        list_zero_slot(this.items, i, this.blank);
         this.count = i;
         return Option.Some(last);
     }
@@ -141,7 +140,7 @@ public class List<T> : IndexedCollection<T> {
     // Empties the list while keeping the backing buffer. Managed element slots are nulled so the
     // unused prefix is not a GC root; unmanaged `T` only resets `count`.
     public fun clear(): void {
-        gc_clear_prefix(this.items, this.count);
+        gc_clear_prefix(this.items, this.count, this.blank);
         this.count = 0;
     }
 
@@ -177,6 +176,7 @@ public class List<T> : IndexedCollection<T> {
             Span<T>(this.items, index, n).copy_from(Span<T>(this.items, index + 1, n));
         }
         this.count = this.count - 1;
+        list_zero_slot(this.items, this.count, this.blank);
         return true;
     }
 
@@ -283,35 +283,43 @@ public class List<T> : IndexedCollection<T> {
 
 // Zero the live prefix of a managed array so a subsequent `count = 0` does not keep dead objects
 // reachable through unused capacity. Unmanaged `T` is not traced — skip the stores.
-internal fun gc_clear_prefix<T>(items: T[], n: int): void {
+internal fun gc_clear_prefix<T>(items: T[], n: int, blank: T[]): void {
     if (n <= 0) {
         return;
     }
-    let z = Buffer.alloc<T>(1);
+    let z = blank[0];
     let i = 0;
     while (i < n) {
-        items[i] = z[0];
+        items[i] = z;
         i = i + 1;
     }
 }
 
-internal fun gc_clear_prefix<T>(items: T[], n: int): void where T : unmanaged {
+internal fun gc_clear_prefix<T>(items: T[], n: int, blank: T[]): void where T : unmanaged {
     return;
 }
 
 // Null occupied open-addressing slots (keys/values) so a `states` reset can drop them from the
 // graph. Unmanaged payloads are not traced.
-internal fun gc_clear_occupied<T>(items: T[], states: int[], cap: int): void {
-    let z = Buffer.alloc<T>(1);
+internal fun gc_clear_occupied<T>(items: T[], states: int[], cap: int, blank: T[]): void {
+    let z = blank[0];
     let i = 0;
     while (i < cap) {
         if (states[i] == hash_slot_occupied()) {
-            items[i] = z[0];
+            items[i] = z;
         }
         i = i + 1;
     }
 }
 
-internal fun gc_clear_occupied<T>(items: T[], states: int[], cap: int): void where T : unmanaged {
+internal fun gc_clear_occupied<T>(items: T[], states: int[], cap: int, blank: T[]): void where T : unmanaged {
+    return;
+}
+
+internal fun list_zero_slot<T>(items: T[], i: int, blank: T[]): void {
+    items[i] = blank[0];
+}
+
+internal fun list_zero_slot<T>(items: T[], i: int, blank: T[]): void where T : unmanaged {
     return;
 }

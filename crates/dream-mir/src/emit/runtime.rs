@@ -8,7 +8,7 @@ use super::*;
 /// When `needs_threads` is false (no `WebWorker` / worker-pool host imports in the module), the
 /// allocator spinlock around `$malloc`/`$free`/`$gc_collect_*` is also elided: a single-threaded
 /// instance never races on the free lists, so the atomic acquire/release is pure overhead.
-pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
+pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u32) -> String {
     let (malloc_count, free_count) = if debug {
         (
             "global.get $live_objects\n    i32.const 1\n    i32.add\n    global.set $live_objects\n    \
@@ -52,7 +52,8 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
     out.push_str(
         &RUNTIME_STRINGS
             .replace("{TAG_STRING}", &crate::abi::TAG_STRING.to_string())
-            .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string()),
+            .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
+            .replace("{STRING_EMPTY}", &empty_string.to_string()),
     );
     out
 }
@@ -112,6 +113,15 @@ fn substitute_gc_runtime(
             &a::GC_REMSET_OVERFLOW_ADDR.to_string(),
         )
         .replace("{GC_EPOCH_ADDR}", &a::GC_EPOCH_ADDR.to_string())
+        .replace(
+            "{GC_CARD_TABLE_PTR_ADDR}",
+            &a::GC_CARD_TABLE_PTR_ADDR.to_string(),
+        )
+        .replace("{GC_CARD_SHIFT}", &a::GC_CARD_SHIFT.to_string())
+        .replace(
+            "{GC_CARD_TABLE_BYTES}",
+            &a::GC_CARD_TABLE_BYTES.to_string(),
+        )
         .replace(
             "{GC_FINALIZER_HEAD_ADDR}",
             &a::GC_FINALIZER_HEAD_ADDR.to_string(),

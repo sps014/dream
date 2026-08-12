@@ -6,6 +6,8 @@ module system.collections;
 public class SortedMap<K : Comparable<K>, V> {
     keys_arr: K[];
     values_arr: V[];
+    blank_k: K[];
+    blank_v: V[];
     count: int;
 
     // Allocates an empty sorted map with an initial capacity (defaults to 8).
@@ -16,6 +18,8 @@ public class SortedMap<K : Comparable<K>, V> {
         }
         this.keys_arr = Buffer.alloc<K>(c);
         this.values_arr = Buffer.alloc<V>(c);
+        this.blank_k = Buffer.alloc<K>(1);
+        this.blank_v = Buffer.alloc<V>(1);
         this.count = 0;
     }
 
@@ -31,6 +35,8 @@ public class SortedMap<K : Comparable<K>, V> {
 
     // Removes every entry.
     public fun clear(): void {
+        gc_clear_prefix(this.keys_arr, this.count, this.blank_k);
+        gc_clear_prefix(this.values_arr, this.count, this.blank_v);
         this.count = 0;
     }
 
@@ -116,6 +122,8 @@ public class SortedMap<K : Comparable<K>, V> {
             i = i + 1;
         }
         this.count = this.count - 1;
+        list_zero_slot(this.keys_arr, this.count, this.blank_k);
+        list_zero_slot(this.values_arr, this.count, this.blank_v);
         return true;
     }
 

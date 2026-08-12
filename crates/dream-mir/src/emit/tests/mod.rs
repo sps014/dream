@@ -483,14 +483,14 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
 /// path stays clean. Single-threaded modules also drop the allocator spinlock.
 #[test]
 fn debug_toggles_allocator_instrumentation() {
-    assert!(runtime_prelude(true, false).contains("global.set $live_objects"));
-    assert!(!runtime_prelude(false, false).contains("global.set $live_objects"));
+    assert!(runtime_prelude(true, false, 0).contains("global.set $live_objects"));
+    assert!(!runtime_prelude(false, false, 0).contains("global.set $live_objects"));
     assert!(
-        runtime_prelude(false, true).contains("call $__alloc_lock_acquire"),
+        runtime_prelude(false, true, 0).contains("call $__alloc_lock_acquire"),
         "threaded modules must keep the allocator spinlock"
     );
     assert!(
-        !runtime_prelude(false, false).contains("call $__alloc_lock_acquire"),
+        !runtime_prelude(false, false, 0).contains("call $__alloc_lock_acquire"),
         "single-threaded modules must elide the allocator spinlock"
     );
 }

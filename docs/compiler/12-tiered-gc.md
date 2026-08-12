@@ -20,7 +20,7 @@ roots and write barriers become the correctness surface instead.
 
 1. **Custom GC in linear memory** — keep `i32` data pointers; no WasmGC proposal types.
 2. **C# workstation shape** — Gen0 nursery → Gen1 → Gen2 + **LOH**; ephemeral collections first.
-3. **Stop-the-world**, precise mark (copying nursery; mark-compact older gens; mark-sweep LOH).
+3. **Stop-the-world**, precise mark (copying nursery; mark-sweep older gens and LOH).
 4. **Big bang** — no ARC shims, dual paths, or “legacy” retain/release fallbacks.
 5. **`del()` is a finalizer** — run after an object is found unreachable (not guaranteed prompt).
 6. **`weak` stays**; **`unowned` is deleted** (dangling under GC is unsafe with no upside).
@@ -54,15 +54,19 @@ Unmanaged `@unsafe` `Buffer` / `Pointer` blocks bypass the GC (manual `$malloc`/
 | Space | Alloc | Collect | Promote |
 |-------|--------|---------|---------|
 | **Gen0** | Thread-local bump nursery | Copying evacuate survivors | → Gen1 |
-| **Gen1** | Survivors only | Mark + compact | → Gen2 |
-| **Gen2** | Long-lived survivors | Full mark + compact/sweep | stays |
-| **LOH** | Payload ≥ `LOH_THRESHOLD` (~85 KiB) | Mark-sweep (no copy in v1) | stays |
+| **Gen1** | Survivors only | Mark-sweep (promote marked → Gen2) | → Gen2 |
+| **Gen2** | Long-lived survivors | Mark-sweep | stays |
+| **LOH** | Payload ≥ `LOH_THRESHOLD` (~85 KiB) | Mark-sweep (no copy) | stays |
+
+Older gens are **mark-sweep** onto the segregated freelist (not mark-compact). `HEAP_PTR` is a
+high-water mark and does not shrink.
 
 Triggers:
 
-- Gen0 full → ephemeral collection (Gen0, optionally Gen1).
-- Allocation budget / Gen1 pressure → include Gen2.
-- LOH pressure → include LOH in the collection.
+- Gen0 full or `GC_REQUEST_ADDR` (remset overflow) → `$malloc` runs `$__gc_collect_locked`.
+- Kind 0 = Gen0 only. Kind 1 = Gen0 then old/LOH mark-sweep when `GC_OLD_BYTES` meets
+  `GC_GEN1_THRESHOLD` (2 MiB) **or** the remset overflowed.
+- `Debug.gc_collect` / `$gc_collect_full` is kind 2 (same old-space sweep as kind 1 today).
 
 Prefer short Gen0 pauses (gamedev + web). Incremental / concurrent GC is **post-merge**.
 
@@ -82,21 +86,23 @@ Compiler + runtime maintain:
 Value-`struct`s with embedded refs: their slots are already on the shadow stack and are
 included in root maps.
 
-**Safepoints** at calls, loop backs, and alloc slow paths poll “collection requested” and
-ensure root maps are up to date before STW.
+**Safepoints** at calls and alloc slow paths: the emitter reloads roots when `GC_EPOCH`
+changed. Loop-back polls are not emitted (single-threaded STW collects from `$malloc`).
 
 ## Write barriers
 
 Every heap store of a reference (field / index / box):
 
 - If storing a **younger** pointer into an **older** object, record a remembered-set
-  entry so ephemeral collections can find Gen0 refs from older gens.
-- Emitter emits `$write_barrier` instead of retain/release-old.
+  entry so ephemeral collections can find Gen0 refs from older gens. The same slot
+  stored twice in a row is skipped (`$__gc_remset_last`).
+- Emitter emits `$write_barrier` instead of retain/release-old. Nursery destinations
+  skip the call.
 - Remset capacity is fixed (`GC_REMEMBERED_CAP`). On overflow the barrier **keeps**
-  existing entries, sets `GC_REMSET_OVERFLOW`, and requests a Gen0 collect. That
-  collection scans **all live old/LOH objects** for young pointers (not only the
-  remset). Never reset the remset count on overflow — doing so dropped edges and
-  corrupted Map/JSON under a 256 KiB nursery.
+  existing entries, dirties a 512-byte **card**, sets `GC_REMSET_OVERFLOW`, and
+  requests a collect (`GC_REQUEST`). Gen0 then traces dirty cards (or all live old/LOH
+  if the heap exceeds card-table coverage). Never reset the remset count on overflow —
+  doing so dropped edges and corrupted Map/JSON under a 256 KiB nursery.
 
 ## Nursery sizing
 
@@ -109,10 +115,10 @@ treat `int[]` payloads as pointers; heap field stores compute the place address 
 
 - Fast path: Gen0 bump into the nursery (or `$__gc_alloc_old` with LOH gen bits when
   `payload ≥ LOH_THRESHOLD`).
-- Slow path: nursery full or `GC_REQUEST_ADDR` set → `$__gc_collect_locked` (kind 0,
-  ephemeral) → retry bump. Still no room after the retry → fall back to `$__gc_alloc_old`
-  with Gen1 gen bits so the caller cannot spin forever waiting for space that only a
-  heavier collection would free.
+- Slow path: nursery full or `GC_REQUEST_ADDR` set → `$__gc_collect_locked` (kind 1 when
+  old-space growth or remset overflow requires it) → retry bump. Still no room after the
+  retry → fall back to `$__gc_alloc_old` with Gen1 gen bits so the caller cannot spin
+  forever waiting for space that only a heavier collection would free.
 - Dead objects reclaimed by the collector, not by `$release` → `$free`.
 - Freelists may hold **post-GC free space** for Gen1/2/LOH; they are not RC teardown.
 

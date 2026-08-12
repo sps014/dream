@@ -32,7 +32,7 @@ public class JsonGenerator {
     static fun name_in(borrow list: List<string>, name: string): bool {
         let i = 0;
         while (i < list.length) {
-            if (list.get(i).unwrap_or("") == name) {
+            if (list.get(i).unwrap_or(string.empty) == name) {
                 return true;
             }
             i = i + 1;
@@ -44,7 +44,7 @@ public class JsonGenerator {
         if (JsonGenerator.name_in(jsonable, core)) {
             return "; '" + core + "' must itself be marked @json (add the @json attribute to it)";
         }
-        return "";
+        return string.empty;
     }
 
     static fun ignore_default(ftype: string, option_inner: string): string {
@@ -89,7 +89,7 @@ public class JsonGenerator {
             let inner = ftype.substring(18, ftype.length - 1);
             return "SortedMap<string, " + inner + ">()";
         }
-        return "";
+        return string.empty;
     }
 
     static fun json_to_expr(elem_type: string, access: string, borrow json_names: List<string>): string {
@@ -114,7 +114,7 @@ public class JsonGenerator {
         if (JsonGenerator.name_in(json_names, elem_type)) {
             return access + ".to_json()";
         }
-        return "";
+        return string.empty;
     }
 
     static fun json_from_expr(elem_type: string, jexpr: string, borrow json_names: List<string>): string {
@@ -139,7 +139,7 @@ public class JsonGenerator {
         if (JsonGenerator.name_in(json_names, elem_type)) {
             return elem_type + ".from_json(" + jexpr + ")";
         }
-        return "";
+        return string.empty;
     }
 
     // True when `elem_type` can be written by `json_write_stmts` (scalars + nested `@json`).
@@ -341,7 +341,7 @@ public class JsonGenerator {
             if (i > 0) {
                 cb.line("sb.append_char(',');");
             }
-            let elem = elems.get(i).unwrap_or("");
+            let elem = elems.get(i).unwrap_or(string.empty);
             let acc = access + "." + i.to_string();
             if (JsonGenerator.is_tuple_type(elem)) {
                 if (JsonGenerator.tuple_write_stmts(cb, elem, acc, json_names) == false) {
@@ -598,7 +598,7 @@ public class JsonGenerator {
             return out;
         }
         let inner = ftype.substring(1, ftype.length - 1);
-        let cur = "";
+        let cur = string.empty;
         let depth = 0;
         let i = 0;
         while (i < inner.length) {
@@ -613,7 +613,7 @@ public class JsonGenerator {
                 if (cur.length > 0) {
                     out.push(cur);
                 }
-                cur = "";
+                cur = string.empty;
             } else if (ch == ' ' && depth == 0 && cur.length == 0) {
                 // skip leading spaces after commas
             } else {
@@ -641,7 +641,7 @@ public class JsonGenerator {
         cb.line("let " + arr_var + " = JsonValue.array();");
         let i = 0;
         while (i < elems.length) {
-            let elem = elems.get(i).unwrap_or("");
+            let elem = elems.get(i).unwrap_or(string.empty);
             let acc = access + "." + i.to_string();
             if (JsonGenerator.is_tuple_type(elem)) {
                 let nested = arr_var + "_t" + i.to_string();
@@ -692,7 +692,7 @@ public class JsonGenerator {
         let first_part = true;
         let i = 0;
         while (i < elems.length) {
-            let elem = elems.get(i).unwrap_or("");
+            let elem = elems.get(i).unwrap_or(string.empty);
             let je = src_var + ".at(" + i.to_string() + ").unwrap_or(JsonValue.none())";
             if (JsonGenerator.is_tuple_type(elem)) {
                 let nested = out_var + "_t" + i.to_string();
@@ -1773,7 +1773,7 @@ public class JsonGenerator {
             }
         }
         if (ok == false) {
-            let hint = "";
+            let hint = string.empty;
             if (spec.kind == "list" || spec.kind == "set" || spec.kind == "array") {
                 hint = JsonGenerator.missing_hint(spec.elem_type, jsonable);
             } else {

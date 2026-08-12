@@ -41,7 +41,7 @@ public class RegexMatch {
         let s = this.group_start(i);
         let e = this.group_end(i);
         if ((s < 0) || (e < 0)) {
-            return "";
+            return string.empty;
         }
         return input.substring(s, e);
     }

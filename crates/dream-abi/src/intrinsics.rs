@@ -115,6 +115,8 @@ pub const ATTR_STRING_FROM_UTF8_PREFIX: &str = "string_from_utf8_prefix";
 pub const ATTR_STRING_SUBSTRING: &str = "string_substring_raw";
 /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk copy UTF-8 bytes into a `byte[]`.
 pub const ATTR_STRING_COPY_UTF8: &str = "string_copy_utf8";
+/// `string.compare_raw(a, b)` — UTF-8 lexicographic compare (`$string_compare`).
+pub const ATTR_STRING_COMPARE: &str = "string_compare";
 /// `Debug.free_list_head()` — allocator introspection for tests.
 pub const ATTR_DEBUG_FREE_LIST: &str = "debug_get_free_list_head";
 /// `Debug.heap_ptr()` — current bump-pointer (heap high-water mark).
@@ -164,6 +166,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_STRING_FROM_UTF8_PREFIX,
     ATTR_STRING_SUBSTRING,
     ATTR_STRING_COPY_UTF8,
+    ATTR_STRING_COMPARE,
     ATTR_DEBUG_FREE_LIST,
     ATTR_DEBUG_HEAP_PTR,
     ATTR_DEBUG_LIVE_OBJECTS,
@@ -215,6 +218,8 @@ pub enum IntrinsicOp {
     StringSubstring,
     /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk UTF-8 copy into a `byte[]`.
     StringCopyUtf8,
+    /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare.
+    StringCompare,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
     /// `Debug.heap_ptr()` — current bump-pointer value.
@@ -262,6 +267,7 @@ impl IntrinsicOp {
             ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
             ATTR_STRING_SUBSTRING => IntrinsicOp::StringSubstring,
             ATTR_STRING_COPY_UTF8 => IntrinsicOp::StringCopyUtf8,
+            ATTR_STRING_COMPARE => IntrinsicOp::StringCompare,
             ATTR_DEBUG_FREE_LIST => IntrinsicOp::DebugFreeList,
             ATTR_DEBUG_HEAP_PTR => IntrinsicOp::DebugHeapPtr,
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,

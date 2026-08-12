@@ -73,7 +73,9 @@ pub const NURSERY_SIZE: u32 = 1024 * 1024;
 /// Maximum number of GC root slots in the shadow root table (scanned at safepoints).
 pub const GC_ROOT_TABLE_CAP: u32 = 4096;
 
-/// Maximum remembered-set entries (older→younger slots) before forcing a Gen1 collection.
+/// Maximum remembered-set entries (older→younger slots). Further old→young stores set
+/// [`GC_REMSET_OVERFLOW_ADDR`] and [`GC_REQUEST_ADDR`]; `$malloc` then runs Gen0 (and old-space
+/// mark-sweep when overflow is set or [`GC_OLD_BYTES_ADDR`] meets [`GC_GEN1_THRESHOLD`]).
 pub const GC_REMEMBERED_CAP: u32 = 65536;
 
 /// Byte size of the length/count prefix preceding an array's elements at the data pointer
@@ -181,11 +183,20 @@ pub const GC_MARK_STACK_BASE_ADDR: u32 = 136;
 pub const GC_MARK_STACK_CAP: u32 = 8192;
 
 /// Non-zero when the remembered set hit [`GC_REMEMBERED_CAP`] and dropped further entries;
-/// next Gen0 must scan all live old/LOH objects for young pointers (not only the remset).
+/// next Gen0 scans dirty cards (or all live old/LOH if the heap exceeds card coverage).
 pub const GC_REMSET_OVERFLOW_ADDR: u32 = 140;
 /// Monotonic collection epoch. Bumped at the end of every Gen0 / old collect so mutators can
 /// skip root reloads when no collection ran since the last safepoint check.
 pub const GC_EPOCH_ADDR: u32 = 144;
+/// Pointer to the old-space card table (one byte per [`GC_CARD_SIZE`] bytes of old/LOH).
+pub const GC_CARD_TABLE_PTR_ADDR: u32 = 148;
+
+/// Card size in bytes (`1 << GC_CARD_SHIFT`).
+pub const GC_CARD_SHIFT: u32 = 9;
+pub const GC_CARD_SIZE: u32 = 1 << GC_CARD_SHIFT;
+/// Card-table length in bytes (also the number of cards). Coverage is
+/// `GC_CARD_TABLE_BYTES << GC_CARD_SHIFT` (~32 MiB of old heap).
+pub const GC_CARD_TABLE_BYTES: u32 = 65536;
 
 // -- `@shared class` header extension --------------------------------------------------------
 //

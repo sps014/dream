@@ -1,0 +1,18 @@
+import system;
+
+fun main(): void {
+    let a = string.empty;
+    let blank = "";
+    let b = blank.substring(0, 0);
+    let c = string.from_utf8(Buffer.alloc<byte>(0));
+    let d = "hello" + string.empty;
+    let e = string.empty + "world";
+    let x = "x";
+    System.println(a.length);
+    System.println(a.is_empty());
+    System.println(b == a);
+    System.println(c == a);
+    System.println(d);
+    System.println(e);
+    System.println(x.repeat(0) == string.empty);
+}

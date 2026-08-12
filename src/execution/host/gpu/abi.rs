@@ -1,7 +1,4 @@
 //! Parsed `"gpu"` section from sibling `.abi.json`.
-//! Serde fields mirror the compile-time ABI shape even when unused by the host today.
-
-#![allow(dead_code)]
 
 use serde::Deserialize;
 use std::fs;
@@ -42,8 +39,6 @@ pub struct GpuShaderMeta {
     pub vertex_layout: Vec<GpuVertexAttrMeta>,
     #[serde(default)]
     pub vertex_stride: u32,
-    #[serde(default)]
-    pub interface: String,
     #[serde(default = "default_color_targets")]
     pub color_targets: u32,
     #[serde(default)]
@@ -56,15 +51,10 @@ fn default_color_targets() -> u32 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GpuBindingMeta {
-    pub name: String,
     pub binding: u32,
     pub kind: String,
-    #[serde(rename = "type", default)]
-    pub type_: String,
     #[serde(default)]
     pub read_write: bool,
-    #[serde(default)]
-    pub atomic: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

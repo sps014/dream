@@ -60,8 +60,6 @@ pub enum StopReason {
     Breakpoint,
     Step,
     Pause,
-    #[allow(dead_code)]
-    Entry,
 }
 
 impl StopReason {
@@ -70,7 +68,6 @@ impl StopReason {
             StopReason::Breakpoint => "breakpoint",
             StopReason::Step => "step",
             StopReason::Pause => "pause",
-            StopReason::Entry => "entry",
         }
     }
 }

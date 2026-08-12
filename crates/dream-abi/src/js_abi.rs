@@ -15,7 +15,6 @@ use dream_types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
 /// The host module every `@js` bridge is imported from: matches the first argument of the
 /// `@js("Dream", …)` attributes in `stdlib/core/js.dream` and the module object installed by
 /// `runtime/dream.js`.
-#[allow(dead_code)]
 pub const HOST_MODULE: &str = "Dream";
 
 /// The Dream type name whose stdlib methods back every interop bridge. Combined with a method name
@@ -62,10 +61,6 @@ pub const SLOT_PAYLOAD_OFFSET: u32 = 8;
 /// Slot tags identifying how the host decodes a slot's payload (see the `decodeJsSlots` decoder in
 /// `runtime/dream.js`).
 pub mod tag {
-    /// Part of the wire ABI (the host decoder maps it to `null`); the emitter never writes it today
-    /// because a `null` argument is rejected earlier, so it is intentionally unused on this side.
-    #[allow(dead_code)]
-    pub const NULL: i32 = 0;
     pub const INT: i32 = 1;
     pub const LONG: i32 = 2;
     pub const DOUBLE: i32 = 3;

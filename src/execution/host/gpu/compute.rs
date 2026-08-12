@@ -699,12 +699,9 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
                 .iter()
                 .enumerate()
                 .map(|(i, _)| super::abi::GpuBindingMeta {
-                    name: format!("b{i}"),
                     binding: i as u32,
                     kind: "storage".into(),
-                    type_: "f32".into(),
                     read_write: true,
-                    atomic: false,
                 })
                 .collect(),
             source,

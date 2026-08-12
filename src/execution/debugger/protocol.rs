@@ -68,17 +68,6 @@ impl<W: Write> DapWriter<W> {
         self.send(&response_envelope(request, true, None, body))
     }
 
-    /// Sends a failure response to `request` with a human-readable `message`.
-    #[allow(dead_code)]
-    pub fn respond_error(&mut self, request: &Value, message: &str) -> std::io::Result<()> {
-        self.send(&response_envelope(
-            request,
-            false,
-            Some(message.to_string()),
-            Value::Null,
-        ))
-    }
-
     /// Sends an event with the given name and body.
     pub fn event(&mut self, event: &str, body: Value) -> std::io::Result<()> {
         self.send(&json!({

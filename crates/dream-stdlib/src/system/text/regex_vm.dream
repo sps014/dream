@@ -403,6 +403,13 @@ internal class RegexVM {
                         }
                         if (pos >= len) {
                             going = false;
+                        } else {
+                            // Threads still carry captures from the pre-skip position; restart
+                            // unanchored search at the candidate so group 0 starts here.
+                            clist.clear();
+                            gen = gen + 1;
+                            this.search_gen = gen;
+                            this.add_to_threadq(clist, on_list, gen, 0, pos, input, len, init_caps);
                         }
                     }
                 }

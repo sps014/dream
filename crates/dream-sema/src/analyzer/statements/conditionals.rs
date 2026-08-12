@@ -32,11 +32,7 @@ impl<'a> Analyzer<'a> {
         let branches = std::iter::once((condition, condition.position(), if_body))
             .chain(else_if.iter().map(|i| (&i.0, i.0.position(), &i.1)));
 
-        let mut branch_moved: Vec<std::collections::HashSet<String>> = Vec::new();
-        let before_if = self.snapshot_moved();
-
         for (cond_expr, cond_pos, body) in branches {
-            self.restore_moved(before_if.clone());
             // An `is`-with-binding condition declares a narrowed local `name: T` scoped to the taken
             // branch only. This covers a bare `if (x is T name)` and every `is`-binding reachable
             // through a top-level `&&` chain (`if (a && x is T name)`), each of which is guaranteed to
@@ -69,7 +65,6 @@ impl<'a> Analyzer<'a> {
                             diagnostics,
                         )?;
                         terminal = self.hir_close_block();
-                        branch_moved.push(self.snapshot_moved());
                         terminated = true;
                         break;
                     } else {
@@ -100,7 +95,6 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             )?;
             let body_hir = self.hir_close_block();
-            branch_moved.push(self.snapshot_moved());
             match cond_hir {
                 Some(cond_hir) => arms.push((cond_hir, body_hir)),
                 None => self.hir_fail(),
@@ -108,7 +102,6 @@ impl<'a> Analyzer<'a> {
         }
 
         if !terminated {
-            self.restore_moved(before_if.clone());
             if let Some(body) = else_body {
                 self.hir_open_block();
                 self.analyze_body(
@@ -119,17 +112,8 @@ impl<'a> Analyzer<'a> {
                     diagnostics,
                 )?;
                 terminal = self.hir_close_block();
-                branch_moved.push(self.snapshot_moved());
-            } else {
-                branch_moved.push(before_if.clone());
             }
         }
-
-        let mut merged = before_if;
-        for m in branch_moved {
-            merged = merged.union(&m).cloned().collect();
-        }
-        self.restore_moved(merged);
 
         // Fold the live arms (innermost last) into a single nested `if`/`else` and emit it.
         let mut chain = terminal;

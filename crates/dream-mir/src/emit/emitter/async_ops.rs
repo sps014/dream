@@ -8,14 +8,10 @@ use crate::async_emit::AsyncSlots;
 impl Emitter<'_> {
     /// Completes the current coroutine: drops frame-resident value(`struct`) locals, then
     /// `$dream_complete($self, value)` and returns `0` (the poll result).
-    ///
-    /// RC locals are released by MIR `Release` stmts inserted before `AsyncComplete` (see
-    /// `RcInsertion`); emitting another bulk release here would double-free aliases and
-    /// use-after-free a returned local when packing `F_RESULT`.
     fn emit_poll_complete(&mut self, value: Option<&Operand>) {
         if let Some(parent) = self.async_parent {
             // Only persistent user value locals (params + declared `let`s); trailing synthetic temps
-            // are transient. RC ownership is already handled in MIR.
+            // are transient.
             for (i, decl) in parent
                 .locals
                 .iter()

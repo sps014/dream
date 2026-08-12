@@ -25,7 +25,6 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
             return Ok(Type::Unknown);
         }
-        self.check_local_not_moved(&id.text, Some(id.position), diagnostics);
         let lookup = (*symbol_table).as_ref().borrow().get_symbol(id);
         let r = match lookup {
             Ok(t) => {

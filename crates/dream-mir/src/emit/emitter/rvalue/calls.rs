@@ -33,8 +33,8 @@ impl Emitter<'_> {
     }
 
     /// Applies the `emit_call_args` widening/funcbox-unbox rule to the `i`-th argument already
-    /// left on the WASM operand stack — factored so both the fast path and the rooted spill path
-    /// stay in lockstep with the parameter-type rules.
+    /// left on the WASM operand stack — factored so call sites stay in lockstep with the
+    /// parameter-type rules.
     fn apply_arg_widen(
         &mut self,
         a: &Operand,

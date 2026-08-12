@@ -7,6 +7,32 @@
 
 ;; Trace mode: 0 = Gen0 update (forward nursery slots), 1 = mark children.
 (global $gc_trace_mode (mut i32) (i32.const 0))
+;; Immutable-after-init copies of the shared-memory GC bounds/table bases. Linear memory stays
+;; the source of truth for workers; `$__gc_cache_bounds` hydrates these per instance so hot
+;; mutator helpers (`$write_barrier`, `$gc_root_*`, `$gc_alloc`) avoid a memory load per call.
+(global $__gc_nursery_start (mut i32) (i32.const 0))
+(global $__gc_nursery_end (mut i32) (i32.const 0))
+(global $__gc_old_start (mut i32) (i32.const 0))
+(global $__gc_root_table (mut i32) (i32.const 0))
+(global $__gc_remset_table (mut i32) (i32.const 0))
+
+(func $__gc_cache_bounds
+    i32.const {NURSERY_START_ADDR}
+    i32.load
+    global.set $__gc_nursery_start
+    i32.const {NURSERY_END_ADDR}
+    i32.load
+    global.set $__gc_nursery_end
+    i32.const {OLD_START_ADDR}
+    i32.load
+    global.set $__gc_old_start
+    i32.const {GC_ROOT_TABLE_PTR_ADDR}
+    i32.load
+    global.set $__gc_root_table
+    i32.const {GC_REMSET_TABLE_PTR_ADDR}
+    i32.load
+    global.set $__gc_remset_table
+)
 
 (func $__gc_meta_gen (param $meta i32) (result i32)
     local.get $meta
@@ -14,25 +40,20 @@
     i32.and
 )
 
+;; Data-pointer nursery test: managed data ptrs sit at block+12, so they still fall in
+;; `[nursery_start, nursery_end)` for every well-formed nursery object (header is 12 bytes).
 (func $__gc_in_nursery (param $ptr i32) (result i32)
-    (local $block i32)
     local.get $ptr
     i32.eqz
     if (result i32)
         i32.const 0
     else
         local.get $ptr
-        i32.const 12
-        i32.sub
-        local.set $block
-        local.get $block
-        i32.const {NURSERY_START_ADDR}
-        i32.load
+        global.get $__gc_nursery_start
         i32.ge_u
         if (result i32)
-            local.get $block
-            i32.const {NURSERY_END_ADDR}
-            i32.load
+            local.get $ptr
+            global.get $__gc_nursery_end
             i32.lt_u
         else
             i32.const 0
@@ -40,24 +61,8 @@
     end
 )
 
-(func $gc_safepoint
-    i32.const {GC_REQUEST_ADDR}
-    i32.load
-    i32.eqz
-    br_if 0
-    ;; Single-threaded / already holding the collector path: acknowledge and, if we are the
-    ;; last waiter and not inside collect, run ephemeral collection.
-    i32.const {GC_SAFEPOINT_ACK_ADDR}
-    i32.const {GC_SAFEPOINT_ACK_ADDR}
-    i32.load
-    i32.const 1
-    i32.add
-    i32.store
-)
-
 (func $gc_root_push (param $ptr i32) (result i32)
     (local $idx i32)
-    (local $base i32)
     i32.const {GC_ROOT_COUNT_ADDR}
     i32.load
     local.set $idx
@@ -65,10 +70,7 @@
     i32.const {GC_ROOT_TABLE_CAP}
     i32.ge_u
     (if (then unreachable))
-    i32.const {GC_ROOT_TABLE_PTR_ADDR}
-    i32.load
-    local.set $base
-    local.get $base
+    global.get $__gc_root_table
     local.get $idx
     i32.const 2
     i32.shl
@@ -84,11 +86,7 @@
 )
 
 (func $gc_root_set (param $idx i32) (param $ptr i32)
-    (local $base i32)
-    i32.const {GC_ROOT_TABLE_PTR_ADDR}
-    i32.load
-    local.set $base
-    local.get $base
+    global.get $__gc_root_table
     local.get $idx
     i32.const 2
     i32.shl
@@ -97,39 +95,21 @@
     i32.store
 )
 
+;; Value-root reload (mutator locals / `$__obj` / module globals). Slot roots are updated in
+;; place during collection and are never read through this helper.
 (func $gc_root_get (param $idx i32) (result i32)
-    (local $base i32)
-    (local $entry i32)
-    i32.const {GC_ROOT_TABLE_PTR_ADDR}
-    i32.load
-    local.set $base
-    local.get $base
+    global.get $__gc_root_table
     local.get $idx
     i32.const 2
     i32.shl
     i32.add
     i32.load
-    local.set $entry
-    ;; Slot roots (low bit set) are updated in place during collection; value roots are
-    ;; forwarded in the table. Either way the payload pointer is what callers reload.
-    local.get $entry
-    i32.const 1
-    i32.and
-    if (result i32)
-        local.get $entry
-        i32.const -2
-        i32.and
-        i32.load
-    else
-        local.get $entry
-    end
 )
 
 ;; Register a memory slot (shadow-stack / heap field) as a root. The collector loads and
 ;; updates the pointer at `addr` in place (low bit tags the root-table entry).
 (func $gc_root_push_slot (param $addr i32) (result i32)
     (local $idx i32)
-    (local $base i32)
     i32.const {GC_ROOT_COUNT_ADDR}
     i32.load
     local.set $idx
@@ -137,10 +117,7 @@
     i32.const {GC_ROOT_TABLE_CAP}
     i32.ge_u
     (if (then unreachable))
-    i32.const {GC_ROOT_TABLE_PTR_ADDR}
-    i32.load
-    local.set $base
-    local.get $base
+    global.get $__gc_root_table
     local.get $idx
     i32.const 2
     i32.shl
@@ -166,23 +143,20 @@
 
 (func $write_barrier (param $slot i32) (param $new_val i32)
     (local $count i32)
-    (local $base i32)
     local.get $new_val
     i32.eqz
     br_if 0
     ;; Nursery destination: young→young is invisible to ephemeral collections.
     local.get $slot
-    i32.const {OLD_START_ADDR}
-    i32.load
+    global.get $__gc_old_start
     i32.lt_u
     br_if 0
     local.get $new_val
-    call $__gc_in_nursery
-    i32.eqz
+    global.get $__gc_nursery_start
+    i32.lt_u
     br_if 0
-    local.get $slot
-    i32.const {HEAP_PTR_ADDR}
-    i32.load
+    local.get $new_val
+    global.get $__gc_nursery_end
     i32.ge_u
     br_if 0
     i32.const {GC_REMSET_COUNT_ADDR}
@@ -194,8 +168,8 @@
     if
         ;; Remset full: keep every existing entry. Flag overflow so Gen0 walks all live
         ;; old/LOH objects for young pointers. Never wipe the count (that dropped edges and
-        ;; left dangling nursery refs in Maps after nursery reset). Request collect so the
-        ;; next `$malloc` drains via `$__gc_collect_locked` after locals can reload.
+        ;; left dangling nursery refs in Maps after nursery reset). The next nursery-full
+        ;; collect drains via `$__gc_collect_locked` (overflow scan covers unrecorded edges).
         i32.const {GC_REMSET_OVERFLOW_ADDR}
         i32.const 1
         i32.store
@@ -204,10 +178,7 @@
         i32.store
         return
     end
-    i32.const {GC_REMSET_TABLE_PTR_ADDR}
-    i32.load
-    local.set $base
-    local.get $base
+    global.get $__gc_remset_table
     local.get $count
     i32.const 2
     i32.shl
@@ -413,8 +384,7 @@
     i32.const {GC_ROOT_COUNT_ADDR}
     i32.load
     local.set $n
-    i32.const {GC_ROOT_TABLE_PTR_ADDR}
-    i32.load
+    global.get $__gc_root_table
     local.set $base
     i32.const 0
     local.set $i
@@ -464,8 +434,7 @@
     i32.const {GC_REMSET_COUNT_ADDR}
     i32.load
     local.set $n
-    i32.const {GC_REMSET_TABLE_PTR_ADDR}
-    i32.load
+    global.get $__gc_remset_table
     local.set $base
     i32.const 0
     local.set $i
@@ -669,8 +638,7 @@
     call $gc_scan_old_for_young
     call $gc_finalize_dead_nursery
     i32.const {NURSERY_BUMP_ADDR}
-    i32.const {NURSERY_START_ADDR}
-    i32.load
+    global.get $__gc_nursery_start
     i32.store
     i32.const {GC_REMSET_COUNT_ADDR}
     i32.const 0
@@ -814,8 +782,7 @@
     i32.const {GC_ROOT_COUNT_ADDR}
     i32.load
     local.set $n
-    i32.const {GC_ROOT_TABLE_PTR_ADDR}
-    i32.load
+    global.get $__gc_root_table
     local.set $base
     i32.const 0
     local.set $i
@@ -999,8 +966,7 @@
     i32.load
     local.set $count
     ;; Reuse remset table as a finalizer stack when count is stored at FINALIZER_HEAD as length.
-    i32.const {GC_REMSET_TABLE_PTR_ADDR}
-    i32.load
+    global.get $__gc_remset_table
     local.set $base
     local.get $count
     i32.const {GC_REMEMBERED_CAP}
@@ -1028,8 +994,7 @@
     i32.const {GC_FINALIZER_HEAD_ADDR}
     i32.load
     local.set $n
-    i32.const {GC_REMSET_TABLE_PTR_ADDR}
-    i32.load
+    global.get $__gc_remset_table
     local.set $base
     i32.const 0
     local.set $i
@@ -1289,20 +1254,12 @@
     i32.const 12
     i32.add
     local.set $size
-    ;; A pending safepoint request must not be ignored — some write barrier already asked
-    ;; for an ephemeral collect (typically remset overflow). The caller holds the alloc lock.
-    i32.const {GC_REQUEST_ADDR}
-    i32.load
-    if
-        i32.const 0
-        call $__gc_collect_locked
-    end
-    ;; Try nursery bump.
+    ;; Try nursery bump. Remset overflow sets `GC_REQUEST_ADDR` but is still correct if we
+    ;; wait until the nursery fills: `$gc_scan_old_for_young` covers unrecorded old→young edges.
     i32.const {NURSERY_BUMP_ADDR}
     i32.load
     local.set $bump
-    i32.const {NURSERY_END_ADDR}
-    i32.load
+    global.get $__gc_nursery_end
     local.set $end
     local.get $bump
     local.get $size
@@ -1319,8 +1276,7 @@
         local.get $bump
         local.get $size
         i32.add
-        i32.const {NURSERY_END_ADDR}
-        i32.load
+        global.get $__gc_nursery_end
         i32.gt_u
         if
             ;; Ephemeral collect did not free enough contiguous nursery space (every survivor
@@ -1338,9 +1294,7 @@
             return
         end
     end
-    ;; Bump succeeds. Reload the current bump (may have moved after the retry collect).
-    i32.const {NURSERY_BUMP_ADDR}
-    i32.load
+    local.get $bump
     local.set $block
     i32.const {NURSERY_BUMP_ADDR}
     local.get $block
@@ -1471,4 +1425,5 @@
     i32.const {GC_EPOCH_ADDR}
     i32.const 0
     i32.store
+    call $__gc_cache_bounds
 )

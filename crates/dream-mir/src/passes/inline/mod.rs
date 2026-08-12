@@ -6,11 +6,11 @@
 //! block (assigning the returned value into the call's destination first).
 //!
 //! Inlining runs as a [`ModulePass`] (see `optimize_module_opts`):
-//! each callee already carries its scope-exit `Release`s, so splicing copies those lifetimes to the
-//! inlined continuation. Value-struct teardown is emitter-side for standalone functions; the inliner
-//! inserts [`Statement::ValueDrop`] at each remapped return→continuation edge so owning value locals
-//! still die at the call site (not the caller's frame exit). Call-result dests are forced Owning
-//! (`__vret`) so the return `Assign` deep-copies rather than Borrow-rebinding a synthetic temp.
+//! each callee is spliced into the caller CFG. Value-struct teardown is emitter-side for standalone
+//! functions; the inliner inserts [`Statement::ValueDrop`] at each remapped return→continuation
+//! edge so owning value locals still die at the call site (not the caller's frame exit). Call-result
+//! dests are forced Owning (`__vret`) so the return `Assign` deep-copies rather than Borrow-rebinding
+//! a synthetic temp.
 
 use super::ModulePass;
 use crate::{
@@ -29,14 +29,12 @@ use remap::{arg_type, remap_block, wasm_kind, WasmKind};
 type FnKey = (DefId, Vec<TypeId>);
 
 /// A callee small enough to always inline: at most this many statements across all its blocks.
-const MAX_INLINE_STMTS: usize = 16;
+const MAX_INLINE_STMTS: usize = 24;
 /// ...and at most this many blocks.
-const MAX_INLINE_BLOCKS: usize = 4;
-/// Stop inlining into a caller once it has grown past this many blocks. Kept modest so sync
-/// functions stay within the relooper's structured-shape budget: past this, emit falls back to
-/// `$__pc`/`br_table`, and inlined scope-exit `Release`s then double-free (e.g. `Signal` →
-/// `List<Effect>` OOB in UI event handlers / silent `@state` push+notify failures).
-const CALLER_BLOCK_CAP: usize = 16;
+const MAX_INLINE_BLOCKS: usize = 6;
+/// Stop inlining into a caller once it would exceed this many blocks. Relooper can fall back to
+/// `$__pc`/`br_table` on very large CFGs; keep a cap so huge stdlib methods stay as calls.
+const CALLER_BLOCK_CAP: usize = 48;
 /// Safety cap on inlines performed into a single function per `run` (defends against any unforeseen
 /// non-termination; the DAG-only inlining should terminate well before this).
 const MAX_INLINES_PER_FN: usize = 4096;
@@ -199,9 +197,6 @@ fn eligible(
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let small = stmt_count <= MAX_INLINE_STMTS && g.blocks.len() <= MAX_INLINE_BLOCKS;
-    // Only inline when small. Unbounded single-use inlining folded UI helpers into event
-    // handlers and forced `$__pc`/`br_table` (silent `@state` update failures). Single-use
-    // large callees remain as calls — slightly larger wasm, correct ARC.
     let _ = call_counts;
     if !small || addr_taken.contains(key) {
         return false;
@@ -297,13 +292,10 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
             .push(Statement::Assign(Place::Local(dest_local), rvalue));
     }
     let f = &mut mir.functions[fi];
-    // Zero-initialize the callee's non-parameter *reference* locals. In a standalone function these
-    // start null (a fresh WASM frame); the callee's reference-counting relies on that — its
-    // release-before-overwrite and scope-exit `Release`s assume a null baseline. Inlined into the
-    // caller's frame the locals persist across executions (e.g. loop iterations), so without this
-    // reset a scope-exit release on a not-yet-assigned path would free a stale pointer left by a
-    // previous execution (double-free / use-after-free). Emitting the reset in the site block runs it
-    // once per entry into the inlined region, matching the callee's once-at-entry zeroing.
+    // Zero-initialize the callee's non-parameter GC-tracked locals. In a standalone function these
+    // start null (a fresh WASM frame). Inlined into the caller's frame the locals persist across
+    // executions (e.g. loop iterations), so without this reset a not-yet-assigned path would leave
+    // a stale pointer from a previous execution in a GC root.
     for (i, decl) in g_locals.iter().enumerate() {
         if !params.contains(&(i as u32)) && interner.is_gc_tracked(decl.ty) {
             f.blocks[site.block].stmts.push(Statement::Assign(
@@ -395,7 +387,6 @@ mod tests {
                         def: callee_def,
                         args: vec![],
                         ret: int,
-                    take_params: vec![],
                     },
                     args: vec![Operand::Const(Const::Int(41))],
                 },
@@ -456,7 +447,6 @@ mod tests {
                         def: callee_def,
                         args: vec![],
                         ret: int,
-                    take_params: vec![],
                     },
                     args: vec![],
                 },
@@ -529,7 +519,6 @@ mod tests {
                         def: callee_def,
                         args: vec![],
                         ret: int,
-                    take_params: vec![],
                     },
                     args: vec![Operand::Copy(Place::Local(s))],
                 },
@@ -576,7 +565,6 @@ mod tests {
                     def,
                     args: vec![],
                     ret: int,
-                take_params: vec![],
                 },
                 args: vec![],
             },

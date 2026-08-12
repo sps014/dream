@@ -563,10 +563,6 @@ pub struct FunctionTableInfo {
     /// name: T`, requiring the call site to pass a matching `ref` argument (see
     /// `Analyzer::analyze_ref_argument`). Always all-`false` for synthesized/stdlib entries.
     pub is_ref: Vec<bool>,
-    /// Per-parameter sink (`take`) flag — always `false` under the GC shared-ref ABI (retained
-    /// for MIR LocalDecl wiring until the ARC→GC MIR cleanup lands). Explicit `borrow` is
-    /// accepted as an ignored synonym of unmarked.
-    pub is_take: Vec<bool>,
     /// Per-parameter constant-literal default values, parallel to `parameters`. `None` means the
     /// parameter is required. Defaults are always trailing (enforced by the parser), so a call may
     /// omit the trailing defaulted arguments and the analyzer substitutes these literals.
@@ -621,7 +617,6 @@ impl FunctionTableInfo {
     ) -> FunctionTableInfo {
         let defaults = vec![None; parameters.len()];
         let is_ref = vec![false; parameters.len()];
-        let is_take = vec![false; parameters.len()];
         let param_names = Vec::new();
         FunctionTableInfo {
             name,
@@ -631,7 +626,6 @@ impl FunctionTableInfo {
             param_names,
             is_variadic: false,
             is_ref,
-            is_take,
             defaults,
             is_async: false,
             is_static: false,
@@ -655,15 +649,12 @@ impl FunctionTableInfo {
         let mut param_names: Vec<String> = vec![];
         let mut defaults: Vec<Option<Type>> = vec![];
         let mut is_ref: Vec<bool> = vec![];
-        let mut is_take: Vec<bool> = vec![];
         for i in func.parameters.iter() {
             let j = i.clone();
             parameters.push(j.type_.get_type());
             parameter_types.push(j.type_);
             defaults.push(j.default);
             is_ref.push(j.is_ref);
-            // Shared-ref ABI: unmarked and `borrow` params are never sinks.
-            is_take.push(false);
             param_names.push(j.name.text);
         }
         let intrinsic_name = dream_abi::intrinsics::intrinsic_key(&func.attributes);
@@ -677,7 +668,6 @@ impl FunctionTableInfo {
         info.param_names = param_names;
         info.is_variadic = is_variadic;
         info.is_ref = is_ref;
-        info.is_take = is_take;
         info.defaults = defaults;
         info.is_async = func.is_async;
         info.is_static = func.is_static;

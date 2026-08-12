@@ -359,7 +359,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Rejects `@c` extern signatures whose nominal struct parameter types are not `@unmanaged`
-    /// (heap classes or unions carry ARC headers and non-trivial layouts, neither of which the C
+    /// (heap classes or unions carry GC headers and non-trivial layouts, neither of which the C
     /// FFI trampoline can pass by pointer safely). Primitive/scalar params, `string`, `byte[]`,
     /// and `ref` out-params are always accepted; a struct that satisfies `Unmanaged` (a value
     /// struct with only value-typed / primitive fields) is accepted too.

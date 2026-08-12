@@ -21,8 +21,6 @@ pub struct Callee {
     pub def: DefId,
     pub instance: Vec<TypeId>,
     pub ret: TypeId,
-    /// Per-argument `take` flags aligned with the callee's declared parameters (empty = none).
-    pub take_params: Vec<bool>,
 }
 
 /// Structured statements. Control flow is preserved (lowered to a CFG only in MIR).
@@ -186,7 +184,7 @@ pub enum HExprKind {
     /// An indirect call through a raw function-table index (`target` is always `int`-typed).
     /// `sig` is the interned `fun(...): ret` shape used for the `call_indirect` type immediate —
     /// kept separate from `target` so the funcidx is never mis-typed as a reference `fun` value
-    /// (which would make ARC release a table index as if it were a funcbox).
+    /// (which would treat a table index as a heap funcbox).
     IndirectCall {
         target: Box<HExpr>,
         sig: TypeId,
@@ -392,14 +390,12 @@ mod tests {
                     name: "a".into(),
                     ty: int,
                     is_ref: false,
-                    is_take: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
                     is_ref: false,
-                    is_take: false,
                 },
             ],
             ret: int,

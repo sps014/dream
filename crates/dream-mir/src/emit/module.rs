@@ -395,7 +395,7 @@ pub fn emit_module_with_debug(
     out.push_str("  (local $first i32)\n");
     let _ = writeln!(
         out,
-        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  i32.eqz\n  local.set $first\n  local.get $first\n  (if (then\n    i32.const {}\n    call $__gc_init\n  ))",
+        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  i32.eqz\n  local.set $first\n  local.get $first\n  (if (then\n    i32.const {}\n    call $__gc_init\n  ))\n  call $__gc_cache_bounds",
         crate::abi::NURSERY_START_ADDR,
         heap_base,
         heap_base
@@ -539,7 +539,7 @@ fn emit_gc_reload_globals(out: &mut String, mir: &crate::Mir, interner: &TypeInt
         if interner.is_reference(g.ty) {
             let _ = writeln!(
                 out,
-                "  (global.get $__groot{gid}) (call $gc_root_get) (global.set $g{gid})",
+                "  (global.get $__gc_root_table) (global.get $__groot{gid}) (i32.const 2) (i32.shl) (i32.add) (i32.load) (global.set $g{gid})",
                 gid = g.id.0
             );
         }

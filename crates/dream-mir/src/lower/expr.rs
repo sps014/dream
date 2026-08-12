@@ -286,7 +286,6 @@ impl Lowerer<'_> {
             def: callee.def,
             args: callee.instance.clone(),
             ret: callee.ret,
-            take_params: callee.take_params.clone(),
         }
     }
 

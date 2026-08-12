@@ -147,9 +147,8 @@ struct Emitter<'a> {
     /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
     async_parent: Option<&'a MirFunction>,
     /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
-    /// front of `func.locals`; only these get value(`struct`) drop glue on completion. RC locals are
-    /// released by MIR `Release` stmts from poll `RcInsertion`. Synthetic temps that follow are
-    /// transient (their RC is still MIR-managed when owned).
+    /// front of `func.locals`; only these get value(`struct`) drop glue on completion. Synthetic
+    /// temps that follow are transient.
     async_user_locals: usize,
     /// Generate `@name` annotations
     debug: bool,
@@ -347,12 +346,12 @@ impl Emitter<'_> {
         // (`New`/`ArrayLit`). Safe as a single slot: lowering materializes all args into operands,
         // so allocations never nest within a single rvalue.
         self.line("  (local $__obj i32)");
-        // Root-table index for the in-flight `$__obj` (`Rvalue::New` with a user constructor).
-        // Nested Dream calls inside the ctor can trigger a Gen0 evacuation; reloading `$__obj`
-        // from this index after the call recovers the forwarded block pointer.
-        self.line("  (local $__obj_rg i32)");
-        // Last-seen `GC_EPOCH_ADDR` for this frame; `emit_gc_root_reload` skips work when unchanged.
-        self.line("  (local $__gc_epoch i32)");
+        if self.may_safepoint {
+            // Root-table index for the in-flight `$__obj` (`Rvalue::New` with a user constructor).
+            self.line("  (local $__obj_rg i32)");
+            // Last-seen `GC_EPOCH_ADDR` for this frame; `emit_gc_root_reload` skips work when unchanged.
+            self.line("  (local $__gc_epoch i32)");
+        }
         // Scratch length for `Buffer.alloc<T>(len)`: the count is needed for both the allocation size
         // and the zero-fill, so it is materialized once here.
         self.line("  (local $__len i32)");
@@ -376,9 +375,11 @@ impl Emitter<'_> {
         // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
         // once the destination allocation starts overwriting `$__obj`.
         self.line("  (local $__src i32)");
-        // Non-zero when `$__obj` currently lives in the nursery (set after `$malloc` in New /
-        // UnionNew / ArrayLit). Construction stores into a nursery dest need no remset entry.
-        self.line("  (local $__obj_young i32)");
+        if self.may_safepoint {
+            // Non-zero when `$__obj` currently lives in the nursery (set after `$malloc` in New /
+            // UnionNew / ArrayLit). Construction stores into a nursery dest need no remset entry.
+            self.line("  (local $__obj_young i32)");
+        }
         if self.gc_frame_active {
             self.line("  (local $__root_base i32)");
             for li in self.gc_root_locals.clone() {
@@ -445,8 +446,21 @@ impl Emitter<'_> {
             return;
         }
         self.line(&format!(
-            "     (local.get $__rg{local}) (local.get ${local}) (call $gc_root_set)"
+            "     (global.get $__gc_root_table) (local.get $__rg{local}) (i32.const 2) (i32.shl) (i32.add) (local.get ${local}) (i32.store)"
         ));
+    }
+
+    /// Heap ref store barrier. Nursery destinations cannot create old→young remset edges, so skip
+    /// the `$write_barrier` call when `slot < $__gc_old_start`.
+    pub(super) fn emit_write_barrier(&mut self, slot: &str, val: &str) {
+        self.line(&format!("     (local.get {slot})"));
+        self.line("     (global.get $__gc_old_start)");
+        self.line("     (i32.ge_u)");
+        self.line("     (if (then");
+        self.line(&format!(
+            "       (local.get {slot}) (local.get {val}) (call $write_barrier)"
+        ));
+        self.line("     ))");
     }
 
     /// Reloads MIR ref-locals from their shadow root-table slots and forwards module ref-globals
@@ -470,7 +484,7 @@ impl Emitter<'_> {
             let root_locals = self.gc_root_locals.clone();
             for li in root_locals {
                 self.line(&format!(
-                    "       (local.get $__rg{li}) (call $gc_root_get) (local.set ${li})"
+                    "       (global.get $__gc_root_table) (local.get $__rg{li}) (i32.const 2) (i32.shl) (i32.add) (i32.load) (local.set ${li})"
                 ));
             }
         }
@@ -512,7 +526,7 @@ impl Emitter<'_> {
     /// root-table slot. No-op when construction rooting is not in effect.
     pub(super) fn emit_reload_obj_root(&mut self) {
         if self.obj_construction_root {
-            self.line("     (local.get $__obj_rg) (call $gc_root_get) (local.set $__obj)");
+            self.line("     (global.get $__gc_root_table) (local.get $__obj_rg) (i32.const 2) (i32.shl) (i32.add) (i32.load) (local.set $__obj)");
         }
     }
 

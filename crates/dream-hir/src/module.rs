@@ -142,13 +142,9 @@ pub struct HParam {
     /// `Analyzer::ref_box_type`/`docs/compiler/03-hir.md`): its MIR local must alias the caller's
     /// storage in place rather than take a private copy (`FunctionBuilder::new_ref_param`).
     pub is_ref: bool,
-    /// True for a `take name: T` parameter — always `false` under the GC shared-ref ABI
-    /// (field retained until MIR ARC cleanup lands).
-    pub is_take: bool,
 }
 
-/// Declaration metadata for a function local (used by the backend to allocate slots and by RC
-/// insertion to know which locals are references).
+/// Declaration metadata for a function local (used by the backend to allocate slots).
 #[derive(Debug, Clone)]
 pub struct HLocal {
     pub id: LocalId,

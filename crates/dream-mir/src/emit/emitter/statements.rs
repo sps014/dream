@@ -339,7 +339,7 @@ impl Emitter<'_> {
                     .is_some_and(|ty| self.interner.is_reference(*ty))
                 {
                     self.line(&format!(
-                        "     (global.get $__groot{}) (global.get $g{}) (call $gc_root_set)",
+                        "     (global.get $__gc_root_table) (global.get $__groot{}) (i32.const 2) (i32.shl) (i32.add) (global.get $g{}) (i32.store)",
                         g.0, g.0
                     ));
                 }
@@ -407,9 +407,7 @@ impl Emitter<'_> {
             self.line("     (local.get $__slot)");
             self.line("     (local.get $__src)");
             self.line(&format!("     ({})", self.store_instr(ty)));
-            self.line("     (local.get $__slot)");
-            self.line("     (local.get $__src)");
-            self.line("     (call $write_barrier)");
+            self.emit_write_barrier("$__slot", "$__src");
             return;
         }
         addr(self);
@@ -623,7 +621,7 @@ impl Emitter<'_> {
             // Nursery dest: young→young stores are not remset-worthy. `$__obj_young` is set after
             // the construction `$malloc`; Gen1 fallback (nursery full) still takes the barrier.
             self.line("     (local.get $__obj_young) (i32.eqz) (if (then");
-            self.line("       (local.get $__rel) (local.get $__src) (call $write_barrier)");
+            self.emit_write_barrier("$__rel", "$__src");
             self.line("     ))");
             return;
         }

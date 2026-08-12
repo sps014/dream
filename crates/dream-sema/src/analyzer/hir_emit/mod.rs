@@ -202,7 +202,7 @@ impl<'a> Analyzer<'a> {
         // heap-durable box (`CaptureCell<T>`) whose pointer serves that purpose unchanged. A name that is
         // *only* `ref`-passed gets its own address-taking box instead: the stack-resident
         // `RefBox<T>` value struct (`ref_boxed_locals`, see `hir_declare_local`) — no heap
-        // allocation or ARC bookkeeping, since its storage never needs to outlive this call.
+        // allocation, since its storage never needs to outlive this call.
         let ref_targets =
             super::expressions::capture_scan::scan_ref_argument_targets(function.body);
         self.ref_boxed_locals = ref_targets
@@ -210,7 +210,6 @@ impl<'a> Analyzer<'a> {
             .cloned()
             .collect();
         self.capturing_fun_locals.clear();
-        self.clear_moved_locals();
         self.hir.locals.clear();
         self.hir.boxed.clear();
         self.hir.next_local = 0;
@@ -274,7 +273,6 @@ impl<'a> Analyzer<'a> {
                     name: param.name.text.clone(),
                     ty: box_tid,
                     is_ref: true,
-                    is_take: false,
                 });
                 self.hir.boxed.insert(param.name.text.clone(), elem_ty);
                 continue;
@@ -288,7 +286,6 @@ impl<'a> Analyzer<'a> {
                 name: param.name.text.clone(),
                 ty,
                 is_ref: false,
-                is_take: false,
             });
         }
 

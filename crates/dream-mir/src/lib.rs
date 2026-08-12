@@ -2,10 +2,9 @@
 //! operations.
 //!
 //! Where HIR keeps structured control flow, MIR desugars everything (if/while/for/foreach/switch/
-//! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Reference-counting
-//! allocation is an explicit [`Statement`], which lets the optimization
-//! passes reason about them with ordinary dataflow. The backend  reconstructs
-//! structured WASM control flow from this CFG via a relooper.
+//! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Heap allocation is an
+//! explicit [`Rvalue::New`]; the GC runtime owns lifetime. The backend reconstructs structured
+//! WASM control flow from this CFG via a relooper.
 
 pub mod abi;
 pub mod debug_schema;
@@ -129,12 +128,6 @@ pub struct LocalDecl {
     /// inliner when remapping a callee `this`/`ref` into the caller so [`ValueFrame`] keeps it as a
     /// borrow. Meaningless (and always `false`) for a local whose type is not a value struct.
     pub is_ref: bool,
-    /// Legacy sink/owned parameter flag (ARC-era). Kept on locals for now; emit no longer uses it
-    /// for retain/release. Always `false` for non-params.
-    pub is_take: bool,
-    /// Legacy non-owning alias flag (typically a field/index load). Kept on locals for now; emit
-    /// no longer uses it for retain/release. Always `false` for params.
-    pub is_cursor: bool,
     /// Owning value local whose destructor runs via explicit [`Statement::ValueDrop`] (inliner
     /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
     /// shadow-stack slot; excluded from [`ValueFrame`] teardown so it is not double-dropped.
@@ -407,7 +400,7 @@ pub enum Rvalue {
     },
     /// An indirect call through a raw function-table index (`target` is `int`). `sig` is the
     /// interned `fun(...): ret` shape selecting the `call_indirect` type immediate — not carried on
-    /// `target`'s type, so ARC never treats a table index as a reference `fun`/funcbox.
+    /// `target`'s type, so a table index is never treated as a reference `fun`/funcbox.
     IndirectCall {
         target: Operand,
         sig: TypeId,
@@ -522,8 +515,6 @@ pub struct Callee {
     pub def: DefId,
     pub args: Vec<TypeId>,
     pub ret: TypeId,
-    /// Per-argument `take` flags from the callee declaration (empty = none).
-    pub take_params: Vec<bool>,
 }
 
 #[cfg(test)]
@@ -552,14 +543,12 @@ mod tests {
                     name: "a".into(),
                     ty: int,
                     is_ref: false,
-                    is_take: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
                     is_ref: false,
-                    is_take: false,
                 },
             ],
             ret: int,

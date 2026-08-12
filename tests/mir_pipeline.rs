@@ -47,7 +47,6 @@ fn compile_sum_to() -> String {
             name: "n".into(),
             ty: int,
             is_ref: false,
-            is_take: false,
         }],
         ret: int,
         locals: vec![

@@ -160,7 +160,6 @@ impl Emitter<'_> {
                 def: ctor,
                 args: vec![],
                 ret: self.interner.void(),
-            take_params: vec![],
             });
             self.line(&format!("     (call ${})", sym));
         }
@@ -218,9 +217,7 @@ impl Emitter<'_> {
                 self.line("     (local.get $__rel)");
                 self.line("     (local.get $__src)");
                 self.line(&format!("     ({})", self.store_instr(fty)));
-                self.line("     (local.get $__rel)");
-                self.line("     (local.get $__src)");
-                self.line("     (call $write_barrier)");
+                self.emit_write_barrier("$__rel", "$__src");
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
@@ -304,9 +301,7 @@ impl Emitter<'_> {
                 self.line("     (local.get $__rel)");
                 self.line("     (local.get $__src)");
                 self.line(&format!("     ({})", self.store_instr(fty)));
-                self.line("     (local.get $__rel)");
-                self.line("     (local.get $__src)");
-                self.line("     (call $write_barrier)");
+                self.emit_write_barrier("$__rel", "$__src");
             } else {
                 field_addr(self);
                 self.emit_operand(arg);

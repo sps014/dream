@@ -2,12 +2,12 @@ use super::*;
 
 /// Which box a boxed local's slot holds — see `Analyzer::hir_declare_local`.
 enum BoxKind {
-    /// `CaptureCell<T>`: heap-allocated, ARC-managed. Used when the name is captured by a lambda (its
+    /// `CaptureCell<T>`: heap-allocated, GC-tracked. Used when the name is captured by a lambda (its
     /// storage may need to outlive this function's stack frame).
     Cell,
     /// `RefBox<T>`: a stack-resident value struct. Used when the name is only ever `ref`-passed
-    /// (never captured) — its storage never needs to outlive this call, so no heap allocation or
-    /// ARC bookkeeping is needed.
+    /// (never captured) — its storage never needs to outlive this call, so no heap allocation is
+    /// needed.
     RefBox,
 }
 

@@ -101,7 +101,6 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let value_hir = self.hir_take();
         self.compare_data_type(&inner_type, &right_type, &empty_span(), diagnostics)?;
-        self.note_sink_store_move(right, &right_type, parent_function);
 
         let target = self.type_ctx.lower(&inner_type);
         self.hir_assign_index(array_hir, index_hir, value_hir, Some(target));
@@ -217,7 +216,6 @@ impl<'a> Analyzer<'a> {
             let value = self.hir_take();
             self.current_expected_type = saved;
             self.compare_data_type(&elem_ty, &right_type, &member.position, diagnostics)?;
-            self.note_sink_store_move(right, &right_type, parent_function);
             let target = self.type_ctx.lower(&elem_ty);
             self.hir_assign_field(obj_hir, idx, value, Some(target));
             return Ok(());
@@ -254,7 +252,6 @@ impl<'a> Analyzer<'a> {
                 let value_hir = self.hir_take();
                 self.current_expected_type = saved_expected;
                 self.compare_data_type(&field_type, &right_type, &member.position, diagnostics)?;
-                self.note_sink_store_move(right, &right_type, parent_function);
 
                 match self.struct_field_index(&struct_name, &member.text) {
                     Some(index) => {

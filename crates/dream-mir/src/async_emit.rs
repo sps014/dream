@@ -261,7 +261,7 @@ pub fn emit_async_function(
             // Frame slot is a heap store of a ref — record older→younger edges.
             let _ = writeln!(
                 out,
-                " local.get $self\n i32.const {off}\n i32.add\n local.get ${idx}\n call $write_barrier"
+                " local.get $self\n i32.const {off}\n i32.add\n global.get $__gc_old_start\n i32.ge_u\n (if (then\n  local.get $self\n  i32.const {off}\n  i32.add\n  local.get ${idx}\n  call $write_barrier\n ))"
             );
         }
     }

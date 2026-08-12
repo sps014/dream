@@ -4,31 +4,30 @@ Recorded with `dream --release run tests/bench/microbenches.dream` after the ARC
 cutover (`docs/compiler/12-tiered-gc.md`). Absolute values vary by host — use relative
 deltas. Re-run via `./scripts/run-microbenches.sh`.
 
-## Post-Gen0 snapshot (2026-08-12, native wasmtime)
+## Snapshot (2026-08-12, native wasmtime)
 
-Nursery = 256 KiB. Gen0 bump + evacuate; epoch-gated root reload; no call-arg spill
-(operands cannot allocate); unmanaged `List`/`Map`/`Set.clear` skips zeroing traced
-slots.
+Nursery = 1 MiB. Cached GC bounds in WASM globals; young dests skip `$write_barrier`;
+alloc fast path is a bump (no `GC_REQUEST` poll); inlined root-table set/get.
 
 | Bench | ns_per_op | notes |
 |-------|----------:|-------|
-| string_eq | 11 | |
-| list_push | 16 | |
-| list_clear_reuse | 18 | ARC-era ~9 |
-| alloc_churn | 25 | |
-| map_clear_reuse | 56 | ARC-era ~46 |
-| gc_locals | 57 | |
-| scratch_arena | 74 | |
-| string_concat | 99 | |
-| map_get_set | 101 | |
-| list_insert_mid | 112 | ARC-era ~96 |
+| list_push | 6 | |
+| list_clear_reuse | 8 | ARC-era ~9 |
+| string_eq | 10 | |
+| alloc_churn | 24 | |
+| map_clear_reuse | 34 | ARC-era ~46 |
+| gc_locals | 56 | |
+| scratch_arena | 62 | |
+| map_get_set | 64 | |
+| list_insert_mid | 90 | ARC-era ~96 |
+| string_concat | 94 | |
 | substring | 128 | ARC-era ~127 |
-| string_builder | 284 | |
-| char_scan | 4.1k | |
-| regex_find | 46k | |
+| string_builder | 346 | |
+| char_scan | 4.3k | |
+| regex_find | 35k | |
 
-`substring` matches ARC. `map_clear_reuse` is within ~20%. `list_clear_reuse` still
-pays per-`push` root prologue / epoch checks that ARC elided on `int` elements.
+`list_clear_reuse` / `substring` / `list_insert_mid` match or beat the ARC-era figures
+on this host. `map_clear_reuse` is ahead of ARC (~34 vs ~46).
 
 ### ARC-era reference (historical)
 

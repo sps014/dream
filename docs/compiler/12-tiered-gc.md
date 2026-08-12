@@ -100,7 +100,7 @@ Every heap store of a reference (field / index / box):
 
 ## Nursery sizing
 
-Default [`NURSERY_SIZE`](../../crates/dream-mir/src/abi.rs) is **256 KiB**. Remset overflow
+Default [`NURSERY_SIZE`](../../crates/dream-mir/src/abi.rs) is **1 MiB**. Remset overflow
 must not drop edges (see above); blittable arrays use `TAG_FLAT_ARRAY` so Gen0 does not
 treat `int[]` payloads as pointers; heap field stores compute the place address **after**
 `$malloc` so evacuated bases are reloaded first.

@@ -68,9 +68,7 @@ pub const GC_META_FREE: u32 = 1 << 7;
 pub const LOH_THRESHOLD: u32 = 85 * 1024;
 
 /// Gen0 nursery size in bytes (fixed region at heap base; copying collector).
-/// Sized to force frequent ephemeral collections under Map/JSON stress — remset overflow
-/// must remain correct at this size (see `docs/compiler/12-tiered-gc.md`).
-pub const NURSERY_SIZE: u32 = 256 * 1024;
+pub const NURSERY_SIZE: u32 = 1024 * 1024;
 
 /// Maximum number of GC root slots in the shadow root table (scanned at safepoints).
 pub const GC_ROOT_TABLE_CAP: u32 = 4096;
@@ -130,8 +128,7 @@ pub const STRING_BASE: u32 = 1024;
 // Coordination words at 44/48/52 must not overlap freelist heads — all well below `STRING_BASE`.
 //
 // GC state words occupy [76, 160) (still below STRING_BASE=1024):
-// nursery bounds, old-space bump mirror, root table, remembered set, safepoint handshake,
-// collection epoch.
+// nursery bounds, old-space bump mirror, root table, remembered set, collection epoch.
 
 /// Spinlock serializing `$malloc`/`$free`/`$gc_collect_*` across shared-memory instances.
 pub const ALLOC_LOCK_ADDR: u32 = 44;
@@ -152,9 +149,9 @@ pub const OLD_START_ADDR: u32 = 88;
 
 /// Non-zero while a STW collection is in progress or has been requested.
 pub const GC_REQUEST_ADDR: u32 = 92;
-/// Number of mutator instances that must acknowledge the current safepoint (0 = single-threaded).
+/// Reserved (was a multi-mutator safepoint handshake; single-threaded STW does not use it).
 pub const GC_SAFEPOINT_EXPECT_ADDR: u32 = 96;
-/// Number of mutators that have reached `$gc_safepoint` for the current request.
+/// Reserved (was a multi-mutator safepoint handshake; single-threaded STW does not use it).
 pub const GC_SAFEPOINT_ACK_ADDR: u32 = 100;
 /// Collection kind: 0=ephemeral(Gen0), 1=Gen0+1, 2=full(+Gen2+LOH).
 pub const GC_COLLECT_KIND_ADDR: u32 = 104;

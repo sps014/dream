@@ -30,7 +30,7 @@ cargo test -p dream relooper::
 
 ### End-to-end tests — `tests/`
 
-`tests/e2e_tests.rs` and `tests/mir_e2e.rs` compile real `.dream` programs through the full driver and check behavior against each case's `.expected`. These are the source of truth for "does the compiler actually work"; every case in `tests/cases/` must pass end-to-end through the MIR backend.
+`tests/e2e_tests.rs` compiles real `.dream` programs through the full driver and checks behavior against each case's `.expected`. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`). The full debug/release corpora, the duplicate `mir_e2e` ratchet, DAP, and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
 
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 

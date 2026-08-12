@@ -160,6 +160,7 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
 /// Only runs the real compiler when a `dream` binary is discoverable (it is, for anyone running
 /// `cargo test --workspace` from a checkout where `dream` has already been built at least once).
 #[test]
+#[ignore = "invokes the full compiler; cargo test --workspace -- --ignored"]
 fn build_compiles_a_project_using_an_installed_dependency() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
@@ -284,6 +285,7 @@ fn init_lib_has_no_entry_and_run_rejects() {
 }
 
 #[test]
+#[ignore = "invokes the full compiler; cargo test --workspace -- --ignored"]
 fn build_refreshes_web_and_node_aliases() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
@@ -326,6 +328,7 @@ fn build_refreshes_web_and_node_aliases() {
 }
 
 #[test]
+#[ignore = "invokes the full compiler; cargo test --workspace -- --ignored"]
 fn build_lib_writes_under_target_debug() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
@@ -344,6 +347,7 @@ fn build_lib_writes_under_target_debug() {
 }
 
 #[test]
+#[ignore = "builds dream-runner --release; cargo test --workspace -- --ignored"]
 fn pack_rejects_libs_and_packs_bin_for_host() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
@@ -375,6 +379,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
 }
 
 #[test]
+#[ignore = "invokes the full compiler; cargo test --workspace -- --ignored"]
 fn workspace_install_shares_lock_and_packages_symlink() {
     prefer_workspace_dream();
     let tmp = tempfile::tempdir().unwrap();

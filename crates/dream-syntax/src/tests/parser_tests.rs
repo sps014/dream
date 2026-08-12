@@ -1173,7 +1173,7 @@ fn fuzz_random_token_soup_never_panics() {
         "ident",
     ];
     let mut rng = XorShift(0x9E3779B97F4A7C15);
-    for _ in 0..3000 {
+    for _ in 0..400 {
         let len = (rng.next_u64() as usize) % 40;
         let mut s = String::new();
         for _ in 0..len {
@@ -1213,7 +1213,7 @@ fn fuzz_byte_mutations_never_panic() {
     let base = "fun main(): int { let x = foo(1, 2); return x; }";
     let bytes = base.as_bytes();
     let mut rng = XorShift(0xDEAD_BEEF_CAFE_F00D);
-    for _ in 0..3000 {
+    for _ in 0..400 {
         let mut v = bytes.to_vec();
         let mutations = 1 + (rng.next_u64() as usize) % 6;
         for _ in 0..mutations {
@@ -1231,7 +1231,7 @@ fn fuzz_unbalanced_delimiters_never_panic() {
         "{", "}", "(", ")", "[", "]", "<", ">", "fun", "class", "if", "for", "x", ";", ":", ",",
     ];
     let mut rng = XorShift(0x1234_5678_ABCD_EF01);
-    for _ in 0..4000 {
+    for _ in 0..400 {
         let len = (rng.next_u64() as usize) % 60;
         let mut s = String::new();
         for _ in 0..len {

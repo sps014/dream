@@ -155,8 +155,9 @@ cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node 
 node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
-# Full test suite
+# Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
 cargo test --workspace
+cargo test --workspace -- --ignored
 
 # Focused unit tests
 cargo test -p dream-types
@@ -196,9 +197,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
+The default test gate is the fast suite (unit tests + e2e smoke). Full golden corpus, DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
+
 ## Testing conventions
 
-- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Run via `cargo test`.
+- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Default `cargo test --workspace` runs a smoke subset; the full corpus is `cargo test --workspace -- --ignored`.
 - **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes/`relooper`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
 - **Integration test** `dream-mir`'s `hir_to_mir_to_optimized_wat` exercises HIR→MIR lowering→pass pipeline→emit in one shot — fastest signal when touching lowering/passes/emission.
 - **Determinism test** `codegen_is_deterministic` (`tests/e2e_tests.rs`) compiles the same source twice and asserts byte-identical output. Never break this.

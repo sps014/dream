@@ -58,6 +58,7 @@ fn run_wasm_binary(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[ignore = "Binaryen at every -O level; cargo test --workspace -- --ignored"]
 fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
     let dream_file = "tests/cases/collection_literals.dream".to_string();
 

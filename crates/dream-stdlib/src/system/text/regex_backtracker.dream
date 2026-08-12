@@ -141,12 +141,12 @@ internal class RegexBacktrackVM {
         let s0 = 2 * idx;
         let e0 = (2 * idx) + 1;
         if ((s0 < 0) || (e0 >= caps.length)) {
-            return "";
+            return string.empty;
         }
         let s = caps[s0];
         let e = caps[e0];
         if ((s < 0) || (e < 0)) {
-            return "";
+            return string.empty;
         }
         return input.substring(s, e);
     }

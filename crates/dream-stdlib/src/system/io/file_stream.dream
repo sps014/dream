@@ -34,7 +34,7 @@ public class FileStream {
     public fun read_all(): string {
         let sz = File.size(this.handle.path);
         if (sz.is_none()) {
-            return "";
+            return string.empty;
         }
         let remaining = (int)sz.unwrap_or(0L) - this.pos;
         if (remaining < 0) {

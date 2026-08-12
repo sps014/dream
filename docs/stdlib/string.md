@@ -4,6 +4,8 @@
 
 `string` is a built-in reference type holding UTF-8 text. Basic operations (`+`, `.length`, `char_at`, interpolation) need no import. Higher-level helpers require this package.
 
+`string.empty` is the interned empty string (always available; no `system.text` import). Prefer it over `""` when you need an empty value — empty substring / UTF-8 conversion / `+` of an empty operand reuse that same pointer instead of allocating.
+
 Build strings with `+` or [interpolation](../language/operators.md#string-interpolation) (`$"hi {name}"`).
 
 ```dream
@@ -34,7 +36,16 @@ System.println(("aé🙂").byte_size());  // 6
 Returns whether the string has zero scalars. Prefer over `length == 0` for readability.
 
 ```dream
-System.println("".is_empty());  // true
+System.println(string.empty.is_empty());  // true
+```
+
+#### `string.empty` (static)
+
+The interned empty string. Prefer this over `""` for empty defaults and fallbacks.
+
+```dream
+let s = string.empty;
+System.println(s.length);  // 0
 ```
 
 #### `char_at(i: int): char` / `s[i]` / `get(i: int): char`
@@ -187,7 +198,7 @@ System.println("  hello  ".trim());  // hello
 
 #### `repeat(times: int): string`
 
-Repeats the string `times` times. `times <= 0` yields `""`.
+Repeats the string `times` times. `times <= 0` yields `string.empty`.
 
 ```dream
 System.println("ab".repeat(3));  // ababab

@@ -5,27 +5,7 @@ module system.text;
 extend string : Comparable<string> {
     // Orders this string against `other` lexicographically.
     public fun compare(borrow other: string): int {
-        let n = this.length;
-        let m = other.length;
-        let i = 0;
-        while ((i < n) && (i < m)) {
-            let a = this.char_at(i);
-            let b = other.char_at(i);
-            if (a < b) {
-                return 0 - 1;
-            }
-            if (a > b) {
-                return 1;
-            }
-            i = i + 1;
-        }
-        if (n < m) {
-            return 0 - 1;
-        }
-        if (n > m) {
-            return 1;
-        }
-        return 0;
+        return string.compare_raw(this, other);
     }
 
     // True when the string has no characters.
@@ -62,53 +42,37 @@ extend string : Comparable<string> {
 
     // The index of the first occurrence of `target`, or `None`.
     public fun index_of(target: char): Option<int> {
-        let n = this.length;
-        let i = 0;
-        while (i < n) {
-            if (this.char_at(i) == target) {
-                return Option.Some(i);
+        let n = this.byte_size();
+        let bo = 0;
+        let si = 0;
+        while (bo < n) {
+            if (string.utf8_decode_at(this, bo) == target) {
+                return Option.Some(si);
             }
-            i = i + 1;
+            bo = bo + string.utf8_width_at(this, bo);
+            si = si + 1;
         }
         return Option.None;
     }
 
     // The index of the first occurrence of substring `sub`, or `None`.
-    // Index of the first occurrence of substring `sub`, or `None`. Uses Boyer–Moore–Horspool
-    // skipping for `m > 1`.
     public fun index_of(borrow sub: string): Option<int> {
-        let n = this.length;
-        let m = sub.length;
-        if (m == 0) {
+        let needle = sub.byte_size();
+        if (needle == 0) {
             return Option.Some(0);
         }
-        if (m > n) {
+        let hay = this.byte_size();
+        if (needle > hay) {
             return Option.None;
         }
-        if (m == 1) {
-            let want = sub.char_at(0);
-            let i = 0;
-            while (i < n) {
-                if (this.char_at(i) == want) {
-                    return Option.Some(i);
-                }
-                i = i + 1;
+        let bo = 0;
+        let si = 0;
+        while ((bo + needle) <= hay) {
+            if (this._bytes_eq(sub, bo, 0, needle) == true) {
+                return Option.Some(si);
             }
-            return Option.None;
-        }
-        let skip = Map<char, int>();
-        let j = 0;
-        while (j < m - 1) {
-            skip.set(sub.char_at(j), m - 1 - j);
-            j = j + 1;
-        }
-        let i = 0;
-        while (i <= n - m) {
-            if (this._matches_at(sub, i) == true) {
-                return Option.Some(i);
-            }
-            let shift = skip.get(this.char_at(i + m - 1)).unwrap_or(m);
-            i = i + shift;
+            bo = bo + string.utf8_width_at(this, bo);
+            si = si + 1;
         }
         return Option.None;
     }
@@ -120,19 +84,21 @@ extend string : Comparable<string> {
 
     // True if this string begins with `prefix`.
     public fun starts_with(borrow prefix: string): bool {
-        if (prefix.length > this.length) {
+        let n = prefix.byte_size();
+        if (n > this.byte_size()) {
             return false;
         }
-        return this._matches_at(prefix, 0);
+        return this._bytes_eq(prefix, 0, 0, n);
     }
 
     // True if this string ends with `suffix`.
     public fun ends_with(borrow suffix: string): bool {
-        let offset = this.length - suffix.length;
-        if (offset < 0) {
+        let n = suffix.byte_size();
+        let hay = this.byte_size();
+        if (n > hay) {
             return false;
         }
-        return this._matches_at(suffix, offset);
+        return this._bytes_eq(suffix, hay - n, 0, n);
     }
 
     // A new string with every uppercase letter lowercased.
@@ -197,22 +163,21 @@ extend string : Comparable<string> {
 
     // A new string repeated `times` times.
     public fun repeat(times: int): string {
-        let n = this.length;
-        let total = n * times;
-        if (total < 0) {
-            total = 0;
+        if (times <= 0) {
+            return string.empty;
         }
-        let result = string.alloc(total);
+        let n = this.byte_size();
+        if (n == 0) {
+            return string.empty;
+        }
+        let total = n * times;
+        let buf = Buffer.alloc<byte>(total);
         let i = 0;
         while (i < times) {
-            let j = 0;
-            while (j < n) {
-                string.set(result, i * n + j, this.char_at(j));
-                j = j + 1;
-            }
+            string.copy_utf8(buf, i * n, this, 0, n);
             i = i + 1;
         }
-        return result;
+        return string.from_utf8(buf);
     }
 
     // True if this string has the same contents as `other`.
@@ -222,87 +187,90 @@ extend string : Comparable<string> {
 
     // Splits this string on the single character `sep`.
     public fun split(sep: char): string[] {
-        let n = this.length;
+        let n = this.byte_size();
         let parts = 1;
-        let i = 0;
-        while (i < n) {
-            if (this.char_at(i) == sep) {
+        let bo = 0;
+        while (bo < n) {
+            if (string.utf8_decode_at(this, bo) == sep) {
                 parts = parts + 1;
             }
-            i = i + 1;
+            bo = bo + string.utf8_width_at(this, bo);
         }
         let result = Buffer.alloc<string>(parts);
-        let start = 0;
+        let start_si = 0;
+        let si = 0;
         let idx = 0;
-        i = 0;
-        while (i < n) {
-            if (this.char_at(i) == sep) {
-                result[idx] = this.substring(start, i);
+        bo = 0;
+        while (bo < n) {
+            let w = string.utf8_width_at(this, bo);
+            if (string.utf8_decode_at(this, bo) == sep) {
+                result[idx] = this.substring(start_si, si);
                 idx = idx + 1;
-                start = i + 1;
+                start_si = si + 1;
             }
-            i = i + 1;
+            bo = bo + w;
+            si = si + 1;
         }
-        result[idx] = this.substring(start, n);
+        result[idx] = this.substring(start_si, si);
         return result;
     }
 
     // Splits this string on every occurrence of substring `sep`.
     public fun split(borrow sep: string): string[] {
-        let m = sep.length;
-        if (m == 0) {
+        let needle = sep.byte_size();
+        if (needle == 0) {
             let one = Buffer.alloc<string>(1);
             one[0] = this;
             return one;
         }
-        if (m == 1) {
-            return this.split(sep.char_at(0));
-        }
-        let n = this.length;
+        let hay = this.byte_size();
         let parts = 1;
-        let i = 0;
-        while ((i + m) <= n) {
-            if (this._matches_at(sep, i)) {
+        let bo = 0;
+        while ((bo + needle) <= hay) {
+            if (this._bytes_eq(sep, bo, 0, needle) == true) {
                 parts = parts + 1;
-                i = i + m;
+                bo = bo + needle;
             } else {
-                i = i + 1;
+                bo = bo + string.utf8_width_at(this, bo);
             }
         }
         let result = Buffer.alloc<string>(parts);
-        let start = 0;
+        let start_si = 0;
+        let si = 0;
         let idx = 0;
-        i = 0;
-        while ((i + m) <= n) {
-            if (this._matches_at(sep, i)) {
-                result[idx] = this.substring(start, i);
+        bo = 0;
+        while ((bo + needle) <= hay) {
+            if (this._bytes_eq(sep, bo, 0, needle) == true) {
+                result[idx] = this.substring(start_si, si);
                 idx = idx + 1;
-                i = i + m;
-                start = i;
+                bo = bo + needle;
+                si = si + sep.length;
+                start_si = si;
             } else {
-                i = i + 1;
+                bo = bo + string.utf8_width_at(this, bo);
+                si = si + 1;
             }
         }
-        result[idx] = this.substring(start, n);
+        result[idx] = this.substring(start_si, this.length);
         return result;
     }
 
     // A new string with every occurrence of `old` replaced by `replacement`.
     public fun replace(borrow old: string, borrow replacement: string): string {
-        let m = old.length;
-        if (m == 0) {
+        let needle = old.byte_size();
+        if (needle == 0) {
             return this;
         }
-        let n = this.length;
-        let sb = StringBuilder(n);
-        let i = 0;
-        while (i < n) {
-            if ((i <= n - m) && (this._matches_at(old, i) == true)) {
+        let hay = this.byte_size();
+        let sb = StringBuilder(this.length);
+        let bo = 0;
+        while (bo < hay) {
+            if (((bo + needle) <= hay) && (this._bytes_eq(old, bo, 0, needle) == true)) {
                 sb.append(replacement);
-                i = i + m;
+                bo = bo + needle;
             } else {
-                sb.append_char(this.char_at(i));
-                i = i + 1;
+                sb.append_char(string.utf8_decode_at(this, bo));
+                bo = bo + string.utf8_width_at(this, bo);
             }
         }
         return sb.build();
@@ -313,14 +281,13 @@ extend string : Comparable<string> {
         return c.is_whitespace();
     }
 
-    fun _matches_at(borrow sub: string, offset: int): bool {
-        let m = sub.length;
-        let j = 0;
-        while (j < m) {
-            if (this.char_at(offset + j) != sub.char_at(j)) {
+    fun _bytes_eq(borrow other: string, this_off: int, other_off: int, n: int): bool {
+        let i = 0;
+        while (i < n) {
+            if (this.byte_at(this_off + i) != other.byte_at(other_off + i)) {
                 return false;
             }
-            j = j + 1;
+            i = i + 1;
         }
         return true;
     }

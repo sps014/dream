@@ -7,6 +7,11 @@
 ;; still lives at ptr-12 and is unchanged, so malloc/free/retain/release/object_tag are unaffected.
 ;; `size()` / `char_at` / iteration use Unicode scalar (code point) indices; `byte_size` / `byte_at`
 ;; expose raw UTF-8 byte access. `$str_scalar_len` is O(1) via the cached word at ptr+4.
+;; Sequential `$char_at` / `$utf8_scalar_byte_offset` reuse the last (ptr, idx, byte-off) walk.
+
+(global $__utf8_walk_ptr (mut i32) (i32.const 0))
+(global $__utf8_walk_idx (mut i32) (i32.const 0))
+(global $__utf8_walk_off (mut i32) (i32.const 0))
 
 ;; Byte length of the UTF-8 payload (O(1)).
 (func $str_byte_size (param $ptr i32) (result i32)
@@ -410,6 +415,20 @@
     local.set $off
     i32.const 0
     local.set $count
+    local.get $ptr
+    global.get $__utf8_walk_ptr
+    i32.eq
+    if
+        local.get $idx
+        global.get $__utf8_walk_idx
+        i32.ge_u
+        if
+            global.get $__utf8_walk_off
+            local.set $off
+            global.get $__utf8_walk_idx
+            local.set $count
+        end
+    end
     (block $done
         (loop $scan
             local.get $count
@@ -433,6 +452,12 @@
             br $scan
         )
     )
+    local.get $ptr
+    global.set $__utf8_walk_ptr
+    local.get $idx
+    global.set $__utf8_walk_idx
+    local.get $off
+    global.set $__utf8_walk_off
     local.get $off
 )
 
@@ -448,6 +473,24 @@
     local.get $str2
     call $strlen
     local.set $len2
+    local.get $len1
+    i32.eqz
+    if
+        local.get $len2
+        i32.eqz
+        if
+            i32.const {STRING_EMPTY}
+            return
+        end
+        local.get $str2
+        return
+    end
+    local.get $len2
+    i32.eqz
+    if
+        local.get $str1
+        return
+    end
     local.get $str1
     call $str_scalar_len
     local.set $sc1
@@ -649,8 +692,235 @@
     i32.const 1
 )
 
+;; UTF-8 byte lexicographic compare (same order as Unicode scalars). Negative / zero / positive
+;; as i32, matching `Comparable.compare`. Null is treated as empty.
+(func $string_compare (param $a i32) (param $b i32) (result i32)
+    (local $len_a i32)
+    (local $len_b i32)
+    (local $n i32)
+    (local $i i32)
+    (local $words i32)
+    (local $wa i32)
+    (local $wb i32)
+    (local $ba i32)
+    (local $bb i32)
+    local.get $a
+    local.get $b
+    i32.eq
+    if
+        i32.const 0
+        return
+    end
+    local.get $a
+    i32.eqz
+    if
+        i32.const 0
+        local.set $len_a
+    else
+        local.get $a
+        i32.load
+        local.set $len_a
+    end
+    local.get $b
+    i32.eqz
+    if
+        i32.const 0
+        local.set $len_b
+    else
+        local.get $b
+        i32.load
+        local.set $len_b
+    end
+    local.get $len_a
+    local.get $len_b
+    i32.lt_u
+    if
+        local.get $len_a
+        local.set $n
+    else
+        local.get $len_b
+        local.set $n
+    end
+    local.get $n
+    i32.const 2
+    i32.shr_u
+    local.set $words
+    i32.const 0
+    local.set $i
+    (block $words_done
+        (loop $word_cmp
+            local.get $i
+            local.get $words
+            i32.ge_u
+            br_if $words_done
+            local.get $a
+            i32.eqz
+            if
+                i32.const 0
+                local.set $wa
+            else
+                local.get $a
+                i32.const 8
+                i32.add
+                local.get $i
+                i32.const 2
+                i32.shl
+                i32.add
+                i32.load
+                local.set $wa
+            end
+            local.get $b
+            i32.eqz
+            if
+                i32.const 0
+                local.set $wb
+            else
+                local.get $b
+                i32.const 8
+                i32.add
+                local.get $i
+                i32.const 2
+                i32.shl
+                i32.add
+                i32.load
+                local.set $wb
+            end
+            local.get $wa
+            local.get $wb
+            i32.ne
+            if
+                i32.const 0
+                local.set $ba
+                (loop $byte_in_word
+                    local.get $wa
+                    local.get $ba
+                    i32.const 3
+                    i32.shl
+                    i32.shr_u
+                    i32.const 255
+                    i32.and
+                    local.set $bb
+                    local.get $wb
+                    local.get $ba
+                    i32.const 3
+                    i32.shl
+                    i32.shr_u
+                    i32.const 255
+                    i32.and
+                    local.get $bb
+                    i32.ne
+                    if
+                        local.get $bb
+                        local.get $wb
+                        local.get $ba
+                        i32.const 3
+                        i32.shl
+                        i32.shr_u
+                        i32.const 255
+                        i32.and
+                        i32.lt_u
+                        if
+                            i32.const -1
+                            return
+                        end
+                        i32.const 1
+                        return
+                    end
+                    local.get $ba
+                    i32.const 1
+                    i32.add
+                    local.set $ba
+                    local.get $ba
+                    i32.const 4
+                    i32.lt_u
+                    br_if $byte_in_word
+                )
+            end
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $word_cmp
+        )
+    )
+    local.get $words
+    i32.const 2
+    i32.shl
+    local.set $i
+    (block $tail_done
+        (loop $tail
+            local.get $i
+            local.get $n
+            i32.ge_u
+            br_if $tail_done
+            local.get $a
+            i32.eqz
+            if
+                i32.const 0
+                local.set $ba
+            else
+                local.get $a
+                i32.const 8
+                i32.add
+                local.get $i
+                i32.add
+                i32.load8_u
+                local.set $ba
+            end
+            local.get $b
+            i32.eqz
+            if
+                i32.const 0
+                local.set $bb
+            else
+                local.get $b
+                i32.const 8
+                i32.add
+                local.get $i
+                i32.add
+                i32.load8_u
+                local.set $bb
+            end
+            local.get $ba
+            local.get $bb
+            i32.ne
+            if
+                local.get $ba
+                local.get $bb
+                i32.lt_u
+                if
+                    i32.const -1
+                    return
+                end
+                i32.const 1
+                return
+            end
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $tail
+        )
+    )
+    local.get $len_a
+    local.get $len_b
+    i32.lt_u
+    if
+        i32.const -1
+        return
+    end
+    local.get $len_a
+    local.get $len_b
+    i32.gt_u
+    if
+        i32.const 1
+        return
+    end
+    i32.const 0
+)
+
 ;; Scalar-indexed substring: clamp `[start, end)`, map to UTF-8 byte offsets, then one
-;; `malloc` + `memory.copy`. Null `ptr` yields an empty string with zeroed headers.
+;; `malloc` + `memory.copy`. Empty / null yields the interned `$string.empty` pointer.
 (func $string_substring_raw (param $ptr i32) (param $start i32) (param $end i32) (result i32)
     (local $sc i32)
     (local $s i32)
@@ -663,19 +933,7 @@
     local.get $ptr
     i32.eqz
     if
-        i32.const 8
-        i32.const {TAG_STRING}
-        call $malloc
-        local.set $p
-        local.get $p
-        i32.const 0
-        i32.store
-        local.get $p
-        i32.const 4
-        i32.add
-        i32.const 0
-        i32.store
-        local.get $p
+        i32.const {STRING_EMPTY}
         return
     end
     local.get $ptr
@@ -737,6 +995,12 @@
     i32.sub
     local.set $scalars
     local.get $byte_len
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $byte_len
     i32.const 8
     i32.add
     i32.const {TAG_STRING}
@@ -750,12 +1014,6 @@
     i32.add
     local.get $scalars
     i32.store
-    local.get $byte_len
-    i32.eqz
-    if
-        local.get $p
-        return
-    end
     local.get $p
     i32.const 8
     i32.add
@@ -847,19 +1105,7 @@
     local.get $bytes
     i32.eqz
     if
-        i32.const 8
-        i32.const {TAG_STRING}
-        call $malloc
-        local.set $p
-        local.get $p
-        i32.const 0
-        i32.store
-        local.get $p
-        i32.const 4
-        i32.add
-        i32.const 0
-        i32.store
-        local.get $p
+        i32.const {STRING_EMPTY}
         return
     end
     local.get $bytes
@@ -868,19 +1114,7 @@
     local.get $count
     i32.eqz
     if
-        i32.const 8
-        i32.const {TAG_STRING}
-        call $malloc
-        local.set $p
-        local.get $p
-        i32.const 0
-        i32.store
-        local.get $p
-        i32.const 4
-        i32.add
-        i32.const 0
-        i32.store
-        local.get $p
+        i32.const {STRING_EMPTY}
         return
     end
     local.get $bytes
@@ -922,6 +1156,8 @@
     (local $new_w i32)
     (local $byte_len i32)
     (local $tail i32)
+    i32.const 0
+    global.set $__utf8_walk_ptr
     local.get $ptr
     call $str_scalar_len
     local.set $scalar_len
@@ -1044,19 +1280,7 @@
     local.get $bytes
     i32.eqz
     if
-        i32.const 8
-        i32.const {TAG_STRING}
-        call $malloc
-        local.set $p
-        local.get $p
-        i32.const 0
-        i32.store
-        local.get $p
-        i32.const 4
-        i32.add
-        i32.const 0
-        i32.store
-        local.get $p
+        i32.const {STRING_EMPTY}
         return
     end
     local.get $bytes
@@ -1079,19 +1303,7 @@
     local.get $len
     i32.eqz
     if
-        i32.const 8
-        i32.const {TAG_STRING}
-        call $malloc
-        local.set $p
-        local.get $p
-        i32.const 0
-        i32.store
-        local.get $p
-        i32.const 4
-        i32.add
-        i32.const 0
-        i32.store
-        local.get $p
+        i32.const {STRING_EMPTY}
         return
     end
     local.get $bytes

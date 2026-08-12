@@ -203,7 +203,7 @@ public class Json {
                 if (i > 0) {
                     sb.append_char(',');
                 }
-                let key = v.key_at(i).unwrap_or("");
+                let key = v.key_at(i).unwrap_or(string.empty);
                 Json._json_escape_into(sb, key);
                 sb.append_char(':');
                 Json._json_stringify_into(sb, v.value_at(i).unwrap_or(JsonValue.none()));
@@ -261,7 +261,7 @@ public class Json {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));
-                let key = v.key_at(i).unwrap_or("");
+                let key = v.key_at(i).unwrap_or(string.empty);
                 Json._json_escape_into(sb, key);
                 sb.append(": ");
                 Json._json_stringify_pretty_into(sb, v.value_at(i).unwrap_or(JsonValue.none()), indent, depth + 1);

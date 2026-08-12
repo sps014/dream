@@ -60,7 +60,7 @@ internal class RegexParser {
     fun resolve_name(name: string): int {
         let i = 0;
         while (i < this.group_names.length) {
-            if (this.group_names.get(i).unwrap_or("") == name) {
+            if (this.group_names.get(i).unwrap_or(string.empty) == name) {
                 return this.group_name_indices.get(i).unwrap_or(0 - 1);
             }
             i = i + 1;

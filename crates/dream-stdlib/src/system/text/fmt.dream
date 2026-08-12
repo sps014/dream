@@ -59,7 +59,7 @@ public class Fmt {
     static fun _render(inner: string, args: object[]): string {
         let colon = inner.index_of(':');
         let index_text = inner;
-        let spec = "";
+        let spec = string.empty;
         if (colon.is_some()) {
             let at = colon.unwrap_or(0);
             index_text = inner.substring(0, at);

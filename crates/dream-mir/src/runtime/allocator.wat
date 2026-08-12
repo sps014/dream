@@ -1,7 +1,6 @@
 ;; --- Segregated free-list (slab) allocator + GC entry points ------------------------------------
 ;;
-;; Managed allocations go through `$gc_alloc` (Gen0 nursery / LOH). `$malloc` is the public entry
-;; that acquires the alloc lock and calls `$gc_alloc` with Gen0 metadata.
+;; Managed allocations go through `$malloc` (Gen0 nursery / LOH).
 ;; `$free` / freelists reclaim blocks after GC sweep or for `@unsafe` Buffer/Pointer paths.
 ;;
 ;; Free-list heads live in a fixed, zero-initialized low-memory table (so every list starts empty).
@@ -75,18 +74,6 @@
     i32.const {ALLOC_LOCK_ADDR}
     i32.const 0
     i32.atomic.store
-)
-
-(func $malloc (param $size i32) (param $tag i32) (result i32)
-    (local $result i32)
-    ;;@ALLOC_LOCK_ACQUIRE@
-    local.get $size
-    local.get $tag
-    i32.const 0
-    call $gc_alloc
-    local.set $result
-    ;;@ALLOC_LOCK_RELEASE@
-    local.get $result
 )
 
 ;; Unmanaged / post-sweep free. Does not run finalizers (collector already did).

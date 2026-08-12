@@ -621,7 +621,7 @@ impl Emitter<'_> {
             // Nursery dest: young→young stores are not remset-worthy. `$__obj_young` is set after
             // the construction `$malloc`; Gen1 fallback (nursery full) still takes the barrier.
             self.line("     (local.get $__obj_young) (i32.eqz) (if (then");
-            self.emit_write_barrier("$__rel", "$__src");
+            self.line("       (local.get $__rel) (local.get $__src) (call $write_barrier)");
             self.line("     ))");
             return;
         }

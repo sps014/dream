@@ -1,6 +1,6 @@
 use super::*;
 
-/// The allocator + GC + string runtime. When `debug` is on (the default compiler mode), `$gc_alloc`
+/// The allocator + GC + string runtime. When `debug` is on (the default compiler mode), `$malloc`
 /// bumps `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
 /// `Debug.*` probes); under `--release` the placeholders expand to nothing so the hot allocation
 /// path carries no extra instructions.

@@ -183,6 +183,7 @@ struct Emitter<'a> {
     /// construction must reload `$__obj` from this index — see
     /// [`Emitter::emit_reload_obj_root`]. Reset once the rvalue completes.
     obj_construction_root: bool,
+    scratch: ScratchNeeds,
 }
 
 impl<'a> Emitter<'a> {
@@ -230,6 +231,7 @@ impl<'a> Emitter<'a> {
         let has_ref_globals = global_tys
             .values()
             .any(|t| interner.is_reference(*t));
+        let scratch = scratch_needs(func, interner, layouts);
         Emitter {
             func,
             interner,
@@ -257,6 +259,7 @@ impl<'a> Emitter<'a> {
             gc_frame_active,
             has_ref_globals,
             obj_construction_root: false,
+            scratch,
         }
     }
 }
@@ -342,43 +345,38 @@ impl Emitter<'_> {
             // Saved shadow-stack pointer, restored before every return.
             self.line("  (local $__saved_sp i32)");
         }
-        // Scratch pointer holding the object under construction across field initialization
-        // (`New`/`ArrayLit`). Safe as a single slot: lowering materializes all args into operands,
-        // so allocations never nest within a single rvalue.
-        self.line("  (local $__obj i32)");
-        if self.may_safepoint {
-            // Root-table index for the in-flight `$__obj` (`Rvalue::New` with a user constructor).
+        let needs_reload = self.may_safepoint && (self.gc_frame_active || self.has_ref_globals);
+        if self.scratch.obj {
+            self.line("  (local $__obj i32)");
+        }
+        if self.scratch.obj && self.may_safepoint {
             self.line("  (local $__obj_rg i32)");
-            // Last-seen `GC_EPOCH_ADDR` for this frame; `emit_gc_root_reload` skips work when unchanged.
+            self.line("  (local $__obj_young i32)");
+        }
+        if needs_reload {
             self.line("  (local $__gc_epoch i32)");
         }
-        // Scratch length for `Buffer.alloc<T>(len)`: the count is needed for both the allocation size
-        // and the zero-fill, so it is materialized once here.
-        self.line("  (local $__len i32)");
-        // Scratch holding the old element count across a `Buffer.realloc<T>` (needed both to size the
-        // `$realloc` call and to zero-fill only the newly grown tail, if any).
-        self.line("  (local $__old_len i32)");
-        // Scratch for nested field write barriers (clobbered by New/UnionNew)
-        self.line("  (local $__rel i32)");
-        // Outer place-store destination surviving emit_rvalue
-        self.line("  (local $__slot i32)");
-        // Scratch holding the saved `$__sp` across a dynamic `js` call's argument-slot buffer (see
-        // `emit_js_call`): the buffer is bump-allocated below `$__sp` and released right after the
-        // single host crossing, so this need only survive one rvalue.
-        self.line("  (local $__jsp i32)");
-        // Scratch pointers used only by `weak` field stores (see `emit_weak_field_store` in
-        // `statements.rs`): `$__wsrc` holds the freshly evaluated `Option<T>` RHS while the old
-        // occupant is torn down; `$__wbox` holds the freshly allocated private weak-box pointer.
-        self.line("  (local $__wsrc i32)");
-        self.line("  (local $__wbox i32)");
-        // Scratch holding the source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes`
-        // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
-        // once the destination allocation starts overwriting `$__obj`.
-        self.line("  (local $__src i32)");
-        if self.may_safepoint {
-            // Non-zero when `$__obj` currently lives in the nursery (set after `$malloc` in New /
-            // UnionNew / ArrayLit). Construction stores into a nursery dest need no remset entry.
-            self.line("  (local $__obj_young i32)");
+        if self.scratch.len {
+            self.line("  (local $__len i32)");
+        }
+        if self.scratch.old_len {
+            self.line("  (local $__old_len i32)");
+        }
+        if self.scratch.rel {
+            self.line("  (local $__rel i32)");
+        }
+        if self.scratch.slot {
+            self.line("  (local $__slot i32)");
+        }
+        if self.scratch.jsp {
+            self.line("  (local $__jsp i32)");
+        }
+        if self.scratch.weak {
+            self.line("  (local $__wsrc i32)");
+            self.line("  (local $__wbox i32)");
+        }
+        if self.scratch.src {
+            self.line("  (local $__src i32)");
         }
         if self.gc_frame_active {
             self.line("  (local $__root_base i32)");
@@ -389,7 +387,7 @@ impl Emitter<'_> {
 
         self.emit_value_frame_prologue();
         self.emit_gc_root_prologue();
-        if self.may_safepoint {
+        if needs_reload {
             self.line(&format!(
                 "     (i32.const {}) (i32.load) (local.set $__gc_epoch)",
                 crate::abi::GC_EPOCH_ADDR
@@ -453,14 +451,9 @@ impl Emitter<'_> {
     /// Heap ref store barrier. Nursery destinations cannot create old→young remset edges, so skip
     /// the `$write_barrier` call when `slot < $__gc_old_start`.
     pub(super) fn emit_write_barrier(&mut self, slot: &str, val: &str) {
-        self.line(&format!("     (local.get {slot})"));
-        self.line("     (global.get $__gc_old_start)");
-        self.line("     (i32.ge_u)");
-        self.line("     (if (then");
         self.line(&format!(
-            "       (local.get {slot}) (local.get {val}) (call $write_barrier)"
+            "     (local.get {slot}) (global.get $__gc_old_start) (i32.ge_u) (if (then (local.get {slot}) (local.get {val}) (call $write_barrier)))"
         ));
-        self.line("     ))");
     }
 
     /// Reloads MIR ref-locals from their shadow root-table slots and forwards module ref-globals
@@ -802,7 +795,131 @@ impl Emitter<'_> {
     }
 
     pub(super) fn emit_mark_obj_young(&mut self) {
-        self.line("     (local.get $__obj) (call $__gc_in_nursery) (local.set $__obj_young)");
+        self.line("     (local.get $__obj) (global.get $__gc_nursery_start) (i32.ge_u)");
+        self.line("     (local.get $__obj) (global.get $__gc_nursery_end) (i32.lt_u)");
+        self.line("     (i32.and) (local.set $__obj_young)");
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+struct ScratchNeeds {
+    obj: bool,
+    len: bool,
+    old_len: bool,
+    rel: bool,
+    slot: bool,
+    jsp: bool,
+    weak: bool,
+    src: bool,
+}
+
+fn scratch_needs(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    layouts: &LayoutTable,
+) -> ScratchNeeds {
+    let mut n = ScratchNeeds::default();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            match stmt {
+                Statement::Assign(place, rv) => {
+                    scan_rvalue(&mut n, rv);
+                    scan_place_store(&mut n, func, interner, layouts, place);
+                }
+                Statement::ArrayElemsCopy { .. } => {
+                    n.obj = true;
+                    n.len = true;
+                    n.src = true;
+                }
+                Statement::JsCall { .. } => n.jsp = true,
+                _ => {}
+            }
+        }
+    }
+    if n.obj {
+        n.rel = true;
+        n.src = true;
+        n.slot = true;
+    }
+    n
+}
+
+fn scan_rvalue(n: &mut ScratchNeeds, rv: &Rvalue) {
+    match rv {
+        Rvalue::New { .. } | Rvalue::UnionNew { .. } | Rvalue::ArrayLit { .. } | Rvalue::Cast(_, _, _) => {
+            n.obj = true;
+        }
+        Rvalue::ArrayNew { .. } => {
+            n.obj = true;
+            n.len = true;
+        }
+        Rvalue::ArrayRealloc { .. } => {
+            n.obj = true;
+            n.len = true;
+            n.old_len = true;
+        }
+        Rvalue::ToBytes { .. } | Rvalue::FromBytes { .. } => {
+            n.obj = true;
+            n.len = true;
+            n.src = true;
+        }
+        Rvalue::JsCall { .. } => n.jsp = true,
+        _ => {}
+    }
+}
+
+fn scan_place_store(
+    n: &mut ScratchNeeds,
+    func: &MirFunction,
+    interner: &TypeInterner,
+    layouts: &LayoutTable,
+    place: &Place,
+) {
+    match place {
+        Place::Local(l) => {
+            let ty = func.local_ty(*l);
+            if matches!(interner.kind(ty), TyKind::Js) {
+                n.src = true;
+                n.rel = true;
+            }
+        }
+        Place::Global(_) => {
+            n.src = true;
+            n.rel = true;
+        }
+        Place::Field { base, field } => {
+            let bty = func.local_ty(*base);
+            if let Some(f) = layouts.get(bty).and_then(|lay| lay.fields.get(*field)) {
+                if f.is_weak {
+                    n.weak = true;
+                    n.src = true;
+                }
+                if interner.is_reference(f.ty) {
+                    n.rel = true;
+                    n.src = true;
+                    n.slot = true;
+                }
+                if matches!(interner.kind(f.ty), TyKind::Js) {
+                    n.src = true;
+                }
+            } else {
+                n.rel = true;
+                n.src = true;
+                n.slot = true;
+            }
+        }
+        Place::Index { base, .. } => {
+            match interner.kind(func.local_ty(*base)) {
+                TyKind::Array(e)
+                    if interner.is_reference(*e) || matches!(interner.kind(*e), TyKind::Js) =>
+                {
+                    n.slot = true;
+                    n.src = true;
+                    n.rel = true;
+                }
+                _ => {}
+            }
+        }
     }
 }
 

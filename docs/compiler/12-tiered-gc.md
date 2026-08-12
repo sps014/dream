@@ -198,7 +198,7 @@ safe default for non-`@shared` data.
 | MIR `Retain` / `Release` | Alloc + barriers + roots |
 | `RcInsertion` / `RcElision` | Root/safepoint pass |
 | Sink / `borrow` ownership ABI | Plain shared refs; keep `ref` |
-| `$retain*` / `$release_*` | `$gc_alloc`, `$gc_collect_*`, `$write_barrier`, mark visitors |
+| `$retain*` / `$release_*` | `$malloc`, `$gc_collect_*`, `$write_barrier`, mark visitors |
 | Cycle diagnostics / `@allow_cycle` | Gone |
 | `unowned` | Gone |
 | `Debug.ref_count` | GC stats / forced-collect test APIs |

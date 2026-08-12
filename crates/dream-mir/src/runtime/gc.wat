@@ -9,7 +9,7 @@
 (global $gc_trace_mode (mut i32) (i32.const 0))
 ;; Immutable-after-init copies of the shared-memory GC bounds/table bases. Linear memory stays
 ;; the source of truth for workers; `$__gc_cache_bounds` hydrates these per instance so hot
-;; mutator helpers (`$write_barrier`, `$gc_root_*`, `$gc_alloc`) avoid a memory load per call.
+;; mutator helpers (`$write_barrier`, `$gc_root_*`, `$malloc`) avoid a memory load per call.
 (global $__gc_nursery_start (mut i32) (i32.const 0))
 (global $__gc_nursery_end (mut i32) (i32.const 0))
 (global $__gc_old_start (mut i32) (i32.const 0))
@@ -1217,17 +1217,15 @@
     i32.add
 )
 
-;; Managed allocator: fast Gen0 bump into the nursery; large payloads go straight to LOH; when
-;; the nursery is full or a collect has been requested, run an ephemeral Gen0 collection (the
-;; caller — `$malloc` — already holds the alloc lock, so we call `$__gc_collect_locked`) and
-;; retry. Still no room means the ephemeral pass survived everything we tried to allocate; fall
-;; back to `$__gc_alloc_old` with Gen1 metadata so the request cannot deadlock waiting for space
-;; that only a heavier collection would free.
-(func $gc_alloc (param $payload i32) (param $tag i32) (param $meta i32) (result i32)
+;; Managed allocator (exported as `$malloc`): fast Gen0 bump into the nursery; large payloads go
+;; straight to LOH. Nursery full → ephemeral collect then retry, else Gen1. The lock is held for
+;; the whole path so `$__gc_collect_locked` must not re-acquire it.
+(func $malloc (param $payload i32) (param $tag i32) (result i32)
     (local $size i32)
     (local $block i32)
     (local $bump i32)
     (local $end i32)
+    ;;@ALLOC_LOCK_ACQUIRE@
     ;; Large object: skip the nursery entirely.
     local.get $payload
     i32.const {LOH_THRESHOLD}
@@ -1235,14 +1233,11 @@
     if
         local.get $payload
         local.get $tag
-        local.get $meta
-        i32.const {GC_META_GEN_MASK}
-        i32.const -1
-        i32.xor
-        i32.and
         i32.const {GC_GEN_LOH}
-        i32.or
         call $__gc_alloc_old
+        local.set $block
+        ;;@ALLOC_LOCK_RELEASE@
+        local.get $block
         return
     end
     ;; Aligned block size (matches `$__gc_alloc_old`: payload align 4 + 12 header).
@@ -1279,18 +1274,13 @@
         global.get $__gc_nursery_end
         i32.gt_u
         if
-            ;; Ephemeral collect did not free enough contiguous nursery space (every survivor
-            ;; got promoted). Rather than spin, promote this allocation to Gen1 directly.
             local.get $payload
             local.get $tag
-            local.get $meta
-            i32.const {GC_META_GEN_MASK}
-            i32.const -1
-            i32.xor
-            i32.and
             i32.const {GC_GEN1}
-            i32.or
             call $__gc_alloc_old
+            local.set $block
+            ;;@ALLOC_LOCK_RELEASE@
+            local.get $block
             return
         end
     end
@@ -1313,18 +1303,15 @@
     local.get $block
     i32.const 8
     i32.add
-    local.get $meta
-    i32.const {GC_META_GEN_MASK}
-    i32.const -1
-    i32.xor
-    i32.and
     i32.const {GC_GEN0}
-    i32.or
     i32.store
     ;;@DEBUG_ALLOC_COUNT@
     local.get $block
     i32.const 12
     i32.add
+    local.set $block
+    ;;@ALLOC_LOCK_RELEASE@
+    local.get $block
 )
 
 ;; Initialize nursery + GC tables. Called once when HEAP_PTR CAS wins (from `$__runtime_init` body).

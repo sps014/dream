@@ -2,7 +2,7 @@
 
 A fast, statically typed language that compiles straight to WebAssembly. Syntax closer to Rust and TypeScript, automatic memory management via a custom generational GC, zero-cost generics, and a batteries-included standard library — compiler written in Rust.
 
-**[Read the docs →](https://sps014.github.io/dream/)** · [Getting Started](https://sps014.github.io/dream/getting-started/) · [Language](https://sps014.github.io/dream/language/variables/) · [JS interop](https://sps014.github.io/dream/language/interop/) · [Compiler](https://sps014.github.io/dream/compiler/)
+**[Read the docs →](https://sps014.github.io/dream/)** · [Getting Started](https://sps014.github.io/dream/getting-started/) · [Language](https://sps014.github.io/dream/language/variables/) · [JS and C interop](https://sps014.github.io/dream/language/interop/) · [Compiler](https://sps014.github.io/dream/compiler/)
 
 ## Install
 

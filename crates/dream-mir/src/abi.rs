@@ -63,7 +63,7 @@ pub const GC_META_IMMORTAL: u32 = 1 << 6;
 /// Block is on the segregated freelist (old/LOH sweep); skip in heap walks.
 pub const GC_META_FREE: u32 = 1 << 7;
 
-/// Payload size (bytes) at or above which `$gc_alloc` uses the LOH path instead of Gen0.
+/// Payload size (bytes) at or above which `$malloc` uses the LOH path instead of Gen0.
 /// Matches C#'s ~85 KiB large-object threshold.
 pub const LOH_THRESHOLD: u32 = 85 * 1024;
 

@@ -105,7 +105,8 @@ JS interop: [docs](https://sps014.github.io/dream/language/interop/) · [`docs/l
 ## Test
 
 ```bash
-cargo test
+cargo test --workspace                 # fast gate (unit + e2e smoke)
+cargo test --workspace -- --ignored    # full golden corpus, DAP, wasm-opt
 ```
 
 ## License

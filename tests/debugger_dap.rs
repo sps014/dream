@@ -154,6 +154,7 @@ fn read_messages(stdout: ChildStdout, tx: mpsc::Sender<serde_json::Value>) {
 }
 
 #[test]
+#[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_breakpoint_stack_variables_step_continue() {
     // Write the program to a unique temp file (the adapter compiles it and emits sibling artifacts).
     let dir = std::env::temp_dir().join(format!("dream_dap_test_{}", std::process::id()));
@@ -306,6 +307,7 @@ async fun main(): void {
 "#;
 
 #[test]
+#[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_async_breakpoint_on_branch_with_locals() {
     let (dir, source_path) = write_temp_program("async", ASYNC_PROGRAM);
 
@@ -378,6 +380,7 @@ async fun main(): void {
 "#;
 
 #[test]
+#[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_worker_breakpoint_stops_worker_thread() {
     let (dir, source_path) = write_temp_program("worker", WORKER_PROGRAM);
 

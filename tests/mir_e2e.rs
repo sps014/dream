@@ -9,6 +9,7 @@
 //! case fails the suite.
 
 use dream::driver::compiler::{Compiler, Target};
+use dream_abi::attributes::CompileTargets;
 use dream::execution::host::{
     attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
     link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
@@ -60,7 +61,11 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
         .unwrap_or("");
     let mut compiler = Compiler::new(Target::Wasm);
     if WEB_COMPILE_CASES.contains(&stem) {
-        compiler = compiler.with_web_compile_target();
+        compiler = compiler.with_compile_targets(CompileTargets {
+            native: true,
+            node: false,
+            web: true,
+        });
     }
     compiler
         .compile(&dream_str, &wat_str)
@@ -160,6 +165,7 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
 }
 
 #[test]
+#[ignore = "duplicates run_all_e2e_cases; cargo test --workspace -- --ignored"]
 fn mir_backend_e2e_coverage() {
     let cases_dir = Path::new("tests/cases");
     if !cases_dir.exists() {

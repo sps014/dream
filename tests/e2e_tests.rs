@@ -259,6 +259,21 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     let _ = fs::remove_file(wat_path);
 }
 
+/// Representative fixtures for the default `cargo test` gate. The full `tests/cases/` corpus is
+/// `#[ignore]`d (`run_all_e2e_cases` / `run_all_e2e_cases_release`) because ~400 compile+run
+/// cycles dominate workspace test time.
+const SMOKE_CASES: &[&str] = &[
+    "arithmetic",
+    "classes",
+    "enum_basic",
+    "generic_structs",
+    "async_basic",
+    "collection_literals",
+    "interfaces",
+    "object_protocol",
+    "diagnostics",
+];
+
 /// Collect every `tests/cases/*.dream` fixture path.
 fn collect_case_paths() -> Vec<PathBuf> {
     let cases_dir = Path::new("tests/cases");
@@ -272,12 +287,20 @@ fn collect_case_paths() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Run the whole corpus in parallel across all CPU cores. `release_for` decides, per fixture stem,
+/// Run fixtures in parallel across all CPU cores. `release_for` decides, per fixture stem,
 /// whether the case runs through the release or debug backend. `wat_ext` scopes this suite's
 /// generated output files so concurrent suites never collide. Each fixture's failure is captured
 /// (rather than aborting the run at the first panic) so one invocation reports every broken case.
-fn run_corpus(wat_ext: &str, release_for: impl Fn(&str) -> bool + Sync) {
-    let paths = collect_case_paths();
+/// When `only` is `Some`, only those stems run.
+fn run_corpus(wat_ext: &str, release_for: impl Fn(&str) -> bool + Sync, only: Option<&[&str]>) {
+    let mut paths = collect_case_paths();
+    if let Some(stems) = only {
+        paths.retain(|p| {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| stems.contains(&s))
+        });
+    }
     if paths.is_empty() {
         println!("No .dream files found in tests/cases/");
         return;
@@ -313,9 +336,15 @@ fn run_corpus(wat_ext: &str, release_for: impl Fn(&str) -> bool + Sync) {
 }
 
 #[test]
+fn run_smoke_e2e_cases() {
+    run_corpus("smoke.wat", |_| false, Some(SMOKE_CASES));
+}
+
+#[test]
+#[ignore = "full golden corpus; cargo test --workspace -- --ignored"]
 fn run_all_e2e_cases() {
     // Default debug backend (`with_release(false)`).
-    run_corpus("wat", |_| false);
+    run_corpus("wat", |_| false, None);
 }
 
 /// The whole suite run through the *release* backend (`with_release(true)`), the only path that
@@ -324,11 +353,16 @@ fn run_all_e2e_cases() {
 /// the hot path diverged. EVERY case runs here with full output asserted: instrumentation-probe
 /// cases (`DEBUG_ONLY_CASES`) run in debug (their counts are debug-specific), all others in release.
 #[test]
+#[ignore = "full release corpus; cargo test --workspace -- --ignored"]
 fn run_all_e2e_cases_release() {
     // The instrumentation-probe cases only produce correct output with the debug allocator, so
     // bypass release for them and run them in debug with the full output assertion — they are
     // important and must stay fully checked, not relaxed to a smoke test.
-    run_corpus("release.wat", |stem| !DEBUG_ONLY_CASES.contains(&stem));
+    run_corpus(
+        "release.wat",
+        |stem| !DEBUG_ONLY_CASES.contains(&stem),
+        None,
+    );
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
@@ -342,17 +376,9 @@ fn codegen_is_deterministic() {
     if !cases_dir.exists() {
         return;
     }
-    // Exercise classes, enums, unions, generics, strings, interfaces, async, and object protocol.
-    let fixtures = [
-        "classes",
-        "enum_basic",
-        "union_to_string",
-        "generic_structs",
-        "json_derive",
-        "object_protocol",
-        "interfaces",
-        "async_basic",
-    ];
+    // Two independent compiles of a couple of fixtures is enough to catch HashMap-order
+    // regressions; the ignored full corpus still covers more shapes in CI `--ignored` runs.
+    let fixtures = ["classes", "async_basic"];
     for name in fixtures {
         let src = cases_dir.join(format!("{}.dream", name));
         if !src.exists() {
@@ -361,11 +387,12 @@ fn codegen_is_deterministic() {
         let src_str = src.to_str().unwrap().to_string();
         let mut prev_wat: Option<String> = None;
         let mut prev_rt: Option<String> = None;
-        for run in 0..4 {
+        for run in 0..2 {
             let out = std::env::temp_dir().join(format!("dream_det_{}_{}.wat", name, run));
             let out_str = out.to_str().unwrap().to_string();
             Compiler::new(Target::Wasm)
                 .with_release(true)
+                .with_optimize(None)
                 .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));

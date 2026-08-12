@@ -30,6 +30,13 @@ impl<'a> Analyzer<'a> {
         is_expression: bool,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        if self.current_function_is_gpu {
+            diagnostics.report_error(
+                "pattern-matching switch is not supported in GPU shaders; use if/else or a C-style case switch".to_string(),
+                subject.position(),
+            );
+            return Ok(Type::Unknown);
+        }
         // Or-patterns and small literal ranges expand into flat multi-key Switch arms. Unexpanded
         // ranges still need the full if-chain. Nested/guards use the hybrid outer-Switch path
         // (residual if-chain inside each Switch arm) when every arm has an outer key.

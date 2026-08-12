@@ -7,7 +7,11 @@ use super::ty::{
 };
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::types::Type;
+use dream_syntax::number::{
+    numeric_body_is_float, parse_float_literal, parse_int_literal, split_numeric_literal,
+};
 use dream_syntax::token::token_kind::TokenKind;
+use dream_text::text_span::TextSpan;
 
 /// Emit `expr`, inserting a WGSL constructor cast when the inferred type differs from `want`.
 pub(super) fn coerce_expr_to_wgsl_ty(expr: &ExpressionNode<'_>, want: &str, ctx: &EmitCtx<'_>) -> String {
@@ -149,7 +153,16 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     2 => format!("mat2x2<f32>({joined})"),
                     3 => format!("mat3x3<f32>({joined})"),
                     4 => format!("mat4x4<f32>({joined})"),
-                    _ => format!("mat4x4<f32>({joined})"),
+                    n => {
+                        ctx.report_error(
+                            format!(
+                                "GPU shader '{}' matrix constructor expects 2, 3, or 4 column vectors, found {n}",
+                                ctx.kernel
+                            ),
+                            None,
+                        );
+                        format!("mat4x4<f32>({joined})")
+                    }
                 }
             } else {
                 let n = args.len();
@@ -159,13 +172,27 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     2 => format!("vec2<f32>({joined})"),
                     3 => format!("vec3<f32>({joined})"),
                     4 => format!("vec4<f32>({joined})"),
-                    _ => format!("vec4<f32>({joined})"),
+                    n => {
+                        ctx.report_error(
+                            format!(
+                                "GPU shader '{}' vector constructor expects 2, 3, or 4 components, found {n}",
+                                ctx.kernel
+                            ),
+                            None,
+                        );
+                        format!("vec4<f32>({joined})")
+                    }
                 }
             }
         }
         "identity" => {
-            // GpuMatN.identity() — arity inferred from call site is lost; default mat4.
-            // Prefer explicit column constructors when size matters; identity is sugar.
+            ctx.report_error(
+                format!(
+                    "GPU shader '{}' cannot lower a free identity() call; use GpuMat2/3/4.identity()",
+                    ctx.kernel
+                ),
+                None,
+            );
             "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into()
         }
         "mul2" | "mul3" | "mul4" | "matmul4" => {
@@ -277,35 +304,105 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
     }
 }
 
-fn literal_text(ty: &Type) -> String {
+fn reject_gpu_type_args(type_args: &Option<Vec<Type>>, span: Option<TextSpan>, ctx: &EmitCtx<'_>) {
+    if type_args.as_ref().is_some_and(|a| !a.is_empty()) {
+        ctx.report_error(
+            format!(
+                "GPU shader '{}' does not support generic type arguments on calls",
+                ctx.kernel
+            ),
+            span,
+        );
+    }
+}
+
+fn mat_identity_wgsl(obj: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
+    let name = match obj {
+        ExpressionNode::Identifier(n) => n.text.as_str(),
+        _ => {
+            return ctx.unsupported_expr("identity() on a non-type receiver", obj.position());
+        }
+    };
+    match name {
+        "GpuMat2" => "mat2x2<f32>(1.0, 0.0, 0.0, 1.0)".into(),
+        "GpuMat3" => {
+            "mat3x3<f32>(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)".into()
+        }
+        "GpuMat4" => {
+            "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into()
+        }
+        other => {
+            ctx.report_error(
+                format!(
+                    "GPU shader '{}' cannot emit identity() for '{other}'",
+                    ctx.kernel
+                ),
+                obj.position(),
+            );
+            "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into()
+        }
+    }
+}
+
+fn literal_text(ty: &Type, ctx: &EmitCtx<'_>) -> String {
     match ty {
+        Type::Boolean(t) => t.text.clone(),
+        Type::Char(t) => ctx.unsupported_expr("character literal", Some(t.position)),
+        Type::String(t) => ctx.unsupported_expr("string literal", Some(t.position)),
         Type::Integer(t)
-        | Type::Float(t)
-        | Type::Double(t)
         | Type::Long(t)
         | Type::UInt(t)
         | Type::ULong(t)
         | Type::Byte(t)
-        | Type::Boolean(t)
-        | Type::Char(t)
-        | Type::String(t) => {
-            let mut s = t.text.clone();
-            if matches!(ty, Type::Float(_) | Type::Double(_))
-                && !s.contains('.')
-                && !s.contains('e')
-                && !s.contains('E')
-            {
-                s.push_str(".0");
+        | Type::Float(t)
+        | Type::Double(t) => {
+            let raw = t.text.as_str();
+            let (body, _) = split_numeric_literal(raw).unwrap_or((raw, ""));
+            let is_float = matches!(ty, Type::Float(_) | Type::Double(_))
+                || numeric_body_is_float(body);
+            if is_float {
+                match parse_float_literal(body) {
+                    Some(v) => {
+                        let mut s = format!("{v}");
+                        if !s.contains('.') && !s.contains('e') && !s.contains('E') {
+                            s.push_str(".0");
+                        }
+                        s
+                    }
+                    None => {
+                        ctx.report_error(
+                            format!(
+                                "GPU shader '{}' has an unparseable float literal '{raw}'",
+                                ctx.kernel
+                            ),
+                            Some(t.position),
+                        );
+                        "0.0".into()
+                    }
+                }
+            } else {
+                match parse_int_literal(body) {
+                    Some(v) => v.to_string(),
+                    None => {
+                        ctx.report_error(
+                            format!(
+                                "GPU shader '{}' has an unparseable integer literal '{raw}'",
+                                ctx.kernel
+                            ),
+                            Some(t.position),
+                        );
+                        "0".into()
+                    }
+                }
             }
-            s
         }
-        _ => "0".into(),
+        _ => ctx.unsupported_expr("literal", ty.get_span()),
     }
 }
 
 pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     match expr {
-        ExpressionNode::Literal(ty) => literal_text(ty),
+        ExpressionNode::Literal(ty) => literal_text(ty, ctx),
         ExpressionNode::Identifier(t) => ctx.rewrite_ident(&t.text),
         ExpressionNode::Binary(l, op, r) => {
             let op_s = match op.kind {
@@ -324,7 +421,17 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 TokenKind::PipePipeToken => "||",
                 TokenKind::BitWiseAmpersandToken => "&",
                 TokenKind::BitWisePipeToken => "|",
-                _ => "+",
+                TokenKind::BitWiseXorToken => "^",
+                _ => {
+                    ctx.report_error(
+                        format!(
+                            "GPU shader '{}' does not support operator '{}'",
+                            ctx.kernel, op.text
+                        ),
+                        Some(op.position),
+                    );
+                    "+"
+                }
             };
             let ls = emit_expr(l, ctx);
             let rs = emit_expr(r, ctx);
@@ -350,14 +457,23 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 TokenKind::MinusToken => "-",
                 TokenKind::BangToken => "!",
                 TokenKind::TildeToken => "~",
-                _ => "-",
+                _ => {
+                    ctx.report_error(
+                        format!(
+                            "GPU shader '{}' does not support unary operator '{}'",
+                            ctx.kernel, op.text
+                        ),
+                        Some(op.position),
+                    );
+                    "-"
+                }
             };
             format!("({}{})", op_s, emit_expr(e, ctx))
         }
-        // Statement `i++`/`++i` are desugared to Assignment before emission. Value-producing
-        // forms in kernels are expanded in `emit_stmt` for declarations; nested uses fall back
-        // to the place (side effect must be written as `i = i + 1` in kernels).
-        ExpressionNode::IncDec { target, .. } => emit_expr(target, ctx),
+        ExpressionNode::IncDec { op, .. } => ctx.unsupported_expr(
+            "nested increment/decrement (write `x = x + 1` instead)",
+            Some(op.position),
+        ),
         ExpressionNode::Parenthesized(_, e) => format!("({})", emit_expr(e, ctx)),
         ExpressionNode::IndexAccess(arr, idx) => {
             let arr_s = emit_expr(arr, ctx);
@@ -377,26 +493,36 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 format!("{}.{}", base, escape_wgsl_ident(&member.text))
             }
         }
-        ExpressionNode::FunctionCall(name, _, args) => emit_call(&name.text, args, ctx),
-        ExpressionNode::MethodCall(obj, method, _, args) => {
-            // Zero-arg `.length()` on a buffer → arrayLength; `GpuMath.length(vec)` has args.
+        ExpressionNode::FunctionCall(name, type_args, args) => {
+            reject_gpu_type_args(type_args, Some(name.position), ctx);
+            emit_call(&name.text, args, ctx)
+        }
+        ExpressionNode::MethodCall(obj, method, type_args, args) => {
+            reject_gpu_type_args(type_args, Some(method.position), ctx);
             if method.text == "length" && args.is_empty() {
                 format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
+            } else if method.text == "identity" && args.is_empty() {
+                mat_identity_wgsl(obj, ctx)
             } else {
                 emit_call(&method.text, args, ctx)
             }
         }
-        ExpressionNode::Call(callee, _, args) => match &**callee {
-            ExpressionNode::Identifier(n) => emit_call(&n.text, args, ctx),
-            ExpressionNode::MemberAccess(obj, method) => {
-                if method.text == "length" && args.is_empty() {
-                    format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
-                } else {
-                    emit_call(&method.text, args, ctx)
+        ExpressionNode::Call(callee, type_args, args) => {
+            reject_gpu_type_args(type_args, callee.position(), ctx);
+            match &**callee {
+                ExpressionNode::Identifier(n) => emit_call(&n.text, args, ctx),
+                ExpressionNode::MemberAccess(obj, method) => {
+                    if method.text == "length" && args.is_empty() {
+                        format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
+                    } else if method.text == "identity" && args.is_empty() {
+                        mat_identity_wgsl(obj, ctx)
+                    } else {
+                        emit_call(&method.text, args, ctx)
+                    }
                 }
+                _ => ctx.unsupported_expr("call whose callee is not a name or member", expr.position()),
             }
-            _ => "0".into(),
-        },
+        }
         ExpressionNode::Ternary(c, t, e) => {
             let tt = infer_wgsl_ty(t, ctx);
             let et = infer_wgsl_ty(e, ctx);
@@ -407,21 +533,40 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 coerce_expr_to_wgsl_ty(t, &common, ctx),
                 emit_expr(c, ctx)
             )
-        },
+        }
         ExpressionNode::Cast(_, ty, e) => {
-            // Coerce once — wrapping again would emit `f32(f32(x))` / `i32(i32(x))`.
             let wty = dream_ty_to_wgsl(ty);
             coerce_expr_to_wgsl_ty(e, &wty, ctx)
         }
         ExpressionNode::SizeOf(_, ty) => format!("{}", gpu_sizeof_bytes(ty, ctx)),
-        // `nameof` yields `string`, which is illegal in GPU shaders — leave a typed zero so
-        // other errors can still surface; kernels that use it should be rejected by validation
-        // or rewritten on the CPU host.
         ExpressionNode::NameOf(_, _) => "0".into(),
         ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
             emit_expr(inner, ctx)
         }
-        _ => "0".into(),
+        ExpressionNode::ArrayLiteral(tok, _) => {
+            ctx.unsupported_expr("array literal", Some(tok.position))
+        }
+        ExpressionNode::TupleLiteral(tok, _) => {
+            ctx.unsupported_expr("tuple literal", Some(tok.position))
+        }
+        ExpressionNode::SetLiteral(tok, _) => {
+            ctx.unsupported_expr("set literal", Some(tok.position))
+        }
+        ExpressionNode::MapLiteral(tok, _) => {
+            ctx.unsupported_expr("map literal", Some(tok.position))
+        }
+        ExpressionNode::IsExpression(e, _, _) => {
+            ctx.unsupported_expr("`is` type check", e.position())
+        }
+        ExpressionNode::Await(tok, _) => ctx.unsupported_expr("await", Some(tok.position)),
+        ExpressionNode::Try(e) => ctx.unsupported_expr("`?` try operator", e.position()),
+        ExpressionNode::Switch(tok, _, _) => {
+            ctx.unsupported_expr("pattern switch", Some(tok.position))
+        }
+        ExpressionNode::Lambda(l) => ctx.unsupported_expr("lambda", Some(l.start_span())),
+        ExpressionNode::SyntaxBlock(block) => {
+            ctx.unsupported_expr("syntax block", Some(block.name.position))
+        }
     }
 }
 

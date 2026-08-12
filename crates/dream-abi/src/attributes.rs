@@ -986,13 +986,23 @@ pub fn is_gpu_shader_attr(attributes: &[AttributeNode]) -> bool {
     has_compute_attr(attributes) || has_vertex_attr(attributes) || has_fragment_attr(attributes)
 }
 
-/// Optional `@location(N)` on a struct field. `None` when absent or malformed.
-pub fn field_location_override(attributes: &[AttributeNode]) -> Option<u32> {
-    let attr = attributes.iter().find(|a| a.name.text == "location")?;
-    attr.args
-        .first()
+fn parse_named_u32(attributes: &[AttributeNode], name: &str) -> Option<u32> {
+    attributes
+        .iter()
+        .find(|a| a.name.text == name)
+        .and_then(|a| a.args.first())
         .and_then(|t| t.as_int_text())
-        .and_then(|s| s.parse().ok())
+        .and_then(dream_syntax::number::parse_u32_literal)
+}
+
+/// True when an attribute named `name` is present (even if its argument failed to parse).
+pub fn has_named_attr(attributes: &[AttributeNode], name: &str) -> bool {
+    attributes.iter().any(|a| a.name.text == name)
+}
+
+/// Optional `@location(N)` on a struct field. `None` when absent or not a valid `u32`.
+pub fn field_location_override(attributes: &[AttributeNode]) -> Option<u32> {
+    parse_named_u32(attributes, "location")
 }
 
 /// Optional `@builtin("name")` on a struct field. `None` when absent or malformed.
@@ -1007,22 +1017,14 @@ pub fn field_interpolate_mode(attributes: &[AttributeNode]) -> Option<String> {
     attr.args.first().and_then(|t| t.as_string()).map(|s| s.to_string())
 }
 
-/// Optional `@group(N)` on a shader parameter. `None` when absent or malformed.
+/// Optional `@group(N)` on a shader parameter. `None` when absent or not a valid `u32`.
 pub fn param_group_override(attributes: &[AttributeNode]) -> Option<u32> {
-    let attr = attributes.iter().find(|a| a.name.text == "group")?;
-    attr.args
-        .first()
-        .and_then(|t| t.as_int_text())
-        .and_then(|s| s.parse().ok())
+    parse_named_u32(attributes, "group")
 }
 
-/// Optional `@binding(N)` on a shader parameter. `None` when absent or malformed.
+/// Optional `@binding(N)` on a shader parameter. `None` when absent or not a valid `u32`.
 pub fn param_binding_override(attributes: &[AttributeNode]) -> Option<u32> {
-    let attr = attributes.iter().find(|a| a.name.text == "binding")?;
-    attr.args
-        .first()
-        .and_then(|t| t.as_int_text())
-        .and_then(|s| s.parse().ok())
+    parse_named_u32(attributes, "binding")
 }
 
 /// True when a field is the clip-space position builtin (`@builtin("position")` or name `position`).
@@ -1033,23 +1035,30 @@ pub fn field_is_position_builtin(name: &str, attributes: &[AttributeNode]) -> bo
     name == "position"
 }
 
-/// Workgroup size from `@compute` / `@compute(x[, y[, z]])`. Defaults to `(64, 1, 1)`.
-pub fn compute_workgroup_size(attributes: &[AttributeNode]) -> (u32, u32, u32) {
+/// Workgroup size from `@compute` / `@compute(x[, y[, z]])`. Bare `@compute` is `(64, 1, 1)`.
+/// Present arguments must parse as `u32` (decimal/hex/bin/oct); they are never silently defaulted.
+pub fn compute_workgroup_size(attributes: &[AttributeNode]) -> Result<(u32, u32, u32), String> {
     let Some(attr) = attributes.iter().find(|a| a.name.text == "compute") else {
-        return (64, 1, 1);
+        return Ok((64, 1, 1));
     };
-    let parse = |i: usize| -> u32 {
-        attr.args
-            .get(i)
-            .and_then(|t| t.as_int_text())
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(if i == 0 { 64 } else { 1 })
+    if attr.args.is_empty() {
+        return Ok((64, 1, 1));
+    }
+    let parse = |i: usize| -> Result<u32, String> {
+        let arg = &attr.args[i];
+        arg.as_int_text()
+            .and_then(dream_syntax::number::parse_u32_literal)
+            .ok_or_else(|| {
+                format!(
+                    "@compute workgroup size '{}' is not a valid u32",
+                    arg.display()
+                )
+            })
     };
     match attr.args.len() {
-        0 => (64, 1, 1),
-        1 => (parse(0), 1, 1),
-        2 => (parse(0), parse(1), 1),
-        _ => (parse(0), parse(1), parse(2)),
+        1 => Ok((parse(0)?, 1, 1)),
+        2 => Ok((parse(0)?, parse(1)?, 1)),
+        _ => Ok((parse(0)?, parse(1)?, parse(2)?)),
     }
 }
 
@@ -1349,5 +1358,46 @@ mod tests {
         let mut diagnostics = DiagnosticBag::new(None);
         validate_c_extern_attrs(attrs, &mut diagnostics);
         assert!(!diagnostics.has_errors());
+    }
+
+    fn int_arg(text: &str) -> AttributeArg {
+        let span = TextSpan::new((0, 0), &LineText::new(String::new()));
+        AttributeArg::Int(SyntaxToken::new(
+            TokenKind::NumberToken,
+            span,
+            text.to_string(),
+        ))
+    }
+
+    fn attr_ints(name: &str, args: &[&str]) -> AttributeNode {
+        AttributeNode {
+            name: ident(name),
+            args: args.iter().map(|a| int_arg(a)).collect(),
+        }
+    }
+
+    #[test]
+    fn compute_workgroup_parses_hex_and_bin() {
+        assert_eq!(
+            compute_workgroup_size(&[attr_ints("compute", &["0x40"])]).unwrap(),
+            (64, 1, 1)
+        );
+        assert_eq!(
+            compute_workgroup_size(&[attr_ints("compute", &["0b1000", "0o10"])]).unwrap(),
+            (8, 8, 1)
+        );
+    }
+
+    #[test]
+    fn compute_workgroup_rejects_unparseable_size() {
+        assert!(compute_workgroup_size(&[attr_ints("compute", &["-1"])]).is_err());
+    }
+
+    #[test]
+    fn location_override_parses_hex() {
+        assert_eq!(
+            field_location_override(&[attr_ints("location", &["0x10"])]),
+            Some(16)
+        );
     }
 }

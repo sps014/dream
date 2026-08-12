@@ -2,6 +2,7 @@
 
 use dream_abi::attributes::{
     field_builtin_name, field_interpolate_mode, field_is_position_builtin, field_location_override,
+    has_named_attr,
 };
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::Type;
@@ -157,14 +158,18 @@ pub(super) fn assign_locations(
         if field_builtin(field).is_some() {
             continue;
         }
-        let loc = match field_location_override(&field.attributes) {
-            Some(n) => n,
-            None => {
-                while used.contains_key(&auto) {
-                    auto += 1;
-                }
-                auto
+        let loc = if has_named_attr(&field.attributes, "location") {
+            field_location_override(&field.attributes).ok_or_else(|| {
+                format!(
+                    "invalid @location on field '{}'; expected an integer literal",
+                    field.name.text
+                )
+            })?
+        } else {
+            while used.contains_key(&auto) {
+                auto += 1;
             }
+            auto
         };
         if let Some(prev) = used.insert(loc, field.name.text.clone()) {
             return Err(format!(
@@ -200,7 +205,12 @@ pub(super) fn build_vertex_layout(
                 field.field_type.get_type()
             ));
         };
-        let location = *locs.get(&field.name.text).unwrap_or(&0);
+        let location = *locs.get(&field.name.text).ok_or_else(|| {
+            format!(
+                "internal error: missing @location assignment for vertex field '{}'",
+                field.name.text
+            )
+        })?;
         layout.push(GpuVertexAttr {
             location,
             format,
@@ -219,7 +229,12 @@ fn emit_field_decorators(
     if let Some(builtin) = field_builtin(field) {
         parts.push_str(&format!("@builtin({builtin}) "));
     } else {
-        let loc = locs.get(field.name.text.as_str()).copied().unwrap_or(0);
+        let loc = *locs.get(field.name.text.as_str()).ok_or_else(|| {
+            format!(
+                "internal error: missing @location assignment for field '{}'",
+                field.name.text
+            )
+        })?;
         parts.push_str(&format!("@location({loc}) "));
         if let Some(mode) = field_interpolate_mode(&field.attributes) {
             let Some(interp) = interpolate_wgsl(&mode) else {
@@ -317,7 +332,12 @@ pub(super) fn emit_fragment_out_struct_wgsl(
                 ));
             }
             has_color = true;
-            let loc = locs.get(field.name.text.as_str()).copied().unwrap_or(0);
+            let loc = *locs.get(field.name.text.as_str()).ok_or_else(|| {
+                format!(
+                    "internal error: missing @location assignment for field '{}'",
+                    field.name.text
+                )
+            })?;
             s.push_str(&format!("  @location({loc}) {fname}: {wgsl_ty},\n"));
         }
     }
@@ -358,6 +378,6 @@ pub(super) fn has_position_gpuvec4(decl: &StructDeclarationNode<'_>) -> bool {
 }
 
 /// Count of `@location` color targets in a fragment output struct (excludes builtins).
-pub(super) fn fragment_color_target_count(decl: &StructDeclarationNode<'_>) -> u32 {
-    assign_locations(decl).map(|m| m.len() as u32).unwrap_or(1)
+pub(super) fn fragment_color_target_count(decl: &StructDeclarationNode<'_>) -> Result<u32, String> {
+    assign_locations(decl).map(|m| m.len() as u32)
 }

@@ -24,6 +24,16 @@ pub fn parse_int_literal(text: &str) -> Option<i64> {
     }
 }
 
+/// Unsigned 32-bit value of a numeric token. Rejects negatives and values above `u32::MAX`.
+pub fn parse_u32_literal(text: &str) -> Option<u32> {
+    let v = parse_int_literal(text)?;
+    if v < 0 || v > i64::from(u32::MAX) {
+        None
+    } else {
+        Some(v as u32)
+    }
+}
+
 /// Float value of a suffix-stripped token (`3.14`, `1e-3`, `-2.5e10`).
 pub fn parse_float_literal(text: &str) -> Option<f64> {
     text.trim().parse::<f64>().ok()
@@ -191,6 +201,9 @@ mod tests {
         assert_eq!(parse_int_literal("0b101"), Some(5));
         assert_eq!(parse_int_literal("0o77"), Some(63));
         assert_eq!(parse_int_literal("42"), Some(42));
+        assert_eq!(parse_u32_literal("0x40"), Some(64));
+        assert_eq!(parse_u32_literal("0b101"), Some(5));
+        assert_eq!(parse_u32_literal("-1"), None);
     }
 
     #[test]

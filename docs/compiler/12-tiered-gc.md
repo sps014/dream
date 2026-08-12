@@ -134,10 +134,10 @@ Reloads are gated on [`GC_EPOCH_ADDR`](../../crates/dream-mir/src/abi.rs): Gen0 
 collections bump the epoch; each function caches the last-seen value in `$__gc_epoch` and
 skips the reload body when unchanged (load + compare on the no-collect fast path).
 
-Ref-typed **call arguments** must not sit only on the WASM operand stack while a later
-argument evaluates: the spill path in `emit_call_args` roots each ref arg into the root
-table, then reloads the forwarded pointer with `$gc_root_get` in argument order and pops
-the ephemeral root frame immediately before the call.
+MIR call arguments are already materialized operands (`local.get` / const), so they cannot
+allocate while sitting on the WASM operand stack; the callee prologue roots params after
+the `call` transfers them into locals. Functions with no call/alloc safepoint skip the
+root-table prologue entirely.
 
 ## Finalizers / `del`
 

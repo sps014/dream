@@ -102,16 +102,10 @@ impl Emitter<'_> {
         self.line(" (local $__pc i32)");
         self.line(" (local $__jsp i32)");
         self.line(" (local $__src i32)");
+        self.line(" (local $__obj_young i32)");
         self.line(" (local $__wsrc i32)");
         self.line(" (local $__wbox i32)");
-        // Rooted call-arg spill scratches (see `rvalue/calls.rs`): `$__rcsave` snapshots
-        // `GC_ROOT_COUNT` at the start of a call's arg preparation, and `$__raiN` are the
-        // per-arg root-table indices used to reload forwarded pointers before dispatch.
-        self.line(" (local $__rcsave i32)");
-        for i in 0..super::rvalue::calls::MAX_ARG_SPILL_SLOTS {
-            self.line(&format!(" (local $__rai{} i32)", i));
-        }
-        if !self.gc_root_locals.is_empty() || !self.gc_slot_root_offs.is_empty() {
+        if self.gc_frame_active {
             self.line(" (local $__root_base i32)");
             let root_locals = self.gc_root_locals.clone();
             for li in root_locals {

@@ -178,16 +178,13 @@ public class Set<T> : Collection<T> {
         return this.count == 0;
     }
 
-    // Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed
-    // entries release; probe `states` are reset in place (no capacity realloc).
+    // Removes all elements, keeping the current capacity. Managed key slots are nulled so they
+    // are not traced after `states` reset; unmanaged payloads skip that walk.
     public fun clear(): void {
         let c = this.cap;
-        let z = Buffer.alloc<T>(1);
+        gc_clear_occupied(this.keys, this.states, c);
         let i = 0;
         while (i < c) {
-            if (this.states[i] == hash_slot_occupied()) {
-                this.keys[i] = z[0];
-            }
             this.states[i] = hash_slot_empty();
             i = i + 1;
         }

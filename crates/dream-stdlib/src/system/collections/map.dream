@@ -210,18 +210,14 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.count == 0;
     }
 
-    // Removes all entries, keeping the current capacity. Occupied key/value slots are zeroed so
-    // managed entries release; probe `states` are reset in place (no triple `Buffer.alloc`).
+    // Removes all entries, keeping the current capacity. Managed key/value slots are nulled so
+    // they are not traced after `states` reset; unmanaged payloads skip that walk.
     public fun clear(): void {
         let c = this.cap;
-        let zk = Buffer.alloc<K>(1);
-        let zv = Buffer.alloc<V>(1);
+        gc_clear_occupied(this.keys, this.states, c);
+        gc_clear_occupied(this.values, this.states, c);
         let i = 0;
         while (i < c) {
-            if (this.states[i] == hash_slot_occupied()) {
-                this.keys[i] = zk[0];
-                this.values[i] = zv[0];
-            }
             this.states[i] = hash_slot_empty();
             i = i + 1;
         }

@@ -204,6 +204,7 @@ impl Emitter<'_> {
                     ));
                     self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
+                    self.emit_mark_obj_young();
                     if self.type_has_del(*ty) {
                         self.line("     (local.get $__obj) (i32.const 4) (i32.sub)");
                         self.line("     (local.get $__obj) (i32.const 4) (i32.sub) (i32.load)");
@@ -293,6 +294,7 @@ impl Emitter<'_> {
                     ));
                     self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
+                    self.emit_mark_obj_young();
                     self.line("     (local.get $__obj)");
                     self.line(&format!("     (i32.const {}) ;; discriminant", variant));
                     self.line("     (i32.store)");
@@ -342,6 +344,7 @@ impl Emitter<'_> {
                 ));
                 self.emit_malloc_call();
                 self.line("     (local.set $__obj)");
+                self.emit_mark_obj_young();
                 self.line("     (local.get $__obj)");
                 self.line(&format!("     (i32.const {})", elems.len()));
                 self.line("     (i32.store) ;; length");
@@ -417,6 +420,7 @@ impl Emitter<'_> {
                     ));
                     self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
+                    self.emit_mark_obj_young();
                     self.line("     (local.get $__obj)");
                     self.line("     (local.get $__len)");
                     self.line("     (i32.store) ;; byte length");
@@ -485,6 +489,7 @@ impl Emitter<'_> {
                     ));
                     self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
+                    self.emit_mark_obj_young();
                     self.line("     (local.get $__obj)");
                     self.line("     (local.get $__len)");
                     self.line(&format!("     (i32.const {})", esize));
@@ -513,6 +518,7 @@ impl Emitter<'_> {
                     self.line(&format!("     (i32.const {}) ;; tag", tag));
                     self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
+                    self.emit_mark_obj_young();
                     // memory.copy(dst = obj, src = bytes+4, size)
                     self.line("     (local.get $__obj)");
                     self.emit_operand(bytes);

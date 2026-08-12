@@ -173,6 +173,12 @@ struct Emitter<'a> {
     gc_root_locals: Vec<u32>,
     /// Shadow-frame byte offsets (from `$__sp`) of embedded GC refs in owning value locals.
     gc_slot_root_offs: Vec<u32>,
+    /// When `true`, this function contains a call/alloc safepoint.
+    may_safepoint: bool,
+    /// When `true`, ref locals/slots are pushed into the root table for this frame.
+    gc_frame_active: bool,
+    /// Module has at least one reference-typed global that `$__gc_reload_globals` must refresh.
+    has_ref_globals: bool,
     /// When `true`, `$__obj_rg` holds the root-table index of the object currently under
     /// construction (`Rvalue::New`'s allocated block). Emitting a nested Dream call inside the
     /// construction must reload `$__obj` from this index — see
@@ -219,6 +225,12 @@ impl<'a> Emitter<'a> {
         }
         gc_slot_root_offs.sort_unstable();
         gc_slot_root_offs.dedup();
+        let may_safepoint = function_may_safepoint(func);
+        let gc_frame_active = may_safepoint
+            && (!gc_root_locals.is_empty() || !gc_slot_root_offs.is_empty());
+        let has_ref_globals = global_tys
+            .values()
+            .any(|t| interner.is_reference(*t));
         Emitter {
             func,
             interner,
@@ -242,6 +254,9 @@ impl<'a> Emitter<'a> {
             shape_label_id: 0,
             gc_root_locals,
             gc_slot_root_offs,
+            may_safepoint,
+            gc_frame_active,
+            has_ref_globals,
             obj_construction_root: false,
         }
     }
@@ -361,15 +376,10 @@ impl Emitter<'_> {
         // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
         // once the destination allocation starts overwriting `$__obj`.
         self.line("  (local $__src i32)");
-        // Saved `GC_ROOT_COUNT` on entry to a rooted call-argument spill; `$__raiN` are the
-        // ephemeral root-table indices of individual reference-typed args pushed during that
-        // spill. Reserved unconditionally (cheap i32 locals) so every call site can use the spill
-        // path without a second prologue pass — see `rvalue/calls.rs` `MAX_ARG_SPILL_SLOTS`.
-        self.line("  (local $__rcsave i32)");
-        for i in 0..rvalue::calls::MAX_ARG_SPILL_SLOTS {
-            self.line(&format!("  (local $__rai{} i32)", i));
-        }
-        if !self.gc_root_locals.is_empty() || !self.gc_slot_root_offs.is_empty() {
+        // Non-zero when `$__obj` currently lives in the nursery (set after `$malloc` in New /
+        // UnionNew / ArrayLit). Construction stores into a nursery dest need no remset entry.
+        self.line("  (local $__obj_young i32)");
+        if self.gc_frame_active {
             self.line("  (local $__root_base i32)");
             for li in self.gc_root_locals.clone() {
                 self.line(&format!("  (local $__rg{} i32)", li));
@@ -378,10 +388,12 @@ impl Emitter<'_> {
 
         self.emit_value_frame_prologue();
         self.emit_gc_root_prologue();
-        self.line(&format!(
-            "     (i32.const {}) (i32.load) (local.set $__gc_epoch)",
-            crate::abi::GC_EPOCH_ADDR
-        ));
+        if self.may_safepoint {
+            self.line(&format!(
+                "     (i32.const {}) (i32.load) (local.set $__gc_epoch)",
+                crate::abi::GC_EPOCH_ADDR
+            ));
+        }
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
         if let Some(dbg) = self.debug_fn {
             self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
@@ -399,7 +411,7 @@ impl Emitter<'_> {
     }
 
     fn emit_gc_root_prologue(&mut self) {
-        if self.gc_root_locals.is_empty() && self.gc_slot_root_offs.is_empty() {
+        if !self.gc_frame_active {
             return;
         }
         self.line(&format!(
@@ -422,14 +434,14 @@ impl Emitter<'_> {
     }
 
     fn emit_gc_root_epilogue(&mut self) {
-        if self.gc_root_locals.is_empty() && self.gc_slot_root_offs.is_empty() {
+        if !self.gc_frame_active {
             return;
         }
         self.line("     (local.get $__root_base) (call $gc_root_pop)");
     }
 
     fn emit_gc_root_update(&mut self, local: u32) {
-        if !self.gc_root_locals.contains(&local) {
+        if !self.gc_frame_active || !self.gc_root_locals.contains(&local) {
             return;
         }
         self.line(&format!(
@@ -444,17 +456,27 @@ impl Emitter<'_> {
     /// raw pointers become stale until this reload copies the forwarded values back. The epoch
     /// gate keeps the common no-collect path to a load + compare.
     pub(super) fn emit_gc_root_reload(&mut self) {
+        if !self.may_safepoint {
+            return;
+        }
+        if !self.gc_frame_active && !self.has_ref_globals {
+            return;
+        }
         self.line(&format!(
             "     (i32.const {}) (i32.load) (local.get $__gc_epoch) (i32.ne) (if (then",
             crate::abi::GC_EPOCH_ADDR
         ));
-        let root_locals = self.gc_root_locals.clone();
-        for li in root_locals {
-            self.line(&format!(
-                "       (local.get $__rg{li}) (call $gc_root_get) (local.set ${li})"
-            ));
+        if self.gc_frame_active {
+            let root_locals = self.gc_root_locals.clone();
+            for li in root_locals {
+                self.line(&format!(
+                    "       (local.get $__rg{li}) (call $gc_root_get) (local.set ${li})"
+                ));
+            }
         }
-        self.line("       (call $__gc_reload_globals)");
+        if self.has_ref_globals {
+            self.line("       (call $__gc_reload_globals)");
+        }
         self.line(&format!(
             "       (i32.const {}) (i32.load) (local.set $__gc_epoch)",
             crate::abi::GC_EPOCH_ADDR
@@ -764,4 +786,69 @@ impl Emitter<'_> {
             BinOp::Shr => format!("{}.shr{}", w, s),
         }
     }
+
+    pub(super) fn emit_mark_obj_young(&mut self) {
+        self.line("     (local.get $__obj) (call $__gc_in_nursery) (local.set $__obj_young)");
+    }
+}
+
+fn function_may_safepoint(func: &MirFunction) -> bool {
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if stmt_may_safepoint(stmt) {
+                return true;
+            }
+        }
+        if term_may_safepoint(&block.terminator) {
+            return true;
+        }
+    }
+    false
+}
+
+fn stmt_may_safepoint(stmt: &Statement) -> bool {
+    match stmt {
+        Statement::Assign(_, rv) => rvalue_may_safepoint(rv),
+        Statement::Call { .. }
+        | Statement::JsCall { .. }
+        | Statement::InterfaceCall { .. }
+        | Statement::IndirectCall { .. }
+        | Statement::ValueDrop(_) => true,
+        Statement::Panic(_)
+        | Statement::Print { .. }
+        | Statement::Nop
+        | Statement::DebugLine(_)
+        | Statement::SourceLine(_)
+        | Statement::ArrayElemsCopy { .. }
+        | Statement::ForceFree(_)
+        | Statement::LockAcquire(_)
+        | Statement::LockRelease(_) => false,
+    }
+}
+
+fn term_may_safepoint(term: &Terminator) -> bool {
+    matches!(
+        term,
+        Terminator::TailCall { .. } | Terminator::Await { .. } | Terminator::AsyncComplete(_)
+    )
+}
+
+fn rvalue_may_safepoint(rv: &Rvalue) -> bool {
+    matches!(
+        rv,
+        Rvalue::Call { .. }
+            | Rvalue::IndirectCall { .. }
+            | Rvalue::InterfaceCall { .. }
+            | Rvalue::JsCall { .. }
+            | Rvalue::New { .. }
+            | Rvalue::UnionNew { .. }
+            | Rvalue::ArrayLit { .. }
+            | Rvalue::ArrayNew { .. }
+            | Rvalue::ArrayRealloc { .. }
+            | Rvalue::Concat(_, _)
+            | Rvalue::ToString(_)
+            | Rvalue::ToBytes { .. }
+            | Rvalue::FromBytes { .. }
+            | Rvalue::Cast(_, _, _)
+    )
 }

@@ -6,29 +6,29 @@ deltas. Re-run via `./scripts/run-microbenches.sh`.
 
 ## Post-Gen0 snapshot (2026-08-12, native wasmtime)
 
-Nursery = 256 KiB. Gen0 bump + evacuate enabled; mutator rooting (call/alloc reload,
-ref-arg spill, `$__obj_rg`) plus `GC_EPOCH_ADDR` so reloads no-op when no collection ran.
+Nursery = 256 KiB. Gen0 bump + evacuate; epoch-gated root reload; no call-arg spill
+(operands cannot allocate); unmanaged `List`/`Map`/`Set.clear` skips zeroing traced
+slots.
 
 | Bench | ns_per_op | notes |
 |-------|----------:|-------|
-| string_eq | 10 | |
-| list_push | 15 | |
-| alloc_churn | 23 | |
-| list_clear_reuse | 27 | ARC-era ~9 |
+| string_eq | 11 | |
+| list_push | 16 | |
+| list_clear_reuse | 18 | ARC-era ~9 |
+| alloc_churn | 25 | |
+| map_clear_reuse | 56 | ARC-era ~46 |
 | gc_locals | 57 | |
-| scratch_arena | 79 | |
-| string_concat | 97 | |
-| map_clear_reuse | 102 | ARC-era ~46 |
-| map_get_set | 124 | |
-| list_insert_mid | 125 | ARC-era ~96 |
-| substring | 144 | ARC-era ~127 |
-| string_builder | 355 | |
-| char_scan | 3.6k | |
-| regex_find | 60k | |
+| scratch_arena | 74 | |
+| string_concat | 99 | |
+| map_get_set | 101 | |
+| list_insert_mid | 112 | ARC-era ~96 |
+| substring | 128 | ARC-era ~127 |
+| string_builder | 284 | |
+| char_scan | 4.1k | |
+| regex_find | 46k | |
 
-Short-lived allocs are back on the nursery path. Clear/reuse and map rows still trail
-ARC (retain/release elision + prompt freelist), but are ~2× faster than the
-all-Gen1 fallback that shipped while Gen0 was disabled.
+`substring` matches ARC. `map_clear_reuse` is within ~20%. `list_clear_reuse` still
+pays per-`push` root prologue / epoch checks that ARC elided on `int` elements.
 
 ### ARC-era reference (historical)
 

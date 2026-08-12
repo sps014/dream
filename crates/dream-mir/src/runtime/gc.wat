@@ -170,17 +170,15 @@
     local.get $new_val
     i32.eqz
     br_if 0
-    local.get $new_val
-    call $__gc_in_nursery
-    i32.eqz
-    br_if 0
-    ;; Only remember stores into old-space / LOH heap slots. Shadow-stack value-struct
-    ;; fields and nursery slots must not enter the remset (non-heap addresses go stale
-    ;; when frames unwind; nursery→nursery needs no barrier).
+    ;; Nursery destination: young→young is invisible to ephemeral collections.
     local.get $slot
     i32.const {OLD_START_ADDR}
     i32.load
     i32.lt_u
+    br_if 0
+    local.get $new_val
+    call $__gc_in_nursery
+    i32.eqz
     br_if 0
     local.get $slot
     i32.const {HEAP_PTR_ADDR}

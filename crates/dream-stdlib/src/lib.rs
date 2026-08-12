@@ -255,6 +255,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
+        name: "system.simd",
+        deps: &["system.core"],
+        files: &[(
+            "<std>/system/simd.dream",
+            include_str!("system/simd.dream"),
+        )],
+    },
+    StdPackage {
         name: "system.text",
         deps: &["system.core", "system.primitives", "system.collections"],
         files: &[

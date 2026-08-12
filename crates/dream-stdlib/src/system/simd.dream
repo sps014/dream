@@ -1,0 +1,28 @@
+module system.simd;
+
+// Portable WASM SIMD (`v128`) kernels over `float[]` / `int[]` slices of length 4.
+public class Simd {
+    @intrinsic("simd_f32x4_add")
+    static extern fun add_f32x4_raw(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void;
+    public static fun add_f32x4(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void {
+        Simd.add_f32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    }
+
+    @intrinsic("simd_f32x4_sub")
+    static extern fun sub_f32x4_raw(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void;
+    public static fun sub_f32x4(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void {
+        Simd.sub_f32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    }
+
+    @intrinsic("simd_f32x4_mul")
+    static extern fun mul_f32x4_raw(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void;
+    public static fun mul_f32x4(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void {
+        Simd.mul_f32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    }
+
+    @intrinsic("simd_i32x4_add")
+    static extern fun add_i32x4_raw(dest: int[], dest_off: int, a: int[], a_off: int, b: int[], b_off: int): void;
+    public static fun add_i32x4(dest: int[], dest_off: int, a: int[], a_off: int, b: int[], b_off: int): void {
+        Simd.add_i32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    }
+}

@@ -446,6 +446,7 @@ fn operand_mentions(op: &Operand, o: Local) -> bool {
         Operand::Copy(Place::Field { base, .. }) | Operand::Copy(Place::Index { base, .. }) => {
             *base == o
         }
+        Operand::Copy(Place::Deref { ptr, .. }) => *ptr == o,
         _ => false,
     }
 }
@@ -502,6 +503,7 @@ fn place_mentions(place: &Place, o: Local) -> bool {
     match place {
         Place::Local(l) => *l == o,
         Place::Field { base, .. } | Place::Index { base, .. } => *base == o,
+        Place::Deref { ptr, .. } => *ptr == o,
         Place::Global(_) => false,
     }
 }

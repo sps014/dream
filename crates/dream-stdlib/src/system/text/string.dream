@@ -35,6 +35,11 @@ extend string : Comparable<string> {
         return StringIterator(this);
     }
 
+    // Sequential UTF-8 walk (O(1) per character). Prefer this over `s[i]` in hot loops.
+    public fun chars(): StringIterator {
+        return StringIterator(this);
+    }
+
     // Gets a substring from start to end (UTF-8 byte-slice copy).
     public fun substring(start: int, end: int): string {
         return string.substring_raw(this, start, end);

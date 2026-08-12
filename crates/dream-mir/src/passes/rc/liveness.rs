@@ -114,6 +114,18 @@ fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
             add_operand_reads(count, live);
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => add_operand_reads(o, live),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            add_operand_reads(dest, live);
+            add_operand_reads(lhs, live);
+            add_operand_reads(rhs, live);
+            add_operand_reads(index, live);
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -206,9 +218,12 @@ fn add_operand_reads(op: &Operand, live: &mut HashSet<u32>) {
             Place::Field { base, .. } => {
                 live.insert(base.0);
             }
-            Place::Index { base, index } => {
+            Place::Index { base, index, .. } => {
                 live.insert(base.0);
                 add_operand_reads(index, live);
+            }
+            Place::Deref { ptr, .. } => {
+                live.insert(ptr.0);
             }
             Place::Global(_) => {}
         }
@@ -220,9 +235,12 @@ fn add_place_base_reads(place: &Place, live: &mut HashSet<u32>) {
         Place::Field { base, .. } => {
             live.insert(base.0);
         }
-        Place::Index { base, index } => {
+        Place::Index { base, index, .. } => {
             live.insert(base.0);
             add_operand_reads(index, live);
+        }
+        Place::Deref { ptr, .. } => {
+            live.insert(ptr.0);
         }
         Place::Local(_) | Place::Global(_) => {}
     }

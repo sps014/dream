@@ -35,20 +35,39 @@ impl Emitter<'_> {
         self.line("     (local.get $self)");
         match value {
             Some(v) => {
-                self.emit_operand(v);
-                // `Future.result` (`F_RESULT`) is a single `i32` slot: an `i32`-native value (int,
-                // bool, char, or any reference — already a heap pointer) fits directly, but a wider
-                // scalar (`long`/`float`/`double`) does not. Box it into a heap cell first so
-                // `$dream_complete` (and every await-resume site below) only ever deals in `i32`.
                 let wt = self.wasm_ty(self.operand_ty(v));
                 match wt.as_str() {
-                    "i64" => self.line("     (call $box_long)"),
-                    "f32" => self.line("     (call $box_float)"),
-                    "f64" => self.line("     (call $box_double)"),
-                    _ => {}
+                    "i64" => {
+                        self.line("     (local.get $self)");
+                        self.emit_operand(v);
+                        self.line(&format!("     (i64.store offset={})", F_WIDE));
+                        self.line("     (local.get $self)");
+                        self.line("     (i32.const 0)");
+                    }
+                    "f32" => {
+                        self.line("     (local.get $self)");
+                        self.emit_operand(v);
+                        self.line(&format!("     (f32.store offset={})", F_WIDE));
+                        self.line("     (local.get $self)");
+                        self.line("     (i32.const 0)");
+                    }
+                    "f64" => {
+                        self.line("     (local.get $self)");
+                        self.emit_operand(v);
+                        self.line(&format!("     (f64.store offset={})", F_WIDE));
+                        self.line("     (local.get $self)");
+                        self.line("     (i32.const 0)");
+                    }
+                    _ => {
+                        self.line("     (local.get $self)");
+                        self.emit_operand(v);
+                    }
                 }
             }
-            None => self.line("     (i32.const 0)"),
+            None => {
+                self.line("     (local.get $self)");
+                self.line("     (i32.const 0)");
+            }
         }
         self.line("     (call $dream_complete)");
         self.line("     (i32.const 0)");
@@ -167,14 +186,29 @@ impl Emitter<'_> {
                 self.line(&format!("     (i32.load offset={})", F_AWAITING));
                 self.line(&format!("     (i32.load offset={})", F_RESULT));
                 match dest_wt.as_deref() {
-                    Some("i64") | Some("f32") | Some("f64") => {
-                        self.line("     (local.set $__obj)");
-                        let unbox = match dest_wt.as_deref() {
-                            Some("i64") => "$unbox_long",
-                            Some("f32") => "$unbox_float",
-                            _ => "$unbox_double",
-                        };
-                        self.line(&format!("     (call {unbox} (local.get $__obj))"));
+                    Some("i64") => {
+                        self.line("     (drop)");
+                        self.line("     (local.get $self)");
+                        self.line(&format!("     (i32.load offset={})", F_AWAITING));
+                        self.line(&format!("     (i64.load offset={})", F_WIDE));
+                        if let Some(d) = dest {
+                            self.line(&format!("     (local.set ${})", d.0));
+                        }
+                    }
+                    Some("f32") => {
+                        self.line("     (drop)");
+                        self.line("     (local.get $self)");
+                        self.line(&format!("     (i32.load offset={})", F_AWAITING));
+                        self.line(&format!("     (f32.load offset={})", F_WIDE));
+                        if let Some(d) = dest {
+                            self.line(&format!("     (local.set ${})", d.0));
+                        }
+                    }
+                    Some("f64") => {
+                        self.line("     (drop)");
+                        self.line("     (local.get $self)");
+                        self.line(&format!("     (i32.load offset={})", F_AWAITING));
+                        self.line(&format!("     (f64.load offset={})", F_WIDE));
                         if let Some(d) = dest {
                             self.line(&format!("     (local.set ${})", d.0));
                         }

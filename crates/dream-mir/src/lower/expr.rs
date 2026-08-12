@@ -146,10 +146,7 @@ impl Lowerer<'_> {
             HExprKind::Index { array, index } => {
                 let base = self.operand_into_local(array);
                 let idx = self.lower_operand(index);
-                Rvalue::Use(Operand::Copy(Place::Index {
-                    base,
-                    index: Box::new(idx),
-                }))
+                Rvalue::Use(Operand::Copy(Place::index(base, idx)))
             }
             HExprKind::Discriminant(v) => Rvalue::Discriminant(self.lower_operand(v)),
             HExprKind::IsType { value, target } => {
@@ -380,10 +377,7 @@ impl Lowerer<'_> {
             HPlace::Index { array, index } => {
                 let base = self.operand_into_local(array);
                 let idx = self.lower_operand(index);
-                Place::Index {
-                    base,
-                    index: Box::new(idx),
-                }
+                Place::index(base, idx)
             }
         }
     }

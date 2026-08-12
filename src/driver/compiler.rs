@@ -122,6 +122,11 @@ impl Compiler {
                 _ => {}
             }
         }
+        // `--release --web` without an explicit `-O` keeps download size (`-Os`); native `--release`
+        // stays at [`OptLevel::RELEASE_DEFAULT`] (`-O3`).
+        if seen_web && self.optimize == Some(OptLevel::RELEASE_DEFAULT) {
+            self.optimize = Some(OptLevel::WEB_RELEASE_DEFAULT);
+        }
         self.runtimes = out;
         if !self.runtimes.is_empty() {
             self.compile_targets = CompileTargets {

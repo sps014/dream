@@ -23,9 +23,11 @@ pub enum OptLevel {
 }
 
 impl OptLevel {
-    /// Default wasm-opt level for `--release` when no `-O`/`--optimize` is given. Size (`-Os`)
-    /// matches the prior bare-`-O` default and favors smaller downloadable modules.
-    pub const RELEASE_DEFAULT: OptLevel = OptLevel::Size;
+    /// Default wasm-opt level for `--release` when no `-O`/`--optimize` is given. Speed (`-O3`)
+    /// is the AOT LTO default; download-size builds pass `-Os` explicitly (`--web` / `-Os`).
+    pub const RELEASE_DEFAULT: OptLevel = OptLevel::O3;
+    /// wasm-opt level for downloadable `--web` modules when `--release` did not get an explicit `-O`.
+    pub const WEB_RELEASE_DEFAULT: OptLevel = OptLevel::Size;
 }
 
 impl FromStr for OptLevel {
@@ -133,7 +135,8 @@ mod tests {
     }
 
     #[test]
-    fn release_default_is_size() {
-        assert_eq!(OptLevel::RELEASE_DEFAULT, OptLevel::Size);
+    fn release_default_is_speed() {
+        assert_eq!(OptLevel::RELEASE_DEFAULT, OptLevel::O3);
+        assert_eq!(OptLevel::WEB_RELEASE_DEFAULT, OptLevel::Size);
     }
 }

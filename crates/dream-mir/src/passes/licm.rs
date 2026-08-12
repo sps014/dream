@@ -314,6 +314,18 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(count, f);
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => operand_reads(o, f),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            operand_reads(dest, f);
+            operand_reads(lhs, f);
+            operand_reads(rhs, f);
+            operand_reads(index, f);
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -321,10 +333,11 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
 fn place_base_reads(place: &Place, f: &mut impl FnMut(Local)) {
     match place {
         Place::Field { base, .. } => f(*base),
-        Place::Index { base, index } => {
+        Place::Index { base, index, .. } => {
             f(*base);
             operand_reads(index, f);
         }
+        Place::Deref { ptr, .. } => f(*ptr),
         Place::Local(_) | Place::Global(_) => {}
     }
 }
@@ -413,10 +426,11 @@ fn operand_reads(op: &Operand, f: &mut impl FnMut(Local)) {
         match place {
             Place::Local(l) => f(*l),
             Place::Field { base, .. } => f(*base),
-            Place::Index { base, index } => {
+            Place::Index { base, index, .. } => {
                 f(*base);
                 operand_reads(index, f);
             }
+            Place::Deref { ptr, .. } => f(*ptr),
             Place::Global(_) => {}
         }
     }

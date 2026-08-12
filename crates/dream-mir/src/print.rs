@@ -105,6 +105,19 @@ fn stmt(s: &Statement) -> String {
         ),
         Statement::LockAcquire(o) => format!("lock_acquire {}", operand(o)),
         Statement::LockRelease(o) => format!("lock_release {}", operand(o)),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => format!(
+            "simd_f32x4({}, {}, {}, {})",
+            operand(dest),
+            operand(lhs),
+            operand(rhs),
+            operand(index)
+        ),
         Statement::ValueDrop(l) => format!("value_drop _{}", l.0),
     }
 }
@@ -289,7 +302,11 @@ fn place(p: &Place) -> String {
         Place::Local(l) => format!("_{}", l.0),
         Place::Global(g) => format!("@{}", g.0),
         Place::Field { base, field } => format!("_{}.{}", base.0, field),
-        Place::Index { base, index } => format!("_{}[{}]", base.0, operand(index)),
+        Place::Index { base, index, unchecked } => {
+            let u = if *unchecked { "u" } else { "" };
+            format!("_{}[{}{}]", base.0, operand(index), u)
+        }
+        Place::Deref { ptr, .. } => format!("*_{}", ptr.0),
     }
 }
 

@@ -5,7 +5,7 @@
 //! Determinism: every result is indexed by block position or held in ordered containers, and blocks
 //! are always visited in their `Vec` order, so two runs produce identical output.
 
-use crate::{BlockId, MirFunction};
+use crate::{BlockId, MirFunction, Terminator};
 use std::collections::BTreeSet;
 
 /// Predecessor lists indexed by block position. Only edges among the function's blocks are

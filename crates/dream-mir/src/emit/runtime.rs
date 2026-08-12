@@ -44,6 +44,8 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u3
             .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
             .replace("{STRING_EMPTY}", &empty_string.to_string()),
     );
+    out.push('\n');
+    out.push_str(RUNTIME_SIMD);
     out
 }
 

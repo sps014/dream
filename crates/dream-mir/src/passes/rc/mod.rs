@@ -67,6 +67,7 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
                 Place::Local(l) => Some(l.0),
                 Place::Field { base, .. } => Some(base.0),
                 Place::Index { base, .. } => Some(base.0),
+                Place::Deref { ptr, .. } => Some(ptr.0),
                 Place::Global(_) => None,
             };
             if base == Some(local) {

@@ -44,7 +44,7 @@ fn main() -> ExitCode {
             verbose = true;
         } else if arg == "--release" {
             // Trimmed release build: uninstrumented allocator + structural WAT dead-function
-            // elimination + wasm-opt at OptLevel::RELEASE_DEFAULT (-Os) unless -O overrides.
+            // elimination + wasm-opt at OptLevel::RELEASE_DEFAULT (-O3) unless -O overrides.
             // Default (no flag) keeps allocator probes and the full runtime.
             release = true;
         } else if arg == "-g" || arg == "--debug-info" {
@@ -351,7 +351,7 @@ fn print_usage(program: &str) {
     );
     error!("  -v, --verbose         Print progress information");
     error!(
-        "  --release             Trimmed build + wasm-opt (-Os); override level with -O"
+        "  --release             Trimmed build + wasm-opt (-O3; -Os with --web); override with -O"
     );
     error!(
         "  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)"

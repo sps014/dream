@@ -162,6 +162,18 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(count, read);
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => read_operand(o, read),
+        Statement::SimdF32x4 {
+            dest,
+            lhs,
+            rhs,
+            index,
+            ..
+        } => {
+            read_operand(dest, read);
+            read_operand(lhs, read);
+            read_operand(rhs, read);
+            read_operand(index, read);
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -173,9 +185,12 @@ fn read_place_base(place: &Place, read: &mut HashSet<Local>) {
         Place::Field { base, .. } => {
             read.insert(*base);
         }
-        Place::Index { base, index } => {
+        Place::Index { base, index, .. } => {
             read.insert(*base);
             read_operand(index, read);
+        }
+        Place::Deref { ptr, .. } => {
+            read.insert(*ptr);
         }
         Place::Local(_) | Place::Global(_) => {}
     }
@@ -269,9 +284,12 @@ fn read_operand(op: &Operand, read: &mut HashSet<Local>) {
             Place::Field { base, .. } => {
                 read.insert(*base);
             }
-            Place::Index { base, index } => {
+            Place::Index { base, index, .. } => {
                 read.insert(*base);
                 read_operand(index, read);
+            }
+            Place::Deref { ptr, .. } => {
+                read.insert(*ptr);
             }
             Place::Global(_) => {}
         }

@@ -12,7 +12,7 @@
 //! - [`rvalue`]: `Rvalue` (expression) emission (split out previously).
 
 use super::*;
-use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE};
+use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
 use crate::emit::valuetype::{ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
@@ -426,9 +426,11 @@ impl Emitter<'_> {
     /// Pushes the address of `base[index]` (`base + 4 + index * elem_size`) onto the stack. The
     /// length occupies the first word, so element 0 is at offset 4. Checked: traps via `$dream_panic`
     /// if `index` is out of range (see [`Self::emit_bounds_check`]).
-    fn elem_addr(&mut self, base: crate::Local, elem_ty: TypeId, index: &Operand) {
+    fn elem_addr(&mut self, base: crate::Local, elem_ty: TypeId, index: &Operand, unchecked: bool) {
         let (size, _) = scalar_size(self.interner, elem_ty);
-        self.emit_bounds_check(|s| s.line(&format!("     (local.get ${})", base.0)), index);
+        if !unchecked {
+            self.emit_bounds_check(|s| s.line(&format!("     (local.get ${})", base.0)), index);
+        }
         self.line(&format!("     (local.get ${})", base.0));
         self.line("     (i32.const 4)");
         self.line("     (i32.add)");
@@ -528,14 +530,24 @@ impl Emitter<'_> {
                     );
                 }
             }
-            Operand::Copy(Place::Index { base, index }) => {
+            Operand::Copy(Place::Index {
+                base,
+                index,
+                unchecked,
+            }) => {
                 if let Some(ety) = self.array_elem_ty(*base) {
-                    self.elem_addr(*base, ety, index);
+                    self.elem_addr(*base, ety, index, *unchecked);
                     if !self.interner.is_value_type(ety) {
                         self.line(&format!("     ({})", self.load_instr(ety)));
                     }
                 } else {
                     crate::internal_error!("missing array element type for read (base {:?})", base);
+                }
+            }
+            Operand::Copy(Place::Deref { ptr, elem_ty }) => {
+                self.line(&format!("     (local.get ${})", ptr.0));
+                if !self.interner.is_value_type(*elem_ty) {
+                    self.line(&format!("     ({})", self.load_instr(*elem_ty)));
                 }
             }
         }
@@ -567,6 +579,7 @@ impl Emitter<'_> {
             Operand::Copy(Place::Index { base, .. }) => self
                 .array_elem_ty(*base)
                 .unwrap_or_else(|| self.func.local_ty(*base)),
+            Operand::Copy(Place::Deref { elem_ty, .. }) => *elem_ty,
             Operand::Copy(Place::Global(_)) => self.interner.int(),
             Operand::Const(Const::Long(_)) => self.interner.long(),
             Operand::Const(Const::Float(_)) => self.interner.double(),

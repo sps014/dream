@@ -40,9 +40,27 @@ impl MirPass for Gvn {
 
     fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
         let mut changed = false;
-        for block in &mut func.blocks {
-            // Available expressions: key -> the local currently holding its value.
+        let rpo = super::cfg::reverse_postorder(func);
+        let preds = super::cfg::predecessors(func);
+        let mut exit_avail: Vec<Option<Vec<(Key, u32)>>> = vec![None; func.blocks.len()];
+        for &bid in &rpo {
+            let bi = bid.0 as usize;
             let mut avail: Vec<(Key, u32)> = Vec::new();
+            let ps = &preds[bi];
+            if ps.len() == 1 {
+                if let Some(parent) = exit_avail[ps[0].0 as usize].as_ref() {
+                    avail = parent.clone();
+                }
+            } else if ps.len() > 1 {
+                let mut iter = ps.iter().filter_map(|p| exit_avail[p.0 as usize].as_ref());
+                if let Some(first) = iter.next() {
+                    avail = first.clone();
+                    for other in iter {
+                        avail.retain(|(k, l)| other.iter().any(|(ok, ol)| ok == k && ol == l));
+                    }
+                }
+            }
+            let block = &mut func.blocks[bi];
             for stmt in &mut block.stmts {
                 if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
                     let dest_id = dest.0;
@@ -52,22 +70,15 @@ impl MirPass for Gvn {
                         {
                             *rvalue = Rvalue::Use(Operand::Copy(Place::Local(Local(src))));
                             changed = true;
-                            // The value in `dest` is now just a copy; still record it below so a third
-                            // occurrence can reuse either. Fall through to invalidation + insert.
                         }
                         invalidate(&mut avail, dest_id);
                         avail.push((key, dest_id));
                     } else {
-                        // Impure / un-numbered rvalue still defines `dest`: drop stale entries.
                         invalidate(&mut avail, dest_id);
                     }
-                } else if let Statement::Assign(_, _) = stmt {
-                    // Store through a non-local place: no local is defined, and numbered expressions
-                    // depend only on locals/consts, so nothing is invalidated.
                 }
-                // Retain/Release/Call/InterfaceCall/Print define no local and cannot affect a numbered
-                // (memory-free) expression, so they need no invalidation.
             }
+            exit_avail[bi] = Some(avail);
         }
         changed
     }

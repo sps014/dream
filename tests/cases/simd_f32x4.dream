@@ -1,0 +1,13 @@
+import system;
+import system.simd;
+
+fun main(): void {
+    let a = [1, 2, 3, 4];
+    let b = [10, 20, 30, 40];
+    let c = [0, 0, 0, 0];
+    Simd.add_i32x4(c, 0, a, 0, b, 0);
+    System.println(c[0]);
+    System.println(c[1]);
+    System.println(c[2]);
+    System.println(c[3]);
+}

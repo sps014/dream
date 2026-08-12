@@ -3,6 +3,7 @@
 //! middle layer of the front-end crate stack and never reaches back into semantics or codegen.
 pub mod lexer;
 pub mod nodes;
+pub mod number;
 pub mod parser;
 pub mod precedence;
 pub mod syntax_tree;

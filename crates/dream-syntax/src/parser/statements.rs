@@ -398,22 +398,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
-            self.match_token(TokenKind::OpenParenthesisToken);
-            let mut names = Vec::new();
-            names.push(self.match_token(TokenKind::IdentifierToken));
-            while self.current_token().kind == TokenKind::CommaToken {
-                self.match_token(TokenKind::CommaToken);
-                if self.current_token().kind == TokenKind::CloseParenthesisToken {
-                    break;
-                }
-                names.push(self.match_token(TokenKind::IdentifierToken));
-            }
-            self.match_token(TokenKind::CloseParenthesisToken);
-            if names.len() < 2 {
+            let pattern = self.parse_pattern()?;
+            if !pattern.is_irrefutable_let_pattern() {
                 self.diagnostics.report_error(
-                    "Tuple destructuring requires at least two bindings".to_string(),
-                    names.first().map(|n| n.position),
+                    "let/const destructure only allows names, '_' and nested tuples; use switch for other patterns"
+                        .to_string(),
+                    pattern.position(),
                 );
+            }
+            if let crate::nodes::PatternNode::Tuple(elems) = &pattern {
+                if elems.len() < 2 {
+                    self.diagnostics.report_error(
+                        "Tuple destructuring requires at least two bindings".to_string(),
+                        pattern.position(),
+                    );
+                }
             }
             let mut type_annotation = None;
             if self.current_token().kind == TokenKind::ColonToken {
@@ -424,7 +423,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let expression = self.parse_expression(0)?;
             self.match_token(TokenKind::SemicolonToken);
             return Ok(StatementNode::TupleDeclaration {
-                names,
+                pattern,
                 ty: type_annotation,
                 init: expression,
                 is_const,

@@ -83,9 +83,9 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
         | StatementNode::ForEach(tok, _, _, _, _) => Some(tok.position.line_no),
-        StatementNode::TupleDeclaration { names, init, .. } => names
-            .first()
-            .map(|n| n.position.line_no)
+        StatementNode::TupleDeclaration { pattern, init, .. } => pattern
+            .position()
+            .map(|s| s.line_no)
             .or_else(|| line(init.position())),
         StatementNode::IndexAssignment(arr, _, _) => line(arr.position()),
         StatementNode::Return(Some(e))

@@ -1,0 +1,6 @@
+fun id(x: int): int { return x; }
+
+fun main() {
+    let f: fun(int): int = id;
+    let n = f<int>(1);
+}

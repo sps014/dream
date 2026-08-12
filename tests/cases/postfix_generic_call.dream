@@ -1,0 +1,13 @@
+import system;
+
+fun first<T>(xs: T[]): T {
+    return xs[0];
+}
+
+fun main() {
+    let xs: int[] = [7, 8];
+    let n = (first)<int>(xs);
+    System.println(n);
+    let f = first;
+    System.println(f<int>(xs));
+}

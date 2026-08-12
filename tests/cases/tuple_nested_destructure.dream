@@ -1,0 +1,12 @@
+import system;
+
+fun main() {
+    let (a, (b, c)) = (1, (2, 3));
+    System.println(a);
+    System.println(b);
+    System.println(c);
+    let t = (10, (20, 30));
+    let (x, (y, _)) = t;
+    System.println(x);
+    System.println(y);
+}

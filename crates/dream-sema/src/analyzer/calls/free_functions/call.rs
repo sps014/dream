@@ -5,6 +5,8 @@
 use super::*;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::ExpressionNode;
+use dream_syntax::token::syntax_token::SyntaxToken;
+use dream_syntax::token::token_kind::TokenKind;
 use dream_types::constructor_fn;
 
 impl<'a> Analyzer<'a> {
@@ -250,6 +252,19 @@ impl<'a> Analyzer<'a> {
                 .as_ref()
                 .borrow_mut()
                 .mark_used(&name.text);
+            if generic_args
+                .as_ref()
+                .map(|g| !g.is_empty())
+                .unwrap_or(false)
+            {
+                diagnostics.report_error(
+                    format!(
+                        "type arguments are not valid on non-generic function value '{}'",
+                        name.text
+                    ),
+                    Some(name.position),
+                );
+            }
             if param_types.len() != params_types.len() {
                 diagnostics.report_error(
                     format!(
@@ -515,15 +530,51 @@ impl<'a> Analyzer<'a> {
     pub(crate) fn analyze_expr_call(
         &mut self,
         callee: &ExpressionNode<'a>,
+        generic_args: &Option<Vec<Type>>,
         params: &Vec<ExpressionNode<'a>>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        if generic_args.as_ref().map(|g| !g.is_empty()).unwrap_or(false) {
+            if let Some(name) = unwrap_callee_ident(callee) {
+                return self.analyze_function_call(
+                    name,
+                    generic_args,
+                    params,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                );
+            }
+        }
+
         let callee_ty =
             self.analyze_expression(callee, parent_function, symbol_table, diagnostics)?;
         let callee_hir = self.hir_take();
         let span = callee.position();
+
+        if generic_args.as_ref().map(|g| !g.is_empty()).unwrap_or(false) {
+            if let Type::GenericFunctionItem(gname) = &callee_ty {
+                let tok = SyntaxToken::new(
+                    TokenKind::IdentifierToken,
+                    span.unwrap_or_else(empty_span),
+                    gname.clone(),
+                );
+                return self.analyze_function_call(
+                    &tok,
+                    generic_args,
+                    params,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                );
+            }
+            diagnostics.report_error(
+                "type arguments are not valid on a non-generic function value".to_string(),
+                span,
+            );
+        }
 
         let mut arg_hirs = Vec::with_capacity(params.len());
         let mut params_types = Vec::with_capacity(params.len());
@@ -637,5 +688,13 @@ impl<'a> Analyzer<'a> {
             }
         }
         Ok(())
+    }
+}
+
+fn unwrap_callee_ident<'a>(expr: &'a ExpressionNode<'a>) -> Option<&'a SyntaxToken> {
+    match expr {
+        ExpressionNode::Identifier(t) => Some(t),
+        ExpressionNode::Parenthesized(_, inner) => unwrap_callee_ident(inner),
+        _ => None,
     }
 }

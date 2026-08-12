@@ -1581,3 +1581,50 @@ fn test_unused_local_warns_but_discard_does_not() {
         .iter()
         .any(|d| d.message.contains("unused variable '_'")));
 }
+
+#[test]
+fn test_analyze_hex_and_scientific_literals() {
+    let code = "fun main(): void { let a: int = 0x10; let b: int = 0b101; let c: float = 1e-3; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_nested_tuple_destructure() {
+    let code = "fun main(): void { let (a, (b, c)) = (1, (2, 3)); }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_tuple_switch_pattern() {
+    let code = "fun f(p: (int, int)): int { return switch (p) { (0, x) => x, (_, _) => 1 }; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_postfix_generic_call() {
+    let code = "fun first<T>(xs: T[]): T { return xs[0]; }
+        fun main(): void { let xs: int[] = [1]; let n = (first)<int>(xs); }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_nongeneric_function_value_rejects_type_args() {
+    let code = "fun id(x: int): int { return x; }
+        fun main(): void { let f: fun(int): int = id; let n = f<int>(1); }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics.diagnostics.iter().any(|d| d
+        .message
+        .contains("type arguments are not valid")));
+}
+
+#[test]
+fn test_analyze_illegal_let_pattern() {
+    let code = "fun main(): void { let (0, x) = (1, 2); }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+}

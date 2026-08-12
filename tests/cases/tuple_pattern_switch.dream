@@ -1,0 +1,12 @@
+import system;
+
+fun main() {
+    let p: (int, int) = (0, 9);
+    let n = switch (p) {
+        (0, x) => x,
+        (_, _) => -1,
+    };
+    System.println(n);
+    let q: (int, int) = (3, 4);
+    System.println(switch (q) { (0, x) => x, (_, y) => y });
+}

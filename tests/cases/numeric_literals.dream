@@ -1,0 +1,9 @@
+import system;
+
+fun main() {
+    System.println(0x10);
+    System.println(0b101);
+    System.println(0o10);
+    let x: float = 1e2;
+    System.println((int)x);
+}

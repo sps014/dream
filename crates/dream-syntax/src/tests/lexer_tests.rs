@@ -113,6 +113,42 @@ fn test_lex_suffixed_number_literals() {
 }
 
 #[test]
+fn test_lex_prefixed_and_scientific_numbers() {
+    let mut lexer = Lexer::new("0xFF 0b101 0o77 1e-3 2.5e10d 0b 0xFFu".to_string());
+    let mut diagnostics = DiagnosticBag::new(None);
+    let tokens = lexer.lex_all(&mut diagnostics);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let texts: Vec<String> = tokens
+        .iter()
+        .filter(|t| t.kind == TokenKind::NumberToken)
+        .map(|t| t.text.clone())
+        .collect();
+    assert_eq!(
+        texts,
+        vec!["0xFF", "0b101", "0o77", "1e-3", "2.5e10d", "0b", "0xFFu"]
+    );
+}
+
+#[test]
+fn test_lex_bad_hex_literal() {
+    let mut lexer = Lexer::new("0xG".to_string());
+    let mut diagnostics = DiagnosticBag::new(None);
+    let _tokens = lexer.lex_all(&mut diagnostics);
+    assert_eq!(diagnostics.has_errors(), true);
+}
+
+#[test]
+fn test_lex_interpolated_string_with_inner_quotes() {
+    let mut lexer = Lexer::new("$\"x is {\"hi\"}\"".to_string());
+    let mut diagnostics = DiagnosticBag::new(None);
+    let tokens = lexer.lex_all(&mut diagnostics);
+    assert_eq!(diagnostics.has_errors(), false);
+    assert_eq!(tokens[0].kind, TokenKind::InterpolatedStringToken);
+    assert_eq!(tokens[0].text, "$\"x is {\"hi\"}\"");
+}
+
+#[test]
 fn test_lex_interpolated_string() {
     let mut lexer = Lexer::new("$\"hi {x}\"".to_string());
     let mut diagnostics = DiagnosticBag::new(None);

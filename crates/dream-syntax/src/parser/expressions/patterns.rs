@@ -89,6 +89,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_pattern_atom(&mut self) -> Result<PatternNode, Error> {
         let cur = self.current_token();
         match cur.kind {
+            TokenKind::OpenParenthesisToken => self.parse_tuple_pattern(),
             TokenKind::IdentifierToken => {
                 if cur.text == "_" {
                     let tok = self.next_token();
@@ -122,6 +123,28 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
+    /// `(p0, p1, …)` as a tuple pattern. A single parenthesized pattern `(p)` is grouping, not a
+    /// 1-tuple (Dream tuples have arity ≥ 2).
+    pub(crate) fn parse_tuple_pattern(&mut self) -> Result<PatternNode, Error> {
+        self.match_token(TokenKind::OpenParenthesisToken);
+        let elems =
+            self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_pattern())?;
+        match elems.len() {
+            0 => {
+                self.diagnostics.report_error(
+                    "tuple pattern requires at least two elements".to_string(),
+                    Some(self.current_token().position),
+                );
+                Ok(PatternNode::Wildcard(self.current_token().clone()))
+            }
+            1 => {
+                let mut elems = elems;
+                Ok(elems.remove(0))
+            }
+            _ => Ok(PatternNode::Tuple(elems)),
+        }
+    }
+
     /// Parses the parenthesized sub-pattern list of a variant pattern, e.g. the `(x, None)` in
     /// `Pair(x, None)`. Returns an empty list when there is no `(...)`.
     pub(crate) fn parse_pattern_args(&mut self) -> Result<Vec<PatternNode>, Error> {
@@ -140,11 +163,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// `b` (byte). A bare literal with a decimal point is `float`, otherwise `int`.
     pub(crate) fn classify_number_literal(mut token: SyntaxToken) -> Type {
         let text = token.text.clone();
-        let num_end = text
-            .find(|c: char| c.is_ascii_alphabetic())
-            .unwrap_or(text.len());
-        let (num, suffix) = text.split_at(num_end);
-        token.text = num.to_string();
+        let Some((body, suffix)) = crate::number::split_numeric_literal(&text) else {
+            return Type::Integer(token);
+        };
+        token.text = body.to_string();
         match suffix.to_ascii_lowercase().as_str() {
             "b" => Type::Byte(token),
             "ul" | "lu" => Type::ULong(token),
@@ -153,7 +175,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             "d" => Type::Double(token),
             "f" => Type::Float(token),
             _ => {
-                if num.contains('.') {
+                if crate::number::numeric_body_is_float(body) {
                     Type::Float(token)
                 } else {
                     Type::Integer(token)

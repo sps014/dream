@@ -104,7 +104,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let value = if self.current_token().kind == TokenKind::EqualToken {
                     self.match_token(TokenKind::EqualToken);
                     let num = self.match_token(TokenKind::NumberToken);
-                    num.text.parse::<i32>().unwrap_or(next_value)
+                    crate::number::parse_int_literal(&num.text)
+                        .filter(|&v| v >= i32::MIN as i64 && v <= i32::MAX as i64)
+                        .map(|v| v as i32)
+                        .unwrap_or(next_value)
                 } else {
                     next_value
                 };

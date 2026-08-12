@@ -134,6 +134,48 @@ impl<'a> Analyzer<'a> {
                 // (across all arms, including nested sub-patterns) is decided in `check_exhaustiveness`.
                 Ok(PatternInfo { irrefutable: false })
             }
+            PatternNode::Tuple(elems) => {
+                match expected {
+                    Type::Tuple(ts) => {
+                        if ts.len() != elems.len() {
+                            diagnostics.report_error(
+                                format!(
+                                    "tuple pattern has {} elements but subject type has {}",
+                                    elems.len(),
+                                    ts.len()
+                                ),
+                                pattern.position(),
+                            );
+                        }
+                        let mut irrefutable = true;
+                        for (i, sub) in elems.iter().enumerate() {
+                            let slot = ts.get(i).cloned().unwrap_or(Type::Unknown);
+                            let info = self.check_pattern(sub, &slot, scope, diagnostics)?;
+                            irrefutable = irrefutable && info.irrefutable;
+                        }
+                        Ok(PatternInfo { irrefutable })
+                    }
+                    Type::Unknown => {
+                        for sub in elems {
+                            self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
+                        }
+                        Ok(PatternInfo { irrefutable: false })
+                    }
+                    other => {
+                        diagnostics.report_error(
+                            format!(
+                                "tuple pattern cannot match a value of type '{}'",
+                                other.display_name()
+                            ),
+                            pattern.position(),
+                        );
+                        for sub in elems {
+                            self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
+                        }
+                        Ok(PatternInfo { irrefutable: false })
+                    }
+                }
+            }
             PatternNode::Range(lo, hi) => {
                 for bound in [lo, hi] {
                     if !bound.is_unknown()
@@ -334,6 +376,17 @@ impl<'a> Analyzer<'a> {
                 }
                 true
             }
+            PatternNode::Tuple(elems) => {
+                if let Type::Tuple(ts) = ty {
+                    ts.len() == elems.len()
+                        && elems
+                            .iter()
+                            .zip(ts.iter())
+                            .all(|(p, t)| self.pattern_is_irrefutable(p, t))
+                } else {
+                    false
+                }
+            }
             _ => false,
         }
     }
@@ -349,6 +402,9 @@ impl<'a> Analyzer<'a> {
             PatternNode::Binding(name) => !matches!(union_info, Some(info)
                 if info.variant(&name.text).is_some_and(|v| v.fields.is_empty())),
             PatternNode::Variant(_, _, subs) => subs
+                .iter()
+                .any(|s| Self::pattern_introduces_binding(s, union_info)),
+            PatternNode::Tuple(elems) => elems
                 .iter()
                 .any(|s| Self::pattern_introduces_binding(s, union_info)),
             PatternNode::Or(alts) => alts

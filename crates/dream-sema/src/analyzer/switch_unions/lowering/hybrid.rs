@@ -274,7 +274,7 @@ impl<'a> Analyzer<'a> {
                 .first()
                 .map(|a| Self::outer_switch_key(a, union_info))
                 .unwrap_or_else(|| "_".to_string()),
-            PatternNode::Range(..) => "_".to_string(),
+            PatternNode::Range(..) | PatternNode::Tuple(_) => "_".to_string(),
         }
     }
     /// Strips nested sub-patterns to Binding/Wildcard so [`hir_switch_pattern`] accepts the arm.

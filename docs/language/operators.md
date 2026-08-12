@@ -52,7 +52,7 @@ let x = 5;
 let s = $"{{literal}} and {x}";   // "{literal} and 5"
 ```
 
-A hole cannot contain a string literal (the inner `"` would end the string). Use `+` for those cases.
+A hole may contain a string literal (`$"x is {"hi"}"`). Escape a quote in the outer interpolation with `\"`.
 
 ## Comparison
 

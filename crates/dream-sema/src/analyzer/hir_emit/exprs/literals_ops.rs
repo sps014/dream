@@ -11,9 +11,11 @@ impl<'a> Analyzer<'a> {
         }
         let kind = match lit {
             Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::ULong(t) | Type::Byte(t) => {
-                t.text.parse::<i64>().ok().map(HExprKind::IntLit)
+                dream_syntax::number::parse_int_literal(&t.text).map(HExprKind::IntLit)
             }
-            Type::Float(t) | Type::Double(t) => t.text.parse::<f64>().ok().map(HExprKind::FloatLit),
+            Type::Float(t) | Type::Double(t) => {
+                dream_syntax::number::parse_float_literal(&t.text).map(HExprKind::FloatLit)
+            }
             Type::Boolean(t) => Some(HExprKind::BoolLit(t.text == "true")),
             // The parser normalizes a char literal's token text to its decimal code point (e.g.
             // `'A'` → "65"), so recover the `char` from that integer rather than the raw glyph.

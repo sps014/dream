@@ -392,9 +392,35 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let index = self.parse_expression(0)?;
                 self.match_token(TokenKind::CloseBracketToken);
                 expr = ExpressionNode::IndexAccess(self.arena.alloc(expr), self.arena.alloc(index));
+            } else if self.current_token().kind == TokenKind::SmallerThanToken {
+                // `expr<T>(...)` — only when `<...>` is a balanced generic list immediately
+                // followed by `(`, so `a < b > (c)` stays comparison + call.
+                let is_generic = self
+                    .scan_generic_args(1)
+                    .map(|after| self.peek_token(after).kind == TokenKind::OpenParenthesisToken)
+                    .unwrap_or(false);
+                if !is_generic {
+                    break;
+                }
+                self.match_token(TokenKind::SmallerThanToken);
+                let generic_args = Some(self.parse_generic_args()?);
+                self.match_token(TokenKind::OpenParenthesisToken);
+                let mut arguments = Vec::new();
+                while self.current_token().kind != TokenKind::CloseParenthesisToken
+                    && self.current_token().kind != EndOfFileToken
+                {
+                    let iter = self.current_token_index;
+                    arguments.push(self.parse_call_argument()?);
+                    if self.current_token().kind == TokenKind::CommaToken
+                        && self.peek_token(1).kind != TokenKind::CloseParenthesisToken
+                    {
+                        self.match_token(TokenKind::CommaToken);
+                    }
+                    self.ensure_progress(iter);
+                }
+                self.match_token(TokenKind::CloseParenthesisToken);
+                expr = ExpressionNode::Call(self.arena.alloc(expr), generic_args, arguments);
             } else if self.current_token().kind == TokenKind::OpenParenthesisToken {
-                // Generic type args on a postfix call (`expr<T>(...)`) are not supported; only
-                // bare `expr(...)`. Named free-function generics stay on the `FunctionCall` path.
                 self.match_token(TokenKind::OpenParenthesisToken);
                 let mut arguments = Vec::new();
                 while self.current_token().kind != TokenKind::CloseParenthesisToken

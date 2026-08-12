@@ -1,3 +1,4 @@
+use super::lex::{lex_interpolated_string, lex_number};
 use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone, Copy, Hash, Eq)]
@@ -12,13 +13,13 @@ pub enum TokenKind {
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
     IdentifierToken,
 
-    #[regex(r"[0-9]+(\.[0-9]+)?([dDfF]|[uU]?[lL]|[lL]?[uU]|[bB])?")]
+    #[regex(r"[0-9]", lex_number)]
     NumberToken,
 
     #[regex(r#""([^"\\]*(\\.[^"\\]*)*)""#)]
     StringToken,
 
-    #[regex(r#"\$"([^"\\]*(\\.[^"\\]*)*)""#)]
+    #[regex(r#"\$""#, lex_interpolated_string)]
     InterpolatedStringToken,
 
     #[regex(r#"'(\\.|[^'\\])'"#)]

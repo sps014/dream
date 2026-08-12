@@ -33,6 +33,8 @@ A plain integer literal is `int`; a literal with a decimal point is `float`. A c
 | `f` / `F` | `float` | `3.14f` |
 | `d` / `D` | `double` | `3.0d` |
 
+Integer literals also accept `0x`/`0X` hex, `0b`/`0B` binary (needs at least one `0`/`1` digit, so `0b` alone stays byte `0`), and `0o`/`0O` octal. Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` suffix.
+
 Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed
 binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`
 so `let x: double = 3.14` works without a `d` suffix.
@@ -83,6 +85,8 @@ let t: (int, string) = (1, "hi");
 System.println(t.0);
 t.1 = "bye";
 let (a, b) = t;         // destructure
+let (x, (y, z)) = (1, (2, 3));
+
 ```
 
 Nested tuples are allowed. There are no named tuple elements. Access is via `.0`, `.1`, … (not

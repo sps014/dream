@@ -91,7 +91,9 @@ impl<'a> Analyzer<'a> {
             }
             // Range/Or are expanded into flat Const/Variant arms before the Switch path runs; if
             // one still reaches here it is an ICE-class routing gap.
-            PatternNode::Range(..) | PatternNode::Or(..) => HirArmShape::Unsupported,
+            PatternNode::Range(..) | PatternNode::Or(..) | PatternNode::Tuple(_) => {
+                HirArmShape::Unsupported
+            }
         }
     }
 
@@ -143,8 +145,8 @@ impl<'a> Analyzer<'a> {
     fn expand_range_literals(lo: &Type, hi: &Type) -> Option<Vec<Type>> {
         match (lo, hi) {
             (Type::Integer(a), Type::Integer(b)) => {
-                let lo_v = a.text.parse::<i64>().ok()?;
-                let hi_v = b.text.parse::<i64>().ok()?;
+                let lo_v = dream_syntax::number::parse_int_literal(&a.text)?;
+                let hi_v = dream_syntax::number::parse_int_literal(&b.text)?;
                 if hi_v < lo_v {
                     return None;
                 }
@@ -207,7 +209,7 @@ impl<'a> Analyzer<'a> {
     /// True when the pattern has no Switch-representable outer key even after expansion.
     fn pattern_lacks_outer_key(p: &PatternNode) -> bool {
         match p {
-            PatternNode::Range(..) => true,
+            PatternNode::Range(..) | PatternNode::Tuple(_) => true,
             PatternNode::Or(alts) => alts.iter().any(Self::pattern_lacks_outer_key),
             _ => false,
         }
@@ -310,6 +312,30 @@ impl<'a> Analyzer<'a> {
                 let ge = self.hx_bin(BinOp::Ge, value.clone(), lo_e);
                 let le = self.hx_bin(BinOp::Le, value.clone(), hi_e);
                 Some((vec![self.hx_bin(BinOp::And, ge, le)], vec![]))
+            }
+            PatternNode::Tuple(elems) => {
+                let Type::Tuple(slot_tys) = value_type else {
+                    return None;
+                };
+                if slot_tys.len() != elems.len() {
+                    return None;
+                }
+                let mut conds = Vec::new();
+                let mut binds = Vec::new();
+                for (i, (sub, fty)) in elems.iter().zip(slot_tys.iter()).enumerate() {
+                    let fty_id = self.type_ctx.lower(fty);
+                    let field_expr = HExpr::new(
+                        fty_id,
+                        HExprKind::Field {
+                            obj: Box::new(value.clone()),
+                            field: i,
+                        },
+                    );
+                    let (mut c, mut b) = self.compile_pattern(&field_expr, fty, sub)?;
+                    conds.append(&mut c);
+                    binds.append(&mut b);
+                }
+                Some((conds, binds))
             }
             PatternNode::Or(alts) => {
                 // Alternatives are validated binding-free in `check_pattern`, so only the boolean

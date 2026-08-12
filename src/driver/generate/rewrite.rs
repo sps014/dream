@@ -305,12 +305,12 @@ fn rewrite_stmt<'a>(
             *c,
         ),
         StatementNode::TupleDeclaration {
-            names,
+            pattern,
             ty,
             init,
             is_const,
         } => StatementNode::TupleDeclaration {
-            names: names.clone(),
+            pattern: pattern.clone(),
             ty: ty.clone(),
             init: rewrite_expr(arena, init, by_site, diagnostics, changed)?,
             is_const: *is_const,

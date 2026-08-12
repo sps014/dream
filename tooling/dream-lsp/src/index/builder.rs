@@ -703,13 +703,13 @@ impl Builder {
                 self.walk_expr(expr, scope);
             }
             StatementNode::TupleDeclaration {
-                names, ty, init, ..
+                pattern, ty, init, ..
             } => {
                 if let Some(t) = ty {
                     self.add_type_ref(t, scope);
                 }
                 self.walk_expr(init, scope);
-                for name in names {
+                for name in pattern.binding_names() {
                     let type_str = ty
                         .as_ref()
                         .map(|t| t.display_name())
@@ -1038,6 +1038,11 @@ impl Builder {
             PatternNode::Or(alts) => {
                 for alt in alts {
                     self.walk_pattern(alt, scope, expected.clone());
+                }
+            }
+            PatternNode::Tuple(elems) => {
+                for sub in elems {
+                    self.walk_pattern(sub, scope, None);
                 }
             }
         }

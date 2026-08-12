@@ -1564,3 +1564,71 @@ fn test_parenthesized_comparison_is_not_a_cast() {
         other => panic!("expected a `<` comparison, got {:?}", other),
     }
 }
+
+#[test]
+fn test_parse_nested_tuple_destructure() {
+    let code = "fun main(): void { let (a, (b, c)) = (1, (2, 3)); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    use crate::nodes::PatternNode;
+    match &program.functions[0].body[0] {
+        StatementNode::TupleDeclaration { pattern, .. } => {
+            let PatternNode::Tuple(outer) = pattern else {
+                panic!("expected outer tuple pattern");
+            };
+            assert!(matches!(outer[0], PatternNode::Binding(_)));
+            assert!(matches!(outer[1], PatternNode::Tuple(_)));
+        }
+        other => panic!("expected tuple declaration, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_tuple_switch_pattern() {
+    let code = "fun f(p: (int, int)): int { return switch (p) { (0, x) => x, (_, _) => 1 }; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    use crate::nodes::PatternNode;
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _, arms))) =
+        &program.functions[0].body[0]
+    else {
+        panic!("expected switch");
+    };
+    assert!(matches!(arms[0].pattern, PatternNode::Tuple(_)));
+}
+
+#[test]
+fn test_parse_postfix_generic_call() {
+    let code = "fun main(): void { let n = (first)<int>(xs); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match only_decl_expr(&program) {
+        ExpressionNode::Call(_, Some(args), _) => assert_eq!(args.len(), 1),
+        other => panic!("expected postfix generic Call, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_interpolated_string_with_inner_string() {
+    let code = "fun f(): string { return $\"x is {\"hi\"}\"; }";
+    let arena = bumpalo::Bump::new();
+    let (_program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_parse_hex_literal() {
+    let code = "fun main(): int { return 0xFF; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::Literal(Type::Integer(t)))) => {
+            assert_eq!(t.text, "0xFF");
+        }
+        other => panic!("expected hex int literal, got {:?}", other),
+    }
+}

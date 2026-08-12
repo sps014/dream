@@ -461,6 +461,11 @@ fn bind_pattern(pattern: &PatternNode, scopes: &mut [HashSet<String>]) {
                 bind_pattern(s, scopes);
             }
         }
+        PatternNode::Tuple(elems) => {
+            for s in elems {
+                bind_pattern(s, scopes);
+            }
+        }
         PatternNode::Or(_) => {}
     }
 }
@@ -511,9 +516,9 @@ fn collect_names_stmt(
             collect_names_expr(e, scopes, referenced);
             bind_here(scopes, name.text.clone());
         }
-        StatementNode::TupleDeclaration { names, init, .. } => {
+        StatementNode::TupleDeclaration { pattern, init, .. } => {
             collect_names_expr(init, scopes, referenced);
-            for name in names {
+            for name in pattern.binding_names() {
                 bind_here(scopes, name.text.clone());
             }
         }

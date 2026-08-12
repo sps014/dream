@@ -18,9 +18,8 @@ fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
         | StatementNode::ForEach(tok, _, _, _, _) => Some(tok.position),
-        StatementNode::TupleDeclaration { names, init, .. } => names
-            .first()
-            .map(|n| n.position)
+        StatementNode::TupleDeclaration { pattern, init, .. } => pattern
+            .position()
             .or_else(|| init.position()),
         StatementNode::IndexAssignment(arr, _, _) => arr.position(),
         StatementNode::Return(Some(e))

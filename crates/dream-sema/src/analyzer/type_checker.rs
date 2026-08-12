@@ -180,11 +180,11 @@ impl<'a> Analyzer<'a> {
                 }
             }
             StatementNode::TupleDeclaration {
-                names,
+                pattern,
                 ty,
                 init,
                 is_const,
-            } => self.analyze_tuple_declaration(names, ty, init, *is_const, &ctx, diagnostics)?,
+            } => self.analyze_tuple_declaration(pattern, ty, init, *is_const, &ctx, diagnostics)?,
             StatementNode::Assignment(left, right) => {
                 self.analyze_assignment(left, right, parent_function, symbol_table, diagnostics)?
             }

@@ -14,10 +14,10 @@ pub enum StatementNode<'a> {
     MemberAssignment(&'a ExpressionNode<'a>, SyntaxToken, ExpressionNode<'a>),
     /// `let`/`const` declaration. The final `bool` marks `const` (immutable) bindings.
     Declaration(SyntaxToken, Option<Type>, ExpressionNode<'a>, bool),
-    /// `let (a, b) = expr;` / `const (a, b): (T, U) = expr;` — positional tuple destructure.
-    /// Names are identifiers only (no nested patterns). Arity ≥ 2.
+    /// `let (a, b) = expr;` / `const (a, (b, c)) = expr;` — positional tuple destructure.
+    /// `pattern` is a [`crate::nodes::PatternNode::Tuple`] of irrefutable bindings/`_`/nested tuples.
     TupleDeclaration {
-        names: Vec<SyntaxToken>,
+        pattern: crate::nodes::PatternNode,
         ty: Option<Type>,
         init: ExpressionNode<'a>,
         is_const: bool,

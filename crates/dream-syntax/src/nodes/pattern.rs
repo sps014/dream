@@ -23,6 +23,8 @@ pub enum PatternNode {
     /// alternative must be binding-free (a literal, range, wildcard, or payload-free variant);
     /// this is validated during analysis, not here.
     Or(Vec<PatternNode>),
+    /// `(p0, p1, …)` — positional tuple pattern, arity ≥ 2. Sub-patterns may nest.
+    Tuple(Vec<PatternNode>),
 }
 
 impl PatternNode {
@@ -34,6 +36,45 @@ impl PatternNode {
             PatternNode::Variant(_, name, _) => Some(name.position),
             PatternNode::Range(lo, _) => lo.get_span(),
             PatternNode::Or(alts) => alts.first().and_then(|p| p.position()),
+            PatternNode::Tuple(elems) => elems.first().and_then(|p| p.position()),
+        }
+    }
+
+    /// Identifier tokens bound by this pattern (`_` excluded).
+    pub fn binding_names(&self) -> Vec<&SyntaxToken> {
+        let mut out = Vec::new();
+        self.collect_binding_names(&mut out);
+        out
+    }
+
+    fn collect_binding_names<'a>(&'a self, out: &mut Vec<&'a SyntaxToken>) {
+        match self {
+            PatternNode::Binding(t) if t.text != "_" => out.push(t),
+            PatternNode::Tuple(elems) | PatternNode::Or(elems) => {
+                for e in elems {
+                    e.collect_binding_names(out);
+                }
+            }
+            PatternNode::Variant(_, _, subs) => {
+                for s in subs {
+                    s.collect_binding_names(out);
+                }
+            }
+            PatternNode::Wildcard(_)
+            | PatternNode::Literal(_)
+            | PatternNode::Range(..)
+            | PatternNode::Binding(_) => {}
+        }
+    }
+
+    /// Bindings, `_`, and nested tuples only — legal on the left of `let`/`const`.
+    pub fn is_irrefutable_let_pattern(&self) -> bool {
+        match self {
+            PatternNode::Wildcard(_) | PatternNode::Binding(_) => true,
+            PatternNode::Tuple(elems) => {
+                elems.len() >= 2 && elems.iter().all(|e| e.is_irrefutable_let_pattern())
+            }
+            _ => false,
         }
     }
 }

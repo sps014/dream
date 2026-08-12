@@ -136,8 +136,10 @@ fn js_type_and_static_member_completions() {
         names.contains(&"global")
             && names.contains(&"global_this")
             && names.contains(&"object")
-            && names.contains(&"array"),
-        "expected static js.* entry points on js., got {names:?}"
+            && names.contains(&"array")
+            && names.contains(&"null")
+            && names.contains(&"undefined"),
+        "expected static js.* entry points (incl. null/undefined) on js., got {names:?}"
     );
 
     // `js.global.` is typed as `js` (property form / static return), so instance helpers appear.

@@ -45,6 +45,12 @@ pub(super) const JS_STUB: &str = "
         static extern fun object(): js;
         @js(\"Dream\", \"jsArray\")
         static extern fun array(): js;
+        @js(\"Dream\", \"jsNull\")
+        static extern fun host_null(): js;
+        @js(\"Dream\", \"jsUndefined\")
+        static extern fun host_undefined(): js;
+        public static get null(): js { return js.host_null(); }
+        public static get undefined(): js { return js.host_undefined(); }
         @js(\"Dream\", \"jsFunc\")
         static extern fun func(handler: fun(js): void): js;
         @js(\"Dream\", \"jsFunc0\")
@@ -129,7 +135,10 @@ pub(super) const JS_STUB: &str = "
         static extern fun as_bool(target: js): bool;
         @js(\"Dream\", \"jsAsString\")
         static extern fun as_string(target: js): string;
+        @js(\"Dream\", \"jsIsNull\")
+        static extern fun host_is_null(target: js): bool;
         public fun to_int(): int { return js.as_int(this); }
         public fun to_str(): string { return js.as_string(this); }
+        public fun is_null(): bool { return js.host_is_null(this); }
     }
 ";

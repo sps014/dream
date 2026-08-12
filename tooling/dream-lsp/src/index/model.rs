@@ -152,6 +152,10 @@ pub(crate) fn method_detail(owner: &str, func: &FunctionNode) -> String {
             "{static_prefix}{async_prefix}{owner}.{}({}): {}",
             func.name.text, params, ret
         )
+    } else if let Some(dream::syntax::nodes::function::AccessorKind::Get) = func.accessor {
+        format!("{static_prefix}get {owner}.{}: {}", func.name.text, ret)
+    } else if let Some(dream::syntax::nodes::function::AccessorKind::Set) = func.accessor {
+        format!("{static_prefix}set {owner}.{}({}): void", func.name.text, params)
     } else {
         format!(
             "{static_prefix}{async_prefix}{owner}.{}{generics}({}): {}",
@@ -172,6 +176,10 @@ pub(crate) fn detail_belongs_to(detail: &str, base: &str) -> bool {
         || detail.starts_with(&format!("async {prefix}"))
         || detail.starts_with(&format!("static {prefix}"))
         || detail.starts_with(&format!("static async {prefix}"))
+        || detail.starts_with(&format!("static get {prefix}"))
+        || detail.starts_with(&format!("static set {prefix}"))
+        || detail.starts_with(&format!("get {prefix}"))
+        || detail.starts_with(&format!("set {prefix}"))
 }
 
 fn param_list(func: &FunctionNode) -> String {

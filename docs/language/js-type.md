@@ -44,6 +44,7 @@ handles automatically.
 | `js.global(name)` | `globalThis[name]`, for a runtime-only name |
 | `js.object()` | a fresh empty `{}` |
 | `js.array()` | a fresh empty `[]` |
+| `js.null` / `js.undefined` | the JS `null` / `undefined` values as `js` handles |
 | `js.func(handler)` / `js.func0(handler)` | wrap a Dream function as a JS callable — see [Callbacks](callbacks.md) |
 
 ```dream

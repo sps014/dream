@@ -35,6 +35,23 @@ extend js {
     @js("Dream", "jsArray")
     static extern fun array(): js;
 
+    // JS `null` / `undefined` as `js` handles (handle id 0 on the host). Prefer these over inventing
+    // sentinel values when an API expects an explicit nullish argument.
+    @node @web
+    @js("Dream", "jsNull")
+    static extern fun host_null(): js;
+    @node @web
+    @js("Dream", "jsUndefined")
+    static extern fun host_undefined(): js;
+    @node @web
+    public static get null(): js {
+        return js.host_null();
+    }
+    @node @web
+    public static get undefined(): js {
+        return js.host_undefined();
+    }
+
     // Wraps a Dream function as a JS callable (e.g. an event handler). The wrapper has stable
     // identity per function, so a handler registered with `addEventListener` can be removed with
     // `removeEventListener`. A one-argument handler receives the JS argument (e.g. the event) as a

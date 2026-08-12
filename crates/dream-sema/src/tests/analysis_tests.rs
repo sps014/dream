@@ -1386,6 +1386,26 @@ fn test_js_global_property_syntax() {
 }
 
 #[test]
+fn test_js_null_and_undefined_properties() {
+    let code = format!(
+        "{JS_STUB}
+        fun main(): void {{
+            let n = js.null;
+            let u = js.undefined;
+            let ok: bool = n.is_null();
+            let ok2: bool = u.is_null();
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
 fn test_js_await_promise() {
     // Awaiting a `js` value (a JS Promise handle) is legal inside an async function and yields
     // `Option<js>` - `Some` on resolve, `None` on rejection.

@@ -710,6 +710,8 @@ function makeJsHost(getInstance) {
     jsGlobalThis: () => globalThis,
     jsObject: () => ({}),
     jsArray: () => [],
+    jsNull: () => null,
+    jsUndefined: () => undefined,
     jsString: (value) => value,
     jsInt: (value) => value,
     jsLong: (value) => value,

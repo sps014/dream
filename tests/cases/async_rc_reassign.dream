@@ -1,0 +1,34 @@
+// Regression: reassigning a ref local inside async must release the previous value.
+// `live_delta=1` is the still-held `run` Future handle inside `main`.
+
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+async fun swap(): int {
+    let t = Tracked(1);
+    await Time.sleep(0);
+    t = Tracked(2);
+    await Time.sleep(0);
+    return t.id;
+}
+
+async fun run(): void {
+    System.println(await swap());
+}
+
+async fun main(): void {
+    let base = Debug.live_objects();
+    await run();
+    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+}

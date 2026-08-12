@@ -1,6 +1,8 @@
 // Exercises reference-typed parameters and locals across suspension points.
 // Prior to the fix, string params were not retained by the async frame, and
 // string locals were leaked (never released) when the task completed.
+// Poll bodies now run RcInsertion; sink params store the caller's +1 without a
+// second ctor retain (which previously permanently over-counted).
 
 import system;
 async fun greet(name: string): string {

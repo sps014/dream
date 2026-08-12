@@ -1,0 +1,21 @@
+// Regression: returning an owned ref local from async must not release-then-read it
+// (prior emit_poll_complete bulk-released user locals before packing F_RESULT).
+// `live_delta=1` is the still-held `run` Future handle inside `main`.
+
+import system;
+async fun greet(name: string): string {
+    await Time.sleep(0);
+    let msg = "Hello, " + name + "!";
+    return msg;
+}
+
+async fun run(): void {
+    let g = await greet("World");
+    System.println(g);
+}
+
+async fun main(): void {
+    let base = Debug.live_objects();
+    await run();
+    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+}

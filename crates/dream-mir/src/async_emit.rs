@@ -8,6 +8,7 @@ use super::emit::{
     emit_async_poll, func_symbol, poll_symbol, vs_retain_sym, wasm_ty_of,
 };
 use super::lower::lower_async_poll_body;
+use super::passes::MirPass;
 use super::MirFunction;
 use dream_hir::scalar_size;
 use dream_types::{TypeId, TypeInterner};
@@ -187,13 +188,27 @@ pub fn emit_async_function(
         )
     });
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
-    let body = lower_async_poll_body(hir, interner);
+    // Poll MIR is lowered here (stubs skip module-wide RcInsertion), so insert RC on this CFG
+    // before emit — otherwise mid-body aliasing/reassign and return handoff corrupt counts.
+    let mut body = lower_async_poll_body(hir, interner);
+    // HIR sink flags (parallel to `body.params`) — needed before we mark poll params owned.
+    let param_is_sink: Vec<bool> = hir.params.iter().map(|p| p.is_take).collect();
+    // Frame owns each RC param's +1 (sink transfer or borrow retain in the ctor). Mark them take
+    // so poll RcInsertion releases them at AsyncComplete.
+    for p in &body.params {
+        let decl = &mut body.locals[p.0 as usize];
+        if interner.is_rc_tracked(decl.ty) {
+            decl.is_take = true;
+        }
+    }
+    let _ = crate::passes::RcInsertion.run(&mut body, interner);
     let (slots, frame_size) = async_slots(&body, interner);
     let sym = func_symbol(func);
     let mut out = String::new();
 
-    // Constructor: allocate the future frame, store (and retain) the params into their slots, enqueue
-    // the first poll, and hand the frame back to the caller as the task handle.
+    // Constructor: allocate the future frame, store params into slots, enqueue the first poll, and
+    // hand the frame back. Sink RC params already hold the caller's +1 — do not retain again.
+    // Borrow RC params are retained so the frame owns a copy independent of the caller.
     if debug {
         let _ = writeln!(out, "(func ${sym} (@name \"{}\")", func.name);
     } else {
@@ -223,7 +238,7 @@ pub fn emit_async_function(
     let _ = writeln!(out, " i32.const {poll_idx}");
     let _ = writeln!(out, " i32.const {KIND_TASK}");
     out.push_str(" call $dream_new_future\n local.set $self\n");
-    for p in &body.params {
+    for (pi, p) in body.params.iter().enumerate() {
         let idx = p.0 as usize;
         let off = slots.offsets[&idx];
         if let Some(&size) = slots.value_locals.get(&idx) {
@@ -252,13 +267,17 @@ pub fn emit_async_function(
         }
         let wt = wasm_ty_of(interner, body.locals[idx].ty);
         if interner.is_rc_tracked(body.locals[idx].ty) {
-            let _ = writeln!(out, " local.get ${idx}");
-            let retain = match interner.kind(body.locals[idx].ty) {
-                dream_types::TyKind::Js => "$js_retain",
-                _ if interner.is_shared_type(body.locals[idx].ty) => "$retain_shared",
-                _ => "$retain",
-            };
-            let _ = writeln!(out, " call {retain}");
+            let sink = param_is_sink.get(pi).copied().unwrap_or(true);
+            // Sink-default: caller already transferred +1. Borrow: retain for the frame.
+            if !sink {
+                let _ = writeln!(out, " local.get ${idx}");
+                let retain = match interner.kind(body.locals[idx].ty) {
+                    dream_types::TyKind::Js => "$js_retain",
+                    _ if interner.is_shared_type(body.locals[idx].ty) => "$retain_shared",
+                    _ => "$retain",
+                };
+                let _ = writeln!(out, " call {retain}");
+            }
         }
         let _ = writeln!(
             out,
@@ -268,8 +287,8 @@ pub fn emit_async_function(
     }
     out.push_str(" local.get $self\n call $dream_enqueue\n local.get $self\n)\n\n");
 
-    // Poll: the coroutine state machine over `body`'s CFG. Only the persistent user locals (params +
-    // declared `let`s, which lead `body.locals`) are released on completion.
+    // Poll: coroutine state machine over `body`'s CFG. Value-struct drop glue covers only the
+    // persistent user locals (params + declared `let`s); RC is MIR-managed via RcInsertion above.
     let user_local_count = hir.params.len() + hir.locals.len();
     out.push_str(&emit_async_poll(
         &body,

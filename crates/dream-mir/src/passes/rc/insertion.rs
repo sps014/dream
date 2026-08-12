@@ -182,7 +182,8 @@ impl MirPass for RcInsertion {
         // excludes them from Rule 3 below).
         func.locals.extend(extra_locals);
 
-        // Rule 3: scope-exit release at every `Return`.
+        // Rule 3: scope-exit release at every `Return` / `AsyncComplete`. Await must not release —
+        // coroutine locals stay live across suspend (ownership moves to the Future frame).
         let owned_locals: Vec<u32> = (0..func.locals.len() as u32)
             .filter(|i| is_owned_ref(*i))
             .collect();
@@ -190,10 +191,12 @@ impl MirPass for RcInsertion {
         let mut spills: Vec<LocalDecl> = Vec::new();
         let next_local = func.locals.len() as u32;
         for block in &mut func.blocks {
-            let Terminator::Return(ret) = &block.terminator else {
-                continue;
+            let ret = match &block.terminator {
+                Terminator::Return(v) | Terminator::AsyncComplete(v) => v.clone(),
+                _ => continue,
             };
-            let (skip, spill_from): (Option<u32>, Option<Operand>) = match ret {
+            let is_async_complete = matches!(block.terminator, Terminator::AsyncComplete(_));
+            let (skip, spill_from): (Option<u32>, Option<Operand>) = match &ret {
                 Some(Operand::Copy(Place::Local(l))) if is_owned_ref(l.0) => (Some(l.0), None),
                 Some(op) if ret_is_ref => (None, Some(op.clone())),
                 _ => (None, None),
@@ -214,7 +217,12 @@ impl MirPass for RcInsertion {
                 block
                     .stmts
                     .push(Statement::Retain(Operand::Copy(Place::Local(temp))));
-                block.terminator = Terminator::Return(Some(Operand::Copy(Place::Local(temp))));
+                let spilled = Some(Operand::Copy(Place::Local(temp)));
+                block.terminator = if is_async_complete {
+                    Terminator::AsyncComplete(spilled)
+                } else {
+                    Terminator::Return(spilled)
+                };
                 changed = true;
                 Some(temp.0)
             } else {

@@ -6,23 +6,23 @@ use super::*;
 use crate::async_emit::AsyncSlots;
 
 impl Emitter<'_> {
-    /// Completes the current coroutine: releases the persistent user reference locals, then
+    /// Completes the current coroutine: drops frame-resident value(`struct`) locals, then
     /// `$dream_complete($self, value)` and returns `0` (the poll result).
+    ///
+    /// RC locals are released by MIR `Release` stmts inserted before `AsyncComplete` (see
+    /// `RcInsertion`); emitting another bulk release here would double-free aliases and
+    /// use-after-free a returned local when packing `F_RESULT`.
     fn emit_poll_complete(&mut self, value: Option<&Operand>) {
         if let Some(parent) = self.async_parent {
-            // Only the persistent user locals (params + declared `let`s) are released; the trailing
-            // synthetic temps are transient and have no guaranteed release helper for their types.
+            // Only persistent user value locals (params + declared `let`s); trailing synthetic temps
+            // are transient. RC ownership is already handled in MIR.
             for (i, decl) in parent
                 .locals
                 .iter()
                 .enumerate()
                 .take(self.async_user_locals)
             {
-                if self.interner.is_rc_tracked(decl.ty) {
-                    let call = release_call(self.interner, self.layouts, decl.ty);
-                    self.line(&format!("     (local.get ${i})"));
-                    self.line(&format!("     (call {call})"));
-                } else if self.interner.is_value_type(decl.ty) && self.value_has_glue(decl.ty) {
+                if self.interner.is_value_type(decl.ty) && self.value_has_glue(decl.ty) {
                     // Value params/locals live at a fixed frame address held in the local; drop glue
                     // releases embedded refs retained when the frame took ownership.
                     self.emit_value_drop(|s| s.line(&format!("     (local.get ${i})")), decl.ty);
@@ -160,6 +160,8 @@ impl Emitter<'_> {
                 // wide-scalar (`long`/`float`/`double`) result was boxed by the awaited coroutine's
                 // `emit_poll_complete` (see above) since `F_RESULT` only ever holds an `i32`; unbox
                 // it back to its native representation here and release the now-consumed box cell.
+                // The child Future stays owned by the await operand local (saved/restored across
+                // suspend); poll RcInsertion releases it at AsyncComplete — do not free it here.
                 let dest_wt = dest.map(|d| self.wasm_ty(self.func.local_ty(d)));
                 self.line("     (local.get $self)");
                 self.line(&format!("     (i32.load offset={})", F_AWAITING));

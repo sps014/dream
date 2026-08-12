@@ -42,6 +42,9 @@ const DEBUG_ONLY_CASES: &[&str] = &[
     "gc_complete",
     "closure_env_reclaim",
     "closure_env_escape",
+    "async_rc_alias",
+    "async_rc_return",
+    "async_rc_reassign",
 ];
 
 fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {

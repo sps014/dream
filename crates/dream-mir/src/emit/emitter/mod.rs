@@ -147,9 +147,9 @@ struct Emitter<'a> {
     /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
     async_parent: Option<&'a MirFunction>,
     /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
-    /// front of `func.locals`; only these are released on completion. Synthetic lowering temporaries
-    /// (await results, array/reassignment scratch) that follow are transient and not deep-released
-    /// here (mirroring the pre-CFG async behavior), so no helper is needed for their element types.
+    /// front of `func.locals`; only these get value(`struct`) drop glue on completion. RC locals are
+    /// released by MIR `Release` stmts from poll `RcInsertion`. Synthetic temps that follow are
+    /// transient (their RC is still MIR-managed when owned).
     async_user_locals: usize,
     /// Generate `@name` annotations
     debug: bool,

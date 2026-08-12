@@ -217,6 +217,10 @@ union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions 
 code is also a compile error — helpers are WGSL-only; stages dispatch via `Compute.run` /
 `GpuRenderPipeline.create`.
 
+`sizeof(T)` is allowed and becomes a WGSL integer literal (see
+[`sizeof` / `nameof`](operators.md#sizeof-and-nameof)). `nameof(...)` is not — it yields
+`string`, which is forbidden on the GPU.
+
 See [`@gpu` helpers](shaders.md#gpu-helpers).
 
 ### Workgroup memory

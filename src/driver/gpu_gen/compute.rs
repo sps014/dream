@@ -5,7 +5,7 @@ use super::ident::escape_wgsl_ident;
 use super::layout::{
     build_struct_field_tys, emit_value_struct_wgsl, find_struct,
 };
-use super::stmt::emit_stmts;
+use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
 use dream_abi::attributes::{compute_workgroup_size, has_readonly_attr};
@@ -220,6 +220,7 @@ pub(super) fn emit_kernel(
 
     let mut workgroup_decls = String::new();
     let mut body = String::new();
+    reject_gpu_nameof(func.body, diagnostics, &func.name.text);
     emit_stmts(
         func.body,
         &mut body,

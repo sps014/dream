@@ -49,6 +49,13 @@ pub enum ExpressionNode<'a> {
     IndexAccess(&'a ExpressionNode<'a>, &'a ExpressionNode<'a>),
     /// `(T)expr` — the `SyntaxToken` is the opening `(` of the cast.
     Cast(SyntaxToken, Type, &'a ExpressionNode<'a>),
+    /// `sizeof(T)` — compile-time byte size of type `T` in Dream's ABI (refs/classes = 4).
+    /// The `SyntaxToken` is the `sizeof` identifier. Not a reserved keyword.
+    SizeOf(SyntaxToken, Type),
+    /// `nameof(a.b.c)` — compile-time string of the last identifier in a simple name path.
+    /// The `SyntaxToken` is the `nameof` identifier; the `Vec` is the dotted path (length ≥ 1).
+    /// Not a reserved keyword; the operand is not evaluated.
+    NameOf(SyntaxToken, Vec<SyntaxToken>),
     MemberAccess(&'a ExpressionNode<'a>, SyntaxToken),
     /// `expr is Type` — a runtime type check. The optional trailing `SyntaxToken` is an
     /// `is`-with-binding name (`expr is Type name`): when present, the analyzer introduces a new
@@ -198,6 +205,8 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::SetLiteral(open, _)
             | ExpressionNode::MapLiteral(open, _)
             | ExpressionNode::Cast(open, _, _)
+            | ExpressionNode::SizeOf(open, _)
+            | ExpressionNode::NameOf(open, _)
             | ExpressionNode::Switch(open, _, _)
             | ExpressionNode::RefArgument(open, _) => Some(open.position),
             ExpressionNode::Try(inner) | ExpressionNode::IsExpression(inner, _, _) => {

@@ -540,6 +540,8 @@ impl<'a> Analyzer<'a> {
                 )?;
                 Ok(t)
             }
+            ExpressionNode::SizeOf(_, ty) => self.analyze_sizeof(ty, diagnostics),
+            ExpressionNode::NameOf(_, parts) => self.analyze_nameof(parts, diagnostics),
             ExpressionNode::MethodCall(obj, method, generic_args, params) => {
                 let ctx = super::super::AnalyzerContext {
                     parent_function,

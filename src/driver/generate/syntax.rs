@@ -226,7 +226,10 @@ impl SyntaxTreeView {
                     }
                 }
             },
-            ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
+            ExpressionNode::Literal(_)
+            | ExpressionNode::Identifier(_)
+            | ExpressionNode::SizeOf(_, _)
+            | ExpressionNode::NameOf(_, _) => {}
         }
     }
 

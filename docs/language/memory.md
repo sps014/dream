@@ -154,8 +154,33 @@ What `@unsafe` does **not** do: it does not insert runtime checks, and it does n
 - `List` / `Map` / `Set` `clear()` keeps capacity: live slots are zeroed in place (no capacity-sized realloc). Prefer `clear` + refill over allocating a new collection each batch.
 - `ScratchArena<T : unmanaged>` bump-allocates short-lived `Span<T>` slices from one owned slab;
   `reset()` rewinds the cursor without freeing to the OS — use it for parse/match/fill scratch
-  (`ScratchArena<int>`, `ScratchArena<byte>`, …), not long-lived graphs.
+  (`ScratchArena<int>`, `ScratchArena<byte>`, …), not long-lived graphs. Use [`sizeof`](operators.md#sizeof-and-nameof)
+  when you need the ABI byte size of an unmanaged element type.
 - `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release). Under `--release`, the inliner erases small `Span` / value-struct method call boundaries (including into `List.insert` / `push_all`), so those hot paths compile down to the same WAT as hand-written bulk copies.
 - The compiler's ARC passes elide retain/release pairs along Goto chains, transparent diamonds/loops, and postdominated transparent regions; last-use moves transfer ownership without an extra retain. Prefer clear ownership so elision has an easy cancel pattern.
 - Unmarked parameters sink into the callee (see [Functions](functions.md#ownership-sink-default-and-borrow)); mark readers `borrow`. Stores like `List.push(value)` skip a redundant retain when the arg is moved.
 - Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths; silent SROA may promote non-escaping class instances whose accessed fields are non-references.
+
+## WASM call stack (`dream run`)
+
+This is the **WebAssembly guest call stack** (wasmtime `max_wasm_stack`), not language-level
+stack allocation of Dream values. Deep recursion, large value-struct frames, and long ARC release
+chains need enough of it.
+
+Precedence when running with the native host (`dream run` / e2e):
+
+1. Environment variable **`DREAM_STACK_SIZE`** — e.g. `32M`, `32MiB`, `33554432` (bytes).
+2. Compiler default baked from the Dream repo’s `[package.metadata.dream] stack-size` (currently
+   `16MiB` in the root `Cargo.toml`).
+3. Hard fallback: **16 MiB**.
+
+```bash
+DREAM_STACK_SIZE=32M dream run path/to/file.dream
+```
+
+Async fibers get a few MiB above that sync budget. Values below 64 KiB are rejected.
+
+This only affects the **native** wasmtime runner. Browser / Node hosts use the engine’s own stack
+limits. Separately, building or testing the compiler itself may need a larger **Rust host** thread
+stack (`RUST_MIN_STACK`, also set in the repo’s `.cargo/config.toml`) — that is unrelated to guest
+WASM stack size.

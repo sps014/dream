@@ -271,6 +271,8 @@ fn rewrite_expr<'a>(
         }
         ExpressionNode::Literal(_)
         | ExpressionNode::Identifier(_)
+        | ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::NameOf(_, _)
         | ExpressionNode::SyntaxBlock(_) => expr.clone(),
     })
 }

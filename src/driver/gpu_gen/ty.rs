@@ -108,6 +108,7 @@ pub(super) fn builtin_return_wgsl_ty(name: &str, arg_count: usize) -> Option<&'s
 pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     match expr {
         ExpressionNode::Cast(_, ty, _) | ExpressionNode::Literal(ty) => dream_ty_to_wgsl(ty),
+        ExpressionNode::SizeOf(_, _) => "i32".into(),
         ExpressionNode::Parenthesized(_, inner)
         | ExpressionNode::NamedArg(_, inner)
         | ExpressionNode::RefArgument(_, inner)

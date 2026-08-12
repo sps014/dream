@@ -128,6 +128,8 @@ Rules: top-level only; not generic/async/extern; explicit non-void return type.
 - `@fragment` first parameter is usually that interface struct; return `GpuVec4` or an output struct.
 - When names passed to `create` / `create_ex` are **string literals**, the compiler checks stages
   and matching interface types.
+- `sizeof(T)` lowers to a WGSL integer literal; `nameof(...)` is not available in shader bodies
+  (it produces `string`). Details: [Operators — sizeof and nameof](operators.md#sizeof-and-nameof).
 
 ## Related
 

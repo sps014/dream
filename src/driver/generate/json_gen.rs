@@ -558,7 +558,10 @@ fn collect_collections_from_expr(
                 collect_collections_from_expr(v, jsonable, out);
             }
         }
-        ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
+        ExpressionNode::Literal(_)
+        | ExpressionNode::Identifier(_)
+        | ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::NameOf(_, _) => {}
     }
 }
 

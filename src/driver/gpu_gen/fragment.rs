@@ -7,7 +7,7 @@ use super::layout::{
     build_struct_field_tys, emit_fragment_out_struct_wgsl, emit_interface_struct_wgsl, find_struct,
     fragment_color_target_count, has_position_gpuvec4, struct_name_of,
 };
-use super::stmt::emit_stmts;
+use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::types::GpuShaderInfo;
 use super::vertex::{emit_resource_param, finalize_uniforms};
 use dream_diagnostics::DiagnosticBag;
@@ -164,6 +164,7 @@ pub(super) fn emit_fragment(
 
     let mut workgroup_decls = String::new();
     let mut body = String::new();
+    reject_gpu_nameof(func.body, diagnostics, &func.name.text);
     emit_stmts(
         func.body,
         &mut body,

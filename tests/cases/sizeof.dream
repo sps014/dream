@@ -1,0 +1,22 @@
+import system;
+
+struct Point {
+    public x: int;
+    public y: int;
+}
+
+class Box {
+    public value: int;
+}
+
+fun main(): void {
+    System.println(sizeof(int));
+    System.println(sizeof(long));
+    System.println(sizeof(byte));
+    System.println(sizeof(bool));
+    System.println(sizeof(string));
+    System.println(sizeof(int[]));
+    System.println(sizeof(Point));
+    System.println(sizeof(Box));
+    System.println(sizeof(List<int>));
+}

@@ -7,7 +7,7 @@ use super::layout::{
     assign_locations, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
     emit_interface_struct_wgsl, find_struct, has_position_gpuvec4, struct_name_of,
 };
-use super::stmt::emit_stmts;
+use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuShaderInfo};
 use dream_abi::attributes::{
@@ -154,6 +154,7 @@ pub(super) fn emit_vertex(
 
     let mut workgroup_decls = String::new();
     let mut body = String::new();
+    reject_gpu_nameof(func.body, diagnostics, &func.name.text);
     emit_stmts(
         func.body,
         &mut body,

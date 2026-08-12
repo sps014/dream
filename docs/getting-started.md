@@ -82,6 +82,7 @@ dream hello.dream
 
 That writes `.wat`, `.wasm`, and `.abi.json` next to your source.
 
+Native `dream run` 
 ### Running in the browser or Node
 
 ```bash

@@ -116,6 +116,8 @@ impl Builder {
     fn infer_type_internal(&self, expr: &ExpressionNode, scope: usize) -> Option<String> {
         match expr {
             ExpressionNode::Literal(t) => Some(t.display_name()),
+            ExpressionNode::SizeOf(_, _) => Some("int".to_string()),
+            ExpressionNode::NameOf(_, _) => Some("string".to_string()),
             ExpressionNode::Cast(_, ty, _) => Some(ty.display_name()),
             ExpressionNode::IsExpression(_, _, _) => Some("bool".to_string()),
             ExpressionNode::Binary(left, op, right) => match op.kind {
@@ -961,6 +963,10 @@ impl Builder {
                 }
             }
             ExpressionNode::Literal(_) => {}
+            ExpressionNode::SizeOf(_, ty) => {
+                self.add_type_ref(ty, scope);
+            }
+            ExpressionNode::NameOf(_, _) => {}
             ExpressionNode::Try(e) => self.walk_expr(e, scope),
             ExpressionNode::Lambda(lambda) => {
                 for param in &lambda.parameters {

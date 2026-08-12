@@ -1,0 +1,8 @@
+import system;
+
+fun main(): void {
+    System.println(nameof(main));
+    System.println(nameof(System.println));
+    let local_name = 1;
+    System.println(nameof(local_name));
+}

@@ -144,6 +144,14 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         //parse identifiers
         else if self.current_token().kind == IdentifierToken {
+            // Soft specials (not reserved keywords): `sizeof(T)` / `nameof(a.b)`.
+            if self.peek_token(1).kind == TokenKind::OpenParenthesisToken {
+                match self.current_token().text.as_str() {
+                    "sizeof" => return self.parse_sizeof_expression(),
+                    "nameof" => return self.parse_nameof_expression(),
+                    _ => {}
+                }
+            }
             let mut is_invocation = false;
             // `Cache<int>.make(...)`: a generic *class* named as a static-call receiver, where the
             // type arguments belong to the class (not the method). Distinguished from a generic
@@ -222,6 +230,38 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let identifier = self.match_token(TokenKind::IdentifierToken);
         Ok(ExpressionNode::Identifier(identifier))
+    }
+
+    /// `sizeof(T)` — soft special (not a keyword). Operand is a type, not a value expression.
+    pub(crate) fn parse_sizeof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let kw = self.match_token(TokenKind::IdentifierToken);
+        self.match_token(TokenKind::OpenParenthesisToken);
+        let ty = self.parse_type()?;
+        self.match_token(TokenKind::CloseParenthesisToken);
+        Ok(ExpressionNode::SizeOf(kw, ty))
+    }
+
+    /// `nameof(a.b.c)` — soft special (not a keyword). Dotted identifier path only; last segment
+    /// is the compile-time string. Types like `int` may appear as `DataTypeToken` segments.
+    pub(crate) fn parse_nameof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let kw = self.match_token(TokenKind::IdentifierToken);
+        self.match_token(TokenKind::OpenParenthesisToken);
+        let mut parts = Vec::new();
+        parts.push(self.parse_nameof_segment()?);
+        while self.current_token().kind == TokenKind::DotToken {
+            self.next_token();
+            parts.push(self.parse_nameof_segment()?);
+        }
+        self.match_token(TokenKind::CloseParenthesisToken);
+        Ok(ExpressionNode::NameOf(kw, parts))
+    }
+
+    fn parse_nameof_segment(&mut self) -> Result<SyntaxToken, Error> {
+        let kind = self.current_token().kind;
+        if kind == TokenKind::IdentifierToken || kind == TokenKind::DataTypeToken {
+            return Ok(self.next_token());
+        }
+        Ok(self.match_token(TokenKind::IdentifierToken))
     }
 
     /// Disambiguates a leading `(` between a cast (`(Type)expr`) and a parenthesized expression

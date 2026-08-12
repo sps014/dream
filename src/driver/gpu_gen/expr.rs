@@ -413,9 +413,49 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             let wty = dream_ty_to_wgsl(ty);
             coerce_expr_to_wgsl_ty(e, &wty, ctx)
         }
+        ExpressionNode::SizeOf(_, ty) => format!("{}", gpu_sizeof_bytes(ty, ctx)),
+        // `nameof` yields `string`, which is illegal in GPU shaders — leave a typed zero so
+        // other errors can still surface; kernels that use it should be rejected by validation
+        // or rewritten on the CPU host.
+        ExpressionNode::NameOf(_, _) => "0".into(),
         ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
             emit_expr(inner, ctx)
         }
         _ => "0".into(),
+    }
+}
+
+/// Dream ABI byte size for `sizeof(T)` inside WGSL emission (matches host `sizeof` for scalars /
+/// GPU builtins; user value structs sum field sizes from the shader field map).
+fn gpu_sizeof_bytes(ty: &Type, ctx: &EmitCtx<'_>) -> u32 {
+    match ty {
+        Type::Struct(tok, _) => {
+            if let Some(fields) = ctx.struct_fields.get(&tok.text) {
+                let mut size = 0u32;
+                for wgsl_ty in fields.values() {
+                    size = size.saturating_add(wgsl_type_byte_size(wgsl_ty));
+                }
+                return size.max(1);
+            }
+            dream_types::value_size_align(&tok.text).0 as u32
+        }
+        Type::Array(_) => 4,
+        _ => {
+            let name = ty.get_type();
+            dream_types::value_size_align(&name).0 as u32
+        }
+    }
+}
+
+fn wgsl_type_byte_size(wgsl_ty: &str) -> u32 {
+    match wgsl_ty {
+        "bool" | "i32" | "u32" | "f32" => 4,
+        "vec2<f32>" | "vec2<i32>" | "vec2<u32>" => 8,
+        "vec3<f32>" | "vec3<i32>" | "vec3<u32>" => 12,
+        "vec4<f32>" | "vec4<i32>" | "vec4<u32>" => 16,
+        "mat2x2<f32>" => 16,
+        "mat3x3<f32>" => 48,
+        "mat4x4<f32>" => 64,
+        _ => 4,
     }
 }

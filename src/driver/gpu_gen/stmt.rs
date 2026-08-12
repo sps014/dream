@@ -56,6 +56,184 @@ pub(super) fn emit_stmts(
     ctx.pop_scope();
 }
 
+/// Report `nameof(...)` in GPU shader bodies (`string` is illegal in WGSL).
+pub(super) fn reject_gpu_nameof(
+    stmts: &[StatementNode<'_>],
+    diagnostics: &mut DiagnosticBag,
+    kernel: &str,
+) {
+    for s in stmts {
+        scan_stmt_nameof(s, diagnostics, kernel);
+    }
+}
+
+fn scan_stmt_nameof(stmt: &StatementNode<'_>, diagnostics: &mut DiagnosticBag, kernel: &str) {
+    match stmt {
+        StatementNode::ExpressionStatement(e)
+        | StatementNode::AwaitStmt(e)
+        | StatementNode::Return(Some(e))
+        | StatementNode::Assignment(_, e)
+        | StatementNode::Declaration(_, _, e, _)
+        | StatementNode::TupleDeclaration { init: e, .. } => {
+            scan_expr_nameof(e, diagnostics, kernel)
+        }
+        StatementNode::IndexAssignment(a, i, v) => {
+            scan_expr_nameof(a, diagnostics, kernel);
+            scan_expr_nameof(i, diagnostics, kernel);
+            scan_expr_nameof(v, diagnostics, kernel);
+        }
+        StatementNode::MemberAssignment(r, _, v) => {
+            scan_expr_nameof(r, diagnostics, kernel);
+            scan_expr_nameof(v, diagnostics, kernel);
+        }
+        StatementNode::FunctionInvocation(_, _, args) => {
+            for a in args {
+                scan_expr_nameof(a, diagnostics, kernel);
+            }
+        }
+        StatementNode::MethodInvocation(r, _, _, args) => {
+            scan_expr_nameof(r, diagnostics, kernel);
+            for a in args {
+                scan_expr_nameof(a, diagnostics, kernel);
+            }
+        }
+        StatementNode::IfElse(cond, then_b, elifs, else_b) => {
+            scan_expr_nameof(cond, diagnostics, kernel);
+            reject_gpu_nameof(then_b, diagnostics, kernel);
+            for (c, body) in elifs {
+                scan_expr_nameof(c, diagnostics, kernel);
+                reject_gpu_nameof(body, diagnostics, kernel);
+            }
+            if let Some(eb) = else_b {
+                reject_gpu_nameof(eb, diagnostics, kernel);
+            }
+        }
+        StatementNode::While(cond, body) => {
+            scan_expr_nameof(cond, diagnostics, kernel);
+            reject_gpu_nameof(body, diagnostics, kernel);
+        }
+        StatementNode::DoWhile(body, cond) => {
+            reject_gpu_nameof(body, diagnostics, kernel);
+            scan_expr_nameof(cond, diagnostics, kernel);
+        }
+        StatementNode::For(init, cond, step, body) => {
+            if let Some(i) = init {
+                scan_stmt_nameof(i, diagnostics, kernel);
+            }
+            if let Some(c) = cond {
+                scan_expr_nameof(c, diagnostics, kernel);
+            }
+            if let Some(s) = step {
+                scan_stmt_nameof(s, diagnostics, kernel);
+            }
+            reject_gpu_nameof(body, diagnostics, kernel);
+        }
+        StatementNode::Switch(subj, cases, default) => {
+            scan_expr_nameof(subj, diagnostics, kernel);
+            for (labels, body) in cases {
+                for lit in labels {
+                    scan_expr_nameof(lit, diagnostics, kernel);
+                }
+                reject_gpu_nameof(body, diagnostics, kernel);
+            }
+            if let Some(db) = default {
+                reject_gpu_nameof(db, diagnostics, kernel);
+            }
+        }
+        StatementNode::Lock(e, body) => {
+            scan_expr_nameof(e, diagnostics, kernel);
+            reject_gpu_nameof(body, diagnostics, kernel);
+        }
+        StatementNode::ForEach(_, e, _, _, body) => {
+            scan_expr_nameof(e, diagnostics, kernel);
+            reject_gpu_nameof(body, diagnostics, kernel);
+        }
+        StatementNode::Labeled(_, inner) => scan_stmt_nameof(inner, diagnostics, kernel),
+        StatementNode::WorkgroupDecl(..)
+        | StatementNode::Return(None)
+        | StatementNode::Break(_)
+        | StatementNode::Continue(_) => {}
+    }
+}
+
+fn scan_expr_nameof(expr: &ExpressionNode<'_>, diagnostics: &mut DiagnosticBag, kernel: &str) {
+    match expr {
+        ExpressionNode::NameOf(tok, _) => {
+            diagnostics.report_error(
+                format!(
+                    "GPU shader '{kernel}' cannot use nameof(...); nameof yields string, which is not allowed in shaders — keep it on the CPU host"
+                ),
+                Some(tok.position),
+            );
+        }
+        ExpressionNode::Binary(l, _, r) | ExpressionNode::IndexAccess(l, r) => {
+            scan_expr_nameof(l, diagnostics, kernel);
+            scan_expr_nameof(r, diagnostics, kernel);
+        }
+        ExpressionNode::Ternary(c, t, e) => {
+            scan_expr_nameof(c, diagnostics, kernel);
+            scan_expr_nameof(t, diagnostics, kernel);
+            scan_expr_nameof(e, diagnostics, kernel);
+        }
+        ExpressionNode::Unary(_, e)
+        | ExpressionNode::IncDec { target: e, .. }
+        | ExpressionNode::Parenthesized(_, e)
+        | ExpressionNode::Cast(_, _, e)
+        | ExpressionNode::IsExpression(e, _, _)
+        | ExpressionNode::MemberAccess(e, _)
+        | ExpressionNode::Await(_, e)
+        | ExpressionNode::Try(e)
+        | ExpressionNode::NamedArg(_, e)
+        | ExpressionNode::RefArgument(_, e) => scan_expr_nameof(e, diagnostics, kernel),
+        ExpressionNode::FunctionCall(_, _, args)
+        | ExpressionNode::ArrayLiteral(_, args)
+        | ExpressionNode::TupleLiteral(_, args)
+        | ExpressionNode::SetLiteral(_, args) => {
+            for a in args {
+                scan_expr_nameof(a, diagnostics, kernel);
+            }
+        }
+        ExpressionNode::Call(c, _, args) | ExpressionNode::MethodCall(c, _, _, args) => {
+            scan_expr_nameof(c, diagnostics, kernel);
+            for a in args {
+                scan_expr_nameof(a, diagnostics, kernel);
+            }
+        }
+        ExpressionNode::MapLiteral(_, entries) => {
+            for (k, v) in entries {
+                scan_expr_nameof(k, diagnostics, kernel);
+                scan_expr_nameof(v, diagnostics, kernel);
+            }
+        }
+        ExpressionNode::Switch(_, subj, arms) => {
+            scan_expr_nameof(subj, diagnostics, kernel);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    scan_expr_nameof(g, diagnostics, kernel);
+                }
+                match &arm.body {
+                    dream_syntax::nodes::SwitchArmBody::Expr(e) => {
+                        scan_expr_nameof(e, diagnostics, kernel)
+                    }
+                    dream_syntax::nodes::SwitchArmBody::Block(stmts) => {
+                        reject_gpu_nameof(stmts, diagnostics, kernel)
+                    }
+                }
+            }
+        }
+        ExpressionNode::Lambda(l) => match &l.body {
+            dream_syntax::nodes::LambdaBody::Expr(e) => scan_expr_nameof(e, diagnostics, kernel),
+            dream_syntax::nodes::LambdaBody::Block(stmts) => {
+                reject_gpu_nameof(stmts, diagnostics, kernel)
+            }
+        },
+        ExpressionNode::Literal(_)
+        | ExpressionNode::Identifier(_)
+        | ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::SyntaxBlock(_) => {}
+    }
+}
+
 fn pad(n: usize) -> String {
     "  ".repeat(n)
 }

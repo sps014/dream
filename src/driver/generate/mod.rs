@@ -160,7 +160,10 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                     }
                 }
             },
-            ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
+            ExpressionNode::Literal(_)
+            | ExpressionNode::Identifier(_)
+            | ExpressionNode::SizeOf(_, _)
+            | ExpressionNode::NameOf(_, _) => {}
         }
     }
     fn walk_stmt(stmt: &StatementNode<'_>, diagnostics: &mut DiagnosticBag) {

@@ -15,3 +15,4 @@ mod identifiers;
 mod lambda;
 mod member_access;
 mod operators;
+mod sizeof_nameof;

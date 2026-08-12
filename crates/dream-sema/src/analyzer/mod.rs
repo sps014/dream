@@ -848,6 +848,15 @@ impl<'a> Analyzer<'a> {
             _ => None,
         }
     }
+
+    /// True when `ty` is a C-style integer enum (named `i32` constants). Discriminated unions
+    /// share `Type::Struct` spelling but live in `union_table`, not `enum_table`.
+    pub(in crate::analyzer) fn is_c_style_enum(&self, ty: &Type) -> bool {
+        let Some((base, args)) = Self::resolve_struct_parts(ty) else {
+            return false;
+        };
+        args.is_empty() && self.enum_table.contains_key(&base)
+    }
     fn analyze_pgm(
         &mut self,
         node: &'a ProgramNode<'a>,

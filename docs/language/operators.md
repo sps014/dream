@@ -74,7 +74,9 @@ String `==` and `!=` compare **contents**, not addresses.
 
 `&` (and), `|` (or), `^` (xor), `<<` (shift left), `>>` (shift right), and prefix `~` (complement)
 work on any integer type: `int`, `uint`, `long`, `ulong`, `byte`. Both operands of a binary bitwise
-op must be the same type, same as arithmetic. `>>` is an *arithmetic* (sign-extending) shift on the
+op must be the same type, same as arithmetic. C-style enums are integers at runtime, so `&`/`|`/`^`
+and prefix `~` also work on them and yield the same enum type (`Flags.Read | Flags.Write`). Shifts
+stay integer-only. `>>` is an *arithmetic* (sign-extending) shift on the
 signed types (`int`, `long`) and a *logical* (zero-filling) shift on the unsigned types (`uint`,
 `ulong`, `byte`).
 

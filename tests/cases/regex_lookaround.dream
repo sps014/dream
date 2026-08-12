@@ -1,23 +1,23 @@
 import system;
 import system.text;
 fun main(): void {
-    let ahead = Regex("foo(?=bar)", "");
+    let ahead = Regex("foo(?=bar)");
     System.println(ahead.test("foobar"));
     System.println(ahead.test("foobaz"));
     System.println(ahead.match("foobar")[0]);
 
-    let not_ahead = Regex("foo(?!bar)", "");
+    let not_ahead = Regex("foo(?!bar)");
     System.println(not_ahead.test("foobar"));
     System.println(not_ahead.test("foobaz"));
 
-    let behind = Regex("(?<=\\$)\\d+", "");
+    let behind = Regex("(?<=\\$)\\d+");
     let bm = behind.match("$100");
     System.println(bm[0]);
     System.println(behind.test("100"));
 
-    let not_behind = Regex("(?<!\\$)\\d+", "g");
+    let not_behind = Regex("(?<!\\$)\\d+", RegexFlags.Global);
     System.println(not_behind.replace("$100 and 200", "#"));
 
-    let price = Regex("(?<=USD )\\d+(?=\\.\\d{2})", "");
+    let price = Regex("(?<=USD )\\d+(?=\\.\\d{2})");
     System.println(price.match("USD 42.50")[0]);
 }

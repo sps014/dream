@@ -367,7 +367,10 @@ impl<'a> Analyzer<'a> {
                         Ok(right_type)
                     }
                     TokenKind::TildeToken => {
-                        if !right_type.is_unknown() && !right_type.is_integer() {
+                        if !right_type.is_unknown()
+                            && !right_type.is_integer()
+                            && !self.is_c_style_enum(&right_type)
+                        {
                             diagnostics.report_error(
                                 format!(
                                     "~ operator requires an integer operand (int/long/uint/ulong/byte), got {}",

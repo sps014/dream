@@ -153,16 +153,26 @@ impl<'a> Analyzer<'a> {
         // (`int`/`long`/`uint`/`ulong`/`byte`); `float`/`double` have no well-defined bitwise
         // lowering. Caught here rather than left to the backend, which would otherwise emit an
         // invalid WASM instruction (e.g. a nonexistent `f64.and`) instead of a clean diagnostic.
+        // C-style enums are `i32` at runtime, so `&`/`|`/`^` combine them as bitflags (result
+        // stays the enum type). Shifts stay integer-only — an enum is not a shift count.
         if is_bitwise_op(opr.kind) && !left_value.is_unknown() && !left_value.is_integer() {
-            diagnostics.report_error(
-                format!(
-                    "'{}' requires an integer operand (int/long/uint/ulong/byte), got {}",
-                    opr.text,
-                    left_value.display_name()
-                ),
-                Some(opr.position),
-            );
-            return Ok(Type::Unknown);
+            let enum_bitflags = matches!(
+                opr.kind,
+                TokenKind::BitWiseAmpersandToken
+                    | TokenKind::BitWisePipeToken
+                    | TokenKind::BitWiseXorToken
+            ) && self.is_c_style_enum(&left_value);
+            if !enum_bitflags {
+                diagnostics.report_error(
+                    format!(
+                        "'{}' requires an integer operand (int/long/uint/ulong/byte), got {}",
+                        opr.text,
+                        left_value.display_name()
+                    ),
+                    Some(opr.position),
+                );
+                return Ok(Type::Unknown);
+            }
         }
 
         match (&left_value, &opr.kind) {

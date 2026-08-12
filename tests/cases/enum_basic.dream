@@ -1,6 +1,7 @@
 import system;
 enum Color { Red, Green, Blue }
 enum Status { Active = 10, Inactive = 20 }
+enum Flags { None = 0, Read = 1, Write = 2 }
 
 fun describe(c: Color): string {
     switch (c) {
@@ -30,4 +31,8 @@ fun main(): void {
     if (c == Color.Green) {
         System.println(100);
     }
+
+    let flags = Flags.Read | Flags.Write;
+    System.println(flags);
+    System.println((flags & Flags.Read) != Flags.None);
 }

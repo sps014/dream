@@ -1,33 +1,33 @@
 import system;
 import system.text;
 fun main(): void {
-    let anchored = Regex("^abc$", "");
+    let anchored = Regex("^abc$");
     System.println(anchored.test("abc"));
     System.println(anchored.test("xabc"));
     System.println(anchored.test("abcx"));
 
-    let multiline = Regex("^b", "mg");
+    let multiline = Regex("^b", RegexFlags.Multiline | RegexFlags.Global);
     System.println(multiline.match("a\nb\nc").length);
 
-    let single_line = Regex("^b", "g");
+    let single_line = Regex("^b", RegexFlags.Global);
     System.println(single_line.match("a\nb\nc").length);
 
-    let word_boundary = Regex("\\bcat\\b", "");
+    let word_boundary = Regex("\\bcat\\b");
     System.println(word_boundary.test("a cat sat"));
     System.println(word_boundary.test("category"));
 
-    let non_word_boundary = Regex("\\Bcat", "");
+    let non_word_boundary = Regex("\\Bcat");
     System.println(non_word_boundary.test("concatenate"));
     System.println(non_word_boundary.test("a cat"));
 
-    let case_insensitive = Regex("hello", "i");
+    let case_insensitive = Regex("hello", RegexFlags.IgnoreCase);
     System.println(case_insensitive.test("HELLO world"));
     System.println(case_insensitive.test("goodbye"));
 
-    let case_sensitive = Regex("hello", "");
+    let case_sensitive = Regex("hello");
     System.println(case_sensitive.test("HELLO world"));
 
-    let combined = Regex("[a-z]+", "gi");
+    let combined = Regex("[a-z]+", RegexFlags.Global | RegexFlags.IgnoreCase);
     System.println(combined.match("ABC def")[0]);
     System.println(combined.match("ABC def")[1]);
 }

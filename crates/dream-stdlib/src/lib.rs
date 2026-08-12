@@ -343,6 +343,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/text/regex_vm.dream"),
             ),
             (
+                "<std>/system/text/regex_flags.dream",
+                include_str!("system/text/regex_flags.dream"),
+            ),
+            (
                 "<std>/system/text/regex.dream",
                 include_str!("system/text/regex.dream"),
             ),

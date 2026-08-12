@@ -242,7 +242,7 @@ fun bench_scratch_arena(iters: int): void {
 }
 
 fun bench_regex_find(iters: int): void {
-    let re = Regex("\\d+", "g");
+    let re = Regex("\\d+", RegexFlags.Global);
     let hay = "abc123def456ghi789xyz";
     let sw = Stopwatch();
     let acc = 0;

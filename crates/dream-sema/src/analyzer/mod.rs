@@ -412,7 +412,7 @@ pub struct Analyzer<'a> {
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
     type_visibility: HashMap<String, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
-    /// Locals whose value was moved into a sink parameter and must not be used again.
+    /// Sink RC params moved into a field/index store; further uses of the binding are errors.
     moved_locals: std::collections::HashSet<String>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
     /// annotation or `return` type). Used to resolve the type arguments of a generic union's

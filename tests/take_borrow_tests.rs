@@ -50,6 +50,52 @@ fn reuse_after_sink_is_allowed_via_copy() {
 }
 
 #[test]
+fn use_after_sink_field_store_is_error() {
+    // Storing a sink param into a field moves it — further uses of the param are hard errors
+    // (the old silent null caused empty Seq ranges / empty Regex patterns / runaway loops).
+    let code = r#"
+        class Box {
+            public value: string;
+            public constructor(value: string) {
+                this.value = value;
+                let again = value;
+            }
+        }
+        fun main(): void {
+            let _ = Box("hi");
+        }
+    "#;
+    let d = analyze_code(code);
+    assert!(d.has_errors(), "expected use-after-move error");
+    let msg = format!("{:?}", d);
+    assert!(
+        msg.contains("after move"),
+        "unexpected diagnostics: {}",
+        msg
+    );
+}
+
+#[test]
+fn borrow_param_reusable_after_field_store() {
+    let code = format!(
+        "{SYSTEM_STUB}
+        class Box {{
+            public value: string;
+            public constructor(borrow value: string) {{
+                this.value = value;
+                System.println(value);
+            }}
+        }}
+        fun main(): void {{
+            let _ = Box(\"hi\");
+        }}
+    "
+    );
+    let d = analyze_code(&code);
+    assert!(!d.has_errors(), "unexpected errors: {:?}", d);
+}
+
+#[test]
 fn sink_store_skips_retain_vs_borrow() {
     // Callee stores a string field: unmarked sink transfers +1 (no retain on store);
     // `borrow` must retain into the field.

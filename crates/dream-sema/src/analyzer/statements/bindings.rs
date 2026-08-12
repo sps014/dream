@@ -49,6 +49,7 @@ impl<'a> Analyzer<'a> {
             return;
         }
         self.record_capturing_fun_local(&name.text, &var_type, value.as_ref());
+        self.unmark_moved_local(&name.text);
         self.hir_declare_local(&name.text, &var_type, value);
         {
             let mut st = (*symbol_table).as_ref().borrow_mut();
@@ -344,6 +345,8 @@ impl<'a> Analyzer<'a> {
         self.current_expected_type = saved_expected;
         self.compare_data_type(&l, &r, &left.position, diagnostics)?;
         self.record_capturing_fun_local(&left.text, &l, value.as_ref());
+        // Rebinding clears a prior move (the name now owns a fresh value).
+        self.unmark_moved_local(&left.text);
         self.hir_assign_local(&left.text, value);
         Ok(())
     }

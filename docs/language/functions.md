@@ -198,6 +198,16 @@ keyword, like `ref`) for an explicit read-only/share parameter.
 | `borrow` | Callee borrows; caller keeps ownership |
 | `ref` | Mutable place alias — unchanged |
 
+After a sink parameter is **stored into a field or index**, that binding is moved: further uses of
+the parameter name are a compile error. Read through the destination instead:
+
+```dream
+public constructor(items: List<T>) {
+    this.items = items;
+    this.end = this.items.length; // OK — not `items.length` after the store
+}
+```
+
 ```dream
 fun sink(s: string): void {
     // `s` is owned here; storing it does not need an extra retain.

@@ -1,17 +1,23 @@
 //! Ownership helpers for sink-default ABI.
 //!
-//! Unmarked RC params are sinks at the callee. Callers move on last use or copy when the
-//! argument is still live (MIR [`RcInsertion`]); sema does not treat unmarked sinks as
-//! invalidating the caller binding.
+//! Unmarked RC params are sinks at the callee. Callers still copy into sink *calls* when the
+//! argument is live afterward (MIR [`RcInsertion`]) — so call sites do not invalidate the
+//! binding. Storing a sink param into a field/index **does** move it: further uses must go
+//! through the destination (e.g. `this.items.length`, not `items.length` after
+//! `this.items = items`).
 
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::ExpressionNode;
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;
 use std::collections::HashSet;
 
 impl<'a> super::Analyzer<'a> {
     pub(super) fn clear_moved_locals(&mut self) {
         self.moved_locals.clear();
+    }
+
+    pub(super) fn unmark_moved_local(&mut self, name: &str) {
+        self.moved_locals.remove(name);
     }
 
     pub(super) fn check_local_not_moved(
@@ -21,8 +27,35 @@ impl<'a> super::Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         if self.moved_locals.contains(name) {
-            diagnostics.report_error(format!("use of '{name}' after move"), span);
+            diagnostics.report_error(
+                format!(
+                    "use of '{name}' after move; the value was stored into a field or index — use that place instead"
+                ),
+                span,
+            );
         }
+    }
+
+    /// After `place = <ident>` where `ident` is a sink RC parameter: mark it moved.
+    pub(super) fn note_sink_store_move(
+        &mut self,
+        rhs: &ExpressionNode<'a>,
+        rhs_ty: &Type,
+        parent_function: &FunctionNode<'a>,
+    ) {
+        let ExpressionNode::Identifier(id) = rhs else {
+            return;
+        };
+        if id.text == "this" || id.text == "_" {
+            return;
+        }
+        if rhs_ty.is_unknown() || !self.type_is_rc_tracked(rhs_ty) {
+            return;
+        }
+        if !Self::is_sink_param(&id.text, parent_function) {
+            return;
+        }
+        self.moved_locals.insert(id.text.clone());
     }
 
     /// Hook after a resolved sink call. Unmarked sinks copy when live (see MIR), so this does
@@ -43,5 +76,17 @@ impl<'a> super::Analyzer<'a> {
 
     pub(super) fn restore_moved(&mut self, saved: HashSet<String>) {
         self.moved_locals = saved;
+    }
+
+    fn is_sink_param(name: &str, parent_function: &FunctionNode<'a>) -> bool {
+        parent_function
+            .parameters
+            .iter()
+            .any(|p| p.name.text == name && !p.is_ref && !p.is_borrow && p.name.text != "this")
+    }
+
+    fn type_is_rc_tracked(&mut self, ty: &Type) -> bool {
+        let id = self.type_ctx.lower(ty);
+        self.type_ctx.interner.is_rc_tracked(id)
     }
 }

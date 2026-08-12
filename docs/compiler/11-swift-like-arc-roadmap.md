@@ -52,7 +52,8 @@ ARC alone removes RC *tax*; beating a generational GC still needs fewer heap hit
    instances with only non-ref field accesses promote to locals (`crates/dream-mir/src/passes/sroa.rs`).
 2. **Clear-and-reuse** — `List`/`Map`/`Set.clear` keep capacity and zero live slots in place
    (no capacity-sized realloc). Prefer `clear` + refill over `new` each batch.
-3. **ScratchArena** — bump `Span<int>` from one owned slab; `reset()` rewinds (`system.core`).
+3. **ScratchArena** — bump `Span<T>` from one owned slab (`ScratchArena<T : unmanaged>`);
+   `reset()` rewinds (`system.core`).
 4. **Contiguous / SOA hot paths** — regex Pike-VM uses parallel `List<int>` / `List<int[]>`
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see

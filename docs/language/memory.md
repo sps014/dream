@@ -152,7 +152,9 @@ What `@unsafe` does **not** do: it does not insert runtime checks, and it does n
 - Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop — one growable UTF-8 buffer, one final `build()`.
 - Use `byte_size` / `byte_at` / byte-oriented helpers when you don't need scalar indices; scalar `char_at` / `substring` still work, but `substring` now copies a UTF-8 byte slice once instead of per-scalar `set`.
 - `List` / `Map` / `Set` `clear()` keeps capacity: live slots are zeroed in place (no capacity-sized realloc). Prefer `clear` + refill over allocating a new collection each batch.
-- `ScratchArena` bump-allocates short-lived `Span<int>` slices from one owned slab; `reset()` rewinds the cursor without freeing to the OS — use it for parse/match/fill scratch, not long-lived graphs.
+- `ScratchArena<T : unmanaged>` bump-allocates short-lived `Span<T>` slices from one owned slab;
+  `reset()` rewinds the cursor without freeing to the OS — use it for parse/match/fill scratch
+  (`ScratchArena<int>`, `ScratchArena<byte>`, …), not long-lived graphs.
 - `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release). Under `--release`, the inliner erases small `Span` / value-struct method call boundaries (including into `List.insert` / `push_all`), so those hot paths compile down to the same WAT as hand-written bulk copies.
 - The compiler's ARC passes elide retain/release pairs along Goto chains, transparent diamonds/loops, and postdominated transparent regions; last-use moves transfer ownership without an extra retain. Prefer clear ownership so elision has an easy cancel pattern.
 - Unmarked parameters sink into the callee (see [Functions](functions.md#ownership-sink-default-and-borrow)); mark readers `borrow`. Stores like `List.push(value)` skip a redundant retain when the arg is moved.

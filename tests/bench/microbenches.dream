@@ -225,12 +225,12 @@ fun bench_list_clear_reuse(iters: int): void {
 }
 
 fun bench_scratch_arena(iters: int): void {
-    let arena = ScratchArena(1 << 16);
+    let arena = ScratchArena<int>(1 << 14);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        let s = arena.alloc_ints(32);
+        let s = arena.alloc(32);
         s[0] = i;
         acc = acc + s[0];
         arena.reset();

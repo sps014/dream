@@ -222,21 +222,6 @@
     )
 )
 
-;; Atomic counterpart of `$retain` (`runtime/allocator.wat`), used for `@shared class` instances,
-;; which may be retained/released concurrently from more than one thread once a reference has
-;; crossed into a `WebWorker` closure.
-(func $retain_shared (param $ptr i32)
-    local.get $ptr
-    i32.eqz
-    br_if 0
-    local.get $ptr
-    i32.const 4
-    i32.sub
-    i32.const 1
-    i32.atomic.rmw.add
-    drop
-)
-
 ;; `Lock.acquire()`/`Lock.release()` (`src/stdlib/core/sync.dream`): `Lock` is an `@shared class`
 ;; with no fields of its own, so its embedded lock word sits at `this + 0` — these are thin
 ;; wrappers exposing `$__lock_acquire`/`$__lock_release` as callable methods (for critical sections

@@ -10,12 +10,9 @@ pub struct StructFieldInfo {
     /// Accessibility of the field. Private (default) fields may only be accessed from within the
     /// declaring type's own methods; `internal` fields from anywhere in the same module.
     pub visibility: Visibility,
-    /// True when declared `weak`: an `Option<T>` field that does not hold a strong reference to
-    /// its referent and is excluded from the reference-cycle graph.
+    /// True when declared `weak`: an `Option<T>` field that does not keep its referent alive;
+    /// the GC clears it to `None` once the referent is unreachable.
     pub is_weak: bool,
-    /// True when declared `unowned`: a plain reference-type field that does not hold a strong
-    /// reference to its referent and is excluded from the reference-cycle graph.
-    pub is_unowned: bool,
     /// Optional `@location(N)` override for vertex attributes / varyings.
     pub location: Option<u32>,
     /// Optional `@builtin("name")` for shader I/O (e.g. `position`, `frag_depth`).
@@ -25,10 +22,9 @@ pub struct StructFieldInfo {
 }
 
 impl StructFieldInfo {
-    /// True when this field is excluded from ARC strong-reference bookkeeping (`weak` or
-    /// `unowned`), and therefore does not contribute an edge to the reference-cycle graph.
+    /// True when this field does not keep its referent alive (`weak`).
     pub fn is_non_owning(&self) -> bool {
-        self.is_weak || self.is_unowned
+        self.is_weak
     }
 }
 
@@ -114,7 +110,6 @@ impl StructTable {
                     offset: current_offset,
                     visibility: field.visibility,
                     is_weak: field.is_weak,
-                    is_unowned: field.is_unowned,
                     location: dream_abi::attributes::field_location_override(&field.attributes),
                     builtin: dream_abi::attributes::field_builtin_name(&field.attributes),
                     interpolate: dream_abi::attributes::field_interpolate_mode(&field.attributes),

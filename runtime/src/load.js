@@ -141,6 +141,20 @@ export async function load(source, options = {}) {
     }
   }
 
+  // Compiler-emitted imports (e.g. `jsRetain` / `jsRelease`) appear in the WASM module but are not
+  // listed in `.abi.json` — bind any still-missing Dream functions from the host factory.
+  for (const imp of WebAssembly.Module.imports(wasmModule)) {
+    if (imp.kind !== "function" || imp.module !== "Dream") continue;
+    const bucket = (importObject.Dream ||= {});
+    if (bucket[imp.name]) continue;
+    const resolved = builtinDream[imp.name];
+    bucket[imp.name] = resolved
+      ? wrapFor(resolved, null)
+      : () => {
+          throw new Error(`no JS implementation for Dream.${imp.name}`);
+        };
+  }
+
   const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
   instance = new DreamInstance(wasmInstance);
   return instance;

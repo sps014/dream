@@ -141,4 +141,4 @@ nav:
     - Design notes:
       - Nullable purge: compiler/09-nullable-purge-design-note.md
       - Stack alloc & mono: compiler/10-stack-alloc-and-mono-design-note.md
-      - Swift-like ARC: compiler/11-swift-like-arc-roadmap.md
+      - Tiered GC: compiler/12-tiered-gc.md

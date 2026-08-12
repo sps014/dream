@@ -1,31 +1,29 @@
-;; --- `weak`/`unowned` side table -----------------------------------------------------------------
+;; --- `weak` side table (GC) ---------------------------------------------------------------------
 ;;
-;; A `weak`/`unowned` field never contributes to its referent's strong reference count (see
-;; `docs/language/memory.md`), so ARC's ordinary retain/release bookkeeping cannot reset it when the
-;; referent is freed. Instead, every live `weak`/`unowned` slot registers itself here (keyed by the
-;; referent it currently points at); when that referent's strong count reaches zero, `$weak_clear_all`
-;; walks the registrations for it and poisons every slot before it is freed, so a later read observes
-;; `None` (`weak`) or traps (`unowned`) instead of a dangling pointer.
+;; A `weak` field must not keep its referent alive. The collector finds unreachable objects via
+;; tracing; before finalizers run / the block is reclaimed, `$weak_clear_all` poisons every live
+;; `weak` slot that watched that referent so a later read observes `Option.None` instead of a
+;; dangling pointer. See `docs/language/memory.md` and `docs/compiler/12-tiered-gc.md`.
 ;;
 ;; The table is one unbucketed singly linked list of small heap nodes (private allocations, tag 0,
-;; never touched by `$retain`/`$release_*`/`$release_object` — they are managed exclusively by the
-;; three functions below via direct `$malloc`/`$free`). This is O(n) per operation, which is the right
-;; trade-off here: `weak`/`unowned` fields are rare (this table exists purely to break reference
-;; cycles), so a hash table would add complexity without a measurable win.
+;; never traced as program objects — managed exclusively by the three functions below via
+;; `$malloc` / `$__free_locked`). O(n) per operation is fine: `weak` fields are rare.
+;;
+;; `$weak_clear_all` is called from GC finalizer / sweep paths while the allocator lock is already
+;; held, so it must free watch nodes with `$__free_locked` (not `$free`, which would re-acquire the
+;; lock and deadlock under threads).
 ;;
 ;; Node layout (20 bytes, `$malloc(20, 0)`):
 ;;   +0  target : i32   -- the referent this registration watches
-;;   +4  slot   : i32   -- where to write on poison: for `weak`, the address of the private weak-box's
-;;                         discriminant word (see below); for `unowned`, the field's own address
-;;   +8  kind   : i32   -- 0 = weak, 1 = unowned
-;;   +12 extra  : i32   -- `weak` only: the `Option<T>` union's `None` discriminant, written to `slot`
-;;                         on poison (payload at `slot+4` is zeroed alongside it); unused for `unowned`
+;;   +4  slot   : i32   -- address of the private weak-box's discriminant word
+;;   +8  kind   : i32   -- 0 = weak→None; 1 = legacy unowned (unused; `unowned` is deleted)
+;;   +12 extra  : i32   -- `Option.None` discriminant written to `slot` on poison
 ;;   +16 next   : i32   -- next node, or 0
 
 (global $weak_list_head (mut i32) (i32.const 0))
 
-;; Registers `slot` as watching `target`. A no-op when `target` is null (an unset/`None` field has
-;; nothing to watch). Called once per store into a live `weak`/`unowned` field.
+;; Registers `slot` as watching `target`. A no-op when `target` is null. Called once per store into
+;; a live `weak` field (kind 0).
 (func $weak_register (param $target i32) (param $slot i32) (param $kind i32) (param $extra i32)
     (local $node i32)
     local.get $target
@@ -62,9 +60,8 @@
     global.set $weak_list_head
 )
 
-;; Removes the (unique) registration for `(target, slot)`, if any, and frees its node. Called before a
-;; `weak`/`unowned` slot is overwritten or torn down, so a stale registration never outlives the slot
-;; it watches (which could otherwise poison unrelated memory reused for something else later).
+;; Removes the (unique) registration for `(target, slot)`, if any, and frees its node. Called before
+;; a `weak` slot is overwritten or torn down.
 (func $weak_unregister (param $target i32) (param $slot i32)
     (local $prev i32)
     (local $curr i32)
@@ -136,9 +133,9 @@
     )
 )
 
-;; Called from every generated `$release_<Class>`, right before the object is freed: poisons every
-;; live `weak`/`unowned` slot that watches `target` (there may be more than one), unregistering and
-;; freeing each watch node as it goes. A no-op when nothing watches `target` (the common case).
+;; Called from GC when `target` is unreachable: poisons every live `weak` slot watching it
+;; (kind 0 → `Option.None`), unregistering and freeing each watch node. Kind 1 is legacy dead code.
+;; Safe under the allocator lock (uses `$__free_locked`).
 (func $weak_clear_all (param $target i32)
     (local $prev i32)
     (local $curr i32)
@@ -182,8 +179,7 @@
                     i32.eqz
                     (if
                         (then
-                            ;; weak: `slot` is the private weak-box's discriminant word; reset it to
-                            ;; `None` and zero the payload word right after it.
+                            ;; weak: reset private weak-box discriminant to None; zero payload.
                             local.get $slot
                             local.get $curr
                             i32.const 12
@@ -197,7 +193,7 @@
                             i32.store
                         )
                         (else
-                            ;; unowned: `slot` is the field's own address; poison it directly.
+                            ;; legacy unowned: poison the field word (unused under GC).
                             local.get $slot
                             i32.const 0
                             i32.store
@@ -219,7 +215,7 @@
                         )
                     )
                     local.get $curr
-                    call $free
+                    call $__free_locked
                 )
                 (else
                     local.get $curr

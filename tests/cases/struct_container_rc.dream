@@ -66,5 +66,6 @@ fun main() {
     in_class();
     in_array();
     in_union();
+    Debug.gc_collect();
     System.println("live_delta=" + (Debug.live_objects() - base).to_string());
 }

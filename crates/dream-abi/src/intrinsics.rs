@@ -123,8 +123,8 @@ pub const ATTR_DEBUG_HEAP_PTR: &str = "debug_get_heap_ptr";
 pub const ATTR_DEBUG_LIVE_OBJECTS: &str = "debug_get_live_objects";
 /// `Debug.total_allocations()` — monotonic count of every allocation ever made.
 pub const ATTR_DEBUG_TOTAL_ALLOCATIONS: &str = "debug_get_total_allocations";
-/// `Debug.ref_count(o)` — live reference count of a heap value.
-pub const ATTR_DEBUG_REF_COUNT: &str = "debug_get_ref_count";
+/// `Debug.gc_collect()` — force a full (Gen0+old) garbage collection.
+pub const ATTR_DEBUG_GC_COLLECT: &str = "gc_collect_full";
 /// `Bytes.of<T>(v)` — raw-copy a blittable value's bytes into a fresh `byte[]` buffer.
 pub const ATTR_TO_BYTES: &str = "to_bytes";
 /// `Bytes.to<T>(bytes)` — reconstruct a blittable value from a `byte[]` buffer (a raw copy
@@ -168,7 +168,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_DEBUG_HEAP_PTR,
     ATTR_DEBUG_LIVE_OBJECTS,
     ATTR_DEBUG_TOTAL_ALLOCATIONS,
-    ATTR_DEBUG_REF_COUNT,
+    ATTR_DEBUG_GC_COLLECT,
     ATTR_TO_BYTES,
     ATTR_FROM_BYTES,
     ATTR_ARRAY_REALLOC,
@@ -223,8 +223,8 @@ pub enum IntrinsicOp {
     DebugLiveObjects,
     /// `Debug.total_allocations()` — monotonic allocation count.
     DebugTotalAllocations,
-    /// `Debug.ref_count(o)` — live reference count of a heap value.
-    DebugRefCount,
+    /// `Debug.gc_collect()` — force a full garbage collection.
+    DebugGcCollect,
     /// `Bytes.of<T>(v)` — raw-copy a blittable value's bytes into a fresh `byte[]`.
     ToBytes,
     /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of `T` from a `byte[]` buffer.
@@ -266,7 +266,7 @@ impl IntrinsicOp {
             ATTR_DEBUG_HEAP_PTR => IntrinsicOp::DebugHeapPtr,
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,
             ATTR_DEBUG_TOTAL_ALLOCATIONS => IntrinsicOp::DebugTotalAllocations,
-            ATTR_DEBUG_REF_COUNT => IntrinsicOp::DebugRefCount,
+            ATTR_DEBUG_GC_COLLECT => IntrinsicOp::DebugGcCollect,
             ATTR_TO_BYTES => IntrinsicOp::ToBytes,
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,

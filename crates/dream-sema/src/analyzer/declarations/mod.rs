@@ -12,8 +12,7 @@
 //!   monomorphization, the runtime interface table, and `validate_implements`.
 //! - [`register_methods`]: struct-method and `extend`-block method registration plus object-protocol
 //!   override validation.
-//! - [`reference_cycles`]: `weak`/`unowned` field validation and the compile-time class
-//!   reference-cycle check.
+//! - [`reference_cycles`]: `weak` field validation (tracing GC collects cycles; no cycle checker).
 //! - [`imports`]: resolves every aliased `import a.b.c as x;` against the function table once
 //!   registration completes.
 //!

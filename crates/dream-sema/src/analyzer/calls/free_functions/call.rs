@@ -239,9 +239,17 @@ impl<'a> Analyzer<'a> {
         // Indirect call: if the called name is a local variable of function type, validate the
         // arguments against the function-type signature and return its result type.
         // `fun(ref T)` is encoded as `RefBox<T>` in the parameter list.
-        if let Ok(Type::Function(param_types, ret)) =
-            (*symbol_table).as_ref().borrow().get_symbol(name)
-        {
+        let local_fun = match (*symbol_table).as_ref().borrow().get_symbol(name) {
+            Ok(Type::Function(param_types, ret)) => Some((param_types, ret)),
+            _ => None,
+        };
+        if let Some((param_types, ret)) = local_fun {
+            // `f()` is a `FunctionCall` node (not an `Identifier` read), so mark the local used
+            // here — otherwise only `(f)()` counted as a use via the parenthesized path.
+            (*symbol_table)
+                .as_ref()
+                .borrow_mut()
+                .mark_used(&name.text);
             if param_types.len() != params_types.len() {
                 diagnostics.report_error(
                     format!(

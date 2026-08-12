@@ -54,7 +54,7 @@ mod tests {
         let fun = i.func(vec![i.int()], i.int());
         assert!(
             i.is_reference(fun),
-            "fun(...) values are ARC-managed funcboxes"
+            "fun(...) values are GC-managed funcboxes"
         );
         let js = i.js();
         assert!(
@@ -62,11 +62,11 @@ mod tests {
             "js is a host handle id, not a Dream heap pointer"
         );
         assert!(
-            i.is_rc_tracked(js),
-            "js ownership is tracked via host retain/release"
+            i.is_gc_tracked(js),
+            "js handles are GC-tracked for host registry lifetime"
         );
-        assert!(i.is_rc_tracked(i.string()));
-        assert!(!i.is_rc_tracked(i.int()));
+        assert!(i.is_gc_tracked(i.string()));
+        assert!(!i.is_gc_tracked(i.int()));
     }
 
     #[test]

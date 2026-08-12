@@ -317,6 +317,20 @@ async function load(source, options = {{}}) {{
     }}
   }}
 
+  // Compiler-emitted imports (`jsRetain` / `jsRelease`) appear in the WASM module but are not
+  // listed in `.abi.json` — bind any still-missing Dream functions from the host factory.
+  for (const imp of WebAssembly.Module.imports(wasmModule)) {{
+    if (imp.kind !== "function" || imp.module !== "Dream") continue;
+    const bucket = (importObject.Dream ||= {{}});
+    if (bucket[imp.name]) continue;
+    const resolved = builtinDream[imp.name];
+    bucket[imp.name] = resolved
+      ? wrapFor(resolved, null)
+      : () => {{
+          throw new Error(`no JS implementation for Dream.${{imp.name}}`);
+        }};
+  }}
+
   const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
   instance = new DreamInstance(wasmInstance);
   return instance;
@@ -457,6 +471,17 @@ mod tests {
         let text = assemble_selective_runtime(&live, JsRuntimeTarget::Web).expect("assemble");
         assert!(text.contains("makeGpuHost"));
         assert!(!text.contains("makeFsHost"));
+    }
+
+    #[test]
+    fn selective_runtime_wires_dream_imports() {
+        let live = vec![("Dream".into(), "jsGlobal".into())];
+        let text = assemble_selective_runtime(&live, JsRuntimeTarget::Web).expect("assemble");
+        assert!(
+            text.contains("WebAssembly.Module.imports(wasmModule)"),
+            "load() must bind Dream imports missing from abi.json"
+        );
+        assert!(text.contains("jsGlobal") || text.contains("makeJsHost"));
     }
 
     #[test]

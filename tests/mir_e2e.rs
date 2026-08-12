@@ -27,6 +27,10 @@ use wasmtime::*;
 // reason instead of silently flipping the ratchet.
 const XFAIL: &[(&str, &str)] = &[];
 
+/// Cases that `import system.ui` (DOM/`@js` web-only APIs). Compiles with the `web` availability
+/// target; runtime still uses wasmtime with unknown imports stubbed (same as `e2e_tests`).
+const WEB_COMPILE_CASES: &[&str] = &["state_map"];
+
 #[derive(Clone)]
 struct TestEnv {
     output: Arc<Mutex<String>>,
@@ -50,7 +54,14 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     let dream_str = dream_file.to_str().unwrap().to_string();
     let wat_str = wat_path.to_str().unwrap().to_string();
 
-    let compiler = Compiler::new(Target::Wasm);
+    let stem = dream_file
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let mut compiler = Compiler::new(Target::Wasm);
+    if WEB_COMPILE_CASES.contains(&stem) {
+        compiler = compiler.with_web_compile_target();
+    }
     compiler
         .compile(&dream_str, &wat_str)
         .map_err(|e| format!("compile: {e:?}"))?;

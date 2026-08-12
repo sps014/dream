@@ -8,12 +8,14 @@ fun make_adder(n: int): fun(int): int {
 fun main(): void {
     let warm: fun(int): int = make_adder(0);
     warm = make_adder(0);
+    Debug.gc_collect();
     let base = Debug.live_objects();
 
     let held: fun(int): int = make_adder(7);
     let mid = Debug.live_objects() - base;
     held = make_adder(0);
     held = make_adder(0);
+    Debug.gc_collect();
     let after = Debug.live_objects() - base;
 
     System.println("held_delta=" + mid.to_string());

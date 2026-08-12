@@ -90,6 +90,7 @@ pub fn emit_module_with_debug(
         ftable,
         value_glue,
     } = build_tables(mir, interner, locate_panics);
+    let value_trace = value_trace_types(mir, interner);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
 
     // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
@@ -199,6 +200,9 @@ pub fn emit_module_with_debug(
                 zero
             );
         }
+        if interner.is_reference(g.ty) {
+            let _ = writeln!(out, "(global $__groot{} (mut i32) (i32.const 0))", g.id.0);
+        }
     }
 
     // Debug-info spill pool: one exported mutable `i64` global per live-local slot. Each named local
@@ -233,7 +237,7 @@ pub fn emit_module_with_debug(
     out.push('\n');
     emit_js_marshal(&mut out, mir, interner, &strings, &tags);
     out.push('\n');
-    emit_release_funcs(&mut out, mir, interner, &tags, &value_glue);
+    emit_gc_funcs(&mut out, mir, interner, &tags, &value_trace, &value_glue);
     out.push('\n');
     emit_value_glue(&mut out, mir, interner, &value_glue);
     out.push('\n');
@@ -374,20 +378,38 @@ pub fn emit_module_with_debug(
     }
 
     // Every instantiation of this module (the owner, and every `WebWorker` spawned afterward) runs
-    // `(start)` against the *same* shared linear memory. The bump-pointer heap high-water mark
-    // (`HEAP_PTR_ADDR`) must therefore be initialized exactly once across all of them, not reset to
-    // `heap_base` on every instantiation (that would let a later instance re-bump-allocate over an
-    // earlier instance's live objects). An atomic compare-exchange from 0 makes this init race-safe:
-    // whichever instance's `$__runtime_init` runs first wins the exchange, every later one is a no-op.
+    // `(start)` against the *same* shared linear memory. GC nursery / heap tables must therefore be
+    // initialized exactly once across all of them. An atomic compare-exchange on `NURSERY_START_ADDR`
+    // from 0 makes this init race-safe: the winner calls `$__gc_init` (which sets `HEAP_PTR` past
+    // the root/remset/mark-stack tables) and permanently roots module globals; every later instance
+    // skips that.
+    let gc_globals: Vec<u32> = mir
+        .globals
+        .iter()
+        .filter(|g| interner.is_reference(g.ty))
+        .map(|g| g.id.0)
+        .collect();
     let _ = writeln!(out, "(func $__runtime_init");
+    out.push_str("  (local $first i32)\n");
     let _ = writeln!(
         out,
-        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  drop",
-        crate::abi::HEAP_PTR_ADDR,
+        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  i32.eqz\n  local.set $first\n  local.get $first\n  (if (then\n    i32.const {}\n    call $__gc_init\n  ))",
+        crate::abi::NURSERY_START_ADDR,
+        heap_base,
         heap_base
     );
     if has_init {
         let _ = writeln!(out, "  call ${}", crate::lower::INIT_FN_NAME);
+    }
+    if !gc_globals.is_empty() {
+        out.push_str("  local.get $first\n  (if (then\n");
+        for &gid in &gc_globals {
+            let _ = writeln!(
+                out,
+                "    global.get $g{gid}\n    call $gc_root_push\n    global.set $__groot{gid}"
+            );
+        }
+        out.push_str("  ))\n");
     }
     out.push_str(")\n");
     out.push_str("(start $__runtime_init)\n");
@@ -438,10 +460,10 @@ pub fn emit_module_with_debug(
 }
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which
-/// `print`/`println` lower to) followed by user `extern fun` interop imports. When any Dream `js*`
-/// bridge is imported, also emit `$js_retain` / `$js_release` for host-side handle RC (compiler-
-/// emitted — not declared in the stdlib prelude). Call sites reference each import's internal
-/// `$name`; the `module`/`field` pair names the host binding.
+/// `print`/`println` lower to) followed by user `extern fun` interop imports. When the module
+/// uses Dream `js` handles, also emit `$js_retain` / `$js_unregister` (host fields `jsRetain` /
+/// `jsRelease`) so overwrite/null paths can keep the host registry in sync. Call sites reference
+/// each import's internal `$name`; the `module`/`field` pair names the host binding.
 pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeInterner) {
     for (name, param) in [
         ("print_string", "i32"),
@@ -456,9 +478,9 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
             crate::abi::ENV_MODULE
         );
     }
-    let needs_js_rc = mir.imports.iter().any(|imp| imp.field.starts_with("js"));
+    let needs_js_host = module_needs_js_host(mir, interner);
     for imp in &mir.imports {
-        // Compiler-emitted `$js_retain`/`$js_release` below replace any stdlib `jsRelease` extern.
+        // Compiler-emitted `$js_retain` / `$js_unregister` below replace any stdlib aliases.
         if imp.field == "jsRelease" || imp.field == "jsRetain" {
             continue;
         }
@@ -490,14 +512,45 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
             imp.module, imp.field, imp.name, params, result
         );
     }
-    if needs_js_rc {
+    if needs_js_host {
         let _ = writeln!(
             out,
             "(import \"Dream\" \"jsRetain\" (func $js_retain (param i32)))"
         );
         let _ = writeln!(
             out,
-            "(import \"Dream\" \"jsRelease\" (func $js_release (param i32)))"
+            "(import \"Dream\" \"jsRelease\" (func $js_unregister (param i32)))"
         );
     }
+}
+
+/// True when this module stores or roots any Dream `js` handle (host registry lifetime).
+fn module_needs_js_host(mir: &crate::Mir, interner: &TypeInterner) -> bool {
+    if mir.imports.iter().any(|imp| imp.field.starts_with("js")) {
+        return true;
+    }
+    let is_js = |t: TypeId| matches!(interner.kind(t), TyKind::Js);
+    for f in &mir.functions {
+        if f.locals.iter().any(|d| is_js(d.ty)) {
+            return true;
+        }
+    }
+    if mir.globals.iter().any(|g| is_js(g.ty)) {
+        return true;
+    }
+    for layout in mir.layouts.structs.values() {
+        if layout.fields.iter().any(|f| is_js(f.ty)) {
+            return true;
+        }
+    }
+    for layout in mir.layouts.unions.values() {
+        if layout
+            .variants
+            .iter()
+            .any(|v| v.fields.iter().any(|f| is_js(f.ty)))
+        {
+            return true;
+        }
+    }
+    false
 }

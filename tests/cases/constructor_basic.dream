@@ -34,5 +34,6 @@ fun main() {
     System.println(p.y);
 
     make(7);
+    Debug.gc_collect();
     System.println(999);
 }

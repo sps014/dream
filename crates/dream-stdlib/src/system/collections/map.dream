@@ -87,18 +87,16 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let i = 0;
         while (i < old_cap) {
             if (old_states[i] == hash_slot_occupied()) {
-                this.set(old_keys[i], old_values[i]);
+                // Must not call `set` here: that can re-enter `rehash` and blow the guest stack
+                // if `cap` is transiently wrong across a Gen0 (moving `this`).
+                this.place_entry(old_keys[i], old_values[i]);
             }
             i = i + 1;
         }
     }
 
-    // Inserts or updates the value for a key.
-    @set_indexer
-    public fun set(key: K, value: V): void {
-        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
-            this.rehash();
-        }
+    // Probe-insert without a load-factor grow. Used by `set` after the grow check and by `rehash`.
+    fun place_entry(key: K, value: V): void {
         let idx = this.home(key);
         let first_tomb = -1;
         let placed = false;
@@ -136,6 +134,15 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
                 }
             }
         }
+    }
+
+    // Inserts or updates the value for a key.
+    @set_indexer
+    public fun set(key: K, value: V): void {
+        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
+            this.rehash();
+        }
+        this.place_entry(key, value);
     }
 
     // True if the map contains the key.

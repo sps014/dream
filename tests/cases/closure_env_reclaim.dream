@@ -19,12 +19,14 @@ fun main(): void {
     warm(0);
     warm = make_adder(0);
 
+    Debug.gc_collect();
     let base = Debug.live_objects();
     let i = 0;
     while (i < 50) {
         once(i);
         i = i + 1;
     }
+    Debug.gc_collect();
     let delta = Debug.live_objects() - base;
     System.println("live_delta=" + delta.to_string());
 }

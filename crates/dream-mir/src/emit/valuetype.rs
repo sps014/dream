@@ -1,14 +1,14 @@
 //! Codegen support for inline value (`struct`) types.
 //!
 //! A value struct is stored *inline* (its bytes live directly in a shadow-stack frame slot, a
-//! container field/element, or a union payload) rather than as a heap-allocated, reference-counted
-//! pointer. At the WASM level a value-struct local is an `i32` holding the **address** of its
-//! storage; reading such a place yields that address (never a load), and moving a value struct into
-//! a new location performs a byte-wise copy plus a recursive retain of any reference fields.
+//! container field/element, or a union payload) rather than as a heap-allocated object. At the WASM
+//! level a value-struct local is an `i32` holding the **address** of its storage; reading such a
+//! place yields that address (never a load), and moving a value struct into a new location performs
+//! a byte-wise copy. Embedded heap refs are GC roots (shadow stack / `$gc_trace_*`); `$__vs_retain`
+//! / `$__vs_drop` remain only for `js` handles and `del()`.
 //!
 //! This module computes, per function, the shadow-frame layout and the ownership classification of
-//! each value-struct local, and emits the per-type retain/drop glue (`$__vs_retain_<T>` /
-//! `$__vs_drop_<T>`) that keeps reference fields embedded inside value structs balanced.
+//! each value-struct local, and emits the per-type retain/drop glue when needed.
 
 use super::*;
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement};
@@ -37,6 +37,59 @@ pub(crate) struct ValueFrame {
     kinds: HashMap<Local, ValueLocalKind>,
     /// Total frame size in bytes (0 when the function has no owning value locals).
     pub size: u32,
+}
+
+/// Absolute offsets of every heap-reference field embedded in value type `ty` (including nested
+/// value structs). Used to register shadow-stack slots as GC roots. Union variants are unioned
+/// conservatively (all variant ref offsets), which may keep dead-variant payloads alive for one
+/// collection cycle — acceptable for v1.
+pub(crate) fn value_gc_ref_offsets(
+    ty: TypeId,
+    layouts: &dream_hir::LayoutTable,
+    interner: &TypeInterner,
+) -> Vec<u32> {
+    let mut out = Vec::new();
+    value_gc_ref_offsets_into(ty, 0, layouts, interner, &mut out);
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+fn value_gc_ref_offsets_into(
+    ty: TypeId,
+    base: u32,
+    layouts: &dream_hir::LayoutTable,
+    interner: &TypeInterner,
+    out: &mut Vec<u32>,
+) {
+    if interner.is_reference(ty) {
+        out.push(base);
+        return;
+    }
+    if !interner.is_value_type(ty) {
+        return;
+    }
+    if let Some(layout) = layouts.get(ty) {
+        for f in &layout.fields {
+            if interner.is_reference(f.ty) {
+                out.push(base + f.offset);
+            } else if interner.is_value_type(f.ty) {
+                value_gc_ref_offsets_into(f.ty, base + f.offset, layouts, interner, out);
+            }
+        }
+        return;
+    }
+    if let Some(u) = layouts.union(ty) {
+        for v in &u.variants {
+            for f in &v.fields {
+                if interner.is_reference(f.ty) {
+                    out.push(base + f.offset);
+                } else if interner.is_value_type(f.ty) {
+                    value_gc_ref_offsets_into(f.ty, base + f.offset, layouts, interner, out);
+                }
+            }
+        }
+    }
 }
 
 impl ValueFrame {
@@ -141,33 +194,29 @@ fn is_value_place_copy(rv: &Rvalue) -> bool {
     )
 }
 
-/// The `$__vs_retain_<T>` symbol: retains (increments) every reference reachable *by value* inside a
-/// value struct after a byte-wise copy, so the copy owns its own references.
+/// The `$__vs_retain_<T>` symbol: host-handle retain (`js`) and nested glue after a byte-wise copy.
+/// Heap refs inside value structs are GC roots — no retain under the tiered GC.
 pub(crate) fn vs_retain_sym(name: &str) -> String {
     format!("$__vs_retain_{}", name)
 }
 
-/// The `$__vs_drop_<T>` symbol: runs `del()` (if any) then releases every reference reachable by
-/// value inside a value struct, when an owning value goes out of scope or is overwritten.
+/// The `$__vs_drop_<T>` symbol: runs `del()` (if any) and unregisters embedded `js` handles when an
+/// owning value goes out of scope or is overwritten. Heap refs need no release under GC.
 pub(crate) fn vs_drop_sym(name: &str) -> String {
     format!("$__vs_drop_{}", name)
 }
 
-/// The set of value-struct types that require retain/drop glue: those that (transitively) embed a
-/// reference field, or declare a `del()` destructor. Purely-scalar value structs need none, so their
-/// copies and drops are plain byte moves with no bookkeeping.
+/// Value types that need `$__vs_retain`/`$__vs_drop`: `del()`, embedded `js`, or a nested glue type.
+/// Plain GC heap refs do **not** qualify — those are handled by root maps / `$gc_trace_*`.
 pub(super) fn value_glue_types(mir: &crate::Mir, interner: &TypeInterner) -> HashSet<TypeId> {
     let fn_names: HashSet<&str> = mir.functions.iter().map(|f| f.name.as_str()).collect();
     let mut out = HashSet::new();
-    let struct_keys: Vec<TypeId> = mir.layouts.structs.keys().copied().collect();
-    for ty in struct_keys {
+    for ty in mir.layouts.structs.keys().copied() {
         if interner.is_value_type(ty) {
             needs_glue(ty, mir, interner, &fn_names, &mut out, &mut HashSet::new());
         }
     }
-    // Value unions can also embed references (via a value-struct payload), so they too may need glue.
-    let union_keys: Vec<TypeId> = mir.layouts.unions.keys().copied().collect();
-    for ty in union_keys {
+    for ty in mir.layouts.unions.keys().copied() {
         if interner.is_value_union(ty) {
             needs_glue(ty, mir, interner, &fn_names, &mut out, &mut HashSet::new());
         }
@@ -175,9 +224,29 @@ pub(super) fn value_glue_types(mir: &crate::Mir, interner: &TypeInterner) -> Has
     out
 }
 
-/// Determines whether value type `ty` (a value struct or value union) needs glue, memoizing the
-/// answer into `out` (the set of glue-requiring types). `visiting` guards the recursion (value-type
-/// cycles are a rejected error).
+/// Value types whose embedded heap refs must be visited by `$gc_trace_*` when the value is stored
+/// inline inside a heap object or array element. Distinct from [`value_glue_types`]: Span-like
+/// values need tracing but not retain/drop.
+pub(super) fn value_trace_types(mir: &crate::Mir, interner: &TypeInterner) -> HashSet<TypeId> {
+    let mut out = HashSet::new();
+    for ty in mir.layouts.structs.keys().copied() {
+        if interner.is_value_type(ty) {
+            needs_trace(ty, mir, interner, &mut out, &mut HashSet::new());
+        }
+    }
+    for ty in mir.layouts.unions.keys().copied() {
+        if interner.is_value_union(ty) {
+            needs_trace(ty, mir, interner, &mut out, &mut HashSet::new());
+        }
+    }
+    out
+}
+
+fn field_needs_glue(ty: TypeId, interner: &TypeInterner) -> bool {
+    matches!(interner.kind(ty), TyKind::Js)
+}
+
+/// Retain/drop glue only — not mere GC-tracked heap refs.
 fn needs_glue(
     ty: TypeId,
     mir: &crate::Mir,
@@ -192,13 +261,12 @@ fn needs_glue(
     if !visiting.insert(ty) {
         return false;
     }
-    // A value union needs glue when any variant payload is a reference or a glue-needing value type.
     if interner.is_value_union(ty) {
         let mut needs = false;
         if let Some(u) = mir.layouts.unions.get(&ty) {
             for v in &u.variants {
                 for f in &v.fields {
-                    if interner.is_rc_tracked(f.ty)
+                    if field_needs_glue(f.ty, interner)
                         || (interner.is_value_type(f.ty)
                             && needs_glue(f.ty, mir, interner, fn_names, out, visiting))
                     {
@@ -219,9 +287,62 @@ fn needs_glue(
     };
     let mut needs = fn_names.contains(format!("{}_del", layout.name).as_str());
     for f in &layout.fields {
-        if interner.is_rc_tracked(f.ty)
+        if field_needs_glue(f.ty, interner)
             || (interner.is_value_type(f.ty)
                 && needs_glue(f.ty, mir, interner, fn_names, out, visiting))
+        {
+            needs = true;
+        }
+    }
+    visiting.remove(&ty);
+    if needs {
+        out.insert(ty);
+    }
+    needs
+}
+
+/// Whether value type `ty` embeds any GC-tracked heap ref (directly or nested).
+fn needs_trace(
+    ty: TypeId,
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    out: &mut HashSet<TypeId>,
+    visiting: &mut HashSet<TypeId>,
+) -> bool {
+    if out.contains(&ty) {
+        return true;
+    }
+    if !visiting.insert(ty) {
+        return false;
+    }
+    if interner.is_value_union(ty) {
+        let mut needs = false;
+        if let Some(u) = mir.layouts.unions.get(&ty) {
+            for v in &u.variants {
+                for f in &v.fields {
+                    if interner.is_gc_tracked(f.ty)
+                        || (interner.is_value_type(f.ty)
+                            && needs_trace(f.ty, mir, interner, out, visiting))
+                    {
+                        needs = true;
+                    }
+                }
+            }
+        }
+        visiting.remove(&ty);
+        if needs {
+            out.insert(ty);
+        }
+        return needs;
+    }
+    let Some(layout) = mir.layouts.structs.get(&ty) else {
+        visiting.remove(&ty);
+        return false;
+    };
+    let mut needs = false;
+    for f in &layout.fields {
+        if interner.is_gc_tracked(f.ty)
+            || (interner.is_value_type(f.ty) && needs_trace(f.ty, mir, interner, out, visiting))
         {
             needs = true;
         }
@@ -249,7 +370,7 @@ pub(super) fn emit_value_glue(
         // `$__vs_retain_<T>(ptr)`: retain each reference field; recurse into value fields.
         let _ = writeln!(
             out,
-            "(func {} (param $ptr i32)",
+            "(func {} (param $ptr i32) (local $h i32)",
             vs_retain_sym(&layout.name)
         );
         for f in &layout.fields {
@@ -258,7 +379,11 @@ pub(super) fn emit_value_glue(
         out.push_str(")\n");
 
         // `$__vs_drop_<T>(ptr)`: run `del()` (if any), then release each reference field / recurse.
-        let _ = writeln!(out, "(func {} (param $ptr i32)", vs_drop_sym(&layout.name));
+        let _ = writeln!(
+            out,
+            "(func {} (param $ptr i32) (local $h i32)",
+            vs_drop_sym(&layout.name)
+        );
         let del = format!("{}_del", layout.name);
         if fn_names.contains(del.as_str()) {
             let _ = writeln!(out, "  (local.get $ptr) (call ${})", del);
@@ -280,13 +405,13 @@ pub(super) fn emit_value_glue(
                 GlueOp::Retain => vs_retain_sym(&layout.name),
                 GlueOp::Drop => vs_drop_sym(&layout.name),
             };
-            let _ = writeln!(out, "(func {} (param $ptr i32)", sym);
+            let _ = writeln!(out, "(func {} (param $ptr i32) (local $h i32)", sym);
             for v in &layout.variants {
                 let live: Vec<&dream_hir::FieldLayout> = v
                     .fields
                     .iter()
                     .filter(|f| {
-                        interner.is_rc_tracked(f.ty)
+                        field_needs_glue(f.ty, interner)
                             || (interner.is_value_type(f.ty) && glue.contains(&f.ty))
                     })
                     .collect();
@@ -331,20 +456,24 @@ fn emit_field_glue(
             let _ = write!(out, " (i32.const {}) (i32.add)", f.offset);
         }
     };
-    if interner.is_rc_tracked(f.ty) {
+    if matches!(interner.kind(f.ty), TyKind::Js) {
+        // Host handle: retain/unregister on value-struct copy/drop (raw i32, not a heap ref).
         addr(out);
+        out.push_str(" (i32.load)");
         match op {
             GlueOp::Retain => {
-                let _ = writeln!(out, " (i32.load) (call {})", retain_call(interner, f.ty));
+                out.push_str(
+                    " (local.tee $h) (if (then (local.get $h) (call $js_retain)))\n",
+                );
             }
             GlueOp::Drop => {
-                let _ = writeln!(
-                    out,
-                    " (i32.load) (call {})",
-                    release_call(interner, &mir.layouts, f.ty)
+                out.push_str(
+                    " (local.tee $h) (if (then (local.get $h) (call $js_unregister)))\n",
                 );
             }
         }
+    } else if interner.is_reference(f.ty) || interner.is_gc_tracked(f.ty) {
+        // Under GC, embedded heap refs are roots via the shadow stack / container; no retain/release.
     } else if interner.is_value_type(f.ty) && glue.contains(&f.ty) {
         let stripped = f.ty;
         // A nested value field is either a value struct or a value union; resolve its glue name from

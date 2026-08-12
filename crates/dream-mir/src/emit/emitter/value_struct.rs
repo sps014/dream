@@ -64,7 +64,7 @@ impl Emitter<'_> {
         scalar_size(self.interner, ty).0
     }
 
-    /// True when value struct `ty` needs retain/drop glue (embeds references or declares `del`).
+    /// True when value struct `ty` needs retain/drop glue (`js` handles and/or `del()`).
     pub(super) fn value_has_glue(&self, ty: TypeId) -> bool {
         self.value_glue.contains(&ty)
     }
@@ -197,11 +197,34 @@ impl Emitter<'_> {
             if self.interner.is_value_type(fty) {
                 let arg = arg.clone();
                 self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty);
+            } else if matches!(self.interner.kind(fty), TyKind::Js) {
+                field_addr(self);
+                self.line("     (local.set $__rel)");
+                self.emit_operand(arg);
+                self.line("     (local.set $__src)");
+                if matches!(arg, Operand::Copy(_)) {
+                    self.line(
+                        "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
+                    );
+                }
+                self.line("     (local.get $__rel)");
+                self.line("     (local.get $__src)");
+                self.line(&format!("     ({})", self.store_instr(fty)));
+            } else if self.interner.is_reference(fty) {
+                field_addr(self);
+                self.line("     (local.set $__rel)");
+                self.emit_operand(arg);
+                self.line("     (local.set $__src)");
+                self.line("     (local.get $__rel)");
+                self.line("     (local.get $__src)");
+                self.line(&format!("     ({})", self.store_instr(fty)));
+                self.line("     (local.get $__rel)");
+                self.line("     (local.get $__src)");
+                self.line("     (call $write_barrier)");
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
                 self.line(&format!("     ({})", self.store_instr(fty)));
-                self.retain_container_value(fty, arg);
             }
         }
     }
@@ -260,11 +283,34 @@ impl Emitter<'_> {
             if self.interner.is_value_type(fty) {
                 let arg = arg.clone();
                 self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty);
+            } else if matches!(self.interner.kind(fty), TyKind::Js) {
+                field_addr(self);
+                self.line("     (local.set $__rel)");
+                self.emit_operand(arg);
+                self.line("     (local.set $__src)");
+                if matches!(arg, Operand::Copy(_)) {
+                    self.line(
+                        "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
+                    );
+                }
+                self.line("     (local.get $__rel)");
+                self.line("     (local.get $__src)");
+                self.line(&format!("     ({})", self.store_instr(fty)));
+            } else if self.interner.is_reference(fty) {
+                field_addr(self);
+                self.line("     (local.set $__rel)");
+                self.emit_operand(arg);
+                self.line("     (local.set $__src)");
+                self.line("     (local.get $__rel)");
+                self.line("     (local.get $__src)");
+                self.line(&format!("     ({})", self.store_instr(fty)));
+                self.line("     (local.get $__rel)");
+                self.line("     (local.get $__src)");
+                self.line("     (call $write_barrier)");
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
                 self.line(&format!("     ({})", self.store_instr(fty)));
-                self.retain_container_value(fty, arg);
             }
         }
     }
@@ -332,13 +378,14 @@ impl Emitter<'_> {
     }
 
     /// Emits the scope-exit teardown of a function's shadow frame: drop each owning value local, then
-    /// restore `$__sp`. A no-op for functions with no value frame.
+    /// restore `$__sp`. Also pops this frame's GC root slots.
     pub(super) fn emit_frame_teardown(&mut self) {
         for (local, _) in self.frame.teardown_slots(self.func) {
             let ty = self.func.local_ty(local);
             let l0 = local.0;
             self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
         }
+        self.emit_gc_root_epilogue();
         if self.frame.size > 0 {
             self.line("     (local.get $__saved_sp) (global.set $__sp)");
         }

@@ -21,6 +21,90 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// `obj.field(args)` when `field` is a `fun(...)`-typed instance field (not a method): load the
+    /// field then perform an indirect call. Returns `Ok(None)` when there is no such field so the
+    /// caller can fall through to the normal "no method" error.
+    #[allow(clippy::too_many_arguments)]
+    fn try_call_fun_typed_field(
+        &mut self,
+        struct_name: &str,
+        obj_type: &Type,
+        field_name: &SyntaxToken,
+        params: &[ExpressionNode<'a>],
+        ctx: &super::super::super::AnalyzerContext<'a, '_>,
+        receiver: Option<dream_hir::HExpr>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Option<Type>, SemanticError> {
+        let member = field_name;
+        let resolved = self.resolve_member_field(obj_type, member, ctx.parent_function, diagnostics);
+        let (field_struct, field_type) = match resolved {
+            MemberField::Field {
+                struct_name: sn,
+                field_type,
+            } => (sn, field_type),
+            _ => return Ok(None),
+        };
+        let Type::Function(param_types, ret) = &field_type else {
+            return Ok(None);
+        };
+        let _ = struct_name;
+        let expected_params: Vec<Type> = param_types.clone();
+        let (arg_types, arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
+            params,
+            Some(&expected_params),
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
+        if param_types.len() != arg_types.len() {
+            diagnostics.report_error(
+                format!(
+                    "function field '{}' expects {} arguments, got {}",
+                    member.text,
+                    param_types.len(),
+                    arg_types.len()
+                ),
+                Some(member.position),
+            );
+            self.hir_none();
+            return Ok(Some((**ret).clone()));
+        }
+        let expected_is_ref: Vec<bool> = param_types
+            .iter()
+            .map(|t| Self::peel_ref_box(t).1)
+            .collect();
+        self.validate_ref_arguments(
+            &format!("function field '{}'", member.text),
+            &expected_is_ref,
+            &arg_is_ref,
+            member.position,
+            diagnostics,
+        );
+        let expected_strs: Vec<String> = param_types
+            .iter()
+            .map(|t| Self::peel_ref_box(t).0.get_type())
+            .collect();
+        self.validate_arguments(
+            &format!("function field '{}'", member.text),
+            &expected_strs,
+            &arg_types,
+            member.position,
+            diagnostics,
+        );
+        match self.struct_field_index(&field_struct, &member.text) {
+            Some(index) => {
+                self.hir_set_field(receiver, index, &field_type);
+                let boxed = self.hir_take();
+                match boxed {
+                    Some(b) => self.hir_set_indirect_call_expr(b, arg_hirs, ret.as_ref()),
+                    None => self.hir_none(),
+                }
+            }
+            None => self.hir_none(),
+        }
+        Ok(Some((**ret).clone()))
+    }
+
     /// Dispatches a method call on an interface-typed receiver. Resolves `method` against the
     /// interface's ordered signature list (yielding its local slot index and return type),
     /// type-checks the arguments, and emits a dynamically-dispatched `InterfaceCall` HIR node.
@@ -290,6 +374,17 @@ impl<'a> Analyzer<'a> {
                 )?;
             } else {
                 let Some(info) = method_info else {
+                    if let Some(t) = self.try_call_fun_typed_field(
+                        struct_name,
+                        obj_type,
+                        method,
+                        params,
+                        ctx,
+                        receiver.take(),
+                        diagnostics,
+                    )? {
+                        return Ok(t);
+                    }
                     return Err(report(
                         diagnostics,
                         format!("Type '{}' has no method '{}'", struct_name, method.text),
@@ -369,6 +464,17 @@ impl<'a> Analyzer<'a> {
             match self.function_table.get_function(&mangled_name) {
                 Ok(s) => s.clone(),
                 Err(_) => {
+                    if let Some(t) = self.try_call_fun_typed_field(
+                        struct_name,
+                        obj_type,
+                        method,
+                        params,
+                        ctx,
+                        receiver.take(),
+                        diagnostics,
+                    )? {
+                        return Ok(t);
+                    }
                     return Err(report(
                         diagnostics,
                         format!("Type '{}' has no method '{}'", struct_name, method.text),

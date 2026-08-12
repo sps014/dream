@@ -118,6 +118,9 @@ impl DomTree {
 /// Immediate postdominator of every block. Built as dominators of the reverse CFG with a synthetic
 /// exit that every function-exit terminator edges to. `a` postdominates `b` when every path from
 /// `b` to a function exit passes through `a`.
+/// Post-dominator tree. Kept for CFG unit tests and future GC root-region analysis; not used by
+/// the current pass pipeline after ARC elision was removed.
+#[allow(dead_code)]
 pub(crate) struct PostDomTree {
     /// Immediate postdominator per block; `None` for the synthetic exit and unreachable-from-exit
     /// blocks. Real blocks that only exit through `Return`/`Unreachable`/… postdominate themselves
@@ -129,7 +132,9 @@ pub(crate) struct PostDomTree {
     exit: BlockId,
 }
 
+#[allow(dead_code)]
 impl PostDomTree {
+    #[allow(dead_code)]
     pub(crate) fn new(func: &MirFunction) -> PostDomTree {
         let n = func.blocks.len();
         let exit = BlockId(n as u32);
@@ -211,6 +216,7 @@ impl PostDomTree {
     }
 
     /// True if `a` postdominates `b` (every path from `b` to a function exit passes through `a`).
+    #[allow(dead_code)]
     pub(crate) fn postdominates(&self, a: BlockId, b: BlockId) -> bool {
         if a == b {
             return true;
@@ -236,6 +242,7 @@ impl PostDomTree {
     }
 }
 
+#[allow(dead_code)]
 fn is_exit_terminator(t: &Terminator) -> bool {
     matches!(
         t,

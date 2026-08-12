@@ -118,8 +118,8 @@ mod tests {
     }
 
     #[test]
-    fn skips_when_release_after_call() {
-        // `d = f(); release(d); return d;` — cleanup between call and return blocks the tail call.
+    fn skips_when_effect_after_call() {
+        // `d = f(); print(d); return d;` — observable effect between call and return blocks TCO.
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("f", i.int());
         let d = b.new_temp(i.int());
@@ -130,7 +130,11 @@ mod tests {
                 args: vec![],
             },
         );
-        b.push(Statement::Release(Operand::Copy(Place::Local(d))));
+        b.push(Statement::Print {
+            arg: Operand::Copy(Place::Local(d)),
+            ty: i.int(),
+            newline: false,
+        });
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(d)))));
         let mut func = b.finish();
         assert!(!Tco.run(&mut func, &i), "must not tail-call past cleanup");

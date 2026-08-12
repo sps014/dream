@@ -4,7 +4,7 @@
 //! and stays, fully generic: any `@identifier` or `@identifier(arg, ...)` parses on any
 //! attribute-bearing declaration, with args classified as typed [`AttributeArg`] constants
 //! (string/int/float/double/bool/enum path). Historically every consumer
-//! (`@intrinsic`, `@json`, `@property_name`, `@override`, `@js`, `@allow_cycle`) then hand-rolled
+//! (`@intrinsic`, `@json`, `@property_name`, `@override`, `@js`) then hand-rolled
 //! its own `attributes.iter().any(|a| a.name.text == "...")` check with no shared validation, so an
 //! unknown attribute name (a typo like `@josn`) or a misapplied one (`@json` on a function) was
 //! silently accepted and simply had no effect.
@@ -227,13 +227,6 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         },
         repeatable: false,
         doc: "Binds an extern function to a JavaScript host import: `@js(\"module\", \"export\")`.",
-    },
-    AttributeSpec {
-        name: "allow_cycle",
-        targets: &[AttributeTarget::Struct],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Allows a class to participate in a reference cycle (ARC will not free it automatically).",
     },
     AttributeSpec {
         name: "operator",

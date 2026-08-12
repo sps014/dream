@@ -1,6 +1,4 @@
-// See `linked_list.dream` for why a self-referencing `next` needs `@allow_cycle`.
 import system;
-@allow_cycle
 class Node {
     val: int;
     next: Option<Node>;
@@ -77,14 +75,11 @@ fun do_enum_allocations() {
 }
 
 fun main() {
-    // Warm up once, then capture the live-object baseline. `Debug.live_objects()` is the count of
-    // heap blocks currently handed out (incremented by `$malloc`, decremented by `$free`), so it is
-    // the true leak detector: it is insensitive to which freed block sits at the freelist head
-    // (deep recursive frees of mixed-size union nodes reorder the freelist without leaking). If
-    // every round's classes AND recursive union chains are fully reclaimed, the count after 100
-    // more rounds equals the baseline; a single leaked node makes it grow.
+    // Warm up once, then capture the live-object baseline after a forced collection.
+    // Under GC, scope exit does not free immediately — `Debug.gc_collect()` is the reclaim barrier.
     do_allocations();
     do_enum_allocations();
+    Debug.gc_collect();
     let baseline = Debug.live_objects();
 
     let i = 0;
@@ -93,6 +88,7 @@ fun main() {
         do_enum_allocations();
         i = i + 1;
     }
+    Debug.gc_collect();
 
     let final_live = Debug.live_objects();
     if (baseline == final_live) {

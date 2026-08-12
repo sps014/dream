@@ -154,8 +154,8 @@ mod contract_tests {
     /// Internal JS-only keys that are not `@js` imports (ABI attach hooks, etc.).
     const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
 
-    /// Host keys emitted by the WAT backend for `js` handle RC (`$js_retain` / `$js_release`), not
-    /// declared as Dream stdlib `@js` bridges — ownership is inserted by the RC pass.
+    /// Host keys for compiler-emitted `js` handle lifetime (`jsRetain` / `jsRelease` →
+    /// `$js_retain` / `$js_unregister`). Bound even when not listed in `.abi.json`.
     const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
 
     /// Extracts keys from the primary host factory object in a source file: the last `return {`

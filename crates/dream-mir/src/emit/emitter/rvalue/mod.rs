@@ -127,6 +127,7 @@ impl Emitter<'_> {
                 } else {
                     self.emit_call_args(callee, args);
                     self.line(&format!("     (call ${sym})"));
+                    self.emit_gc_reload_if_collect(&sym);
                 }
             }
             Rvalue::IndirectCall { target, sig, args } => {
@@ -198,8 +199,16 @@ impl Emitter<'_> {
                         "     (i32.const {}) ;; tag",
                         self.type_tag(*ty, *def)
                     ));
-                    self.line("     (call $malloc)");
+                    self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
+                    if self.type_has_del(*ty) {
+                        self.line("     (local.get $__obj) (i32.const 4) (i32.sub)");
+                        self.line("     (local.get $__obj) (i32.const 4) (i32.sub) (i32.load)");
+                        self.line(&format!(
+                            "     (i32.const {}) (i32.or) (i32.store)",
+                            crate::abi::GC_META_FINALIZE
+                        ));
+                    }
                     if is_shared {
                         self.zero_at_obj(size, self.interner.int());
                     }
@@ -274,7 +283,7 @@ impl Emitter<'_> {
                         "     (i32.const {}) ;; tag",
                         self.type_tag(*ty, *def)
                     ));
-                    self.line("     (call $malloc)");
+                    self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
                     self.line("     (local.get $__obj)");
                     self.line(&format!("     (i32.const {}) ;; discriminant", variant));
@@ -319,8 +328,11 @@ impl Emitter<'_> {
                         )
                     });
                 self.line(&format!("     (i32.const {})", size));
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
+                self.line(&format!(
+                    "     (i32.const {}) ;; array tag",
+                    crate::emit::array_heap_tag_for(self.interner, *elem_ty)
+                ));
+                self.emit_malloc_call();
                 self.line("     (local.set $__obj)");
                 self.line("     (local.get $__obj)");
                 self.line(&format!("     (i32.const {})", elems.len()));
@@ -342,8 +354,11 @@ impl Emitter<'_> {
                 self.line(&format!("     (i32.const {})", esize));
                 self.line("     (i32.mul)");
                 self.line("     (i32.add)");
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
+                self.line(&format!(
+                    "     (i32.const {}) ;; array tag",
+                    crate::emit::array_heap_tag_for(self.interner, *elem_ty)
+                ));
+                self.emit_malloc_call();
                 self.line("     (local.set $__obj)");
                 self.line("     (local.get $__obj)");
                 self.line("     (local.get $__len)");
@@ -388,8 +403,11 @@ impl Emitter<'_> {
                     self.line("     (local.get $__len)");
                     self.line("     (i32.const 4)");
                     self.line("     (i32.add)");
-                    self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                    self.line("     (call $malloc)");
+                    self.line(&format!(
+                        "     (i32.const {}) ;; flat byte[] tag",
+                        crate::abi::TAG_FLAT_ARRAY
+                    ));
+                    self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
                     self.line("     (local.get $__obj)");
                     self.line("     (local.get $__len)");
@@ -412,8 +430,11 @@ impl Emitter<'_> {
                 // it is written directly with the matching store instruction instead.
                 let size = self.value_size(*ty);
                 self.line(&format!("     (i32.const {}) ;; 4 + byte size", 4 + size));
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
+                self.line(&format!(
+                    "     (i32.const {}) ;; flat byte[] tag",
+                    crate::abi::TAG_FLAT_ARRAY
+                ));
+                self.emit_malloc_call();
                 self.line("     (local.set $__obj)");
                 self.line("     (local.get $__obj)");
                 self.line(&format!("     (i32.const {})", size));
@@ -450,8 +471,11 @@ impl Emitter<'_> {
                     self.line("     (local.get $__len)");
                     self.line("     (i32.const 4)");
                     self.line("     (i32.add)");
-                    self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                    self.line("     (call $malloc)");
+                    self.line(&format!(
+                        "     (i32.const {}) ;; array tag",
+                        crate::emit::array_heap_tag_for(self.interner, *elem_ty)
+                    ));
+                    self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
                     self.line("     (local.get $__obj)");
                     self.line("     (local.get $__len)");
@@ -479,7 +503,7 @@ impl Emitter<'_> {
                     let tag = self.type_tag(*ty, dream_types::DefId(0));
                     self.line(&format!("     (i32.const {})", size));
                     self.line(&format!("     (i32.const {}) ;; tag", tag));
-                    self.line("     (call $malloc)");
+                    self.emit_malloc_call();
                     self.line("     (local.set $__obj)");
                     // memory.copy(dst = obj, src = bytes+4, size)
                     self.line("     (local.get $__obj)");
@@ -519,7 +543,10 @@ impl Emitter<'_> {
                 self.line(&format!("     (i32.const {})", esize));
                 self.line("     (i32.mul)");
                 self.line("     (i32.add)");
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
+                self.line(&format!(
+                    "     (i32.const {}) ;; array tag",
+                    crate::emit::array_heap_tag_for(self.interner, *elem_ty)
+                ));
                 self.line("     (call $realloc)");
                 self.line("     (local.set $__obj) ;; new (possibly moved) ptr");
                 self.line("     (local.get $__obj)");

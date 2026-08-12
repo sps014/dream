@@ -1,9 +1,6 @@
 module system.text;
 
-// Regex AST nodes form a tree (children via `left`/`right`); the structural cycle checker
-// correctly sees `List<RegexNode>` as a self-edge, so `@allow_cycle` documents that the
-// author keeps these acyclic at runtime.
-@allow_cycle
+// Regex AST nodes form a tree (children via `left`/`right`).
 internal class RegexNode {
     public kind: RegexNodeKind;
     public left: List<RegexNode>;

@@ -1,15 +1,16 @@
-//! Sink-default / `borrow` parameter parsing, type-checking, and RC store behavior.
+//! Shared-ref / `borrow` parameter parsing and type-checking (post-ARC).
+//! `borrow` is an ignored synonym of unmarked; there is no use-after-move-on-sink.
 
 mod common;
 use common::*;
 
 #[test]
-fn sink_param_unmarked_parses_and_typechecks() {
+fn unmarked_param_parses_and_typechecks() {
     let code = r#"
-        fun sink(s: string): void { }
+        fun shared(s: string): void { }
         fun main(): void {
             let x = "hi";
-            sink(x);
+            shared(x);
         }
     "#;
     let d = analyze_code(code);
@@ -33,14 +34,13 @@ fn borrow_param_is_ok_and_reusable() {
 }
 
 #[test]
-fn reuse_after_sink_is_allowed_via_copy() {
-    // Nim-style: unmarked sink copies when the arg is still live.
+fn reuse_after_call_is_allowed() {
     let code = format!(
         "{SYSTEM_STUB}
-        fun sink(s: string): void {{ System.println(s); }}
+        fun take(s: string): void {{ System.println(s); }}
         fun main(): void {{
             let x = \"hi\";
-            sink(x);
+            take(x);
             System.println(x);
         }}
     "
@@ -50,9 +50,8 @@ fn reuse_after_sink_is_allowed_via_copy() {
 }
 
 #[test]
-fn use_after_sink_field_store_is_error() {
-    // Storing a sink param into a field moves it — further uses of the param are hard errors
-    // (the old silent null caused empty Seq ranges / empty Regex patterns / runaway loops).
+fn reuse_after_field_store_is_allowed() {
+    // Under GC shared-ref ABI, storing a param into a field does not move it.
     let code = r#"
         class Box {
             public value: string;
@@ -66,13 +65,7 @@ fn use_after_sink_field_store_is_error() {
         }
     "#;
     let d = analyze_code(code);
-    assert!(d.has_errors(), "expected use-after-move error");
-    let msg = format!("{:?}", d);
-    assert!(
-        msg.contains("after move"),
-        "unexpected diagnostics: {}",
-        msg
-    );
+    assert!(!d.has_errors(), "unexpected errors: {:?}", d);
 }
 
 #[test]
@@ -93,64 +86,4 @@ fn borrow_param_reusable_after_field_store() {
     );
     let d = analyze_code(&code);
     assert!(!d.has_errors(), "unexpected errors: {:?}", d);
-}
-
-#[test]
-fn sink_store_skips_retain_vs_borrow() {
-    // Callee stores a string field: unmarked sink transfers +1 (no retain on store);
-    // `borrow` must retain into the field.
-    let sink_code = format!(
-        "{SYSTEM_STUB}
-        class Box {{
-            public value: string;
-            public constructor(value: string) {{
-                this.value = value;
-            }}
-        }}
-        fun main(): void {{
-            let s = \"hi\";
-            let b = Box(s);
-            System.println(b.value);
-        }}
-    "
-    );
-    let borrow_code = format!(
-        "{SYSTEM_STUB}
-        class Box {{
-            public value: string;
-            public constructor(borrow value: string) {{
-                this.value = value;
-            }}
-        }}
-        fun main(): void {{
-            let s = \"hi\";
-            let b = Box(s);
-            System.println(b.value);
-        }}
-    "
-    );
-    let sink_wat = emit_hir_to_module_optimized(&sink_code);
-    let borrow_wat = emit_hir_to_module_optimized(&borrow_code);
-    let sink_retains = sink_wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $retain")
-        })
-        .count();
-    let borrow_retains = borrow_wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $retain")
-        })
-        .count();
-    assert!(
-        sink_retains < borrow_retains,
-        "sink constructor should retain less than borrow ({} vs {})\nsink:\n{}\nborrow:\n{}",
-        sink_retains,
-        borrow_retains,
-        sink_wat,
-        borrow_wat
-    );
 }

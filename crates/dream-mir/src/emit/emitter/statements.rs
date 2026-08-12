@@ -1,8 +1,5 @@
-//! `Statement` emission (assignment, print, retain/release, calls) for the WAT backend, plus the
-//! place-store helpers used by assignment and by object-construction stores in `rvalue.rs`: retain
-//! on store (`retain_container_value`), deferred release of an overwritten reference
-//! (`stash_old_ref`/`release_stash`), and debug-info local spilling. Split out of `emitter.rs`;
-//! these are methods on the parent's private `Emitter`.
+//! `Statement` emission (assignment, print, calls) for the WAT backend, plus place-store helpers
+//! (store + `$write_barrier` for GC-tracked heap slots) and debug-info local spilling.
 
 use super::*;
 
@@ -40,31 +37,15 @@ impl Emitter<'_> {
     pub(super) fn emit_stmt(&mut self, stmt: &Statement) {
         match stmt {
             Statement::Assign(place, rvalue) => self.emit_assign(place, rvalue),
-            Statement::Retain(o) => {
-                let ty = self.operand_ty(o);
-                self.emit_operand(o);
-                self.line(&format!("     (call {})", retain_call(self.interner, ty)));
-            }
-            Statement::Release(o) => {
-                // Deep release by the operand's declared type: structs/unions/reference arrays run
-                // their generated `$release_<...>`; `js` handles call `$js_release`; other
-                // references fall back to the generic/tag-dispatched runtime.
-                let ty = self.operand_ty(o);
-                let call = if self.interner.is_rc_tracked(ty) {
-                    release_call(self.interner, self.layouts, ty)
-                } else {
-                    "$release_generic".to_string()
-                };
-                self.emit_operand(o);
-                self.line(&format!("     (call {})", call));
-            }
             Statement::Panic(msg) => {
                 self.emit_operand(msg);
                 self.line("     (call $dream_panic)");
             }
             Statement::Call { callee, args } => {
+                let sym = self.callee_symbol(callee);
                 self.emit_call_args(callee, args);
-                self.line(&format!("     (call ${})", self.callee_symbol(callee)));
+                self.line(&format!("     (call ${})", sym));
+                self.emit_gc_reload_if_collect(&sym);
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
                     self.line("     (drop)");
                 }
@@ -210,12 +191,19 @@ impl Emitter<'_> {
                 );
                 let l0 = local.0;
                 self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
-                // Null RC fields so loop re-entry into an inlined region (value_store's pre-drop)
-                // only releases null. Nested inlines must not emit a second `ValueDrop` for the
+                // Null GC-tracked fields so loop re-entry into an inlined region does not keep
+                // stale root slots. Nested inlines must not emit a second `ValueDrop` for the
                 // same local (the inliner skips already-`manual_drop` locals when collecting).
                 if let Some(layout) = self.layouts.get(ty) {
                     for f in &layout.fields {
-                        if self.interner.is_rc_tracked(f.ty) {
+                        if matches!(self.interner.kind(f.ty), TyKind::Js) {
+                            // `vs_drop` already unregistered; just clear the word.
+                            self.line(&format!("     (local.get ${})", l0));
+                            if f.offset > 0 {
+                                self.line(&format!("     (i32.const {}) (i32.add)", f.offset));
+                            }
+                            self.line("     (i32.const 0) (i32.store)");
+                        } else if self.interner.is_reference(f.ty) {
                             self.line(&format!("     (local.get ${})", l0));
                             if f.offset > 0 {
                                 self.line(&format!("     (i32.const {}) (i32.add)", f.offset));
@@ -293,6 +281,10 @@ impl Emitter<'_> {
         match place {
             Place::Local(l) => {
                 let ty = self.func.local_ty(*l);
+                if matches!(self.interner.kind(ty), TyKind::Js) {
+                    self.emit_js_local_assign(l.0, rvalue);
+                    return;
+                }
                 if self.interner.is_value_type(ty) {
                     let l0 = l.0;
                     match self.frame.kind(*l) {
@@ -317,9 +309,14 @@ impl Emitter<'_> {
                 }
                 self.emit_rvalue(rvalue);
                 self.line(&format!("     (local.set ${})", l.0));
+                self.emit_gc_root_update(l.0);
             }
             Place::Global(g) => {
                 if let Some(&ty) = self.global_tys.get(&g.0) {
+                    if matches!(self.interner.kind(ty), TyKind::Js) {
+                        self.emit_js_global_assign(g.0, rvalue);
+                        return;
+                    }
                     if self.interner.is_value_type(ty) {
                         let g0 = g.0;
                         self.emit_value_store(
@@ -332,15 +329,23 @@ impl Emitter<'_> {
                 }
                 self.emit_rvalue(rvalue);
                 self.line(&format!("     (global.set $g{})", g.0));
+                if self
+                    .global_tys
+                    .get(&g.0)
+                    .is_some_and(|ty| self.interner.is_reference(*ty))
+                {
+                    self.line(&format!(
+                        "     (global.get $__groot{}) (global.get $g{}) (call $gc_root_set)",
+                        g.0, g.0
+                    ));
+                }
             }
             Place::Field { base, field } => {
                 if let Some(f) = self.field_layout_full(*base, *field) {
-                    let (off, fty, is_weak, is_unowned) = (f.offset, f.ty, f.is_weak, f.is_unowned);
+                    let (off, fty, is_weak) = (f.offset, f.ty, f.is_weak);
                     let b = *base;
                     if is_weak {
                         self.emit_weak_field_store(b, off, fty, rvalue);
-                    } else if is_unowned {
-                        self.emit_unowned_field_store(b, off, fty, rvalue);
                     } else if realloc_self_store(place, rvalue) {
                         self.emit_place_store_no_release_old(
                             fty,
@@ -373,93 +378,110 @@ impl Emitter<'_> {
         }
     }
 
-    /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`. Shared by
-    /// field and array-element assignment, which differ only in how the slot address is computed. A
-    /// value(`struct`) slot is copied in place (`emit_value_store`); a reference/scalar slot stashes
-    /// the previous occupant, stores the new value with the slot's width, retains a stored borrowed
-    /// reference, then releases the stashed old reference (deferred so self-referential writes stay
-    /// sound).
-    ///
-    /// For a *borrowed* reference store (`Use(Copy(_))` / `Use(Const::Str(_))`), identity-elides when
-    /// the new pointer equals the old occupant: stash old → `$__rel`, new → `$__src`, and only
-    /// store+retain+release when `$__rel != $__src`.
+    /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`.
+    /// Value structs copy in place; heap refs store then `$write_barrier`; `js` handles
+    /// retain-on-copy / unregister-old.
     fn emit_place_store(&mut self, ty: TypeId, addr: impl Fn(&mut Self), rvalue: &Rvalue) {
         if self.interner.is_value_type(ty) {
             self.emit_value_store(addr, ty, rvalue);
             return;
         }
-        let take_transfer = matches!(
-            rvalue,
-            Rvalue::Use(Operand::Copy(Place::Local(l)))
-                if self.func.locals.get(l.0 as usize).is_some_and(|d| d.is_take)
-        );
-        let borrowed_ref = self.interner.is_rc_tracked(ty)
-            && matches!(
-                rvalue,
-                Rvalue::Use(Operand::Copy(_)) | Rvalue::Use(Operand::Const(Const::Str(_)))
-            )
-            && !take_transfer;
-        if borrowed_ref {
-            addr(self);
-            self.line("     (i32.load)");
-            self.line("     (local.set $__rel)");
-            self.emit_rvalue(rvalue);
-            self.line("     (local.set $__src)");
-            self.line("     (local.get $__rel)");
-            self.line("     (local.get $__src)");
-            self.line("     (i32.ne)");
-            self.line("     (if (then");
-            addr(self);
-            self.line("       (local.get $__src)");
-            self.line(&format!("       ({})", self.store_instr(ty)));
-            self.line("       (local.get $__src)");
-            self.line(&format!(
-                "       (call {})",
-                retain_call(self.interner, ty)
-            ));
-            let release = release_call(self.interner, self.layouts, ty);
-            self.line("       (local.get $__rel)");
-            self.line(&format!("       (call {})", release));
-            self.line("     ))");
+        if matches!(self.interner.kind(ty), TyKind::Js) {
+            self.emit_js_place_store(addr, rvalue);
             return;
         }
-        let stash = self.stash_old_ref(ty, &addr);
+        if self.interner.is_reference(ty) {
+            // Emit the rvalue first. `$malloc` / Gen0 may evacuate the place's base object; an
+            // address computed beforehand would dangle into the reset nursery (Map rehash /
+            // field stores). Roots reload before we return from `$malloc`, so `addr` sees
+            // forwarded bases. `$__slot` still survives nested `New` inside other helpers that
+            // reuse `$__rel`, but we set it only after the rvalue is materialized.
+            self.emit_rvalue(rvalue);
+            self.line("     (local.set $__src)");
+            addr(self);
+            self.line("     (local.set $__slot)");
+            self.line("     (local.get $__slot)");
+            self.line("     (local.get $__src)");
+            self.line(&format!("     ({})", self.store_instr(ty)));
+            self.line("     (local.get $__slot)");
+            self.line("     (local.get $__src)");
+            self.line("     (call $write_barrier)");
+            return;
+        }
         addr(self);
         self.emit_rvalue(rvalue);
         self.line(&format!("     ({})", self.store_instr(ty)));
-        self.retain_stored_rvalue(ty, rvalue);
-        self.release_stash(ty, stash);
     }
 
-    /// Like [`Self::emit_place_store`], but skips the stash/release of the slot's previous
-    /// occupant. Used exactly when `rvalue` is `Rvalue::ArrayRealloc` reading the *same* place being
-    /// stored to (see [`realloc_self_store`]): `$realloc` has already consumed the old block itself
-    /// (freed it outright if the block moved, or reused it in place otherwise), so the ordinary
-    /// release-old-occupant step would double-free/decrement a block the allocator may have already
-    /// handed to someone else.
+    /// Assigns a `js` local: `$js_retain` when copying an existing handle, then store, then
+    /// `$js_unregister` the previous occupant (ClearDeadGcRoots nulls go through here too).
+    fn emit_js_local_assign(&mut self, local: u32, rvalue: &Rvalue) {
+        self.line(&format!("     (local.get ${}) (local.set $__rel)", local));
+        self.emit_rvalue(rvalue);
+        self.line("     (local.set $__src)");
+        if matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
+            self.line(
+                "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
+            );
+        }
+        self.line(&format!("     (local.get $__src) (local.set ${})", local));
+        self.line(
+            "     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))",
+        );
+    }
+
+    fn emit_js_global_assign(&mut self, gid: u32, rvalue: &Rvalue) {
+        self.line(&format!(
+            "     (global.get $g{}) (local.set $__rel)",
+            gid
+        ));
+        self.emit_rvalue(rvalue);
+        self.line("     (local.set $__src)");
+        if matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
+            self.line(
+                "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
+            );
+        }
+        self.line(&format!(
+            "     (local.get $__src) (global.set $g{})",
+            gid
+        ));
+        self.line(
+            "     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))",
+        );
+    }
+
+    /// Memory store of a `js` handle: retain on Copy, store, unregister previous.
+    fn emit_js_place_store(&mut self, addr: impl Fn(&mut Self), rvalue: &Rvalue) {
+        addr(self);
+        self.line("     (i32.load) (local.set $__rel)");
+        self.emit_rvalue(rvalue);
+        self.line("     (local.set $__src)");
+        if matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
+            self.line(
+                "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
+            );
+        }
+        addr(self);
+        self.line("     (local.get $__src) (i32.store)");
+        self.line(
+            "     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))",
+        );
+    }
+
+    /// Same as [`Self::emit_place_store`] for the realloc-self-store idiom (old block already
+    /// consumed by `$realloc`).
     fn emit_place_store_no_release_old(
         &mut self,
         ty: TypeId,
         addr: impl Fn(&mut Self),
         rvalue: &Rvalue,
     ) {
-        addr(self);
-        self.emit_rvalue(rvalue);
-        self.line(&format!("     ({})", self.store_instr(ty)));
+        self.emit_place_store(ty, addr, rvalue);
     }
 
-    /// Stores into a `weak` field (`ty` is `Option<T>` for a class `T`; see `docs/language/memory.md`
-    /// and `src/mir/runtime/weak.wat`). A `weak` field never holds a strong reference to its
-    /// payload, so it cannot be stored through the ordinary place-store path (which would retain the
-    /// payload on store and deep-release it on overwrite/teardown, just like a normal strong field).
-    /// Instead: the RHS is evaluated and fully strongly owned as usual (so any temporary is correctly
-    /// retained/released by the surrounding rvalue machinery), but only its `(discriminant, payload)`
-    /// bits are copied into a *fresh, privately managed* weak-box (never retaining the payload); that
-    /// box's address is registered as watching the payload (if `Some`) and stored into the field —
-    /// only *then* is the old occupant's box unregistered and freed directly (deferred exactly like
-    /// the ordinary stash/release rule, so a self-referential `n.parent = f(n.parent)` stays sound);
-    /// finally the RHS temporary itself is released (if owned), since the field never took ownership
-    /// of it.
+    /// Stores into a `weak` field (`Option<T>`): private weak-box + register/unregister, no strong
+    /// retain on the payload.
     fn emit_weak_field_store(
         &mut self,
         base: crate::Local,
@@ -479,21 +501,16 @@ impl Emitter<'_> {
             .unwrap_or(4);
         let box_size = u.size;
 
-        // Evaluate the RHS normally (a fully-owned-or-borrowed `Option<T>` per the usual rules) and
-        // peek at its bits.
         self.emit_rvalue(rvalue);
         self.line("     (local.set $__wsrc)");
 
-        // Stash the old occupant's box pointer (read-only; freed only after the new box is in place).
         self.field_addr(base, offset);
         self.line("     (i32.load)");
         self.line("     (local.set $__rel)");
 
-        // Allocate the fresh private box and copy the (discriminant, payload) bits into it, without
-        // retaining the payload.
         self.line(&format!("     (i32.const {})", box_size));
-        self.line("     (i32.const 0) ;; tag 0: never dispatched through $release_object");
-        self.line("     (call $malloc)");
+        self.line("     (i32.const 0) ;; tag 0: weak box, not object-dispatched");
+        self.emit_malloc_call();
         self.line("     (local.set $__wbox)");
         self.line("     (local.get $__wbox)");
         self.line("     (local.get $__wsrc) (i32.load)");
@@ -508,7 +525,6 @@ impl Emitter<'_> {
         ));
         self.line("     (i32.store)");
 
-        // Register the new box as watching its payload, if it's live.
         self.line("     (local.get $__wsrc) (i32.load)");
         self.line(&format!(
             "     (i32.const {}) (i32.eq) (if (then",
@@ -527,14 +543,10 @@ impl Emitter<'_> {
         self.line("       (call $weak_register)");
         self.line("     ))");
 
-        // Store the new box into the field.
         self.field_addr(base, offset);
         self.line("     (local.get $__wbox)");
         self.line("     (i32.store)");
 
-        // Now that the new box is safely in place, tear down the old one: unregister it (if it
-        // currently watches a live referent) and free it directly — never through
-        // `$release_<Option_...>`, since the box was never a strong owner of its payload.
         self.line("     (local.get $__rel)");
         self.line("     (if (then");
         self.line("       (local.get $__rel) (i32.load)");
@@ -551,74 +563,10 @@ impl Emitter<'_> {
         self.line("       ))");
         self.line("       (local.get $__rel) (call $free)");
         self.line("     ))");
-
-        // The field never owns the RHS wrapper itself; release it if it was a fresh, owned value
-        // (a borrowed copy is left untouched, matching the ordinary store rule).
-        if !matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line("     (local.get $__wsrc)");
-            let call = release_call(self.interner, self.layouts, option_ty);
-            self.line(&format!("     (call {})", call));
-        }
     }
 
-    /// Stores into an `unowned` field (`ty` is a plain class type; see `docs/language/memory.md` and
-    /// `src/mir/runtime/weak.wat`). An `unowned` field holds the referent's raw pointer directly (no
-    /// wrapper), never retains it on store, and is poisoned to `0` by `$weak_clear_all` if the
-    /// referent is freed while still watched — a later read then traps (see
-    /// `Emitter::emit_unowned_read_check`).
-    fn emit_unowned_field_store(
-        &mut self,
-        base: crate::Local,
-        offset: u32,
-        field_ty: TypeId,
-        rvalue: &Rvalue,
-    ) {
-        // Unregister the old occupant, if any (no box to free — the field itself was the slot).
-        self.field_addr(base, offset);
-        self.line("     (i32.load)");
-        self.line("     (local.set $__wsrc)");
-        self.line("     (local.get $__wsrc)");
-        self.line("     (if (then");
-        self.line("       (local.get $__wsrc)");
-        self.field_addr(base, offset);
-        self.line("       (call $weak_unregister)");
-        self.line("     ))");
-
-        // Evaluate the RHS, store it directly (no retain), and register it as a new watcher of its
-        // referent *before* possibly releasing it below — so an RHS that was its own referent's only
-        // owner is correctly poisoned back to `0` right away, rather than left dangling.
-        self.emit_rvalue(rvalue);
-        self.line("     (local.set $__wbox)");
-        self.field_addr(base, offset);
-        self.line("     (local.get $__wbox)");
-        self.line("     (i32.store)");
-        self.line("     (local.get $__wbox)");
-        self.line("     (if (then");
-        self.line("       (local.get $__wbox)");
-        self.field_addr(base, offset);
-        self.line("       (i32.const 1) ;; kind: unowned");
-        self.line("       (i32.const 0) ;; extra: unused");
-        self.line("       (call $weak_register)");
-        self.line("     ))");
-
-        // The field never takes ownership of the RHS; give back its `+1` if it was a fresh, owned
-        // value (a borrowed copy is left untouched).
-        if !matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line("     (local.get $__wbox)");
-            let call = release_call(self.interner, self.layouts, field_ty);
-            self.line(&format!("     (call {})", call));
-        }
-    }
-
-    /// Stores `value` into the object under construction (`$__obj + offset`) with the field/element
-    /// width. Used by `New`/`ArrayLit` initialization. A *borrowed* reference (a copy of an existing
-    /// place) is retained, since the container becomes a new owner; an owned producer is not
-    /// materialized here (lowering routes those through a temporary that is itself released at scope
-    /// exit), so retaining a copied operand is the sound, uniform rule.
+    /// Stores `value` into the object under construction (`$__obj + offset`).
     pub(super) fn store_at_obj(&mut self, offset: u32, value_ty: TypeId, value: &Operand) {
-        // A value struct stored into a freshly-allocated container is copied inline (byte-wise + a
-        // retain of its reference fields); the block was just zeroed, so there is no old value to
-        // drop.
         if self.interner.is_value_type(value_ty) {
             let value = value.clone();
             self.emit_value_copy(
@@ -633,6 +581,40 @@ impl Emitter<'_> {
             );
             return;
         }
+        if matches!(self.interner.kind(value_ty), TyKind::Js) {
+            self.emit_operand(value);
+            self.line("     (local.set $__src)");
+            if matches!(value, Operand::Copy(_)) {
+                self.line(
+                    "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
+                );
+            }
+            self.line("     (local.get $__obj)");
+            if offset > 0 {
+                self.line(&format!("     (i32.const {})", offset));
+                self.line("     (i32.add)");
+            }
+            self.line("     (local.get $__src)");
+            self.line(&format!("     ({})", self.store_instr(value_ty)));
+            return;
+        }
+        if self.interner.is_reference(value_ty) {
+            self.line("     (local.get $__obj)");
+            if offset > 0 {
+                self.line(&format!("     (i32.const {})", offset));
+                self.line("     (i32.add)");
+            }
+            self.line("     (local.set $__rel)");
+            self.emit_operand(value);
+            self.line("     (local.set $__src)");
+            self.line("     (local.get $__rel)");
+            self.line("     (local.get $__src)");
+            self.line(&format!("     ({})", self.store_instr(value_ty)));
+            self.line("     (local.get $__rel)");
+            self.line("     (local.get $__src)");
+            self.line("     (call $write_barrier)");
+            return;
+        }
         self.line("     (local.get $__obj)");
         if offset > 0 {
             self.line(&format!("     (i32.const {})", offset));
@@ -640,70 +622,9 @@ impl Emitter<'_> {
         }
         self.emit_operand(value);
         self.line(&format!("     ({})", self.store_instr(value_ty)));
-        self.retain_container_value(value_ty, value);
     }
 
-    /// Emits a `$retain` / `$js_retain` of an RC-tracked value being stored into a container (struct
-    /// field, array element, or union payload), so the container owns its own reference count. A
-    /// no-op for non-tracked values and non-place operands. For a **`take` parameter** of an
-    /// RC-tracked type, ownership transfers with the store: skip retain and null the local so the
-    /// function-exit `Release` is a no-op (otherwise the container and the param would both drop).
-    pub(super) fn retain_container_value(&mut self, value_ty: TypeId, value: &Operand) {
-        if let Operand::Copy(Place::Local(l)) = value {
-            if self.func.locals.get(l.0 as usize).is_some_and(|d| d.is_take)
-                && self.interner.is_rc_tracked(value_ty)
-            {
-                self.line("     (i32.const 0)");
-                self.line(&format!("     (local.set ${})", l.0));
-                return;
-            }
-        }
-        let borrowed = matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
-        if self.interner.is_rc_tracked(value_ty) && borrowed {
-            self.emit_operand(value);
-            self.line(&format!(
-                "     (call {})",
-                retain_call(self.interner, value_ty)
-            ));
-        }
-    }
-
-    /// Before an RC-tracked field/element is overwritten, load and stash its previous occupant into
-    /// the `$__rel` scratch so it can be released *after* the new value is stored (a deferred
-    /// release keeps self-referential reassignments like `n.next = f(n.next)` sound). `emit_addr`
-    /// pushes the slot's address. Returns `true` when a value was stashed. A no-op for non-tracked
-    /// slots, and releasing a null previous value (fresh field) is a runtime no-op.
-    fn stash_old_ref(&mut self, ty: TypeId, emit_addr: impl Fn(&mut Self)) -> bool {
-        if !self.interner.is_rc_tracked(ty) {
-            return false;
-        }
-        emit_addr(self);
-        self.line("     (i32.load)");
-        self.line("     (local.set $__rel)");
-        true
-    }
-
-    /// Releases the value stashed by [`Self::stash_old_ref`] (the overwritten field/element's previous
-    /// occupant), if any.
-    fn release_stash(&mut self, ty: TypeId, stashed: bool) {
-        if !stashed {
-            return;
-        }
-        let call = release_call(self.interner, self.layouts, ty);
-        self.line("     (local.get $__rel)");
-        self.line(&format!("     (call {})", call));
-    }
-
-    /// Like [`Self::retain_container_value`] but for a field/element written from an rvalue: a
-    /// *borrowed* value (`Use(Copy(place))`) is retained, while an owned producer (call/new/array
-    /// literal result) transfers its `+1` into the container and is left as-is.
-    fn retain_stored_rvalue(&mut self, ty: TypeId, rvalue: &Rvalue) {
-        if let Rvalue::Use(value) = rvalue {
-            self.retain_container_value(ty, value);
-        }
-    }
-
-    /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
+        /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
     /// Used to clear a struct before a user constructor runs (reused heap blocks are not zeroed).
     pub(super) fn zero_at_obj(&mut self, offset: u32, field_ty: TypeId) {
         self.line("     (local.get $__obj)");

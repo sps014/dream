@@ -1,6 +1,10 @@
 # Memory Management
 
-Dream manages heap memory with **Automatic Reference Counting (ARC)**. You never call `free`, and there is no garbage collector to pause your program — memory is reclaimed the moment the last reference to an object drops.
+Dream manages heap memory with a **stop-the-world generational garbage collector** in
+WebAssembly linear memory (Gen0 nursery, Gen1, Gen2, and a large-object heap). You never
+call `free` for ordinary values — unreachable objects are reclaimed when the collector runs.
+
+Engineering details: [`docs/compiler/12-tiered-gc.md`](../compiler/12-tiered-gc.md).
 
 ## What lives on the heap
 
@@ -9,130 +13,73 @@ Dream manages heap memory with **Automatic Reference Counting (ARC)**. You never
 - Class instances
 - Standard library collections (`List`, `Map`, `Set`)
 
-Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored on the stack or inline inside other objects — no heap allocation.
+Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored on the stack or
+inline inside other objects — no heap allocation.
 
-`js` handles are not Dream heap objects, but the compiler still tracks ownership and releases them through the host registry when the last Dream owner drops (same retain/release rules as heap references). See [The `js` type](js-type.md).
+`js` handles are host-registry entries. The Dream-side handle is a GC-managed value; when
+it becomes unreachable, the host unregisters the entry. See [The `js` type](js-type.md).
 
 ## How it works
 
-Every heap object tracks how many references point to it. The compiler inserts `retain` and `release` for you:
-
-- When a variable goes out of scope, its reference is released.
-- Reassigning a variable releases the value it held before.
-- When a count reaches zero, the object is freed immediately (its `del` destructor runs first, if it has one).
-
-The same ownership rules apply to `js` values: each Dream owner holds one host-side count; when it hits zero the handle is unregistered.
+The runtime allocates short-lived objects into a **Gen0 nursery**. When the nursery fills,
+a short stop-the-world collection copies survivors into Gen1 (and may promote further into
+Gen2). Large allocations go to the **LOH** and are swept rather than copied. Cycles are
+collected normally — there is no reference-count balance to break.
 
 ```dream
 fun make_list(): int[] {
-    let arr = [1, 2, 3];   // allocated, count = 1
-    return arr;            // handed to the caller
+    let arr = [1, 2, 3];   // nursery allocation
+    return arr;
 }
 
 fun main() {
     let result = make_list();
     println(result[0]);
-} // result leaves scope -> count 0 -> freed instantly
+} // when `result` is no longer reachable, GC reclaims it
 ```
 
-## Advanced: reference cycles
+Pauses are typically dominated by Gen0; full Gen2 / LOH collections are rarer and longer.
+Prefer clear-and-reuse (`List.clear`) and `ScratchArena` on hot paths to allocate less.
 
-ARC relies on counts, so it cannot collect a **cycle**. If `A` references `B` and `B` references `A`, neither count ever reaches zero — a leak:
+## Finalizers: `del`
+
+A class may define `del()`. Under GC it is a **finalizer**: after the object is found
+unreachable, the runtime may run `del` before reclaiming the block. Timing is not
+guaranteed — do not use `del` for prompt release of files, sockets, or GPU resources;
+prefer an explicit `close` / `dispose` when those APIs exist.
+
+If a finalizer stores `this` into a still-reachable location (resurrection), the object
+stays alive and `del` is not run again for that object.
+
+## `weak` references
+
+Mark a field `weak` when it should not keep its target alive (caches, parent back-edges,
+observer lists):
 
 ```dream
 class Node {
-    public next: Option<Node>;
-}
-
-let a = Node(...);
-let b = Node(...);
-a.next = Option.Some(b);
-b.next = Option.Some(a);   // cycle created — `a` and `b` now leak
-```
-
-### The compiler catches this for you
-
-Rather than relying on you to notice, the compiler builds a graph of every `class`'s strong (non-`weak`/`unowned`) fields and hard-errors on any cycle in it — including a class holding a field of its own type, since that field could always be wired into a self-cycle:
-
-```
-error: reference cycle detected: 'Node.next' form a strong-reference cycle, so none of their
-objects can ever be freed; mark one field 'weak' or 'unowned' to break it, or annotate every
-class in the cycle with '@allow_cycle' if the cycle is intentional
-```
-
-This is a **structural**, type-level check, not a value-level one: it flags "these class types are structurally capable of forming a cycle," not "this specific program creates one." It follows strong fields through `Option<T>`, `T[]`, `List<T>`, `Map<K, V>`, and `Set<T>`, so textbook cases — direct self-reference, parent/child, doubly-linked lists, observer/observed, and the same shapes behind stdlib collections — are caught. It still cannot see cycles assembled dynamically through `object` or callbacks (e.g. an `object` that happens to hold itself); those still require programmer discipline.
-
-### Breaking a cycle: `weak` and `unowned`
-
-Mark one side of the cycle `weak` or `unowned` so it doesn't hold a strong reference:
-
-```dream
-class Node {
-    public next: Option<Node>;
-    weak parent: Option<Node>;    // does not keep the parent alive
-}
-
-class Cache {
-    unowned owner: Manager;       // does not keep `owner` alive
+    public value: int;
+    public weak parent: Option<Node>;
 }
 ```
 
-- **`weak T`** — the field must be `Option<T>` for a class `T`. Read it like any other `Option`: `switch`, `.unwrap_or(...)`, `.is_some()`.
-- **`unowned T`** — the field must itself be a class type `T` (not wrapped in `Option`). Use it only when a stronger invariant (e.g. "the parent always outlives the child") already guarantees the referent is alive.
+- **`weak T`** — must be `Option<T>` for a class `T`. After the referent becomes
+  unreachable, the slot is cleared to `Option.None` before finalizers run.
+- There is no `unowned` modifier.
 
-Both are excluded from the cycle graph, so a field marked either way satisfies the compiler's check.
-
-#### Runtime behavior
-
-Neither modifier contributes to its referent's strong reference count, so declaring one breaks the underlying ARC cycle for real, not just at the type-check level:
-
-- **`weak`** fields are automatically reset to `Option.None` the instant their referent's last strong reference is released — you never observe a dangling pointer, only `None` a little earlier than you might expect:
-
-    ```dream
-    class Node {
-        public value: int;
-        public weak parent: Option<Node>;
-    }
-
-    fun demo(child: Node) {
-        let p = Node(...);
-        child.parent = Option.Some(p);
-        // ... p's only strong owner is this local ...
-    } // `p` is released here -> `child.parent` becomes `Option.None`
-    ```
-
-- **`unowned`** fields hold the referent's raw, unretained pointer. Reading one after its referent has been freed **traps** (a fatal runtime panic), rather than reading freed memory — `unowned` is a promise ("this will always outlive me") the runtime checks for you at the point of failure, even though it can't prevent the failure itself:
-
-    ```
-    panic: access to deallocated 'unowned' reference (at cache.dream:12, in main)
-    ```
-
-    Use `unowned` only when you can truly guarantee the referent outlives every access; reach for `weak` (and a `switch`/`is_some()` check) whenever the referent's lifetime is less certain.
-
-When the referent is freed, every live `weak` slot watching it becomes `None`, and every `unowned` slot is poisoned so later reads panic.
-
-### `@allow_cycle`: the escape hatch
-
-For the rare case where a cycle is intentional and manually managed, annotate **every** class in the cycle:
-
-```dream
-@allow_cycle
-class Node {
-    public next: Node;
-    public prev: Node;   // author takes manual responsibility for breaking this cycle
-}
-```
-
-`@allow_cycle` only suppresses a cycle that is entirely contained within the classes carrying it — annotating just one class in a multi-class cycle does not launder the rest of it.
+Cycles through ordinary strong fields are fine; the collector traces them.
 
 ## `@unsafe`: manual memory management
 
-ARC covers every allocation by default, but a handful of low-level primitives step outside it for tight, allocation-sensitive hot paths: `Buffer.realloc`/`Buffer.free` and [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) manage a block's lifetime directly through the allocator, bypassing reference counting entirely. Every function or method that touches one of these must be marked `@unsafe`:
+A handful of low-level primitives step outside the GC for tight, allocation-sensitive hot
+paths: `Buffer.realloc`/`Buffer.free` and [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe)
+manage a block's lifetime directly through the allocator. Every function or method that
+touches one of these must be marked `@unsafe`:
 
 ```dream
 @unsafe
 fun grow(p: Pointer<int>): Pointer<int> {
-    p.realloc(p.length * 2);   // fine: this function is itself @unsafe
+    p.realloc(p.length * 2);
     return p;
 }
 
@@ -143,35 +90,42 @@ fun caller(): void {
 }
 ```
 
-`@unsafe` is purely a caller-side gate, checked at every call site (not just where the callee is declared): calling an `@unsafe` function/method from ordinary code is a compile-time error, exactly like calling an `unsafe fn` from safe code in Rust. Marking your own function `@unsafe` propagates the same restriction to *its* callers — the attribute has to be threaded all the way up to wherever the unsafe operation is actually justified.
-
-What `@unsafe` does **not** do: it does not insert runtime checks, and it does not verify the specific contract of the operation you're calling (e.g. that a `Buffer.realloc`'d array has exactly one owner, or that a freed `Pointer<T>` is never read again). It is a documented promise from the author, not a proof — the same trade-off manual memory management makes in every language that offers it.
+`@unsafe` is a caller-side gate only — it does not insert runtime checks or prove
+single-ownership. It is a documented promise, not a proof.
 
 ## Performance notes
 
-- Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop — one growable UTF-8 buffer, one final `build()`.
-- Use `byte_size` / `byte_at` / byte-oriented helpers when you don't need scalar indices; scalar `char_at` / `substring` still work, but `substring` now copies a UTF-8 byte slice once instead of per-scalar `set`.
-- `List` / `Map` / `Set` `clear()` keeps capacity: live slots are zeroed in place (no capacity-sized realloc). Prefer `clear` + refill over allocating a new collection each batch.
-- `ScratchArena<T : unmanaged>` bump-allocates short-lived `Span<T>` slices from one owned slab;
-  `reset()` rewinds the cursor without freeing to the OS — use it for parse/match/fill scratch
-  (`ScratchArena<int>`, `ScratchArena<byte>`, …), not long-lived graphs. Use [`sizeof`](operators.md#sizeof-and-nameof)
-  when you need the ABI byte size of an unmanaged element type.
-- `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release). Under `--release`, the inliner erases small `Span` / value-struct method call boundaries (including into `List.insert` / `push_all`), so those hot paths compile down to the same WAT as hand-written bulk copies.
-- The compiler's ARC passes elide retain/release pairs along Goto chains, transparent diamonds/loops, and postdominated transparent regions; last-use moves transfer ownership without an extra retain. Prefer clear ownership so elision has an easy cancel pattern.
-- Unmarked parameters sink into the callee (see [Functions](functions.md#ownership-sink-default-and-borrow)); mark readers `borrow`. Stores like `List.push(value)` skip a redundant retain when the arg is moved.
-- Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths; silent SROA may promote non-escaping class instances whose accessed fields are non-references.
+- Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+`
+  when building text in a loop.
+- Use `byte_size` / `byte_at` / byte-oriented helpers when you don't need scalar indices.
+- `List` / `Map` / `Set` `clear()` keeps capacity: live slots are zeroed in place. Prefer
+  `clear` + refill over allocating a new collection each batch.
+- `ScratchArena<T : unmanaged>` bump-allocates short-lived `Span<T>` slices from one owned
+  slab; `reset()` rewinds the cursor without freeing to the OS.
+- `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed
+  elements go through ordinary assignment (write barriers apply).
+- Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths; silent SROA may promote
+  non-escaping class instances whose accessed fields are non-references.
+- Under `--release`, the inliner erases small `Span` / value-struct method call boundaries.
+
+## WebWorkers
+
+Linear memory is **shared** across the owner and every `WebWorker` (needed for `@shared` /
+`lock`). The GC is stop-the-world and cooperative: collections run only at safepoints while
+the allocator lock is held. Prefer message-passing for ordinary data; use `@shared` only for
+intentionally shared graphs. See [WebWorkers](webworkers.md).
 
 ## WASM call stack (`dream run`)
 
-This is the **WebAssembly guest call stack** (wasmtime `max_wasm_stack`), not language-level
-stack allocation of Dream values. Deep recursion, large value-struct frames, and long ARC release
-chains need enough of it.
+This is the **WebAssembly guest call stack** (wasmtime `max_wasm_stack`), not
+language-level stack allocation of Dream values. Deep recursion and large value-struct
+frames need enough of it.
 
 Precedence when running with the native host (`dream run` / e2e):
 
 1. Environment variable **`DREAM_STACK_SIZE`** — e.g. `32M`, `32MiB`, `33554432` (bytes).
-2. Compiler default baked from the Dream repo’s `[package.metadata.dream] stack-size` (currently
-   `16MiB` in the root `Cargo.toml`).
+2. Compiler default baked from the Dream repo’s `[package.metadata.dream] stack-size`
+   (currently `16MiB` in the root `Cargo.toml`).
 3. Hard fallback: **16 MiB**.
 
 ```bash
@@ -180,7 +134,7 @@ DREAM_STACK_SIZE=32M dream run path/to/file.dream
 
 Async fibers get a few MiB above that sync budget. Values below 64 KiB are rejected.
 
-This only affects the **native** wasmtime runner. Browser / Node hosts use the engine’s own stack
-limits. Separately, building or testing the compiler itself may need a larger **Rust host** thread
-stack (`RUST_MIN_STACK`, also set in the repo’s `.cargo/config.toml`) — that is unrelated to guest
-WASM stack size.
+This only affects the **native** wasmtime runner. Browser / Node hosts use the engine’s
+own stack limits. Separately, building or testing the compiler itself may need a larger
+**Rust host** thread stack (`RUST_MIN_STACK`, also set in the repo’s `.cargo/config.toml`)
+— that is unrelated to guest WASM stack size.

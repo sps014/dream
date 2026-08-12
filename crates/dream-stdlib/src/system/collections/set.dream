@@ -81,17 +81,14 @@ public class Set<T> : Collection<T> {
         let i = 0;
         while (i < old_cap) {
             if (old_states[i] == hash_slot_occupied()) {
-                this.add(old_keys[i]);
+                this.place_entry(old_keys[i]);
             }
             i = i + 1;
         }
     }
 
-    // Inserts a value into the set. Returns true if it was newly added, false if already present.
-    public fun add(value: T): bool {
-        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
-            this.rehash();
-        }
+    // Probe-insert without a load-factor grow. Used by `add` after the grow check and by `rehash`.
+    fun place_entry(value: T): bool {
         let idx = this.home(value);
         let first_tomb = -1;
         let placed = false;
@@ -131,6 +128,14 @@ public class Set<T> : Collection<T> {
             }
         }
         return added;
+    }
+
+    // Inserts a value into the set. Returns true if it was newly added, false if already present.
+    public fun add(value: T): bool {
+        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
+            this.rehash();
+        }
+        return this.place_entry(value);
     }
 
     // True if the set contains the value.

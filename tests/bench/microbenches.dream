@@ -2,7 +2,7 @@ import system;
 import system.collections;
 import system.text;
 
-// Microbench suite for ARC / string / collection / allocator hot paths.
+// Microbench suite for GC / string / collection / allocator hot paths.
 // Run: `dream --release run tests/bench/microbenches.dream`
 // Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
 
@@ -24,12 +24,12 @@ fun sink_string(s: string): int {
     return s.byte_size();
 }
 
-fun bench_arc_locals(iters: int): void {
+fun bench_gc_locals(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        // Short-lived heap refs: assign/copy stress retain/release without cycles.
+        // Short-lived heap refs: Gen0 nursery traffic (strings) without retaining graphs.
         let a = "n" + i.to_string();
         let b = a;
         let c = b;
@@ -37,7 +37,7 @@ fun bench_arc_locals(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("arc_locals", sw.elapsed_nanos(), iters);
+    report("gc_locals", sw.elapsed_nanos(), iters);
     sink_int(acc);
 }
 
@@ -274,7 +274,7 @@ fun bench_string_builder(iters: int): void {
 
 fun main(): void {
     let scale = 20000;
-    bench_arc_locals(scale);
+    bench_gc_locals(scale);
     bench_string_concat(scale);
     bench_string_eq(scale * 5);
     bench_char_scan(scale / 10);

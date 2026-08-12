@@ -1,0 +1,21 @@
+import system;
+
+// Multi-capture env packs CaptureCells into `object[]` via cast. The container store must retain
+// those cells so the funcbox still sees live captures after the creating frame exits (UI
+// `bind:value` handlers hit `null function` without this).
+fun wrap(f: fun(int): void, label: string): fun(): void {
+    return () => {
+        f(label.length);
+    };
+}
+
+fun main(): void {
+    let n = 0;
+    let setter = (x: int) => {
+        n = n + x;
+    };
+    let run = wrap(setter, "abcd");
+    run();
+    run();
+    System.println(n);
+}

@@ -152,7 +152,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: field_name,
             visibility: Visibility::Public,
             is_weak: false,
-            is_unowned: false,
             type_token: field_type_token,
             field_type: parsed_type,
         })

@@ -1,10 +1,10 @@
 use super::*;
 
-/// A struct lowered for layout: `(interned type id, name, packed, [(field name, interned field type)])`.
-type LoweredStruct = (TypeId, String, bool, Vec<(String, TypeId, bool, bool)>);
-/// One struct's fields as `(name, source type, is_weak, is_unowned)`, snapshotted from
+/// A struct lowered for layout: `(interned type id, name, packed, [(field name, interned field type, is_weak)])`.
+type LoweredStruct = (TypeId, String, bool, Vec<(String, TypeId, bool)>);
+/// One struct's fields as `(name, source type, is_weak)`, snapshotted from
 /// `StructFieldInfo` before `type_ctx` is re-borrowed mutably for lowering.
-type StructFieldSnapshot = (String, Type, bool, bool);
+type StructFieldSnapshot = (String, Type, bool);
 
 impl<'a> Analyzer<'a> {
     /// Turns on HIR collection so a top-level variable's initializer expression is captured while it
@@ -71,7 +71,7 @@ impl<'a> Analyzer<'a> {
                 let fields = info
                     .fields
                     .iter()
-                    .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.is_weak, f.is_unowned))
+                    .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.is_weak))
                     .collect();
                 (name.clone(), info.packed, fields)
             })
@@ -105,10 +105,10 @@ impl<'a> Analyzer<'a> {
         let mut lowered: Vec<LoweredStruct> = Vec::with_capacity(struct_snapshot.len());
         for (name, packed, fields) in struct_snapshot {
             let ty = self.type_ctx.lower_str(&name);
-            let defs: Vec<(String, TypeId, bool, bool)> = fields
+            let defs: Vec<(String, TypeId, bool)> = fields
                 .iter()
-                .map(|(fname, t, is_weak, is_unowned)| {
-                    (fname.clone(), self.type_ctx.lower(t), *is_weak, *is_unowned)
+                .map(|(fname, t, is_weak)| {
+                    (fname.clone(), self.type_ctx.lower(t), *is_weak)
                 })
                 .collect();
             lowered.push((ty, name, packed, defs));
@@ -218,10 +218,10 @@ impl<'a> Analyzer<'a> {
                     }
                 })
                 .collect();
-            let defs: Vec<(String, TypeId, bool, bool)> = elems
+            let defs: Vec<(String, TypeId, bool)> = elems
                 .iter()
                 .enumerate()
-                .map(|(i, e)| (i.to_string(), *e, false, false))
+                .map(|(i, e)| (i.to_string(), *e, false))
                 .collect();
             layouts.insert(
                 ty,
@@ -251,7 +251,6 @@ impl<'a> Analyzer<'a> {
                         ty: fty,
                         name: fname,
                         is_weak: false,
-                        is_unowned: false,
                     });
                     offset += fsize;
                 }

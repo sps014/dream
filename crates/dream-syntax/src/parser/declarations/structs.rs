@@ -119,9 +119,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 methods.push(self.parse_function(Some(field_attributes))?);
             } else {
                 // Fields are private by default; an explicit `public`/`internal` exposes them.
-                // `weak`/`unowned` are storage qualifiers that break ARC reference cycles (see
-                // `docs/language/memory.md`); any order/combination with the visibility modifier is
-                // accepted here, with `weak`+`unowned` together rejected during semantic analysis.
+                // `weak` is a storage qualifier (see `docs/language/memory.md`); any order with
+                // the visibility modifier is accepted. `unowned` was removed — reject with a
+                // clear diagnostic.
                 //
                 // Doc comments attach to the first token of the field (`public`, or the name when
                 // bare). Capture before consuming modifiers and splice onto the name for LSP.
@@ -129,7 +129,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let doc_trivia = Self::recover_doc_trivia(first_trivia, &field_attributes);
                 let mut field_visibility = Visibility::Private;
                 let mut field_weak = false;
-                let mut field_unowned = false;
                 loop {
                     if self.try_consume_visibility(&mut field_visibility) {
                         continue;
@@ -140,8 +139,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                             field_weak = true;
                         }
                         TokenKind::UnownedToken => {
-                            self.match_token(TokenKind::UnownedToken);
-                            field_unowned = true;
+                            let tok = self.match_token(TokenKind::UnownedToken);
+                            self.diagnostics.report_error(
+                                "'unowned' was removed; use 'weak'".to_string(),
+                                Some(tok.position),
+                            );
                         }
                         _ => break,
                     }
@@ -170,7 +172,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                     name: field_name,
                     visibility: field_visibility,
                     is_weak: field_weak,
-                    is_unowned: field_unowned,
                     type_token: field_type_token,
                     field_type: parsed_type,
                 });

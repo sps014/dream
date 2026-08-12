@@ -1,5 +1,5 @@
 // Runtime semantics of `weak`: a `weak` field does not keep its referent alive, and is reset to
-// `None` once the referent's last strong reference is released — see `docs/language/memory.md`.
+// `None` once the referent becomes unreachable and GC runs — see `docs/language/memory.md`.
 import system;
 class Node {
     public value: int;
@@ -11,9 +11,8 @@ class Node {
     }
 }
 
-// `parent` is the only strong owner of the freshly-built `Node(99)`; it goes out of scope (and is
-// released) when this function returns, so `child.parent` — a `weak` reference to it — must observe
-// that and reset to `None`.
+// `parent` is the only strong owner of the freshly-built `Node(99)`; it goes out of scope when
+// this function returns. After a forced collection, `child.parent` must observe `None`.
 fun attach_weak_parent(child: Node) {
     let parent = Node(99);
     child.parent = Option.Some(parent);
@@ -26,13 +25,13 @@ fun attach_weak_parent(child: Node) {
 fun main() {
     let child = Node(1);
     attach_weak_parent(child);
+    Debug.gc_collect();
     switch (child.parent) {
         Some(p) => { System.println("after: parent.value=" + p.value.to_string()); }
         None => { System.println("after: parent is None"); }
     }
 
-    // Reassigning a `weak` field to a *live* referent must still work like an ordinary read: it does
-    // not retain the new referent either.
+    // Reassigning a `weak` field to a *live* referent must still work like an ordinary read.
     let other = Node(2);
     child.parent = Option.Some(other);
     switch (child.parent) {

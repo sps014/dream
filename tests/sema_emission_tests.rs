@@ -398,41 +398,32 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
     // tag-dispatches to those per-type releases. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
-        @allow_cycle
         class Node {{ public next: Node; public v: int;
             del() {{ System.print(0); }}
             public constructor(v: int) {{ this.v = v; }}
         }}
         fun main(): void {{ let n: Node = Node(1); let o: object = n; }}"
     );
-    // RC insertion is required so `main`'s scope-exit `Release`s reference the deep-release runtime;
-    // dead-function elimination otherwise (correctly) drops those uncalled helpers. Binding to an
-    // `object` local forces a statically-untyped release, exercising the tag-dispatch router.
+    // Binding to an `object` local keeps the type live so GC visitors are emitted.
     let wat = emit_hir_to_module_rc_only(&code);
     assert!(
-        wat.contains("(func $release_Node"),
-        "per-type release missing:\n{}",
+        wat.contains("(func $gc_trace_Node"),
+        "per-type GC trace missing:\n{}",
         wat
     );
     assert!(
-        wat.contains("(call $Node_del)"),
-        "destructor not invoked from release:\n{}",
-        wat
-    );
-    // The reference field `next` is deep-released; the scalar `v` is not.
-    assert!(
-        wat.contains("(call $release_Node)"),
-        "reference field not released:\n{}",
+        wat.contains("(func $gc_run_finalizer"),
+        "finalizer dispatch missing:\n{}",
         wat
     );
     assert!(
-        wat.contains("(func $release_object"),
-        "tag-dispatch router missing:\n{}",
+        wat.contains("(call $Node_del)") || wat.contains("call $Node_del"),
+        "destructor not wired into finalizer dispatch:\n{}",
         wat
     );
     assert!(
-        wat.contains("(call $free)"),
-        "release must free the block:\n{}",
+        wat.contains("(func $gc_trace_object"),
+        "tag-dispatch trace router missing:\n{}",
         wat
     );
 }
@@ -924,58 +915,95 @@ fn exec_print_struct_array() {
 
 #[cfg(feature = "native")]
 #[test]
-fn exec_del_runs_at_last_release() {
-    // Overwriting a reference local releases its previous occupant; at refcount zero the deep-release
-    // runtime runs the object's `del()` (prints 9 here) before freeing. So `Res(1)` is released (9)
-    // when `r` is reassigned, the surviving `Res(2)` prints its field (2), and finally the scope-exit
-    // release of `r` runs `Res(2).del()` (9) at function return -> "929". Proves overwrite release,
-    // `$release_Res` -> `$Res_del` -> `$free`, and scope-exit release all fire end-to-end.
+fn exec_del_runs_after_gc_collect() {
+    // Under tiered GC, `del()` is a finalizer: it runs after a collection finds the object
+    // unreachable, not on ARC last-release. A helper scope drops both `Res` instances, then
+    // `Debug.gc_collect()` forces finalizers.
     let code = format!(
         "{SYSTEM_STUB}
+        class Debug {{
+            @intrinsic(\"gc_collect_full\")
+            static extern fun gc_collect(): void;
+        }}
         class Res {{ public v: int;
             del() {{ System.print(9); }}
             public constructor(v: int) {{ this.v = v; }}
         }}
-        fun main(): void {{
+        fun body(): void {{
             let r: Res = Res(1);
             r = Res(2);
             System.print(r.v);
+        }}
+        fun main(): void {{
+            body();
+            Debug.gc_collect();
         }}"
     );
-    assert_eq!(run_and_capture_rc(&code, "main"), "929");
+    let out = run_and_capture_rc(&code, "main");
+    assert!(
+        out.starts_with('2'),
+        "field print should precede finalizers: {:?}",
+        out
+    );
+    assert_eq!(
+        out.chars().filter(|&c| c == '9').count(),
+        2,
+        "both Res instances should finalize: {:?}",
+        out
+    );
 }
 
+#[cfg(feature = "native")]
 #[test]
-fn exec_container_store_retains_no_double_free() {
-    // Storing a borrowed reference into a container field retains it, so the field and the source
-    // local each own a count. At scope exit both `a` and `b` are released: releasing `a` runs its
-    // `del()` (1) and deep-releases `a.next` (dropping `b` to 1), then releasing `b` runs its `del()`
-    // (1) and frees it. Each object is destroyed exactly once -> "011". Without the container retain
-    // this double-frees `b`.
+fn exec_container_field_keeps_object_alive_until_gc() {
+    // Storing `b` into `a.next` keeps `b` reachable through `a`. After both locals die, one
+    // collection finalizes each node exactly once (no double-free / missed edge).
     let code = format!(
         "{SYSTEM_STUB}
-        @allow_cycle
+        class Debug {{
+            @intrinsic(\"gc_collect_full\")
+            static extern fun gc_collect(): void;
+        }}
         class Node {{ public next: Node;
             del() {{ System.print(1); }}
             public constructor() {{ }}
         }}
-        fun main(): void {{
+        fun body(): void {{
             let a: Node = Node();
             let b: Node = Node();
             a.next = b;
             System.print(0);
+        }}
+        fun main(): void {{
+            body();
+            Debug.gc_collect();
         }}"
     );
-    assert_eq!(run_and_capture_rc(&code, "main"), "011");
+    let out = run_and_capture_rc(&code, "main");
+    assert!(
+        out.starts_with('0'),
+        "user print should precede finalizers: {:?}",
+        out
+    );
+    assert_eq!(
+        out.chars().filter(|&c| c == '1').count(),
+        2,
+        "both nodes should finalize once: {:?}",
+        out
+    );
 }
 
+#[cfg(feature = "native")]
 #[test]
-fn exec_returned_value_transfers_ownership() {
-    // `make()` returns an owned local; its `+1` transfers to the caller instead of being released at
-    // `make`'s scope exit (which would run `del()` early and hand back a dangling pointer). So `y.v`
-    // reads 5, and the object's single `del()` (7) fires only at `main`'s scope exit -> "57".
+fn exec_returned_value_stays_alive_across_call() {
+    // `make()` returns a heap ref; under GC the object stays live while the caller's `y` roots
+    // it. `del()` must not run inside `make`, only after `y` dies and a collection runs.
     let code = format!(
         "{SYSTEM_STUB}
+        class Debug {{
+            @intrinsic(\"gc_collect_full\")
+            static extern fun gc_collect(): void;
+        }}
         class R {{ public v: int;
             del() {{ System.print(7); }}
             public constructor(v: int) {{ this.v = v; }}
@@ -984,9 +1012,13 @@ fn exec_returned_value_transfers_ownership() {
             let x: R = R(5);
             return x;
         }}
-        fun main(): void {{
+        fun body(): void {{
             let y: R = make();
             System.print(y.v);
+        }}
+        fun main(): void {{
+            body();
+            Debug.gc_collect();
         }}"
     );
     assert_eq!(run_and_capture_rc(&code, "main"), "57");
@@ -1166,10 +1198,8 @@ fn print_function_value_emits_hir() {
 }
 
 #[test]
-fn func_value_argument_is_reference_counted() {
-    // A `fun(...)` value is a heap funcbox (`TyKind::Func` is a reference), so the RC pass retains
-    // and releases it like any other managed ref. A `string` bound alongside it is also counted —
-    // both should see Retain/Release traffic after RC insertion.
+fn func_value_argument_lowers() {
+    // A `fun(...)` value is a heap funcbox (`TyKind::Func` is a reference); lowering must succeed.
     let code = format!(
         "{SYSTEM_STUB}
         {CLOSURE_STUB}
@@ -1181,61 +1211,12 @@ fn func_value_argument_is_reference_counted() {
             let r: int = apply(g, s);
         }}"
     );
-
-    let mut diagnostics = DiagnosticBag::new(None);
-    let lexer = Lexer::new(code.to_string());
-    let parse_arena = bumpalo::Bump::new();
-    let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
-    let tree = parser.parse().expect("parse should succeed");
-    let arena = bumpalo::Bump::new();
-    let mut analyzer = Analyzer::new(&tree, &arena);
-    let hir = analyzer
-        .analyze(&mut diagnostics)
-        .expect("analysis should succeed")
-        .hir;
-    assert!(!diagnostics.has_errors(), "unexpected analysis errors");
-    let interner = analyzer.interner();
-    let mut mir = dream_mir::lower::lower_program(&hir, interner);
-    use dream_mir::passes::MirPass;
-    for f in &mut mir.functions {
-        dream_mir::passes::RcInsertion.run(f, interner);
-    }
-
-    use dream_mir::{Operand, Place, Statement};
-    let main = mir
-        .functions
-        .iter()
-        .find(|f| f.name == "main")
-        .expect("main should be lowered");
-
-    let mut func_value_rc = 0usize;
-    let mut reference_rc = 0usize;
-    for block in &main.blocks {
-        for stmt in &block.stmts {
-            let op = match stmt {
-                Statement::Retain(o) | Statement::Release(o) => o,
-                _ => continue,
-            };
-            if let Operand::Copy(Place::Local(l)) = op {
-                let ty = main.locals[l.0 as usize].ty;
-                if matches!(interner.kind(ty), dream_types::TyKind::Func(_, _)) {
-                    func_value_rc += 1;
-                } else if interner.is_reference(ty) {
-                    reference_rc += 1;
-                }
-            }
-        }
-    }
-
+    let (wat, _) = emit_hir_to_wat(&code);
     assert!(
-        func_value_rc > 0,
-        "a function value is a heap funcbox and must be retained/released:\n{:#?}",
-        main
-    );
-    assert!(
-        reference_rc > 0,
-        "the string local should still be reference-counted:\n{:#?}",
-        main
+        wat.contains("$funcbox_new") || wat.contains("funcbox"),
+        "funcbox runtime should be present:
+{}",
+        wat
     );
 }
 

@@ -17,5 +17,6 @@ async fun run(): void {
 async fun main(): void {
     let base = Debug.live_objects();
     await run();
+    Debug.gc_collect();
     System.println("live_delta=" + (Debug.live_objects() - base).to_string());
 }

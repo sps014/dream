@@ -61,8 +61,6 @@ impl MirPass for Dse {
                     | Statement::InterfaceCall { .. }
                     | Statement::IndirectCall { .. }
                     | Statement::Print { .. }
-                    | Statement::Retain(_)
-                    | Statement::Release(_)
                     | Statement::ForceFree(_)
                     | Statement::ArrayElemsCopy { .. }
                     // A lock acquire/release is a cross-thread synchronization point: any store

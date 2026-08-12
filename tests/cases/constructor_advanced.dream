@@ -47,5 +47,6 @@ fun main() {
 
     open_account("Grace");
     open_account("Linus");
+    Debug.gc_collect();
     System.println(0);
 }

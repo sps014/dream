@@ -26,8 +26,6 @@ fn print_block(out: &mut String, block: &BasicBlock) {
 fn stmt(s: &Statement) -> String {
     match s {
         Statement::Assign(p, r) => format!("{} = {}", place(p), rvalue(r)),
-        Statement::Retain(o) => format!("retain {}", operand(o)),
-        Statement::Release(o) => format!("release {}", operand(o)),
         Statement::Panic(o) => format!("panic {}", operand(o)),
         Statement::Call { callee, args } => {
             format!("call def{}({})", callee.def.0, ops(args))

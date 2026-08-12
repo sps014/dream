@@ -1,0 +1,24 @@
+import system;
+
+class Box {
+    run_fn: fun(): int;
+
+    public constructor() {
+        this.run_fn = () => 7;
+    }
+
+    public fun via_local(): int {
+        let f = this.run_fn;
+        return f();
+    }
+
+    public fun via_field(): int {
+        return this.run_fn();
+    }
+}
+
+fun main(): void {
+    let b = Box();
+    System.println(b.via_local());
+    System.println(b.via_field());
+}

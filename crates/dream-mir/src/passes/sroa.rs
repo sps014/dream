@@ -125,21 +125,7 @@ fn analyze_simple_ctor(
                 assigned.insert(*field, ());
                 inits.push((*field, init));
             }
-            Statement::Retain(_) | Statement::Release(_) => {
-                // RC on ctor params/this is inserted before this pass; ignore RC of non-this, but
-                // any mention of `this` besides field stores disqualifies.
-                if stmt_mentions(stmt, this) {
-                    // Retain/Release(this) alone is fine — object still exists after expansion.
-                    if !matches!(
-                        stmt,
-                        Statement::Retain(Operand::Copy(Place::Local(l)))
-                            | Statement::Release(Operand::Copy(Place::Local(l)))
-                            if *l == this
-                    ) {
-                        return None;
-                    }
-                }
-            }
+            Statement::Nop => {}
             _ => {
                 if stmt_mentions(stmt, this) {
                     return None;
@@ -321,9 +307,6 @@ fn classify(
                     fields.insert(*field, func.local_ty(*x));
                 }
                 // Heap RC on the object itself: dropped in `transform` once the allocation is gone.
-                Statement::Retain(Operand::Copy(Place::Local(l)))
-                | Statement::Release(Operand::Copy(Place::Local(l)))
-                    if *l == o => {}
                 // Any other mention of `o` disqualifies promotion.
                 _ => {
                     if stmt_mentions(stmt, o) {
@@ -340,7 +323,7 @@ fn classify(
 }
 
 /// Replaces `o` with one promoted local per field: the `New` becomes zero-inits and every field
-/// access is rewritten to the corresponding local. Matching `Retain`/`Release` of `o` are dropped.
+/// access is rewritten to the corresponding local.
 fn transform(
     func: &mut MirFunction,
     interner: &TypeInterner,
@@ -388,9 +371,6 @@ fn transform(
                         Rvalue::Use(Operand::Copy(Place::Local(promo[&field]))),
                     ));
                 }
-                Statement::Retain(Operand::Copy(Place::Local(l)))
-                | Statement::Release(Operand::Copy(Place::Local(l)))
-                    if l == o => {}
                 other => new_stmts.push(other),
             }
         }
@@ -560,8 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn promotes_despite_retain_release() {
-        // Same as the basic case, plus Retain(o)/Release(o) that RC insertion would emit.
+    fn promotes_simple_struct() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("f", i.int());
         let o = b.new_temp(i.int());
@@ -575,7 +554,6 @@ mod tests {
                 args: vec![],
             },
         );
-        b.push(Statement::Retain(Operand::Copy(Place::Local(o))));
         b.assign(
             Place::Field { base: o, field: 0 },
             Rvalue::Use(Operand::Const(Const::Int(7))),
@@ -584,21 +562,10 @@ mod tests {
             Place::Local(x),
             Rvalue::Use(Operand::Copy(Place::Field { base: o, field: 0 })),
         );
-        b.push(Statement::Release(Operand::Copy(Place::Local(o))));
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(x)))));
         let mut func = b.finish();
 
-        assert!(
-            Sroa.run(&mut func, &i),
-            "Retain/Release on the object local must not block promotion"
-        );
-        let has_rc = func.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
-            matches!(
-                s,
-                Statement::Retain(_) | Statement::Release(_)
-            )
-        });
-        assert!(!has_rc, "object Retain/Release should be dropped with the New");
+        assert!(Sroa.run(&mut func, &i));
         let has_new = func
             .blocks
             .iter()

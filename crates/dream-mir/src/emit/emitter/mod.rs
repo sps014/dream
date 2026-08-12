@@ -13,7 +13,7 @@
 
 use super::*;
 use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE};
-use crate::emit::valuetype::{ValueFrame, ValueLocalKind};
+use crate::emit::valuetype::{value_gc_ref_offsets, ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
 mod async_ops;
@@ -169,6 +169,10 @@ struct Emitter<'a> {
     shape_scopes: Vec<shape::ShapeScope>,
     /// Monotonic id for `$__brkN` / `$__cntN` / `$__joinN` labels in shape emit.
     shape_label_id: u32,
+    /// Reference locals registered in the GC root table for the function body.
+    gc_root_locals: Vec<u32>,
+    /// Shadow-frame byte offsets (from `$__sp`) of embedded GC refs in owning value locals.
+    gc_slot_root_offs: Vec<u32>,
 }
 
 impl<'a> Emitter<'a> {
@@ -194,6 +198,22 @@ impl<'a> Emitter<'a> {
         debug_fn: Option<&'a crate::emit::debug_map::DebugFunction>,
     ) -> Self {
         let frame = ValueFrame::compute(func, interner);
+        let gc_root_locals: Vec<u32> = func
+            .locals
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| interner.is_reference(d.ty))
+            .map(|(i, _)| i as u32)
+            .collect();
+        let mut gc_slot_root_offs = Vec::new();
+        for (local, frame_off) in frame.owning_slots() {
+            let ty = func.local_ty(local);
+            for field_off in value_gc_ref_offsets(ty, layouts, interner) {
+                gc_slot_root_offs.push(frame_off + field_off);
+            }
+        }
+        gc_slot_root_offs.sort_unstable();
+        gc_slot_root_offs.dedup();
         Emitter {
             func,
             interner,
@@ -215,6 +235,8 @@ impl<'a> Emitter<'a> {
             current_line: 0,
             shape_scopes: Vec::new(),
             shape_label_id: 0,
+            gc_root_locals,
+            gc_slot_root_offs,
         }
     }
 }
@@ -310,17 +332,16 @@ impl Emitter<'_> {
         // Scratch holding the old element count across a `Buffer.realloc<T>` (needed both to size the
         // `$realloc` call and to zero-fill only the newly grown tail, if any).
         self.line("  (local $__old_len i32)");
-        // Scratch holding the previous occupant of a reference field/element across a reassignment, so
-        // it can be released *after* the new value is stored (deferred release keeps a self-referential
-        // `obj.f = g(obj.f)` sound).
+        // Scratch for nested field write barriers (clobbered by New/UnionNew)
         self.line("  (local $__rel i32)");
+        // Outer place-store destination surviving emit_rvalue
+        self.line("  (local $__slot i32)");
         // Scratch holding the saved `$__sp` across a dynamic `js` call's argument-slot buffer (see
         // `emit_js_call`): the buffer is bump-allocated below `$__sp` and released right after the
         // single host crossing, so this need only survive one rvalue.
         self.line("  (local $__jsp i32)");
-        // Scratch pointers used only by `weak`/`unowned` field stores (see `emit_weak_field_store`/
-        // `emit_unowned_field_store` in `statements.rs`): `$__wsrc` holds the freshly evaluated RHS
-        // `Option<T>` value (for `weak`) or plain reference value (for `unowned`) while the old
+        // Scratch pointers used only by `weak` field stores (see `emit_weak_field_store` in
+        // `statements.rs`): `$__wsrc` holds the freshly evaluated `Option<T>` RHS while the old
         // occupant is torn down; `$__wbox` holds the freshly allocated private weak-box pointer.
         self.line("  (local $__wsrc i32)");
         self.line("  (local $__wbox i32)");
@@ -328,14 +349,88 @@ impl Emitter<'_> {
         // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
         // once the destination allocation starts overwriting `$__obj`.
         self.line("  (local $__src i32)");
+        if !self.gc_root_locals.is_empty() || !self.gc_slot_root_offs.is_empty() {
+            self.line("  (local $__root_base i32)");
+            for li in self.gc_root_locals.clone() {
+                self.line(&format!("  (local $__rg{} i32)", li));
+            }
+        }
 
         self.emit_value_frame_prologue();
+        self.emit_gc_root_prologue();
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
         if let Some(dbg) = self.debug_fn {
             self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
         }
         self.emit_shaped_body();
         self.line(")");
+    }
+
+    fn type_has_del(&self, ty: TypeId) -> bool {
+        let Some(layout) = self.layouts.get(ty) else {
+            return false;
+        };
+        let del = format!("{}_del", layout.name);
+        self.symbols.values().any(|s| s == &del)
+    }
+
+    fn emit_gc_root_prologue(&mut self) {
+        if self.gc_root_locals.is_empty() && self.gc_slot_root_offs.is_empty() {
+            return;
+        }
+        self.line(&format!(
+            "     (i32.const {}) (i32.load) (local.set $__root_base)",
+            crate::abi::GC_ROOT_COUNT_ADDR
+        ));
+        let slot_offs = self.gc_slot_root_offs.clone();
+        for off in slot_offs {
+            self.line("     (global.get $__sp)");
+            self.line(&format!("     (i32.const {}) (i32.add)", off));
+            self.line("     (call $gc_root_push_slot)");
+            self.line("     (drop)");
+        }
+        let root_locals = self.gc_root_locals.clone();
+        for li in root_locals {
+            self.line(&format!(
+                "     (local.get ${li}) (call $gc_root_push) (local.set $__rg{li})"
+            ));
+        }
+    }
+
+    fn emit_gc_root_epilogue(&mut self) {
+        if self.gc_root_locals.is_empty() && self.gc_slot_root_offs.is_empty() {
+            return;
+        }
+        self.line("     (local.get $__root_base) (call $gc_root_pop)");
+    }
+
+    fn emit_gc_root_update(&mut self, local: u32) {
+        if !self.gc_root_locals.contains(&local) {
+            return;
+        }
+        self.line(&format!(
+            "     (local.get $__rg{local}) (local.get ${local}) (call $gc_root_set)"
+        ));
+    }
+
+    fn emit_gc_root_reload(&mut self) {
+        let root_locals = self.gc_root_locals.clone();
+        for li in root_locals {
+            self.line(&format!(
+                "     (local.get $__rg{li}) (call $gc_root_get) (local.set ${li})"
+            ));
+        }
+    }
+
+    fn emit_malloc_call(&mut self) {
+        self.line("     (call $malloc)");
+        self.emit_gc_root_reload();
+    }
+
+    fn emit_gc_reload_if_collect(&mut self, sym: &str) {
+        if matches!(sym, "gc_collect" | "gc_collect_ephemeral" | "gc_collect_full") {
+            self.emit_gc_root_reload();
+        }
     }
 
     /// Emits the `dream_debug.exit` hook (pops the debugger's call-stack frame) right before a return,
@@ -383,20 +478,6 @@ impl Emitter<'_> {
         };
         self.line(&format!("     (i32.const {})", self.string_addr(&msg)));
         self.line("     (call $dream_panic)");
-    }
-
-    /// Traps if the just-loaded `unowned` field value (top of stack) is the poison sentinel `0`
-    /// (written by `$weak_clear_all` when the referent was freed — see `src/mir/runtime/weak.wat`),
-    /// otherwise leaves the value back on the stack unchanged. Runtime semantics for `unowned`: see
-    /// `docs/language/memory.md`.
-    fn emit_unowned_read_check(&mut self) {
-        self.line("     (local.set $__wsrc)");
-        self.line("     (local.get $__wsrc)");
-        self.line("     (i32.eqz)");
-        self.line("     (if (then");
-        self.emit_panic(super::panic_msgs::UNOWNED_NULL_DEREF);
-        self.line("     ))");
-        self.line("     (local.get $__wsrc)");
     }
 
     /// Pushes the address of `base.field` (`base + offset`) onto the stack.
@@ -473,9 +554,8 @@ impl Emitter<'_> {
         Some((f.offset, f.ty))
     }
 
-    /// Like [`Self::field_layout`], but also exposes the field's `weak`/`unowned` storage qualifiers
-    /// (see `docs/language/memory.md`), needed at both the store site (skip retain, register in the
-    /// weak side-table) and the read site (trap on a poisoned `unowned` field).
+    /// Like [`Self::field_layout`], but also exposes the field's `weak` storage qualifier (see
+    /// `docs/language/memory.md`), needed at the store site (register in the weak side-table).
     fn field_layout_full(
         &self,
         base: crate::Local,
@@ -510,15 +590,12 @@ impl Emitter<'_> {
             Operand::Copy(Place::Global(g)) => self.line(&format!("     (global.get $g{})", g.0)),
             Operand::Copy(Place::Field { base, field }) => {
                 if let Some(f) = self.field_layout_full(*base, *field) {
-                    let (off, fty, is_unowned) = (f.offset, f.ty, f.is_unowned);
+                    let (off, fty) = (f.offset, f.ty);
                     self.field_addr(*base, off);
                     // A value-struct field is addressed inline, not loaded: reading it yields the
                     // address of its inline storage (the consumer copies where a value is needed).
                     if !self.interner.is_value_type(fty) {
                         self.line(&format!("     ({})", self.load_instr(fty)));
-                    }
-                    if is_unowned {
-                        self.emit_unowned_read_check();
                     }
                 } else {
                     crate::internal_error!(

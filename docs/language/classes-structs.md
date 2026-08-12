@@ -23,7 +23,9 @@ p2.x = 10;
 println(p1.x);  // 10
 ```
 
-Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
+Classes are managed by the tracing garbage collector — no manual frees. Define a `del()`
+finalizer if you need cleanup when the object becomes unreachable (timing is not guaranteed —
+see [Memory Management](memory.md)).
 
 ### Overloaded constructors
 
@@ -130,9 +132,8 @@ public class Counter {
 }
 ```
 
-A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a
-strong-reference-cycle-prone field out of the compiler's cycle check — see
-[Memory > Reference cycles](memory.md#advanced-reference-cycles).
+A field may also carry `weak` (combinable with visibility in any order) when it should not
+keep its target alive — see [Memory > `weak` references](memory.md#weak-references).
 
 ### Methods
 

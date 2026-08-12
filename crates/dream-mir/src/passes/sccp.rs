@@ -48,6 +48,7 @@ impl MirPass for Sccp {
             })
             .collect();
 
+        let is_take: Vec<bool> = func.locals.iter().map(|d| d.is_take).collect();
         let mut changed = false;
         for (i, block) in func.blocks.iter_mut().enumerate() {
             if !reachable[i] {
@@ -60,9 +61,9 @@ impl MirPass for Sccp {
                 continue;
             }
             for stmt in &mut block.stmts {
-                changed |= subst_stmt_reads(stmt, &known);
+                changed |= subst_stmt_reads(stmt, &known, &is_take);
             }
-            changed |= subst_terminator_reads(&mut block.terminator, &known);
+            changed |= subst_terminator_reads(&mut block.terminator, &known, &is_take);
             // Fold a now-constant branch into an unconditional jump.
             if let Some(t) = fold_branch(&block.terminator) {
                 block.terminator = t;

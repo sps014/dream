@@ -7,8 +7,8 @@ export class DreamInstance {
     this.memory = instance.exports.memory;
     // JS-object handle registry backing the Dream `js` type. A `js` value crosses the boundary
     // as a small i32 id; the host keeps the real JS value here with a Dream-owned refcount.
-    // Id 0 is reserved for null. `registerHandle` / `retainValue` / `releaseValue` keep the count
-    // in sync with MIR `Retain`/`Release` so the entry is dropped when the last owner releases.
+    // Id 0 is reserved for null. `registerHandle` / `retainHandle` / `releaseHandle` keep the count
+    // in sync with emitter-side `$js_retain` / `$js_unregister` on overwrite and null of `js` places.
     this._jsHandles = new Map(); // id -> { value, count }
     this._jsIds = new Map(); // JS value -> id (identity for objects, value for primitives)
     this._jsNextId = 1;
@@ -63,6 +63,26 @@ export class DreamInstance {
     this._jsHandles.delete(id);
     this._jsIds.delete(value);
     this._jsFreeIds.push(id);
+  }
+
+  /** Compiler-emitted `$js_retain`: bump by handle id (raw i32 from WASM). */
+  retainHandle(id) {
+    if (!id) return;
+    const entry = this._jsHandles.get(id | 0);
+    if (entry) entry.count += 1;
+  }
+
+  /** Compiler-emitted `$js_release`: drop by handle id (raw i32 from WASM). */
+  releaseHandle(id) {
+    if (!id) return;
+    const hid = id | 0;
+    const entry = this._jsHandles.get(hid);
+    if (!entry) return;
+    entry.count -= 1;
+    if (entry.count > 0) return;
+    this._jsHandles.delete(hid);
+    this._jsIds.delete(entry.value);
+    this._jsFreeIds.push(hid);
   }
 
   /** A fresh DataView over current memory (memory may grow, so do not cache the buffer). */

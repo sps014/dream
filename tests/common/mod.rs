@@ -80,22 +80,19 @@ pub fn run_and_capture(code: &str, entry: &str) -> String {
     run_wat(&emit_hir_to_module(code), entry)
 }
 
-/// Like [`emit_hir_to_module`] but runs [`RcInsertion`] first, so `Retain`/`Release` statements are
-/// present. Needed to exercise the deep-release runtime: `del()` fires when a reference's last owner
-/// is released (here, when a reference local is overwritten). Only RC insertion is run — the
-/// optimizing passes are skipped so they cannot elide the release we are testing.
+/// Alias for [`emit_hir_to_module`] (historically ran RC insertion only).
 pub fn emit_hir_to_module_rc(code: &str) -> String {
     emit_hir_to_module_rc_only(code)
 }
 
-/// Compiles `code` with RC insertion enabled and runs it, capturing output (see [`run_and_capture`]).
+/// Compiles `code` and runs it, capturing output (see [`run_and_capture`]).
 pub fn run_and_capture_rc(code: &str, entry: &str) -> String {
     run_wat(&emit_hir_to_module_rc(code), entry)
 }
 
 /// Instantiates a WAT module under wasmtime with the host `print_*` imports wired to a capture
 /// buffer, runs the exported `entry`, and returns everything it printed. This exercises the *runtime*
-/// — allocator, string ABI, `*_to_string`, and deep release — for real, not just that it assembles.
+/// — allocator, string ABI, `*_to_string`, and GC runtime — for real, not just that it assembles.
 pub fn run_wat(wat: &str, entry: &str) -> String {
     use std::sync::{Arc, Mutex};
     use wasmtime::*;
@@ -178,8 +175,8 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
     captured
 }
 
-/// Compiles through the production-like MIR pipeline: RC insertion, module optimize (inline), then
-/// the default per-function pass manager (includes `RcElision`). Returns full-module WAT.
+/// Compiles through the production-like MIR pipeline: module optimize (inline), then the default
+/// per-function pass manager. Returns full-module WAT.
 pub fn emit_hir_to_module_optimized(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);
@@ -201,19 +198,10 @@ pub fn emit_hir_to_module(code: &str) -> String {
     })
 }
 
-/// Like [`emit_hir_to_module`] but runs `RcInsertion` first (no other passes), matching the
-/// production pipeline where reference-counting is always inserted before emission. Needed for tests
-/// that assert on the deep-release runtime: those helper functions are only *reachable* — and so
-/// retained by the module's dead-function elimination — once a `Release` call site references them.
+/// Alias for [`emit_hir_to_module`]. Historically inserted RC before emit so deep-release helpers
+/// stayed reachable; under GC the visitors are always emitted.
 pub fn emit_hir_to_module_rc_only(code: &str) -> String {
-    compile_test_pipeline(code, |hir, interner| {
-        let mut mir = dream_mir::lower::lower_program(hir, interner);
-        use dream_mir::passes::MirPass;
-        for f in &mut mir.functions {
-            dream_mir::passes::RcInsertion.run(f, interner);
-        }
-        dream_mir::emit::emit_module(&mir, interner, false)
-    })
+    emit_hir_to_module(code)
 }
 
 /// The `System` intrinsic surface (mirrors `stdlib/system/system.dream`), inlined so the print tests do not

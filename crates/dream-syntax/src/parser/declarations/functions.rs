@@ -251,7 +251,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             let attributes = self.parse_attributes();
 
             // A `ref name: T` / `borrow name: T` parameter. Both are real keywords (same slot).
-            // Unmarked parameters are sink (callee takes the caller's +1).
+            // Unmarked and `borrow` parameters are plain shared refs (`borrow` is an ignored
+            // synonym kept for source compatibility); only `ref` changes calling convention.
             let is_ref = self.current_token().kind == TokenKind::RefToken;
             if is_ref {
                 self.match_token(TokenKind::RefToken);

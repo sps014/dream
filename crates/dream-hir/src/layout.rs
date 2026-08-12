@@ -34,12 +34,9 @@ pub struct FieldLayout {
     pub offset: u32,
     pub ty: TypeId,
     pub name: String,
-    /// True when declared `weak` (an `Option<T>` field, `T` a class, excluded from strong ARC
-    /// bookkeeping and from the reference-cycle graph). Always `false` for union-variant fields.
+    /// True when declared `weak` (an `Option<T>` field, `T` a class; the GC clears it when the
+    /// referent becomes unreachable). Always `false` for union-variant fields.
     pub is_weak: bool,
-    /// True when declared `unowned` (a plain class-typed field excluded from strong ARC
-    /// bookkeeping). Always `false` for union-variant fields.
-    pub is_unowned: bool,
 }
 
 /// The full layout of one nominal type.
@@ -59,17 +56,17 @@ pub struct TypeLayout {
 }
 
 impl TypeLayout {
-    /// Builds a layout from a struct's `(field name, field type)` pairs in declaration order,
-    /// assigning aligned offsets. `name` is the struct's display name.
+    /// Builds a layout from a struct's `(field name, field type, is_weak)` triples in declaration
+    /// order, assigning aligned offsets. `name` is the struct's display name.
     pub fn from_fields(
         interner: &TypeInterner,
         name: impl Into<String>,
-        field_defs: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
+        field_defs: impl IntoIterator<Item = (String, TypeId, bool)>,
     ) -> Self {
         let mut offset = 0u32;
         let mut max_align = 4u32;
         let mut fields = Vec::new();
-        for (field_name, ty, is_weak, is_unowned) in field_defs {
+        for (field_name, ty, is_weak) in field_defs {
             let (size, align) = scalar_size(interner, ty);
             offset = align_up(offset, align);
             fields.push(FieldLayout {
@@ -77,7 +74,6 @@ impl TypeLayout {
                 ty,
                 name: field_name,
                 is_weak,
-                is_unowned,
             });
             offset += size;
             max_align = max_align.max(align);
@@ -96,18 +92,17 @@ impl TypeLayout {
     pub fn from_fields_packed(
         interner: &TypeInterner,
         name: impl Into<String>,
-        field_defs: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
+        field_defs: impl IntoIterator<Item = (String, TypeId, bool)>,
     ) -> Self {
         let mut offset = 0u32;
         let mut fields = Vec::new();
-        for (field_name, ty, is_weak, is_unowned) in field_defs {
+        for (field_name, ty, is_weak) in field_defs {
             let (size, _align) = scalar_size(interner, ty);
             fields.push(FieldLayout {
                 offset,
                 ty,
                 name: field_name,
                 is_weak,
-                is_unowned,
             });
             offset += size;
         }
@@ -204,9 +199,9 @@ mod tests {
             &i,
             "T",
             [
-                ("b".into(), by, false, false),
-                ("d".into(), dbl, false, false),
-                ("n".into(), int, false, false),
+                ("b".into(), by, false),
+                ("d".into(), dbl, false),
+                ("n".into(), int, false),
             ],
         );
         assert_eq!(l.fields[0].offset, 0);
@@ -227,9 +222,9 @@ mod tests {
             &i,
             "T",
             [
-                ("b".into(), by, false, false),
-                ("d".into(), dbl, false, false),
-                ("n".into(), int, false, false),
+                ("b".into(), by, false),
+                ("d".into(), dbl, false),
+                ("n".into(), int, false),
             ],
         );
         assert_eq!(l.fields[0].offset, 0);

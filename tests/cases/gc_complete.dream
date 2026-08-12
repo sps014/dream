@@ -1,15 +1,10 @@
-// Comprehensive garbage-collection (ARC) coverage. Uses the `Debug.*` allocator probes to assert,
-// at runtime, that every allocation pattern is reference-counted correctly:
-//   * ref_count()        - retain/release arithmetic on shared values
-//   * live_objects()     - net live blocks (leak detection)
-//   * heap_ptr()         - heap high-water mark (block reuse vs. growth)
-//   * free_list_head()   - reclaimed-block freelist
-//
-// The destructor prints make reclamation order observable for the `del()` cases.
+// Comprehensive GC coverage. Uses `Debug.*` probes to assert allocation patterns stay balanced:
+//   * live_objects()  - net live blocks (leak detection)
+//   * heap_ptr()      - heap high-water mark
+//   * free_list_head() - reclaimed-block freelist
+//   * gc_collect()    - force a full collection so finalizers / weak clears run
 
-// See `linked_list.dream` for why a self-referencing `next` needs `@allow_cycle`.
 import system;
-@allow_cycle
 class Node {
     public val: int;
     public next: Option<Node>;
@@ -42,8 +37,6 @@ class Tracked {
         System.println(this.id);
     }
 }
-
-// --- Allocation patterns, each self-contained so everything is released at scope exit. ---
 
 fun build_chain(): Node {
     let no_next: Option<Node> = Option.None;
@@ -109,7 +102,7 @@ fun nullable_paths() {
     b = Option.None;
 }
 
-fun pass_borrow(n: Node): int {
+fun pass_shared(n: Node): int {
     return n.val;
 }
 
@@ -122,16 +115,13 @@ fun branchy(flag: bool) {
     }
 }
 
-// A single tracked object per scope so its `del()` runs (and prints) in a deterministic order
-// driven by the call sequence rather than by intra-scope local-release order.
 fun drop_one(id: int) {
     let t = Tracked(id);
 }
 
-// Every pattern in one unit of work; nothing escapes.
 fun stress() {
     let chain = build_chain();
-    let borrowed = pass_borrow(chain);
+    let shared = pass_shared(chain);
     struct_array();
     string_array();
     nested_array();
@@ -143,32 +133,14 @@ fun stress() {
     branchy(false);
 }
 
-// --- Targeted reference-count assertions. ---
-
-fun check_ref_counts() {
-    let no_next: Option<Node> = Option.None;
-    let n = Node(1, no_next);
-    System.println("rc.fresh=" + Debug.ref_count(n).to_string());
-
-    let alias = n;
-    System.println("rc.aliased=" + Debug.ref_count(n).to_string());
-
-    let h = Holder(Option.Some(n), "held");
-    System.println("rc.in_field=" + Debug.ref_count(n).to_string());
-
-    let arr = [n, n];
-    System.println("rc.in_array=" + Debug.ref_count(n).to_string());
-}
-
 fun main() {
-    check_ref_counts();
-
-    // Warm up so the freelist/heap reach steady state, then capture the baseline.
+    // Warm up, then capture a baseline after a forced collection.
     let w = 0;
     while (w < 20) {
         stress();
         w = w + 1;
     }
+    Debug.gc_collect();
     let base_live = Debug.live_objects();
     let base_heap = Debug.heap_ptr();
     let base_free = Debug.free_list_head();
@@ -178,6 +150,7 @@ fun main() {
         stress();
         i = i + 1;
     }
+    Debug.gc_collect();
 
     let end_live = Debug.live_objects();
     let end_heap = Debug.heap_ptr();
@@ -187,8 +160,8 @@ fun main() {
     System.println("heap_grew=" + (end_heap - base_heap > 0).to_string());
     System.println("free_stable=" + (base_free == end_free).to_string());
 
-    // Destructor execution + ordering, driven by the call sequence.
     drop_one(1);
     drop_one(2);
+    Debug.gc_collect();
     System.println("done");
 }

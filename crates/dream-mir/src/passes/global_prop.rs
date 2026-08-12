@@ -33,6 +33,7 @@ impl MirPass for GlobalProp {
             .iter()
             .map(|d| interner.is_value_type(d.ty))
             .collect();
+        let is_take: Vec<bool> = func.locals.iter().map(|d| d.is_take).collect();
         let preds = cfg::predecessors(func);
         let rpo = cfg::reverse_postorder(func);
 
@@ -67,10 +68,10 @@ impl MirPass for GlobalProp {
             let mut st = entry[b.0 as usize].clone();
             let block = func.block_mut(b);
             for stmt in &mut block.stmts {
-                rewrote |= subst_stmt_reads(stmt, &st);
+                rewrote |= subst_stmt_reads(stmt, &st, &is_take);
                 update_known(stmt, &mut st, &value_local);
             }
-            rewrote |= subst_terminator_reads(&mut block.terminator, &st);
+            rewrote |= subst_terminator_reads(&mut block.terminator, &st, &is_take);
         }
         rewrote
     }

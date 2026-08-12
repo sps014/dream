@@ -8,7 +8,6 @@ use super::emit::{
     emit_async_poll, func_symbol, poll_symbol, vs_retain_sym, wasm_ty_of,
 };
 use super::lower::lower_async_poll_body;
-use super::passes::MirPass;
 use super::MirFunction;
 use dream_hir::scalar_size;
 use dream_types::{TypeId, TypeInterner};
@@ -128,7 +127,7 @@ fn async_slots(func: &MirFunction, interner: &TypeInterner) -> (AsyncSlots, i32)
             cursor += size as i32;
         } else {
             cursor += SLOT_SIZE;
-            if interner.is_rc_tracked(ty) {
+            if interner.is_gc_tracked(ty) {
                 ref_locals.push(*local_idx);
             }
         }
@@ -188,20 +187,7 @@ pub fn emit_async_function(
         )
     });
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
-    // Poll MIR is lowered here (stubs skip module-wide RcInsertion), so insert RC on this CFG
-    // before emit — otherwise mid-body aliasing/reassign and return handoff corrupt counts.
-    let mut body = lower_async_poll_body(hir, interner);
-    // HIR sink flags (parallel to `body.params`) — needed before we mark poll params owned.
-    let param_is_sink: Vec<bool> = hir.params.iter().map(|p| p.is_take).collect();
-    // Frame owns each RC param's +1 (sink transfer or borrow retain in the ctor). Mark them take
-    // so poll RcInsertion releases them at AsyncComplete.
-    for p in &body.params {
-        let decl = &mut body.locals[p.0 as usize];
-        if interner.is_rc_tracked(decl.ty) {
-            decl.is_take = true;
-        }
-    }
-    let _ = crate::passes::RcInsertion.run(&mut body, interner);
+    let body = lower_async_poll_body(hir, interner);
     let (slots, frame_size) = async_slots(&body, interner);
     let sym = func_symbol(func);
     let mut out = String::new();
@@ -238,7 +224,7 @@ pub fn emit_async_function(
     let _ = writeln!(out, " i32.const {poll_idx}");
     let _ = writeln!(out, " i32.const {KIND_TASK}");
     out.push_str(" call $dream_new_future\n local.set $self\n");
-    for (pi, p) in body.params.iter().enumerate() {
+    for p in body.params.iter() {
         let idx = p.0 as usize;
         let off = slots.offsets[&idx];
         if let Some(&size) = slots.value_locals.get(&idx) {
@@ -266,29 +252,23 @@ pub fn emit_async_function(
             continue;
         }
         let wt = wasm_ty_of(interner, body.locals[idx].ty);
-        if interner.is_rc_tracked(body.locals[idx].ty) {
-            let sink = param_is_sink.get(pi).copied().unwrap_or(true);
-            // Sink-default: caller already transferred +1. Borrow: retain for the frame.
-            if !sink {
-                let _ = writeln!(out, " local.get ${idx}");
-                let retain = match interner.kind(body.locals[idx].ty) {
-                    dream_types::TyKind::Js => "$js_retain",
-                    _ if interner.is_shared_type(body.locals[idx].ty) => "$retain_shared",
-                    _ => "$retain",
-                };
-                let _ = writeln!(out, " call {retain}");
-            }
-        }
         let _ = writeln!(
             out,
             " local.get $self\n local.get ${idx}\n {} offset={off}",
             slot_store(wt)
         );
+        if interner.is_gc_tracked(body.locals[idx].ty) {
+            // Frame slot is a heap store of a ref — record older→younger edges.
+            let _ = writeln!(
+                out,
+                " local.get $self\n i32.const {off}\n i32.add\n local.get ${idx}\n call $write_barrier"
+            );
+        }
     }
     out.push_str(" local.get $self\n call $dream_enqueue\n local.get $self\n)\n\n");
 
     // Poll: coroutine state machine over `body`'s CFG. Value-struct drop glue covers only the
-    // persistent user locals (params + declared `let`s); RC is MIR-managed via RcInsertion above.
+    // persistent user locals (params + declared `let`s).
     let user_local_count = hir.params.len() + hir.locals.len();
     out.push_str(&emit_async_poll(
         &body,

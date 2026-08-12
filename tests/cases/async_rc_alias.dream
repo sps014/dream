@@ -1,5 +1,5 @@
-// Regression: async bodies must retain on aliasing copies. Without poll RcInsertion,
-// `let b = a` shares one count and completion bulk-released both → double-free.
+// Regression: async bodies must keep aliases live across awaits. Under GC, a forced
+// collection after `run` completes should reclaim `Tracked` without trapping.
 // `live_delta=1` is the still-held `run` Future handle inside `main` (freed at main complete).
 
 import system;
@@ -32,5 +32,6 @@ async fun run(): void {
 async fun main(): void {
     let base = Debug.live_objects();
     await run();
+    Debug.gc_collect();
     System.println("live_delta=" + (Debug.live_objects() - base).to_string());
 }

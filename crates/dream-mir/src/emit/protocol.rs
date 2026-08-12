@@ -59,6 +59,8 @@ pub(super) fn value_hash_code_instrs(interner: &TypeInterner, ty: TypeId) -> &'s
     match interner.kind(ty) {
         TyKind::Prim(p) => prim_info(*p).hash,
         TyKind::Enum(_) => "",
+        // Host handle ids are plain i32s, not Dream heap pointers — never `$object_tag` them.
+        TyKind::Js => "",
         _ => "(call $object_hash_code)",
     }
 }
@@ -398,6 +400,127 @@ pub(super) fn array_elem_types(mir: &crate::Mir, interner: &TypeInterner) -> Vec
         i += 1;
     }
     order
+}
+
+/// Like [`array_elem_types`], plus types that only show up once async poll bodies are lowered (and
+/// other call/rvalue sites that stay as calls under a tighter inliner). Used only for
+/// `$release_array_t*` emission — not for js marshal / to_string helpers.
+pub(super) fn array_elem_types_for_release(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+) -> Vec<TypeId> {
+    let mut order = array_elem_types(mir, interner);
+    for f in &mir.functions {
+        for arg in &f.instance {
+            push_array_elem(&mut order, interner, *arg);
+        }
+        push_array_elem(&mut order, interner, f.ret);
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::Assign(_, rv) => {
+                        collect_array_elems_from_rvalue(&mut order, interner, rv);
+                    }
+                    Statement::Call { callee, .. } | Statement::JsCall { callee, .. } => {
+                        for arg in &callee.args {
+                            push_array_elem(&mut order, interner, *arg);
+                        }
+                        push_array_elem(&mut order, interner, callee.ret);
+                    }
+                    Statement::ArrayElemsCopy { elem_ty, .. } if !order.contains(elem_ty) => {
+                        order.push(*elem_ty);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if !f.is_async {
+            continue;
+        }
+        let Some(hir) = &f.hir_fn else {
+            continue;
+        };
+        let poll_body = crate::lower::lower_async_poll_body(hir, interner);
+        for l in &poll_body.locals {
+            push_array_elem(&mut order, interner, l.ty);
+        }
+        for b in &poll_body.blocks {
+            for s in &b.stmts {
+                if let Statement::Assign(_, rv) = s {
+                    collect_array_elems_from_rvalue(&mut order, interner, rv);
+                }
+            }
+        }
+    }
+    let mut i = 0;
+    while i < order.len() {
+        let cur = order[i];
+        push_array_elem(&mut order, interner, cur);
+        collect_array_elems_from_ty(&mut order, interner, cur);
+        i += 1;
+    }
+    order
+}
+
+fn collect_array_elems_from_rvalue(
+    order: &mut Vec<TypeId>,
+    interner: &TypeInterner,
+    rv: &crate::Rvalue,
+) {
+    match rv {
+        crate::Rvalue::ArrayNew { elem_ty, .. } => {
+            if !order.contains(elem_ty) {
+                order.push(*elem_ty);
+            }
+        }
+        crate::Rvalue::Call { callee, .. } | crate::Rvalue::FuncRef(callee) => {
+            for arg in &callee.args {
+                push_array_elem(order, interner, *arg);
+            }
+            push_array_elem(order, interner, callee.ret);
+        }
+        crate::Rvalue::IndirectCall { sig, .. } => {
+            push_array_elem(order, interner, *sig);
+        }
+        crate::Rvalue::InterfaceCall { sig, ret, .. } => {
+            push_array_elem(order, interner, *sig);
+            push_array_elem(order, interner, *ret);
+        }
+        crate::Rvalue::New { ty, .. }
+        | crate::Rvalue::Tuple { ty, .. }
+        | crate::Rvalue::UnionNew { ty, .. } => {
+            collect_array_elems_from_ty(order, interner, *ty);
+        }
+        crate::Rvalue::Cast(_, from, to) => {
+            collect_array_elems_from_ty(order, interner, *from);
+            collect_array_elems_from_ty(order, interner, *to);
+        }
+        _ => {}
+    }
+}
+
+fn collect_array_elems_from_ty(order: &mut Vec<TypeId>, interner: &TypeInterner, ty: TypeId) {
+    push_array_elem(order, interner, ty);
+    match interner.kind(ty) {
+        TyKind::Array(e) => collect_array_elems_from_ty(order, interner, *e),
+        TyKind::Struct(_, args) | TyKind::Union(_, args) | TyKind::Interface(_, args) => {
+            for a in args {
+                collect_array_elems_from_ty(order, interner, *a);
+            }
+        }
+        TyKind::Func(params, ret) => {
+            for p in params {
+                collect_array_elems_from_ty(order, interner, *p);
+            }
+            collect_array_elems_from_ty(order, interner, *ret);
+        }
+        TyKind::Tuple(elems) => {
+            for e in elems {
+                collect_array_elems_from_ty(order, interner, *e);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// If `ty` (after nullable stripping) is an array, records its element type in `order` (dedup,

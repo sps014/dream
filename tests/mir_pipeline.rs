@@ -9,7 +9,7 @@ use dream_hir::{
 use dream_mir::emit::emit_program;
 use dream_mir::lower::lower_program;
 use dream_mir::passes::{
-    ConstFold, CopyConstProp, Dce, PassManager, RcElision, RcInsertion, SimplifyCfg,
+    ConstFold, CopyConstProp, Dce, PassManager, SimplifyCfg,
 };
 use dream_types::{DefKind, TypeCtx};
 
@@ -130,8 +130,6 @@ fn compile_sum_to() -> String {
     pm.add(ConstFold);
     pm.add(SimplifyCfg);
     pm.add(Dce);
-    pm.add(RcInsertion);
-    pm.add(RcElision);
     for f in &mut mir.functions {
         pm.run(f, &ctx.interner);
     }

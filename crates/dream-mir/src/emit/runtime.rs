@@ -1,13 +1,13 @@
 use super::*;
 
-/// The allocator + string runtime. When `debug` is on (the default compiler mode), `$malloc` bumps
-/// `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
+/// The allocator + GC + string runtime. When `debug` is on (the default compiler mode), `$gc_alloc`
+/// bumps `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
 /// `Debug.*` probes); under `--release` the placeholders expand to nothing so the hot allocation
 /// path carries no extra instructions.
 ///
 /// When `needs_threads` is false (no `WebWorker` / worker-pool host imports in the module), the
-/// allocator spinlock around `$malloc`/`$free` is also elided: a single-threaded instance never
-/// races on the free lists, so the atomic acquire/release is pure overhead.
+/// allocator spinlock around `$malloc`/`$free`/`$gc_collect_*` is also elided: a single-threaded
+/// instance never races on the free lists, so the atomic acquire/release is pure overhead.
 pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
     let (malloc_count, free_count) = if debug {
         (
@@ -32,7 +32,18 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
             "{ALLOC_LOCK_ADDR}",
             &crate::abi::ALLOC_LOCK_ADDR.to_string(),
         )
-        .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string());
+        .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
+        .replace(
+            "{GC_META_FREE}",
+            &crate::abi::GC_META_FREE.to_string(),
+        );
+    out.push('\n');
+    out.push_str(&substitute_gc_runtime(
+        lock_acquire,
+        lock_release,
+        malloc_count,
+        free_count,
+    ));
     out.push('\n');
     // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
     // itself no longer bounds-checks: callers emit a located check inline before calling it (see
@@ -44,6 +55,79 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
             .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string()),
     );
     out
+}
+
+fn substitute_gc_runtime(
+    lock_acquire: &str,
+    lock_release: &str,
+    malloc_count: &str,
+    free_count: &str,
+) -> String {
+    use crate::abi as a;
+    RUNTIME_GC
+        .replace(";;@ALLOC_LOCK_ACQUIRE@", lock_acquire)
+        .replace(";;@ALLOC_LOCK_RELEASE@", lock_release)
+        .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
+        .replace(";;@DEBUG_FREE_COUNT@", free_count)
+        .replace("{ALLOC_LOCK_ADDR}", &a::ALLOC_LOCK_ADDR.to_string())
+        .replace("{HEAP_PTR_ADDR}", &a::HEAP_PTR_ADDR.to_string())
+        .replace("{GC_META_GEN_MASK}", &a::GC_META_GEN_MASK.to_string())
+        .replace("{GC_META_MARK}", &a::GC_META_MARK.to_string())
+        .replace("{GC_META_FORWARDED}", &a::GC_META_FORWARDED.to_string())
+        .replace("{GC_META_FINALIZE}", &a::GC_META_FINALIZE.to_string())
+        .replace("{GC_META_FINALIZED}", &a::GC_META_FINALIZED.to_string())
+        .replace("{GC_META_IMMORTAL}", &a::GC_META_IMMORTAL.to_string())
+        .replace("{GC_META_FREE}", &a::GC_META_FREE.to_string())
+        .replace("{GC_GEN0}", &a::GC_GEN0.to_string())
+        .replace("{GC_GEN1}", &a::GC_GEN1.to_string())
+        .replace("{GC_GEN2}", &a::GC_GEN2.to_string())
+        .replace("{GC_GEN_LOH}", &a::GC_GEN_LOH.to_string())
+        .replace("{LOH_THRESHOLD}", &a::LOH_THRESHOLD.to_string())
+        .replace("{NURSERY_SIZE}", &a::NURSERY_SIZE.to_string())
+        .replace("{NURSERY_BUMP_ADDR}", &a::NURSERY_BUMP_ADDR.to_string())
+        .replace("{NURSERY_START_ADDR}", &a::NURSERY_START_ADDR.to_string())
+        .replace("{NURSERY_END_ADDR}", &a::NURSERY_END_ADDR.to_string())
+        .replace("{OLD_START_ADDR}", &a::OLD_START_ADDR.to_string())
+        .replace("{GC_REQUEST_ADDR}", &a::GC_REQUEST_ADDR.to_string())
+        .replace(
+            "{GC_SAFEPOINT_EXPECT_ADDR}",
+            &a::GC_SAFEPOINT_EXPECT_ADDR.to_string(),
+        )
+        .replace("{GC_SAFEPOINT_ACK_ADDR}", &a::GC_SAFEPOINT_ACK_ADDR.to_string())
+        .replace("{GC_COLLECT_KIND_ADDR}", &a::GC_COLLECT_KIND_ADDR.to_string())
+        .replace("{GC_ROOT_COUNT_ADDR}", &a::GC_ROOT_COUNT_ADDR.to_string())
+        .replace(
+            "{GC_ROOT_TABLE_PTR_ADDR}",
+            &a::GC_ROOT_TABLE_PTR_ADDR.to_string(),
+        )
+        .replace("{GC_ROOT_TABLE_CAP}", &a::GC_ROOT_TABLE_CAP.to_string())
+        .replace("{GC_REMSET_COUNT_ADDR}", &a::GC_REMSET_COUNT_ADDR.to_string())
+        .replace(
+            "{GC_REMSET_TABLE_PTR_ADDR}",
+            &a::GC_REMSET_TABLE_PTR_ADDR.to_string(),
+        )
+        .replace("{GC_REMEMBERED_CAP}", &a::GC_REMEMBERED_CAP.to_string())
+        .replace(
+            "{GC_REMSET_OVERFLOW_ADDR}",
+            &a::GC_REMSET_OVERFLOW_ADDR.to_string(),
+        )
+        .replace(
+            "{GC_FINALIZER_HEAD_ADDR}",
+            &a::GC_FINALIZER_HEAD_ADDR.to_string(),
+        )
+        .replace("{GC_OLD_BYTES_ADDR}", &a::GC_OLD_BYTES_ADDR.to_string())
+        .replace("{GC_GEN1_THRESHOLD}", &a::GC_GEN1_THRESHOLD.to_string())
+        .replace(
+            "{GC_MARK_STACK_PTR_ADDR}",
+            &a::GC_MARK_STACK_PTR_ADDR.to_string(),
+        )
+        .replace(
+            "{GC_MARK_STACK_BASE_ADDR}",
+            &a::GC_MARK_STACK_BASE_ADDR.to_string(),
+        )
+        .replace("{GC_MARK_STACK_CAP}", &a::GC_MARK_STACK_CAP.to_string())
+        .replace("{TAG_ARRAY}", &a::TAG_ARRAY.to_string())
+        .replace("{TAG_FLAT_ARRAY}", &a::TAG_FLAT_ARRAY.to_string())
 }
 
 /// True when this module imports any `WebWorker` / worker-pool host function. Only those programs

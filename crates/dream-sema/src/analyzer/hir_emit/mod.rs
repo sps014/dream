@@ -288,7 +288,7 @@ impl<'a> Analyzer<'a> {
                 name: param.name.text.clone(),
                 ty,
                 is_ref: false,
-                is_take: !param.is_ref && !param.is_borrow && param.name.text != "this",
+                is_take: false,
             });
         }
 

@@ -2,6 +2,7 @@
 
 mod algebraic;
 mod cfg;
+mod clear_dead_gc;
 mod const_fold;
 mod dce;
 mod dse;
@@ -11,13 +12,13 @@ mod inline;
 mod licm;
 mod loop_unroll;
 mod prop;
-mod rc;
 mod sccp;
 mod simplify_cfg;
 mod sroa;
 mod tco;
 
 pub use algebraic::Algebraic;
+pub use clear_dead_gc::ClearDeadGcRoots;
 pub use const_fold::ConstFold;
 pub(crate) use dce::is_pure;
 pub use dce::Dce;
@@ -28,7 +29,6 @@ pub use inline::Inliner;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
-pub use rc::{RcElision, RcInsertion};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa};
@@ -57,6 +57,10 @@ pub trait ModulePass {
 pub struct PassManager {
     passes: Vec<Box<dyn MirPass>>,
     max_iterations: usize,
+    /// When true (release/opt builds), [`ClearDeadGcRoots`] runs once after the fixpoint so dead
+    /// heap refs stop keeping objects alive. Debug-info builds leave those locals intact so DAP
+    /// can still decode named variables after their last MIR use.
+    clear_dead_gc: bool,
 }
 
 impl PassManager {
@@ -64,11 +68,12 @@ impl PassManager {
         PassManager {
             passes: Vec::new(),
             max_iterations: 16,
+            clear_dead_gc: true,
         }
     }
 
     /// The default optimization pipeline, ordered so cheap simplifications expose work for the
-    /// later ones (prop -> fold -> algebraic -> gvn -> simplify-cfg -> dce, then RC elision).
+    /// later ones (prop -> fold -> algebraic -> gvn -> simplify-cfg -> dce).
     pub fn default_pipeline() -> Self {
         let mut pm = PassManager::new();
         pm.add(CopyConstProp);
@@ -84,29 +89,17 @@ impl PassManager {
         pm.add(SimplifyCfg);
         pm.add(Tco);
         pm.add(Dce);
-        pm.add(RcElision);
-        // RC *insertion* is a module-wide phase that must run once before inlining (see
-        // `optimize_module`); the per-function pipeline only *elides* redundant RC. Running
-        // RcInsertion here would double-insert retains/releases, so guard against that regression.
-        debug_assert!(
-            pm.passes.iter().all(|p| p.name() != "rc-insertion"),
-            "per-function pipeline must not contain RcInsertion (RC is inserted module-wide first)"
-        );
-        debug_assert!(
-            pm.passes.iter().any(|p| p.name() == "rc-elision"),
-            "per-function pipeline is expected to clean up RC with RcElision"
-        );
         pm
     }
 
     /// A minimal, value-preserving pipeline for debug-info builds. It deliberately omits every pass
     /// that can eliminate, fold, or coalesce user locals (const/copy propagation, SCCP, GVN, DCE,
-    /// DSE), so each declared variable still lives in a distinct slot the debugger can read at every
-    /// statement. Only redundant RC is elided (a value-neutral cleanup) and the CFG is tidied.
+    /// DSE), and skips [`ClearDeadGcRoots`], so each declared variable still lives in a distinct
+    /// slot the debugger can read at every statement. Only the CFG is tidied.
     pub fn debug_pipeline() -> Self {
         let mut pm = PassManager::new();
+        pm.clear_dead_gc = false;
         pm.add(SimplifyCfg);
-        pm.add(RcElision);
         pm
     }
 
@@ -114,7 +107,9 @@ impl PassManager {
         self.passes.push(Box::new(pass));
     }
 
-    /// Runs every pass repeatedly until none reports a change (or the iteration cap is hit).
+    /// Runs every pass repeatedly until none reports a change (or the iteration cap is hit), then
+    /// (unless this is the debug pipeline) clears dead GC-tracked locals once so DCE cannot delete
+    /// the nulling stores.
     pub fn run(&self, func: &mut MirFunction, interner: &TypeInterner) {
         for _ in 0..self.max_iterations {
             let mut changed = false;
@@ -125,6 +120,9 @@ impl PassManager {
                 break;
             }
         }
+        if self.clear_dead_gc {
+            let _ = ClearDeadGcRoots.run(func, interner);
+        }
     }
 }
 
@@ -134,39 +132,18 @@ impl Default for PassManager {
     }
 }
 
-/// Whole-module optimization: reference-counting insertion, then aggressive tree-shaking interleaved
-/// with function inlining, run to a fixpoint.
-///
-/// Crucially, `RcInsertion` runs *before* inlining. Dream has deterministic, reference-counted
-/// destruction, so a local reference's lifetime must end at the point its owning function returns —
-/// not at the caller's scope exit. Inserting RC first bakes each callee's scope-exit `Release`s into
-/// its body, so inlining copies them to the return site (the continuation), preserving object
-/// lifetimes exactly. Inlining a callee whose value it *returns* moves the transferred `+1` into the
-/// call's destination via a plain copy, which is balanced because the callee already skipped
-/// releasing the returned value.
-///
-/// After inlining, [`crate::driver`] runs the per-function [`PassManager`] (copy/const prop, folding,
-/// algebraic, GVN, CFG simplification, DCE, and RC elision) to clean up the merged bodies.
+/// Whole-module optimization: aggressive tree-shaking interleaved with function inlining, run to a
+/// fixpoint. After inlining, [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     optimize_module_opts(mir, interner, true)
 }
 
 /// Like [`optimize_module`], but `inline` can be disabled. Debug-info builds turn inlining off so
 /// each user function keeps its own body (and thus its own call-stack frame + local variables),
-/// which the interactive debugger relies on. Reference-counting insertion + dead-function pruning
-/// still run in both modes since they are correctness-relevant, not just optimizations.
+/// which the interactive debugger relies on. Dead-function pruning still runs in both modes.
 pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool) {
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
-    let rc = RcInsertion;
-    for f in &mut mir.functions {
-        rc.run(f, interner);
-    }
-    // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
-    // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag
-    // makes a future reordering that hoists the inliner above this point fail loudly in dev.
-    let _rc_inserted = true;
-    debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
     if !inline {
         // Still expand simple ctors so a later opt pipeline (if any) can SROA; debug builds skip
         // Sroa itself, so this is a no-op for codegen shape there beyond removing the ctor call.

@@ -309,7 +309,7 @@ pub(super) fn emit_interface_dispatch(
         // Per-interface tables still isolate `Collection_int` from `Collection_string`, so the
         // shared tag does not collide across element types.
         let tag = match interner.kind(imp.class_ty) {
-            TyKind::Array(_) => crate::abi::TAG_ARRAY as usize,
+            TyKind::Array(elem) => super::array_heap_tag_for(interner, *elem) as usize,
             _ => match tags.get(&imp.class_ty) {
                 Some(t) => *t as usize,
                 None => continue,

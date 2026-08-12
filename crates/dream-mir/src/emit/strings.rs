@@ -67,7 +67,7 @@ pub(super) fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<
 
 /// Interns every string constant in the program to a data pointer, in first-appearance order
 /// (deterministic). Each string is a heap-object block
-/// `[size=0][tag=STRING][ref_count=1][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
+/// `[size=0][tag=STRING][gc_meta=IMMORTAL][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
 /// points at the byte_len word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at
 /// `ptr+8`, so it is a valid runtime string pointer. There is no NUL terminator (the length prefix
 /// makes it redundant). Blocks are laid out consecutively, 4-byte aligned.
@@ -236,7 +236,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             }
             strings_in_rvalue(rv, out);
         }
-        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+        Statement::Panic(o) => {
             strings_in_operand(o, out)
         }
         Statement::Call { args, .. } => args.iter().for_each(|a| strings_in_operand(a, out)),
@@ -302,11 +302,8 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
                 out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
                 in_operand(index, out);
             }
-            // A field *read* may be an `unowned` field, in which case
-            // `Emitter::emit_unowned_read_check` emits a located `UNOWNED_NULL_DEREF` panic; whether
-            // the field is actually `unowned` depends on layout info not available here, so this
-            // over-approximates (pre-interns the message for every field read).
-            Place::Field { .. } => out.push(panic_msgs::UNOWNED_NULL_DEREF),
+            // Field reads no longer emit a located unowned-null panic (unowned was removed).
+            Place::Field { .. } => {}
             Place::Local(_) | Place::Global(_) => {}
         }
     }
@@ -401,9 +398,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
             in_place(place, out);
             in_rvalue(rv, out);
         }
-        Statement::Retain(_)
-        | Statement::Release(_)
-        | Statement::Panic(_)
+        Statement::Panic(_)
         | Statement::Call { .. }
         | Statement::JsCall { .. }
         | Statement::InterfaceCall { .. }
@@ -461,14 +456,22 @@ pub(super) fn strings_in_terminator(t: &Terminator, out: &mut Vec<String>) {
     match t {
         Terminator::If { cond, .. } => strings_in_operand(cond, out),
         Terminator::Switch { value, .. } => strings_in_operand(value, out),
-        Terminator::Return(Some(o)) => strings_in_operand(o, out),
-        Terminator::AsyncComplete(Some(o)) => strings_in_operand(o, out),
-        _ => {}
+        Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
+            strings_in_operand(o, out)
+        }
+        Terminator::Await { future, .. } => strings_in_operand(future, out),
+        Terminator::TailCall { args, .. } => {
+            args.iter().for_each(|a| strings_in_operand(a, out));
+        }
+        Terminator::Goto(_)
+        | Terminator::Return(None)
+        | Terminator::AsyncComplete(None)
+        | Terminator::Unreachable => {}
     }
 }
 
 /// Escapes an interned string's full heap-block bytes as `\HH` pairs: the 12-byte header
-/// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the string data header
+/// (`size=0`, `tag=STRING`, `gc_meta=IMMORTAL`, little-endian i32s), the string data header
 /// (`byte_len`, `scalar_len` as little-endian i32s), then the utf8 bytes. No NUL terminator.
 /// Written at the block start (the mapped address minus [`HEAP_HEADER_SIZE`]); the mapped address
 /// itself points at the byte_len word.
@@ -477,7 +480,7 @@ pub(super) fn escape_data(s: &str) -> String {
     for word in [
         0_i32,
         STRING_TAG,
-        1,
+        crate::abi::GC_META_IMMORTAL as i32,
         s.len() as i32,
         s.chars().count() as i32,
     ] {

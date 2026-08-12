@@ -13,7 +13,7 @@ impl Emitter<'_> {
         let tag = self.type_tag(ty, dream_types::DefId(0));
         self.line(&format!("     (i32.const {})", size));
         self.line(&format!("     (i32.const {}) ;; tag", tag));
-        self.line("     (call $malloc)");
+        self.emit_malloc_call();
         self.line("     (local.set $__obj)");
         // memory.copy(dst = $__obj, src = inline address of the value, size)
         self.line("     (local.get $__obj)");

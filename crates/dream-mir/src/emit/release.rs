@@ -1,211 +1,17 @@
 use super::*;
 
-/// The `$release_*` symbol that deep-releases a reference value of `ty` (chosen *statically* from the
-/// declared type): structs/unions call their generated per-type release, reference-element arrays
-/// their element-typed array release, `js` handles call the host `$js_release`, and everything else
-/// (strings, scalar arrays, boxed primitives) drops one reference via the generic runtime.
-/// `object`-typed values route through the tag-dispatched `$release_object` since their concrete
-/// type is unknown until runtime. Callers guard on [`TypeInterner::is_rc_tracked`] (or
-/// [`TypeInterner::is_reference`] for heap-only sites) first.
-pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: TypeId) -> String {
-    match interner.kind(ty) {
-        TyKind::Js => "$js_release".to_string(),
-        TyKind::Struct(..) | TyKind::Union(..) => {
-            if let Some(l) = layouts.structs.get(&ty) {
-                format!("$release_{}", l.name)
-            } else if let Some(l) = layouts.unions.get(&ty) {
-                format!("$release_{}", l.name)
-            } else {
-                "$release_object".to_string()
-            }
-        }
-        TyKind::Array(e)
-            if interner.is_reference(*e)
-                || interner.is_value_type(*e)
-                || matches!(interner.kind(*e), TyKind::Js) =>
-        {
-            format!("$release_array_t{}", e.0)
-        }
-        // An interface-typed value is a concrete tagged object; release it through the
-        // tag-dispatching `$release_object` so the concrete type's deep release runs.
-        TyKind::Object | TyKind::Interface(..) => "$release_object".to_string(),
-        // Funcboxes deep-release their env word; `$release_generic` would only free the box.
-        TyKind::Func(..) => "$release_funcbox".to_string(),
-        _ => "$release_generic".to_string(),
-    }
-}
-
-/// The retain symbol for a reference value of `ty`: `js` handles go through the host `$js_retain`;
-/// `@shared class` instances (may be captured into another `WebWorker` thread and retained/released
-/// concurrently — see `lock`/point 4 in the shared-memory-WebWorkers plan) go through
-/// `$retain_shared` (atomic RMW increment); every other reference type keeps the plain, non-atomic
-/// `$retain` fast path.
-pub(super) fn retain_call(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    if matches!(interner.kind(ty), TyKind::Js) {
-        "$js_retain"
-    } else if interner.is_shared_type(ty) {
-        "$retain_shared"
-    } else {
-        "$retain"
-    }
-}
-
-/// Emits the null check + refcount decrement shared by every per-type release, opening the
-/// `if (new_count == 0) (then` block that the caller fills with the deep-release + `$free`. Uses only
-/// the `$rc`/`$nc` locals, which every release function declares. Matches `$release_generic`'s ABI
-/// (refcount word at `ptr - 4`).
-pub(super) fn emit_release_prologue(out: &mut String) {
-    out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
-    out.push_str("  (local.get $ptr) (i32.const 4) (i32.sub) (local.set $rc)\n");
-    out.push_str("  (local.get $rc) (i32.load) (i32.const 1) (i32.sub) (local.set $nc)\n");
-    out.push_str("  (local.get $rc) (local.get $nc) (i32.store)\n");
-    out.push_str("  (local.get $nc) (i32.eqz) (if (then\n");
-}
-
-/// Like [`emit_release_prologue`], but for an `@shared class`'s generated `$release_<Type>`: the
-/// refcount decrement is an atomic RMW (`i32.atomic.rmw.sub`, which returns the *old* value, hence
-/// subtracting 1 from it here) since another thread may concurrently retain/release the same
-/// instance through a captured reference.
-pub(super) fn emit_release_prologue_atomic(out: &mut String) {
-    out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
-    out.push_str("  (local.get $ptr) (i32.const 4) (i32.sub) (local.set $rc)\n");
-    out.push_str(
-        "  (local.get $rc) (i32.const 1) (i32.atomic.rmw.sub) (i32.const 1) (i32.sub) (local.set $nc)\n",
-    );
-    out.push_str("  (local.get $nc) (i32.eqz) (if (then\n");
-}
-
-/// Emits the `del()` destructor invocation (when the type declares one): the refcount is first pinned
-/// to 1 so the destructor body's own `this` retain/release cannot re-enter this release at zero, then
-/// `$<Type>_del(ptr)` runs while the fields are still live. `del` is the destructor's function symbol
-/// or `None`.
-pub(super) fn emit_del_call(out: &mut String, del: Option<&str>) {
-    if let Some(d) = del {
-        out.push_str("    (local.get $rc) (i32.const 1) (i32.store)\n");
-        let _ = writeln!(out, "    (local.get $ptr) (call ${})", d);
-    }
-}
-
-/// Releases one reference field/variant-field: `release(this[+offset].load)` at `indent`. Shared by
-/// struct and union deep-release; the union calls it inside each variant's discriminant guard.
-fn emit_release_ref_field(
-    out: &mut String,
-    indent: &str,
-    f: &dream_hir::FieldLayout,
-    interner: &TypeInterner,
-    layouts: &LayoutTable,
-) {
-    let _ = writeln!(out, "{indent}(local.get $ptr)");
-    if f.offset > 0 {
-        let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", f.offset);
-    }
-    let _ = writeln!(
-        out,
-        "{indent}(i32.load) (call {})",
-        release_call(interner, layouts, f.ty)
-    );
-}
-
-/// Emits an in-place drop of an inline value(`struct`) field `f` (at `ptr + offset`) via its
-/// `$__vs_drop_<T>` glue, if the field is a value struct that requires glue. A no-op otherwise. The
-/// inline storage is not freed (it belongs to the enclosing object's block).
-fn emit_embedded_value_drop(
-    out: &mut String,
-    mir: &crate::Mir,
-    interner: &TypeInterner,
-    value_glue: &std::collections::HashSet<TypeId>,
-    f: &dream_hir::FieldLayout,
-    indent: &str,
-) {
-    if !interner.is_value_type(f.ty) {
-        return;
-    }
-    let stripped = f.ty;
-    if !value_glue.contains(&stripped) {
-        return;
-    }
-    let Some(name) = mir.layouts.structs.get(&stripped).map(|l| l.name.clone()) else {
-        return;
-    };
-    out.push_str(indent);
-    out.push_str("(local.get $ptr)");
-    if f.offset > 0 {
-        let _ = write!(out, " (i32.const {}) (i32.add)", f.offset);
-    }
-    let _ = writeln!(out, " (call {})", vs_drop_sym(&name));
-}
-
-/// Emits the teardown of one `weak` field (`f.ty` is `Option<T>` for some class `T`): frees the
-/// field's private weak-box (see `src/mir/runtime/weak.wat`), first unregistering it from the side
-/// table if it currently watches a live referent (`Some`). The box is *never* passed to
-/// `$release_Option_...` — it never held a strong reference to its payload, so deep-releasing it would
-/// wrongly decrement the referent's real strong count.
-fn emit_release_weak_field(out: &mut String, f: &dream_hir::FieldLayout, layouts: &LayoutTable) {
-    let Some(u) = layouts.union(f.ty) else {
-        // A `weak` field always type-checks to `Option<T>`, which is always a registered union; this
-        // is unreachable in practice, but degrade to a no-op rather than emitting malformed WAT.
-        return;
-    };
-    let Some(some_disc) = u.variant("Some").map(|v| v.discriminant) else {
-        return;
-    };
-    let payload_off = u
-        .variant("Some")
-        .and_then(|v| v.fields.first())
-        .map(|f| f.offset)
-        .unwrap_or(4);
-    let _ = writeln!(
-        out,
-        "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)",
-        f.offset
-    );
-    out.push_str("    (local.get $__wbox) (if (then\n");
-    let _ = writeln!(
-        out,
-        "      (local.get $__wbox) (i32.load) (i32.const {}) (i32.eq) (if (then",
-        some_disc
-    );
-    let _ = writeln!(
-        out,
-        "        (local.get $__wbox) (i32.const {}) (i32.add) (i32.load)",
-        payload_off
-    );
-    out.push_str("        (local.get $__wbox)\n");
-    out.push_str("        (call $weak_unregister)\n");
-    out.push_str("      ))\n");
-    out.push_str("      (local.get $__wbox) (call $free)\n");
-    out.push_str("    ))\n");
-}
-
-/// Emits the teardown of one `unowned` field: unregisters it from the side table if it currently
-/// watches a live referent. There is no box to free — the field itself holds the raw (non-owning)
-/// pointer.
-fn emit_release_unowned_field(out: &mut String, f: &dream_hir::FieldLayout) {
-    let _ = writeln!(
-        out,
-        "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)",
-        f.offset
-    );
-    out.push_str("    (local.get $__wbox) (if (then\n");
-    out.push_str("      (local.get $__wbox)\n");
-    let _ = writeln!(
-        out,
-        "      (local.get $ptr) (i32.const {}) (i32.add)",
-        f.offset
-    );
-    out.push_str("      (call $weak_unregister)\n");
-    out.push_str("    ))\n");
-}
-
-/// Emits the deep-release runtime: a per-struct/union `$release_<Type>` (run `del()` if present,
-/// release reference fields, then `$free`), a `$release_array_t<E>` for each reference-element array
-/// type, and the tag-dispatching `$release_object`. Non-reference fields and scalar arrays never need
-/// releasing; strings/boxed primitives fall through to `$release_generic`.
-pub(super) fn emit_release_funcs(
+/// Emits GC mark/update visitors and finalizer dispatch: per-type `$gc_trace_<Type>`,
+/// `$gc_trace_array_t*`, `$gc_trace_funcbox`, tag-dispatching `$gc_trace_object`, and
+/// `$gc_run_finalizer` (calls `$Type_del` when present). See `docs/compiler/12-tiered-gc.md`.
+///
+/// `value_trace` — value types with embedded heap refs (inline `$gc_trace_*` calls).
+/// `value_glue` — value types with `js`/`del` retain-drop glue (finalizer js unregister).
+pub(super) fn emit_gc_funcs(
     out: &mut String,
     mir: &crate::Mir,
     interner: &TypeInterner,
     tags: &HashMap<TypeId, i32>,
+    value_trace: &std::collections::HashSet<TypeId>,
     value_glue: &std::collections::HashSet<TypeId>,
 ) {
     let fn_names: std::collections::HashSet<&str> =
@@ -216,153 +22,374 @@ pub(super) fn emit_release_funcs(
     };
 
     for (ty, layout) in &mir.layouts.structs {
-        let del = del_of(&layout.name);
-        let _ = writeln!(out, "(func $release_{} (param $ptr i32)", layout.name);
-        out.push_str("  (local $rc i32) (local $nc i32) (local $__wbox i32)\n");
-        if interner.is_shared_type(*ty) {
-            emit_release_prologue_atomic(out);
-        } else {
-            emit_release_prologue(out);
-        }
-        emit_del_call(out, del.as_deref());
-        // `weak`/`unowned` fields never held a strong reference, so they are excluded from the
-        // generic reference-field release loop (which would otherwise wrongly decrement/deep-release
-        // a referent this object never owned) and are torn down via their own dedicated logic instead.
+        let _ = writeln!(out, "(func $gc_trace_{} (param $ptr i32)", layout.name);
+        out.push_str("  (local $slot i32) (local $child i32)\n");
         for f in layout
             .fields
             .iter()
-            .filter(|f| interner.is_rc_tracked(f.ty) && !f.is_weak && !f.is_unowned)
+            .filter(|f| interner.is_reference(f.ty) && !f.is_weak)
         {
-            emit_release_ref_field(out, "    ", f, interner, &mir.layouts);
+            emit_trace_ref_slot(out, "  ", f.offset);
+            emit_trace_ref_child(out, mir, interner, value_trace, f.ty, "  ");
         }
-        for f in layout.fields.iter().filter(|f| f.is_weak) {
-            emit_release_weak_field(out, f, &mir.layouts);
-        }
-        for f in layout.fields.iter().filter(|f| f.is_unowned) {
-            emit_release_unowned_field(out, f);
-        }
-        // Inline value(`struct`) fields are dropped in place (their reference fields released, `del`
-        // run) via the field type's drop-glue at `ptr + offset` — never freed, since they share the
-        // enclosing object's block.
         for f in &layout.fields {
-            emit_embedded_value_drop(out, mir, interner, value_glue, f, "    ");
+            emit_trace_embedded_value(out, mir, interner, value_trace, f, "  ");
         }
-        // Poison every `weak`/`unowned` slot elsewhere in the program that currently watches this
-        // object, before it is freed (see `src/mir/runtime/weak.wat`). Only classes can be a
-        // `weak`/`unowned` target (enforced during semantic analysis), so this need not run for
-        // unions or arrays.
-        out.push_str("    (local.get $ptr) (call $weak_clear_all)\n");
-        out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
+        let _ = ty;
+        out.push_str(")\n");
     }
 
     for layout in mir.layouts.unions.values() {
-        let del = del_of(&layout.name);
-        let _ = writeln!(out, "(func $release_{} (param $ptr i32)", layout.name);
-        out.push_str("  (local $rc i32) (local $nc i32) (local $d i32)\n");
-        emit_release_prologue(out);
-        emit_del_call(out, del.as_deref());
-        // Only the active variant's payload is valid, so switch on the discriminant (offset 0).
-        out.push_str("    (local.get $ptr) (i32.load) (local.set $d)\n");
+        let _ = writeln!(out, "(func $gc_trace_{} (param $ptr i32)", layout.name);
+        out.push_str("  (local $slot i32) (local $d i32) (local $child i32)\n");
+        out.push_str("  (local.get $ptr) (i32.load) (local.set $d)\n");
         for v in &layout.variants {
             let ref_fields: Vec<&dream_hir::FieldLayout> = v
                 .fields
                 .iter()
-                .filter(|f| interner.is_rc_tracked(f.ty))
+                .filter(|f| interner.is_reference(f.ty))
                 .collect();
-            if ref_fields.is_empty() {
-                continue;
-            }
-            let _ = writeln!(
-                out,
-                "    (local.get $d) (i32.const {}) (i32.eq) (if (then",
-                v.discriminant
-            );
-            for f in ref_fields {
-                emit_release_ref_field(out, "      ", f, interner, &mir.layouts);
-            }
-            out.push_str("    ))\n");
-        }
-        // Inline value-struct payloads (present in at most one active variant) are dropped in place.
-        for v in &layout.variants {
             let value_fields: Vec<&dream_hir::FieldLayout> = v
                 .fields
                 .iter()
-                .filter(|f| interner.is_value_type(f.ty) && value_glue.contains(&f.ty))
+                .filter(|f| interner.is_value_type(f.ty) && value_trace.contains(&f.ty))
                 .collect();
-            if value_fields.is_empty() {
+            if ref_fields.is_empty() && value_fields.is_empty() {
                 continue;
             }
             let _ = writeln!(
                 out,
-                "    (local.get $d) (i32.const {}) (i32.eq) (if (then",
+                "  (local.get $d) (i32.const {}) (i32.eq) (if (then",
                 v.discriminant
             );
-            for f in value_fields {
-                emit_embedded_value_drop(out, mir, interner, value_glue, f, "      ");
+            for f in ref_fields {
+                emit_trace_ref_slot(out, "    ", f.offset);
+                emit_trace_ref_child(out, mir, interner, value_trace, f.ty, "    ");
             }
-            out.push_str("    ))\n");
+            for f in value_fields {
+                emit_trace_embedded_value(out, mir, interner, value_trace, f, "    ");
+            }
+            out.push_str("  ))\n");
         }
-        out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
+        out.push_str(")\n");
     }
 
-    // One array release per reference-, js-, or value-element array type; the element type is known
-    // statically at the call site, so array releases (unlike `$release_object`) can recurse into
-    // their elements. Reference/`js` elements are released by loaded pointer/handle; inline
-    // value-struct elements are dropped in place via their drop-glue at the element address.
-    for elem in array_elem_types(mir, interner) {
-        let is_ref = interner.is_rc_tracked(elem);
+    for elem in array_elem_types_for_release(mir, interner) {
+        let is_ref = interner.is_reference(elem);
         let is_value = interner.is_value_type(elem);
         if !is_ref && !is_value {
             continue;
         }
-        let _ = writeln!(out, "(func $release_array_t{} (param $ptr i32)", elem.0);
+        let _ = writeln!(out, "(func $gc_trace_array_t{} (param $ptr i32)", elem.0);
         out.push_str(
-            "  (local $rc i32) (local $nc i32) (local $len i32) (local $i i32) (local $elem i32)\n",
+            "  (local $slot i32) (local $len i32) (local $i i32) (local $elem i32)\n",
         );
-        emit_release_prologue(out);
+        out.push_str("  (local.get $ptr) (i32.load) (local.set $len)\n");
+        out.push_str("  (i32.const 0) (local.set $i)\n");
+        out.push_str("  (block $done (loop $scan\n");
+        out.push_str("    (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
         if is_ref {
-            out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
-            out.push_str("    (i32.const 0) (local.set $i)\n");
-            out.push_str("    (block $done (loop $scan\n");
-            out.push_str("      (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
-            out.push_str("      (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const 4) (i32.mul) (i32.add) (i32.load) (local.set $elem)\n");
-            let _ = writeln!(
-                out,
-                "      (local.get $elem) (if (then (local.get $elem) (call {})))",
-                release_call(interner, &mir.layouts, elem)
-            );
             out.push_str(
-                "      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n",
+                "    (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const 4) (i32.mul) (i32.add) (local.set $slot)\n",
             );
-        } else if value_glue.contains(&elem) {
-            // Drop each inline element (stride = its inline size) via `$__vs_drop_<T>` at its address.
+            out.push_str("    (global.get $gc_trace_mode) (i32.eqz) (if (then\n");
+            out.push_str("      (local.get $slot) (call $gc_update_slot)\n");
+            out.push_str("    ) (else\n");
+            out.push_str("      (local.get $slot) (i32.load) (call $gc_mark_object)\n");
+            out.push_str("    ))\n");
+        } else if value_trace.contains(&elem) {
             let name = mir.layouts.structs[&elem].name.clone();
             let (stride, _) = dream_hir::scalar_size(interner, elem);
-            out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
-            out.push_str("    (i32.const 0) (local.set $i)\n");
-            out.push_str("    (block $done (loop $scan\n");
-            out.push_str("      (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
             let _ = writeln!(
                 out,
-                "      (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const {}) (i32.mul) (i32.add) (call {})",
-                stride,
-                vs_drop_sym(&name)
-            );
-            out.push_str(
-                "      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n",
+                "    (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const {}) (i32.mul) (i32.add) (call $gc_trace_{})",
+                stride, name
             );
         }
-        out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
+        out.push_str("    (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n");
+        out.push_str(")\n");
     }
 
-    // `$release_object`: tag dispatch for reference values whose static type is `object`. Strings,
-    // boxed primitives, and arrays (not self-describing about their element type) fall through to the
-    // shallow generic release.
-    out.push_str("(func $release_object (param $ptr i32)\n  (local $tag i32)\n");
+    // Funcbox: word 1 is the env ref (word 0 is the table index).
+    out.push_str("(func $gc_trace_funcbox (param $ptr i32)\n");
+    out.push_str("  (local $slot i32)\n");
+    out.push_str("  (local.get $ptr) (i32.const 4) (i32.add) (local.set $slot)\n");
+    out.push_str("  (global.get $gc_trace_mode) (i32.eqz) (if (then\n");
+    out.push_str("    (local.get $slot) (call $gc_update_slot)\n");
+    out.push_str("  ) (else\n");
+    out.push_str("    (local.get $slot) (i32.load) (call $gc_mark_object)\n");
+    out.push_str("  ))\n");
+    out.push_str(")\n");
+
+    out.push_str("(func $gc_trace_object (param $ptr i32)\n  (local $tag i32)\n");
     out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
     out.push_str("  (local.get $ptr) (call $object_tag) (local.set $tag)\n");
     write_struct_union_tag_arms(out, mir, tags, |name| {
-        format!("(local.get $ptr) (call $release_{})", name)
+        format!("(local.get $ptr) (call $gc_trace_{})", name)
     });
-    out.push_str("  (local.get $ptr) (call $release_generic)\n)\n");
+    // Arrays: not self-describing about element type — nothing further to do without a typed helper.
+    // Funcboxes use malloc tag 0; they are traced only via typed `$gc_trace_funcbox` call sites /
+    // object graphs that hold them as strong refs of known static type.
+    out.push_str(")\n");
+
+    // Finalizer dispatch: only types that declare `del`.
+    out.push_str("(func $gc_run_finalizer (param $ptr i32)\n  (local $tag i32)\n");
+    out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
+    out.push_str("  (local.get $ptr) (call $object_tag) (local.set $tag)\n");
+    for (ty, layout) in &mir.layouts.structs {
+        let Some(del) = del_of(&layout.name) else {
+            continue;
+        };
+        let Some(&tag) = tags.get(ty) else {
+            continue;
+        };
+        let _ = writeln!(
+            out,
+            "  (local.get $tag) (i32.const {}) (i32.eq) (if (then (local.get $ptr) (call ${}) (return)))",
+            tag, del
+        );
+    }
+    for (ty, layout) in &mir.layouts.unions {
+        let Some(del) = del_of(&layout.name) else {
+            continue;
+        };
+        let Some(&tag) = tags.get(ty) else {
+            continue;
+        };
+        let _ = writeln!(
+            out,
+            "  (local.get $tag) (i32.const {}) (i32.eq) (if (then (local.get $ptr) (call ${}) (return)))",
+            tag, del
+        );
+    }
+    out.push_str(")\n");
+
+    // Unregister host `js` handles stored in unreachable objects (raw i32 ids, not heap refs).
+    out.push_str(
+        "(func $gc_drop_js_handles (param $ptr i32)\n  (local $tag i32) (local $h i32) (local $d i32)\n",
+    );
+    out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
+    out.push_str("  (local.get $ptr) (call $object_tag) (local.set $tag)\n");
+    for (ty, layout) in &mir.layouts.structs {
+        let has_js = layout_has_js(mir, interner, value_glue, *ty);
+        if !has_js {
+            continue;
+        }
+        let Some(&tag) = tags.get(ty) else {
+            continue;
+        };
+        let _ = writeln!(
+            out,
+            "  (local.get $tag) (i32.const {}) (i32.eq) (if (then",
+            tag
+        );
+        for f in &layout.fields {
+            emit_unregister_js_field(out, mir, interner, value_glue, f, "    ");
+        }
+        out.push_str("    (return)\n  ))\n");
+    }
+    for (ty, layout) in &mir.layouts.unions {
+        let has_js = layout
+            .variants
+            .iter()
+            .any(|v| v.fields.iter().any(|f| field_has_js(mir, interner, value_glue, f.ty)));
+        if !has_js {
+            continue;
+        }
+        let Some(&tag) = tags.get(ty) else {
+            continue;
+        };
+        let _ = writeln!(
+            out,
+            "  (local.get $tag) (i32.const {}) (i32.eq) (if (then",
+            tag
+        );
+        out.push_str("    (local.get $ptr) (i32.load) (local.set $d)\n");
+        for v in &layout.variants {
+            let js_fields: Vec<&dream_hir::FieldLayout> = v
+                .fields
+                .iter()
+                .filter(|f| field_has_js(mir, interner, value_glue, f.ty))
+                .collect();
+            if js_fields.is_empty() {
+                continue;
+            }
+            let _ = writeln!(
+                out,
+                "    (local.get $d) (i32.const {}) (i32.eq) (if (then",
+                v.discriminant
+            );
+            for f in js_fields {
+                emit_unregister_js_field(out, mir, interner, value_glue, f, "      ");
+            }
+            out.push_str("    ))\n");
+        }
+        out.push_str("    (return)\n  ))\n");
+    }
+    out.push_str(")\n");
+}
+
+fn field_has_js(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    value_glue: &std::collections::HashSet<TypeId>,
+    ty: TypeId,
+) -> bool {
+    if matches!(interner.kind(ty), TyKind::Js) {
+        return true;
+    }
+    if interner.is_value_type(ty) && value_glue.contains(&ty) {
+        return layout_has_js(mir, interner, value_glue, ty);
+    }
+    false
+}
+
+fn layout_has_js(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    value_glue: &std::collections::HashSet<TypeId>,
+    ty: TypeId,
+) -> bool {
+    if let Some(layout) = mir.layouts.structs.get(&ty) {
+        return layout
+            .fields
+            .iter()
+            .any(|f| field_has_js(mir, interner, value_glue, f.ty));
+    }
+    if let Some(layout) = mir.layouts.unions.get(&ty) {
+        return layout.variants.iter().any(|v| {
+            v.fields
+                .iter()
+                .any(|f| field_has_js(mir, interner, value_glue, f.ty))
+        });
+    }
+    false
+}
+
+fn emit_unregister_js_field(
+    out: &mut String,
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    value_glue: &std::collections::HashSet<TypeId>,
+    f: &dream_hir::FieldLayout,
+    indent: &str,
+) {
+    emit_unregister_js_at(out, mir, interner, value_glue, f.ty, f.offset, indent);
+}
+
+fn emit_unregister_js_at(
+    out: &mut String,
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    value_glue: &std::collections::HashSet<TypeId>,
+    ty: TypeId,
+    base_off: u32,
+    indent: &str,
+) {
+    if matches!(interner.kind(ty), TyKind::Js) {
+        let _ = writeln!(out, "{indent}(local.get $ptr)");
+        if base_off > 0 {
+            let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", base_off);
+        }
+        out.push_str(indent);
+        out.push_str("(i32.load) (local.tee $h) (if (then (local.get $h) (call $js_unregister)))\n");
+        return;
+    }
+    if !(interner.is_value_type(ty) && value_glue.contains(&ty)) {
+        return;
+    }
+    if let Some(layout) = mir.layouts.structs.get(&ty) {
+        for inner in &layout.fields {
+            if field_has_js(mir, interner, value_glue, inner.ty) {
+                emit_unregister_js_at(
+                    out,
+                    mir,
+                    interner,
+                    value_glue,
+                    inner.ty,
+                    base_off + inner.offset,
+                    indent,
+                );
+            }
+        }
+    }
+}
+
+/// Trace one strong ref slot at `$ptr + offset`: Gen0 update-slot or mark-child depending on
+/// `$gc_trace_mode`.
+fn emit_trace_ref_slot(out: &mut String, indent: &str, offset: u32) {
+    let _ = writeln!(out, "{indent}(local.get $ptr)");
+    if offset > 0 {
+        let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", offset);
+    }
+    let _ = writeln!(out, "{indent}(local.set $slot)");
+    let _ = writeln!(out, "{indent}(global.get $gc_trace_mode) (i32.eqz) (if (then");
+    let _ = writeln!(out, "{indent}  (local.get $slot) (call $gc_update_slot)");
+    let _ = writeln!(out, "{indent}) (else");
+    let _ = writeln!(out, "{indent}  (local.get $slot) (i32.load) (call $gc_mark_object)");
+    let _ = writeln!(out, "{indent}))");
+}
+
+/// After updating/marking a ref field, recurse into arrays and funcboxes. Those are not covered by
+/// `$gc_trace_object` tag dispatch (`TAG_ARRAY` is shared; funcboxes use tag 0), so the parent's
+/// static field type must drive a typed visitor — otherwise Gen0 leaves nursery element pointers
+/// dangling inside evacuated arrays (Map rehash / JSON parse corruption).
+fn emit_trace_ref_child(
+    out: &mut String,
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    value_trace: &std::collections::HashSet<TypeId>,
+    ty: TypeId,
+    indent: &str,
+) {
+    match interner.kind(ty) {
+        TyKind::Array(elem) => {
+            let elem = *elem;
+            let needs = interner.is_reference(elem)
+                || (interner.is_value_type(elem) && value_trace.contains(&elem));
+            if !needs {
+                return;
+            }
+            // Ensure the typed array tracer exists for this elem (emitter already emits for
+            // `array_elem_types_for_release`; Map/List field elems are included via layouts).
+            let _ = mir;
+            let _ = writeln!(
+                out,
+                "{indent}(local.get $slot) (i32.load) (local.tee $child) (if (then (local.get $child) (call $gc_trace_array_t{})))",
+                elem.0
+            );
+        }
+        TyKind::Func(..) => {
+            let _ = writeln!(
+                out,
+                "{indent}(local.get $slot) (i32.load) (local.tee $child) (if (then (local.get $child) (call $gc_trace_funcbox)))"
+            );
+        }
+        _ => {}
+    }
+}
+
+/// Trace an inline value-struct field by calling its `$gc_trace_<T>`. Value structs with only
+/// scalar fields need no visitor; those with ref fields are in `value_trace` and get a
+/// `$gc_trace_<Name>` emitted alongside heap classes above.
+fn emit_trace_embedded_value(
+    out: &mut String,
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    value_trace: &std::collections::HashSet<TypeId>,
+    f: &dream_hir::FieldLayout,
+    indent: &str,
+) {
+    if !interner.is_value_type(f.ty) || !value_trace.contains(&f.ty) {
+        return;
+    }
+    let Some(name) = mir.layouts.structs.get(&f.ty).map(|l| l.name.clone()) else {
+        return;
+    };
+    out.push_str(indent);
+    out.push_str("(local.get $ptr)");
+    if f.offset > 0 {
+        let _ = write!(out, " (i32.const {}) (i32.add)", f.offset);
+    }
+    let _ = writeln!(out, " (call $gc_trace_{})", name);
 }

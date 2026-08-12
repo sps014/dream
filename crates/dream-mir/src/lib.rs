@@ -3,7 +3,7 @@
 //!
 //! Where HIR keeps structured control flow, MIR desugars everything (if/while/for/foreach/switch/
 //! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Reference-counting
-//! (`Retain`/`Release`) and allocation are explicit [`Statement`]s, which lets the optimization
+//! allocation is an explicit [`Statement`], which lets the optimization
 //! passes reason about them with ordinary dataflow. The backend  reconstructs
 //! structured WASM control flow from this CFG via a relooper.
 
@@ -129,12 +129,11 @@ pub struct LocalDecl {
     /// inliner when remapping a callee `this`/`ref` into the caller so [`ValueFrame`] keeps it as a
     /// borrow. Meaningless (and always `false`) for a local whose type is not a value struct.
     pub is_ref: bool,
-    /// True for a sink/owned parameter: the callee owns the incoming +1 (released at scope exit
-    /// unless transferred into a container without a second retain). Always `false` for non-params.
-    /// After sink-default ABI, unmarked RC params set this; `borrow` / `ref` / `this` clear it.
+    /// Legacy sink/owned parameter flag (ARC-era). Kept on locals for now; emit no longer uses it
+    /// for retain/release. Always `false` for non-params.
     pub is_take: bool,
-    /// Non-owning RC alias (typically a field/index load). Excluded from RcInsertion ownership
-    /// retains and scope-exit releases. Always `false` for params.
+    /// Legacy non-owning alias flag (typically a field/index load). Kept on locals for now; emit
+    /// no longer uses it for retain/release. Always `false` for params.
     pub is_cursor: bool,
     /// Owning value local whose destructor runs via explicit [`Statement::ValueDrop`] (inliner
     /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
@@ -153,10 +152,6 @@ pub struct BasicBlock {
 pub enum Statement {
     /// `place = rvalue`.
     Assign(Place, Rvalue),
-    /// Increment the refcount of a reference operand.
-    Retain(Operand),
-    /// Decrement the refcount of a reference operand (and free at zero).
-    Release(Operand),
     /// Prints `Operand` (a `string`-typed panic message, always a compile-time-known literal built
     /// during HIR emission) via the shared `$dream_panic` runtime helper, then traps unconditionally.
     /// The single, shared halt point for every runtime failure: array/string bounds checks,

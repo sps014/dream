@@ -165,8 +165,6 @@
             )
         )
     )
-    local.get $c
-    call $release_generic
 )
 (func $dream_set_timer (param $f i32) (param $delay i32)
     (local $due i32)
@@ -382,33 +380,6 @@
                     local.get $w
                     local.get $arr
                     i32.store offset={F_RESULTS}
-                    ;; ownership of each result pointer has transferred into $arr; drop the
-                    ;; parent's strong ref on every child frame now that its result is copied out
-                    i32.const 0
-                    local.set $i
-                    (block $rdone
-                        (loop $rloop
-                            local.get $i
-                            local.get $n
-                            i32.ge_s
-                            br_if $rdone
-                            local.get $w
-                            i32.load offset={F_CHILDREN}
-                            i32.const 4
-                            i32.add
-                            local.get $i
-                            i32.const 4
-                            i32.mul
-                            i32.add
-                            i32.load
-                            call $release_generic
-                            local.get $i
-                            i32.const 1
-                            i32.add
-                            local.set $i
-                            br $rloop
-                        )
-                    )
                     local.get $w
                     local.get $arr
                     call $dream_complete
@@ -465,8 +436,6 @@
                             br $cloop
                         )
                     )
-                    local.get $child
-                    call $release_generic
                 )
             )
         )
@@ -503,32 +472,6 @@
             call $dream_complete
             local.get $w
             return
-        )
-    )
-    ;; take a strong ref on every child up front so the parent owns them all before any
-    ;; synchronous completion can fire progress (and, for `any`, cancel the losers)
-    i32.const 0
-    local.set $i
-    (block $retdone
-        (loop $retloop
-            local.get $i
-            local.get $n
-            i32.ge_s
-            br_if $retdone
-            local.get $arr
-            i32.const 4
-            i32.add
-            local.get $i
-            i32.const 4
-            i32.mul
-            i32.add
-            i32.load
-            call $retain
-            local.get $i
-            i32.const 1
-            i32.add
-            local.set $i
-            br $retloop
         )
     )
     i32.const 0
@@ -591,32 +534,6 @@
     local.get $w
     local.get $n
     i32.store offset={F_REMAINING}
-    ;; take a strong ref on every child up front so the parent owns them all before any
-    ;; synchronous completion can fire progress (and, for `any`, cancel the losers)
-    i32.const 0
-    local.set $i
-    (block $retdone
-        (loop $retloop
-            local.get $i
-            local.get $n
-            i32.ge_s
-            br_if $retdone
-            local.get $arr
-            i32.const 4
-            i32.add
-            local.get $i
-            i32.const 4
-            i32.mul
-            i32.add
-            i32.load
-            call $retain
-            local.get $i
-            i32.const 1
-            i32.add
-            local.set $i
-            br $retloop
-        )
-    )
     i32.const 0
     local.set $i
     (block $done

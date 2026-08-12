@@ -1,0 +1,41 @@
+import system;
+import system.collections;
+
+// Stress heap growth + full GC: Map entries must survive collections (remset / mark /
+// place-store / flat-array tagging). With Gen0 copying temporarily disabled, this is
+// primarily an old-space mark-sweep stress; keep the junk-alloc pattern so re-enabling
+// Gen0 copying continues to exercise ephemeral traffic.
+fun main(): void {
+    let m = Map<string, int>();
+    let n = 8000;
+    let i = 0;
+    while (i < n) {
+        m.set("k" + i.to_string(), i);
+        if (i % 64 == 0) {
+            let junk = 0;
+            let j = 0;
+            while (j < 200) {
+                junk = junk + ("x" + j.to_string()).byte_size();
+                j = j + 1;
+            }
+            sink_int(junk);
+        }
+        i = i + 1;
+    }
+    Debug.gc_collect();
+    let ok = 0;
+    i = 0;
+    while (i < n) {
+        if (m.get_or("k" + i.to_string(), -1) == i) {
+            ok = ok + 1;
+        }
+        i = i + 1;
+    }
+    System.println(ok.to_string());
+}
+
+fun sink_int(x: int): void {
+    if (x < 0) {
+        System.println("neg");
+    }
+}

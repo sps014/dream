@@ -14,7 +14,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 ## What Dream is
 
-A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting, no GC pauses), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
+A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via a custom stop-the-world generational GC in linear memory (Gen0/Gen1/Gen2/LOH; not WasmGC), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
 
 Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in `wasmtime`.
 
@@ -75,7 +75,7 @@ Each arrow is a **total** lowering: the producer records everything the consumer
 | Names | Identifiers | Resolved `Binding`/`Callee` | `Local`/`Global` indices |
 | Control flow | if/while/for/... | Same (structured) | goto/if/switch terminators |
 | Generics | Type-param syntax | Explicit `MonoInstance` worklist | Already monomorphized |
-| RC/alloc | Implicit | Implicit | Explicit `Retain`/`Release`/`New` |
+| GC/alloc | Implicit | Implicit | Explicit `New` + barriers / safepoints |
 
 ## Crate dependency graph
 
@@ -110,11 +110,10 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 
 Do not implement these (decision record: `docs/compiler/10-stack-alloc-and-mono-design-note.md`):
 
-- **Small-string SSO** — `string` stays a heap ARC `i32` pointer; no tagged inline representation.
+- **Small-string SSO** — `string` stays a heap GC `i32` pointer; no tagged inline representation.
 - **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`@stack` on unions is shipped and unrelated.)
 - **Size-class-keyed unmanaged monomorphization** — mono stays `(DefId, args)`; `unmanaged` stdlib code uses runtime `esize`, not a compiler size-class key.
-
-Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/compiler/11-swift-like-arc-roadmap.md`.
+- **WasmGC / ARC** — heap is the custom tiered GC in linear memory; ARC (`Retain`/`Release`, sink/borrow ABI) is deleted. See `docs/compiler/12-tiered-gc.md`.
 
 Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll functions keep `$__pc` + `br_table` (suspend/resume).
 

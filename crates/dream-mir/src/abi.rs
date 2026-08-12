@@ -1,6 +1,6 @@
 //! Runtime ABI constants shared between the MIR backend and the embedded runtime `.wat` layers.
 //!
-//! Every heap block carries a type tag in its header (`[size][tag][ref_count]`). Reference types
+//! Every heap block carries a type tag in its header (`[size][tag][gc_meta]`). Reference types
 //! store their tag in the block they already own; primitives are boxed into a small tagged block.
 //! These are the single source of truth for those tags — the `{TAG_*}` placeholders in
 //! `runtime/object.wat` / `runtime/format.wat` are substituted from them at emit time, and the host
@@ -17,25 +17,66 @@ pub const TAG_LONG: i32 = 8;
 pub const TAG_UINT: i32 = 9;
 pub const TAG_ULONG: i32 = 10;
 pub const TAG_BYTE: i32 = 11;
+/// Blittable / non-ref element arrays (`int[]`, `byte[]`, …). Same `[len][elems…]` layout as
+/// [`TAG_ARRAY`], but Gen0 must not scan elements as pointers.
+pub const TAG_FLAT_ARRAY: i32 = 12;
 /// Structs/unions are assigned consecutive tags starting here, ordered by sorted type name.
-pub const TAG_STRUCT_BASE: i32 = 12;
+pub const TAG_STRUCT_BASE: i32 = 13;
 
 // -- Heap block layout ---------------------------------------------------------------------------
 //
-// Every allocated value is preceded by a fixed header `[size:i32][tag:i32][ref_count:i32]`. These
+// Every managed value is preceded by a fixed header `[size:i32][tag:i32][gc_meta:i32]`. These
 // offsets are the single source of truth shared by the emitter, the host interop layer
 // (`execution/host`), and the hand-written runtime `.wat` (which references them via `{...}`
-// placeholders substituted at emit time, or via matching comments).
+// placeholders substituted at emit time, or via matching comments). See
+// `docs/compiler/12-tiered-gc.md`.
 
-/// Byte size of the universal heap-block header `[size:i32][tag:i32][ref_count:i32]`. A value's data
+/// Byte size of the universal heap-block header `[size:i32][tag:i32][gc_meta:i32]`. A value's data
 /// pointer is `block_start + HEAP_HEADER_SIZE`.
 pub const HEAP_HEADER_SIZE: u32 = 12;
 
 /// Byte offset (from the block start) of the type-tag word in the heap header.
 pub const HEADER_TAG_OFFSET: u32 = 4;
 
-/// Byte offset (from the block start) of the reference-count word in the heap header.
-pub const HEADER_REFCOUNT_OFFSET: u32 = 8;
+/// Byte offset (from the block start) of the GC metadata word in the heap header.
+pub const HEADER_GC_META_OFFSET: u32 = 8;
+
+// -- `gc_meta` bit layout ------------------------------------------------------------------------
+
+/// Generation field mask (bits 0–1): 0=Gen0, 1=Gen1, 2=Gen2, 3=LOH.
+pub const GC_META_GEN_MASK: u32 = 0b11;
+pub const GC_GEN0: u32 = 0;
+pub const GC_GEN1: u32 = 1;
+pub const GC_GEN2: u32 = 2;
+pub const GC_GEN_LOH: u32 = 3;
+
+/// Object is marked reachable in the current collection.
+pub const GC_META_MARK: u32 = 1 << 2;
+/// Object was evacuated; the size word holds the forwarding data pointer (block+12 of new home).
+pub const GC_META_FORWARDED: u32 = 1 << 3;
+/// Type has a `del` finalizer; enqueue when found unreachable.
+pub const GC_META_FINALIZE: u32 = 1 << 4;
+/// Finalizer already ran once (blocks resurrection loops).
+pub const GC_META_FINALIZED: u32 = 1 << 5;
+/// Immortal / non-movable (interned strings): never evacuated or swept.
+pub const GC_META_IMMORTAL: u32 = 1 << 6;
+/// Block is on the segregated freelist (old/LOH sweep); skip in heap walks.
+pub const GC_META_FREE: u32 = 1 << 7;
+
+/// Payload size (bytes) at or above which `$gc_alloc` uses the LOH path instead of Gen0.
+/// Matches C#'s ~85 KiB large-object threshold.
+pub const LOH_THRESHOLD: u32 = 85 * 1024;
+
+/// Gen0 nursery size in bytes (fixed region at heap base; copying collector).
+/// Sized to force frequent ephemeral collections under Map/JSON stress — remset overflow
+/// must remain correct at this size (see `docs/compiler/12-tiered-gc.md`).
+pub const NURSERY_SIZE: u32 = 256 * 1024;
+
+/// Maximum number of GC root slots in the shadow root table (scanned at safepoints).
+pub const GC_ROOT_TABLE_CAP: u32 = 4096;
+
+/// Maximum remembered-set entries (older→younger slots) before forcing a Gen1 collection.
+pub const GC_REMEMBERED_CAP: u32 = 65536;
 
 /// Byte size of the length/count prefix preceding an array's elements at the data pointer
 /// (`[count:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. Also the size of the
@@ -54,13 +95,11 @@ pub const STRING_SCALAR_LEN_OFFSET: u32 = 4;
 //
 // Layout, low -> high address:
 //
-//   [ static data ] [ shadow stack -> grows DOWN ] [ heap -> grows UP (memory.grow) ]
+//   [ static data ] [ shadow stack -> grows DOWN ] [ nursery | old+LOH -> grows UP ]
 //   ^ strings+itables ^ SHADOW_STACK_SIZE bytes     ^ heap base == shadow-stack top
 //
-// The shadow stack (inline value-`struct` locals) and the heap share a single boundary and grow
-// away from it in *opposite* directions, so they can never collide. The shadow stack is capped at
-// `SHADOW_STACK_SIZE` (a deep-recursion bound); the heap is effectively unbounded, extending linear
-// memory via `memory.grow` in the allocator's bump path.
+// Low memory also holds freelist heads, alloc lock, heap bump, GC coordination words, and the
+// root / remembered-set tables (all below [`STRING_BASE`]).
 
 /// WASM linear-memory page size, in bytes.
 pub const WASM_PAGE_SIZE: u32 = 65536;
@@ -72,7 +111,8 @@ pub const SHADOW_STACK_SIZE: u32 = 16 * WASM_PAGE_SIZE; // 1 MiB
 
 /// Pages of heap mapped in the initial memory, beyond the static-data + shadow-stack regions. The
 /// heap grows past this on demand via `memory.grow`, so this is only a starting cushion.
-pub const INITIAL_HEAP_PAGES: u32 = 1;
+/// Sized to cover the nursery plus a small old-space cushion.
+pub const INITIAL_HEAP_PAGES: u32 = (NURSERY_SIZE / WASM_PAGE_SIZE) + 2;
 
 /// Maximum page count declared on the module's linear memory. The WASM threads proposal requires a
 /// shared memory to declare a fixed maximum up front (unlike a plain memory, which may leave it
@@ -83,33 +123,68 @@ pub const MAX_MEMORY_PAGES: u32 = 65536;
 /// Base address (block start) of the interned string data segment; the heap begins above it.
 pub const STRING_BASE: u32 = 1024;
 
-// -- Cross-thread allocator coordination (linear memory is `shared`, see `execution::host::shared_memory`) --
+// -- Cross-thread allocator / GC coordination (linear memory is `shared`) ------------------------
 //
 // The segregated free-list table occupies bytes [4, 44) for size-class heads 0..8
 // (`runtime/allocator.wat`), plus large-class heads at 56+ (idx 9..12) and the huge-list head at 72.
-// Two more coordination words are reserved at 44/48 — deliberately *not* overlapping freelist
-// heads — both well below `STRING_BASE` (1024) so they can never collide with static data:
+// Coordination words at 44/48/52 must not overlap freelist heads — all well below `STRING_BASE`.
 //
-// - `ALLOC_LOCK_ADDR`: a spinlock (0 = free, 1 = held) serializing every `$malloc`/`$free` body. The
-//   owner instance and every `WebWorker` instance of the same module import the *same*
-//   `wasmtime::SharedMemory`, so without this lock two threads racing the free-list/bump-pointer
-//   logic concurrently would corrupt the heap (lost updates, double-allocated blocks).
-// - `HEAP_PTR_ADDR`: the bump-pointer high-water mark, moved out of a WASM global (which is
-//   per-*instance*, not per-memory) into shared memory so every thread bumps the same pointer.
-//   Initialized exactly once across however many instances share this memory, via an atomic
-//   compare-exchange from 0 in `$__runtime_init` (see `emit/module.rs`) — whichever instance runs
-//   first wins the exchange, every later instantiation's exchange is a no-op.
+// GC state words occupy [76, 160) (still below STRING_BASE=1024):
+// nursery bounds, old-space bump mirror, root table, remembered set, safepoint handshake.
+
+/// Spinlock serializing `$malloc`/`$free`/`$gc_collect_*` across shared-memory instances.
 pub const ALLOC_LOCK_ADDR: u32 = 44;
+/// Old-space / LOH bump high-water mark (shared); Gen0 uses the nursery bump instead.
 pub const HEAP_PTR_ADDR: u32 = 48;
 
-/// A monotonically increasing counter (`i32.atomic.rmw.add`) handing out a small, dense, unique id
-/// to each thread that ever calls `$__thread_id` (see `runtime/sync.wat`) — the owner instance and
-/// every `WebWorker` instance draw from this one shared word, so ids never collide across threads.
-/// Each thread caches its own id in the ordinary (per-*instance*) WASM global `$__tid` after the
-/// first call, so every later call is a single `global.get`, not a repeat atomic RMW. Backs the
-/// owner-thread-id half of the reentrant lock word (`@shared class`'s embedded lock, `lock (obj)
-/// { ... }`, and `Lock`) — see `HEADER_LOCK_WORD_SIZE` below for the lock word's own layout.
+/// Monotonic thread-id counter for `$__thread_id` / `@shared` lock words.
 pub const THREAD_ID_COUNTER_ADDR: u32 = 52;
+
+/// Nursery bump pointer (shared). Allocations with payload < [`LOH_THRESHOLD`] bump here first.
+pub const NURSERY_BUMP_ADDR: u32 = 76;
+/// Absolute nursery start (set once in `$__runtime_init` to heap_base).
+pub const NURSERY_START_ADDR: u32 = 80;
+/// Absolute nursery end (= start + [`NURSERY_SIZE`]).
+pub const NURSERY_END_ADDR: u32 = 84;
+/// Old-space start (= nursery end); Gen1/Gen2/LOH live at or above this.
+pub const OLD_START_ADDR: u32 = 88;
+
+/// Non-zero while a STW collection is in progress or has been requested.
+pub const GC_REQUEST_ADDR: u32 = 92;
+/// Number of mutator instances that must acknowledge the current safepoint (0 = single-threaded).
+pub const GC_SAFEPOINT_EXPECT_ADDR: u32 = 96;
+/// Number of mutators that have reached `$gc_safepoint` for the current request.
+pub const GC_SAFEPOINT_ACK_ADDR: u32 = 100;
+/// Collection kind: 0=ephemeral(Gen0), 1=Gen0+1, 2=full(+Gen2+LOH).
+pub const GC_COLLECT_KIND_ADDR: u32 = 104;
+
+/// Root-table count (number of live slots).
+pub const GC_ROOT_COUNT_ADDR: u32 = 108;
+/// Pointer to the root table (array of i32 data pointers); allocated in `$__runtime_init`.
+pub const GC_ROOT_TABLE_PTR_ADDR: u32 = 124;
+
+/// Remembered-set count.
+pub const GC_REMSET_COUNT_ADDR: u32 = 112;
+/// Pointer to the remembered-set table (slot addresses); allocated in `$__runtime_init`.
+pub const GC_REMSET_TABLE_PTR_ADDR: u32 = 128;
+
+/// Finalizer queue head (data pointer linked via a side list, or 0).
+pub const GC_FINALIZER_HEAD_ADDR: u32 = 116;
+
+/// Bytes allocated into old/LOH since last Gen1+ collection (trigger heuristic).
+pub const GC_OLD_BYTES_ADDR: u32 = 120;
+/// Gen1 collection threshold in bytes of old-space growth.
+pub const GC_GEN1_THRESHOLD: u32 = 2 * 1024 * 1024;
+
+/// Mark-stack bump for older-gen tracing (pointer into a scratch region allocated at init).
+pub const GC_MARK_STACK_PTR_ADDR: u32 = 132;
+pub const GC_MARK_STACK_BASE_ADDR: u32 = 136;
+/// Capacity of the mark stack in entries.
+pub const GC_MARK_STACK_CAP: u32 = 8192;
+
+/// Non-zero when the remembered set hit [`GC_REMEMBERED_CAP`] and dropped further entries;
+/// next Gen0 must scan all live old/LOH objects for young pointers (not only the remset).
+pub const GC_REMSET_OVERFLOW_ADDR: u32 = 140;
 
 // -- `@shared class` header extension --------------------------------------------------------
 //

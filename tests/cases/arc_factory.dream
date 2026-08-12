@@ -92,13 +92,18 @@ fun arg_temp() {
 
 fun main() {
     use_once(1);
+    Debug.gc_collect();
     System.println(0);
     loop_reassign();
+    Debug.gc_collect();
     System.println(0);
     method_factory();
+    Debug.gc_collect();
     System.println(0);
     ref_field();
+    Debug.gc_collect();
     System.println(0);
     arg_temp();
+    Debug.gc_collect();
     System.println(0);
 }

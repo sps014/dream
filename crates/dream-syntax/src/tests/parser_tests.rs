@@ -943,15 +943,13 @@ fn test_parse_struct_keyword_sets_is_value() {
 }
 
 #[test]
-fn test_parse_weak_and_unowned_field_modifiers() {
-    // `weak`/`unowned` are field-level storage qualifiers; `public` may combine with either, in
-    // any order. A plain field leaves both flags false.
+fn test_parse_weak_field_modifier() {
+    // `weak` is a field-level storage qualifier; `public` may combine with it in any order.
+    // `unowned` is rejected with a diagnostic.
     let code = "class Node {
         public next: Node;
         weak parent: Node;
-        unowned owner: Node;
         public weak alias: Node;
-        unowned public other: Node;
     }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
@@ -971,19 +969,25 @@ fn test_parse_weak_and_unowned_field_modifiers() {
     };
 
     let next = field("next");
-    assert!(next.visibility.is_public() && !next.is_weak && !next.is_unowned);
+    assert!(next.visibility.is_public() && !next.is_weak);
 
     let parent = field("parent");
-    assert!(!parent.visibility.is_public() && parent.is_weak && !parent.is_unowned);
-
-    let owner = field("owner");
-    assert!(!owner.visibility.is_public() && !owner.is_weak && owner.is_unowned);
+    assert!(!parent.visibility.is_public() && parent.is_weak);
 
     let alias = field("alias");
-    assert!(alias.visibility.is_public() && alias.is_weak && !alias.is_unowned);
+    assert!(alias.visibility.is_public() && alias.is_weak);
+}
 
-    let other = field("other");
-    assert!(other.visibility.is_public() && !other.is_weak && other.is_unowned);
+#[test]
+fn test_parse_unowned_is_rejected() {
+    let code = "class Node { unowned owner: Node; }";
+    let arena = bumpalo::Bump::new();
+    let (_program, diagnostics) = parse_code(code, &arena);
+    assert!(diagnostics.has_errors());
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("unowned") && d.message.contains("removed")));
 }
 
 #[test]

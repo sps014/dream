@@ -265,9 +265,9 @@ impl TypeInterner {
         self.kind(id).is_reference()
     }
 
-    /// True if the RC pass tracks ownership of `id` (heap references and `js` handles). Value
-    /// structs/unions are not RC-tracked as envelopes (same carve-outs as [`Self::is_reference`]).
-    pub fn is_rc_tracked(&self, id: TypeId) -> bool {
+    /// True if `id` is a GC-tracked reference (heap references and `js` handles). Value
+    /// structs/unions are not GC-tracked as envelopes (same carve-outs as [`Self::is_reference`]).
+    pub fn is_gc_tracked(&self, id: TypeId) -> bool {
         if self.is_reference(id) {
             return true;
         }

@@ -118,8 +118,8 @@ pub enum TyKind {
     /// A C-style enum definition (no type arguments; values are `int` at runtime).
     Enum(DefId),
     /// A first-class function value `fun(params...): ret`. At runtime this is a heap-allocated
-    /// 2-word funcbox `[funcidx][env]` (see `runtime/closure.wat`), reference-counted like other
-    /// heap values so a capturing lambda's environment is reclaimed when the last `fun` drops.
+    /// 2-word funcbox `[funcidx][env]` (see `runtime/closure.wat`), traced by the GC like other
+    /// heap values so a capturing lambda's environment is reclaimed when unreachable.
     Func(Vec<TypeId>, TypeId),
     /// A positional product type `(T, U, …)` (arity ≥ 2). Structural identity by element
     /// `TypeId`s; always stored inline as a value type (never a heap reference for the envelope).
@@ -127,15 +127,14 @@ pub enum TyKind {
     /// The dynamic JavaScript-interop type `js`: an opaque `i32` handle into the host's live-value
     /// registry (see `runtime/dream.js`). Member/method/index access on a `js` value binds
     /// dynamically at runtime, so the compiler performs no member resolution. It is not a Dream
-    /// heap object (no RC header / tag), but ownership is still tracked: the RC pass emits
-    /// host `jsRetain`/`jsRelease` so the registry entry is dropped when the last Dream owner
-    /// releases (like an enum it lowers to a bare `i32`).
+    /// heap object (no GC header / tag); host registry lifetime follows GC reachability of the
+    /// Dream-side handle (unregister on finalizer — see `docs/compiler/12-tiered-gc.md`).
     Js,
 }
 
 impl TyKind {
-    /// True if a value of this type is a heap-allocated, reference-counted object (strings, arrays,
-    /// objects, structs, unions, interfaces, and first-class `fun` values).
+    /// True if a value of this type is a heap-allocated GC object (strings, arrays, objects,
+    /// structs, unions, interfaces, and first-class `fun` values).
     pub fn is_reference(&self) -> bool {
         matches!(
             self,
@@ -149,9 +148,9 @@ impl TyKind {
         )
     }
 
-    /// True if ownership of this value is tracked by the RC pass: Dream heap references, or a `js`
-    /// handle whose lifetime is managed by the host registry (`jsRetain`/`jsRelease`).
-    pub fn is_rc_tracked(&self) -> bool {
+    /// True if this value is a GC-tracked reference: Dream heap references, or a `js` handle whose
+    /// host-registry lifetime follows Dream-side reachability.
+    pub fn is_gc_tracked(&self) -> bool {
         self.is_reference() || matches!(self, TyKind::Js)
     }
 }

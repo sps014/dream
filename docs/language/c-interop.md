@@ -105,7 +105,7 @@ The `.abi.json` `structs` map records the layout the host needs to marshal the v
 ```
 
 Only `@unmanaged` value structs may appear in `@c` signatures — the compiler rejects a class or a
-union in a `@c` signature, because heap references carry ARC headers the C ABI knows nothing
+union in a `@c` signature, because heap references are GC-managed values the C ABI knows nothing
 about.
 
 ## Callbacks

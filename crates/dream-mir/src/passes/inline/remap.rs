@@ -180,7 +180,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_place(place, base);
             remap_rvalue(rv, base);
         }
-        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+        Statement::Panic(o) => {
             remap_operand(o, base)
         }
         Statement::Call { args, .. } => {

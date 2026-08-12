@@ -5,7 +5,7 @@
 //! are bound to the argument operands, and every callee `Return` becomes a jump to a continuation
 //! block (assigning the returned value into the call's destination first).
 //!
-//! Inlining runs as a [`ModulePass`] *after* module-wide `RcInsertion` (see `optimize_module_opts`):
+//! Inlining runs as a [`ModulePass`] (see `optimize_module_opts`):
 //! each callee already carries its scope-exit `Release`s, so splicing copies those lifetimes to the
 //! inlined continuation. Value-struct teardown is emitter-side for standalone functions; the inliner
 //! inserts [`Statement::ValueDrop`] at each remapped return→continuation edge so owning value locals
@@ -29,11 +29,14 @@ use remap::{arg_type, remap_block, wasm_kind, WasmKind};
 type FnKey = (DefId, Vec<TypeId>);
 
 /// A callee small enough to always inline: at most this many statements across all its blocks.
-const MAX_INLINE_STMTS: usize = 48;
+const MAX_INLINE_STMTS: usize = 16;
 /// ...and at most this many blocks.
-const MAX_INLINE_BLOCKS: usize = 10;
-/// Stop inlining into a caller once it has grown past this many blocks, to bound code blow-up.
-const CALLER_BLOCK_CAP: usize = 4096;
+const MAX_INLINE_BLOCKS: usize = 4;
+/// Stop inlining into a caller once it has grown past this many blocks. Kept modest so sync
+/// functions stay within the relooper's structured-shape budget: past this, emit falls back to
+/// `$__pc`/`br_table`, and inlined scope-exit `Release`s then double-free (e.g. `Signal` →
+/// `List<Effect>` OOB in UI event handlers / silent `@state` push+notify failures).
+const CALLER_BLOCK_CAP: usize = 16;
 /// Safety cap on inlines performed into a single function per `run` (defends against any unforeseen
 /// non-termination; the DAG-only inlining should terminate well before this).
 const MAX_INLINES_PER_FN: usize = 4096;
@@ -196,10 +199,14 @@ fn eligible(
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let small = stmt_count <= MAX_INLINE_STMTS && g.blocks.len() <= MAX_INLINE_BLOCKS;
-    // Always inline a function with a single direct call site whose address is never taken (it will
-    // become dead and be pruned), even if it is larger than the "small" threshold.
-    let single_use = call_counts.get(key).copied().unwrap_or(0) == 1 && !addr_taken.contains(key);
-    small || single_use
+    // Only inline when small. Unbounded single-use inlining folded UI helpers into event
+    // handlers and forced `$__pc`/`br_table` (silent `@state` update failures). Single-use
+    // large callees remain as calls — slightly larger wasm, correct ARC.
+    let _ = call_counts;
+    if !small || addr_taken.contains(key) {
+        return false;
+    }
+    caller.blocks.len().saturating_add(g.blocks.len()) <= CALLER_BLOCK_CAP
 }
 
 /// Remaps a callee [`LocalDecl`] into the caller using the callee's [`ValueFrame`] classification:
@@ -298,7 +305,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // previous execution (double-free / use-after-free). Emitting the reset in the site block runs it
     // once per entry into the inlined region, matching the callee's once-at-entry zeroing.
     for (i, decl) in g_locals.iter().enumerate() {
-        if !params.contains(&(i as u32)) && interner.is_rc_tracked(decl.ty) {
+        if !params.contains(&(i as u32)) && interner.is_gc_tracked(decl.ty) {
             f.blocks[site.block].stmts.push(Statement::Assign(
                 Place::Local(Local(local_base + i as u32)),
                 Rvalue::Use(Operand::Const(Const::Null)),

@@ -26,15 +26,15 @@ pub struct ParameterNode {
     /// with `default`/`is_variadic`/`is_borrow` (enforced by the parser). Call sites
     /// must pass a matching `ref` argument (`ExpressionNode::RefArgument`).
     pub is_ref: bool,
-    /// True for an explicit `borrow name: T` parameter: the callee borrows (share ABI); the
-    /// caller keeps ownership. Unmarked parameters are sink (callee takes the caller's +1).
-    /// Mutually exclusive with `ref`/`default`/`is_variadic` (enforced by the parser).
-    /// `borrow` is a reserved keyword (same class as `ref`).
+    /// True for an explicit `borrow name: T` parameter. Under the GC shared-ref ABI this is an
+    /// ignored synonym of an unmarked parameter (no ownership effect). Kept so existing sources
+    /// that spell `borrow` continue to parse. Mutually exclusive with `ref`/`default`/`is_variadic`
+    /// (enforced by the parser). `borrow` is a reserved keyword (same class as `ref`).
     pub is_borrow: bool,
 }
 
 impl ParameterNode {
-    /// Creates a new required parameter node (no default value). Unmarked = sink ABI.
+    /// Creates a new required parameter node (no default value). Unmarked = plain shared ref.
     pub fn new(name: SyntaxToken, type_: Type) -> ParameterNode {
         ParameterNode {
             attributes: Vec::new(),
@@ -86,7 +86,7 @@ impl ParameterNode {
         }
     }
 
-    /// Creates a `borrow name: T` parameter node (share ABI; caller keeps ownership).
+    /// Creates a `borrow name: T` parameter node (`borrow` is an ignored synonym of unmarked).
     pub fn borrow(name: SyntaxToken, type_: Type) -> ParameterNode {
         ParameterNode {
             attributes: Vec::new(),

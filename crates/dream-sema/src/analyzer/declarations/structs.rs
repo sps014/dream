@@ -116,10 +116,9 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        // `weak`/`unowned` field validation and the whole-program class reference-cycle check run
-        // last, once every non-generic class's fields are in `self.struct_table` (needed to
-        // classify a field's target as a value struct vs. a class).
-        self.check_weak_unowned_and_cycles(node, diagnostics);
+        // `weak` field shape validation runs once every non-generic class's fields are in
+        // `self.struct_table` (needed to classify a field's target as a value struct vs. a class).
+        self.check_weak_fields(node, diagnostics);
 
         // A `ref struct` field would smuggle a stack-only value into a heap-allocated (or
         // otherwise longer-lived) container — reject it regardless of whether the enclosing type
@@ -366,7 +365,6 @@ impl<'a> Analyzer<'a> {
                 name: field.name.clone(),
                 visibility: field.visibility,
                 is_weak: field.is_weak,
-                is_unowned: field.is_unowned,
                 type_token: substitute_generic_token(&field.type_token, &bindings),
                 field_type: substitute_generic_type(&field.field_type, &bindings),
             })

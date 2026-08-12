@@ -3,8 +3,8 @@
 ;;   [ptr+4]        scalar length: i32  (Unicode scalar / code-point count, cached)
 ;;   [ptr+8 ..]     utf8 bytes
 ;; There is no NUL terminator: the length prefix makes it redundant, and every consumer (strlen,
-;; string_eq, hashing, host interop) is length-driven. The 12-byte heap header ([size][tag][ref_count])
-;; still lives at ptr-12 and is unchanged, so malloc/free/retain/release/object_tag are unaffected.
+;; string_eq, hashing, host interop) is length-driven. The 12-byte heap header ([size][tag][gc_meta])
+;; still lives at ptr-12 and is unchanged, so malloc/free/object_tag are unaffected.
 ;; `size()` / `char_at` / iteration use Unicode scalar (code point) indices; `byte_size` / `byte_at`
 ;; expose raw UTF-8 byte access. `$str_scalar_len` is O(1) via the cached word at ptr+4.
 
@@ -515,23 +515,6 @@
 
 (func $debug_get_total_allocations (result i32)
     global.get $total_allocations
-)
-
-;; Reads the live reference count of a heap value (string/array/struct/object). The data pointer
-;; passed in points just past the [size][tag][ref_count] header, so the count lives at ptr-4.
-;; A null pointer reports 0.
-(func $debug_get_ref_count (param $ptr i32) (result i32)
-    local.get $ptr
-    i32.eqz
-    (if (result i32)
-        (then i32.const 0)
-        (else
-            local.get $ptr
-            i32.const 4
-            i32.sub
-            i32.load
-        )
-    )
 )
 
 (func $string_eq (param $a i32) (param $b i32) (result i32)

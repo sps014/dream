@@ -270,7 +270,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             place_base_reads(place, f);
             rvalue_reads(rv, f);
         }
-        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => operand_reads(o, f),
+        Statement::Panic(o) => operand_reads(o, f),
         Statement::Call { args, .. } => args.iter().for_each(|a| operand_reads(a, f)),
         Statement::JsCall {
             target,

@@ -186,56 +186,29 @@ Rules:
   The variadic parameter itself cannot be passed by name (there is one calling convention: bare
   `T` values, not a pre-built array).
 
-## Ownership: sink-default and `borrow`
+## Parameters: shared refs and `ref`
 
-Unmarked parameters **sink** (callee takes ownership of a +1). When the argument is still
-used afterward, the compiler inserts a copy (retain) — same as Nim. Use `borrow` (a reserved
-keyword, like `ref`) for an explicit read-only/share parameter.
+Heap references use a **plain shared-ref** calling convention. Unmarked parameters (and the
+ignored `borrow` keyword, kept as a no-op synonym) do not consume the caller's binding — you
+may reuse an argument after the call. Only `ref` changes the convention (mutable place alias).
 
 | Modifier | Meaning |
 |----------|---------|
-| *(none)* | Sink — callee owns a +1 (move if last use, else copy) |
-| `borrow` | Callee borrows; caller keeps ownership |
-| `ref` | Mutable place alias — unchanged |
-
-After a sink parameter is **stored into a field or index**, that binding is moved: further uses of
-the parameter name are a compile error. Read through the destination instead:
+| *(none)* | Shared ref — callee and caller both see the same object |
+| `borrow` | Ignored synonym of unmarked (deprecated spelling; prefer unmarked) |
+| `ref` | Mutable place alias |
 
 ```dream
-public constructor(items: List<T>) {
-    this.items = items;
-    this.end = this.items.length; // OK — not `items.length` after the store
-}
-```
-
-```dream
-fun sink(s: string): void {
-    // `s` is owned here; storing it does not need an extra retain.
-}
-
-fun peek(borrow s: string): void {
+fun peek(s: string): void {
     println(s);
 }
 
 fun demo() {
     let a = "hi";
-    sink(a);       // last use → move
-    let b = "yo";
-    peek(b);
-    sink(b);       // still need b? mark borrow on peek; here b may copy into sink if live
-    peek(b);
+    peek(a);
+    peek(a);       // still valid — shared ref, not a sink
 }
 ```
-
-`List.push` sinks the pushed element (move when last use):
-
-```dream
-let xs = List<string>();
-let s = "item";
-xs.push(s);        // last use of `s` → move into the list
-```
-
-The implicit `this` receiver is never a sink — methods do not consume the instance.
 
 ```dream
 fun swap(ref a: int, ref b: int): void {
@@ -367,6 +340,8 @@ println(apply(twice, 8)); // 16
 
 A [generic function used as a first-class value](generics.md#generic-functions-as-first-class-values) needs a `fun(...)`-typed context so its type arguments can be inferred — e.g. `let cmp: fun(int, int): int = natural_order;` — a bare `let f = natural_order;` is an error.
 
+Calling a `fun(...)`-typed local is ordinary: `f()` (and `return f()`). Instance fields typed as `fun(...)` are also callable with method syntax — `this.run_fn()` loads the field and performs an indirect call (it is not looked up as a named method).
+
 #### Arrow-lambda literals
 
 An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional when the lambda is used in a `fun(...)`-typed context (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`): omitted parameter types and the return type are taken from that context. When every parameter is explicitly annotated, the return type can instead be inferred from the body — so `let f = (x: int) => x * 2;` works without a surrounding `fun(...)` annotation. A lambda with any untyped parameter and no `fun(...)` context is rejected.
@@ -435,7 +410,8 @@ println(inc());   // 2
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
 
-Capturing closures are ordinary ARC-managed `fun(...)` values: the funcbox owns a retain on the captured environment, and that environment is released when the last reference to the closure drops. A self-capturing closure (a `fun` that stores itself into its own environment) can still form a reference cycle and leak, just like mutually-referencing classes — break such cycles deliberately or avoid them.
+Capturing closures are ordinary GC-managed `fun(...)` values. Cycles through closures are
+collected like any other heap graph — see [Memory Management](memory.md).
 
 Capturing closures **cannot** be passed to JavaScript APIs — the JS bridges drop the closure environment. See [Callbacks](callbacks.md).
 

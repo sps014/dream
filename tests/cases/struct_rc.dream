@@ -46,5 +46,6 @@ fun run() {
 fun main() {
     let base = Debug.live_objects();
     run();
+    Debug.gc_collect();
     System.println("live_delta=" + (Debug.live_objects() - base).to_string());
 }

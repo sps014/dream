@@ -32,6 +32,7 @@ impl Emitter<'_> {
         // Debug-info: the coroutine is finishing, so pop its shadow call-stack frame. This is the only
         // exit path (awaits return without popping), so the frame count stays balanced.
         self.emit_debug_exit();
+        self.emit_gc_root_epilogue();
         self.line("     (local.get $self)");
         match value {
             Some(v) => {
@@ -84,17 +85,28 @@ impl Emitter<'_> {
                 self.line(&format!(" (local ${} {})", i, self.wasm_ty(decl.ty)));
             }
         }
-        // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` back array &
-        // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call, `$__src` the
-        // source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes` dynamic-length raw copy);
-        // `$__pc` drives the block dispatch, `$__scratch` holds the awaited future at a suspend.
+        // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` nested field
+        // stores, `$__slot` outer place-store destination, `$__jsp` a saved `$__sp` across a dynamic
+        // `js` call, `$__src` the source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes`
+        // dynamic-length raw copy); `$__pc` drives the block dispatch, `$__scratch` holds the awaited
+        // future at a suspend.
         self.line(" (local $__obj i32)");
         self.line(" (local $__scratch i32)");
         self.line(" (local $__len i32)");
         self.line(" (local $__rel i32)");
+        self.line(" (local $__slot i32)");
         self.line(" (local $__pc i32)");
         self.line(" (local $__jsp i32)");
         self.line(" (local $__src i32)");
+        self.line(" (local $__wsrc i32)");
+        self.line(" (local $__wbox i32)");
+        if !self.gc_root_locals.is_empty() || !self.gc_slot_root_offs.is_empty() {
+            self.line(" (local $__root_base i32)");
+            let root_locals = self.gc_root_locals.clone();
+            for li in root_locals {
+                self.line(&format!(" (local $__rg{} i32)", li));
+            }
+        }
 
         // Restore every frame-resident local; reference slots are zeroed after the move so ownership
         // lives in the WASM local (and is not double-freed from the frame) until the next suspend. A
@@ -119,6 +131,8 @@ impl Emitter<'_> {
                 self.line(&format!(" i32.store offset={}", off));
             }
         }
+
+        self.emit_gc_root_prologue();
 
         // Blocks that are an await's `resume` target, mapped to the local its result binds to (if any).
         let mut resume_binds: HashMap<u32, Option<crate::Local>> = HashMap::new();
@@ -160,8 +174,7 @@ impl Emitter<'_> {
                 // wide-scalar (`long`/`float`/`double`) result was boxed by the awaited coroutine's
                 // `emit_poll_complete` (see above) since `F_RESULT` only ever holds an `i32`; unbox
                 // it back to its native representation here and release the now-consumed box cell.
-                // The child Future stays owned by the await operand local (saved/restored across
-                // suspend); poll RcInsertion releases it at AsyncComplete — do not free it here.
+                // Child Future stays reachable via the await local (saved/restored across suspend).
                 let dest_wt = dest.map(|d| self.wasm_ty(self.func.local_ty(d)));
                 self.line("     (local.get $self)");
                 self.line(&format!("     (i32.load offset={})", F_AWAITING));
@@ -178,8 +191,7 @@ impl Emitter<'_> {
                         if let Some(d) = dest {
                             self.line(&format!("     (local.set ${})", d.0));
                         }
-                        self.line("     (local.get $__obj)");
-                        self.line("     (call $release_generic)");
+                        // Box is unreachable after unbox; Gen0/collector reclaim it.
                     }
                     _ => match dest {
                         Some(d) => self.line(&format!("     (local.set ${})", d.0)),
@@ -233,6 +245,7 @@ impl Emitter<'_> {
                 self.line("     (local.get $self)");
                 self.line("     (local.get $__scratch)");
                 self.line("     (call $dream_await)");
+                self.emit_gc_root_epilogue();
                 self.line("     (i32.const 0)");
                 self.line("     (return)");
             }

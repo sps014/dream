@@ -332,7 +332,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             }
             collect_global_reads_rvalue(rv, out);
         }
-        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+        Statement::Panic(o) => {
             collect_global_reads_operand(o, out)
         }
         Statement::Call { args, .. } => args

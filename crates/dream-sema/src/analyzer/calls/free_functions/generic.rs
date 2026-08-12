@@ -48,11 +48,7 @@ impl<'a> Analyzer<'a> {
                     .map(|p| p.is_variadic)
                     .unwrap_or(false),
                 is_ref: template.parameters.iter().map(|p| p.is_ref).collect(),
-                is_take: template
-                    .parameters
-                    .iter()
-                    .map(|p| !p.is_ref && !p.is_borrow && p.name.text != "this")
-                    .collect(),
+                is_take: template.parameters.iter().map(|_| false).collect(),
                 defaults: template
                     .parameters
                     .iter()

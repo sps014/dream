@@ -30,7 +30,7 @@ pub(super) fn runtime_tag_for(
     let stripped = ty;
     match interner.kind(stripped) {
         TyKind::Prim(p) => Some(prim_info(*p).tag),
-        TyKind::Array(_) => Some(crate::abi::TAG_ARRAY),
+        TyKind::Array(elem) => Some(super::array_heap_tag_for(interner, *elem)),
         _ => tags.get(&stripped).copied(),
     }
 }

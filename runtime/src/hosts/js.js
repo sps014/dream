@@ -118,8 +118,9 @@ export function makeJsHost(getInstance) {
     jsAsBool: (target) => !!target,
     jsAsString: (target) => (target == null ? "" : String(target)),
     jsIsNull: (target) => target === null || target === undefined,
-    jsRetain: (target) => getInstance().retainValue(target),
-    jsRelease: (target) => getInstance().releaseValue(target),
+    // Compiler-emitted RC imports pass raw handle ids (i32), not marshaled JS values.
+    jsRetain: (id) => getInstance().retainHandle(id),
+    jsRelease: (id) => getInstance().releaseHandle(id),
     jsFunc: (handler) => handler,
     jsFunc0: (handler) => handler,
     jsFuncN: (index, arity) => {

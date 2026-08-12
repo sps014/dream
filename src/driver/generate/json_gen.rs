@@ -936,6 +936,9 @@ fn harness_wat_path() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
+        // RC insertion policy (sink `New` args, cursors, …) changes emitted harness WAT without
+        // touching the Dream sources above — fold it in so the cache cannot go stale.
+        include_str!("../../../crates/dream-mir/src/passes/rc/insertion.rs").hash(&mut h);
         h.finish()
     };
     let entry = super::current_entry_file();

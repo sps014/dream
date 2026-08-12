@@ -563,9 +563,9 @@ pub struct FunctionTableInfo {
     /// name: T`, requiring the call site to pass a matching `ref` argument (see
     /// `Analyzer::analyze_ref_argument`). Always all-`false` for synthesized/stdlib entries.
     pub is_ref: Vec<bool>,
-    /// Per-parameter `take` flag, parallel to `parameters`: true when the declaration is `take
-    /// name: T` (ownership transfer). Always all-`false` for synthesized/stdlib entries.
-    /// Explicit `borrow` is the default ABI and does not need a table flag.
+    /// Per-parameter sink (`take`) flag, parallel to `parameters`: true when the parameter is
+    /// unmarked (neither `ref` nor `borrow`) and not the synthetic `this` receiver — the callee
+    /// takes ownership of the caller's +1. Explicit `borrow` is share ABI and is `false` here.
     pub is_take: Vec<bool>,
     /// Per-parameter constant-literal default values, parallel to `parameters`. `None` means the
     /// parameter is required. Defaults are always trailing (enforced by the parser), so a call may
@@ -660,10 +660,10 @@ impl FunctionTableInfo {
             let j = i.clone();
             parameters.push(j.type_.get_type());
             parameter_types.push(j.type_);
-            param_names.push(j.name.text);
             defaults.push(j.default);
             is_ref.push(j.is_ref);
-            is_take.push(j.is_take);
+            is_take.push(!j.is_ref && !j.is_borrow && j.name.text != "this");
+            param_names.push(j.name.text);
         }
         let intrinsic_name = dream_abi::intrinsics::intrinsic_key(&func.attributes);
         let is_variadic = func

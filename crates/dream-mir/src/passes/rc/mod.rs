@@ -5,6 +5,7 @@
 //! `Retain`/`Release` pairs when it can prove the cancel is safe (Goto chains, transparent
 //! diamonds, transparent natural loops). See `docs/compiler/11-swift-like-arc-roadmap.md`.
 
+mod cursor;
 mod elision;
 mod insertion;
 mod liveness;

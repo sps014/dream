@@ -16,7 +16,7 @@ public interface Collection<T> {
     }
 
     // True when every element satisfies `pred`.
-    public fun all(pred: fun(T): bool): bool {
+    public fun all(borrow pred: fun(T): bool): bool {
         for (let x in this) {
             if (!pred(x)) {
                 return false;
@@ -26,7 +26,7 @@ public interface Collection<T> {
     }
 
     // True when at least one element satisfies `pred`.
-    public fun any(pred: fun(T): bool): bool {
+    public fun any(borrow pred: fun(T): bool): bool {
         for (let x in this) {
             if (pred(x)) {
                 return true;
@@ -36,12 +36,12 @@ public interface Collection<T> {
     }
 
     // True when no element satisfies `pred`.
-    public fun none(pred: fun(T): bool): bool {
+    public fun none(borrow pred: fun(T): bool): bool {
         return !this.any(pred);
     }
 
     // Counts elements for which `pred` is true.
-    public fun count_where(pred: fun(T): bool): int {
+    public fun count_where(borrow pred: fun(T): bool): int {
         let n = 0;
         for (let x in this) {
             if (pred(x)) {
@@ -52,7 +52,7 @@ public interface Collection<T> {
     }
 
     // First element for which `pred` is true, or `None`.
-    public fun find_where(pred: fun(T): bool): Option<T> {
+    public fun find_where(borrow pred: fun(T): bool): Option<T> {
         for (let x in this) {
             if (pred(x)) {
                 return Option.Some(x);
@@ -62,7 +62,7 @@ public interface Collection<T> {
     }
 
     // Invokes `action` for each element in iteration order.
-    public fun for_each(action: fun(T): void): void {
+    public fun for_each(borrow action: fun(T): void): void {
         for (let x in this) {
             action(x);
         }

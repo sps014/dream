@@ -28,7 +28,7 @@ internal class RegexParser {
     public constructor(pattern: string) {
         this.pattern = pattern;
         this.pos = 0;
-        this.n = pattern.length;
+        this.n = this.pattern.length;
         this.group_count = 0;
         this.has_backref = false;
         this.group_names = List<string>();

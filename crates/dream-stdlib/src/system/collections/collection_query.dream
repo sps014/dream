@@ -14,7 +14,7 @@ extend Collection<T> {
     }
 
     // Keeps elements for which `pred` is true.
-    public fun filter(pred: fun(T): bool): List<T> {
+    public fun filter(borrow pred: fun(T): bool): List<T> {
         let result = List<T>();
         for (let x in this) {
             if (pred(x)) {
@@ -25,7 +25,7 @@ extend Collection<T> {
     }
 
     // Maps each element through `f`.
-    public fun map<U>(f: fun(T): U): List<U> {
+    public fun map<U>(borrow f: fun(T): U): List<U> {
         let result = List<U>();
         for (let x in this) {
             result.push(f(x));
@@ -34,7 +34,7 @@ extend Collection<T> {
     }
 
     // Left-fold with seed `init`.
-    public fun reduce<A>(init: A, f: fun(A, T): A): A {
+    public fun reduce<A>(init: A, borrow f: fun(A, T): A): A {
         let acc = init;
         for (let x in this) {
             acc = f(acc, x);
@@ -65,7 +65,7 @@ extend Collection<T> {
     }
 
     // Maps each element to a list and concatenates the results.
-    public fun flat_map<U>(f: fun(T): List<U>): List<U> {
+    public fun flat_map<U>(borrow f: fun(T): List<U>): List<U> {
         let result = List<U>();
         for (let x in this) {
             let inner = f(x);
@@ -104,7 +104,7 @@ extend Collection<T> {
     }
 
     // Copies into a list and sorts by `cmp`.
-    public fun order_by(cmp: fun(T, T): int): List<T> {
+    public fun order_by(borrow cmp: fun(T, T): int): List<T> {
         let result = this.to_list();
         result.sort_by(cmp);
         return result;

@@ -7,7 +7,7 @@ internal class RegexCompiler {
     dot_all: bool;
     table: RegexSubTable;
 
-    public constructor(ignore_case: bool, dot_all: bool, table: RegexSubTable) {
+    public constructor(ignore_case: bool, dot_all: bool, borrow table: RegexSubTable) {
         this.prog = Buffer.alloc<RegexInst>(0);
         this.pc = 0;
         this.ignore_case = ignore_case;
@@ -27,7 +27,7 @@ internal class RegexCompiler {
     }
 
     // How many instructions `node` needs, mirroring `compile.c`'s `count`.
-    static fun count_instructions(node: RegexNode): int {
+    static fun count_instructions(borrow node: RegexNode): int {
         if (node.kind == RegexNodeKind.Alt) {
             return 2 + RegexCompiler.count_instructions(node.left_child()) + RegexCompiler.count_instructions(node.right_child());
         }
@@ -74,7 +74,7 @@ internal class RegexCompiler {
     }
 
     // Compiles `root` into a flat instruction array, terminated by a `Match` instruction.
-    public fun compile(root: RegexNode): RegexInst[] {
+    public fun compile(borrow root: RegexNode): RegexInst[] {
         let total = RegexCompiler.count_instructions(root) + 1;
         this.prog = Buffer.alloc<RegexInst>(total);
         let i = 0;
@@ -91,14 +91,14 @@ internal class RegexCompiler {
 
     // Allocates the next slot for a non-branching leaf instruction (`CharClass`/`Capture`/
     // `EmptyWidth`): it always falls through to the instruction right after it.
-    fun alloc_leaf(inst: RegexInst): void {
+    fun alloc_leaf(borrow inst: RegexInst): void {
         let idx = this.pc;
         inst.out = idx + 1;
         this.prog[idx] = inst;
         this.pc = this.pc + 1;
     }
 
-    fun emit(node: RegexNode): void {
+    fun emit(borrow node: RegexNode): void {
         if (node.kind == RegexNodeKind.Alt) {
             let idx_alt = this.pc;
             this.prog[idx_alt] = RegexInst.alt(0 - 1, 0 - 1);

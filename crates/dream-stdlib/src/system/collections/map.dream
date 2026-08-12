@@ -36,13 +36,13 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Initial probe index for a key.
-    fun home(key: K): int {
+    fun home(borrow key: K): int {
         let h = key.hash_code();
         return h & (this.cap - 1);
     }
 
     // Index of an occupied slot holding a key, or -1.
-    fun find(key: K): int {
+    fun find(borrow key: K): int {
         let idx = this.home(key);
         let result = -1;
         let searching = true;
@@ -139,7 +139,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // True if the map contains the key.
-    public fun contains(key: K): bool {
+    public fun contains(borrow key: K): bool {
         return this.find(key) >= 0;
     }
 
@@ -147,7 +147,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // length, the extra tail of the longer one is ignored. Also what the `{k1: v1, ...}`
     // map-literal syntax lowers to via `from_arrays`, so a literal with N entries costs one call to
     // build each backing array plus one call here, not N `set` calls.
-    public fun set_all(keys: K[], values: V[]): void {
+    public fun set_all(borrow keys: K[], borrow values: V[]): void {
         let n = keys.length;
         if (values.length < n) {
             n = values.length;
@@ -161,7 +161,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     // Builds a map from parallel `keys`/`values` arrays. The `{k1: v1, k2: v2, ...}` map-literal
     // syntax (e.g. `let m: Map<string, int> = {"a": 1, "b": 2};`) desugars to this.
-    public static fun from_arrays(keys: K[], values: V[]): Map<K, V> {
+    public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V> {
         let result = Map<K, V>(keys.length);
         result.set_all(keys, values);
         return result;
@@ -169,7 +169,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     // Gets the value for a key, or None.
     @get_indexer
-    public fun get(key: K): Option<V> {
+    public fun get(borrow key: K): Option<V> {
         let i = this.find(key);
         if (i >= 0) {
             return Option.Some(this.values[i]);
@@ -178,7 +178,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Gets the value for a key, or a fallback.
-    public fun get_or(key: K, fallback: V): V {
+    public fun get_or(borrow key: K, fallback: V): V {
         let i = this.find(key);
         if (i >= 0) {
             return this.values[i];
@@ -187,7 +187,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Removes a key and returns true if it was removed.
-    public fun remove(key: K): bool {
+    public fun remove(borrow key: K): bool {
         let i = this.find(key);
         if (i >= 0) {
             this.states[i] = hash_slot_tombstone();

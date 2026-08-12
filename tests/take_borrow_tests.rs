@@ -1,12 +1,12 @@
-//! `take` / `borrow` parameter parsing and type-checking.
+//! Sink-default / `borrow` parameter parsing, type-checking, and RC store behavior.
 
 mod common;
 use common::*;
 
 #[test]
-fn take_param_parses_and_typechecks() {
+fn sink_param_unmarked_parses_and_typechecks() {
     let code = r#"
-        fun sink(take s: string): void { }
+        fun sink(s: string): void { }
         fun main(): void {
             let x = "hi";
             sink(x);
@@ -33,14 +33,31 @@ fn borrow_param_is_ok_and_reusable() {
 }
 
 #[test]
-fn take_store_skips_retain_vs_borrow() {
-    // Callee stores a string field: `take` transfers +1 (no retain on store);
-    // unmarked/`borrow` must retain into the field.
-    let take_code = format!(
+fn reuse_after_sink_is_allowed_via_copy() {
+    // Nim-style: unmarked sink copies when the arg is still live.
+    let code = format!(
+        "{SYSTEM_STUB}
+        fun sink(s: string): void {{ System.println(s); }}
+        fun main(): void {{
+            let x = \"hi\";
+            sink(x);
+            System.println(x);
+        }}
+    "
+    );
+    let d = analyze_code(&code);
+    assert!(!d.has_errors(), "unexpected errors: {:?}", d);
+}
+
+#[test]
+fn sink_store_skips_retain_vs_borrow() {
+    // Callee stores a string field: unmarked sink transfers +1 (no retain on store);
+    // `borrow` must retain into the field.
+    let sink_code = format!(
         "{SYSTEM_STUB}
         class Box {{
             public value: string;
-            public constructor(take value: string) {{
+            public constructor(value: string) {{
                 this.value = value;
             }}
         }}
@@ -66,9 +83,9 @@ fn take_store_skips_retain_vs_borrow() {
         }}
     "
     );
-    let take_wat = emit_hir_to_module_optimized(&take_code);
+    let sink_wat = emit_hir_to_module_optimized(&sink_code);
     let borrow_wat = emit_hir_to_module_optimized(&borrow_code);
-    let take_retains = take_wat
+    let sink_retains = sink_wat
         .lines()
         .filter(|l| {
             let t = l.trim();
@@ -83,11 +100,11 @@ fn take_store_skips_retain_vs_borrow() {
         })
         .count();
     assert!(
-        take_retains < borrow_retains,
-        "take constructor should retain less than borrow ({} vs {})\ntake:\n{}\nborrow:\n{}",
-        take_retains,
+        sink_retains < borrow_retains,
+        "sink constructor should retain less than borrow ({} vs {})\nsink:\n{}\nborrow:\n{}",
+        sink_retains,
         borrow_retains,
-        take_wat,
+        sink_wat,
         borrow_wat
     );
 }

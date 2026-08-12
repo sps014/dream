@@ -344,6 +344,15 @@ impl<'a> Analyzer<'a> {
                         .defs
                         .lookup(dream_types::DefKind::Function, &ctor_def_name);
                     self.hir_set_new(&name.text, ctor, arg_hirs, &t);
+                    if let Ok(info) = self.function_table.get_function(&ctor_def_name) {
+                        self.note_sink_arg_moves(
+                            params,
+                            &params_types,
+                            &info.is_take,
+                            true,
+                            diagnostics,
+                        );
+                    }
                 }
             }
             return Ok(t);
@@ -498,6 +507,7 @@ impl<'a> Analyzer<'a> {
         } else {
             self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
         }
+        self.note_sink_arg_moves(params, &params_types, &store_sig.is_take, false, diagnostics);
         Ok(ret_type)
     }
 

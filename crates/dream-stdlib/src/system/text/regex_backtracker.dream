@@ -18,7 +18,7 @@ internal class RegexBacktrackVM {
     multiline: bool;
     table: RegexSubTable;
 
-    public constructor(prog: RegexInst[], ngroup: int, multiline: bool, table: RegexSubTable) {
+    public constructor(borrow prog: RegexInst[], ngroup: int, multiline: bool, borrow table: RegexSubTable) {
         this.prog = prog;
         this.ngroup = ngroup;
         this.multiline = multiline;
@@ -46,7 +46,7 @@ internal class RegexBacktrackVM {
         return c == '_';
     }
 
-    fun empty_ok(kind: RegexEmptyKind, pos: int, input: string, len: int): bool {
+    fun empty_ok(kind: RegexEmptyKind, pos: int, borrow input: string, len: int): bool {
         if (kind == RegexEmptyKind.BeginText) {
             return pos == 0;
         }
@@ -97,7 +97,7 @@ internal class RegexBacktrackVM {
         return false;
     }
 
-    fun char_matches(inst: RegexInst, c: char): bool {
+    fun char_matches(borrow inst: RegexInst, c: char): bool {
         let hit = this.range_hit(inst.ranges, c, inst.foldcase);
         if (inst.negate) {
             return hit == false;
@@ -108,7 +108,7 @@ internal class RegexBacktrackVM {
     // Same technique `RegexVM.look_holds` uses (see its comment): lookahead checks whether the
     // sub-program can match anything starting at `pos`; lookbehind tries every candidate start
     // and checks for a sub-match that ends exactly at `pos`.
-    fun look_holds(inst: RegexInst, pos: int, input: string, len: int): bool {
+    fun look_holds(borrow inst: RegexInst, pos: int, borrow input: string, len: int): bool {
         let sub_prog = this.table.progs.get(inst.sub_index).unwrap_or(Buffer.alloc<RegexInst>(0));
         let sub_ngroup = this.table.ngroups.get(inst.sub_index).unwrap_or(0);
         let sub_vm = RegexVM(sub_prog, sub_ngroup, this.multiline, this.table);
@@ -141,7 +141,7 @@ internal class RegexBacktrackVM {
 
     // Text previously captured by group `idx` (empty if it never participated — the common
     // "unmatched backreference matches the empty string" convention).
-    fun group_text(idx: int, caps: int[], input: string): string {
+    fun group_text(idx: int, caps: int[], borrow input: string): string {
         let s0 = 2 * idx;
         let e0 = (2 * idx) + 1;
         if ((s0 < 0) || (e0 >= caps.length)) {
@@ -155,7 +155,7 @@ internal class RegexBacktrackVM {
         return input.substring(s, e);
     }
 
-    fun text_matches_at(text: string, input: string, pos: int, ignore_case: bool): bool {
+    fun text_matches_at(borrow text: string, borrow input: string, pos: int, ignore_case: bool): bool {
         let n = text.length;
         let i = 0;
         while (i < n) {
@@ -173,7 +173,7 @@ internal class RegexBacktrackVM {
         return true;
     }
 
-    public fun find(input: string, start: int): Option<RegexMatch> {
+    public fun find(borrow input: string, start: int): Option<RegexMatch> {
         let len = input.length;
         let ncap = 2 * (this.ngroup + 1);
         let caps = Buffer.alloc<int>(ncap);

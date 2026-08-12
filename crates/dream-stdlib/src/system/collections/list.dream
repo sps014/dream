@@ -5,7 +5,7 @@ module system.collections;
 // Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
 // so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
 // `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
-fun compare_ascending<T : Comparable<T>>(a: T, b: T): int {
+fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
     return a.compare(b);
 }
 
@@ -50,7 +50,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Appends a value to the end, growing if necessary.
-    public fun push(take value: T): void {
+    public fun push(value: T): void {
         if (this.count == this.items.length) {
             this.grow();
         }
@@ -59,7 +59,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Appends every element of `items`, ensuring capacity once then copying via `Span`.
-    public fun push_all(items: T[]): void {
+    public fun push_all(borrow items: T[]): void {
         let src = Span<T>.of(items);
         let n = src.length;
         let need = this.count + n;
@@ -73,7 +73,7 @@ public class List<T> : IndexedCollection<T> {
 
     // Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]`
     // list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
-    public static fun from_array(items: T[]): List<T> {
+    public static fun from_array(borrow items: T[]): List<T> {
         let result = List<T>(items.length);
         result.push_all(items);
         return result;
@@ -110,7 +110,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // True if `value` is present (uses value equality, including string contents).
-    public fun contains(value: T): bool {
+    public fun contains(borrow value: T): bool {
         let i = 0;
         while (i < this.count) {
             if (this.items[i] == value) {
@@ -122,7 +122,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Index of the first matching element (by value equality), or `None` if absent.
-    public fun index_of(value: T): Option<int> {
+    public fun index_of(borrow value: T): Option<int> {
         let i = 0;
         while (i < this.count) {
             if (this.items[i] == value) {
@@ -176,7 +176,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Removes the first occurrence of `value` (by equality). Returns true when something was removed.
-    public fun remove(value: T): bool {
+    public fun remove(borrow value: T): bool {
         return switch (this.index_of(value)) {
             Some(i) => this.remove_at(i),
             None => false,
@@ -195,7 +195,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Sorts the list in place with the supplied comparator.
-    public fun sort_by(cmp: fun(T, T): int): void {
+    public fun sort_by(borrow cmp: fun(T, T): int): void {
         let n = this.count;
         if (n < 2) {
             return;
@@ -257,7 +257,7 @@ public class List<T> : IndexedCollection<T> {
     // Binary search over a list that is already sorted ascending (by `compare`). Returns the index
     // of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
     // Only attached when `T : Comparable<T>` (via `where`).
-    public fun binary_search(value: T): Option<int> where T : Comparable<T> {
+    public fun binary_search(borrow value: T): Option<int> where T : Comparable<T> {
         let lo = 0;
         let hi = this.count - 1;
         while (lo <= hi) {

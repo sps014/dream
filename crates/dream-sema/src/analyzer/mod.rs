@@ -27,6 +27,7 @@ mod expressions;
 mod generics;
 mod hir_emit;
 mod js_interop;
+mod ownership;
 mod statements;
 mod switch_unions;
 mod type_checker;
@@ -411,6 +412,8 @@ pub struct Analyzer<'a> {
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
     type_visibility: HashMap<String, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
+    /// Locals whose value was moved into a sink parameter and must not be used again.
+    moved_locals: std::collections::HashSet<String>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
     /// annotation or `return` type). Used to resolve the type arguments of a generic union's
     /// nullary variant (`let o: Option<int> = Option.None;`), where they cannot be inferred from
@@ -501,6 +504,7 @@ impl<'a> Analyzer<'a> {
             lambda_counter: 0,
             boxed_locals: std::collections::HashSet::new(),
             ref_boxed_locals: std::collections::HashSet::new(),
+            moved_locals: std::collections::HashSet::new(),
             closure_captures: HashMap::new(),
             capturing_fun_locals: HashMap::new(),
             is_binding_aliases: Vec::new(),

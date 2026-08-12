@@ -15,14 +15,14 @@ public ref struct Span<T> {
     offset: int;
     _length: int;
 
-    public constructor(array: T[], offset: int, length: int) {
+    public constructor(borrow array: T[], offset: int, length: int) {
         this.array = array;
         this.offset = offset;
         this._length = length;
     }
 
     // A span over the whole of `array`.
-    public static fun of(array: T[]): Span<T> {
+    public static fun of(borrow array: T[]): Span<T> {
         return Span<T>(array, 0, array.length);
     }
 

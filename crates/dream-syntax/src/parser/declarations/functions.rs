@@ -250,33 +250,17 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let attributes = self.parse_attributes();
 
-            // A `ref name: T` parameter: the callee shares the caller's storage. Mutually
-            // exclusive with take/borrow/variadic/default, enforced below. `ref` is a real keyword.
+            // A `ref name: T` / `borrow name: T` parameter. Both are real keywords (same slot).
+            // Unmarked parameters are sink (callee takes the caller's +1).
             let is_ref = self.current_token().kind == TokenKind::RefToken;
             if is_ref {
                 self.match_token(TokenKind::RefToken);
             }
-
-            // Contextual `take`/`borrow` modifiers: only when followed by another identifier
-            // (the parameter name), so `fun take(...)` / `let take = …` stay ordinary idents.
-            // Same modifier slot as `ref` — mutually exclusive by construction.
-            let (is_take, is_borrow) = if !is_ref
-                && self.current_token().kind == TokenKind::IdentifierToken
-                && self.peek_token(1).kind == TokenKind::IdentifierToken
-            {
-                match self.current_token().text.as_str() {
-                    crate::nodes::function::TAKE_PARAM => {
-                        self.match_token(TokenKind::IdentifierToken);
-                        (true, false)
-                    }
-                    crate::nodes::function::BORROW_PARAM => {
-                        self.match_token(TokenKind::IdentifierToken);
-                        (false, true)
-                    }
-                    _ => (false, false),
-                }
+            let is_borrow = if !is_ref && self.current_token().kind == TokenKind::BorrowToken {
+                self.match_token(TokenKind::BorrowToken);
+                true
             } else {
-                (false, false)
+                false
             };
 
             // A trailing variadic parameter: `...name: T[]`. Must be the last parameter and
@@ -295,8 +279,6 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let ownership_modifier = if is_ref {
                 Some("ref")
-            } else if is_take {
-                Some("take")
             } else if is_borrow {
                 Some("borrow")
             } else {
@@ -355,8 +337,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }
                     let node = if is_ref {
                         ParameterNode::by_ref(param, param_type)
-                    } else if is_take {
-                        ParameterNode::take(param, param_type)
                     } else {
                         ParameterNode::borrow(param, param_type)
                     };
@@ -400,6 +380,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     TokenKind::IdentifierToken
                         | TokenKind::DotDotDotToken
                         | TokenKind::RefToken
+                        | TokenKind::BorrowToken
                         | TokenKind::AtToken
                 ) {
                     //eat the comma

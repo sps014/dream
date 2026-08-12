@@ -11,7 +11,7 @@ extend bool {
     }
 
     // Parses `true` or `false` (case-sensitive, matching language literals).
-    public static fun parse(text: string): Result<bool, ParseError> {
+    public static fun parse(borrow text: string): Result<bool, ParseError> {
         if (text == "true") {
             return Result.Ok(true);
         }

@@ -20,5 +20,5 @@ public class Debug {
 
     // Live reference count of a heap value.
     @intrinsic("debug_get_ref_count")
-    static extern fun ref_count(o: object): int;
+    static extern fun ref_count(borrow o: object): int;
 }

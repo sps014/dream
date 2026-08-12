@@ -25,12 +25,13 @@ public class Regex {
     public constructor(pattern: string, flags: string) {
         this.pattern = pattern;
         this.flags = flags;
-        this.ignore_case = flags.contains("i");
-        this.multiline = flags.contains("m");
-        this.dot_all = flags.contains("s");
-        this.global = flags.contains("g");
+        // Sink params are moved above — read flags only via `this.flags`.
+        this.ignore_case = this.flags.contains("i");
+        this.multiline = this.flags.contains("m");
+        this.dot_all = this.flags.contains("s");
+        this.global = this.flags.contains("g");
 
-        let parser = RegexParser(pattern);
+        let parser = RegexParser(this.pattern);
         let ast = parser.parse();
         this.ngroup = parser.groups();
         this.use_backtrack = parser.backreferenced();

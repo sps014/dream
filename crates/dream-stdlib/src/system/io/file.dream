@@ -5,50 +5,50 @@ module system.io;
 public class File {
     // --- host bridge: synchronous externs (real WASM imports; no @intrinsic) -------------------
     @js("Dream", "fileRead")
-    static extern fun file_read(path: string): string;
+    static extern fun file_read(borrow path: string): string;
 
     // Overwrites `path` with `content`; returns the number of bytes written (-1 on error).
     @js("Dream", "fileWrite")
-    static extern fun file_write(path: string, content: string): long;
+    static extern fun file_write(borrow path: string, borrow content: string): long;
 
     // Appends `content` to `path`; returns the number of bytes written (-1 on error).
     @js("Dream", "fileAppend")
-    static extern fun file_append(path: string, content: string): long;
+    static extern fun file_append(borrow path: string, borrow content: string): long;
 
     // Binary I/O: bytes are bulk-copied straight between the file and a Dream `byte[]`, with no
     // string round-trip (binary-safe, minimal marshalling).
     @js("Dream", "fileReadBytes")
-    static extern fun file_read_bytes(path: string): byte[];
+    static extern fun file_read_bytes(borrow path: string): byte[];
 
     @js("Dream", "fileWriteBytes")
-    static extern fun file_write_bytes(path: string, data: byte[]): long;
+    static extern fun file_write_bytes(borrow path: string, borrow data: byte[]): long;
 
     @js("Dream", "fileExists")
-    static extern fun file_exists(path: string): bool;
+    static extern fun file_exists(borrow path: string): bool;
 
     // Deletes `path`; returns true on success.
     @js("Dream", "fileDelete")
-    static extern fun file_delete(path: string): bool;
+    static extern fun file_delete(borrow path: string): bool;
 
     // Size of `path` in bytes (-1 if it does not exist).
     @js("Dream", "fileSize")
-    static extern fun file_size(path: string): long;
+    static extern fun file_size(borrow path: string): long;
 
     @js("Dream", "fileIsDir")
-    static extern fun file_is_dir(path: string): bool;
+    static extern fun file_is_dir(borrow path: string): bool;
 
     // Directory entries joined by '\n' ("" when empty or not a directory); split into string[] below.
     @js("Dream", "dirList")
-    static extern fun dir_list(path: string): string;
+    static extern fun dir_list(borrow path: string): string;
 
     @js("Dream", "dirCreate")
-    static extern fun dir_create(path: string): bool;
+    static extern fun dir_create(borrow path: string): bool;
 
     @js("Dream", "dirCreateAll")
-    static extern fun dir_create_all(path: string): bool;
+    static extern fun dir_create_all(borrow path: string): bool;
 
     // Reads the whole file at `path` as UTF-8 text.
-    public static async fun read(path: string): Result<string, IoError> {
+    public static async fun read(borrow path: string): Result<string, IoError> {
         if (File.exists(path) == false) {
             return Result.Err(IoError.not_found(path));
         }
@@ -56,7 +56,7 @@ public class File {
     }
 
     // Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
-    public static async fun write(path: string, content: string): Result<long, IoError> {
+    public static async fun write(borrow path: string, borrow content: string): Result<long, IoError> {
         let n = File.file_write(path, content);
         if (n < 0L) {
             return Result.Err(IoError.other(path, "failed to write file: " + path));
@@ -65,7 +65,7 @@ public class File {
     }
 
     // Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
-    public static async fun append(path: string, content: string): Result<long, IoError> {
+    public static async fun append(borrow path: string, borrow content: string): Result<long, IoError> {
         let n = File.file_append(path, content);
         if (n < 0L) {
             return Result.Err(IoError.other(path, "failed to append to file: " + path));
@@ -74,7 +74,7 @@ public class File {
     }
 
     // Reads the whole file at `path` as raw bytes.
-    public static async fun read_bytes(path: string): Result<byte[], IoError> {
+    public static async fun read_bytes(borrow path: string): Result<byte[], IoError> {
         if (File.exists(path) == false) {
             return Result.Err(IoError.not_found(path));
         }
@@ -82,7 +82,7 @@ public class File {
     }
 
     // Writes raw bytes to `path`, replacing any existing contents.
-    public static async fun write_bytes(path: string, data: byte[]): Result<long, IoError> {
+    public static async fun write_bytes(borrow path: string, borrow data: byte[]): Result<long, IoError> {
         let n = File.file_write_bytes(path, data);
         if (n < 0L) {
             return Result.Err(IoError.other(path, "failed to write file: " + path));
@@ -91,7 +91,7 @@ public class File {
     }
 
     // Deletes `path`; resolves `Ok(true)` on success.
-    public static async fun delete(path: string): Result<bool, IoError> {
+    public static async fun delete(borrow path: string): Result<bool, IoError> {
         if (File.file_delete(path) == false) {
             if (File.exists(path) == false) {
                 return Result.Err(IoError.not_found(path));
@@ -102,7 +102,7 @@ public class File {
     }
 
     // Creates a single directory at `path`; resolves `Ok(true)` on success.
-    public static async fun create_dir(path: string): Result<bool, IoError> {
+    public static async fun create_dir(borrow path: string): Result<bool, IoError> {
         if (File.dir_create(path) == false) {
             if (File.exists(path)) {
                 return Result.Err(IoError.exists(path));
@@ -113,7 +113,7 @@ public class File {
     }
 
     // Creates `path` and any missing parents; resolves `Ok(true)` on success.
-    public static async fun create_dir_all(path: string): Result<bool, IoError> {
+    public static async fun create_dir_all(borrow path: string): Result<bool, IoError> {
         if (File.dir_create_all(path) == false) {
             return Result.Err(IoError.other(path, "failed to create directories: " + path));
         }
@@ -121,7 +121,7 @@ public class File {
     }
 
     // Lists the entries of directory `path`. An empty or non-directory path yields an empty array.
-    public static async fun list(path: string): string[] {
+    public static async fun list(borrow path: string): string[] {
         let joined = File.dir_list(path);
         if (joined.is_empty()) {
             return Buffer.alloc<string>(0);
@@ -130,23 +130,23 @@ public class File {
     }
 
     // Cheap synchronous predicates (no async overhead).
-    public static fun exists(path: string): bool {
+    public static fun exists(borrow path: string): bool {
         return File.file_exists(path);
     }
     // Size of `path` in bytes, or `None` if it does not exist.
-    public static fun size(path: string): Option<long> {
+    public static fun size(borrow path: string): Option<long> {
         let s = File.file_size(path);
         if (s < 0L) {
             return Option.None;
         }
         return Option.Some(s);
     }
-    public static fun is_dir(path: string): bool {
+    public static fun is_dir(borrow path: string): bool {
         return File.file_is_dir(path);
     }
 
     // Opens a seekable read stream over `path` (OS-backed; no whole-file preload).
-    public static fun open(path: string): Result<FileStream, IoError> {
+    public static fun open(borrow path: string): Result<FileStream, IoError> {
         return switch (FileHandle.open(path, "r")) {
             Ok(h) => Result.Ok(FileStream(h)),
             Err(e) => Result.Err(e),
@@ -154,7 +154,7 @@ public class File {
     }
 
     // Async wrapper around `open`.
-    public static async fun open_async(path: string): Result<FileStream, IoError> {
+    public static async fun open_async(borrow path: string): Result<FileStream, IoError> {
         return File.open(path);
     }
 }

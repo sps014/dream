@@ -5,11 +5,11 @@ module system;
 public class System {
     // Prints a value to standard output.
     @intrinsic("print")
-    static extern fun print<T>(value: T): void;
+    static extern fun print<T>(borrow value: T): void;
 
     // Prints a value to standard output followed by a newline.
     @intrinsic("println")
-    static extern fun println<T>(value: T): void;
+    static extern fun println<T>(borrow value: T): void;
 
     @js("Dream", "consoleReadLine")
     static extern fun host_read_line(): string;
@@ -35,22 +35,22 @@ public class System {
 
     // Tagged: leading '1' + value when set, empty / other when unset.
     @js("Dream", "processEnvGet")
-    static extern fun host_env_get(name: string): string;
+    static extern fun host_env_get(borrow name: string): string;
 
     @js("Dream", "processEnvSet")
-    static extern fun host_env_set(name: string, value: string): void;
+    static extern fun host_env_set(borrow name: string, borrow value: string): void;
 
     @js("Dream", "processCwd")
     static extern fun host_cwd(): string;
 
     @js("Dream", "processSetCwd")
-    static extern fun host_set_cwd(path: string): bool;
+    static extern fun host_set_cwd(borrow path: string): bool;
 
     // Halts the program immediately with `message`, after printing it to standard output. Fatal
     // and non-recoverable (there is no catch/recover) — the same halt point every automatic
     // runtime check (bounds, division by zero, bad cast) already uses.
     @intrinsic("dream_panic")
-    static extern fun panic(message: string): void;
+    static extern fun panic(borrow message: string): void;
 
     // Reads a line of input from stdin.
     public static fun read_line(): string {
@@ -134,7 +134,7 @@ public class System {
     }
 
     // Value of environment variable `name`, or `None` when unset.
-    public static fun env(name: string): Option<string> {
+    public static fun env(borrow name: string): Option<string> {
         let raw = System.host_env_get(name);
         if (raw.is_empty()) {
             return Option.None;
@@ -146,12 +146,12 @@ public class System {
     }
 
     // Value of environment variable `name`, or `fallback` when unset.
-    public static fun env_or(name: string, fallback: string): string {
+    public static fun env_or(borrow name: string, fallback: string): string {
         return System.env(name).unwrap_or(fallback);
     }
 
     // Sets environment variable `name` to `value`.
-    public static fun set_env(name: string, value: string): Result<bool, ArgError> {
+    public static fun set_env(borrow name: string, borrow value: string): Result<bool, ArgError> {
         if (name.is_empty()) {
             return Result.Err(ArgError.invalid("environment variable name must not be empty"));
         }
@@ -169,7 +169,7 @@ public class System {
     }
 
     // Sets the current working directory.
-    public static fun set_cwd(path: string): Result<bool, IoError> {
+    public static fun set_cwd(borrow path: string): Result<bool, IoError> {
         if (System.host_set_cwd(path)) {
             return Result.Ok(true);
         }
@@ -244,7 +244,7 @@ public class System {
     }
 
     // Prints a string in the specified color.
-    public static fun print_colored(value: string, color: ConsoleColor): void {
+    public static fun print_colored(borrow value: string, color: ConsoleColor): void {
         System.set_foreground(color);
         System.print(value);
         System.reset_color();

@@ -150,6 +150,7 @@ fn transform(
             name: None,
             is_ref: false,
             is_take: false,
+            is_cursor: false,
             manual_drop: false,
         });
         promo.insert(field, l);

@@ -19,7 +19,7 @@ internal class RegexVM {
     multiline: bool;
     table: RegexSubTable;
 
-    public constructor(prog: RegexInst[], ngroup: int, multiline: bool, table: RegexSubTable) {
+    public constructor(borrow prog: RegexInst[], ngroup: int, multiline: bool, borrow table: RegexSubTable) {
         this.prog = prog;
         this.ngroup = ngroup;
         this.multiline = multiline;
@@ -32,7 +32,7 @@ internal class RegexVM {
     // whether the sub-program, run anchored at `0` against the substring `input[s:pos]`, matches
     // that substring exactly end to end — equivalent to "does the sub-pattern match some span
     // ending exactly at `pos`", without needing to reverse the pattern or the input.
-    fun look_holds(inst: RegexInst, pos: int, input: string, len: int): bool {
+    fun look_holds(borrow inst: RegexInst, pos: int, borrow input: string, len: int): bool {
         let sub_prog = this.table.progs.get(inst.sub_index).unwrap_or(Buffer.alloc<RegexInst>(0));
         let sub_ngroup = this.table.ngroups.get(inst.sub_index).unwrap_or(0);
         let sub_vm = RegexVM(sub_prog, sub_ngroup, this.multiline, this.table);
@@ -87,7 +87,7 @@ internal class RegexVM {
     // Whether the zero-width assertion `kind` holds at `pos` in `input` (length `len`). Mirrors
     // `Prog::EmptyFlags`, with `^`/`$` (`BeginLine`/`EndLine`) folding in the multiline flag here
     // at match time rather than needing two compile-time node variants.
-    fun empty_ok(kind: RegexEmptyKind, pos: int, input: string, len: int): bool {
+    fun empty_ok(kind: RegexEmptyKind, pos: int, borrow input: string, len: int): bool {
         if (kind == RegexEmptyKind.BeginText) {
             return pos == 0;
         }
@@ -138,7 +138,7 @@ internal class RegexVM {
         return false;
     }
 
-    fun char_matches(inst: RegexInst, c: char): bool {
+    fun char_matches(borrow inst: RegexInst, c: char): bool {
         let hit = this.range_hit(inst.ranges, c, inst.foldcase);
         if (inst.negate) {
             return hit == false;
@@ -152,7 +152,7 @@ internal class RegexVM {
     // would explore them in). `on_list`/`gen` deduplicate: an instruction already added during
     // this generation is skipped, so a cyclic epsilon graph (e.g. `(a*)*`) can't loop forever and
     // a lower-priority path never overrides a higher-priority one that reached the same state.
-    fun add_to_threadq(threads: List<RegexThread>, on_list: int[], gen: int, start_pc: int, pos: int, input: string, len: int, start_caps: int[]): void {
+    fun add_to_threadq(threads: List<RegexThread>, on_list: int[], gen: int, start_pc: int, pos: int, borrow input: string, len: int, start_caps: int[]): void {
         let stack = List<RegexAddFrame>();
         stack.push(RegexAddFrame(start_pc, start_caps));
         while (stack.length > 0) {
@@ -199,7 +199,7 @@ internal class RegexVM {
     // relies on the compiled program's own leading `.*?` — see `RegexParser.parse` — for an
     // unanchored search from position 0). Returns the leftmost, Perl-style ("leftmost-first" by
     // thread priority, not POSIX leftmost-longest) match.
-    public fun find(input: string, start: int): Option<RegexMatch> {
+    public fun find(borrow input: string, start: int): Option<RegexMatch> {
         let len = input.length;
         let ncap = 2 * (this.ngroup + 1);
         let on_list = Buffer.alloc<int>(this.prog.length);

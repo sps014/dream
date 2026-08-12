@@ -129,9 +129,13 @@ pub struct LocalDecl {
     /// inliner when remapping a callee `this`/`ref` into the caller so [`ValueFrame`] keeps it as a
     /// borrow. Meaningless (and always `false`) for a local whose type is not a value struct.
     pub is_ref: bool,
-    /// True for a `take` parameter: the callee owns the incoming +1 (released at scope exit unless
-    /// transferred into a container without a second retain). Always `false` for non-params.
+    /// True for a sink/owned parameter: the callee owns the incoming +1 (released at scope exit
+    /// unless transferred into a container without a second retain). Always `false` for non-params.
+    /// After sink-default ABI, unmarked RC params set this; `borrow` / `ref` / `this` clear it.
     pub is_take: bool,
+    /// Non-owning RC alias (typically a field/index load). Excluded from RcInsertion ownership
+    /// retains and scope-exit releases. Always `false` for params.
+    pub is_cursor: bool,
     /// Owning value local whose destructor runs via explicit [`Statement::ValueDrop`] (inliner
     /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
     /// shadow-stack slot; excluded from [`ValueFrame`] teardown so it is not double-dropped.

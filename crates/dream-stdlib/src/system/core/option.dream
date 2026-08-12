@@ -30,7 +30,7 @@ public enum Option<T> {
     }
 
     // Maps the contained value when `Some`, otherwise `None`.
-    public fun map<U>(f: fun(T): U): Option<U> {
+    public fun map<U>(borrow f: fun(T): U): Option<U> {
         return switch (this) {
             Some(v) => Option.Some(f(v)),
             None    => Option.None,
@@ -38,7 +38,7 @@ public enum Option<T> {
     }
 
     // Chains into another `Option` when `Some`, otherwise `None`.
-    public fun and_then<U>(f: fun(T): Option<U>): Option<U> {
+    public fun and_then<U>(borrow f: fun(T): Option<U>): Option<U> {
         return switch (this) {
             Some(v) => f(v),
             None    => Option.None,

@@ -79,13 +79,13 @@ public class StringBuilder {
     }
 
     // Appends every UTF-8 byte of `text`, growing at most once.
-    public fun append(text: string): void {
+    public fun append(borrow text: string): void {
         this.append_utf8_slice(text, 0, text.byte_size());
     }
 
     // Appends `byte_len` UTF-8 bytes starting at byte index `start` of `text`.
     // Bytes are bulk-copied; scalar count is derived from UTF-8 lead bytes (non-continuation).
-    public fun append_utf8_slice(text: string, start: int, byte_len: int): void {
+    public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void {
         if (byte_len <= 0) {
             return;
         }
@@ -106,7 +106,7 @@ public class StringBuilder {
     }
 
     // Appends `text` followed by a newline character.
-    public fun append_line(text: string): void {
+    public fun append_line(borrow text: string): void {
         this.append(text);
         this.append_char('\n');
     }

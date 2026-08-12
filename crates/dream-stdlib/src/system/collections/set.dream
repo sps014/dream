@@ -32,13 +32,13 @@ public class Set<T> : Collection<T> {
     }
 
     // Initial probe index for a value.
-    fun home(value: T): int {
+    fun home(borrow value: T): int {
         let h = value.hash_code();
         return h & (this.cap - 1);
     }
 
     // Index of an occupied slot holding a value, or -1.
-    fun find(value: T): int {
+    fun find(borrow value: T): int {
         let idx = this.home(value);
         let result = -1;
         let searching = true;
@@ -134,14 +134,14 @@ public class Set<T> : Collection<T> {
     }
 
     // True if the set contains the value.
-    public fun contains(value: T): bool {
+    public fun contains(borrow value: T): bool {
         return this.find(value) >= 0;
     }
 
     // Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls).
     // Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal
     // with N elements costs one call, not N.
-    public fun add_all(items: T[]): void {
+    public fun add_all(borrow items: T[]): void {
         let i = 0;
         while (i < items.length) {
             this.add(items[i]);
@@ -151,14 +151,14 @@ public class Set<T> : Collection<T> {
 
     // Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}`
     // set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
-    public static fun from_array(items: T[]): Set<T> {
+    public static fun from_array(borrow items: T[]): Set<T> {
         let result = Set<T>(items.length);
         result.add_all(items);
         return result;
     }
 
     // Removes a value and returns true if it was removed.
-    public fun remove(value: T): bool {
+    public fun remove(borrow value: T): bool {
         let i = this.find(value);
         if (i >= 0) {
             this.states[i] = hash_slot_tombstone();

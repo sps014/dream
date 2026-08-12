@@ -485,6 +485,7 @@ impl<'a> Analyzer<'a> {
         // name; resolve to the selected overload's name so the call targets the right instance.
         // Non-overloaded methods keep their base-mangled name.
         self.hir_set_method_call(receiver, &store_sig.name, arg_hirs, &ret_type);
+        self.note_sink_arg_moves(params, &arg_types, &expected_is_take, false, diagnostics);
         Ok(ret_type)
     }
 

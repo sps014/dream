@@ -186,20 +186,20 @@ Rules:
   The variadic parameter itself cannot be passed by name (there is one calling convention: bare
   `T` values, not a pre-built array).
 
-## Ownership transfer (`take`) and explicit borrow (`borrow`)
+## Ownership: sink-default and `borrow`
 
-Parameters may carry a short ownership modifier in the same slot as `ref`. These are
-*contextual* — `take` and `borrow` are not reserved as names elsewhere (`let take = 1` and
-`fun take(...)` stay valid).
+Unmarked parameters **sink** (callee takes ownership of a +1). When the argument is still
+used afterward, the compiler inserts a copy (retain) — same as Nim. Use `borrow` (a reserved
+keyword, like `ref`) for an explicit read-only/share parameter.
 
 | Modifier | Meaning |
 |----------|---------|
-| *(none)* or `borrow` | Callee borrows; caller keeps ownership (the default) |
-| `take` | Callee takes ownership of the argument; the caller must not use that value afterward |
-| `ref` | Existing mutable place alias — unchanged |
+| *(none)* | Sink — callee owns a +1 (move if last use, else copy) |
+| `borrow` | Callee borrows; caller keeps ownership |
+| `ref` | Mutable place alias — unchanged |
 
 ```dream
-fun sink(take s: string): void {
+fun sink(s: string): void {
     // `s` is owned here; storing it does not need an extra retain.
 }
 
@@ -209,22 +209,23 @@ fun peek(borrow s: string): void {
 
 fun demo() {
     let a = "hi";
-    sink(a);       // moves `a` into the sink (caller must not use `a` afterward)
-    // Use-after-take is not yet diagnosed flow-sensitively; treat it as caller discipline.
-
+    sink(a);       // last use → move
     let b = "yo";
-    peek(b);       // borrow — `b` still usable
+    peek(b);
+    sink(b);       // still need b? mark borrow on peek; here b may copy into sink if live
     peek(b);
 }
 ```
 
-`List.push` takes ownership of the pushed element:
+`List.push` sinks the pushed element (move when last use):
 
 ```dream
 let xs = List<string>();
 let s = "item";
-xs.push(s);        // `s` is moved into the list
+xs.push(s);        // last use of `s` → move into the list
 ```
+
+The implicit `this` receiver is never a sink — methods do not consume the instance.
 
 ```dream
 fun swap(ref a: int, ref b: int): void {

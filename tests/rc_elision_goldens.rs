@@ -87,6 +87,45 @@ fn rc_golden_transparent_if_else_bounded() {
 }
 
 #[test]
+fn rc_golden_field_walk_near_zero_retains() {
+    // Cursor locals: field loads in a loop should not bump RC each iteration.
+    let code = r#"
+        class Person {
+            public name: string;
+            public constructor(name: string) {
+                this.name = name;
+            }
+        }
+        fun walk(borrow p: Person): int {
+            let i = 0;
+            let n = 0;
+            while (i < 3) {
+                n = n + p.name.length;
+                i = i + 1;
+            }
+            return n;
+        }
+        fun main(): void {
+            let p = Person("ada");
+            System.println(walk(p));
+        }
+    "#;
+    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    // Count retains inside the walk function body only (between its func header and the next).
+    let walk_wat = wat
+        .split("(func $")
+        .find(|s| s.starts_with("walk") || s.contains("walk"))
+        .unwrap_or(&wat);
+    let (retains, _) = retain_release_counts(walk_wat);
+    assert!(
+        retains <= 2,
+        "field-walk should be near retain-free inside walk (got {}):\n{}",
+        retains,
+        walk_wat
+    );
+}
+
+#[test]
 fn rc_golden_transparent_loop_bounded() {
     let code = r#"
         fun count(n: int): int {

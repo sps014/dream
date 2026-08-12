@@ -199,8 +199,6 @@ impl<'a> Analyzer<'a> {
                 Type::Unknown => {
                     if exp_is_ref || param.is_ref {
                         parameters.push(ParameterNode::by_ref(param.name.clone(), exp_elem));
-                    } else if param.is_take {
-                        parameters.push(ParameterNode::take(param.name.clone(), exp_elem));
                     } else if param.is_borrow {
                         parameters.push(ParameterNode::borrow(param.name.clone(), exp_elem));
                     } else {
@@ -432,8 +430,6 @@ impl<'a> Analyzer<'a> {
             .map(|(param, ty)| {
                 if param.is_ref {
                     ParameterNode::by_ref(param.name.clone(), ty.clone())
-                } else if param.is_take {
-                    ParameterNode::take(param.name.clone(), ty.clone())
                 } else if param.is_borrow {
                     ParameterNode::borrow(param.name.clone(), ty.clone())
                 } else if matches!(param.type_, Type::Unknown) {

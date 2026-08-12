@@ -47,7 +47,7 @@ public class SortedMap<K : Comparable<K>, V> {
     // Binary search for `key`. A non-negative result is the index of an exact match; a negative
     // result `r` means "not found" and `0 - r - 1` is the sorted insertion point (same convention
     // as Java's `Collections.binarySearch`/Rust's `slice::binary_search`).
-    fun locate(key: K): int {
+    fun locate(borrow key: K): int {
         let lo = 0;
         let hi = this.count;
         while (lo < hi) {
@@ -90,7 +90,7 @@ public class SortedMap<K : Comparable<K>, V> {
 
     // Gets the value for a key, or `None`.
     @get_indexer
-    public fun get(key: K): Option<V> {
+    public fun get(borrow key: K): Option<V> {
         let idx = this.locate(key);
         if (idx >= 0) {
             return Option.Some(this.values_arr[idx]);
@@ -99,12 +99,12 @@ public class SortedMap<K : Comparable<K>, V> {
     }
 
     // True if the map contains the key.
-    public fun contains(key: K): bool {
+    public fun contains(borrow key: K): bool {
         return this.locate(key) >= 0;
     }
 
     // Removes a key and returns true if it was present.
-    public fun remove(key: K): bool {
+    public fun remove(borrow key: K): bool {
         let idx = this.locate(key);
         if (idx < 0) {
             return false;
@@ -136,7 +136,7 @@ public class SortedMap<K : Comparable<K>, V> {
     }
 
     // The smallest key `>= key`, or `None` if every key is smaller.
-    public fun ceiling_key(key: K): Option<K> {
+    public fun ceiling_key(borrow key: K): Option<K> {
         let idx = this.locate(key);
         if (idx >= 0) {
             return Option.Some(this.keys_arr[idx]);
@@ -149,7 +149,7 @@ public class SortedMap<K : Comparable<K>, V> {
     }
 
     // The largest key `<= key`, or `None` if every key is larger.
-    public fun floor_key(key: K): Option<K> {
+    public fun floor_key(borrow key: K): Option<K> {
         let idx = this.locate(key);
         if (idx >= 0) {
             return Option.Some(this.keys_arr[idx]);

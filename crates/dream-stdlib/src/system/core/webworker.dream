@@ -40,7 +40,7 @@ public class WebWorker<TIn, TOut> {
     static extern fun env_async(body: fun(string): Future<string>): int;
 
     @js("Dream", "workerPost")
-    static extern fun post_host(id: int, msg: string): void;
+    static extern fun post_host(id: int, borrow msg: string): void;
 
     @js("Dream", "workerRecv")
     static extern async fun recv_host(id: int): string;
@@ -110,7 +110,7 @@ public class WebWorker<TIn, TOut> {
     }
 
     // Fan `body` over `items` (one worker per element, spawn-then-join); results in input order.
-    public static async fun map(items: TIn[], body: fun(TIn): TOut): TOut[] {
+    public static async fun map(borrow items: TIn[], body: fun(TIn): TOut): TOut[] {
         let n = items.length;
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
@@ -124,7 +124,7 @@ public class WebWorker<TIn, TOut> {
         return results;
     }
 
-    public static async fun map(items: TIn[], body: fun(TIn): Future<TOut>): TOut[] {
+    public static async fun map(borrow items: TIn[], body: fun(TIn): Future<TOut>): TOut[] {
         let n = items.length;
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {

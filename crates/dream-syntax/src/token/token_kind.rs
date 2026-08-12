@@ -178,6 +178,8 @@ pub enum TokenKind {
     UnownedToken,
     #[token("ref")]
     RefToken,
+    #[token("borrow")]
+    BorrowToken,
     #[token("interface")]
     InterfaceToken,
     #[token("extend")]
@@ -299,6 +301,7 @@ impl TokenKind {
             TokenKind::WeakToken => "'weak'",
             TokenKind::UnownedToken => "'unowned'",
             TokenKind::RefToken => "'ref'",
+            TokenKind::BorrowToken => "'borrow'",
             TokenKind::InterfaceToken => "'interface'",
             TokenKind::ExtendToken => "'extend'",
             TokenKind::IsToken => "'is'",
@@ -363,6 +366,7 @@ pub const KEYWORDS: &[&str] = &[
     "case",
     "default",
     "ref",
+    "borrow",
     "int",
     "float",
     "double",
@@ -381,8 +385,6 @@ pub const CONTEXTUAL_KEYWORDS: &[&str] = &[
     "this",
     crate::nodes::function::GET_ACCESSOR,
     crate::nodes::function::SET_ACCESSOR,
-    crate::nodes::function::TAKE_PARAM,
-    crate::nodes::function::BORROW_PARAM,
     crate::nodes::types::CONSTRUCTOR_NAME,
     crate::nodes::types::DESTRUCTOR_NAME,
 ];
@@ -455,6 +457,7 @@ mod tests {
             "case",
             "default",
             "ref",
+            "borrow",
             "int",
             "float",
             "double",
@@ -472,7 +475,7 @@ mod tests {
         }
         assert_eq!(
             KEYWORDS.len(),
-            46,
+            47,
             "a keyword token was added/removed; update both this list and KEYWORDS"
         );
     }

@@ -9,21 +9,21 @@ extend string {
 
     // Writes scalar `c` at scalar index `i` of string `s`.
     @intrinsic("string_set")
-    static extern fun set(s: string, i: int, c: char): void;
+    static extern fun set(borrow s: string, i: int, c: char): void;
 
     // Builds a string from a full `byte[]` UTF-8 payload (copies bytes; counts scalars once).
     @intrinsic("string_from_utf8")
-    static extern fun from_utf8(bytes: byte[]): string;
+    static extern fun from_utf8(borrow bytes: byte[]): string;
 
     // Builds a string from the first `len` bytes of `bytes` (clamped to the array length).
     @intrinsic("string_from_utf8_prefix")
-    static extern fun from_utf8_prefix(bytes: byte[], len: int): string;
+    static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string;
 
     // Scalar-indexed substring via one UTF-8 byte-range copy (`$string_substring_raw`).
     @intrinsic("string_substring_raw")
-    static extern fun substring_raw(s: string, start: int, end: int): string;
+    static extern fun substring_raw(borrow s: string, start: int, end: int): string;
 
     // Bulk-copies `count` UTF-8 bytes from `src` into `dst` at `dst_off`.
     @intrinsic("string_copy_utf8")
-    static extern fun copy_utf8(dst: byte[], dst_off: int, src: string, src_off: int, count: int): void;
+    static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void;
 }

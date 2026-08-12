@@ -382,9 +382,9 @@ pub(crate) fn is_ident_byte(b: u8) -> bool {
 
 /// Language keywords offered as completion proposals: every reserved word (`KEYWORDS`) plus the
 /// contextual keywords that are only reserved in specific positions (`CONTEXTUAL_KEYWORDS`, e.g.
-/// `this`/`get`/`set`/`constructor`/`del`). Re-exported from `dream-syntax` (the parser's own
-/// source of truth) rather than hand-duplicated here, which is what previously let this list drift
-/// out of sync with the parser (missing `interface`/`async`/`await`/`sealed`/`struct`/`unmanaged`).
+/// `this`/`get`/`set`/`constructor`/`del`). `borrow` and `ref` are full keywords in `KEYWORDS`.
+/// Re-exported from `dream-syntax` (the parser's own source of truth) rather than hand-duplicated
+/// here, which is what previously let this list drift out of sync with the parser.
 pub fn keywords() -> impl Iterator<Item = &'static str> {
     dream::syntax::token::token_kind::KEYWORDS
         .iter()

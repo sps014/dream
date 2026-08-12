@@ -60,6 +60,7 @@ impl FunctionBuilder {
             name,
             is_ref: false,
             is_take: false,
+            is_cursor: false,
             manual_drop: false,
         });
         id

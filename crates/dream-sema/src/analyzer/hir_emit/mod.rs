@@ -210,6 +210,7 @@ impl<'a> Analyzer<'a> {
             .cloned()
             .collect();
         self.capturing_fun_locals.clear();
+        self.clear_moved_locals();
         self.hir.locals.clear();
         self.hir.boxed.clear();
         self.hir.next_local = 0;
@@ -287,7 +288,7 @@ impl<'a> Analyzer<'a> {
                 name: param.name.text.clone(),
                 ty,
                 is_ref: false,
-                is_take: param.is_take,
+                is_take: !param.is_ref && !param.is_borrow && param.name.text != "this",
             });
         }
 

@@ -14,13 +14,13 @@ public class Bytes {
 
     // Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.
     @intrinsic("from_bytes")
-    static extern fun to<T : unmanaged>(bytes: byte[]): T;
+    static extern fun to<T : unmanaged>(borrow bytes: byte[]): T;
 
     // Encodes `bytes` as a `string` with one codepoint (0-255) per byte - lossless, since every
     // byte value is a valid standalone Unicode codepoint, and the inverse of `fromWireString`.
     // Used to carry an arbitrary byte buffer over a channel that only understands `string`s (the
     // `WebWorker` wire), without needing a second, binary-native transport.
-    public static fun toWireString(bytes: byte[]): string {
+    public static fun toWireString(borrow bytes: byte[]): string {
         let n = bytes.length;
         let s = string.alloc(n);
         let src = Span<byte>.of(bytes);
@@ -33,7 +33,7 @@ public class Bytes {
     }
 
     // The inverse of `toWireString`.
-    public static fun fromWireString(s: string): byte[] {
+    public static fun fromWireString(borrow s: string): byte[] {
         let n = s.length;
         let out = Buffer.alloc<byte>(n);
         let dst = Span<byte>.of(out);
@@ -50,9 +50,9 @@ public class Bytes {
     // re-encoded via `toWireString`. Used by `WebWorker`/`WebWorker.map`/
     // `WebWorkerPool.dispatch` to marshal an arbitrary wire value without a second wire format.
     @intrinsic("wire_encode")
-    static extern fun toWire<T>(value: T): string;
+    static extern fun toWire<T>(borrow value: T): string;
 
     // The inverse of `toWire`.
     @intrinsic("wire_decode")
-    static extern fun fromWire<T>(text: string): T;
+    static extern fun fromWire<T>(borrow text: string): T;
 }

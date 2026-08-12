@@ -26,9 +26,9 @@ public class Buffer {
     @intrinsic("array_elems_copy")
     @unsafe
     static extern fun elems_copy<T : unmanaged>(
-        dst: T[],
+        borrow dst: T[],
         dst_off: int,
-        src: T[],
+        borrow src: T[],
         src_off: int,
         count: int
     ): void;

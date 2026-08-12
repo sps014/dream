@@ -92,7 +92,7 @@
         },
         {
           "name": "storage.modifier.dream",
-          "match": "\\b(static|public|internal|extern|import|as|sealed|unmanaged|ref|weak|unowned)\\b"
+          "match": "\\b(static|public|internal|extern|import|as|sealed|unmanaged|ref|borrow|weak|unowned)\\b"
         },
         {
           "name": "variable.language.this.dream",

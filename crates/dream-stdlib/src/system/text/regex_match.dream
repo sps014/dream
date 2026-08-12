@@ -37,7 +37,7 @@ public class RegexMatch {
     }
 
     // The text captured by group `i` (0 is the whole match), or "" if it didn't participate.
-    public fun group_text(input: string, i: int): string {
+    public fun group_text(borrow input: string, i: int): string {
         let s = this.group_start(i);
         let e = this.group_end(i);
         if ((s < 0) || (e < 0)) {

@@ -2,5 +2,5 @@ module system.core;
 
 // Value equality independent of reference identity.
 public interface Equatable<T> {
-    fun equals(other: T): bool;
+    fun equals(borrow other: T): bool;
 }

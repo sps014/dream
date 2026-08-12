@@ -90,30 +90,17 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let index_before = self.current_token_index;
 
-            // A `ref name: T` lambda parameter, mirroring named-function ref parameters.
+            // A `ref name: T` / `borrow name: T` lambda parameter (real keywords, same slot).
+            // Unmarked = sink.
             let is_ref = self.current_token().kind == TokenKind::RefToken;
             if is_ref {
                 self.match_token(TokenKind::RefToken);
             }
-
-            // Contextual `take`/`borrow`, same rule as [`parse_formal_parameters`].
-            let (is_take, is_borrow) = if !is_ref
-                && self.current_token().kind == TokenKind::IdentifierToken
-                && self.peek_token(1).kind == TokenKind::IdentifierToken
-            {
-                match self.current_token().text.as_str() {
-                    crate::nodes::function::TAKE_PARAM => {
-                        self.match_token(TokenKind::IdentifierToken);
-                        (true, false)
-                    }
-                    crate::nodes::function::BORROW_PARAM => {
-                        self.match_token(TokenKind::IdentifierToken);
-                        (false, true)
-                    }
-                    _ => (false, false),
-                }
+            let is_borrow = if !is_ref && self.current_token().kind == TokenKind::BorrowToken {
+                self.match_token(TokenKind::BorrowToken);
+                true
             } else {
-                (false, false)
+                false
             };
 
             let param = self.match_token(TokenKind::IdentifierToken);
@@ -127,8 +114,6 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let ownership_modifier = if is_ref {
                 Some("ref")
-            } else if is_take {
-                Some("take")
             } else if is_borrow {
                 Some("borrow")
             } else {
@@ -147,8 +132,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 if is_ref {
                     params.push(ParameterNode::by_ref(param, param_type));
-                } else if is_take {
-                    params.push(ParameterNode::take(param, param_type));
                 } else {
                     params.push(ParameterNode::borrow(param, param_type));
                 }
@@ -178,7 +161,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             if self.current_token().kind == TokenKind::CommaToken
                 && matches!(
                     self.peek_token(1).kind,
-                    TokenKind::IdentifierToken | TokenKind::RefToken
+                    TokenKind::IdentifierToken | TokenKind::RefToken | TokenKind::BorrowToken
                 )
             {
                 self.match_token(TokenKind::CommaToken);

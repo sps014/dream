@@ -31,7 +31,7 @@ public enum Result<T, E> {
     }
 
     // Maps the success value when `Ok`, otherwise preserves the error.
-    public fun map<U>(f: fun(T): U): Result<U, E> {
+    public fun map<U>(borrow f: fun(T): U): Result<U, E> {
         return switch (this) {
             Ok(v)  => Result.Ok(f(v)),
             Err(e) => Result.Err(e),
@@ -39,7 +39,7 @@ public enum Result<T, E> {
     }
 
     // Maps the error when `Err`, otherwise preserves the success value.
-    public fun map_err<F>(f: fun(E): F): Result<T, F> {
+    public fun map_err<F>(borrow f: fun(E): F): Result<T, F> {
         return switch (this) {
             Ok(v)  => Result.Ok(v),
             Err(e) => Result.Err(f(e)),
@@ -47,7 +47,7 @@ public enum Result<T, E> {
     }
 
     // Chains into another `Result` when `Ok`, otherwise preserves the error.
-    public fun and_then<U>(f: fun(T): Result<U, E>): Result<U, E> {
+    public fun and_then<U>(borrow f: fun(T): Result<U, E>): Result<U, E> {
         return switch (this) {
             Ok(v)  => f(v),
             Err(e) => Result.Err(e),

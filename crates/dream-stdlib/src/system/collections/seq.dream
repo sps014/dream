@@ -12,7 +12,8 @@ public class Seq<T> {
     public constructor(items: List<T>) {
         this.items = items;
         this.start = 0;
-        this.end = items.length;
+        // `items` is a sink param — read length from the field after the move.
+        this.end = this.items.length;
     }
 
     static fun from_range(items: List<T>, start: int, end: int): Seq<T> {
@@ -31,7 +32,7 @@ public class Seq<T> {
     }
 
     // Keeps elements for which `pred` is true.
-    public fun filter(pred: fun(T): bool): Seq<T> {
+    public fun filter(borrow pred: fun(T): bool): Seq<T> {
         let result = List<T>();
         let i = this.start;
         while (i < this.end) {
@@ -49,7 +50,7 @@ public class Seq<T> {
     }
 
     // Maps each element through `f`.
-    public fun map<U>(f: fun(T): U): Seq<U> {
+    public fun map<U>(borrow f: fun(T): U): Seq<U> {
         let result = List<U>();
         let i = this.start;
         while (i < this.end) {
@@ -94,12 +95,12 @@ public class Seq<T> {
     }
 
     // Returns a new sequence sorted by `cmp`.
-    public fun order_by(cmp: fun(T, T): int): Seq<T> {
+    public fun order_by(borrow cmp: fun(T, T): int): Seq<T> {
         return Seq<T>(this.to_list().order_by(cmp));
     }
 
     // Maps each element to a list and concatenates the results.
-    public fun flat_map<U>(f: fun(T): List<U>): Seq<U> {
+    public fun flat_map<U>(borrow f: fun(T): List<U>): Seq<U> {
         return Seq<U>(this.to_list().flat_map(f));
     }
 

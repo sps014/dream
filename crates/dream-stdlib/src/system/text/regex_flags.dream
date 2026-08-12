@@ -1,0 +1,14 @@
+module system.text;
+
+// Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).
+public enum RegexFlags {
+    None = 0,
+    Global = 1,
+    IgnoreCase = 2,
+    Multiline = 4,
+    DotAll = 8,
+
+    public fun has(flag: RegexFlags): bool {
+        return (this & flag) != RegexFlags.None;
+    }
+}

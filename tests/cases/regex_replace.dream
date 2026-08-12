@@ -1,22 +1,22 @@
 import system;
 import system.text;
 fun main(): void {
-    let swap = Regex("(\\w+)\\s+(\\w+)", "");
+    let swap = Regex("(\\w+)\\s+(\\w+)");
     System.println(swap.replace("hello world", "$2 $1"));
     System.println(swap.replace("hello world", "[$&]"));
     System.println(swap.replace("hello world", "$$1"));
 
-    let digits = Regex("\\d+", "g");
+    let digits = Regex("\\d+", RegexFlags.Global);
     System.println(digits.replace("a1b22c333", "#"));
 
-    let first_only = Regex("\\d+", "");
+    let first_only = Regex("\\d+");
     System.println(first_only.replace("a1b22c333", "#"));
 
     // Global replace of a pattern that can match the empty string must terminate and still make
     // forward progress.
-    let maybe_a = Regex("a*", "g");
+    let maybe_a = Regex("a*", RegexFlags.Global);
     System.println(maybe_a.replace("bab", "-"));
 
-    let no_match = Regex("zzz", "g");
+    let no_match = Regex("zzz", RegexFlags.Global);
     System.println(no_match.replace("hello", "#"));
 }

@@ -139,6 +139,49 @@ fn test_analyze_unary_minus_rejects_non_numeric_types() {
 }
 
 #[test]
+fn test_c_style_enum_bitwise_or_and_xor() {
+    let code = "
+        enum Flags { None = 0, A = 1, B = 2 }
+        fun main(): void {
+            let both: Flags = Flags.A | Flags.B;
+            let masked: Flags = both & Flags.A;
+            let flipped: Flags = both ^ Flags.B;
+            let inverted: Flags = ~Flags.None;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false, "{:?}", diagnostics.diagnostics);
+}
+
+#[test]
+fn test_c_style_enum_shift_still_rejected() {
+    let code = "
+        enum Flags { A = 1, B = 2 }
+        fun main(): void { let x = Flags.A << 1; }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("requires an integer operand")));
+}
+
+#[test]
+fn test_discriminated_union_bitwise_or_rejected() {
+    let code = "
+        enum Shape { Circle(r: int), Empty }
+        fun main(): void { let x = Shape.Empty | Shape.Empty; }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("requires an integer operand")));
+}
+
+#[test]
 fn test_analyze_undefined_variable() {
     let code = "fun main(): void { let x = y + 5; }";
     let diagnostics = analyze_code(code);

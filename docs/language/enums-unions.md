@@ -19,6 +19,17 @@ println(c);              // 1
 println(c.to_string());  // Green
 ```
 
+C-style enums also take bitwise `&`, `|`, `^`, and prefix `~` (same `i32` lowering as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<`/`>>`) stay integer-only.
+
+```dream
+enum Flags { None = 0, Read = 1, Write = 2, Exec = 4 }
+
+let rw: Flags = Flags.Read | Flags.Write;
+let can_read = (rw & Flags.Read) != Flags.None;  // true
+```
+
+Discriminated unions are heap values, not integers — bitwise operators do not apply to them.
+
 ## Discriminated unions
 
 When **any** variant carries a payload `(...)`, the whole `enum` becomes a discriminated union. A value is exactly one variant, and each variant holds its own typed data:

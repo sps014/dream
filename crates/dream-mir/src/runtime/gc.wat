@@ -641,6 +641,12 @@
             i32.add
             call $gc_drop_js_handles
             ;;@DEBUG_FREE_COUNT@
+        else
+            ;; Forwarded blocks: the source was counted at its original `$malloc`, and the copied
+            ;; target was counted again in `$__gc_alloc_old` during evacuation. Nursery reset
+            ;; abandons the source without hitting `$__free_locked`, so decrement `live_objects`
+            ;; here to keep the debug counter balanced with a move (net zero across the pair).
+            ;;@DEBUG_FREE_COUNT@
         end
         local.get $p
         local.get $size
@@ -676,6 +682,12 @@
     i32.store
     i32.const {GC_REQUEST_ADDR}
     i32.const 0
+    i32.store
+    i32.const {GC_EPOCH_ADDR}
+    i32.const {GC_EPOCH_ADDR}
+    i32.load
+    i32.const 1
+    i32.add
     i32.store
 )
 
@@ -1083,6 +1095,12 @@
     i32.const {GC_OLD_BYTES_ADDR}
     i32.const 0
     i32.store
+    i32.const {GC_EPOCH_ADDR}
+    i32.const {GC_EPOCH_ADDR}
+    i32.load
+    i32.const 1
+    i32.add
+    i32.store
 )
 
 ;; kind: 0 = Gen0 only, 1 = Gen0+Gen1, 2 = full (Gen0+old+LOH). Caller must hold alloc lock.
@@ -1236,32 +1254,125 @@
     i32.add
 )
 
+;; Managed allocator: fast Gen0 bump into the nursery; large payloads go straight to LOH; when
+;; the nursery is full or a collect has been requested, run an ephemeral Gen0 collection (the
+;; caller — `$malloc` — already holds the alloc lock, so we call `$__gc_collect_locked`) and
+;; retry. Still no room means the ephemeral pass survived everything we tried to allocate; fall
+;; back to `$__gc_alloc_old` with Gen1 metadata so the request cannot deadlock waiting for space
+;; that only a heavier collection would free.
 (func $gc_alloc (param $payload i32) (param $tag i32) (param $meta i32) (result i32)
     (local $size i32)
     (local $block i32)
     (local $bump i32)
     (local $end i32)
-    ;; Gen0 copying evacuate still corrupts some graphs (syntax generators, Map rehash
-    ;; under heavy junk alloc). Until that is fixed, send every managed alloc through
-    ;; old/LOH mark-sweep space. Nursery constants + remset/barrier paths stay wired
-    ;; for the copying collector; see docs/compiler/12-tiered-gc.md.
+    ;; Large object: skip the nursery entirely.
     local.get $payload
+    i32.const {LOH_THRESHOLD}
+    i32.ge_u
+    if
+        local.get $payload
+        local.get $tag
+        local.get $meta
+        i32.const {GC_META_GEN_MASK}
+        i32.const -1
+        i32.xor
+        i32.and
+        i32.const {GC_GEN_LOH}
+        i32.or
+        call $__gc_alloc_old
+        return
+    end
+    ;; Aligned block size (matches `$__gc_alloc_old`: payload align 4 + 12 header).
+    local.get $payload
+    i32.const 3
+    i32.add
+    i32.const -4
+    i32.and
+    i32.const 12
+    i32.add
+    local.set $size
+    ;; A pending safepoint request must not be ignored — some write barrier already asked
+    ;; for an ephemeral collect (typically remset overflow). The caller holds the alloc lock.
+    i32.const {GC_REQUEST_ADDR}
+    i32.load
+    if
+        i32.const 0
+        call $__gc_collect_locked
+    end
+    ;; Try nursery bump.
+    i32.const {NURSERY_BUMP_ADDR}
+    i32.load
+    local.set $bump
+    i32.const {NURSERY_END_ADDR}
+    i32.load
+    local.set $end
+    local.get $bump
+    local.get $size
+    i32.add
+    local.get $end
+    i32.gt_u
+    if
+        ;; Nursery full: ephemeral collect (Gen0), then retry.
+        i32.const 0
+        call $__gc_collect_locked
+        i32.const {NURSERY_BUMP_ADDR}
+        i32.load
+        local.set $bump
+        local.get $bump
+        local.get $size
+        i32.add
+        i32.const {NURSERY_END_ADDR}
+        i32.load
+        i32.gt_u
+        if
+            ;; Ephemeral collect did not free enough contiguous nursery space (every survivor
+            ;; got promoted). Rather than spin, promote this allocation to Gen1 directly.
+            local.get $payload
+            local.get $tag
+            local.get $meta
+            i32.const {GC_META_GEN_MASK}
+            i32.const -1
+            i32.xor
+            i32.and
+            i32.const {GC_GEN1}
+            i32.or
+            call $__gc_alloc_old
+            return
+        end
+    end
+    ;; Bump succeeds. Reload the current bump (may have moved after the retry collect).
+    i32.const {NURSERY_BUMP_ADDR}
+    i32.load
+    local.set $block
+    i32.const {NURSERY_BUMP_ADDR}
+    local.get $block
+    local.get $size
+    i32.add
+    i32.store
+    ;; Header: [size][tag][gc_meta] with Gen0 gen bits.
+    local.get $block
+    local.get $size
+    i32.store
+    local.get $block
+    i32.const 4
+    i32.add
     local.get $tag
+    i32.store
+    local.get $block
+    i32.const 8
+    i32.add
     local.get $meta
     i32.const {GC_META_GEN_MASK}
     i32.const -1
     i32.xor
     i32.and
-    local.get $payload
-    i32.const {LOH_THRESHOLD}
-    i32.ge_u
-    if (result i32)
-        i32.const {GC_GEN_LOH}
-    else
-        i32.const {GC_GEN1}
-    end
+    i32.const {GC_GEN0}
     i32.or
-    call $__gc_alloc_old
+    i32.store
+    ;;@DEBUG_ALLOC_COUNT@
+    local.get $block
+    i32.const 12
+    i32.add
 )
 
 ;; Initialize nursery + GC tables. Called once when HEAP_PTR CAS wins (from `$__runtime_init` body).
@@ -1357,6 +1468,9 @@
     i32.const 0
     i32.store
     i32.const {GC_REQUEST_ADDR}
+    i32.const 0
+    i32.store
+    i32.const {GC_EPOCH_ADDR}
     i32.const 0
     i32.store
 )

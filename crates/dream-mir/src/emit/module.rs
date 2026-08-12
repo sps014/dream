@@ -239,6 +239,8 @@ pub fn emit_module_with_debug(
     out.push('\n');
     emit_gc_funcs(&mut out, mir, interner, &tags, &value_trace, &value_glue);
     out.push('\n');
+    emit_gc_reload_globals(&mut out, mir, interner);
+    out.push('\n');
     emit_value_glue(&mut out, mir, interner, &value_glue);
     out.push('\n');
 
@@ -522,6 +524,27 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
             "(import \"Dream\" \"jsRelease\" (func $js_unregister (param i32)))"
         );
     }
+}
+
+/// Emits `$__gc_reload_globals`: the per-Dream-call helper that forwards every reference-typed
+/// module global through its root-table slot. `emit_gc_root_reload` invokes this from every
+/// mutator call site — globals hold raw pointers whose target may have been evacuated inside a
+/// safepoint, but their `$__grootN` root-table entry always holds the current forwarded address.
+///
+/// Empty body when the module has no reference globals; kept as a real function so callers do not
+/// need to know whether globals exist, and dead-function elimination drops it when unreferenced.
+fn emit_gc_reload_globals(out: &mut String, mir: &crate::Mir, interner: &TypeInterner) {
+    out.push_str("(func $__gc_reload_globals\n");
+    for g in &mir.globals {
+        if interner.is_reference(g.ty) {
+            let _ = writeln!(
+                out,
+                "  (global.get $__groot{gid}) (call $gc_root_get) (global.set $g{gid})",
+                gid = g.id.0
+            );
+        }
+    }
+    out.push_str(")\n");
 }
 
 /// True when this module stores or roots any Dream `js` handle (host registry lifetime).

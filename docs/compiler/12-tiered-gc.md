@@ -105,18 +105,39 @@ must not drop edges (see above); blittable arrays use `TAG_FLAT_ARRAY` so Gen0 d
 treat `int[]` payloads as pointers; heap field stores compute the place address **after**
 `$malloc` so evacuated bases are reloaded first.
 
-**Current runtime:** Gen0 **copying is disabled** in `$gc_alloc` (every managed alloc goes to
-Gen1/LOH mark-sweep). Copying evacuate still corrupts some live graphs (stdlib syntax
-generators, Map rehash under junk-alloc pressure). Barriers/remset/nursery layout remain
-wired so copying can be re-enabled once evacuate is fixed — do not “fix” that class of
-bugs by only enlarging the nursery.
-
 ## Allocation path
 
-- Fast path: Gen0 bump (or LOH path for large).
-- Slow path: `$gc_collect_*` → retry.
+- Fast path: Gen0 bump into the nursery (or `$__gc_alloc_old` with LOH gen bits when
+  `payload ≥ LOH_THRESHOLD`).
+- Slow path: nursery full or `GC_REQUEST_ADDR` set → `$__gc_collect_locked` (kind 0,
+  ephemeral) → retry bump. Still no room after the retry → fall back to `$__gc_alloc_old`
+  with Gen1 gen bits so the caller cannot spin forever waiting for space that only a
+  heavier collection would free.
 - Dead objects reclaimed by the collector, not by `$release` → `$free`.
 - Freelists may hold **post-GC free space** for Gen1/2/LOH; they are not RC teardown.
+
+### Mutator safepoint reload after calls and allocations
+
+Every reference held in a WASM local, WASM global, `$__obj` scratch, or on the operand
+stack is a raw `i32` pointer. During a Gen0 collection the collector updates the shadow
+**root table** in place, but any stale copy in the mutator's own registers must be
+refreshed before use. The emitter therefore reloads roots after every safepoint:
+
+- After `$malloc`, `$realloc`, `$concat_strings` (allocation).
+- After every direct, interface, indirect, and JS call (nested Dream mutator may allocate).
+- After a `Rvalue::New` constructor call — the object under construction is rooted through
+  `$__obj_rg` for the duration of the call and reloaded from the root table afterward.
+- Reload always ends in `$__gc_reload_globals`, which forwards each reference-typed module
+  global from its `$__grootN` root slot back into `$gN` before the mutator resumes.
+
+Reloads are gated on [`GC_EPOCH_ADDR`](../../crates/dream-mir/src/abi.rs): Gen0 and old
+collections bump the epoch; each function caches the last-seen value in `$__gc_epoch` and
+skips the reload body when unchanged (load + compare on the no-collect fast path).
+
+Ref-typed **call arguments** must not sit only on the WASM operand stack while a later
+argument evaluates: the spill path in `emit_call_args` roots each ref arg into the root
+table, then reloads the forwarded pointer with `$gc_root_get` in argument order and pops
+the ephemeral root frame immediately before the call.
 
 ## Finalizers / `del`
 

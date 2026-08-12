@@ -173,6 +173,11 @@ struct Emitter<'a> {
     gc_root_locals: Vec<u32>,
     /// Shadow-frame byte offsets (from `$__sp`) of embedded GC refs in owning value locals.
     gc_slot_root_offs: Vec<u32>,
+    /// When `true`, `$__obj_rg` holds the root-table index of the object currently under
+    /// construction (`Rvalue::New`'s allocated block). Emitting a nested Dream call inside the
+    /// construction must reload `$__obj` from this index — see
+    /// [`Emitter::emit_reload_obj_root`]. Reset once the rvalue completes.
+    obj_construction_root: bool,
 }
 
 impl<'a> Emitter<'a> {
@@ -237,6 +242,7 @@ impl<'a> Emitter<'a> {
             shape_label_id: 0,
             gc_root_locals,
             gc_slot_root_offs,
+            obj_construction_root: false,
         }
     }
 }
@@ -326,6 +332,12 @@ impl Emitter<'_> {
         // (`New`/`ArrayLit`). Safe as a single slot: lowering materializes all args into operands,
         // so allocations never nest within a single rvalue.
         self.line("  (local $__obj i32)");
+        // Root-table index for the in-flight `$__obj` (`Rvalue::New` with a user constructor).
+        // Nested Dream calls inside the ctor can trigger a Gen0 evacuation; reloading `$__obj`
+        // from this index after the call recovers the forwarded block pointer.
+        self.line("  (local $__obj_rg i32)");
+        // Last-seen `GC_EPOCH_ADDR` for this frame; `emit_gc_root_reload` skips work when unchanged.
+        self.line("  (local $__gc_epoch i32)");
         // Scratch length for `Buffer.alloc<T>(len)`: the count is needed for both the allocation size
         // and the zero-fill, so it is materialized once here.
         self.line("  (local $__len i32)");
@@ -349,6 +361,14 @@ impl Emitter<'_> {
         // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
         // once the destination allocation starts overwriting `$__obj`.
         self.line("  (local $__src i32)");
+        // Saved `GC_ROOT_COUNT` on entry to a rooted call-argument spill; `$__raiN` are the
+        // ephemeral root-table indices of individual reference-typed args pushed during that
+        // spill. Reserved unconditionally (cheap i32 locals) so every call site can use the spill
+        // path without a second prologue pass — see `rvalue/calls.rs` `MAX_ARG_SPILL_SLOTS`.
+        self.line("  (local $__rcsave i32)");
+        for i in 0..rvalue::calls::MAX_ARG_SPILL_SLOTS {
+            self.line(&format!("  (local $__rai{} i32)", i));
+        }
         if !self.gc_root_locals.is_empty() || !self.gc_slot_root_offs.is_empty() {
             self.line("  (local $__root_base i32)");
             for li in self.gc_root_locals.clone() {
@@ -358,6 +378,10 @@ impl Emitter<'_> {
 
         self.emit_value_frame_prologue();
         self.emit_gc_root_prologue();
+        self.line(&format!(
+            "     (i32.const {}) (i32.load) (local.set $__gc_epoch)",
+            crate::abi::GC_EPOCH_ADDR
+        ));
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
         if let Some(dbg) = self.debug_fn {
             self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
@@ -413,23 +437,69 @@ impl Emitter<'_> {
         ));
     }
 
-    fn emit_gc_root_reload(&mut self) {
+    /// Reloads MIR ref-locals from their shadow root-table slots and forwards module ref-globals
+    /// through the same table when a collection has run since the last check (`GC_EPOCH_ADDR`).
+    /// Every Dream-side call / allocation is a potential safepoint: the collector updates
+    /// root-table entries in place (see `$gc_scan_roots`), but the WASM locals and globals holding
+    /// raw pointers become stale until this reload copies the forwarded values back. The epoch
+    /// gate keeps the common no-collect path to a load + compare.
+    pub(super) fn emit_gc_root_reload(&mut self) {
+        self.line(&format!(
+            "     (i32.const {}) (i32.load) (local.get $__gc_epoch) (i32.ne) (if (then",
+            crate::abi::GC_EPOCH_ADDR
+        ));
         let root_locals = self.gc_root_locals.clone();
         for li in root_locals {
             self.line(&format!(
-                "     (local.get $__rg{li}) (call $gc_root_get) (local.set ${li})"
+                "       (local.get $__rg{li}) (call $gc_root_get) (local.set ${li})"
             ));
         }
+        self.line("       (call $__gc_reload_globals)");
+        self.line(&format!(
+            "       (i32.const {}) (i32.load) (local.set $__gc_epoch)",
+            crate::abi::GC_EPOCH_ADDR
+        ));
+        self.line("     ))");
     }
 
     fn emit_malloc_call(&mut self) {
         self.line("     (call $malloc)");
         self.emit_gc_root_reload();
+        self.emit_reload_obj_root();
     }
 
-    fn emit_gc_reload_if_collect(&mut self, sym: &str) {
-        if matches!(sym, "gc_collect" | "gc_collect_ephemeral" | "gc_collect_full") {
-            self.emit_gc_root_reload();
+    /// Emits the root reload after a Dream call. Broadens the previous "only after `gc_collect*`"
+    /// gate: any user call may reach a safepoint through its own body (allocation, nested call),
+    /// so pointers held in this function's WASM locals and globals must be refreshed before they
+    /// are read again.
+    pub(super) fn emit_gc_reload_after_call(&mut self) {
+        self.emit_gc_root_reload();
+        self.emit_reload_obj_root();
+    }
+
+    /// Push the freshly allocated `$__obj` into the root table and remember its index in
+    /// `$__obj_rg`. Callers use [`Self::emit_reload_obj_root`] to reload `$__obj` after any
+    /// intermediate safepoint (typically a user constructor call), and
+    /// [`Self::emit_pop_obj_root`] to release the ephemeral root before leaving the rvalue.
+    pub(super) fn emit_push_obj_root(&mut self) {
+        self.line("     (local.get $__obj) (call $gc_root_push) (local.set $__obj_rg)");
+        self.obj_construction_root = true;
+    }
+
+    /// If an object-construction root is live, refresh `$__obj` from its (possibly forwarded)
+    /// root-table slot. No-op when construction rooting is not in effect.
+    pub(super) fn emit_reload_obj_root(&mut self) {
+        if self.obj_construction_root {
+            self.line("     (local.get $__obj_rg) (call $gc_root_get) (local.set $__obj)");
+        }
+    }
+
+    /// Release the object-construction root (shrinks the root table back to before the pushed
+    /// `$__obj` slot). No-op when construction rooting is not in effect.
+    pub(super) fn emit_pop_obj_root(&mut self) {
+        if self.obj_construction_root {
+            self.line("     (local.get $__obj_rg) (call $gc_root_pop)");
+            self.obj_construction_root = false;
         }
     }
 

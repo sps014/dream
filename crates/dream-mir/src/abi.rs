@@ -130,7 +130,8 @@ pub const STRING_BASE: u32 = 1024;
 // Coordination words at 44/48/52 must not overlap freelist heads — all well below `STRING_BASE`.
 //
 // GC state words occupy [76, 160) (still below STRING_BASE=1024):
-// nursery bounds, old-space bump mirror, root table, remembered set, safepoint handshake.
+// nursery bounds, old-space bump mirror, root table, remembered set, safepoint handshake,
+// collection epoch.
 
 /// Spinlock serializing `$malloc`/`$free`/`$gc_collect_*` across shared-memory instances.
 pub const ALLOC_LOCK_ADDR: u32 = 44;
@@ -185,6 +186,9 @@ pub const GC_MARK_STACK_CAP: u32 = 8192;
 /// Non-zero when the remembered set hit [`GC_REMEMBERED_CAP`] and dropped further entries;
 /// next Gen0 must scan all live old/LOH objects for young pointers (not only the remset).
 pub const GC_REMSET_OVERFLOW_ADDR: u32 = 140;
+/// Monotonic collection epoch. Bumped at the end of every Gen0 / old collect so mutators can
+/// skip root reloads when no collection ran since the last safepoint check.
+pub const GC_EPOCH_ADDR: u32 = 144;
 
 // -- `@shared class` header extension --------------------------------------------------------
 //

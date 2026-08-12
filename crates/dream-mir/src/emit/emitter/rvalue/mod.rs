@@ -8,7 +8,7 @@
 
 use super::*;
 
-mod calls;
+pub(super) mod calls;
 mod casts;
 
 impl Emitter<'_> {
@@ -127,11 +127,12 @@ impl Emitter<'_> {
                 } else {
                     self.emit_call_args(callee, args);
                     self.line(&format!("     (call ${sym})"));
-                    self.emit_gc_reload_if_collect(&sym);
+                    self.emit_gc_reload_after_call();
                 }
             }
             Rvalue::IndirectCall { target, sig, args } => {
                 self.emit_indirect_call(target, *sig, args);
+                self.emit_gc_reload_after_call();
             }
             Rvalue::InterfaceCall {
                 receiver,
@@ -142,6 +143,7 @@ impl Emitter<'_> {
                 ..
             } => {
                 self.emit_interface_call(receiver, *iface_id, *method_slot, *sig, args);
+                self.emit_gc_reload_after_call();
             }
             Rvalue::JsCall {
                 callee,
@@ -151,6 +153,7 @@ impl Emitter<'_> {
                 args,
             } => {
                 self.emit_js_call(callee, target, via.as_ref(), method.as_ref(), args);
+                self.emit_gc_reload_after_call();
             }
             Rvalue::FuncRef(callee) => {
                 // A function value is its slot index in the module function table. The table is
@@ -219,6 +222,9 @@ impl Emitter<'_> {
                         for &(off, fty) in &fields {
                             self.zero_at_obj(off, fty);
                         }
+                        // Root the object across the ctor call: the ctor is itself a Dream call
+                        // and any Gen0 evacuation inside it would otherwise leave `$__obj` stale.
+                        self.emit_push_obj_root();
                         self.line("     (local.get $__obj)");
                         for arg in args {
                             self.emit_operand(arg);
@@ -230,6 +236,8 @@ impl Emitter<'_> {
                         take_params: vec![],
                         });
                         self.line(&format!("     (call ${})", sym));
+                        self.emit_gc_reload_after_call();
+                        self.emit_pop_obj_root();
                         self.line("     (local.get $__obj)");
                     } else {
                         // Implicit zero-arg default constructor: leave every field at its zero
@@ -548,6 +556,9 @@ impl Emitter<'_> {
                     crate::emit::array_heap_tag_for(self.interner, *elem_ty)
                 ));
                 self.line("     (call $realloc)");
+                // `$realloc` mallocs a new block when the grow fails in place, so the same GC
+                // reload rule that follows `$malloc` applies to the caller's roots here too.
+                self.emit_gc_root_reload();
                 self.line("     (local.set $__obj) ;; new (possibly moved) ptr");
                 self.line("     (local.get $__obj)");
                 self.line("     (local.get $__len)");
@@ -579,6 +590,9 @@ impl Emitter<'_> {
                 self.emit_operand(a);
                 self.emit_operand(b);
                 self.line("     (call $concat_strings)");
+                // `$concat_strings` allocates the result string; any live nursery pointer in this
+                // function's roots may have been evacuated during that alloc.
+                self.emit_gc_root_reload();
             }
             Rvalue::ToString(o) => {
                 self.emit_operand(o);

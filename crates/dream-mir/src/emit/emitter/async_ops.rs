@@ -91,6 +91,10 @@ impl Emitter<'_> {
         // dynamic-length raw copy); `$__pc` drives the block dispatch, `$__scratch` holds the awaited
         // future at a suspend.
         self.line(" (local $__obj i32)");
+        // Root-table index for the in-flight `$__obj` — mirrors the sync `emit()` prologue so
+        // `Rvalue::New`'s ctor-call rooting works uniformly across sync and async bodies.
+        self.line(" (local $__obj_rg i32)");
+        self.line(" (local $__gc_epoch i32)");
         self.line(" (local $__scratch i32)");
         self.line(" (local $__len i32)");
         self.line(" (local $__rel i32)");
@@ -100,6 +104,13 @@ impl Emitter<'_> {
         self.line(" (local $__src i32)");
         self.line(" (local $__wsrc i32)");
         self.line(" (local $__wbox i32)");
+        // Rooted call-arg spill scratches (see `rvalue/calls.rs`): `$__rcsave` snapshots
+        // `GC_ROOT_COUNT` at the start of a call's arg preparation, and `$__raiN` are the
+        // per-arg root-table indices used to reload forwarded pointers before dispatch.
+        self.line(" (local $__rcsave i32)");
+        for i in 0..super::rvalue::calls::MAX_ARG_SPILL_SLOTS {
+            self.line(&format!(" (local $__rai{} i32)", i));
+        }
         if !self.gc_root_locals.is_empty() || !self.gc_slot_root_offs.is_empty() {
             self.line(" (local $__root_base i32)");
             let root_locals = self.gc_root_locals.clone();
@@ -133,6 +144,10 @@ impl Emitter<'_> {
         }
 
         self.emit_gc_root_prologue();
+        self.line(&format!(
+            " (i32.const {}) (i32.load) (local.set $__gc_epoch)",
+            crate::abi::GC_EPOCH_ADDR
+        ));
 
         // Blocks that are an await's `resume` target, mapped to the local its result binds to (if any).
         let mut resume_binds: HashMap<u32, Option<crate::Local>> = HashMap::new();

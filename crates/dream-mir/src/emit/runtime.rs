@@ -111,6 +111,7 @@ fn substitute_gc_runtime(
             "{GC_REMSET_OVERFLOW_ADDR}",
             &a::GC_REMSET_OVERFLOW_ADDR.to_string(),
         )
+        .replace("{GC_EPOCH_ADDR}", &a::GC_EPOCH_ADDR.to_string())
         .replace(
             "{GC_FINALIZER_HEAD_ADDR}",
             &a::GC_FINALIZER_HEAD_ADDR.to_string(),

@@ -1,6 +1,6 @@
 live_delta=0
-heap_grew=true
-free_stable=false
+heap_grew=false
+free_stable=true
 drop 1
 drop 2
 done

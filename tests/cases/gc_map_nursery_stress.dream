@@ -2,9 +2,10 @@ import system;
 import system.collections;
 
 // Stress heap growth + full GC: Map entries must survive collections (remset / mark /
-// place-store / flat-array tagging). With Gen0 copying temporarily disabled, this is
-// primarily an old-space mark-sweep stress; keep the junk-alloc pattern so re-enabling
-// Gen0 copying continues to exercise ephemeral traffic.
+// place-store / flat-array tagging). With Gen0 copying enabled, the junk-alloc pattern
+// forces frequent nursery evacuations under a 256 KiB nursery, exercising mutator-side
+// root reload (call-arg spill, `$__obj` rooting, per-call `$__gc_reload_globals`) and
+// remset overflow behavior alongside the old-space mark-sweep survivor path.
 fun main(): void {
     let m = Map<string, int>();
     let n = 8000;

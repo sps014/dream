@@ -45,7 +45,7 @@ impl Emitter<'_> {
                 let sym = self.callee_symbol(callee);
                 self.emit_call_args(callee, args);
                 self.line(&format!("     (call ${})", sym));
-                self.emit_gc_reload_if_collect(&sym);
+                self.emit_gc_reload_after_call();
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
                     self.line("     (drop)");
                 }
@@ -58,6 +58,7 @@ impl Emitter<'_> {
                 args,
             } => {
                 self.emit_js_call(callee, target, via.as_ref(), method.as_ref(), args);
+                self.emit_gc_reload_after_call();
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
                     self.line("     (drop)");
                 }
@@ -70,6 +71,7 @@ impl Emitter<'_> {
                 args,
             } => {
                 self.emit_interface_call(receiver, *iface_id, *method_slot, *sig, args);
+                self.emit_gc_reload_after_call();
                 let ret = match self.interner.kind(*sig) {
                     TyKind::Func(_, r) => Some(*r),
                     _ => None,
@@ -82,7 +84,9 @@ impl Emitter<'_> {
                 }
             }
             Statement::IndirectCall { target, sig, args } => {
-                if self.emit_indirect_call(target, *sig, args).is_some() {
+                let has_val = self.emit_indirect_call(target, *sig, args).is_some();
+                self.emit_gc_reload_after_call();
+                if has_val {
                     self.line("     (drop)");
                 }
             }
@@ -599,14 +603,20 @@ impl Emitter<'_> {
             return;
         }
         if self.interner.is_reference(value_ty) {
+            // Mirror `emit_place_store` for reference slots: materialize the source value first,
+            // then recompute the destination address so a construction-time evacuation (via
+            // `$__obj_rg` if present) leaves us with the forwarded object rather than a stale
+            // pointer. `emit_operand` on an `Operand` cannot allocate itself, but keeping the
+            // ordering symmetric with the place-store path guards against future changes.
+            self.emit_operand(value);
+            self.line("     (local.set $__src)");
+            self.emit_reload_obj_root();
             self.line("     (local.get $__obj)");
             if offset > 0 {
                 self.line(&format!("     (i32.const {})", offset));
                 self.line("     (i32.add)");
             }
             self.line("     (local.set $__rel)");
-            self.emit_operand(value);
-            self.line("     (local.set $__src)");
             self.line("     (local.get $__rel)");
             self.line("     (local.get $__src)");
             self.line(&format!("     ({})", self.store_instr(value_ty)));

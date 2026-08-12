@@ -76,29 +76,8 @@ internal class RegexBacktrackVM {
         return boundary == false;
     }
 
-    fun range_hit(ranges: List<char>, c: char, foldcase: bool): bool {
-        let probe = c;
-        if (foldcase) {
-            probe = c.to_lower();
-        }
-        let i = 0;
-        while (i < ranges.length) {
-            let lo = ranges.get(i).unwrap_or(' ');
-            let hi = ranges.get(i + 1).unwrap_or(' ');
-            if ((probe >= lo) && (probe <= hi)) {
-                return true;
-            }
-            i = i + 2;
-        }
-        return false;
-    }
-
     fun char_matches(borrow inst: RegexInst, c: char): bool {
-        let hit = this.range_hit(inst.ranges, c, inst.foldcase);
-        if (inst.negate) {
-            return hit == false;
-        }
-        return hit;
+        return inst.matches_char(c);
     }
 
     // Same technique `RegexVM.look_holds` uses (see its comment): lookahead checks whether the

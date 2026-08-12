@@ -3,6 +3,9 @@ module system.text;
 internal class RegexInst {
     public opcode: RegexOp;
     public ranges: List<char>;
+    public range_pairs: char[];
+    // 0 = generic pairs, 1 = ASCII digits, 2 = ASCII word, 3 = ASCII space, 4 = any char.
+    public class_kind: int;
     public negate: bool;
     public foldcase: bool;
     public cap: int;
@@ -15,6 +18,8 @@ internal class RegexInst {
     public constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int, sub_index: int, look_ahead: bool) {
         this.opcode = opcode;
         this.ranges = ranges;
+        this.range_pairs = RegexInst.copy_pairs(ranges);
+        this.class_kind = RegexInst.kind_of(ranges, negate, foldcase);
         this.negate = negate;
         this.foldcase = foldcase;
         this.cap = cap;
@@ -23,6 +28,112 @@ internal class RegexInst {
         this.out1 = out1;
         this.sub_index = sub_index;
         this.look_ahead = look_ahead;
+    }
+
+    static fun copy_pairs(borrow ranges: List<char>): char[] {
+        let n = ranges.length;
+        let out = Buffer.alloc<char>(n);
+        let i = 0;
+        while (i < n) {
+            out[i] = ranges.get(i).unwrap_or(' ');
+            i = i + 1;
+        }
+        return out;
+    }
+
+    static fun kind_of(borrow ranges: List<char>, negate: bool, foldcase: bool): int {
+        if ((negate) && (ranges.length == 0)) {
+            return 4;
+        }
+        if (ranges.length == 2) {
+            if ((ranges.get(0).unwrap_or(' ') == '0') && (ranges.get(1).unwrap_or(' ') == '9')) {
+                return 1;
+            }
+        }
+        if ((foldcase == false) && (negate == false) && RegexInst.is_word_pairs(ranges)) {
+            return 2;
+        }
+        if ((foldcase == false) && (negate == false) && RegexInst.is_space_pairs(ranges)) {
+            return 3;
+        }
+        return 0;
+    }
+
+    static fun is_word_pairs(borrow ranges: List<char>): bool {
+        if (ranges.length != 8) {
+            return false;
+        }
+        return (ranges.get(0).unwrap_or(' ') == 'a')
+            && (ranges.get(1).unwrap_or(' ') == 'z')
+            && (ranges.get(2).unwrap_or(' ') == 'A')
+            && (ranges.get(3).unwrap_or(' ') == 'Z')
+            && (ranges.get(4).unwrap_or(' ') == '0')
+            && (ranges.get(5).unwrap_or(' ') == '9')
+            && (ranges.get(6).unwrap_or(' ') == '_')
+            && (ranges.get(7).unwrap_or(' ') == '_');
+    }
+
+    static fun is_space_pairs(borrow ranges: List<char>): bool {
+        if (ranges.length != 8) {
+            return false;
+        }
+        return (ranges.get(0).unwrap_or(' ') == ' ')
+            && (ranges.get(1).unwrap_or(' ') == ' ')
+            && (ranges.get(2).unwrap_or(' ') == '\t')
+            && (ranges.get(3).unwrap_or(' ') == '\t')
+            && (ranges.get(4).unwrap_or(' ') == '\n')
+            && (ranges.get(5).unwrap_or(' ') == '\n')
+            && (ranges.get(6).unwrap_or(' ') == '\r')
+            && (ranges.get(7).unwrap_or(' ') == '\r');
+    }
+
+    static fun ascii_word(c: char): bool {
+        if ((c >= 'a') && (c <= 'z')) {
+            return true;
+        }
+        if ((c >= 'A') && (c <= 'Z')) {
+            return true;
+        }
+        if ((c >= '0') && (c <= '9')) {
+            return true;
+        }
+        return c == '_';
+    }
+
+    // Effective character-class membership (negate already applied). Kind 4 is the synthetic
+    // unanchored `.*?` any-char prefix and always matches.
+    public fun matches_char(c: char): bool {
+        let k = this.class_kind;
+        if (k == 4) {
+            return true;
+        }
+        let hit = false;
+        if (k == 1) {
+            hit = (c >= '0') && (c <= '9');
+        } else if (k == 2) {
+            hit = RegexInst.ascii_word(c);
+        } else if (k == 3) {
+            hit = (c == ' ') || (c == '\t') || (c == '\n') || (c == '\r');
+        } else {
+            let probe = c;
+            if (this.foldcase) {
+                probe = c.to_lower();
+            }
+            let pairs = this.range_pairs;
+            let i = 0;
+            while (i < pairs.length) {
+                if ((probe >= pairs[i]) && (probe <= pairs[i + 1])) {
+                    hit = true;
+                    i = pairs.length;
+                } else {
+                    i = i + 2;
+                }
+            }
+        }
+        if (this.negate) {
+            return hit == false;
+        }
+        return hit;
     }
 
     public static fun char_class(ranges: List<char>, negate: bool, foldcase: bool): RegexInst {

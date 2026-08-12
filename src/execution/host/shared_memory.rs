@@ -8,15 +8,19 @@
 //! `wasmtime::SharedMemory` can only be handed to multiple `Instance`s if the module imports its
 //! memory instead of instantiating its own.
 
+use super::stack_size::{dream_async_stack_size, dream_stack_size};
 use wasmtime::*;
 
 /// A `wasmtime::Config` with the WASM threads proposal + `SharedMemory` creation enabled, plus the
 /// stack-size tuning every execution entry point already needs (a recursive ARC release chains one
 /// wasm frame per node, undersizing the default 512 KiB stack for ordinary-sized data structures).
+///
+/// Stack bytes come from [`dream_stack_size`] (`DREAM_STACK_SIZE` env, else Cargo.toml
+/// `[package.metadata.dream] stack-size`, else 16 MiB).
 pub fn threaded_wasm_config() -> Config {
     let mut config = Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
+    config.max_wasm_stack(dream_stack_size());
+    config.async_stack_size(dream_async_stack_size());
     config.wasm_threads(true);
     config.shared_memory(true);
     // Hard `WebWorker.terminate()` aborts an in-flight body via `Engine::increment_epoch` (see

@@ -78,9 +78,10 @@ fn run_wasm_bytes(
 
     // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
-    // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up to match
-    // a typical native thread stack. `threaded_wasm_config` also enables the WASM threads proposal
-    // and `SharedMemory` creation, needed since the module imports its linear memory as `shared`.
+    // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up via
+    // `DREAM_STACK_SIZE` / `[package.metadata.dream] stack-size` (see `host::stack_size`).
+    // `threaded_wasm_config` also enables the WASM threads proposal and `SharedMemory` creation,
+    // needed since the module imports its linear memory as `shared`.
     let config = threaded_wasm_config();
     let engine = Engine::new(&config)?;
     let module = Module::new(&engine, wasm_bytes)?;

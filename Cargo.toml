@@ -4,6 +4,13 @@ version = "0.1.0"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
 edition = "2018"
 
+# Dream runtime defaults (read by `build.rs` → `DREAM_DEFAULT_STACK_SIZE`).
+# Override at run time with env `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`, `33554432`).
+# Host Rust thread stack for the compiler/tests is separate: set `RUST_MIN_STACK` (or
+# `.cargo/config.toml` `[env]`) when `cargo test` / deep mono overflows.
+[package.metadata.dream]
+stack-size = "16MiB"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

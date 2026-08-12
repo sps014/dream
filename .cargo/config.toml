@@ -1,0 +1,6 @@
+# Env vars injected for every `cargo` invocation in this workspace.
+# See https://doc.rust-lang.org/cargo/reference/config.html#env
+[env]
+# Host Rust thread stack for compiling / testing large Dream programs (analyzer mono, e2e).
+# Separate from the WASM guest stack (`DREAM_STACK_SIZE` / `[package.metadata.dream] stack-size`).
+RUST_MIN_STACK = "33554432"

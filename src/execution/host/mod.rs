@@ -26,6 +26,7 @@ mod memory;
 mod net;
 mod process;
 mod shared_memory;
+mod stack_size;
 mod text;
 mod webview;
 mod worker;
@@ -50,6 +51,7 @@ pub use process::link_process_functions;
 pub use text::link_text_functions;
 pub use webview::link_webview_functions;
 pub use shared_memory::{shared_memory_for, threaded_wasm_config};
+pub use stack_size::{dream_async_stack_size, dream_stack_size, parse_size_bytes};
 pub use worker::{
     link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
 };

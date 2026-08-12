@@ -143,6 +143,10 @@ cargo run -- run path/to/file.dream        # compile + execute (wasmtime)
 cargo run -- path/to/file.dream            # compile to .wat / .wasm / .abi.json
 cargo run -- -v run path/to/file.dream     # verbose
 
+# WASM guest stack for `dream run` / e2e (default from `[package.metadata.dream] stack-size`)
+# DREAM_STACK_SIZE=32M cargo run -- run path/to/file.dream
+# Host Rust thread stack for deep compile/tests: `RUST_MIN_STACK` (also `.cargo/config.toml`)
+
 # Opt-in tree-shaken JS host next to the .wasm (browser or Node)
 cargo run -- --runtime --web path/to/file.dream    # *.web.runtime.js for the browser
 cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node ≥ 18

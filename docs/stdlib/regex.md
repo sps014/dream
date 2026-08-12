@@ -29,7 +29,7 @@ fun main(): void {
 
 #### `Regex(pattern: string, flags: string)`
 
-Compiles a pattern with optional flag letters (`g`, `i`, `m`, `s`). Compile once and reuse — compilation is not free.
+Compiles a pattern with optional flag letters (`g`, `i`, `m`, `s`). Compile once and reuse the `Regex` object — compilation is not free, and each instance keeps a matcher VM. Prefer `test` when you only need presence; global `match` walks every hit.
 
 ```dream
 let re = Regex("\\w+", "gi");

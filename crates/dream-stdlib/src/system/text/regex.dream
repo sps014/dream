@@ -21,6 +21,8 @@ public class Regex {
     use_backtrack: bool;
     group_names: string[];
     group_name_numbers: int[];
+    pike: RegexVM;
+    back: RegexBacktrackVM;
 
     public constructor(pattern: string, flags: string) {
         this.pattern = pattern;
@@ -41,23 +43,17 @@ public class Regex {
         this.table = RegexSubTable();
         let compiler = RegexCompiler(this.ignore_case, this.dot_all, this.table);
         this.prog = compiler.compile(ast);
-    }
-
-    fun vm(): RegexVM {
-        return RegexVM(this.prog, this.ngroup, this.multiline, this.table);
-    }
-
-    fun backtrack_vm(): RegexBacktrackVM {
-        return RegexBacktrackVM(this.prog, this.ngroup, this.multiline, this.table);
+        this.pike = RegexVM(this.prog, this.ngroup, this.multiline, this.table);
+        this.back = RegexBacktrackVM(this.prog, this.ngroup, this.multiline, this.table);
     }
 
     // Finds the next match starting at or after `pos`, dispatching to whichever engine this
-    // pattern requires.
+    // pattern requires. Lookaround still allocates a nested VM so it cannot clobber these queues.
     fun find_at(input: string, pos: int): Option<RegexMatch> {
         if (this.use_backtrack) {
-            return this.backtrack_vm().find(input, pos);
+            return this.back.find(input, pos);
         }
-        return this.vm().find(input, pos);
+        return this.pike.find(input, pos);
     }
 
     // True if `input` contains a match for this pattern.

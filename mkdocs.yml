@@ -145,6 +145,9 @@ nav:
     - Hello, World: cookbook/hello-world.md
     - Greet by name: cookbook/greet.md
     - Sum a list: cookbook/sum-a-list.md
+    - GPU SAXPY: cookbook/gpu-saxpy.md
+    - GPU triangle: cookbook/gpu-triangle.md
+    - Quote generator: cookbook/quote-generator.md
   - Internals:
     - Overview: internals/README.md
     - Pipeline: internals/01-pipeline-overview.md

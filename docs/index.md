@@ -70,7 +70,7 @@ fun main() {
 
     ---
 
-    Small programs you can copy and run.
+    Hello World, lists, GPU, and a source generator.
 
     [:octicons-arrow-right-24: Recipes](cookbook/index.md)
 

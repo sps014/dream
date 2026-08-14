@@ -1,293 +1,39 @@
 # JSON
 
-**Package:** `system.json` — `import system.json;` (also auto-loaded when any type carries `@json`)
+**Import:** `import system.json;` (also loaded when a type has `@json`)
 
-Native JSON: a `JsonValue` data model, `Json.parse` / `Json.stringify`, and a `@json` attribute that derives converters for your own types. Pure Dream — no JS interop — so it runs on every host.
-
-Most of the time you want `@json` auto-derive. Reach for `JsonValue` when you need to build or inspect arbitrary, untyped JSON.
-
-## Auto-derive with `@json`
-
-Mark a class `@json` and the compiler generates its `to_json` / `from_json`, so it round-trips with no boilerplate. It works for a value [`struct`](../language/classes-structs.md) too:
+Mark a class `@json` to serialize and parse it. Works on value structs too.
 
 ```dream
 import system;
 import system.json;
 
 @json
-class Address { city: string; zip: string; }
-
-@json
-class User { name: string; age: int; address: Address; tags: string[]; }
-
-fun main(): void {
-    let u = User("Ada", 36, Address("London", "NW1"), ["dev", "math"]);
-
-    let text = Json.serialize(u);              // to_json + stringify
-    let back = Json.deserialize<User>(text).unwrap_or(u);   // Result<User, ParseError>
-    System.println(back.address.city);         // London
-}
-```
-
-- `Json.serialize(x): string` — stringify any supported value (see [Collections](#collections) below).
-- `Json.deserialize<T>(text): Result<T, ParseError>` — parse and reconstruct a `T`.
-- `Json.from_value<T>(value): T` — reconstruct from an already-parsed `JsonValue` (no parse step).
-
-Field types may be primitives, `string`, other `@json` classes, supported [collections](#collections), positional **tuples** of supported element types (serialized as JSON arrays), and (for classes) `Option<T>` where `T` is `string`, `int`, `double`, `float`, `bool`, another `@json` class/union, or `T[]` of a supported element. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
-
-```dream
-@json
-class Row {
-    pair: (int, string);   // JSON: { "pair": [1, "hi"] }
-}
-```
-
-### Custom keys
-
-`@property_name("key")` maps a field to a different JSON key while keeping the Dream name in code:
-
-```dream
-@json
-class Product {
-    @property_name("id")
-    product_id: int;
-
-    @property_name("priceUsd")
-    price: float;
-}
-```
-
-This writes `product_id` as `"id"` and `price` as `"priceUsd"`.
-
-### Ignoring fields
-
-`@json_ignore` omits a field from both serialize and deserialize. On deserialize the positional constructor still receives a zero/empty default for that slot (`0`, `false`, `""`, `Option.None`, empty array, …). Nested `@json` class/union fields cannot be ignored unless wrapped in `Option` (defaults to `None`):
-
-```dream
-@json
 class User {
     name: string;
-    @json_ignore
-    password: string;
+    age: int;
+}
+
+fun main() {
+    let u = User("Ada", 36);
+    let text = Json.serialize(u);
+    let back = Json.deserialize<User>(text).unwrap_or(u);
+    System.println(back.name);
 }
 ```
 
-### Optional fields
+- `Json.serialize(x)` → string
+- `Json.deserialize<T>(text)` → `Result<T, ParseError>`
+- `Json.from_value<T>(value)` — from an already-parsed `JsonValue`
 
-An `Option<T>` field maps to JSON `null`. On serialize, `None` is written as `null`; on deserialize, a JSON `null` *or* a missing key produces `None`. `T` may be `string`, `int`, `double`, `float`, `bool`, another `@json` class/union, or an array of a supported element type:
+Fields may be primitives, `string`, arrays, other `@json` types, tuples (JSON arrays), and `Option<T>` of supported types. `@property_name("key")` renames a JSON key. Skip a field with the ignore attribute. [Unions](../language/enums-unions.md) serialize with a `"type"` tag.
 
-```dream
-@json
-class Profile {
-    name: string;
-    nickname: Option<string>;
-    age: Option<int>;
-    address: Option<Address>;
-    tags: Option<string[]>;
-}
-```
+## Untyped `JsonValue`
 
-### Collections
+`Json.parse` / `Json.stringify` / `Json.stringify_pretty` when you do not have a class.
 
-`@json` supports these collection shapes both as **class fields** and as **top-level**
-`serialize` / `deserialize` targets. Element types `T` / `V` must be primitives, `string`, or
-`@json` types.
-
-| Dream type | JSON shape | Notes |
-| --- | --- | --- |
-| `List<T>` | array | Order preserved |
-| `Set<T>` | array | Order not guaranteed on round-trip |
-| `T[]` | array | Fixed-length array field; same wire shape as `List` |
-| `Map<string, V>` | object | Keys are JSON object property names |
-| `SortedMap<string, V>` | object | Same wire shape as `Map`; iteration order follows the sorted map |
-
-**As fields** on an `@json` class:
-
-```dream
-@json
-class Bundle {
-    items: List<int>;
-    tags: Set<string>;
-    scores: Map<string, int>;
-    ordered: SortedMap<string, int>;
-    trail: int[];
-}
-```
-
-**At top level** (no wrapping class):
-
-```dream
-let xs = List<int>();
-xs.push(1);
-System.println(Json.serialize(xs));                    // [1]
-
-let back = Json.deserialize<List<int>>("[9,10]").unwrap_or(xs);
-```
-
-`Map<string, V>` and `SortedMap<string, V>` fields serialize as JSON objects keyed by the map's
-string keys:
-
-```dream
-@json
-class Scoreboard {
-    scores: Map<string, int>;
-}
-
-let s = Scoreboard(Map<string, int>());
-s.scores.set("ada", 100);
-System.println(Json.serialize(s));   // {"scores":{"ada":100}}
-```
-
-### Unions
-
-`@json` also works on [discriminated unions](../language/enums-unions.md). A value serializes as an object tagged with a `"type"` key naming the active variant, followed by its payload fields; a unit variant becomes just `{ "type": "<Variant>" }`. Payload fields may include arrays of supported element types:
-
-```dream
-@json
-enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
-
-@json
-enum Tags { Many(items: string[]), Empty }
-
-let text = Json.serialize(Shape.Rect(3, 4));   // {"type":"Rect","width":3,"height":4}
-let back = Json.deserialize<Shape>(text).unwrap_or(Shape.Empty);  // Ok(Shape.Rect(3, 4))
-System.println(Json.serialize(Shape.Empty));           // {"type":"Empty"}
-```
-
-On `Json.deserialize<T>(text)` (the top-level entry point), an unrecognized `"type"` is reported as `Err(ParseError)` rather than silently defaulting to the first variant:
-
-```dream
-switch (Json.deserialize<Shape>("{\"type\":\"Triangle\"}")) {
-    Ok(v) => System.println(v.to_string()),
-    Err(e) => System.println(e.message()),  // unknown variant 'Triangle' for union 'Shape'
-}
-```
-
-`@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
-
-!!! note "v1 limits"
-    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, `List<T>`, `Set<T>`, `T[]`, `Map<string, V>`, `SortedMap<string, V>`, and (for classes) `Option<T>` of `string` / `int` / `double` / `float` / `bool` / `@json class` / `T[]`. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error. The strict unknown-`"type"` check above only applies to `Json.deserialize<T>`'s own return value — a union nested *inside* another `@json` type (a class field, array element, tuple slot, or generic type-parameter payload) still falls back to its first variant on an unrecognized tag, since propagating the error through an arbitrarily nested constructor-argument expression isn't supported yet.
-
-## The `JsonValue` model
-
-For untyped JSON, `JsonValue` holds any JSON value. Build with the static constructors, read with the typed accessors:
-
-```dream
-let user = JsonValue.dict();
-user.set("name", JsonValue.from_string("Ada"));
-user.set("age", JsonValue.from_int(36));
-
-let tags = JsonValue.array();
-tags.push(JsonValue.from_string("dev"));
-user.set("tags", tags);
-```
-
-| Constructor | Builds |
-| --- | --- |
-| `JsonValue.none()` | `null` |
-| `JsonValue.boolean(b)` | a boolean |
-| `JsonValue.number(d)` / `JsonValue.from_int(n)` | a number |
-| `JsonValue.from_string(s)` | a string |
-| `JsonValue.array()` | an empty array |
-| `JsonValue.dict()` | an empty object |
-
-### Accessors (with examples)
-
-#### `as_bool()` / `as_int()` / `as_double()` / `as_string(): Option<_>`
-
-Narrows a `JsonValue` to a typed scalar, returning `None` on kind mismatch. Prefer over manual `kind_of` checks when reading known JSON shapes.
-
-```dream
-System.println(JsonValue.boolean(true).as_bool().unwrap_or(false));
-System.println(JsonValue.from_int(7).as_int().unwrap_or(0));
-System.println(JsonValue.from_string("hi").as_string().unwrap_or(""));
-```
-
-#### `is_null()` / `is_array()` / `is_object()` / `kind_of(): int`
-
-Tests the JSON kind without extracting a payload. Use `kind_of` when switching on multiple kinds in one place.
-
-```dream
-System.println(JsonValue.none().is_null());     // true
-System.println(JsonValue.array().is_array());    // true
-System.println(JsonValue.dict().is_object());    // true
-```
-
-#### `get(key)` / `has(key)` / `set(key, v)` / `keys()` / `key_at(index)`
-
-Object accessors: lookup, membership, mutation, and enumeration. `get` returns `None` for missing keys — distinct from JSON `null` values.
-
-```dream
-let user = JsonValue.dict();
-user.set("name", JsonValue.from_string("Ada"));
-System.println(user.has("name"));                         // true
-System.println(user.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""));
-System.println(user.keys().length);                       // 1
-System.println(user.key_at(0).unwrap_or(""));
-```
-
-#### `at(index)` / `push(v)` / `.length`
-
-Array accessors: indexed read, append, and length. Bounds-safe `at` returns `Option` — same pattern as object `get`.
-
-```dream
-let tags = JsonValue.array();
-tags.push(JsonValue.from_string("dev"));
-System.println(tags.length);  // 1
-System.println(tags.at(0).unwrap_or(JsonValue.none()).as_string().unwrap_or(""));
-```
-
-`get`, `at`, and `key_at` return an `Option` so a miss is explicit.
-
-## `Json.parse` / `Json.stringify` / `Json.stringify_pretty`
-
-#### `Json.parse(text): Result<JsonValue, ParseError>`
-
-Parses a JSON text document into a `JsonValue` tree. Use for untyped or dynamic JSON; prefer `@json` + `deserialize` for known schemas.
-
-```dream
-switch (Json.parse("{\"name\":\"Ada\"}")) {
-    Ok(v) => System.println(v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
-    Err(e) => System.println(e.message()),
-}
-```
-
-#### `Json.stringify(value): string`
-
-Serializes a `JsonValue` to compact JSON text. Pair with the static constructors when building JSON by hand.
-
-```dream
-let text = Json.stringify(user);  // {"name":"Ada",...}
-```
-
-#### `Json.stringify_pretty(value, indent): string`
-
-Pretty-prints with the given indent width (`0` matches compact `stringify`). Use for debug output and human-edited config files.
-
-```dream
-System.println(Json.stringify_pretty(user, 2));
-```
-
-A JSON `null` reads back with `is_null() == true`; a missing object key yields `None` from `get`.
-
-## `@json` helpers
-
-#### `Json.serialize<T>(x): string` / `Json.deserialize<T>(text)` / `Json.from_value<T>(value)`
-
-Covered in the auto-derive section above — each has a full example there.
+Accessors: `as_bool` / `as_int` / `as_double` / `as_string`, `is_null` / `is_array` / `is_object`, `get` / `has` / `set` / `keys` on objects, `at` / `push` / `.length` on arrays.
 
 ## `GenResult`
 
-Outcome type for compile-time helpers (e.g. a syntax DSL parser). Used by generator samples and
-the `@json` expand logic; import `system.json`.
-
-```dream
-import system.json;
-
-let ok = GenResult.success("extend User { }");
-let bad = GenResult.failure("unsupported field");
-let at = GenResult.failure_at("bad type", "User", "age");
-```
-
-Fields: `ok`, `source`, `error`, `error_type`, `error_field`. From an `@generator` body, pass
-`result.error` to `ctx.error(block, …)` when `!result.ok`.
+Emit-style generators (including `@json` internals) report success or failure with `GenResult.success(source)` / `GenResult.failure(message)`. You rarely construct this by hand — [CodeBuilder](codegen.md) is the usual emit helper.

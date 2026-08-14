@@ -74,7 +74,7 @@ pub(super) fn subst_stmt_reads(
     known: &HashMap<Local, Operand>,
 ) -> bool {
     match stmt {
-        Statement::Assign(place, rvalue) | Statement::AssignNoDrop(place, rvalue) => {
+        Statement::Assign(place, rvalue) => {
             let mut c = subst_place_reads(place, known);
             c |= subst_rvalue_reads(rvalue, known);
             c
@@ -135,10 +135,7 @@ pub(super) fn subst_stmt_reads(
                 | subst_operand(src_off, known)
                 | subst_operand(count, known)
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::ArenaEnter(o) => {
-            subst_operand(o, known)
-        }
-        Statement::ArenaExit => false,
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => subst_operand(o, known),
         Statement::SimdF32x4 {
             dest,
             lhs,

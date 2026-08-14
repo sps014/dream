@@ -197,7 +197,6 @@ impl<'a> Analyzer<'a> {
         // Must run before the body itself is analyzed, since a captured local's very first `let` has
         // to be boxed from the start (its declaration may come before the lambda that captures it).
         self.boxed_locals = super::expressions::capture_scan::scan_function_captures(function.body);
-        self.moved_locals.clear();
         // Every name ever passed as a `ref` argument (`scan_ref_argument_targets`) needs its address
         // taken so the callee can alias it. A name already captured (above) already has a stable,
         // heap-durable box (`CaptureCell<T>`) whose pointer serves that purpose unchanged. A name that is
@@ -274,8 +273,6 @@ impl<'a> Analyzer<'a> {
                     name: param.name.text.clone(),
                     ty: box_tid,
                     is_ref: true,
-                    is_move: false,
-                    is_borrow: false,
                 });
                 self.hir.boxed.insert(param.name.text.clone(), elem_ty);
                 continue;
@@ -289,8 +286,6 @@ impl<'a> Analyzer<'a> {
                 name: param.name.text.clone(),
                 ty,
                 is_ref: false,
-                is_move: param.is_move,
-                is_borrow: param.is_borrow,
             });
         }
 

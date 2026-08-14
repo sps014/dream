@@ -3,7 +3,7 @@
 ;;   [ptr+4]        scalar length: i32  (Unicode scalar / code-point count, cached)
 ;;   [ptr+8 ..]     utf8 bytes
 ;; There is no NUL terminator: the length prefix makes it redundant, and every consumer (strlen,
-;; string_eq, hashing, host interop) is length-driven. The 12-byte heap header ([size][tag][reserved])
+;; string_eq, hashing, host interop) is length-driven. The 12-byte heap header ([size][tag][gc_meta])
 ;; still lives at ptr-12 and is unchanged, so malloc/free/object_tag are unaffected.
 ;; `size()` / `char_at` / iteration use Unicode scalar (code point) indices; `byte_size` / `byte_at`
 ;; expose raw UTF-8 byte access. `$str_scalar_len` is O(1) via the cached word at ptr+4.
@@ -543,57 +543,13 @@
     local.get $new_ptr
 )
 
-;; Builder concat: drop `$left` when `$concat_strings` allocated a new block (interned size-0
-;; strings are ignored by `$free`). Used by generated `*_to_string` so intermediate concats
-;; do not leak into `$live_objects`.
-(func $__str_take_append (param $left i32) (param $right i32) (result i32)
-    (local $out i32)
-    local.get $left
-    local.get $right
-    call $concat_strings
-    local.set $out
-    local.get $left
-    local.get $out
-    i32.ne
-    if
-        local.get $left
-        call $free
-    end
-    local.get $out
-)
-
-;; Like `$__str_take_append`, and also `$free` `$right` when it is not the returned pointer
-;; (formatter temps: `$int_to_string`, nested `$Type_to_string`, …). Do not use on a string
-;; field load — that would free the object's own payload.
-(func $__str_take_append_drop_right (param $left i32) (param $right i32) (result i32)
-    (local $out i32)
-    local.get $left
-    local.get $right
-    call $concat_strings
-    local.set $out
-    local.get $left
-    local.get $out
-    i32.ne
-    if
-        local.get $left
-        call $free
-    end
-    local.get $right
-    local.get $out
-    i32.ne
-    if
-        local.get $right
-        call $free
-    end
-    local.get $out
-)
-
 (func $debug_get_free_list_head (result i32)
     global.get $free_list_head
 )
 
 (func $debug_get_heap_ptr (result i32)
-    call $__heap_ptr_get
+    i32.const {HEAP_PTR_ADDR}
+    i32.atomic.load
 )
 
 (func $debug_get_live_objects (result i32)

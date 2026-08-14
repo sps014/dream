@@ -339,7 +339,6 @@ fn transform(
             name: None,
             is_ref: false,
             manual_drop: false,
-            is_move: false,
         });
         promo.insert(field, l);
     }
@@ -449,7 +448,7 @@ fn rvalue_mentions(rv: &Rvalue, o: Local) -> bool {
 
 fn stmt_mentions(stmt: &Statement, o: Local) -> bool {
     // Writes to `o` (as a place) plus any read of `o`.
-    if let Statement::Assign(place, _) | Statement::AssignNoDrop(place, _) = stmt {
+    if let Statement::Assign(place, _) = stmt {
         if place_mentions(place, o) {
             return true;
         }

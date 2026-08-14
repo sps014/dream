@@ -25,9 +25,7 @@ fn print_block(out: &mut String, block: &BasicBlock) {
 
 fn stmt(s: &Statement) -> String {
     match s {
-        Statement::Assign(p, r) | Statement::AssignNoDrop(p, r) => {
-            format!("{} = {}", place(p), rvalue(r))
-        }
+        Statement::Assign(p, r) => format!("{} = {}", place(p), rvalue(r)),
         Statement::Panic(o) => format!("panic {}", operand(o)),
         Statement::Call { callee, args } => {
             format!("call def{}({})", callee.def.0, ops(args))
@@ -105,8 +103,6 @@ fn stmt(s: &Statement) -> String {
         ),
         Statement::LockAcquire(o) => format!("lock_acquire {}", operand(o)),
         Statement::LockRelease(o) => format!("lock_release {}", operand(o)),
-        Statement::ArenaEnter(o) => format!("arena_enter {}", operand(o)),
-        Statement::ArenaExit => "arena_exit".to_string(),
         Statement::SimdF32x4 {
             dest,
             lhs,

@@ -9,7 +9,8 @@
 ;; through the box's `funcidx` word via the ordinary `call_indirect`. This keeps `call_indirect`'s
 ;; signature completely unchanged from the pre-closures ABI.
 ;;
-;; Funcboxes are ordinary heap values (`TyKind::Func` is a reference). No retain on create.
+;; Funcboxes are ordinary GC heap values (`TyKind::Func` is a reference). The env word is traced by
+;; `$gc_trace_funcbox` / `$gc_trace_object` when the box is reachable; no retain on create.
 (func $funcbox_new (param $funcidx i32) (param $env i32) (result i32)
     (local $box i32)
     i32.const 8
@@ -24,6 +25,18 @@
     i32.add
     local.get $env
     i32.store
+    local.get $env
+    i32.eqz
+    if
+        local.get $box
+        return
+    end
+    ;; Write barrier: box (nursery) may hold an older→younger? env; barrier records older→younger.
+    local.get $box
+    i32.const 4
+    i32.add
+    local.get $env
+    call $write_barrier
     local.get $box
 )
 

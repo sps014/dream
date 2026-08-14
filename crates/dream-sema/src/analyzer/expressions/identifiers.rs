@@ -32,7 +32,6 @@ impl<'a> Analyzer<'a> {
                     .as_ref()
                     .borrow_mut()
                     .mark_used(&id.text);
-                self.check_moved_ident(id, diagnostics);
                 // A local bound to a polymorphic generic function item instantiates when the
                 // use site publishes a concrete `fun(...)` expected type.
                 if let Type::GenericFunctionItem(ref gname) = t {

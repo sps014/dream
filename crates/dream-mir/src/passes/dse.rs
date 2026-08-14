@@ -29,7 +29,7 @@ impl MirPass for Dse {
             let mut dead: Vec<usize> = Vec::new();
             for (idx, stmt) in block.stmts.iter().enumerate() {
                 match stmt {
-                    Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
+                    Statement::Assign(place, rv) => {
                         // The value side may read memory (a load) or have effects; if so it is a
                         // barrier that happens *before* this store completes.
                         if rvalue_touches_memory(rv) {
@@ -69,8 +69,6 @@ impl MirPass for Dse {
                     // memory-observing statement.
                     | Statement::LockAcquire(_)
                     | Statement::LockRelease(_)
-                    | Statement::ArenaEnter(_)
-                    | Statement::ArenaExit
                     | Statement::SimdF32x4 { .. }
                     | Statement::ValueDrop(_)
                     | Statement::Panic(_) => pending.clear(),
@@ -147,7 +145,7 @@ fn is_memory_place(place: &Place) -> bool {
 
 fn stmt_rvalue(stmt: &Statement) -> &Rvalue {
     match stmt {
-        Statement::Assign(_, rv) | Statement::AssignNoDrop(_, rv) => rv,
+        Statement::Assign(_, rv) => rv,
         _ => unreachable!("pending store is always an Assign"),
     }
 }

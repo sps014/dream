@@ -38,18 +38,12 @@ internal class RegexNode {
 
     // The left (or only) child of a unary/binary node, or `Nothing` if absent.
     public fun left_child(): RegexNode {
-        if (this.left.length == 0) {
-            return RegexNode.nothing();
-        }
-        return this.left.get_at(0);
+        return this.left.get(0).unwrap_or(RegexNode.nothing());
     }
 
     // The right child of a binary node, or `Nothing` if absent.
     public fun right_child(): RegexNode {
-        if (this.right.length == 0) {
-            return RegexNode.nothing();
-        }
-        return this.right.get_at(0);
+        return this.right.get(0).unwrap_or(RegexNode.nothing());
     }
 
     public static fun nothing(): RegexNode {

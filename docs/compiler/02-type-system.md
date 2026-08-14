@@ -120,7 +120,7 @@ The analyzer marks a class def as `@shared` when it carries the `@shared` attrib
 
 1. **Field validation** — every field of an `@shared` class must be unmanaged or itself `@shared` (closed-graph rule; see `check_shared_field` in `src/semantics/analyzer/declarations/structs.rs`).
 2. **Layout** — `@shared` allocations are four bytes larger than the equivalent non-`@shared` class to hold a reentrant lock word past the last field (`HEADER_LOCK_WORD_SIZE` in `src/mir/abi.rs`; zero-initialized in `Rvalue::New` emission).
-3. **Lock word** — `@shared` allocations are four bytes larger than the equivalent non-`@shared` class to hold a reentrant lock word past the last field (`HEADER_LOCK_WORD_SIZE` in `src/mir/abi.rs`; zero-initialized in `Rvalue::New` emission). Atomic lock helpers live in `runtime/sync.wat`.
+3. **Backend RC** — retain/release codegen selects atomic helpers for `@shared` types only (`retain_call` / `emit_release_prologue_atomic` in `src/mir/emit/release.rs`).
 
 Never compare types by mangled name to detect sharing — always go through `TypeInterner::is_shared_type`.
 

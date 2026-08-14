@@ -413,16 +413,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    pub(in crate::analyzer) fn hir_with_arena(&mut self, size: Option<HExpr>, body: Vec<HStmt>) {
-        if !self.active() {
-            return;
-        }
-        match size {
-            Some(size) => self.push_stmt(HStmt::WithArena { size, body }),
-            None => self.hir.ok = false,
-        }
-    }
-
     /// Appends a `do { body } while (cond)`. Fails the function if the condition was not
     /// representable.
     pub(in crate::analyzer) fn hir_do_while(

@@ -94,14 +94,12 @@ fn field_access_uses_layout_offsets_and_widths() {
                     ty: int,
                     name: "a".into(),
                     is_weak: false,
-                    skip_nested_drop: false,
                 },
                 FieldLayout {
                     offset: 8,
                     ty: dbl,
                     name: "b".into(),
                     is_weak: false,
-                    skip_nested_drop: false,
                 },
             ],
             size: 16,
@@ -159,14 +157,12 @@ fn new_allocates_and_initializes_fields() {
                     ty: int,
                     name: "a".into(),
                     is_weak: false,
-                    skip_nested_drop: false,
                 },
                 FieldLayout {
                     offset: 4,
                     ty: int,
                     name: "b".into(),
                     is_weak: false,
-                    skip_nested_drop: false,
                 },
             ],
             size: 8,
@@ -268,7 +264,6 @@ fn emit_module_assembles_to_valid_wasm() {
                 ty: int,
                 name: "a".into(),
                 is_weak: false,
-                skip_nested_drop: false,
             }],
             size: 4,
             packed: false,
@@ -488,13 +483,14 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
 /// path stays clean. Single-threaded modules also drop the allocator spinlock.
 #[test]
 fn debug_toggles_allocator_instrumentation() {
-    assert!(runtime_prelude(true, false, 0).contains("global.set $live_objects"));
-    assert!(!runtime_prelude(false, false, 0).contains("global.set $live_objects"));
+    assert!(runtime_prelude(true, false, 0, false).contains("global.set $live_objects"));
+    assert!(!runtime_prelude(false, false, 0, false).contains("global.set $live_objects"));
     assert!(
-        runtime_prelude(false, true, 0).contains("call $__alloc_lock_acquire"),
+        runtime_prelude(false, true, 0, false).contains("call $__alloc_lock_acquire"),
+        "threaded modules must keep the allocator spinlock"
     );
     assert!(
-        !runtime_prelude(false, false, 0).contains("call $__alloc_lock_acquire"),
+        !runtime_prelude(false, false, 0, false).contains("call $__alloc_lock_acquire"),
         "single-threaded modules must elide the allocator spinlock"
     );
 }

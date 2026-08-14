@@ -279,9 +279,7 @@ impl SyntaxTreeView {
                     }
                 }
             }
-            StatementNode::While(cond, body)
-            | StatementNode::Lock(cond, body)
-            | StatementNode::With(cond, body) => {
+            StatementNode::While(cond, body) | StatementNode::Lock(cond, body) => {
                 self.walk_expr(cond, parent);
                 for s in *body {
                     self.walk_stmt(s, parent);

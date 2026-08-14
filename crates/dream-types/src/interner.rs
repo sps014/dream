@@ -265,11 +265,6 @@ impl TypeInterner {
         self.kind(id).is_reference()
     }
 
-    /// True if dropping this value must run destructor/`$free` (heap refs and `js` handles).
-    pub fn needs_drop(&self, id: TypeId) -> bool {
-        self.is_gc_tracked(id)
-    }
-
     /// True if `id` is a GC-tracked reference (heap references and `js` handles). Value
     /// structs/unions are not GC-tracked as envelopes (same carve-outs as [`Self::is_reference`]).
     pub fn is_gc_tracked(&self, id: TypeId) -> bool {

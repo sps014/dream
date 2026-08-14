@@ -142,11 +142,6 @@ pub struct HParam {
     /// `Analyzer::ref_box_type`/`docs/compiler/03-hir.md`): its MIR local must alias the caller's
     /// storage in place rather than take a private copy (`FunctionBuilder::new_ref_param`).
     pub is_ref: bool,
-    /// True for a `move name: T` parameter: the callee owns the value and drops it on exit.
-    pub is_move: bool,
-    /// True for an explicit `borrow name: T` parameter. Storing it into a field marks that
-    /// field `skip_nested_drop` so dropping the wrapper cannot free the borrowed graph.
-    pub is_borrow: bool,
 }
 
 /// Declaration metadata for a function local (used by the backend to allocate slots).

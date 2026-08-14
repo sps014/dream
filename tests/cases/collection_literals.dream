@@ -53,6 +53,6 @@ fun main(): void {
     // Nested `List<List<int>>`.
     let nested: List<List<int>> = [[1, 2], [3]];
     System.println(nested.length);
-    System.println(nested.get_at(0).length);
-    System.println(nested.get_at(1).length);
+    System.println(nested.get(0).unwrap_or(List<int>(0)).length);
+    System.println(nested.get(1).unwrap_or(List<int>(0)).length);
 }

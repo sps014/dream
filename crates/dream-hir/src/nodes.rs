@@ -83,11 +83,6 @@ pub enum HStmt {
         target: HExpr,
         body: Vec<HStmt>,
     },
-    /// `with ArenaAllocator() { body }`: bump-allocate for `body`, restore on every exit.
-    WithArena {
-        size: HExpr,
-        body: Vec<HStmt>,
-    },
     /// A `switch` over a scrutinee (both the C-style and pattern-matching forms lower here). Each
     /// arm is a typed pattern + body; `default` runs when no arm matches.
     Switch {
@@ -173,10 +168,6 @@ pub enum HExprKind {
     },
     Unary {
         op: UnOp,
-        operand: Box<HExpr>,
-    },
-    /// `move expr` — transfer ownership of a heap value; the source local is nulled after the use.
-    Move {
         operand: Box<HExpr>,
     },
     /// A direct function call to a resolved callee.
@@ -399,16 +390,12 @@ mod tests {
                     name: "a".into(),
                     ty: int,
                     is_ref: false,
-                    is_move: false,
-                    is_borrow: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
                     is_ref: false,
-                    is_move: false,
-                    is_borrow: false,
                 },
             ],
             ret: int,

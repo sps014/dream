@@ -266,7 +266,7 @@ fn use_block_map(func: &MirFunction) -> HashMap<Local, BTreeSet<BlockId>> {
 
 pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
     match stmt {
-        Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
+        Statement::Assign(place, rv) => {
             place_base_reads(place, f);
             rvalue_reads(rv, f);
         }
@@ -313,10 +313,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(src_off, f);
             operand_reads(count, f);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::ArenaEnter(o) => {
-            operand_reads(o, f)
-        }
-        Statement::ArenaExit => {}
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => operand_reads(o, f),
         Statement::SimdF32x4 {
             dest,
             lhs,

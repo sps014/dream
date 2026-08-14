@@ -49,7 +49,6 @@ impl TokenKind {
             TokenKind::TildeToken => 100,
             TokenKind::PlusPlusToken => 100,
             TokenKind::MinusMinusToken => 100,
-            TokenKind::MoveToken => 100,
             _ => 0,
         }
     }

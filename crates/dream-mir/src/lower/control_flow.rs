@@ -49,7 +49,6 @@ impl Lowerer<'_> {
             continue_blk: cond_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
-            arena_depth: self.arena_depth,
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -74,7 +73,6 @@ impl Lowerer<'_> {
             continue_blk: cond_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
-            arena_depth: self.arena_depth,
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -122,7 +120,6 @@ impl Lowerer<'_> {
             continue_blk: step_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
-            arena_depth: self.arena_depth,
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -188,7 +185,6 @@ impl Lowerer<'_> {
             continue_blk: step_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
-            arena_depth: self.arena_depth,
         });
         self.b.switch_to(body_blk);
         let elem_local = self.mir_local(elem);
@@ -220,17 +216,15 @@ impl Lowerer<'_> {
     }
 
     pub(super) fn lower_break(&mut self, label: Option<&str>) {
-        if let Some((target, lock_depth, arena_depth)) = self.loop_target(label, true) {
+        if let Some((target, lock_depth)) = self.loop_target(label, true) {
             self.release_locks_above(lock_depth);
-            self.exit_arenas_above(arena_depth);
             self.b.terminate(Terminator::Goto(target));
         }
     }
 
     pub(super) fn lower_continue(&mut self, label: Option<&str>) {
-        if let Some((target, lock_depth, arena_depth)) = self.loop_target(label, false) {
+        if let Some((target, lock_depth)) = self.loop_target(label, false) {
             self.release_locks_above(lock_depth);
-            self.exit_arenas_above(arena_depth);
             self.b.terminate(Terminator::Goto(target));
         }
     }
@@ -239,7 +233,7 @@ impl Lowerer<'_> {
         &self,
         label: Option<&str>,
         is_break: bool,
-    ) -> Option<(super::super::BlockId, usize, usize)> {
+    ) -> Option<(super::super::BlockId, usize)> {
         let ctx = match label {
             Some(l) => self
                 .loops
@@ -253,7 +247,7 @@ impl Lowerer<'_> {
         } else {
             ctx.continue_blk
         };
-        Some((blk, ctx.lock_depth, ctx.arena_depth))
+        Some((blk, ctx.lock_depth))
     }
 
     /// `lock (target) { body }`: evaluates `target` exactly once into a fresh temp (so a
@@ -296,69 +290,5 @@ impl Lowerer<'_> {
     /// `lock` scope on its way out of the function.
     pub(super) fn release_all_locks(&mut self) {
         self.release_locks_above(0);
-        self.exit_arenas_above(0);
-    }
-
-    pub(super) fn lower_with_arena(&mut self, size: &HExpr, body: &[HStmt]) {
-        let sz = self.lower_operand(size);
-        self.b.push(Statement::ArenaEnter(sz));
-        self.arena_depth += 1;
-        self.lower_block(body);
-        self.drop_lets_in(body);
-        self.arena_depth = self.arena_depth.saturating_sub(1);
-        if !self.b.is_terminated() {
-            self.b.push(Statement::ArenaExit);
-        }
-    }
-
-    fn drop_lets_in(&mut self, body: &[HStmt]) {
-        for s in body {
-            match s {
-                HStmt::Let { local, ty, .. } => {
-                    if self.interner.needs_drop(*ty) {
-                        let l = self.mir_local(*local);
-                        self.b
-                            .push(Statement::ForceFree(Operand::Copy(Place::Local(l))));
-                        self.b.assign(
-                            Place::Local(l),
-                            Rvalue::Use(Operand::Const(Const::Null)),
-                        );
-                    }
-                }
-                HStmt::If {
-                    then_branch,
-                    else_branch,
-                    ..
-                } => {
-                    self.drop_lets_in(then_branch);
-                    self.drop_lets_in(else_branch);
-                }
-                HStmt::While { body, .. }
-                | HStmt::DoWhile { body, .. }
-                | HStmt::Lock { body, .. }
-                | HStmt::WithArena { body, .. }
-                | HStmt::Foreach { body, .. } => self.drop_lets_in(body),
-                HStmt::For {
-                    init, step, body, ..
-                } => {
-                    self.drop_lets_in(init);
-                    self.drop_lets_in(step);
-                    self.drop_lets_in(body);
-                }
-                HStmt::Switch { arms, default, .. } => {
-                    for arm in arms {
-                        self.drop_lets_in(&arm.body);
-                    }
-                    self.drop_lets_in(default);
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn exit_arenas_above(&mut self, depth: usize) {
-        for _ in depth..self.arena_depth {
-            self.b.push(Statement::ArenaExit);
-        }
     }
 }

@@ -19,8 +19,8 @@ const ARRAY_TAG: i32 = super::abi::TAG_ARRAY;
 /// Runtime type tag for blittable element arrays (see [`super::abi::TAG_FLAT_ARRAY`]).
 const FLAT_ARRAY_TAG: i32 = super::abi::TAG_FLAT_ARRAY;
 
-/// Heap tag for an array of `elem_ty`: reference elems use [`ARRAY_TAG`];
-/// blittable elems use [`FLAT_ARRAY_TAG`].
+/// Heap tag for an array of `elem_ty`: GC-tracked elems use [`ARRAY_TAG`] (Gen0 scans slots);
+/// blittable elems use [`FLAT_ARRAY_TAG`] so payload ints cannot be mistaken for nursery pointers.
 pub(crate) fn array_heap_tag_for(interner: &TypeInterner, elem_ty: TypeId) -> i32 {
     if interner.is_reference(elem_ty) {
         ARRAY_TAG
@@ -37,12 +37,12 @@ const STRUCT_TAG_BASE: i32 = super::abi::TAG_STRUCT_BASE;
 /// interned string blocks so the runtime treats them as strings.
 const STRING_TAG: i32 = super::abi::TAG_STRING;
 
-/// Byte size of the universal heap-block header `[size:i32][tag:i32][reserved:i32]` that precedes
+/// Byte size of the universal heap-block header `[size:i32][tag:i32][gc_meta:i32]` that precedes
 /// every allocated value; a value's pointer points at `block_start + HEAP_HEADER_SIZE`.
 const HEAP_HEADER_SIZE: u32 = super::abi::HEAP_HEADER_SIZE;
 
 /// Base address (block start) of the interned string data segment. Each string is a heap-object
-/// block `[size=0][tag=STRING][reserved=0][byte_len:i32][scalar_len:i32][utf8]`; the mapped
+/// block `[size=0][tag=STRING][gc_meta=IMMORTAL][byte_len:i32][scalar_len:i32][utf8]`; the mapped
 /// address points at the byte_len word (block start + header), with utf8 bytes at `ptr+8`.
 /// `$str_byte_size` and `$str_scalar_len` are single loads at `ptr` / `ptr+4`. There is no NUL
 /// terminator (the length prefix makes it redundant). The heap starts above.
@@ -65,6 +65,9 @@ const WASM_PAGE_SIZE: u32 = super::abi::WASM_PAGE_SIZE;
 /// (instrumentation on in debug builds, the default; off under `--release`).
 const RUNTIME_ALLOCATOR: &str = include_str!("../runtime/allocator.wat");
 
+/// Tiered GC runtime (Gen0 nursery + Gen1/2 + LOH). Placeholders substituted in [`runtime_prelude`].
+const RUNTIME_GC: &str = include_str!("../runtime/gc.wat");
+
 /// The fixed string runtime (`$str_scalar_len`/`$str_byte_size`/`$char_at`/`$byte_at`/`$string_eq`/`$concat_strings`/…).
 /// Self-contained given the allocator + memory.
 const RUNTIME_STRINGS: &str = include_str!("../runtime/strings.wat");
@@ -81,6 +84,7 @@ const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 /// The shared `$dream_panic(msg)` runtime helper (print message + trap). Self-contained given only
 /// the always-present `$print_string`/`$print_char` imports.
 const RUNTIME_PANIC: &str = include_str!("../runtime/panic.wat");
+const RUNTIME_WEAK: &str = include_str!("../runtime/weak.wat");
 const RUNTIME_CLOSURE: &str = include_str!("../runtime/closure.wat");
 
 /// Cross-thread synchronization primitives (`$__thread_id`/`$__lock_acquire`/`$__lock_release`)
@@ -144,8 +148,9 @@ pub mod debug_map;
 mod emitter;
 mod js_marshal;
 mod module;
+mod safepoint;
 mod protocol;
-mod drop;
+mod release;
 mod runtime;
 mod strings;
 mod tables;
@@ -159,7 +164,8 @@ mod wat_dce;
 use emitter::*;
 use js_marshal::*;
 use protocol::*;
-use drop::*;
+use release::*;
+use safepoint::*;
 use runtime::*;
 use strings::*;
 use tables::*;

@@ -643,7 +643,7 @@ fn collect_collections_from_stmts(
                 }
             }
         }
-        StatementNode::Lock(target, body) | StatementNode::With(target, body) => {
+        StatementNode::Lock(target, body) => {
             collect_collections_from_expr(target, jsonable, out);
             for s in *body {
                 collect_collections_from_stmts(s, jsonable, out);
@@ -939,6 +939,8 @@ fn harness_wat_path() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
+        // GC runtime changes emitted harness WAT without touching the Dream sources above.
+        include_str!("../../../crates/dream-mir/src/runtime/gc.wat").hash(&mut h);
         h.finish()
     };
     let entry = super::current_entry_file();

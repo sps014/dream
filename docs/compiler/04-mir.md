@@ -1,6 +1,6 @@
 # 04 — CFG MIR (`src/mir/`)
 
-MIR is where Dream becomes optimizable. It replaces structured control flow with an explicit **control-flow graph**. Heap lifetime is still implicit in HIR; after optimization, `InsertDrops` inserts `$dream_drop` for owning locals. Once a program is in MIR, ordinary dataflow analysis can reason about it.
+MIR is where Dream becomes optimizable. It replaces structured control flow with an explicit **control-flow graph** and replaces implicit memory management with **explicit refcount operations**. Once a program is in MIR, ordinary dataflow analysis can reason about it.
 
 ## Mental model
 
@@ -32,7 +32,8 @@ flowchart TD
 ```rust
 pub enum Statement {
     Assign(Place, Rvalue),  // place = rvalue
-    ForceFree(Operand),     // $dream_drop (nested deinit + $free)
+    Retain(Operand),        // refcount++
+    Release(Operand),       // refcount-- (free at zero)
     Call { callee, args },  // call for effect; return value discarded
     Nop,                    // tombstone left by passes that delete without renumbering
 }
@@ -108,16 +109,19 @@ Expression lowering (`lower_expr`) returns an `Operand`: literals become `Const`
 
 `is_reference(ty)` delegates to `interner.is_reference` — the same single source of truth used everywhere else.
 
-## Why drops are explicit in MIR
+## Why RC is explicit in MIR
 
-`InsertDrops` runs **after** the per-function opt pipeline (`PassManager::run_module`), using whole-module escape info so callers do not drop values that a callee stored or returned as an alias. Unique array locals are also dropped on overwrite.
+Making `Retain`/`Release` ordinary statements (rather than implicit backend behavior) lets the optimizer treat them like any other dataflow:
 
 ```mermaid
 flowchart LR
-    A["buf = Buffer.alloc\n... use buf ...\nbuf = Buffer.alloc"] -->|InsertDrops| B["force_free buf\nbuf = Buffer.alloc"]
+    A["x = New{..}\nRetain(x)\n... use x ...\nRelease(x)"] -->|RcElision sees adjacent pair| B["x = New{..}\n... use x ..."]
 ```
 
-See [05-writing-passes.md](./05-writing-passes.md) and [12-allocators.md](./12-allocators.md).
+- `RcInsertion` runs once, module-wide, *before* inlining and the per-function pipeline. It conservatively inserts a `Retain` when a reference is copied/escapes and a `Release` when it dies.
+- `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Swift-like ARC roadmap](./11-swift-like-arc-roadmap.md)).
+
+See [05-writing-passes.md](./05-writing-passes.md) for the details, including why RC must be inserted before inlining.
 
 ## Building MIR by hand — `src/mir/build.rs`
 
@@ -133,4 +137,4 @@ MIR has a textual dump for debugging and snapshot tests. When a pass misbehaves,
 2. Operands are atomic (local/global/const) — no nested computation hides in an operand.
 3. Every `Local` has a `LocalDecl` with a valid `TypeId`.
 4. The CFG is **reducible** (Dream cannot express `goto` spaghetti), so the relooper always succeeds.
-5. After `InsertDrops`, owning heap locals that do not escape are dropped on every exit path (and unique arrays on overwrite).
+5. RC is balanced (every retained reference is released on every path) after `RcInsertion`.

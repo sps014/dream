@@ -222,6 +222,7 @@ impl Emitter<'_> {
                 self.line("     (local.get $__rel)");
                 self.line("     (local.get $__src)");
                 self.line(&format!("     ({})", self.store_instr(fty)));
+                self.emit_write_barrier("$__rel", "$__src");
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
@@ -305,6 +306,7 @@ impl Emitter<'_> {
                 self.line("     (local.get $__rel)");
                 self.line("     (local.get $__src)");
                 self.line(&format!("     ({})", self.store_instr(fty)));
+                self.emit_write_barrier("$__rel", "$__src");
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
@@ -383,6 +385,7 @@ impl Emitter<'_> {
             let l0 = local.0;
             self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
         }
+        self.emit_gc_root_epilogue();
         if self.frame.size > 0 {
             self.line("     (local.get $__saved_sp) (global.set $__sp)");
         }

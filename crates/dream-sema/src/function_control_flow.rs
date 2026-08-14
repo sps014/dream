@@ -121,9 +121,7 @@ impl<'a> FunctionControlGraph<'a> {
             // `lock (target) { body }` runs `body` exactly once (unlike `if`/`switch`, it is not a
             // set of alternative paths), so for return-coverage purposes it is transparent: fold
             // its body straight into the current path.
-            StatementNode::Lock(_, body) | StatementNode::With(_, body) => {
-                self.visit_block(body, parent)?
-            }
+            StatementNode::Lock(_, body) => self.visit_block(body, parent)?,
             _ => {}
         };
         Ok(())

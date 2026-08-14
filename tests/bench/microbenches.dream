@@ -29,7 +29,7 @@ fun bench_gc_locals(iters: int): void {
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        // Short-lived strings: GPA allocate-and-drop (or leak-until-exit if not unique).
+        // Short-lived heap refs: Gen0 nursery traffic (strings) without retaining graphs.
         let a = "n" + i.to_string();
         let b = a;
         let c = b;

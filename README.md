@@ -1,6 +1,6 @@
 # Dream
 
-A fast, statically typed language that compiles straight to WebAssembly. Syntax closer to Rust and TypeScript, Zig-like allocators in linear memory, zero-cost generics, and a batteries-included standard library — compiler written in Rust.
+A fast, statically typed language that compiles straight to WebAssembly. Syntax closer to Rust and TypeScript, automatic memory management via a custom generational GC, zero-cost generics, and a batteries-included standard library — compiler written in Rust.
 
 **[Read the docs →](https://sps014.github.io/dream/)** · [Getting Started](https://sps014.github.io/dream/getting-started/) · [Language](https://sps014.github.io/dream/language/variables/) · [JS and C interop](https://sps014.github.io/dream/language/interop/) · [Compiler](https://sps014.github.io/dream/compiler/)
 
@@ -79,7 +79,7 @@ Stdlib APIs live under `system.*` packages — `import system;` for console I/O,
 |------|----------------|
 | **Types** | Inference, classes, value structs, interfaces, enums, discriminated unions, `Option`/`Result` |
 | **Generics** | Zero-cost monomorphization to concrete WASM |
-| **Memory** | Size-class GPA in linear memory; arenas for scoped bursts; owning locals drop automatically. See [Memory](https://sps014.github.io/dream/language/memory/) |
+| **Memory** | Generational GC (Gen0/1/2/LOH) — no manual `free` |
 | **Concurrency** | `async`/`await` with an in-module cooperative scheduler; `WebWorker` for real parallelism |
 | **JS interop** | Dynamic `js` type, `extern fun`, callbacks both ways, optional tree-shaken `*.web.runtime.js` / `*.node.runtime.js` |
 | **GPU** | `@compute` / `@vertex` / `@fragment` → WGSL + `system.gpu` (WebGPU; native stages buffers) |

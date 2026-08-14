@@ -199,8 +199,6 @@ impl<'a> Analyzer<'a> {
                 Type::Unknown => {
                     if exp_is_ref || param.is_ref {
                         parameters.push(ParameterNode::by_ref(param.name.clone(), exp_elem));
-                    } else if param.is_move {
-                        parameters.push(ParameterNode::by_move(param.name.clone(), exp_elem));
                     } else if param.is_borrow {
                         parameters.push(ParameterNode::borrow(param.name.clone(), exp_elem));
                     } else {
@@ -357,8 +355,7 @@ impl<'a> Analyzer<'a> {
                 StatementNode::While(_, body)
                 | StatementNode::DoWhile(body, _)
                 | StatementNode::ForEach(_, _, _, _, body)
-                | StatementNode::Lock(_, body)
-                | StatementNode::With(_, body) => {
+                | StatementNode::Lock(_, body) => {
                     self.collect_return_types(
                         body,
                         parent_function,
@@ -433,8 +430,6 @@ impl<'a> Analyzer<'a> {
             .map(|(param, ty)| {
                 if param.is_ref {
                     ParameterNode::by_ref(param.name.clone(), ty.clone())
-                } else if param.is_move {
-                    ParameterNode::by_move(param.name.clone(), ty.clone())
                 } else if param.is_borrow {
                     ParameterNode::borrow(param.name.clone(), ty.clone())
                 } else if matches!(param.type_, Type::Unknown) {

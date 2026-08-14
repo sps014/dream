@@ -393,7 +393,9 @@ fn test_hir_emission_destructor_body() {
 
 #[test]
 fn test_release_runtime_deep_release_del_and_dispatch() {
-    // Allocator runtime: no GC visitors. `del()` is not a finalizer (prompt deinit is later).
+    // The deep-release runtime: each nominal type gets a `$release_<Type>` that (when the count hits
+    // zero) runs its `del()` destructor, releases reference fields, and frees. `$release_object`
+    // tag-dispatches to those per-type releases. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
         class Node {{ public next: Node; public v: int;
@@ -402,20 +404,26 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         }}
         fun main(): void {{ let n: Node = Node(1); let o: object = n; }}"
     );
+    // Binding to an `object` local keeps the type live so GC visitors are emitted.
     let wat = emit_hir_to_module_rc_only(&code);
     assert!(
-        wat.contains("(func $malloc"),
-        "allocator missing:\n{}",
+        wat.contains("(func $gc_trace_Node"),
+        "per-type GC trace missing:\n{}",
         wat
     );
     assert!(
-        wat.contains("(func $free"),
-        "free missing:\n{}",
+        wat.contains("(func $gc_run_finalizer"),
+        "finalizer dispatch missing:\n{}",
         wat
     );
     assert!(
-        !wat.contains("(func $gc_trace_"),
-        "GC trace visitors must not be emitted:\n{}",
+        wat.contains("(call $Node_del)") || wat.contains("call $Node_del"),
+        "destructor not wired into finalizer dispatch:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(func $gc_trace_object"),
+        "tag-dispatch trace router missing:\n{}",
         wat
     );
 }
@@ -908,7 +916,9 @@ fn exec_print_struct_array() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_del_runs_after_gc_collect() {
-    // Without a collector, `del()` is not a finalizer. `gc_collect` is a no-op stub.
+    // Under tiered GC, `del()` is a finalizer: it runs after a collection finds the object
+    // unreachable, not on ARC last-release. A helper scope drops both `Res` instances, then
+    // `Debug.gc_collect()` forces finalizers.
     let code = format!(
         "{SYSTEM_STUB}
         class Debug {{
@@ -929,13 +939,25 @@ fn exec_del_runs_after_gc_collect() {
             Debug.gc_collect();
         }}"
     );
-    assert_eq!(run_and_capture_rc(&code, "main"), "2");
+    let out = run_and_capture_rc(&code, "main");
+    assert!(
+        out.starts_with('2'),
+        "field print should precede finalizers: {:?}",
+        out
+    );
+    assert_eq!(
+        out.chars().filter(|&c| c == '9').count(),
+        2,
+        "both Res instances should finalize: {:?}",
+        out
+    );
 }
 
 #[cfg(feature = "native")]
 #[test]
 fn exec_container_field_keeps_object_alive_until_gc() {
-    // Field stores alias; without a collector, `del` does not run. The program must still execute.
+    // Storing `b` into `a.next` keeps `b` reachable through `a`. After both locals die, one
+    // collection finalizes each node exactly once (no double-free / missed edge).
     let code = format!(
         "{SYSTEM_STUB}
         class Debug {{
@@ -957,13 +979,25 @@ fn exec_container_field_keeps_object_alive_until_gc() {
             Debug.gc_collect();
         }}"
     );
-    assert_eq!(run_and_capture_rc(&code, "main"), "0");
+    let out = run_and_capture_rc(&code, "main");
+    assert!(
+        out.starts_with('0'),
+        "user print should precede finalizers: {:?}",
+        out
+    );
+    assert_eq!(
+        out.chars().filter(|&c| c == '1').count(),
+        2,
+        "both nodes should finalize once: {:?}",
+        out
+    );
 }
 
 #[cfg(feature = "native")]
 #[test]
 fn exec_returned_value_stays_alive_across_call() {
-    // `make()` returns a heap ref; the caller can still read `y.v`. `del` is not a GC finalizer.
+    // `make()` returns a heap ref; under GC the object stays live while the caller's `y` roots
+    // it. `del()` must not run inside `make`, only after `y` dies and a collection runs.
     let code = format!(
         "{SYSTEM_STUB}
         class Debug {{
@@ -987,7 +1021,7 @@ fn exec_returned_value_stays_alive_across_call() {
             Debug.gc_collect();
         }}"
     );
-    assert_eq!(run_and_capture_rc(&code, "main"), "5");
+    assert_eq!(run_and_capture_rc(&code, "main"), "57");
 }
 
 /// Hand-builds a two-function MIR that takes `add` as a first-class value and calls it indirectly:

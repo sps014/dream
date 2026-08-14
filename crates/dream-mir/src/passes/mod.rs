@@ -4,7 +4,7 @@ mod algebraic;
 mod abc;
 mod autovec;
 mod cfg;
-mod insert_drops;
+mod clear_dead_gc;
 mod const_fold;
 mod dce;
 mod devirt;
@@ -24,7 +24,7 @@ mod tco;
 pub use abc::Abc;
 pub use algebraic::Algebraic;
 pub use autovec::Autovec;
-pub use insert_drops::InsertDrops;
+pub use clear_dead_gc::ClearDeadGcRoots;
 pub use const_fold::ConstFold;
 pub(crate) use dce::is_pure;
 pub use dce::Dce;
@@ -65,6 +65,10 @@ pub trait ModulePass {
 pub struct PassManager {
     passes: Vec<Box<dyn MirPass>>,
     max_iterations: usize,
+    /// When true (release/opt builds), [`ClearDeadGcRoots`] runs once after the fixpoint so dead
+    /// heap refs stop keeping objects alive. Debug-info builds leave those locals intact so DAP
+    /// can still decode named variables after their last MIR use.
+    clear_dead_gc: bool,
 }
 
 impl PassManager {
@@ -72,6 +76,7 @@ impl PassManager {
         PassManager {
             passes: Vec::new(),
             max_iterations: 16,
+            clear_dead_gc: true,
         }
     }
 
@@ -100,9 +105,11 @@ impl PassManager {
 
     /// A minimal, value-preserving pipeline for debug-info builds. It deliberately omits every pass
     /// that can eliminate, fold, or coalesce user locals (const/copy propagation, SCCP, GVN, DCE,
-    /// DSE), so each declared variable still lives in a distinct slot the debugger can read.
+    /// DSE), and skips [`ClearDeadGcRoots`], so each declared variable still lives in a distinct
+    /// slot the debugger can read at every statement. Only the CFG is tidied.
     pub fn debug_pipeline() -> Self {
         let mut pm = PassManager::new();
+        pm.clear_dead_gc = false;
         pm.add(SimplifyCfg);
         pm
     }
@@ -112,7 +119,8 @@ impl PassManager {
     }
 
     /// Runs every pass repeatedly until none reports a change (or the iteration cap is hit), then
-    /// inserts drop/`$free` for owning heap locals.
+    /// (unless this is the debug pipeline) clears dead GC-tracked locals once so DCE cannot delete
+    /// the nulling stores.
     pub fn run(&self, func: &mut MirFunction, interner: &TypeInterner) {
         for _ in 0..self.max_iterations {
             let mut changed = false;
@@ -123,25 +131,8 @@ impl PassManager {
                 break;
             }
         }
-        InsertDrops.run(func, interner);
-    }
-
-    /// Optimize every function, then insert drops using whole-module parameter-escape info.
-    pub fn run_module(&self, mir: &mut Mir, interner: &TypeInterner) {
-        for f in &mut mir.functions {
-            for _ in 0..self.max_iterations {
-                let mut changed = false;
-                for pass in &self.passes {
-                    changed |= pass.run(f, interner);
-                }
-                if !changed {
-                    break;
-                }
-            }
-        }
-        let info = insert_drops::escape_info(mir, interner);
-        for f in &mut mir.functions {
-            InsertDrops.run_with(f, interner, &info);
+        if self.clear_dead_gc {
+            let _ = ClearDeadGcRoots.run(func, interner);
         }
     }
 }

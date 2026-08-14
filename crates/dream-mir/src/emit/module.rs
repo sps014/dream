@@ -12,6 +12,7 @@ struct ModuleTables {
     tags: HashMap<TypeId, i32>,
     ftable: HashMap<(DefId, Vec<TypeId>), usize>,
     value_glue: std::collections::HashSet<TypeId>,
+    non_safepoint: std::collections::HashSet<(DefId, Vec<TypeId>)>,
 }
 
 /// Derives the shared [`ModuleTables`] for `mir`.
@@ -26,6 +27,7 @@ fn build_tables(mir: &crate::Mir, interner: &TypeInterner, locate_panics: bool) 
         tags: struct_tags(mir),
         ftable: func_table(mir),
         value_glue: value_glue_types(mir, interner),
+        non_safepoint: non_safepoint_functions(mir),
     }
 }
 
@@ -39,6 +41,7 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
         tags,
         ftable,
         value_glue,
+        non_safepoint,
     } = build_tables(mir, interner, true);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
     let mut out = String::new();
@@ -54,6 +57,7 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
             &ftable,
             &value_glue,
             &global_tys,
+            &non_safepoint,
             false,
             true,
             None,
@@ -89,7 +93,9 @@ pub fn emit_module_with_debug(
         tags,
         ftable,
         value_glue,
+        non_safepoint,
     } = build_tables(mir, interner, locate_panics);
+    let value_trace = value_trace_types(mir, interner);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
 
     // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
@@ -199,6 +205,9 @@ pub fn emit_module_with_debug(
                 zero
             );
         }
+        if interner.is_reference(g.ty) {
+            let _ = writeln!(out, "(global $__groot{} (mut i32) (i32.const 0))", g.id.0);
+        }
     }
 
     // Debug-info spill pool: one exported mutable `i64` global per live-local slot. Each named local
@@ -214,9 +223,10 @@ pub fn emit_module_with_debug(
         debug,
         module_needs_threads(mir),
         strings[""],
+        module_has_js_fields(mir, interner),
     ));
     out.push('\n');
-    emit_drop_glue(&mut out, mir, interner, &tags);
+    out.push_str(RUNTIME_WEAK);
     out.push('\n');
     out.push_str(RUNTIME_CLOSURE);
     out.push('\n');
@@ -236,6 +246,10 @@ pub fn emit_module_with_debug(
     emit_object_protocol(&mut out, mir, interner, &strings, &tags);
     out.push('\n');
     emit_js_marshal(&mut out, mir, interner, &strings, &tags);
+    out.push('\n');
+    emit_gc_funcs(&mut out, mir, interner, &tags, &value_trace, &value_glue);
+    out.push('\n');
+    emit_gc_reload_globals(&mut out, mir, interner);
     out.push('\n');
     emit_value_glue(&mut out, mir, interner, &value_glue);
     out.push('\n');
@@ -273,6 +287,7 @@ pub fn emit_module_with_debug(
                 debug,
                 locate_panics,
                 debug_fn,
+                &non_safepoint,
             ));
         } else {
             let debug_fn = dbg_by_symbol.get(func_symbol(f).as_str()).copied();
@@ -287,6 +302,7 @@ pub fn emit_module_with_debug(
                 &ftable,
                 &value_glue,
                 &global_tys,
+                &non_safepoint,
                 debug,
                 locate_panics,
                 debug_fn,
@@ -298,27 +314,17 @@ pub fn emit_module_with_debug(
             out.push_str(&crate::async_emit::emit_async_main_wrapper(
                 &func_symbol(f),
                 !f.params.is_empty(),
-                debug,
             ));
         } else if f.instance.is_empty()
             && f.name == crate::abi::ENTRY_FN
             && !f.params.is_empty()
         {
-            let leak = if debug {
-                "\n call $__gpa_check_leaks"
-            } else {
-                ""
-            };
+            // `main(args: string[])`: the exported entry takes no args, so wrap the real `main` with a
+            // `()` shim that passes an empty `string[]` (a zero-length, TAG_ARRAY block).
             let _ = writeln!(
                 out,
-                "(func (export \"main\")\n (local $args i32)\n i32.const 4\n i32.const {}\n call $malloc\n local.set $args\n local.get $args\n i32.const 0\n i32.store\n local.get $args\n call ${}{leak}\n)",
+                "(func (export \"main\")\n (local $args i32)\n i32.const 4\n i32.const {}\n call $malloc\n local.set $args\n local.get $args\n i32.const 0\n i32.store\n local.get $args\n call ${}\n)",
                 crate::abi::TAG_ARRAY,
-                func_symbol(f),
-            );
-        } else if f.instance.is_empty() && f.name == crate::abi::ENTRY_FN && debug {
-            let _ = writeln!(
-                out,
-                "(func (export \"main\")\n call ${}\n call $__gpa_check_leaks\n)",
                 func_symbol(f),
             );
         } else if f.instance.is_empty() {
@@ -385,18 +391,39 @@ pub fn emit_module_with_debug(
         );
     }
 
-    // Every instantiation shares linear memory. Initialize the bump pointer exactly once via CAS
-    // on `HEAP_PTR_ADDR` from 0 to `heap_base`.
+    // Every instantiation of this module (the owner, and every `WebWorker` spawned afterward) runs
+    // `(start)` against the *same* shared linear memory. GC nursery / heap tables must therefore be
+    // initialized exactly once across all of them. An atomic compare-exchange on `NURSERY_START_ADDR`
+    // from 0 makes this init race-safe: the winner calls `$__gc_init` (which sets `HEAP_PTR` past
+    // the root/remset/mark-stack tables) and permanently roots module globals; every later instance
+    // skips that.
+    let gc_globals: Vec<u32> = mir
+        .globals
+        .iter()
+        .filter(|g| interner.is_reference(g.ty))
+        .map(|g| g.id.0)
+        .collect();
     let _ = writeln!(out, "(func $__runtime_init");
+    out.push_str("  (local $first i32)\n");
     let _ = writeln!(
         out,
-        "  i32.const {}\n  global.set $heap_ptr\n  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  drop",
+        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  i32.eqz\n  local.set $first\n  local.get $first\n  (if (then\n    i32.const {}\n    call $__gc_init\n  ))\n  call $__gc_cache_bounds",
+        crate::abi::NURSERY_START_ADDR,
         heap_base,
-        crate::abi::HEAP_PTR_ADDR,
         heap_base
     );
     if has_init {
         let _ = writeln!(out, "  call ${}", crate::lower::INIT_FN_NAME);
+    }
+    if !gc_globals.is_empty() {
+        out.push_str("  local.get $first\n  (if (then\n");
+        for &gid in &gc_globals {
+            let _ = writeln!(
+                out,
+                "    global.get $g{gid}\n    call $gc_root_push\n    global.set $__groot{gid}"
+            );
+        }
+        out.push_str("  ))\n");
     }
     out.push_str(")\n");
     out.push_str("(start $__runtime_init)\n");
@@ -511,11 +538,61 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
     }
 }
 
+/// Emits `$__gc_reload_globals`: the per-Dream-call helper that forwards every reference-typed
+/// module global through its root-table slot. `emit_gc_root_reload` invokes this from every
+/// mutator call site — globals hold raw pointers whose target may have been evacuated inside a
+/// safepoint, but their `$__grootN` root-table entry always holds the current forwarded address.
+///
+/// Empty body when the module has no reference globals; kept as a real function so callers do not
+/// need to know whether globals exist, and dead-function elimination drops it when unreferenced.
+fn emit_gc_reload_globals(out: &mut String, mir: &crate::Mir, interner: &TypeInterner) {
+    out.push_str("(func $__gc_reload_globals\n");
+    for g in &mir.globals {
+        if interner.is_reference(g.ty) {
+            let _ = writeln!(
+                out,
+                "  (global.get $__gc_root_table) (global.get $__groot{gid}) (i32.const 2) (i32.shl) (i32.add) (i32.load) (global.set $g{gid})",
+                gid = g.id.0
+            );
+        }
+    }
+    out.push_str(")\n");
+}
+
 /// True when this module stores or roots any Dream `js` handle (host registry lifetime).
 fn module_needs_js_host(mir: &crate::Mir, interner: &TypeInterner) -> bool {
     if mir.imports.iter().any(|imp| imp.field.starts_with("js")) {
         return true;
     }
+    let is_js = |t: TypeId| matches!(interner.kind(t), TyKind::Js);
+    for f in &mir.functions {
+        if f.locals.iter().any(|d| is_js(d.ty)) {
+            return true;
+        }
+    }
+    if mir.globals.iter().any(|g| is_js(g.ty)) {
+        return true;
+    }
+    for layout in mir.layouts.structs.values() {
+        if layout.fields.iter().any(|f| is_js(f.ty)) {
+            return true;
+        }
+    }
+    for layout in mir.layouts.unions.values() {
+        if layout
+            .variants
+            .iter()
+            .any(|v| v.fields.iter().any(|f| is_js(f.ty)))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Gen0 must walk dead nursery objects when a heap `js` field might live there.
+/// `weak` watchers and `del` finalizers are tracked at run time.
+fn module_has_js_fields(mir: &crate::Mir, interner: &TypeInterner) -> bool {
     let is_js = |t: TypeId| matches!(interner.kind(t), TyKind::Js);
     for f in &mir.functions {
         if f.locals.iter().any(|d| is_js(d.ty)) {

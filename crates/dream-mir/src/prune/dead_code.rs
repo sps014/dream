@@ -326,7 +326,7 @@ fn prune_dead_globals(mir: &mut Mir) {
 
 fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
     match s {
-        Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
+        Statement::Assign(place, rv) => {
             if let Place::Index { index, .. } = place {
                 collect_global_reads_operand(index, out);
             }
@@ -382,10 +382,9 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             collect_global_reads_operand(src_off, out);
             collect_global_reads_operand(count, out);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::ArenaEnter(o) => {
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => {
             collect_global_reads_operand(o, out)
         }
-        Statement::ArenaExit => {}
         Statement::SimdF32x4 {
             dest,
             lhs,

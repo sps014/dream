@@ -127,13 +127,13 @@ pub enum TyKind {
     /// The dynamic JavaScript-interop type `js`: an opaque `i32` handle into the host's live-value
     /// registry (see `runtime/dream.js`). Member/method/index access on a `js` value binds
     /// dynamically at runtime, so the compiler performs no member resolution. It is not a Dream
-    /// heap object (no size/tag header); host registry lifetime follows drop of the
-    /// Dream-side handle (unregister — see `docs/compiler/12-allocators.md`).
+    /// heap object (no GC header / tag); host registry lifetime follows GC reachability of the
+    /// Dream-side handle (unregister on finalizer — see `docs/compiler/12-tiered-gc.md`).
     Js,
 }
 
 impl TyKind {
-    /// True if a value of this type is a heap-allocated object (strings, arrays, objects,
+    /// True if a value of this type is a heap-allocated GC object (strings, arrays, objects,
     /// structs, unions, interfaces, and first-class `fun` values).
     pub fn is_reference(&self) -> bool {
         matches!(

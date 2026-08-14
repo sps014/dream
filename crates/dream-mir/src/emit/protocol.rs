@@ -35,10 +35,9 @@ pub(super) fn emit_object_protocol(
         emit_array_to_string(out, elem, interner, strings);
     }
     emit_object_to_string(out, mir, strings, tags);
-    // `$print_object`: render via the tag dispatcher, print, then drop a *formatter* string.
-    // Identity (`string` tag) returns `$ptr` itself — do not drop that.
+    // `$print_object`: render via the tag dispatcher, then print the resulting string.
     out.push_str(
-        "(func $print_object (param $ptr i32)\n (local $s i32)\n local.get $ptr\n call $object_to_string\n local.set $s\n local.get $s\n call $print_string\n local.get $s\n local.get $ptr\n i32.ne\n (if (then local.get $s\n call $dream_drop)))\n",
+        "(func $print_object (param $ptr i32)\n  (local.get $ptr) (call $object_to_string) (call $print_string))\n",
     );
     for layout in mir.layouts.structs.values() {
         if !has_override(&layout.name, "hash_code") {
@@ -102,15 +101,8 @@ fn emit_to_string_field(
 ) {
     let _ = writeln!(
         out,
-        "{indent}(local.get $res) (i32.const {label}) (call $__str_take_append) (local.set $res)"
+        "{indent}(local.get $res) (i32.const {label}) (call $concat_strings) (local.set $res)"
     );
-    let drop_right =
-        interner.is_value_type(f.ty) || value_to_string_call(interner, f.ty).is_some();
-    let append = if drop_right {
-        "$__str_take_append_drop_right"
-    } else {
-        "$__str_take_append"
-    };
     let _ = write!(out, "{indent}(local.get $res)\n{indent}(local.get $this)\n");
     if f.offset > 0 {
         let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", f.offset);
@@ -132,7 +124,7 @@ fn emit_to_string_field(
             let _ = writeln!(out, "{indent}(call {})", call);
         }
     }
-    let _ = writeln!(out, "{indent}(call {append}) (local.set $res)");
+    let _ = writeln!(out, "{indent}(call $concat_strings) (local.set $res)");
 }
 
 /// Like [`emit_to_string_field`] but with no field label — used for tuple elements `(e0, e1, …)`.
@@ -143,13 +135,6 @@ fn emit_to_string_elem(
     layouts: &LayoutTable,
     interner: &TypeInterner,
 ) {
-    let drop_right =
-        interner.is_value_type(f.ty) || value_to_string_call(interner, f.ty).is_some();
-    let append = if drop_right {
-        "$__str_take_append_drop_right"
-    } else {
-        "$__str_take_append"
-    };
     let _ = write!(out, "{indent}(local.get $res)\n{indent}(local.get $this)\n");
     if f.offset > 0 {
         let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", f.offset);
@@ -171,7 +156,7 @@ fn emit_to_string_elem(
             let _ = writeln!(out, "{indent}(call {})", call);
         }
     }
-    let _ = writeln!(out, "{indent}(call {append}) (local.set $res)");
+    let _ = writeln!(out, "{indent}(call $concat_strings) (local.set $res)");
 }
 
 /// Emits one struct's default `$<Type>_hash_code`: `h = 17`, folding each field in offset order.
@@ -288,7 +273,7 @@ pub(super) fn emit_struct_to_string(
     }
     let _ = writeln!(
         out,
-        "  (local.get $res) (i32.const {}) (call $__str_take_append)",
+        "  (local.get $res) (i32.const {}) (call $concat_strings)",
         strings[" }"]
     );
     out.push_str(")\n");
@@ -313,7 +298,7 @@ pub(super) fn emit_tuple_to_string(
         if i > 0 {
             let _ = writeln!(
                 out,
-                "  (local.get $res) (i32.const {}) (call $__str_take_append) (local.set $res)",
+                "  (local.get $res) (i32.const {}) (call $concat_strings) (local.set $res)",
                 strings[", "]
             );
         }
@@ -321,7 +306,7 @@ pub(super) fn emit_tuple_to_string(
     }
     let _ = writeln!(
         out,
-        "  (local.get $res) (i32.const {}) (call $__str_take_append)",
+        "  (local.get $res) (i32.const {}) (call $concat_strings)",
         strings[")"]
     );
     out.push_str(")\n");
@@ -362,7 +347,7 @@ pub(super) fn emit_union_to_string(
         }
         let _ = writeln!(
             out,
-            "    (local.get $res) (i32.const {}) (call $__str_take_append) (local.set $res)",
+            "    (local.get $res) (i32.const {}) (call $concat_strings) (local.set $res)",
             strings[&suffix]
         );
         out.push_str("  ))\n");
@@ -390,7 +375,7 @@ pub(super) fn array_elem_types(mir: &crate::Mir, interner: &TypeInterner) -> Vec
     }
     for f in &mir.functions {
         // Any array-typed local can be printed *or* deep-released, both of which need its element
-        // helper; covering all locals keeps `$array_to_string_t<E>` references
+        // helper; covering all locals keeps `$release_array_t<E>`/`$array_to_string_t<E>` references
         // resolvable even for arrays that are only released (never printed).
         for l in &f.locals {
             push_array_elem(&mut order, interner, l.ty);
@@ -415,6 +400,127 @@ pub(super) fn array_elem_types(mir: &crate::Mir, interner: &TypeInterner) -> Vec
         i += 1;
     }
     order
+}
+
+/// Like [`array_elem_types`], plus types that only show up once async poll bodies are lowered (and
+/// other call/rvalue sites that stay as calls under a tighter inliner). Used only for
+/// `$release_array_t*` emission — not for js marshal / to_string helpers.
+pub(super) fn array_elem_types_for_release(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+) -> Vec<TypeId> {
+    let mut order = array_elem_types(mir, interner);
+    for f in &mir.functions {
+        for arg in &f.instance {
+            push_array_elem(&mut order, interner, *arg);
+        }
+        push_array_elem(&mut order, interner, f.ret);
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::Assign(_, rv) => {
+                        collect_array_elems_from_rvalue(&mut order, interner, rv);
+                    }
+                    Statement::Call { callee, .. } | Statement::JsCall { callee, .. } => {
+                        for arg in &callee.args {
+                            push_array_elem(&mut order, interner, *arg);
+                        }
+                        push_array_elem(&mut order, interner, callee.ret);
+                    }
+                    Statement::ArrayElemsCopy { elem_ty, .. } if !order.contains(elem_ty) => {
+                        order.push(*elem_ty);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if !f.is_async {
+            continue;
+        }
+        let Some(hir) = &f.hir_fn else {
+            continue;
+        };
+        let poll_body = crate::lower::lower_async_poll_body(hir, interner);
+        for l in &poll_body.locals {
+            push_array_elem(&mut order, interner, l.ty);
+        }
+        for b in &poll_body.blocks {
+            for s in &b.stmts {
+                if let Statement::Assign(_, rv) = s {
+                    collect_array_elems_from_rvalue(&mut order, interner, rv);
+                }
+            }
+        }
+    }
+    let mut i = 0;
+    while i < order.len() {
+        let cur = order[i];
+        push_array_elem(&mut order, interner, cur);
+        collect_array_elems_from_ty(&mut order, interner, cur);
+        i += 1;
+    }
+    order
+}
+
+fn collect_array_elems_from_rvalue(
+    order: &mut Vec<TypeId>,
+    interner: &TypeInterner,
+    rv: &crate::Rvalue,
+) {
+    match rv {
+        crate::Rvalue::ArrayNew { elem_ty, .. } => {
+            if !order.contains(elem_ty) {
+                order.push(*elem_ty);
+            }
+        }
+        crate::Rvalue::Call { callee, .. } | crate::Rvalue::FuncRef(callee) => {
+            for arg in &callee.args {
+                push_array_elem(order, interner, *arg);
+            }
+            push_array_elem(order, interner, callee.ret);
+        }
+        crate::Rvalue::IndirectCall { sig, .. } => {
+            push_array_elem(order, interner, *sig);
+        }
+        crate::Rvalue::InterfaceCall { sig, ret, .. } => {
+            push_array_elem(order, interner, *sig);
+            push_array_elem(order, interner, *ret);
+        }
+        crate::Rvalue::New { ty, .. }
+        | crate::Rvalue::Tuple { ty, .. }
+        | crate::Rvalue::UnionNew { ty, .. } => {
+            collect_array_elems_from_ty(order, interner, *ty);
+        }
+        crate::Rvalue::Cast(_, from, to) => {
+            collect_array_elems_from_ty(order, interner, *from);
+            collect_array_elems_from_ty(order, interner, *to);
+        }
+        _ => {}
+    }
+}
+
+fn collect_array_elems_from_ty(order: &mut Vec<TypeId>, interner: &TypeInterner, ty: TypeId) {
+    push_array_elem(order, interner, ty);
+    match interner.kind(ty) {
+        TyKind::Array(e) => collect_array_elems_from_ty(order, interner, *e),
+        TyKind::Struct(_, args) | TyKind::Union(_, args) | TyKind::Interface(_, args) => {
+            for a in args {
+                collect_array_elems_from_ty(order, interner, *a);
+            }
+        }
+        TyKind::Func(params, ret) => {
+            for p in params {
+                collect_array_elems_from_ty(order, interner, *p);
+            }
+            collect_array_elems_from_ty(order, interner, *ret);
+        }
+        TyKind::Tuple(elems) => {
+            for e in elems {
+                collect_array_elems_from_ty(order, interner, *e);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// If `ty` (after nullable stripping) is an array, records its element type in `order` (dedup,
@@ -449,7 +555,7 @@ pub(super) fn emit_array_to_string(
     out.push_str("    (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
     let _ = writeln!(
         out,
-        "    (local.get $i) (i32.const 0) (i32.gt_s) (if (then (local.get $res) (i32.const {}) (call $__str_take_append) (local.set $res)))",
+        "    (local.get $i) (i32.const 0) (i32.gt_s) (if (then (local.get $res) (i32.const {}) (call $concat_strings) (local.set $res)))",
         strings[", "]
     );
     out.push_str("    (local.get $res)\n    (local.get $ptr) (i32.const 4) (i32.add)\n");
@@ -465,15 +571,13 @@ pub(super) fn emit_array_to_string(
     let _ = writeln!(out, "    ({})", load_instr_for(interner, elem));
     if let Some(call) = value_to_string_call(interner, elem) {
         let _ = writeln!(out, "    (call {})", call);
-        out.push_str("    (call $__str_take_append_drop_right) (local.set $res)\n");
-    } else {
-        out.push_str("    (call $__str_take_append) (local.set $res)\n");
     }
+    out.push_str("    (call $concat_strings) (local.set $res)\n");
     out.push_str("    (local.get $i) (i32.const 1) (i32.add) (local.set $i)\n");
     out.push_str("    (br $scan)))\n");
     let _ = writeln!(
         out,
-        "  (local.get $res) (i32.const {}) (call $__str_take_append)",
+        "  (local.get $res) (i32.const {}) (call $concat_strings)",
         strings["]"]
     );
     out.push_str(")\n");

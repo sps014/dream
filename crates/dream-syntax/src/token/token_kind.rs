@@ -181,10 +181,6 @@ pub enum TokenKind {
     RefToken,
     #[token("borrow")]
     BorrowToken,
-    #[token("move")]
-    MoveToken,
-    #[token("with")]
-    WithToken,
     #[token("interface")]
     InterfaceToken,
     #[token("extend")]
@@ -307,8 +303,6 @@ impl TokenKind {
             TokenKind::UnownedToken => "'unowned'",
             TokenKind::RefToken => "'ref'",
             TokenKind::BorrowToken => "'borrow'",
-            TokenKind::MoveToken => "'move'",
-            TokenKind::WithToken => "'with'",
             TokenKind::InterfaceToken => "'interface'",
             TokenKind::ExtendToken => "'extend'",
             TokenKind::IsToken => "'is'",
@@ -374,8 +368,6 @@ pub const KEYWORDS: &[&str] = &[
     "default",
     "ref",
     "borrow",
-    "move",
-    "with",
     "lock",
     "int",
     "float",
@@ -473,8 +465,6 @@ mod tests {
             "default",
             "ref",
             "borrow",
-            "move",
-            "with",
             "lock",
             "int",
             "float",
@@ -493,7 +483,7 @@ mod tests {
         }
         assert_eq!(
             KEYWORDS.len(),
-            50,
+            48,
             "a keyword token was added/removed; update both this list and KEYWORDS"
         );
     }

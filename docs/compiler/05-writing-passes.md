@@ -34,15 +34,15 @@ Two rules make the system work:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> inline[Inliner\nto fixpoint + prune] --> perfn[per-function\nPassManager] --> drops[InsertDrops]
+    prune1[prune_module] --> rc[RcInsertion\nmodule-wide] --> inline[Inliner\nto fixpoint + prune] --> perfn[per-function\nPassManager]
 ```
 
 - `prune_module` tree-shakes unreachable functions.
+- `RcInsertion` runs **before** inlining. Dream has deterministic, reference-counted destruction, so a local reference's lifetime must end where its owning function returns. Inserting RC first bakes each callee's scope-exit `Release`s into its body, so inlining copies them to the return site and object lifetimes are preserved exactly. (A `debug_assert!` guards against a future reorder that would hoist the inliner above RC insertion.)
 - `Inliner` runs to a fixpoint interleaved with pruning: each round may expose more inlining and more dead callees.
 - The per-function `PassManager` then cleans up the merged bodies.
-- `InsertDrops` runs **after** that pipeline, with whole-module escape info, so inlined callees are dropped in the caller and aliases (`borrow` params, stored fields) are not double-freed.
 
-Debug-info builds call `optimize_module_opts(.., inline = false)`: pruning still runs, but inlining is off so each user function keeps its own body and call frame for the debugger. Drops still run.
+Debug-info builds call `optimize_module_opts(.., inline = false)`: RC insertion and pruning still run (they are correctness-relevant), but inlining is off so each user function keeps its own body and call frame for the debugger.
 
 ## The per-function pipeline
 
@@ -51,13 +51,13 @@ Debug-info builds call `optimize_module_opts(.., inline = false)`: pruning still
 ```mermaid
 flowchart LR
     p1[CopyConstProp] --> p2[GlobalProp] --> p3[Sccp] --> p4[ConstFold] --> p5[Algebraic] --> p6[Gvn]
-    p6 --> p7[Licm] --> p8[LoopUnroll] --> p9[Sroa] --> p10[Dse] --> p11[SimplifyCfg] --> p12[Tco] --> p13[Dce]
-    p13 -.fixpoint: repeat while any changed.-> p1
+    p6 --> p7[Licm] --> p8[LoopUnroll] --> p9[Sroa] --> p10[Dse] --> p11[SimplifyCfg] --> p12[Tco] --> p13[Dce] --> p14[RcElision]
+    p14 -.fixpoint: repeat while any changed.-> p1
 ```
 
-The ordering principle: **cheap rewrites that expose more work run first.** Propagation turns `x = 1; y = x + 2` into `y = 1 + 2`, folding turns that into `y = 3`, which makes a branch constant, which SimplifyCfg folds, which makes a block unreachable, which DCE deletes. The fixpoint loop lets these cascade. `InsertDrops` runs **after** the fixpoint (see above).
+The ordering principle: **cheap rewrites that expose more work run first.** Propagation turns `x = 1; y = x + 2` into `y = 1 + 2`, folding turns that into `y = 3`, which makes a branch constant, which SimplifyCfg folds, which makes a block unreachable, which DCE deletes — and the now-dead RC ops get elided. The fixpoint loop lets these cascade.
 
-> `PassManager::debug_pipeline` is a minimal value-preserving pipeline (`SimplifyCfg` only) for debug-info builds, then `InsertDrops`.
+> `RcInsertion` is **not** in this pipeline — it runs once module-wide (above). The pipeline only contains `RcElision`, which removes pairs the other passes expose. `PassManager::debug_pipeline` is a minimal value-preserving pipeline (`SimplifyCfg` + `RcElision`) for debug-info builds.
 
 ## A tour of the shipped passes
 
@@ -76,12 +76,12 @@ Function-local `MirPass`es:
 - **`SimplifyCfg` (`simplify_cfg.rs`)** — folds `If{cond: Const(bool), ..}` into a `Goto` and threads jumps through empty blocks, exposing unreachable blocks for DCE.
 - **`Tco` (`tco.rs`)** — tail-call optimization.
 - **`Dce` (`dce.rs`)** — two kinds: drop blocks unreachable from `entry` (reachability over `Terminator::successors`), and remove assignments to never-read locals *when the rvalue is pure* (a `Call`/`New` may have side effects and must stay).
-- **`InsertDrops` (`insert_drops.rs`)** — after the opt fixpoint, inserts `$dream_drop` for owning heap locals that do not escape, plus overwrite-drop for unique arrays. Must not drop `borrow` parameters, `this`, or values stored into live heap. See [12-allocators.md](./12-allocators.md).
+- **`RcElision` / `RcInsertion` (`rc/`)** — `RcInsertion` conservatively inserts `Retain`/`Release` and applies a narrow **last-use move** (owned local → owned local copy outside loops when the source is dead). `RcElision` cancels cancelling pairs along unique-predecessor **`Goto` chains**, across **transparent diamonds** (both arms barrier-free), and across **transparent natural loops**. Correctness rule: **never make a program under-retain.** When unsure, RcInsertion keeps the retain; RcElision only removes a pair it can prove is cancelling. See [Swift-like ARC roadmap](./11-swift-like-arc-roadmap.md).
 
 The one shipped `ModulePass` is **`Inliner` (`inline/`)**:
 
 - **Eligibility:** direct calls to sync, non-recursive, non-entry callees. Small callees (≤48 statements and ≤10 blocks) always inline; a single-use, non-address-taken callee inlines regardless of size. Async bodies, recursive SCCs, `New`/indirect/interface calls, and wide-arg sites with unknown argument types are skipped.
-- **Value types:** callees with value-struct / `ref struct` locals are inlinable. Remapped `this` / `ref` / alias temps stay borrows (`LocalDecl::is_ref`). Owning and by-value param value locals get `LocalDecl::manual_drop` and a MIR `Statement::ValueDrop` at each remapped return→continuation edge. Locals already marked `manual_drop` from a prior inline are not dropped again when their enclosing function is inlined. Call-result dests are forced Owning (`__vret`) so the return `Assign` deep-copies instead of Borrow-rebinding. `ValueFrame` treats `manual_drop` as always-Owning so the emitter never reclassifies those slots as borrows.
+- **Value types:** callees with value-struct / `ref struct` locals are inlinable. Remapped `this` / `ref` / alias temps stay borrows (`LocalDecl::is_ref`). Owning and by-value param value locals get `LocalDecl::manual_drop` and a MIR `Statement::ValueDrop` at each remapped return→continuation edge (nulling RC fields afterward so loop re-entry is safe). Locals already marked `manual_drop` from a prior inline are not dropped again when their enclosing function is inlined. Call-result dests are forced Owning (`__vret`) so the return `Assign` deep-copies instead of Borrow-rebinding. `ValueFrame` treats `manual_drop` as always-Owning so the emitter never reclassifies those slots as borrows.
 - **Why this matters:** stdlib leaves like `Span.copy_from` (and callers such as `List.insert` on unmanaged `T`) collapse to open-coded `memory.copy` under `--release` once the Span call layer is erased.
 
 ## Tutorial: reconstruct the `Algebraic` pass
@@ -195,7 +195,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [ ] `run` returns `true` **iff** it mutated the function. No false positives (infinite work), no false negatives (missed cascades).
 - [ ] Iterate to a local fixpoint *within* `run` only if cheap; otherwise rely on the manager's loop.
 - [ ] **Never drop a statement with side effects** to delete its result. Only pure `Rvalue`s (`Use`/`Binary`/`Unary`/`Cast`/`ArrayLen`) are removable; `Call`/`New`/`UnionNew`/`ArrayLit`/`IndirectCall` may allocate or trap.
-- [ ] Do not delete a `ForceFree` / `$dream_drop` unless the local is dead and has no remaining owners.
+- [ ] Respect RC balance: don't delete a `Retain`/`Release` unless you can prove the pairing.
 - [ ] Use `Terminator::successors()` for CFG traversal; don't hand-match terminator variants for edges.
 - [ ] Determinism: iterate blocks/stmts in `Vec` order; if you need a set/map, use `IndexMap`/`BTreeMap`, never `std::HashMap` (see [08](./08-testing-and-determinism.md)).
 - [ ] Add a focused unit test with `FunctionBuilder` and keep the workspace green and clippy-clean.

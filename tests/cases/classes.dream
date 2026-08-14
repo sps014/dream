@@ -28,5 +28,5 @@ fun main(): void {
     
     r.p1.x = 100;
     System.println(r.p1.x);
-    System.println(p1.x);
+    System.println(p1.x); // Should also be 100 since it's a reference
 }

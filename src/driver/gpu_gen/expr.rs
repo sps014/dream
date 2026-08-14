@@ -455,6 +455,7 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
         ExpressionNode::Unary(op, e) => {
             let op_s = match op.kind {
                 TokenKind::MinusToken => "-",
+                TokenKind::PlusToken => "+",
                 TokenKind::BangToken => "!",
                 TokenKind::TildeToken => "~",
                 _ => {

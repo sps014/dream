@@ -135,4 +135,4 @@ Rules: top-level only; not generic/async/extern; explicit non-void return type.
 
 - [Compute shaders](compute.md)
 - [`system.gpu` API](../stdlib/gpu.md)
-- Samples: [`triangle/`](https://github.com/sps014/dream/tree/main/sample/graphics/triangle), [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean)
+- Samples: [`triangle/`](https://github.com/sps014/dream/tree/main/sample/graphics/triangle), [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean), [`elevated/`](https://github.com/sps014/dream/tree/main/sample/graphics/elevated)

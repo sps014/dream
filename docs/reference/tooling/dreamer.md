@@ -400,5 +400,5 @@ This is exactly the fixture setup exercised by `tooling/dreamer`'s own integrati
 ## For contributors
 
 Import resolution, the registry protocol wire format, and resolver edge cases live in the
-[Contributing](../compiler/README.md) handbook and the `tooling/dreamer` crate — not required for
+[Contributing](../../internals/README.md) handbook and the `tooling/dreamer` crate — not required for
 day-to-day package use.

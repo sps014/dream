@@ -2,8 +2,8 @@
 
 !!! warning "Contributors only"
     This section is the engineering handbook for people changing the Dream compiler.
-    If you are learning the language, start at [Getting started](../getting-started.md) and the
-    [Language](../index.md) / [Standard library](../index.md) guides instead.
+    If you are learning the language, start at [Quickstart](../learn/quickstart.md) and the
+    [Learn](../learn/index.md) / [Reference](../reference/language/variables.md) guides instead.
 
 This handbook covers the middle and back end. It assumes you have never seen the codebase. By the end you should be able to add a language feature, write an optimization pass, extend the type system, or wire up a new backend without guessing.
 
@@ -71,7 +71,7 @@ Dream/
 ├── src/                            Root `dream`: driver, CLI, execution only
 │   ├── driver/                     Pipeline orchestration, source loading, errors
 │   └── execution/                  (feature "native") wasmtime runner
-└── docs/compiler/                  ← you are here
+└── docs/internals/                 ← you are here
 ```
 
 The `dream-types → dream-hir → dream-mir` pipeline is the **only** backend. (An earlier AST-walking `codegen/` backend was replaced by it and deleted.)

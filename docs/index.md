@@ -7,11 +7,13 @@ hide:
 <div class="dream-hero">
   <h1 class="dream-gradient-text">Dream</h1>
   <p class="dream-hero-subtitle">
-    A statically typed language that compiles to WebAssembly — Rust- and TypeScript-flavored
-    syntax, ARC memory, zero-cost generics, and first-class JS interop.
+    A typed language with familiar <code>fun</code> / <code>let</code> syntax.
+    Write once, compile to WebAssembly, and run on your computer, in the browser, or in Node.
+    Memory is automatic reference counting (ARC) — no GC pauses.
   </p>
   <div class="dream-hero-actions">
-    <a href="getting-started/" class="md-button md-button--primary">Get Started</a>
+    <a href="learn/quickstart/" class="md-button md-button--primary">Get started</a>
+    <a href="learn/tour/" class="md-button">Language tour</a>
     <a href="https://github.com/sps014/dream" class="md-button">GitHub</a>
   </div>
 </div>
@@ -20,18 +22,15 @@ hide:
 
 ```dream
 import system;
-import system.collections;
 
 fun main() {
-    let xs = List<int>();
-    xs.push(1);
-    System.println(xs.len());
+    System.println("Hello, world!");
 }
 ```
 
 </div>
 
-## Language at a glance
+## What you get
 
 <div class="dream-feature-strip" markdown>
 
@@ -54,37 +53,37 @@ fun main() {
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch: **Getting Started**
+-   :material-rocket-launch: **Learn**
 
     ---
 
-    Install, write `hello.dream`, run it.
+    Install Dream and write your first program in a few minutes.
 
-    [:octicons-arrow-right-24: Install & run](getting-started.md)
+    [:octicons-arrow-right-24: Quickstart](learn/quickstart.md)
 
--   :material-book-open-page-variant: **Language**
-
-    ---
-
-    Syntax, types, async, memory, interop.
-
-    [:octicons-arrow-right-24: Variables](language/variables.md)
-
--   :material-library: **Standard library**
+-   :material-book-open-page-variant: **Language tour**
 
     ---
 
-    Collections, JSON, files, HTTP, GPU, crypto.
+    Variables, `if` / loops, functions, and lists — with notes on each line.
 
-    [:octicons-arrow-right-24: Built-ins](stdlib/builtins.md)
+    [:octicons-arrow-right-24: Tour](learn/tour.md)
 
--   :material-package-variant: **Tooling**
+-   :material-chef-hat: **Cookbook**
 
     ---
 
-    Packages with `dreamer`.
+    Small programs you can copy and run.
 
-    [:octicons-arrow-right-24: Package manager](tooling/package-manager.md)
+    [:octicons-arrow-right-24: Recipes](cookbook/index.md)
+
+-   :material-book-search: **Reference**
+
+    ---
+
+    Language rules, standard library, and `dreamer`.
+
+    [:octicons-arrow-right-24: Variables](reference/language/variables.md)
 
 </div>
 
@@ -100,44 +99,45 @@ fun main() {
 
     ---
 
-    [Variables](language/variables.md) · [Operators](language/operators.md) ·
-    [Control flow](language/control-flow.md) · [Functions](language/functions.md) ·
-    [Comments](language/comments.md) · [Panics](language/panics.md)
+    [Variables](reference/language/variables.md) · [Operators](reference/language/operators.md) ·
+    [Control flow](reference/language/control-flow.md) · [Functions](reference/language/functions.md) ·
+    [Comments](reference/language/comments.md) · [Panics](reference/language/panics.md)
 
 -   :material-cube: **Types**
 
     ---
 
-    [Overview](language/types.md) · [Primitives](language/primitives.md) ·
-    [Arrays](language/arrays.md) · [Enums & unions](language/enums-unions.md) ·
-    [Classes & structs](language/classes-structs.md) · [object](language/objects.md)
+    [Overview](reference/language/types.md) · [Primitives](reference/language/primitives.md) ·
+    [Arrays](reference/language/arrays.md) · [Enums & unions](reference/language/enums-unions.md) ·
+    [Classes & structs](reference/language/classes-structs.md) · [object](reference/language/objects.md)
 
 -   :material-folder-outline: **Structure**
 
     ---
 
-    [Imports](language/imports.md) · [Language rules](language/invariants.md)
+    [Imports](reference/language/imports.md) · [Language rules](reference/language/invariants.md)
 
 -   :material-puzzle: **Features**
 
     ---
 
-    [Generics](language/generics.md) · [Interfaces](language/interfaces.md) ·
-    [Async](language/async.md) · [WebWorkers](language/webworkers.md) ·
-    [Compute](language/compute.md) · [Memory](language/memory.md)
+    [Generics](reference/language/generics.md) · [Interfaces](reference/language/interfaces.md) ·
+    [Async](reference/language/async.md) · [WebWorkers](reference/language/webworkers.md) ·
+    [Compute](reference/language/compute.md) · [Shaders](reference/language/shaders.md) ·
+    [Memory](reference/language/memory.md)
 
--   :material-language-javascript: **JS interop**
+-   :material-language-javascript: **Interop**
 
     ---
 
-    [Overview](language/interop.md) · [js type](language/js-type.md) ·
-    [Callbacks](language/callbacks.md)
+    [JavaScript](reference/language/interop.md) · [js type](reference/language/js-type.md) ·
+    [Callbacks](reference/language/callbacks.md) · [C](reference/language/c-interop.md)
 
 -   :material-auto-fix: **Metaprogramming**
 
     ---
 
-    [Source generators](language/generators.md) · [CodeBuilder](stdlib/codegen.md)
+    [Source generators](reference/language/generators.md) · [CodeBuilder](reference/stdlib/codegen.md)
 
 </div>
 
@@ -153,71 +153,63 @@ fun main() {
 
     ---
 
-    [Built-ins](stdlib/builtins.md) · [Option & Result](stdlib/option-result.md) ·
-    [Sync](stdlib/sync.md)
+    [Built-ins](reference/stdlib/builtins.md) · [Option & Result](reference/stdlib/option-result.md) ·
+    [Sync](reference/stdlib/sync.md)
 
 -   :material-format-text: **Text**
 
     ---
 
-    [Strings](stdlib/string.md) · [Regex](stdlib/regex.md) ·
-    [Encoding](stdlib/encoding.md)
+    [Strings](reference/stdlib/string.md) · [Regex](reference/stdlib/regex.md) ·
+    [Encoding](reference/stdlib/encoding.md)
 
 -   :material-layers: **Collections**
 
     ---
 
-    [List / Map / Set](stdlib/collections.md)
+    [List / Map / Set](reference/stdlib/collections.md)
 
 -   :material-cog: **System**
 
     ---
 
-    [Random](stdlib/random.md) · [DateTime](stdlib/datetime.md) ·
-    [Logging](stdlib/logging.md)
+    [Random](reference/stdlib/random.md) · [DateTime](reference/stdlib/datetime.md) ·
+    [Logging](reference/stdlib/logging.md) · [Testing](reference/stdlib/testing.md) ·
+    [Process](reference/stdlib/process.md) · [WebView](reference/stdlib/webview.md)
 
 -   :material-swap-horizontal: **I/O**
 
     ---
 
-    [File](stdlib/file.md) · [HTTP](stdlib/http.md)
+    [File](reference/stdlib/file.md) · [HTTP](reference/stdlib/http.md) ·
+    [Sockets](reference/stdlib/net.md)
 
 -   :material-gpu: **GPU**
 
     ---
 
-    [system.gpu](stdlib/gpu.md) · [Compute](language/compute.md)
+    [system.gpu](reference/stdlib/gpu.md) · [Compute](reference/language/compute.md)
 
 -   :material-code-json: **JSON**
 
     ---
 
-    [JSON & `@json`](stdlib/json.md)
+    [JSON & `@json`](reference/stdlib/json.md)
 
 -   :material-shield-key: **Crypto**
 
     ---
 
-    [Digests & CSPRNG](stdlib/crypto.md)
+    [Digests & CSPRNG](reference/stdlib/crypto.md)
 
 </div>
 
 </div>
 
-## For contributors
+<div class="dream-community" markdown>
 
-<div class="dream-compact-cards" markdown>
+**Community.** Questions and bugs: [GitHub Issues](https://github.com/sps014/dream/issues). Discussions and Discord: coming soon.
 
-<div class="grid cards" markdown>
-
--   :material-cog: **Contributing**
-
-    ---
-
-    Pipeline, IRs, passes, design notes.
-
-    [:octicons-arrow-right-24: Handbook](compiler/README.md)
-
-</div>
+[:octicons-arrow-right-24: Next steps](learn/next-steps.md)
 
 </div>

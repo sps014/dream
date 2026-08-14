@@ -55,4 +55,4 @@ npx serve .
 ```
 
 Requires a modern browser with WebGPU. Drag to paint; an auto orbit also injects force.
-Native `dream run` cannot present a canvas (see `docs/stdlib/gpu.md`).
+Native `dream run` cannot present a canvas (see [`docs/reference/stdlib/gpu.md`](../../docs/reference/stdlib/gpu.md)).

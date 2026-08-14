@@ -67,4 +67,4 @@ let pipe = await GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc);
 
 A field named `position: GpuVec4` is still accepted as sugar for `@builtin("position")`.
 
-See [Vertex & fragment shaders](../../docs/language/shaders.md) and [`system.gpu`](../../docs/stdlib/gpu.md).
+See [Vertex & fragment shaders](../../docs/reference/language/shaders.md) and [`system.gpu`](../../docs/reference/stdlib/gpu.md).

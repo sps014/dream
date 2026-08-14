@@ -34,4 +34,4 @@ npx serve .
 # open http://localhost:3000/sample/compute/life/life.html
 ```
 
-Requires WebGPU. See [Compute shaders](../../../docs/language/compute.md).
+Requires WebGPU. See [Compute shaders](../../../docs/reference/language/compute.md).

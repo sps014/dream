@@ -28,6 +28,7 @@ theme:
     - navigation.instant.progress
     - navigation.path
     - navigation.sections
+    - navigation.tabs
     - navigation.top
     - navigation.tracking
     - navigation.expand
@@ -35,6 +36,11 @@ theme:
 
 extra_css:
   - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/sps014/dream
 
 hooks:
   - tooling/docs/dream_lexer.py
@@ -64,81 +70,92 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
-  - Language:
-    - Basics:
-      - Variables: language/variables.md
-      - Operators: language/operators.md
-      - Control Flow: language/control-flow.md
-      - Functions: language/functions.md
-      - Comments: language/comments.md
-      - Panics: language/panics.md
-    - Types:
-      - Overview: language/types.md
-      - Primitives: language/primitives.md
-      - Arrays: language/arrays.md
-      - Enums & Unions: language/enums-unions.md
-      - Classes & Structs: language/classes-structs.md
-      - The object Type: language/objects.md
-    - Structure:
-      - Imports & Modules: language/imports.md
-      - Language Rules: language/invariants.md
-    - Features:
-      - Generics: language/generics.md
-      - Interfaces: language/interfaces.md
-      - Async/Await: language/async.md
-      - WebWorkers: language/webworkers.md
-      - Compute shaders: language/compute.md
-      - Vertex & fragment shaders: language/shaders.md
-      - Memory Management: language/memory.md
+  - Learn:
+    - Overview: learn/index.md
+    - Quickstart: learn/quickstart.md
+    - Language tour: learn/tour.md
+    - Next steps: learn/next-steps.md
+  - Reference:
+    - Language:
+      - Basics:
+        - Variables: reference/language/variables.md
+        - Operators: reference/language/operators.md
+        - Control Flow: reference/language/control-flow.md
+        - Functions: reference/language/functions.md
+        - Comments: reference/language/comments.md
+        - Panics: reference/language/panics.md
+      - Types:
+        - Overview: reference/language/types.md
+        - Primitives: reference/language/primitives.md
+        - Arrays: reference/language/arrays.md
+        - Enums & Unions: reference/language/enums-unions.md
+        - Classes & Structs: reference/language/classes-structs.md
+        - The object Type: reference/language/objects.md
+      - Structure:
+        - Imports & Modules: reference/language/imports.md
+        - Language Rules: reference/language/invariants.md
+      - Features:
+        - Generics: reference/language/generics.md
+        - Interfaces: reference/language/interfaces.md
+        - Async/Await: reference/language/async.md
+        - WebWorkers: reference/language/webworkers.md
+        - Compute shaders: reference/language/compute.md
+        - Vertex & fragment shaders: reference/language/shaders.md
+        - Memory Management: reference/language/memory.md
+      - Metaprogramming:
+        - Source Generators: reference/language/generators.md
+        - CodeBuilder: reference/stdlib/codegen.md
     - Interop:
-      - Overview: language/interop.md
-      - The js type: language/js-type.md
-      - Callbacks: language/callbacks.md
-      - C interop: language/c-interop.md
-    - Metaprogramming:
-      - Source Generators: language/generators.md
-      - CodeBuilder: stdlib/codegen.md
-  - Standard Library:
-    - Core:
-      - Built-ins: stdlib/builtins.md
-      - Option & Result: stdlib/option-result.md
-      - Lock & Semaphore: stdlib/sync.md
-    - Text & Data:
-      - Strings: stdlib/string.md
-      - Regex: stdlib/regex.md
-      - Encoding: stdlib/encoding.md
-    - Collections: stdlib/collections.md
-    - System:
-      - Random: stdlib/random.md
-      - DateTime: stdlib/datetime.md
-      - Logging: stdlib/logging.md
-      - Testing: stdlib/testing.md
-      - Process: stdlib/process.md
-      - WebView: stdlib/webview.md
-    - I/O:
-      - File I/O: stdlib/file.md
-      - HTTP: stdlib/http.md
-      - Raw sockets: stdlib/net.md
-    - GPU & compute:
-      - system.gpu: stdlib/gpu.md
-    - Serialization:
-      - JSON: stdlib/json.md
-    - Security:
-      - Crypto: stdlib/crypto.md
-  - Tooling:
-    - Package Manager (dreamer): tooling/package-manager.md
-  - Contributing:
-    - Overview: compiler/README.md
-    - Pipeline: compiler/01-pipeline-overview.md
-    - Type System: compiler/02-type-system.md
-    - HIR: compiler/03-hir.md
-    - MIR: compiler/04-mir.md
-    - Writing Passes: compiler/05-writing-passes.md
-    - Relooper & Backend: compiler/06-relooper-and-backend.md
-    - Adding a Feature: compiler/07-adding-a-language-feature.md
-    - Testing & Determinism: compiler/08-testing-and-determinism.md
+      - JavaScript: reference/language/interop.md
+      - The js type: reference/language/js-type.md
+      - Callbacks: reference/language/callbacks.md
+      - C: reference/language/c-interop.md
+    - Standard library:
+      - Overview: reference/stdlib/index.md
+      - Core:
+        - Built-ins: reference/stdlib/builtins.md
+        - Option & Result: reference/stdlib/option-result.md
+        - Lock & Semaphore: reference/stdlib/sync.md
+      - Text & Data:
+        - Strings: reference/stdlib/string.md
+        - Regex: reference/stdlib/regex.md
+        - Encoding: reference/stdlib/encoding.md
+      - Collections: reference/stdlib/collections.md
+      - System:
+        - Random: reference/stdlib/random.md
+        - DateTime: reference/stdlib/datetime.md
+        - Logging: reference/stdlib/logging.md
+        - Testing: reference/stdlib/testing.md
+        - Process: reference/stdlib/process.md
+        - WebView: reference/stdlib/webview.md
+      - I/O:
+        - File I/O: reference/stdlib/file.md
+        - HTTP: reference/stdlib/http.md
+        - Raw sockets: reference/stdlib/net.md
+      - GPU & compute:
+        - system.gpu: reference/stdlib/gpu.md
+      - Serialization:
+        - JSON: reference/stdlib/json.md
+      - Security:
+        - Crypto: reference/stdlib/crypto.md
+    - Tooling:
+      - Package Manager: reference/tooling/dreamer.md
+  - Cookbook:
+    - Overview: cookbook/index.md
+    - Hello, World: cookbook/hello-world.md
+    - Greet by name: cookbook/greet.md
+    - Sum a list: cookbook/sum-a-list.md
+  - Internals:
+    - Overview: internals/README.md
+    - Pipeline: internals/01-pipeline-overview.md
+    - Type System: internals/02-type-system.md
+    - HIR: internals/03-hir.md
+    - MIR: internals/04-mir.md
+    - Writing Passes: internals/05-writing-passes.md
+    - Relooper & Backend: internals/06-relooper-and-backend.md
+    - Adding a Feature: internals/07-adding-a-language-feature.md
+    - Testing & Determinism: internals/08-testing-and-determinism.md
     - Design notes:
-      - Nullable purge: compiler/09-nullable-purge-design-note.md
-      - Stack alloc & mono: compiler/10-stack-alloc-and-mono-design-note.md
-      - Swift-like ARC: compiler/11-swift-like-arc-roadmap.md
+      - Nullable purge: internals/09-nullable-purge-design-note.md
+      - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
+      - Swift-like ARC: internals/11-swift-like-arc-roadmap.md

@@ -1,6 +1,6 @@
 # AGENTS.md — Dream Compiler
 
-Read this fully before exploring the repo. It exists so agents don't burn tokens re-discovering structure that's already known. `docs/compiler/` is the deep-dive engineering handbook (pipeline, type system, HIR, MIR, passes, relooper, adding a feature, testing/determinism) — read it before touching the middle/back end. Everything below is the fast-reference version.
+Read this fully before exploring the repo. It exists so agents don't burn tokens re-discovering structure that's already known. `docs/internals/` is the deep-dive engineering handbook (pipeline, type system, HIR, MIR, passes, relooper, adding a feature, testing/determinism) — read it before touching the middle/back end. Everything below is the fast-reference version.
 
 ## Non-negotiable ground rules
 
@@ -44,7 +44,7 @@ Dream/
 │   ├── dream-playground/           Browser playground
 │   └── vscode/                     VS Code extension
 ├── tests/                          Golden e2e, MIR pipeline, DAP tests
-├── docs/                           compiler/ + language/ + stdlib/
+├── docs/                           learn/ + reference/ + cookbook/ + internals/
 ├── scripts/dap_probe.py
 ├── mkdocs.yml
 └── Cargo.toml
@@ -108,13 +108,13 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 
 ## Backend non-goals
 
-Do not implement these (decision record: `docs/compiler/10-stack-alloc-and-mono-design-note.md`):
+Do not implement these (decision record: `docs/internals/10-stack-alloc-and-mono-design-note.md`):
 
 - **Small-string SSO** — `string` stays a heap ARC `i32` pointer; no tagged inline representation.
 - **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`@stack` on unions is shipped and unrelated.)
 - **Size-class-keyed unmanaged monomorphization** — mono stays `(DefId, args)`; `unmanaged` stdlib code uses runtime `esize`, not a compiler size-class key.
 
-Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/compiler/11-swift-like-arc-roadmap.md`.
+Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/internals/11-swift-like-arc-roadmap.md`.
 
 Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll functions keep `$__pc` + `br_table` (suspend/resume).
 
@@ -169,7 +169,7 @@ cargo test -p dream-sema
 cargo test -p dream-lsp
 ```
 
-JS interop details (full vs selective runtime): `docs/language/interop.md`.
+JS interop details (full vs selective runtime): `docs/reference/language/interop.md`.
 ### VS Code extension
 ```bash
 cd tooling/vscode
@@ -216,7 +216,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 6. `crates/dream-mir/src/emit/`: emit WAT if new runtime behavior is needed; extend `runtime/*.wat` for new intrinsics.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
-9. Run the full pre-commit gate above. See `docs/compiler/07-adding-a-language-feature.md` for a worked example.
+9. Run the full pre-commit gate above. See `docs/internals/07-adding-a-language-feature.md` for a worked example.
 
 ## Misc conventions
 

@@ -1,33 +1,133 @@
 # Dream
 
-A fast, statically typed language that compiles straight to WebAssembly. Syntax closer to Rust and TypeScript, automatic memory management via a custom generational GC, zero-cost generics, and a batteries-included standard library — compiler written in Rust.
+Dream is a typed programming language with familiar `fun` / `let` syntax. You write one program; it compiles to WebAssembly and can run on your computer, in the browser, or in Node. Memory is managed for you — you do not allocate or free by hand.
 
-**[Read the docs →](https://sps014.github.io/dream/)** · [Getting Started](https://sps014.github.io/dream/getting-started/) · [Language](https://sps014.github.io/dream/language/variables/) · [JS and C interop](https://sps014.github.io/dream/language/interop/) · [Compiler](https://sps014.github.io/dream/compiler/)
+**[Docs](https://sps014.github.io/dream/)** · [Quickstart](https://sps014.github.io/dream/learn/quickstart/) · [Language tour](https://sps014.github.io/dream/learn/tour/) · [Cookbook](https://sps014.github.io/dream/cookbook/)
 
-## Install
+## 5-minute quickstart
 
-macOS / Linux:
+**macOS / Linux:**
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
 ```
 
-Windows (PowerShell):
+**Windows (PowerShell):**
 
 ```powershell
 irm https://sps014.github.io/dream/install.ps1 | iex
 ```
 
-Then:
+Open a new terminal, then:
 
 ```bash
 dreamer init hello && cd hello && dreamer run
 ```
 
-That puts `dream`, `dreamer`, and `dream-lsp` on your PATH (`~/.dream/bin`). Full walkthrough:
-[Getting Started](https://sps014.github.io/dream/getting-started/).
+That creates a project and runs `src/main.dream`:
 
-### Build from source (contributors)
+```kotlin
+import system;
+
+fun main() {
+    System.println("Hello, world!");
+}
+```
+
+```
+Hello, world!
+```
+
+`import system;` loads console I/O so `System.println` works. Full walkthrough: [Quickstart](https://sps014.github.io/dream/learn/quickstart/).
+
+## Language tour
+
+### Variables
+
+```kotlin
+import system;
+
+fun main() {
+    let name = "Ada";     // inferred as string; you can change it later
+    const n = 3;          // a number that cannot be reassigned
+    System.println(name);
+    System.println(n);
+}
+```
+
+### Control flow
+
+```kotlin
+import system;
+
+fun main() {
+    let score = 85;
+    if (score >= 90) {              // conditions go in parentheses
+        System.println("A");
+    } else {
+        System.println("B");
+    }
+
+    let i = 0;
+    while (i < 3) {                 // repeat while the condition is true
+        System.println(i);
+        i = i + 1;
+    }
+}
+```
+
+### Functions
+
+```kotlin
+import system;
+
+fun greet(name: string): string {   // name in, string out
+    return "Hello, " + name;
+}
+
+fun main() {
+    System.println(greet("world"));
+}
+```
+
+### Lists
+
+```kotlin
+import system;
+import system.collections;
+
+fun main() {
+    let xs = List<int>();           // a growable list of integers
+    xs.push(1);
+    xs.push(2);
+
+    for (let n in xs) {             // n is each element in turn
+        System.println(n);
+    }
+}
+```
+
+More syntax: [Language tour](https://sps014.github.io/dream/learn/tour/).
+
+## Docs
+
+| Section | What it is |
+| --- | --- |
+| [Learn](https://sps014.github.io/dream/learn/) | Install, Hello World, and a short tour |
+| [Reference](https://sps014.github.io/dream/reference/language/variables/) | Language, stdlib, and `dreamer` |
+| [Cookbook](https://sps014.github.io/dream/cookbook/) | Small, copy-paste programs |
+| [Internals](https://sps014.github.io/dream/internals/) | Compiler handbook (contributors) |
+
+## Next steps
+
+- [Quickstart](https://sps014.github.io/dream/learn/quickstart/) — install and run
+- [Standard library](https://sps014.github.io/dream/reference/stdlib/) — collections, files, HTTP, JSON, GPU, crypto, and more
+- [Package manager](https://sps014.github.io/dream/reference/tooling/dreamer/) — `dreamer` projects and packages
+- [Cookbook](https://sps014.github.io/dream/cookbook/) — more small examples
+
+**Community:** [GitHub Issues](https://github.com/sps014/dream/issues) · Discussions (coming soon) · Discord (coming soon)
+
+## Contributors
 
 ```bash
 git clone https://github.com/sps014/dream
@@ -35,79 +135,12 @@ cd dream
 source ./use-toolchain.sh
 ```
 
-## A taste
-
-```kotlin
-import system;
-import system.collections;
-
-fun greet(name: string): string {
-    return "Hello, " + name;
-}
-
-// Discriminated unions + pattern matching
-enum Shape {
-    Circle(radius: float),
-    Rect(width: float, height: float),
-}
-
-fun area(s: Shape): float {
-    return switch (s) {
-        Circle(r)  => 3.14 * r * r,
-        Rect(w, h) => w * h,
-    };
-}
-
-fun main() {
-    System.println(greet("world"));
-
-    let shapes = List<Shape>();
-    shapes.push(Shape.Circle(2.0));
-    shapes.push(Shape.Rect(3.0, 4.0));
-
-    for (let s in shapes) {
-        System.println(area(s));
-    }
-}
-```
-
-Stdlib APIs live under `system.*` packages — `import system;` for console I/O, `import system.collections;` for `List`/`Map`/`Set`, and so on. Bootstrap types like `Option` and `Result` need no import. See [Imports](https://sps014.github.io/dream/language/imports/).
-
-## Language features
-
-| Area | What you get |
-|------|----------------|
-| **Types** | Inference, classes, value structs, interfaces, enums, discriminated unions, `Option`/`Result` |
-| **Generics** | Zero-cost monomorphization to concrete WASM |
-| **Memory** | Generational GC (Gen0/1/2/LOH) — no manual `free` |
-| **Concurrency** | `async`/`await` with an in-module cooperative scheduler; `WebWorker` for real parallelism |
-| **JS interop** | Dynamic `js` type, `extern fun`, callbacks both ways, optional tree-shaken `*.web.runtime.js` / `*.node.runtime.js` |
-| **GPU** | `@compute` / `@vertex` / `@fragment` → WGSL + `system.gpu` (WebGPU; native stages buffers) |
-| **Metaprogramming** | `@json` and source generators |
-| **Stdlib** | Collections, strings/regex, JSON, files, HTTP, logging, crypto, GPU |
-
-Also: WASM-native output (`.wat` / `.wasm` + `.abi.json`), editor support (VS Code / LSP), and a Rust-hosted `dream run` path via wasmtime.
-
-## Run a program
-
 ```bash
-dreamer init hello && cd hello && dreamer run
-dream run path/to/your/file.dream          # compile and execute (native host)
-dream path/to/your/file.dream              # compile to .wat / .wasm / .abi.json
-
-# Tree-shaken JS host for browser or Node (optional)
-dream --runtime --web path/to/your/file.dream
-dream --runtime --node path/to/your/file.dream
+cargo test --workspace                 # fast gate
+cargo test --workspace -- --ignored    # full corpus
 ```
 
-JS interop: [docs](https://sps014.github.io/dream/language/interop/) · [`docs/language/interop.md`](docs/language/interop.md).
-
-## Test
-
-```bash
-cargo test --workspace                 # fast gate (unit + e2e smoke)
-cargo test --workspace -- --ignored    # full golden corpus, DAP, wasm-opt
-```
+Compiler internals: [docs/internals](https://sps014.github.io/dream/internals/).
 
 ## License
 

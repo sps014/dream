@@ -1,7 +1,7 @@
 # Compute samples
 
 Progressive `@compute` / `system.gpu` examples. Language guide:
-[Compute shaders](../../docs/language/compute.md).
+[Compute shaders](../../docs/reference/language/compute.md).
 
 | Sample | Role |
 |--------|------|

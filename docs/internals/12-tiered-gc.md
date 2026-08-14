@@ -110,7 +110,7 @@ Every heap store of a reference (field / index / box):
 
 ## Nursery sizing
 
-Default [`NURSERY_SIZE`](../../crates/dream-mir/src/abi.rs) is **2 MiB**. Remset overflow
+Default [`NURSERY_SIZE`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/abi.rs) is **2 MiB**. Remset overflow
 must not drop edges (see above); blittable arrays use `TAG_FLAT_ARRAY` so Gen0 does not
 treat `int[]` payloads as pointers; heap field stores compute the place address **after**
 `$malloc` so evacuated bases are reloaded first.
@@ -141,7 +141,7 @@ refreshed before use. The emitter therefore reloads roots after every safepoint:
 - Reload always ends in `$__gc_reload_globals`, which forwards each reference-typed module
   global from its `$__grootN` root slot back into `$gN` before the mutator resumes.
 
-Reloads are gated on [`GC_EPOCH_ADDR`](../../crates/dream-mir/src/abi.rs): Gen0 collections always
+Reloads are gated on [`GC_EPOCH_ADDR`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/abi.rs): Gen0 collections always
 bump the epoch; old-space mark-sweep does not move objects and does not bump the epoch.
 Each function caches the last-seen value in `$__gc_epoch` and skips the reload body when
 unchanged (load + compare on the no-collect fast path).
@@ -221,5 +221,5 @@ safe default for non-`@shared` data.
 
 ## Measure
 
-`./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](../../tests/bench/BASELINE.md).
+`./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](https://github.com/sps014/dream/blob/main/tests/bench/BASELINE.md).
 Update BASELINE when GC replaces ARC numbers.

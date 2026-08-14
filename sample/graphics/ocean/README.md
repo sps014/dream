@@ -6,7 +6,7 @@ fresnel sky reflection + water refraction, horizon sky mix, soft gamma.
 
 A displaced mesh cannot match Shadertoy; this sample uses the same tracing approach.
 
-[`@gpu`](../../../docs/language/shaders.md#gpu-helpers) helpers hold noise / map / lighting.
+[`@gpu`](../../../docs/reference/language/shaders.md#gpu-helpers) helpers hold noise / map / lighting.
 
 ## Build
 

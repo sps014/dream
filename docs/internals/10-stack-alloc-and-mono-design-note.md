@@ -26,7 +26,7 @@ ABI change than a self-contained follow-up. Heap-pointer strings stay the model:
 
 **What exists and stays:** `src/mir/passes/sroa.rs` silently promotes non-escaping,
 default-constructed class instances' fields to scalar locals. `@stack` on **discriminated
-unions** (checked inline contract) is shipped and unchanged — see `docs/language/enums-unions.md`.
+unions** (checked inline contract) is shipped and unchanged — see [Enums & unions](../reference/language/enums-unions.md).
 
 **Why rejected as a user-facing class feature:** a diagnosable "this `new` must not escape"
 guarantee needs expression-level syntax (attributes are declaration-only today) plus HIR-level

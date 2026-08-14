@@ -33,4 +33,4 @@ Hello generators
 | `gen.dream` | `@generator` + `@syntax_block("quote")`, executed with a `GenContext` |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
-Start here before the larger [`../html/`](../html/) sample. See [Source generators](../../../docs/language/generators.md).
+Start here before the larger [`../html/`](../html/) sample. See [Source generators](../../../docs/reference/language/generators.md).

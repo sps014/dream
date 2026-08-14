@@ -47,4 +47,4 @@ dto
 | `gen.dream` | `@attribute` schema + `@generator` emit logic |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
-See [Source generators](../../../docs/language/generators.md).
+See [Source generators](../../../docs/reference/language/generators.md).

@@ -4,7 +4,7 @@ Dream manages heap memory with a **stop-the-world generational garbage collector
 WebAssembly linear memory (Gen0 nursery, Gen1, Gen2, and a large-object heap). You never
 call `free` for ordinary values — unreachable objects are reclaimed when the collector runs.
 
-Engineering details: [`docs/compiler/12-tiered-gc.md`](../compiler/12-tiered-gc.md).
+Engineering details: [`docs/internals/12-tiered-gc.md`](../../internals/12-tiered-gc.md).
 
 ## What lives on the heap
 

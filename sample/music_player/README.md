@@ -3,7 +3,7 @@
 A playable music player — playlist, play/pause, prev/next, seek bar, volume, live time display —
 written entirely in [`music_player.dream`](music_player.dream). Every DOM query, `<audio>`
 element, event listener, and property get/set is ordinary Dream code compiled to WebAssembly via
-the dynamic [`js` interop type](../../docs/language/js-type.md); there is **no hand-written
+the dynamic [`js` interop type](../../docs/reference/language/js-type.md); there is **no hand-written
 JavaScript logic** anywhere in this sample. The page loads only the shared, program-agnostic
 runtime in [`runtime/dream.js`](../../runtime/dream.js) — the exact same loader every sample under
 [`sample/interop/`](../interop/) uses — via a three-line `<script type="module">` that just calls
@@ -33,7 +33,7 @@ npx serve .
 Serving `sample/music_player/` directly would put `../../runtime/dream.js` above the served root
 and the page would 404 on the runtime.
 
-If you later add [`WebWorker`](../../docs/language/webworkers.md) calls to a browser sample, the
+If you later add [`WebWorker`](../../docs/reference/language/webworkers.md) calls to a browser sample, the
 host page needs [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated)
 headers so Dream can allocate a shared `WebAssembly.Memory` (`SharedArrayBuffer`). With a static
 file server such as `npx serve`, add response headers like
@@ -48,9 +48,9 @@ above is enough.
   `new`, so this sidesteps needing `new Audio(...)`.
 - Dream functions like `on_play_pause_click(ev: js): void` are passed straight to
   `addEventListener`; the runtime wraps them as JS callables automatically (see
-  [Callbacks](../../docs/language/callbacks.md)).
+  [Callbacks](../../docs/reference/language/callbacks.md)).
 - Because those callbacks can't capture a closure, the playlist, current track index, and every
-  DOM handle live in top-level `let`s (see [Variables](../../docs/language/variables.md#top-level-variables)),
+  DOM handle live in top-level `let`s (see [Variables](../../docs/reference/language/variables.md)),
   shared across all handlers in the file.
 - The playlist opens with four freely-licensed [NoCopyrightSounds](https://ncs.io/) (NCS) releases
   mirrored on the Internet Archive, followed by the [SoundHelix](https://www.soundhelix.com/)

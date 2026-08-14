@@ -35,7 +35,7 @@ import math_lib;
 - Each `.` maps to a directory separator, and `.dream` is added automatically: `import utils.math_lib;` resolves to `utils/math_lib.dream`, relative to the importing file.
 - Imported declarations are usable directly — there is no namespace prefix.
 - If no matching file exists relative to the importing file, resolution falls back to a
-  `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/package-manager.md) — so `import json_tools;` can resolve to a project dependency
+  `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/dreamer.md) — so `import json_tools;` can resolve to a project dependency
   once `dreamer install` has run, with no different syntax required.
 - Names that match a stdlib package (`system`, `system.net`, …) never fall through to the filesystem.
 

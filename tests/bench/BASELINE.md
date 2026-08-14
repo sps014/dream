@@ -1,7 +1,7 @@
 # Microbench baseline — tiered GC
 
 Recorded with `dream --release run tests/bench/microbenches.dream` after the ARC→GC
-cutover (`docs/compiler/12-tiered-gc.md`). Absolute values vary by host — use relative
+cutover (`docs/internals/12-tiered-gc.md`). Absolute values vary by host — use relative
 deltas. Re-run via `./scripts/run-microbenches.sh`.
 
 ## Snapshot (2026-08-13, native wasmtime, 3 consecutive runs)

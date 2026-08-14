@@ -13,7 +13,7 @@
 
 use super::*;
 use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
-use crate::emit::valuetype::{value_gc_ref_offsets, ValueFrame, ValueLocalKind};
+use crate::emit::valuetype::{ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
 mod async_ops;
@@ -38,7 +38,6 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &HashMap::new(),
         &HashSet::new(),
         &empty_globals,
-        &HashSet::new(),
         false,
         true,
         None,
@@ -57,7 +56,6 @@ pub(super) fn emit_function_with(
     func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
     value_glue: &HashSet<TypeId>,
     global_tys: &HashMap<u32, TypeId>,
-    non_safepoint: &HashSet<(DefId, Vec<TypeId>)>,
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
@@ -73,7 +71,6 @@ pub(super) fn emit_function_with(
         func_table,
         value_glue,
         global_tys,
-        non_safepoint,
         None,
         0,
         debug,
@@ -100,7 +97,6 @@ pub(crate) fn emit_async_poll(
     slots: &AsyncSlots,
     poll_sym: &str,
     user_local_count: usize,
-    non_safepoint: &HashSet<(DefId, Vec<TypeId>)>,
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
@@ -121,7 +117,6 @@ pub(crate) fn emit_async_poll(
         ftable,
         value_glue,
         &global_tys,
-        non_safepoint,
         Some(func),
         user_local_count,
         debug,
@@ -173,23 +168,6 @@ struct Emitter<'a> {
     shape_scopes: Vec<shape::ShapeScope>,
     /// Monotonic id for `$__brkN` / `$__cntN` / `$__joinN` labels in shape emit.
     shape_label_id: u32,
-    /// Reference locals registered in the GC root table for the function body.
-    gc_root_locals: Vec<u32>,
-    /// Shadow-frame byte offsets (from `$__sp`) of embedded GC refs in owning value locals.
-    gc_slot_root_offs: Vec<u32>,
-    /// When `true`, this function contains a call/alloc safepoint.
-    may_safepoint: bool,
-    /// When `true`, ref locals/slots are pushed into the root table for this frame.
-    gc_frame_active: bool,
-    /// Module has at least one reference-typed global that `$__gc_reload_globals` must refresh.
-    has_ref_globals: bool,
-    /// Functions that cannot reach a GC safepoint; direct calls to them skip root reloads.
-    non_safepoint: &'a HashSet<(DefId, Vec<TypeId>)>,
-    /// When `true`, `$__obj_rg` holds the root-table index of the object currently under
-    /// construction (`Rvalue::New`'s allocated block). Emitting a nested Dream call inside the
-    /// construction must reload `$__obj` from this index — see
-    /// [`Emitter::emit_reload_obj_root`]. Reset once the rvalue completes.
-    obj_construction_root: bool,
     scratch: ScratchNeeds,
 }
 
@@ -209,7 +187,6 @@ impl<'a> Emitter<'a> {
         func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
         value_glue: &'a HashSet<TypeId>,
         global_tys: &'a HashMap<u32, TypeId>,
-        non_safepoint: &'a HashSet<(DefId, Vec<TypeId>)>,
         async_parent: Option<&'a MirFunction>,
         async_user_locals: usize,
         debug: bool,
@@ -217,32 +194,6 @@ impl<'a> Emitter<'a> {
         debug_fn: Option<&'a crate::emit::debug_map::DebugFunction>,
     ) -> Self {
         let frame = ValueFrame::compute(func, interner);
-        let gc_root_locals: Vec<u32> = func
-            .locals
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| interner.is_reference(d.ty))
-            .map(|(i, _)| i as u32)
-            .collect();
-        let mut gc_slot_root_offs = Vec::new();
-        for (local, frame_off) in frame.owning_slots() {
-            let ty = func.local_ty(local);
-            for field_off in value_gc_ref_offsets(ty, layouts, interner) {
-                gc_slot_root_offs.push(frame_off + field_off);
-            }
-        }
-        gc_slot_root_offs.sort_unstable();
-        gc_slot_root_offs.dedup();
-        let may_safepoint = if non_safepoint.contains(&(func.def, func.instance.clone())) {
-            false
-        } else {
-            function_may_safepoint(func)
-        };
-        let gc_frame_active = may_safepoint
-            && (!gc_root_locals.is_empty() || !gc_slot_root_offs.is_empty());
-        let has_ref_globals = global_tys
-            .values()
-            .any(|t| interner.is_reference(*t));
         let scratch = scratch_needs(func, interner, layouts);
         Emitter {
             func,
@@ -265,13 +216,6 @@ impl<'a> Emitter<'a> {
             current_line: 0,
             shape_scopes: Vec::new(),
             shape_label_id: 0,
-            gc_root_locals,
-            gc_slot_root_offs,
-            may_safepoint,
-            gc_frame_active,
-            has_ref_globals,
-            non_safepoint,
-            obj_construction_root: false,
             scratch,
         }
     }
@@ -358,16 +302,8 @@ impl Emitter<'_> {
             // Saved shadow-stack pointer, restored before every return.
             self.line("  (local $__saved_sp i32)");
         }
-        let needs_reload = self.may_safepoint && (self.gc_frame_active || self.has_ref_globals);
         if self.scratch.obj {
             self.line("  (local $__obj i32)");
-        }
-        if self.scratch.obj && self.may_safepoint {
-            self.line("  (local $__obj_rg i32)");
-            self.line("  (local $__obj_young i32)");
-        }
-        if needs_reload {
-            self.line("  (local $__gc_epoch i32)");
         }
         if self.scratch.len {
             self.line("  (local $__len i32)");
@@ -384,25 +320,14 @@ impl Emitter<'_> {
         if self.scratch.jsp {
             self.line("  (local $__jsp i32)");
         }
-        if self.scratch.weak {
-            self.line("  (local $__wsrc i32)");
-            self.line("  (local $__wbox i32)");
-        }
         if self.scratch.src {
             self.line("  (local $__src i32)");
         }
-        if self.gc_frame_active {
-            self.line("  (local $__root_base i32)");
-            for li in self.gc_root_locals.clone() {
-                self.line(&format!("  (local $__rg{} i32)", li));
-            }
+        if self.scratch.drop {
+            self.line("  (local $__drop i32)");
         }
 
         self.emit_value_frame_prologue();
-        self.emit_gc_root_prologue();
-        if needs_reload {
-            self.line("     (global.get $__gc_epoch) (local.set $__gc_epoch)");
-        }
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
         if let Some(dbg) = self.debug_fn {
             self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
@@ -411,141 +336,8 @@ impl Emitter<'_> {
         self.line(")");
     }
 
-    fn type_has_del(&self, ty: TypeId) -> bool {
-        let Some(layout) = self.layouts.get(ty) else {
-            return false;
-        };
-        let del = format!("{}_del", layout.name);
-        self.symbols.values().any(|s| s == &del)
-    }
-
-    fn emit_gc_root_prologue(&mut self) {
-        if !self.gc_frame_active {
-            return;
-        }
-        self.line(&format!(
-            "     (i32.const {}) (i32.load) (local.set $__root_base)",
-            crate::abi::GC_ROOT_COUNT_ADDR
-        ));
-        let slot_offs = self.gc_slot_root_offs.clone();
-        for off in slot_offs {
-            self.line("     (global.get $__sp)");
-            self.line(&format!("     (i32.const {}) (i32.add)", off));
-            self.line("     (call $gc_root_push_slot)");
-            self.line("     (drop)");
-        }
-        let root_locals = self.gc_root_locals.clone();
-        for li in root_locals {
-            self.line(&format!(
-                "     (local.get ${li}) (call $gc_root_push) (local.set $__rg{li})"
-            ));
-        }
-    }
-
-    fn emit_gc_root_epilogue(&mut self) {
-        if !self.gc_frame_active {
-            return;
-        }
-        self.line("     (local.get $__root_base) (call $gc_root_pop)");
-    }
-
-    fn emit_gc_root_update(&mut self, local: u32) {
-        if !self.gc_frame_active || !self.gc_root_locals.contains(&local) {
-            return;
-        }
-        self.line(&format!(
-            "     (global.get $__gc_root_table) (local.get $__rg{local}) (i32.const 2) (i32.shl) (i32.add) (local.get ${local}) (i32.store)"
-        ));
-    }
-
-    /// Heap ref store barrier. Nursery destinations cannot create old→young remset edges, so skip
-    /// the `$write_barrier` call when `slot < $__gc_old_start`.
-    pub(super) fn emit_write_barrier(&mut self, slot: &str, val: &str) {
-        self.line(&format!(
-            "     (local.get {slot}) (global.get $__gc_old_start) (i32.ge_u) (if (then (local.get {slot}) (local.get {val}) (call $write_barrier)))"
-        ));
-    }
-
-    /// Reloads MIR ref-locals from their shadow root-table slots and forwards module ref-globals
-    /// through the same table when a collection has run since the last check (`GC_EPOCH_ADDR`).
-    /// Every Dream-side call / allocation is a potential safepoint: the collector updates
-    /// root-table entries in place (see `$gc_scan_roots`), but the WASM locals and globals holding
-    /// raw pointers become stale until this reload copies the forwarded values back. The epoch
-    /// gate keeps the common no-collect path to a load + compare.
-    pub(super) fn emit_gc_root_reload(&mut self) {
-        if !self.may_safepoint {
-            return;
-        }
-        if !self.gc_frame_active && !self.has_ref_globals {
-            return;
-        }
-        self.line(
-            "     (global.get $__gc_epoch) (local.get $__gc_epoch) (i32.ne) (if (then",
-        );
-        if self.gc_frame_active {
-            let root_locals = self.gc_root_locals.clone();
-            for li in root_locals {
-                self.line(&format!(
-                    "       (global.get $__gc_root_table) (local.get $__rg{li}) (i32.const 2) (i32.shl) (i32.add) (i32.load) (local.set ${li})"
-                ));
-            }
-        }
-        if self.has_ref_globals {
-            self.line("       (call $__gc_reload_globals)");
-        }
-        self.line("       (global.get $__gc_epoch) (local.set $__gc_epoch)");
-        self.line("     ))");
-    }
-
     fn emit_malloc_call(&mut self) {
         self.line("     (call $malloc)");
-        self.emit_gc_root_reload();
-        self.emit_reload_obj_root();
-    }
-
-    /// Emits the root reload after a Dream call. Broadens the previous "only after `gc_collect*`"
-    /// gate: any user call may reach a safepoint through its own body (allocation, nested call),
-    /// so pointers held in this function's WASM locals and globals must be refreshed before they
-    /// are read again.
-    pub(super) fn emit_gc_reload_after_call(&mut self) {
-        self.emit_gc_root_reload();
-        self.emit_reload_obj_root();
-    }
-
-    pub(super) fn emit_gc_reload_after_direct_call(&mut self, callee: &crate::Callee) {
-        if self
-            .non_safepoint
-            .contains(&(callee.def, callee.args.clone()))
-        {
-            return;
-        }
-        self.emit_gc_reload_after_call();
-    }
-
-    /// Push the freshly allocated `$__obj` into the root table and remember its index in
-    /// `$__obj_rg`. Callers use [`Self::emit_reload_obj_root`] to reload `$__obj` after any
-    /// intermediate safepoint (typically a user constructor call), and
-    /// [`Self::emit_pop_obj_root`] to release the ephemeral root before leaving the rvalue.
-    pub(super) fn emit_push_obj_root(&mut self) {
-        self.line("     (local.get $__obj) (call $gc_root_push) (local.set $__obj_rg)");
-        self.obj_construction_root = true;
-    }
-
-    /// If an object-construction root is live, refresh `$__obj` from its (possibly forwarded)
-    /// root-table slot. No-op when construction rooting is not in effect.
-    pub(super) fn emit_reload_obj_root(&mut self) {
-        if self.obj_construction_root {
-            self.line("     (global.get $__gc_root_table) (local.get $__obj_rg) (i32.const 2) (i32.shl) (i32.add) (i32.load) (local.set $__obj)");
-        }
-    }
-
-    /// Release the object-construction root (shrinks the root table back to before the pushed
-    /// `$__obj` slot). No-op when construction rooting is not in effect.
-    pub(super) fn emit_pop_obj_root(&mut self) {
-        if self.obj_construction_root {
-            self.line("     (local.get $__obj_rg) (call $gc_root_pop)");
-            self.obj_construction_root = false;
-        }
     }
 
     /// Emits the `dream_debug.exit` hook (pops the debugger's call-stack frame) right before a return,
@@ -671,8 +463,7 @@ impl Emitter<'_> {
         Some((f.offset, f.ty))
     }
 
-    /// Like [`Self::field_layout`], but also exposes the field's `weak` storage qualifier (see
-    /// `docs/language/memory.md`), needed at the store site (register in the weak side-table).
+    /// Like [`Self::field_layout`], but also exposes the field's layout flags.
     fn field_layout_full(
         &self,
         base: crate::Local,
@@ -822,12 +613,6 @@ impl Emitter<'_> {
             BinOp::Shr => format!("{}.shr{}", w, s),
         }
     }
-
-    pub(super) fn emit_mark_obj_young(&mut self) {
-        self.line("     (local.get $__obj) (global.get $__gc_nursery_start) (i32.ge_u)");
-        self.line("     (local.get $__obj) (global.get $__gc_nursery_end) (i32.lt_u)");
-        self.line("     (i32.and) (local.set $__obj_young)");
-    }
 }
 
 #[derive(Default, Clone, Copy)]
@@ -838,8 +623,9 @@ struct ScratchNeeds {
     rel: bool,
     slot: bool,
     jsp: bool,
-    weak: bool,
     src: bool,
+    /// Tee-slot for `to_string` results that `$print_string` consumes, then `$dream_drop`.
+    drop: bool,
 }
 
 fn scratch_needs(
@@ -851,7 +637,7 @@ fn scratch_needs(
     for block in &func.blocks {
         for stmt in &block.stmts {
             match stmt {
-                Statement::Assign(place, rv) => {
+                Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
                     scan_rvalue(&mut n, rv);
                     scan_place_store(&mut n, func, interner, layouts, place);
                 }
@@ -861,6 +647,9 @@ fn scratch_needs(
                     n.src = true;
                 }
                 Statement::JsCall { .. } => n.jsp = true,
+                Statement::Print { ty, .. } if print_formats_temp_string(interner, *ty) => {
+                    n.drop = true;
+                }
                 _ => {}
             }
         }
@@ -919,10 +708,6 @@ fn scan_place_store(
         Place::Field { base, field } => {
             let bty = func.local_ty(*base);
             if let Some(f) = layouts.get(bty).and_then(|lay| lay.fields.get(*field)) {
-                if f.is_weak {
-                    n.weak = true;
-                    n.src = true;
-                }
                 if interner.is_reference(f.ty) {
                     n.rel = true;
                     n.src = true;
@@ -957,4 +742,11 @@ fn scan_place_store(
             }
         }
     }
+}
+
+fn print_formats_temp_string(interner: &TypeInterner, ty: TypeId) -> bool {
+    !matches!(
+        interner.kind(ty),
+        TyKind::Prim(PrimTy::Int | PrimTy::Char | PrimTy::String) | TyKind::Enum(_)
+    )
 }

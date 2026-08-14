@@ -1,0 +1,9 @@
+import system;
+
+fun main(): void {
+    with ArenaAllocator() {
+        let xs = [1, 2, 3];
+        System.println(xs[0]);
+        System.println(xs[2]);
+    }
+}

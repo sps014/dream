@@ -250,15 +250,20 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let attributes = self.parse_attributes();
 
-            // A `ref name: T` / `borrow name: T` parameter. Both are real keywords (same slot).
-            // Unmarked and `borrow` parameters are plain shared refs (`borrow` is an ignored
-            // synonym kept for source compatibility); only `ref` changes calling convention.
+            // A `ref` / `borrow` / `move` parameter. Unmarked and `borrow` are borrows (callee
+            // does not drop); `move` transfers ownership; only `ref` aliases caller storage.
             let is_ref = self.current_token().kind == TokenKind::RefToken;
             if is_ref {
                 self.match_token(TokenKind::RefToken);
             }
             let is_borrow = if !is_ref && self.current_token().kind == TokenKind::BorrowToken {
                 self.match_token(TokenKind::BorrowToken);
+                true
+            } else {
+                false
+            };
+            let is_move = if !is_ref && !is_borrow && self.current_token().kind == TokenKind::MoveToken {
+                self.match_token(TokenKind::MoveToken);
                 true
             } else {
                 false
@@ -282,6 +287,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some("ref")
             } else if is_borrow {
                 Some("borrow")
+            } else if is_move {
+                Some("move")
             } else {
                 None
             };
@@ -338,6 +345,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }
                     let node = if is_ref {
                         ParameterNode::by_ref(param, param_type)
+                    } else if is_move {
+                        ParameterNode::by_move(param, param_type)
                     } else {
                         ParameterNode::borrow(param, param_type)
                     };
@@ -382,6 +391,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         | TokenKind::DotDotDotToken
                         | TokenKind::RefToken
                         | TokenKind::BorrowToken
+                        | TokenKind::MoveToken
                         | TokenKind::AtToken
                 ) {
                     //eat the comma

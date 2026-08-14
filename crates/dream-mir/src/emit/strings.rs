@@ -67,7 +67,7 @@ pub(super) fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<
 
 /// Interns every string constant in the program to a data pointer, in first-appearance order
 /// (deterministic). Each string is a heap-object block
-/// `[size=0][tag=STRING][gc_meta=IMMORTAL][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
+/// `[size=0][tag=STRING][reserved=0][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
 /// points at the byte_len word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at
 /// `ptr+8`, so it is a valid runtime string pointer. There is no NUL terminator (the length prefix
 /// makes it redundant). Blocks are laid out consecutively, 4-byte aligned.
@@ -230,7 +230,7 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
 
 pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
     match s {
-        Statement::Assign(place, rv) => {
+        Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
             if let Place::Index { index, .. } = place {
                 strings_in_operand(index, out);
             }
@@ -281,7 +281,9 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(src_off, out);
             strings_in_operand(count, out);
         },
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => strings_in_operand(o, out),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::ArenaEnter(o) => {
+            strings_in_operand(o, out)
+        }
         Statement::SimdF32x4 {
             dest,
             lhs,
@@ -294,7 +296,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(rhs, out);
             strings_in_operand(index, out);
         }
-        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
+        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) | Statement::ArenaExit => {}
     }
 }
 
@@ -407,7 +409,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         }
     }
     match s {
-        Statement::Assign(place, rv) => {
+        Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
             in_place(place, out);
             in_rvalue(rv, out);
         }
@@ -421,6 +423,8 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::ArrayElemsCopy { .. }
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
+        | Statement::ArenaEnter(_)
+        | Statement::ArenaExit
         | Statement::SimdF32x4 { .. }
         | Statement::ValueDrop(_)
         | Statement::Nop
@@ -485,7 +489,7 @@ pub(super) fn strings_in_terminator(t: &Terminator, out: &mut Vec<String>) {
 }
 
 /// Escapes an interned string's full heap-block bytes as `\HH` pairs: the 12-byte header
-/// (`size=0`, `tag=STRING`, `gc_meta=IMMORTAL`, little-endian i32s), the string data header
+/// (`size=0`, `tag=STRING`, reserved word 0, little-endian i32s), the string data header
 /// (`byte_len`, `scalar_len` as little-endian i32s), then the utf8 bytes. No NUL terminator.
 /// Written at the block start (the mapped address minus [`HEAP_HEADER_SIZE`]); the mapped address
 /// itself points at the byte_len word.
@@ -494,7 +498,7 @@ pub(super) fn escape_data(s: &str) -> String {
     for word in [
         0_i32,
         STRING_TAG,
-        crate::abi::GC_META_IMMORTAL as i32,
+        0_i32,
         s.len() as i32,
         s.chars().count() as i32,
     ] {

@@ -22,14 +22,14 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 08 | [Testing & Determinism](./08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
 | 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
-| 12 | [Tiered GC](./12-tiered-gc.md) | C#-like STW generational GC (Gen0/1/2/LOH); ARC deleted |
+| 12 | [Allocators](./12-allocators.md) | GPA / size-class freelist, arenas, `InsertDrops`, `$malloc`/`$free` |
 
 ## Why a multi-pass architecture
 
 The original Dream backend walked the AST directly and re-derived semantic facts (types, resolved callees, ownership) inside code generation. That works for a small language but has three structural problems:
 
 1. **Re-derivation is fragile and duplicated.** The analyzer already computes types and resolutions; an AST-walking backend recomputes approximations of them, and the two sources of truth drift apart.
-2. **No place to optimize.** Constant folding, DCE, inlining, and GC root/barrier placement need a representation with explicit control and data flow. The AST has neither.
+2. **No place to optimize.** Constant folding, DCE, inlining, and drop placement need a representation with explicit control and data flow. The AST has neither.
 3. **Stringly-typed types.** Types compared and keyed as strings (`"Box_int"`, `"int[]"`, `"int?"`) make equality a string compare, monomorphization string mangling, and every consumer a re-parser. Slow, error-prone, hard to extend.
 
 The current design fixes all three with three layered representations plus a structured type system:
@@ -133,7 +133,7 @@ Cargo enforces: `dream-sema` never depends on `dream-mir`, and `dream-syntax` ne
 | **Names** | Identifiers | Resolved `Binding`/`Callee` | `Local`/`Global` indices |
 | **Control flow** | `if`/`while`/`for`/… | Same (structured) | `goto`/`if`/`switch` terminators |
 | **Generics** | Type-parameter syntax | Explicit `MonoInstance` worklist | Already monomorphized |
-| **GC / alloc** | Implicit | Implicit | Explicit `New` + barriers / safepoints |
+| **Alloc** | Implicit | Implicit | Explicit `$malloc` / `$free` |
 | **Purpose** | Faithful parse | Kill re-derivation | Optimize + emit |
 
 ## Glossary
@@ -146,7 +146,7 @@ Cargo enforces: `dream-sema` never depends on `dream-mir`, and `dream-syntax` ne
 - **Terminator** — the control-flow instruction ending a block (`goto`, `if`, `switch`, `return`, `unreachable`).
 - **Operand** — a readable value: a local/global read or a constant. All computation is an `Rvalue`.
 - **Relooper** — the algorithm that turns a reducible CFG back into the structured `block`/`loop`/`if` WASM requires.
-- **GC** — generational garbage collection in linear memory. Roots + write barriers; no `Retain`/`Release`.
+- **Allocator** — size-class freelist in linear memory (`$malloc` / `$free`). Owning locals are dropped by `InsertDrops`; arenas switch the current allocator for a scope.
 - **Poison / `Error` type** — the type given to expressions after a semantic error, assignable to and from everything so one mistake doesn't cascade into a flood of diagnostics.
 
 ## Doc conventions

@@ -74,7 +74,7 @@ fn range_facts(func: &MirFunction, nonneg: &HashSet<u32>) -> Facts {
 fn mark_stmt(stmt: &mut Statement, facts: &Facts) -> bool {
     let mut changed = false;
     match stmt {
-        Statement::Assign(place, rv) => {
+        Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
             changed |= mark_place(place, facts, 0);
             changed |= mark_rvalue(rv, facts);
         }

@@ -59,7 +59,7 @@ fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
             hir_expr_edges(cond, out);
             hir_body_edges(body, out);
         }
-        HStmt::Lock { target, body } => {
+        HStmt::Lock { target, body } | HStmt::WithArena { size: target, body } => {
             hir_expr_edges(target, out);
             hir_body_edges(body, out);
         }
@@ -160,6 +160,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(b, out);
         }
         K::Unary { operand: x, .. }
+        | K::Move { operand: x }
         | K::Field { obj: x, .. }
         | K::ArrayLen(x)
         | K::StrLen(x)

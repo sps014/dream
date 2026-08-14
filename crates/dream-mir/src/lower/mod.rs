@@ -117,6 +117,8 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     for p in &func.params {
         let l = if p.is_ref {
             b.new_ref_param(p.ty, Some(p.name.clone()))
+        } else if p.is_move {
+            b.new_move_param(p.ty, Some(p.name.clone()))
         } else {
             b.new_param(p.ty, Some(p.name.clone()))
         };
@@ -149,6 +151,7 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
         locals,
         loops: Vec::new(),
         locks: Vec::new(),
+        arena_depth: 0,
         async_coroutine: false,
     };
     lo.lower_block(&func.body);
@@ -174,6 +177,7 @@ pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFu
         locals,
         loops: Vec::new(),
         locks: Vec::new(),
+        arena_depth: 0,
         async_coroutine: true,
     };
     lo.lower_block(&func.body);
@@ -193,6 +197,7 @@ struct LoopCtx {
     /// lock acquired *inside* the loop (`self.locks[lock_depth..]`, innermost first) but leaves any
     /// lock already held when the loop started untouched.
     lock_depth: usize,
+    arena_depth: usize,
 }
 
 struct Lowerer<'a> {
@@ -204,6 +209,7 @@ struct Lowerer<'a> {
     /// see [`Lowerer::lower_lock`] and the release-on-every-exit-path logic in `lower_break`/
     /// `lower_continue`/`HStmt::Return`.
     locks: Vec<Local>,
+    arena_depth: usize,
     /// When set, this is an async coroutine body: `return` completes the async task (rather than
     /// returning from a WASM function), and each `await` lowers to a [`Terminator::Await`] suspend
     /// point that splits the current block (so awaits work in any control-flow position).
@@ -230,6 +236,7 @@ impl Lowerer<'_> {
                 let rv = self.lower_rvalue(value);
                 let dest = self.mir_local(*local);
                 self.b.assign(Place::Local(dest), rv);
+                self.null_move_sources(value, None);
             }
             HStmt::Assign { place, value } => {
                 // `this.f = Buffer.realloc<T>(this.f, n)` (the `List<T>.grow`/`Pointer<T>.realloc`
@@ -281,6 +288,7 @@ impl Lowerer<'_> {
                 let rv = self.lower_rvalue(value);
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);
+                self.null_move_sources(value, None);
             }
             // A bare `await e;` in a coroutine suspends on the future and discards its result.
             HStmt::Await(e) if self.async_coroutine => {
@@ -293,7 +301,8 @@ impl Lowerer<'_> {
                 });
                 self.b.switch_to(resume);
             }
-            HStmt::Expr(e) | HStmt::Await(e) => match &e.kind {
+            HStmt::Expr(e) | HStmt::Await(e) => {
+                match &e.kind {
                 // A bare call keeps its `Call` statement form (return value discarded). This matters
                 // for void calls: materializing them into a temp (the fallback below) would emit a
                 // `local.set` with nothing on the stack. A call whose discarded result is an owned
@@ -409,9 +418,15 @@ impl Lowerer<'_> {
                 _ => {
                     let _ = self.lower_operand(e);
                 }
-            },
+                }
+                self.null_move_sources(e, None);
+            }
             HStmt::Return(e) => {
-                let op = e.as_ref().map(|e| self.lower_operand(e));
+                let skip = e.as_ref().and_then(returned_local);
+                let op = e.as_ref().map(|ex| self.lower_operand(ex));
+                if let Some(ex) = e {
+                    self.null_move_sources(ex, skip);
+                }
                 self.release_all_locks();
                 if self.async_coroutine {
                     self.b.terminate(Terminator::AsyncComplete(op));
@@ -449,9 +464,18 @@ impl Lowerer<'_> {
             HStmt::Break(label) => self.lower_break(label.as_deref()),
             HStmt::Continue(label) => self.lower_continue(label.as_deref()),
             HStmt::Lock { target, body } => self.lower_lock(target, body),
+            HStmt::WithArena { size, body } => self.lower_with_arena(size, body),
             HStmt::DebugLine(line) => self.b.push(Statement::DebugLine(*line)),
             HStmt::SourceLine(line) => self.b.push(Statement::SourceLine(*line)),
         }
+    }
+}
+
+fn returned_local(e: &HExpr) -> Option<u32> {
+    match &e.kind {
+        HExprKind::Var(Binding::Local(l)) => Some(l.0),
+        HExprKind::Move { operand } | HExprKind::Cast(operand) => returned_local(operand),
+        _ => None,
     }
 }
 
@@ -492,6 +516,8 @@ mod tests {
                 name: "x".into(),
                 ty: int,
                 is_ref: false,
+                is_move: false,
+                is_borrow: false,
             }],
             ret: int,
             locals: vec![],

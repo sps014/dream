@@ -60,6 +60,7 @@ impl FunctionBuilder {
             name,
             is_ref: false,
             manual_drop: false,
+            is_move: false,
         });
         id
     }
@@ -81,6 +82,13 @@ impl FunctionBuilder {
     pub fn new_ref_param(&mut self, ty: TypeId, name: Option<String>) -> Local {
         let l = self.new_param(ty, name);
         self.locals[l.0 as usize].is_ref = true;
+        l
+    }
+
+    /// Declares a `move` parameter: the callee owns the heap value and drops it on exit.
+    pub fn new_move_param(&mut self, ty: TypeId, name: Option<String>) -> Local {
+        let l = self.new_param(ty, name);
+        self.locals[l.0 as usize].is_move = true;
         l
     }
 
@@ -107,6 +115,11 @@ impl FunctionBuilder {
     /// Convenience for `place = rvalue`.
     pub fn assign(&mut self, place: Place, rvalue: Rvalue) {
         self.push(Statement::Assign(place, rvalue));
+    }
+
+    /// Store without `$dream_drop` of the previous occupant (field move-out).
+    pub fn assign_no_drop(&mut self, place: Place, rvalue: Rvalue) {
+        self.push(Statement::AssignNoDrop(place, rvalue));
     }
 
     /// Sets the terminator of the current block (overwrites the default).

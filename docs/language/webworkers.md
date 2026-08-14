@@ -6,7 +6,7 @@ Dream's [`async`/`await`](async.md) is a *single-threaded* scheduler: tasks inte
 
 A `WebWorker<TIn, TOut>` starts a body on its own OS thread (native) or Web Worker (browser) via **`spawn`**, then **`await join()`** for the single result — the same shape as C# `Task.Run` / Python `asyncio.to_thread`. Each worker has its own private globals, but **shares the same heap memory** with the owner. Heap objects (`@shared class`, `Lock` / `Semaphore`, `CancellationToken`) are visible across workers — real parallelism with shared state, guarded by `@shared` / `lock`.
 
-Memory is a **cooperative stop-the-world generational GC** on that shared linear memory (not isolated per-worker heaps): a collection takes the allocator lock and waits until every live instance has reached a safepoint before evacuating. See [Memory Management](memory.md) and [`docs/compiler/12-tiered-gc.md`](../compiler/12-tiered-gc.md).
+Memory is a **shared size-class allocator** on that linear memory (not isolated per-worker heaps). Threads take the allocator lock around `$malloc` / `$free`. See [Memory Management](memory.md) and [`docs/compiler/12-allocators.md`](../compiler/12-allocators.md).
 
 Optional wire arguments / `TOut` must each be `string`, an `unmanaged` (blittable) value type, or a `T[]` array of one: values cross the thread boundary on an internal wire format — never a live non-`@shared` pointer.
 
@@ -205,9 +205,9 @@ Capture and wire rules match `spawn`.
 
 | Runtime | Notes |
 |---------|--------|
-| Native (`dream run`) | One OS thread per worker; shared heap + cooperative STW GC with the owner. |
+| Native (`dream run`) | One OS thread per worker; shared heap + allocator lock with the owner. |
 | Browser | One `Worker` per worker; shared memory needs COOP/COEP on the host page. |
-| Node | One `worker_threads.Worker` per worker; same shared-memory GC model. |
+| Node | One `worker_threads.Worker` per worker; same shared-memory allocator. |
 
 ## Notes and limits
 
@@ -219,5 +219,5 @@ Capture and wire rules match `spawn`.
 
 - [Lock & Semaphore](../stdlib/sync.md) — standalone synchronization primitives.
 - [Classes & Structs](classes-structs.md) — `@shared class` and the closed-graph field rule.
-- [Memory Management](memory.md) — generational GC, including the path `@shared` classes use.
+- [Memory Management](memory.md) — GPA, arenas, and the path `@shared` classes use.
 - [Async](async.md) — cooperative `CancellationToken` / `Promise.cancel`.

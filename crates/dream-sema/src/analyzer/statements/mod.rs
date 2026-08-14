@@ -24,6 +24,7 @@ mod bindings;
 mod case_switch;
 mod conditionals;
 mod lock;
+mod with_arena;
 mod loops;
 
 impl<'a> Analyzer<'a> {

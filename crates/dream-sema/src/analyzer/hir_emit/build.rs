@@ -251,6 +251,7 @@ impl<'a> Analyzer<'a> {
                         ty: fty,
                         name: fname,
                         is_weak: false,
+                        skip_nested_drop: false,
                     });
                     offset += fsize;
                 }
@@ -272,6 +273,7 @@ impl<'a> Analyzer<'a> {
                 },
             );
         }
+        mark_borrow_stored_fields(&self.hir.functions, &mut layouts);
         layouts
     }
 
@@ -531,5 +533,120 @@ fn value_field_size(
         TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => (1, 1),
         TyKind::Prim(PrimTy::Double | PrimTy::Long | PrimTy::ULong) => (8, 8),
         _ => (4, 4),
+    }
+}
+
+/// Explicit `borrow` params stored into `this.f` are aliases; nested drop of the object must not
+/// walk those fields (RegexCompiler.table, RegexVM.prog, …).
+fn mark_borrow_stored_fields(functions: &[dream_hir::HFunction], layouts: &mut dream_hir::LayoutTable) {
+    use std::collections::HashSet;
+
+    for f in functions {
+        let Some(this) = f.params.first() else {
+            continue;
+        };
+        let this_local = this.local.0;
+        let this_ty = this.ty;
+        let borrow_locals: HashSet<u32> = f
+            .params
+            .iter()
+            .filter(|p| p.is_borrow)
+            .map(|p| p.local.0)
+            .collect();
+        if borrow_locals.is_empty() {
+            continue;
+        }
+        mark_borrow_stored_in_stmts(&f.body, this_local, this_ty, &borrow_locals, layouts);
+    }
+}
+
+fn expr_is_borrow_local(e: &dream_hir::HExpr, borrow_locals: &std::collections::HashSet<u32>) -> bool {
+    use dream_hir::{Binding, HExprKind};
+    match &e.kind {
+        HExprKind::Var(Binding::Local(l)) => borrow_locals.contains(&l.0),
+        HExprKind::Cast(inner) | HExprKind::Move { operand: inner } => {
+            expr_is_borrow_local(inner, borrow_locals)
+        }
+        _ => false,
+    }
+}
+
+fn mark_borrow_stored_in_stmts(
+    stmts: &[dream_hir::HStmt],
+    this_local: u32,
+    this_ty: dream_types::TypeId,
+    borrow_locals: &std::collections::HashSet<u32>,
+    layouts: &mut dream_hir::LayoutTable,
+) {
+    use dream_hir::{Binding, HExprKind, HPlace, HStmt};
+    for s in stmts {
+        match s {
+            HStmt::Assign {
+                place: HPlace::Field { obj, field },
+                value,
+            } => {
+                let obj_is_this = matches!(
+                    &obj.kind,
+                    HExprKind::Var(Binding::Local(l)) if l.0 == this_local
+                );
+                if obj_is_this && expr_is_borrow_local(value, borrow_locals) {
+                    if let Some(layout) = layouts.structs.get_mut(&this_ty) {
+                        if let Some(f) = layout.fields.get_mut(*field) {
+                            f.skip_nested_drop = true;
+                        }
+                    }
+                }
+            }
+            HStmt::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                mark_borrow_stored_in_stmts(
+                    then_branch,
+                    this_local,
+                    this_ty,
+                    borrow_locals,
+                    layouts,
+                );
+                mark_borrow_stored_in_stmts(
+                    else_branch,
+                    this_local,
+                    this_ty,
+                    borrow_locals,
+                    layouts,
+                );
+            }
+            HStmt::While { body, .. }
+            | HStmt::DoWhile { body, .. }
+            | HStmt::Foreach { body, .. }
+            | HStmt::Lock { body, .. }
+            | HStmt::WithArena { body, .. } => {
+                mark_borrow_stored_in_stmts(body, this_local, this_ty, borrow_locals, layouts);
+            }
+            HStmt::For {
+                init,
+                step,
+                body,
+                ..
+            } => {
+                mark_borrow_stored_in_stmts(init, this_local, this_ty, borrow_locals, layouts);
+                mark_borrow_stored_in_stmts(step, this_local, this_ty, borrow_locals, layouts);
+                mark_borrow_stored_in_stmts(body, this_local, this_ty, borrow_locals, layouts);
+            }
+            HStmt::Switch { arms, default, .. } => {
+                for arm in arms {
+                    mark_borrow_stored_in_stmts(
+                        &arm.body,
+                        this_local,
+                        this_ty,
+                        borrow_locals,
+                        layouts,
+                    );
+                }
+                mark_borrow_stored_in_stmts(default, this_local, this_ty, borrow_locals, layouts);
+            }
+            _ => {}
+        }
     }
 }

@@ -1,19 +1,14 @@
 use super::*;
 
-/// The allocator + GC + string runtime. When `debug` is on (the default compiler mode), `$malloc`
+/// The allocator + string runtime. When `debug` is on (the default compiler mode), `$malloc`
 /// bumps `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
 /// `Debug.*` probes); under `--release` the placeholders expand to nothing so the hot allocation
 /// path carries no extra instructions.
 ///
 /// When `needs_threads` is false (no `WebWorker` / worker-pool host imports in the module), the
-/// allocator spinlock around `$malloc`/`$free`/`$gc_collect_*` is also elided: a single-threaded
-/// instance never races on the free lists, so the atomic acquire/release is pure overhead.
-pub(super) fn runtime_prelude(
-    debug: bool,
-    needs_threads: bool,
-    empty_string: u32,
-    dead_nursery: bool,
-) -> String {
+/// allocator spinlock around `$malloc`/`$free` is also elided: a single-threaded instance never
+/// races on the free lists, so the atomic acquire/release is pure overhead.
+pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u32) -> String {
     let (malloc_count, free_count) = if debug {
         (
             "global.get $live_objects\n    i32.const 1\n    i32.add\n    global.set $live_objects\n    \
@@ -28,39 +23,45 @@ pub(super) fn runtime_prelude(
     } else {
         ("", "")
     };
-    let bump_commit = if needs_threads {
-        "i32.const {NURSERY_BUMP_ADDR}\n    local.get $bump\n    i32.store"
+    let heap_get = if needs_threads {
+        format!(
+            "i32.const {}\n    i32.load",
+            crate::abi::HEAP_PTR_ADDR
+        )
     } else {
-        ""
+        "global.get $heap_ptr".to_string()
+    };
+    let heap_set_p = if needs_threads {
+        format!(
+            "i32.const {}\n    local.get $p\n    i32.store",
+            crate::abi::HEAP_PTR_ADDR
+        )
+    } else {
+        "local.get $p\n    global.set $heap_ptr".to_string()
+    };
+    let heap_set_bump = if needs_threads {
+        format!(
+            "i32.const {}\n    local.get $new_heap\n    i32.store",
+            crate::abi::HEAP_PTR_ADDR
+        )
+    } else {
+        "local.get $new_heap\n    global.set $heap_ptr".to_string()
     };
     let mut out = RUNTIME_ALLOCATOR
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count)
         .replace(";;@ALLOC_LOCK_ACQUIRE@", lock_acquire)
         .replace(";;@ALLOC_LOCK_RELEASE@", lock_release)
+        .replace(";;@HEAP_PTR_GET_BODY@", &heap_get)
+        .replace(";;@HEAP_PTR_SET_BODY@", &heap_set_p)
+        .replace(";;@HEAP_PTR_GET@", &heap_get)
+        .replace(";;@HEAP_PTR_SET@", &heap_set_bump)
         .replace(
             "{ALLOC_LOCK_ADDR}",
             &crate::abi::ALLOC_LOCK_ADDR.to_string(),
         )
-        .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
-        .replace(
-            "{GC_META_FREE}",
-            &crate::abi::GC_META_FREE.to_string(),
-        );
+        .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string());
     out.push('\n');
-    out.push_str(&substitute_gc_runtime(
-        lock_acquire,
-        lock_release,
-        malloc_count,
-        free_count,
-        dead_nursery,
-        bump_commit,
-    ));
-    out.push('\n');
-    // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
-    // itself no longer bounds-checks: callers emit a located check inline before calling it (see
-    // `Emitter::emit_char_at`), so a string-index panic gets a precise file:line rather than the one
-    // bare, unlocated message a truly shared runtime helper would be stuck with.
     out.push_str(
         &RUNTIME_STRINGS
             .replace("{TAG_STRING}", &crate::abi::TAG_STRING.to_string())
@@ -70,96 +71,6 @@ pub(super) fn runtime_prelude(
     out.push('\n');
     out.push_str(RUNTIME_SIMD);
     out
-}
-
-fn substitute_gc_runtime(
-    lock_acquire: &str,
-    lock_release: &str,
-    malloc_count: &str,
-    free_count: &str,
-    dead_nursery: bool,
-    bump_commit: &str,
-) -> String {
-    use crate::abi as a;
-    RUNTIME_GC
-        .replace(";;@ALLOC_LOCK_ACQUIRE@", lock_acquire)
-        .replace(";;@ALLOC_LOCK_RELEASE@", lock_release)
-        .replace(";;@NURSERY_BUMP_COMMIT@", bump_commit)
-        .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
-        .replace(";;@DEBUG_FREE_COUNT@", free_count)
-        .replace("{ALLOC_LOCK_ADDR}", &a::ALLOC_LOCK_ADDR.to_string())
-        .replace("{HEAP_PTR_ADDR}", &a::HEAP_PTR_ADDR.to_string())
-        .replace("{GC_META_GEN_MASK}", &a::GC_META_GEN_MASK.to_string())
-        .replace("{GC_META_MARK}", &a::GC_META_MARK.to_string())
-        .replace("{GC_META_FORWARDED}", &a::GC_META_FORWARDED.to_string())
-        .replace("{GC_META_FINALIZE}", &a::GC_META_FINALIZE.to_string())
-        .replace("{GC_META_FINALIZED}", &a::GC_META_FINALIZED.to_string())
-        .replace("{GC_META_IMMORTAL}", &a::GC_META_IMMORTAL.to_string())
-        .replace("{GC_META_FREE}", &a::GC_META_FREE.to_string())
-        .replace("{GC_GEN0}", &a::GC_GEN0.to_string())
-        .replace("{GC_GEN1}", &a::GC_GEN1.to_string())
-        .replace("{GC_GEN2}", &a::GC_GEN2.to_string())
-        .replace("{GC_GEN_LOH}", &a::GC_GEN_LOH.to_string())
-        .replace("{LOH_THRESHOLD}", &a::LOH_THRESHOLD.to_string())
-        .replace("{NURSERY_SIZE}", &a::NURSERY_SIZE.to_string())
-        .replace(
-            "{GC_DEAD_NURSERY_NEEDED}",
-            if dead_nursery { "1" } else { "0" },
-        )
-        .replace("{NURSERY_BUMP_ADDR}", &a::NURSERY_BUMP_ADDR.to_string())
-        .replace("{NURSERY_START_ADDR}", &a::NURSERY_START_ADDR.to_string())
-        .replace("{NURSERY_END_ADDR}", &a::NURSERY_END_ADDR.to_string())
-        .replace("{OLD_START_ADDR}", &a::OLD_START_ADDR.to_string())
-        .replace("{GC_REQUEST_ADDR}", &a::GC_REQUEST_ADDR.to_string())
-        .replace(
-            "{GC_SAFEPOINT_EXPECT_ADDR}",
-            &a::GC_SAFEPOINT_EXPECT_ADDR.to_string(),
-        )
-        .replace("{GC_SAFEPOINT_ACK_ADDR}", &a::GC_SAFEPOINT_ACK_ADDR.to_string())
-        .replace("{GC_COLLECT_KIND_ADDR}", &a::GC_COLLECT_KIND_ADDR.to_string())
-        .replace("{GC_ROOT_COUNT_ADDR}", &a::GC_ROOT_COUNT_ADDR.to_string())
-        .replace(
-            "{GC_ROOT_TABLE_PTR_ADDR}",
-            &a::GC_ROOT_TABLE_PTR_ADDR.to_string(),
-        )
-        .replace("{GC_ROOT_TABLE_CAP}", &a::GC_ROOT_TABLE_CAP.to_string())
-        .replace("{GC_REMSET_COUNT_ADDR}", &a::GC_REMSET_COUNT_ADDR.to_string())
-        .replace(
-            "{GC_REMSET_TABLE_PTR_ADDR}",
-            &a::GC_REMSET_TABLE_PTR_ADDR.to_string(),
-        )
-        .replace("{GC_REMEMBERED_CAP}", &a::GC_REMEMBERED_CAP.to_string())
-        .replace(
-            "{GC_REMSET_OVERFLOW_ADDR}",
-            &a::GC_REMSET_OVERFLOW_ADDR.to_string(),
-        )
-        .replace("{GC_EPOCH_ADDR}", &a::GC_EPOCH_ADDR.to_string())
-        .replace(
-            "{GC_CARD_TABLE_PTR_ADDR}",
-            &a::GC_CARD_TABLE_PTR_ADDR.to_string(),
-        )
-        .replace("{GC_CARD_SHIFT}", &a::GC_CARD_SHIFT.to_string())
-        .replace(
-            "{GC_CARD_TABLE_BYTES}",
-            &a::GC_CARD_TABLE_BYTES.to_string(),
-        )
-        .replace(
-            "{GC_FINALIZER_HEAD_ADDR}",
-            &a::GC_FINALIZER_HEAD_ADDR.to_string(),
-        )
-        .replace("{GC_OLD_BYTES_ADDR}", &a::GC_OLD_BYTES_ADDR.to_string())
-        .replace("{GC_GEN1_THRESHOLD}", &a::GC_GEN1_THRESHOLD.to_string())
-        .replace(
-            "{GC_MARK_STACK_PTR_ADDR}",
-            &a::GC_MARK_STACK_PTR_ADDR.to_string(),
-        )
-        .replace(
-            "{GC_MARK_STACK_BASE_ADDR}",
-            &a::GC_MARK_STACK_BASE_ADDR.to_string(),
-        )
-        .replace("{GC_MARK_STACK_CAP}", &a::GC_MARK_STACK_CAP.to_string())
-        .replace("{TAG_ARRAY}", &a::TAG_ARRAY.to_string())
-        .replace("{TAG_FLAT_ARRAY}", &a::TAG_FLAT_ARRAY.to_string())
 }
 
 /// True when this module imports any `WebWorker` / worker-pool host function. Only those programs

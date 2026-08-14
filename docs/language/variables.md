@@ -44,7 +44,7 @@ const pi: int = 3;
 
 ## Scope
 
-A variable lives until the end of the block it was declared in. When a reference-typed value (string, array, class) leaves scope, its reference count drops automatically — see [Memory Management](memory.md).
+A variable lives until the end of the block it was declared in. When a heap value (string, array, class) is an owning local, it is dropped at the end of that lifetime — see [Memory Management](memory.md).
 
 ```dream
 fun main(): void {

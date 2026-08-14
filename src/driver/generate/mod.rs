@@ -211,7 +211,9 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                     }
                 }
             }
-            StatementNode::While(cond, body) | StatementNode::Lock(cond, body) => {
+            StatementNode::While(cond, body)
+            | StatementNode::Lock(cond, body)
+            | StatementNode::With(cond, body) => {
                 walk_expr(cond, diagnostics);
                 for s in *body {
                     walk_stmt(s, diagnostics);

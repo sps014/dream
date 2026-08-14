@@ -28,11 +28,12 @@ argument, or returning a typed value — where Dream converts automatically:
 let count: int = config.count;   // js -> int here
 ```
 
-A `js` value is not a Dream linear-memory object, but its **host-side handle is GC-managed**:
-when the Dream-side handle becomes unreachable, the host unregisters the entry so the JS value
-can be collected. See [Memory Management](memory.md).
+A `js` value is not a Dream linear-memory object, but its **host-side handle** is a registry
+entry: when the Dream-side handle is dropped, the host unregisters the entry so the JS value
+can be reclaimed. See [Memory Management](memory.md).
 
-You do **not** call a manual release API — once no Dream root reaches the handle, GC reclaims it.
+You do **not** call a manual release API for ordinary `js` locals — dropping the Dream handle
+unregisters it.
 
 ## Getting a `js` value
 

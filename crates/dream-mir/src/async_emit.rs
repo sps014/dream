@@ -8,6 +8,7 @@ use super::emit::{
     emit_async_poll, func_symbol, poll_symbol, vs_retain_sym, wasm_ty_of,
 };
 use super::lower::lower_async_poll_body;
+use super::passes::{InsertDrops, MirPass};
 use super::MirFunction;
 use dream_hir::scalar_size;
 use dream_types::{TypeId, TypeInterner};
@@ -181,7 +182,6 @@ pub fn emit_async_function(
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
-    non_safepoint: &HashSet<(dream_types::DefId, Vec<TypeId>)>,
 ) -> String {
     let hir = func.hir_fn.as_ref().unwrap_or_else(|| {
         crate::internal_error!(
@@ -190,7 +190,8 @@ pub fn emit_async_function(
         )
     });
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
-    let body = lower_async_poll_body(hir, interner);
+    let mut body = lower_async_poll_body(hir, interner);
+    InsertDrops.run(&mut body, interner);
     let (slots, frame_size) = async_slots(&body, interner);
     let sym = func_symbol(func);
     let mut out = String::new();
@@ -260,13 +261,6 @@ pub fn emit_async_function(
             " local.get $self\n local.get ${idx}\n {} offset={off}",
             slot_store(wt)
         );
-        if interner.is_gc_tracked(body.locals[idx].ty) {
-            // Frame slot is a heap store of a ref — record older→younger edges.
-            let _ = writeln!(
-                out,
-                " local.get $self\n i32.const {off}\n i32.add\n global.get $__gc_old_start\n i32.ge_u\n (if (then\n  local.get $self\n  i32.const {off}\n  i32.add\n  local.get ${idx}\n  call $write_barrier\n ))"
-            );
-        }
     }
     out.push_str(" local.get $self\n call $dream_enqueue\n local.get $self\n)\n\n");
 
@@ -285,7 +279,6 @@ pub fn emit_async_function(
         &slots,
         &poll_symbol(func),
         user_local_count,
-        non_safepoint,
         debug,
         locate_panics,
         debug_fn,
@@ -293,17 +286,28 @@ pub fn emit_async_function(
     out
 }
 
-pub fn emit_async_main_wrapper(entry_sym: &str, has_args_param: bool) -> String {
+pub fn emit_async_main_wrapper(entry_sym: &str, has_args_param: bool, debug: bool) -> String {
     let mut out = String::from("(func (export \"main\")");
+    out.push_str("\n (local $fut i32)");
     if has_args_param {
         out.push_str("\n (local $args i32)");
         out.push_str("\n i32.const 4");
         out.push_str(&format!("\n i32.const {}", super::abi::TAG_ARRAY));
         out.push_str("\n call $malloc\n local.set $args\n local.get $args\n i32.const 0\n i32.store\n local.get $args");
     }
+    let leak = if debug {
+        "\n call $__gpa_check_leaks"
+    } else {
+        ""
+    };
+    let args_drop = if has_args_param {
+        "\n local.get $args\n call $dream_drop"
+    } else {
+        ""
+    };
     let _ = writeln!(
         out,
-        "\n call ${entry_sym}\n drop\n call $dream_run_loop\n)\n"
+        "\n call ${entry_sym}\n local.set $fut\n call $dream_run_loop\n local.get $fut\n call $free{args_drop}{leak}\n)\n"
     );
     out
 }

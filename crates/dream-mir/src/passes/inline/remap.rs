@@ -177,7 +177,7 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
 
 fn remap_stmt(s: &mut Statement, base: u32) {
     match s {
-        Statement::Assign(place, rv) => {
+        Statement::Assign(place, rv) | Statement::AssignNoDrop(place, rv) => {
             remap_place(place, base);
             remap_rvalue(rv, base);
         }
@@ -235,7 +235,10 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_operand(src_off, base);
             remap_operand(count, base);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => remap_operand(o, base),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::ArenaEnter(o) => {
+            remap_operand(o, base)
+        }
+        Statement::ArenaExit => {}
         Statement::SimdF32x4 {
             dest,
             lhs,

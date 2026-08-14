@@ -368,6 +368,10 @@ fn rewrite_stmt<'a>(
             rewrite_expr(arena, cond, by_site, diagnostics, changed)?,
             rewrite_function_body(arena, body, by_site, diagnostics)?,
         ),
+        StatementNode::With(cond, body) => StatementNode::With(
+            rewrite_expr(arena, cond, by_site, diagnostics, changed)?,
+            rewrite_function_body(arena, body, by_site, diagnostics)?,
+        ),
         StatementNode::DoWhile(body, cond) => StatementNode::DoWhile(
             rewrite_function_body(arena, body, by_site, diagnostics)?,
             rewrite_expr(arena, cond, by_site, diagnostics, changed)?,

@@ -8,8 +8,8 @@ boxing. Backend non-goals are also summarized in `AGENTS.md`.
 
 ## 1. Small-string inline (SSO) representation — **rejected**
 
-**Problem (historical):** every `string`, however short, is a heap allocation with an ARC header.
-For string-heavy code most strings are short-lived and short, so allocate/retain/release traffic
+**Problem (historical):** every `string`, however short, is a heap allocation with a 12-byte block header.
+For string-heavy code most strings are short-lived and short, so allocate/drop traffic
 dominates character data.
 
 **Proposed representation (never built):** a tagged value with inline ≤15-byte UTF-8 vs boxed
@@ -17,7 +17,7 @@ heap (today's layout), mirroring value unions' inline/box split.
 
 **Why rejected:** `string` is a first-class primitive threaded through the type system, runtime
 (`src/mir/runtime/strings.wat`), every emitter path that assumes `TyKind::Prim(PrimTy::String)` is
-an `i32` pointer, RC insertion (`interner.is_reference(ty)` is purely type-driven), JS marshaling,
+an `i32` pointer, drop insertion (`interner.is_reference(ty)` is purely type-driven), JS marshaling,
 and the debugger. An `(i32, i64)` ABI and per-value heap/inline checks are closer to a language
 ABI change than a self-contained follow-up. Heap-pointer strings stay the model:
 `PrimTy::String` remains `is_reference() == true`.

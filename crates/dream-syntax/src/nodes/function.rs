@@ -26,11 +26,11 @@ pub struct ParameterNode {
     /// with `default`/`is_variadic`/`is_borrow` (enforced by the parser). Call sites
     /// must pass a matching `ref` argument (`ExpressionNode::RefArgument`).
     pub is_ref: bool,
-    /// True for an explicit `borrow name: T` parameter. Under the GC shared-ref ABI this is an
-    /// ignored synonym of an unmarked parameter (no ownership effect). Kept so existing sources
-    /// that spell `borrow` continue to parse. Mutually exclusive with `ref`/`default`/`is_variadic`
-    /// (enforced by the parser). `borrow` is a reserved keyword (same class as `ref`).
+    /// True for an explicit `borrow name: T` parameter. Under unique/move, unmarked and `borrow`
+    /// parameters are borrows (callee does not drop them). Mutually exclusive with `ref`/`move`.
     pub is_borrow: bool,
+    /// True for a `move name: T` parameter: the callee takes ownership and drops it.
+    pub is_move: bool,
 }
 
 impl ParameterNode {
@@ -44,6 +44,7 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: false,
             is_borrow: false,
+            is_move: false,
         }
     }
 
@@ -57,6 +58,7 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: false,
             is_borrow: false,
+            is_move: false,
         }
     }
 
@@ -70,6 +72,7 @@ impl ParameterNode {
             is_variadic: true,
             is_ref: false,
             is_borrow: false,
+            is_move: false,
         }
     }
 
@@ -83,10 +86,11 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: true,
             is_borrow: false,
+            is_move: false,
         }
     }
 
-    /// Creates a `borrow name: T` parameter node (`borrow` is an ignored synonym of unmarked).
+    /// Creates a `borrow name: T` parameter node.
     pub fn borrow(name: SyntaxToken, type_: Type) -> ParameterNode {
         ParameterNode {
             attributes: Vec::new(),
@@ -96,6 +100,21 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: false,
             is_borrow: true,
+            is_move: false,
+        }
+    }
+
+    /// Creates a `move name: T` parameter node (callee owns and drops).
+    pub fn by_move(name: SyntaxToken, type_: Type) -> ParameterNode {
+        ParameterNode {
+            attributes: Vec::new(),
+            name,
+            type_,
+            default: None,
+            is_variadic: false,
+            is_ref: false,
+            is_borrow: false,
+            is_move: true,
         }
     }
 

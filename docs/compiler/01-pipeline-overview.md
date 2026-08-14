@@ -17,9 +17,9 @@ flowchart TD
 
     info --> hir["HIR emission\nlower AST+SemanticInfo → typed HIR"]
     hir --> mir["mir::lower\nHIR → CFG MIR"]
-    mir --> rc["RcInsertion pass\n(make ownership explicit)"]
-    rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
-    opt --> emit["mir::emit\nMIR → WAT (via relooper)"]
+    mir --> opt["module optimize\ninline + prune, then per-function pipeline"]
+    opt --> drops["InsertDrops\n(owning locals → $dream_drop)"]
+    drops --> emit["mir::emit\nMIR → WAT (via relooper)"]
 
     emit --> wat["WAT text (.wat)"]
     wat --> abi["driver::abi::emit_wasm_and_abi\nwat→wasm [+ .abi.json for JS]"]
@@ -72,7 +72,7 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `RcInsertion` makes ownership explicit (module-wide, before inlining); `optimize_module` inlines and prunes, then the per-function `PassManager` runs the optimization pipeline to a fixpoint. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `optimize_module` inlines and prunes, then the per-function `PassManager` runs the optimization pipeline to a fixpoint and `InsertDrops` emits `$dream_drop` for owning heap locals. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
 ### 7. Backend — `src/mir/relooper.rs` + `src/mir/emit/`
 

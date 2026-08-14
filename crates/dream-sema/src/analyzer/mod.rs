@@ -27,6 +27,7 @@ mod expressions;
 mod generics;
 mod hir_emit;
 mod js_interop;
+mod ownership;
 mod statements;
 mod switch_unions;
 mod type_checker;
@@ -94,6 +95,7 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
         | StatementNode::While(e, _)
         | StatementNode::DoWhile(_, e)
         | StatementNode::Lock(e, _)
+        | StatementNode::With(e, _)
         | StatementNode::IfElse(e, _, _, _)
         | StatementNode::Switch(e, _, _) => line(e.position()),
         StatementNode::For(_, Some(cond), _, _) => line(cond.position()),
@@ -324,6 +326,8 @@ pub struct Analyzer<'a> {
     /// struct instead of the heap `CaptureCell<T>` (see `hir_declare_local`/`hir_begin_function`).
     /// Cleared and repopulated per function in `hir_begin_function`.
     ref_boxed_locals: std::collections::HashSet<String>,
+    /// Locals whose unique heap value has been moved; a later read is an error.
+    moved_locals: std::collections::HashSet<String>,
     /// For each synthesized capturing-lambda function (keyed by its lifted name, e.g. `__lambda_3`):
     /// the ordered list of `(captured name, its type in the enclosing scope)` it closes over.
     /// Consulted by identifier resolution *inside that lifted function's own body* to redirect a
@@ -501,6 +505,7 @@ impl<'a> Analyzer<'a> {
             lambda_counter: 0,
             boxed_locals: std::collections::HashSet::new(),
             ref_boxed_locals: std::collections::HashSet::new(),
+            moved_locals: std::collections::HashSet::new(),
             closure_captures: HashMap::new(),
             capturing_fun_locals: HashMap::new(),
             is_binding_aliases: Vec::new(),

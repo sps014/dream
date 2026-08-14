@@ -136,6 +136,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         if !Self::is_discard_binding(&left.text) {
+            self.unmove_local(&left.text);
             self.hir_flush_ref_writebacks();
         }
         Ok(())
@@ -379,6 +380,7 @@ impl<'a> Analyzer<'a> {
         self.compare_data_type(&l, &r, &left.position, diagnostics)?;
         self.record_capturing_fun_local(&left.text, &l, value.as_ref());
         self.hir_assign_local(&left.text, value);
+        self.unmove_local(&left.text);
         Ok(())
     }
     pub(in crate::analyzer) fn analyze_return(

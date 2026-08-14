@@ -81,7 +81,7 @@ impl<'a> Analyzer<'a> {
                     self.forbid_await_in_stmt(s, message, diagnostics);
                 }
             }
-            StatementNode::Lock(target, body) => {
+            StatementNode::Lock(target, body) | StatementNode::With(target, body) => {
                 self.scan_expr_await(target, message, diagnostics);
                 for s in body.iter() {
                     self.forbid_await_in_stmt(s, message, diagnostics);

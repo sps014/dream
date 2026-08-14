@@ -132,6 +132,8 @@ pub struct LocalDecl {
     /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
     /// shadow-stack slot; excluded from [`ValueFrame`] teardown so it is not double-dropped.
     pub manual_drop: bool,
+    /// True for a `move` parameter: [`InsertDrops`] frees it on function exit.
+    pub is_move: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -145,6 +147,9 @@ pub struct BasicBlock {
 pub enum Statement {
     /// `place = rvalue`.
     Assign(Place, Rvalue),
+    /// Like [`Self::Assign`], but a field/global heap store does not `$dream_drop` the previous
+    /// occupant (`move this.field` nulls the slot after the value has been copied out).
+    AssignNoDrop(Place, Rvalue),
     /// Prints `Operand` (a `string`-typed panic message, always a compile-time-known literal built
     /// during HIR emission) via the shared `$dream_panic` runtime helper, then traps unconditionally.
     /// The single, shared halt point for every runtime failure: array/string bounds checks,
@@ -235,6 +240,10 @@ pub enum Statement {
     /// Releases one level of the reentrant lock word acquired by a matching
     /// [`Statement::LockAcquire`].
     LockRelease(Operand),
+    /// Enter a bump arena (`$arena_enter`); paired with [`Statement::ArenaExit`] on every exit path.
+    ArenaEnter(Operand),
+    /// Restore the previous allocator (`$arena_exit`).
+    ArenaExit,
     /// `out[i..i+4] = a[i..i+4] ⊕ b[i..i+4]` for `float[]` (WASM `v128` / `f32x4`).
     SimdF32x4 {
         op: crate::BinOp,
@@ -576,12 +585,16 @@ mod tests {
                     name: "a".into(),
                     ty: int,
                     is_ref: false,
+                    is_move: false,
+                    is_borrow: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
                     is_ref: false,
+                    is_move: false,
+                    is_borrow: false,
                 },
             ],
             ret: int,

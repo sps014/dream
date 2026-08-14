@@ -28,7 +28,6 @@ impl Emitter<'_> {
         // Debug-info: the coroutine is finishing, so pop its shadow call-stack frame. This is the only
         // exit path (awaits return without popping), so the frame count stays balanced.
         self.emit_debug_exit();
-        self.emit_gc_root_epilogue();
         match value {
             Some(v) => {
                 let wt = self.wasm_ty(self.operand_ty(v));
@@ -105,10 +104,6 @@ impl Emitter<'_> {
         // dynamic-length raw copy); `$__pc` drives the block dispatch, `$__scratch` holds the awaited
         // future at a suspend.
         self.line(" (local $__obj i32)");
-        // Root-table index for the in-flight `$__obj` — mirrors the sync `emit()` prologue so
-        // `Rvalue::New`'s ctor-call rooting works uniformly across sync and async bodies.
-        self.line(" (local $__obj_rg i32)");
-        self.line(" (local $__gc_epoch i32)");
         self.line(" (local $__scratch i32)");
         self.line(" (local $__len i32)");
         self.line(" (local $__rel i32)");
@@ -116,16 +111,7 @@ impl Emitter<'_> {
         self.line(" (local $__pc i32)");
         self.line(" (local $__jsp i32)");
         self.line(" (local $__src i32)");
-        self.line(" (local $__obj_young i32)");
-        self.line(" (local $__wsrc i32)");
-        self.line(" (local $__wbox i32)");
-        if self.gc_frame_active {
-            self.line(" (local $__root_base i32)");
-            let root_locals = self.gc_root_locals.clone();
-            for li in root_locals {
-                self.line(&format!(" (local $__rg{} i32)", li));
-            }
-        }
+        self.line(" (local $__drop i32)");
 
         // Restore every frame-resident local; reference slots are zeroed after the move so ownership
         // lives in the WASM local (and is not double-freed from the frame) until the next suspend. A
@@ -151,8 +137,6 @@ impl Emitter<'_> {
             }
         }
 
-        self.emit_gc_root_prologue();
-        self.line(" (global.get $__gc_epoch) (local.set $__gc_epoch)");
         let mut resume_binds: HashMap<u32, Option<crate::Local>> = HashMap::new();
         for block in &self.func.blocks {
             if let Terminator::Await { dest, resume, .. } = &block.terminator {
@@ -230,6 +214,12 @@ impl Emitter<'_> {
                         None => self.line("     (drop)"),
                     },
                 }
+                self.line("     (local.get $self)");
+                self.line(&format!("     (i32.load offset={})", F_AWAITING));
+                self.line("     (call $free)");
+                self.line("     (local.get $self)");
+                self.line("     (i32.const 0)");
+                self.line(&format!("     (i32.store offset={})", F_AWAITING));
             }
             let block = self.func.block(crate::BlockId(i as u32));
             for stmt in &block.stmts {
@@ -277,7 +267,6 @@ impl Emitter<'_> {
                 self.line("     (local.get $self)");
                 self.line("     (local.get $__scratch)");
                 self.line("     (call $dream_await)");
-                self.emit_gc_root_epilogue();
                 self.line("     (i32.const 0)");
                 self.line("     (return)");
             }

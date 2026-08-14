@@ -1,0 +1,16 @@
+import system;
+
+class Point {
+    public x: int;
+}
+
+fun take(move p: Point): int {
+    return p.x;
+}
+
+fun main(): void {
+    let a = Point();
+    a.x = 7;
+    let b = move a;
+    System.println(take(move b));
+}

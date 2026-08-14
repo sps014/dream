@@ -268,6 +268,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::WhileToken => Ok(self.parse_while()?),
             TokenKind::DoToken => Ok(self.parse_do_while()?),
             TokenKind::LockToken => Ok(self.parse_lock()?),
+            TokenKind::WithToken => Ok(self.parse_with()?),
             TokenKind::ForToken => Ok(self.parse_for()?),
             TokenKind::SwitchToken => Ok(self.parse_switch()?),
             TokenKind::BreakToken => Ok(self.parse_break()?),
@@ -356,6 +357,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::WhileToken
             | TokenKind::DoToken
             | TokenKind::LockToken
+            | TokenKind::WithToken
             | TokenKind::ReturnToken
             | TokenKind::SwitchToken
             | TokenKind::CurlyCloseBracketToken
@@ -385,6 +387,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::WhileToken
                 | TokenKind::DoToken
                 | TokenKind::LockToken
+                | TokenKind::WithToken
                 | TokenKind::ReturnToken
                 | TokenKind::SwitchToken
                 | TokenKind::CurlyCloseBracketToken => {
@@ -587,6 +590,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::CloseParenthesisToken);
         let body = self.parse_block_or_statement()?;
         Ok(StatementNode::Lock(target, body))
+    }
+    /// Parses `with ArenaAllocator()` / `with ArenaAllocator(n) { body }`.
+    pub(super) fn parse_with(&mut self) -> Result<StatementNode<'a>, Error> {
+        self.match_token(TokenKind::WithToken);
+        let setup = self.parse_expression(0)?;
+        let body = self.parse_block_or_statement()?;
+        Ok(StatementNode::With(setup, body))
     }
     /// Parses a do-while loop: `do { body } while (condition);`.
     pub(super) fn parse_do_while(&mut self) -> Result<StatementNode<'a>, Error> {

@@ -8,7 +8,7 @@ hide:
   <h1 class="dream-gradient-text">Dream</h1>
   <p class="dream-hero-subtitle">
     A statically typed language that compiles to WebAssembly — Rust- and TypeScript-flavored
-    syntax, generational GC, zero-cost generics, and first-class JS interop.
+    syntax, Zig-like allocators, zero-cost generics, and first-class JS interop.
   </p>
   <div class="dream-hero-actions">
     <a href="getting-started/" class="md-button md-button--primary">Get Started</a>
@@ -36,7 +36,7 @@ fun main() {
 <div class="dream-feature-strip" markdown>
 
 - **Static types** with inference
-- **Generational GC** memory (Gen0/1/2/LOH)
+- **Allocators** (GPA, arenas, reuse)
 - **Generics** monomorphized to WASM
 - **Classes / structs / interfaces**
 - **Enums & unions** with `switch`

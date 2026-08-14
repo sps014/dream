@@ -47,6 +47,8 @@ fn compile_sum_to() -> String {
             name: "n".into(),
             ty: int,
             is_ref: false,
+            is_move: false,
+            is_borrow: false,
         }],
         ret: int,
         locals: vec![
@@ -129,9 +131,7 @@ fn compile_sum_to() -> String {
     pm.add(ConstFold);
     pm.add(SimplifyCfg);
     pm.add(Dce);
-    for f in &mut mir.functions {
-        pm.run(f, &ctx.interner);
-    }
+    pm.run_module(&mut mir, &ctx.interner);
 
     emit_program(&mir, &ctx.interner)
 }

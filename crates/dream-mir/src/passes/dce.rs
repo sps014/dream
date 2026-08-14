@@ -3,7 +3,7 @@
 //! pass manager (one removal can expose another).
 
 use super::MirPass;
-use crate::{BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::HashSet;
 
@@ -14,9 +14,9 @@ impl MirPass for Dce {
         "dce"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
         let mut changed = drop_unreachable_blocks(func);
-        changed |= remove_dead_assignments(func);
+        changed |= remove_dead_assignments(func, interner);
         changed
     }
 }
@@ -50,8 +50,13 @@ fn reachable_blocks(func: &MirFunction) -> HashSet<BlockId> {
     seen
 }
 
-fn remove_dead_assignments(func: &mut MirFunction) -> bool {
+fn remove_dead_assignments(func: &mut MirFunction, interner: &TypeInterner) -> bool {
     let read = collect_read_locals(func);
+    let drop_local: Vec<bool> = func
+        .locals
+        .iter()
+        .map(|d| interner.needs_drop(d.ty))
+        .collect();
     let mut changed = false;
     for block in &mut func.blocks {
         let before = block.stmts.len();
@@ -63,6 +68,13 @@ fn remove_dead_assignments(func: &mut MirFunction) -> bool {
                 if d == s =>
             {
                 false
+            }
+            // Nulling a heap local must survive even if later copies were folded away; InsertDrops
+            // and arena exit rely on the slot being 0 so a later `$dream_drop` is a no-op.
+            Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Const(Const::Null)))
+                if drop_local[d.0 as usize] =>
+            {
+                true
             }
             Statement::Assign(Place::Local(d), rvalue) => read.contains(d) || !is_pure(rvalue),
             _ => true,
@@ -99,7 +111,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
     )
 }
 
-fn collect_read_locals(func: &MirFunction) -> HashSet<Local> {
+pub(crate) fn collect_read_locals(func: &MirFunction) -> HashSet<Local> {
     let mut read = HashSet::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
@@ -112,7 +124,7 @@ fn collect_read_locals(func: &MirFunction) -> HashSet<Local> {
 
 fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
     match stmt {
-        Statement::Assign(place, rvalue) => {
+        Statement::Assign(place, rvalue) | Statement::AssignNoDrop(place, rvalue) => {
             read_place_base(place, read);
             read_rvalue(rvalue, read);
         }
@@ -161,7 +173,10 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(src_off, read);
             read_operand(count, read);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => read_operand(o, read),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::ArenaEnter(o) => {
+            read_operand(o, read)
+        }
+        Statement::ArenaExit => {}
         Statement::SimdF32x4 {
             dest,
             lhs,

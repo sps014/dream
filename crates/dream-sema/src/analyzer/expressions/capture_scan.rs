@@ -111,7 +111,7 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_stmts_for_ref_targets(body, out);
             walk_expr_for_ref_targets(cond, out);
         }
-        StatementNode::Lock(target, body) => {
+        StatementNode::Lock(target, body) | StatementNode::With(target, body) => {
             walk_expr_for_ref_targets(target, out);
             walk_stmts_for_ref_targets(body, out);
         }
@@ -296,7 +296,7 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_stmts_for_lambdas(body, out);
             walk_expr_for_lambdas(cond, out);
         }
-        StatementNode::Lock(target, body) => {
+        StatementNode::Lock(target, body) | StatementNode::With(target, body) => {
             walk_expr_for_lambdas(target, out);
             walk_stmts_for_lambdas(body, out);
         }
@@ -557,7 +557,7 @@ fn collect_names_stmt(
             collect_names_block(body, scopes, referenced);
             collect_names_expr(cond, scopes, referenced);
         }
-        StatementNode::Lock(target, body) => {
+        StatementNode::Lock(target, body) | StatementNode::With(target, body) => {
             collect_names_expr(target, scopes, referenced);
             collect_names_block(body, scopes, referenced);
         }

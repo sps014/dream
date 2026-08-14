@@ -1,5 +1,5 @@
 //! `Statement` emission (assignment, print, calls) for the WAT backend, plus place-store helpers
-//! (store + `$write_barrier` for GC-tracked heap slots) and debug-info local spilling.
+//! and debug-info local spilling.
 
 use super::*;
 
@@ -36,7 +36,8 @@ fn realloc_self_store(place: &Place, rvalue: &Rvalue) -> bool {
 impl Emitter<'_> {
     pub(super) fn emit_stmt(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Assign(place, rvalue) => self.emit_assign(place, rvalue),
+            Statement::Assign(place, rvalue) => self.emit_assign(place, rvalue, true),
+            Statement::AssignNoDrop(place, rvalue) => self.emit_assign(place, rvalue, false),
             Statement::Panic(msg) => {
                 self.emit_operand(msg);
                 self.line("     (call $dream_panic)");
@@ -45,9 +46,8 @@ impl Emitter<'_> {
                 let sym = self.callee_symbol(callee);
                 self.emit_call_args(callee, args);
                 self.line(&format!("     (call ${})", sym));
-                self.emit_gc_reload_after_direct_call(callee);
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
-                    self.line("     (drop)");
+                    self.emit_discard(callee.ret);
                 }
             }
             Statement::JsCall {
@@ -58,9 +58,8 @@ impl Emitter<'_> {
                 args,
             } => {
                 self.emit_js_call(callee, target, via.as_ref(), method.as_ref(), args);
-                self.emit_gc_reload_after_call();
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
-                    self.line("     (drop)");
+                    self.emit_discard(callee.ret);
                 }
             }
             Statement::InterfaceCall {
@@ -71,7 +70,6 @@ impl Emitter<'_> {
                 args,
             } => {
                 self.emit_interface_call(receiver, *iface_id, *method_slot, *sig, args);
-                self.emit_gc_reload_after_call();
                 let ret = match self.interner.kind(*sig) {
                     TyKind::Func(_, r) => Some(*r),
                     _ => None,
@@ -80,14 +78,17 @@ impl Emitter<'_> {
                     .map(|r| !matches!(self.interner.kind(r), TyKind::Void))
                     .unwrap_or(false);
                 if drops {
-                    self.line("     (drop)");
+                    self.emit_discard(ret.unwrap());
                 }
             }
             Statement::IndirectCall { target, sig, args } => {
                 let has_val = self.emit_indirect_call(target, *sig, args).is_some();
-                self.emit_gc_reload_after_call();
                 if has_val {
-                    self.line("     (drop)");
+                    let ret = match self.interner.kind(*sig) {
+                        TyKind::Func(_, r) => *r,
+                        _ => self.interner.void(),
+                    };
+                    self.emit_discard(ret);
                 }
             }
             Statement::Print { arg, ty, newline } => {
@@ -104,7 +105,7 @@ impl Emitter<'_> {
                     TyKind::Prim(prim) => match prim_info(*prim).to_string {
                         Some(to_string) => {
                             self.line(&format!("     (call {})", to_string));
-                            self.line("     (call $print_string)");
+                            self.emit_print_temp_string();
                         }
                         None => self.line("     (call $print_int)"),
                     },
@@ -114,20 +115,20 @@ impl Emitter<'_> {
                     // the element-typed `to_string` is chosen statically here, then printed.
                     TyKind::Array(elem) => {
                         self.line(&format!("     (call {})", array_to_string_sym(*elem)));
-                        self.line("     (call $print_string)");
+                        self.emit_print_temp_string();
                     }
                     // A value struct/union has no heap tag header, so it is rendered by its concrete
                     // `$<Type>_to_string` (chosen statically from the operand's type) and printed.
                     _ if self.interner.is_value_type(*ty) => {
                         if let Some(name) = self.value_name(*ty) {
                             self.line(&format!("     (call ${}_to_string)", name));
-                            self.line("     (call $print_string)");
+                            self.emit_print_temp_string();
                         } else {
                             self.line("     (call $print_object)");
                         }
                     }
                     // Reference structs, unions, and `object` render through the tag-dispatching
-                    // `$print_object` (which routes to each type's `to_string`).
+                    // `$print_object` (which routes to each type's `to_string` and drops the temp).
                     _ => self.line("     (call $print_object)"),
                 }
                 if *newline {
@@ -163,7 +164,7 @@ impl Emitter<'_> {
             }
             Statement::ForceFree(o) => {
                 self.emit_operand(o);
-                self.line("     (call $free)");
+                self.line("     (call $dream_drop)");
             }
             Statement::ArrayElemsCopy {
                 elem_ty,
@@ -208,6 +209,13 @@ impl Emitter<'_> {
                 self.emit_lock_addr(o);
                 self.line("     (call $__lock_release)");
             }
+            Statement::ArenaEnter(o) => {
+                self.emit_operand(o);
+                self.line("     (call $arena_enter)");
+            }
+            Statement::ArenaExit => {
+                self.line("     (call $arena_exit)");
+            }
             Statement::ValueDrop(local) => {
                 let ty = self.func.local_ty(*local);
                 debug_assert!(
@@ -239,6 +247,22 @@ impl Emitter<'_> {
                 }
             }
         }
+    }
+
+    fn emit_discard(&mut self, ty: TypeId) {
+        match self.interner.kind(ty) {
+            TyKind::Js => self.line("     (call $js_unregister)"),
+            _ if self.interner.needs_drop(ty) => self.line("     (call $dream_drop)"),
+            _ => self.line("     (drop)"),
+        }
+    }
+
+    fn emit_print_temp_string(&mut self) {
+        self.line("     (local.set $__drop)");
+        self.line("     (local.get $__drop)");
+        self.line("     (call $print_string)");
+        self.line("     (local.get $__drop)");
+        self.line("     (call $dream_drop)");
     }
 
     /// Pushes the address of `o`'s (an `@shared class`-typed pointer operand) embedded lock word:
@@ -302,7 +326,7 @@ impl Emitter<'_> {
         self.line(&format!("     (global.set $__dbg_v{} {})", global, value));
     }
 
-    fn emit_assign(&mut self, place: &Place, rvalue: &Rvalue) {
+    fn emit_assign(&mut self, place: &Place, rvalue: &Rvalue, drop_old: bool) {
         match place {
             Place::Local(l) => {
                 let ty = self.func.local_ty(*l);
@@ -334,7 +358,6 @@ impl Emitter<'_> {
                 }
                 self.emit_rvalue(rvalue);
                 self.line(&format!("     (local.set ${})", l.0));
-                self.emit_gc_root_update(l.0);
             }
             Place::Global(g) => {
                 if let Some(&ty) = self.global_tys.get(&g.0) {
@@ -354,24 +377,12 @@ impl Emitter<'_> {
                 }
                 self.emit_rvalue(rvalue);
                 self.line(&format!("     (global.set $g{})", g.0));
-                if self
-                    .global_tys
-                    .get(&g.0)
-                    .is_some_and(|ty| self.interner.is_reference(*ty))
-                {
-                    self.line(&format!(
-                        "     (global.get $__gc_root_table) (global.get $__groot{}) (i32.const 2) (i32.shl) (i32.add) (global.get $g{}) (i32.store)",
-                        g.0, g.0
-                    ));
-                }
             }
             Place::Field { base, field } => {
                 if let Some(f) = self.field_layout_full(*base, *field) {
-                    let (off, fty, is_weak) = (f.offset, f.ty, f.is_weak);
+                    let (off, fty) = (f.offset, f.ty);
                     let b = *base;
-                    if is_weak {
-                        self.emit_weak_field_store(b, off, fty, rvalue);
-                    } else if realloc_self_store(place, rvalue) {
+                    if !drop_old || realloc_self_store(place, rvalue) {
                         self.emit_place_store_no_release_old(
                             fty,
                             move |s| s.field_addr(b, off),
@@ -397,7 +408,11 @@ impl Emitter<'_> {
                     let b = *base;
                     let idx = index.clone();
                     let uc = *unchecked;
-                    self.emit_place_store(ety, move |s| s.elem_addr(b, ety, &idx, uc), rvalue);
+                    self.emit_place_store_no_release_old(
+                        ety,
+                        move |s| s.elem_addr(b, ety, &idx, uc),
+                        rvalue,
+                    );
                 } else {
                     crate::internal_error!(
                         "missing array element type for store (base {:?})",
@@ -408,7 +423,11 @@ impl Emitter<'_> {
             Place::Deref { ptr, elem_ty } => {
                 let p = *ptr;
                 let ety = *elem_ty;
-                self.emit_place_store(ety, move |s| s.line(&format!("     (local.get ${})", p.0)), rvalue);
+                self.emit_place_store_no_release_old(
+                    ety,
+                    move |s| s.line(&format!("     (local.get ${})", p.0)),
+                    rvalue,
+                );
             }
         }
     }
@@ -424,9 +443,30 @@ impl Emitter<'_> {
     }
 
     /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`.
-    /// Value structs copy in place; heap refs store then `$write_barrier`; `js` handles
+    /// Value structs copy in place; heap refs store the pointer; `js` handles
     /// retain-on-copy / unregister-old.
     fn emit_place_store(&mut self, ty: TypeId, addr: impl Fn(&mut Self), rvalue: &Rvalue) {
+        self.emit_place_store_ref(ty, addr, rvalue, true);
+    }
+
+    /// Same as [`Self::emit_place_store`] for the realloc-self-store idiom (old block already
+    /// consumed by `$realloc`).
+    fn emit_place_store_no_release_old(
+        &mut self,
+        ty: TypeId,
+        addr: impl Fn(&mut Self),
+        rvalue: &Rvalue,
+    ) {
+        self.emit_place_store_ref(ty, addr, rvalue, false);
+    }
+
+    fn emit_place_store_ref(
+        &mut self,
+        ty: TypeId,
+        addr: impl Fn(&mut Self),
+        rvalue: &Rvalue,
+        drop_old: bool,
+    ) {
         if self.interner.is_value_type(ty) {
             self.emit_value_store(addr, ty, rvalue);
             return;
@@ -436,19 +476,20 @@ impl Emitter<'_> {
             return;
         }
         if self.interner.is_reference(ty) {
-            // Emit the rvalue first. `$malloc` / Gen0 may evacuate the place's base object; an
-            // address computed beforehand would dangle into the reset nursery (Map rehash /
-            // field stores). Roots reload before we return from `$malloc`, so `addr` sees
-            // forwarded bases. `$__slot` still survives nested `New` inside other helpers that
-            // reuse `$__rel`, but we set it only after the rvalue is materialized.
+            // Emit the rvalue first so nested `$malloc` cannot leave `$__slot` pointing at a
+            // stale address if a helper reuses `$__rel`.
             self.emit_rvalue(rvalue);
             self.line("     (local.set $__src)");
             addr(self);
             self.line("     (local.set $__slot)");
+            if drop_old {
+                self.line("     (local.get $__slot)");
+                self.line(&format!("     ({})", self.load_instr(ty)));
+                self.line("     (call $dream_drop)");
+            }
             self.line("     (local.get $__slot)");
             self.line("     (local.get $__src)");
             self.line(&format!("     ({})", self.store_instr(ty)));
-            self.emit_write_barrier("$__slot", "$__src");
             return;
         }
         addr(self);
@@ -457,7 +498,7 @@ impl Emitter<'_> {
     }
 
     /// Assigns a `js` local: `$js_retain` when copying an existing handle, then store, then
-    /// `$js_unregister` the previous occupant (ClearDeadGcRoots nulls go through here too).
+    /// `$js_unregister` the previous occupant.
     fn emit_js_local_assign(&mut self, local: u32, rvalue: &Rvalue) {
         self.line(&format!("     (local.get ${}) (local.set $__rel)", local));
         self.emit_rvalue(rvalue);
@@ -512,102 +553,6 @@ impl Emitter<'_> {
         );
     }
 
-    /// Same as [`Self::emit_place_store`] for the realloc-self-store idiom (old block already
-    /// consumed by `$realloc`).
-    fn emit_place_store_no_release_old(
-        &mut self,
-        ty: TypeId,
-        addr: impl Fn(&mut Self),
-        rvalue: &Rvalue,
-    ) {
-        self.emit_place_store(ty, addr, rvalue);
-    }
-
-    /// Stores into a `weak` field (`Option<T>`): private weak-box + register/unregister, no strong
-    /// retain on the payload.
-    fn emit_weak_field_store(
-        &mut self,
-        base: crate::Local,
-        offset: u32,
-        option_ty: TypeId,
-        rvalue: &Rvalue,
-    ) {
-        let Some(u) = self.layouts.union(option_ty) else {
-            crate::internal_error!("weak field's type {:?} has no union layout", option_ty);
-        };
-        let some_disc = u.variant("Some").map(|v| v.discriminant).unwrap_or(0);
-        let none_disc = u.variant("None").map(|v| v.discriminant).unwrap_or(1);
-        let payload_off = u
-            .variant("Some")
-            .and_then(|v| v.fields.first())
-            .map(|fl| fl.offset)
-            .unwrap_or(4);
-        let box_size = u.size;
-
-        self.emit_rvalue(rvalue);
-        self.line("     (local.set $__wsrc)");
-
-        self.field_addr(base, offset);
-        self.line("     (i32.load)");
-        self.line("     (local.set $__rel)");
-
-        self.line(&format!("     (i32.const {})", box_size));
-        self.line("     (i32.const 0) ;; tag 0: weak box, not object-dispatched");
-        self.emit_malloc_call();
-        self.line("     (local.set $__wbox)");
-        self.line("     (local.get $__wbox)");
-        self.line("     (local.get $__wsrc) (i32.load)");
-        self.line("     (i32.store)");
-        self.line(&format!(
-            "     (local.get $__wbox) (i32.const {}) (i32.add)",
-            payload_off
-        ));
-        self.line(&format!(
-            "     (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
-            payload_off
-        ));
-        self.line("     (i32.store)");
-
-        self.line("     (local.get $__wsrc) (i32.load)");
-        self.line(&format!(
-            "     (i32.const {}) (i32.eq) (if (then",
-            some_disc
-        ));
-        self.line(&format!(
-            "       (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
-            payload_off
-        ));
-        self.line("       (local.get $__wbox)");
-        self.line("       (i32.const 0) ;; kind: weak");
-        self.line(&format!(
-            "       (i32.const {}) ;; extra: None's discriminant",
-            none_disc
-        ));
-        self.line("       (call $weak_register)");
-        self.line("     ))");
-
-        self.field_addr(base, offset);
-        self.line("     (local.get $__wbox)");
-        self.line("     (i32.store)");
-
-        self.line("     (local.get $__rel)");
-        self.line("     (if (then");
-        self.line("       (local.get $__rel) (i32.load)");
-        self.line(&format!(
-            "       (i32.const {}) (i32.eq) (if (then",
-            some_disc
-        ));
-        self.line(&format!(
-            "         (local.get $__rel) (i32.const {}) (i32.add) (i32.load)",
-            payload_off
-        ));
-        self.line("         (local.get $__rel)");
-        self.line("         (call $weak_unregister)");
-        self.line("       ))");
-        self.line("       (local.get $__rel) (call $free)");
-        self.line("     ))");
-    }
-
     /// Stores `value` into the object under construction (`$__obj + offset`).
     pub(super) fn store_at_obj(&mut self, offset: u32, value_ty: TypeId, value: &Operand) {
         if self.interner.is_value_type(value_ty) {
@@ -642,14 +587,11 @@ impl Emitter<'_> {
             return;
         }
         if self.interner.is_reference(value_ty) {
-            // Mirror `emit_place_store` for reference slots: materialize the source value first,
-            // then recompute the destination address so a construction-time evacuation (via
-            // `$__obj_rg` if present) leaves us with the forwarded object rather than a stale
-            // pointer. `emit_operand` on an `Operand` cannot allocate itself, but keeping the
-            // ordering symmetric with the place-store path guards against future changes.
+            // Mirror `emit_place_store` for reference slots: materialize the source, then
+            // recompute the destination so nested construction that reuses scratch locals
+            // cannot store through a stale `$__rel`.
             self.emit_operand(value);
             self.line("     (local.set $__src)");
-            self.emit_reload_obj_root();
             self.line("     (local.get $__obj)");
             if offset > 0 {
                 self.line(&format!("     (i32.const {})", offset));
@@ -659,11 +601,6 @@ impl Emitter<'_> {
             self.line("     (local.get $__rel)");
             self.line("     (local.get $__src)");
             self.line(&format!("     ({})", self.store_instr(value_ty)));
-            // Nursery dest: young→young stores are not remset-worthy. `$__obj_young` is set after
-            // the construction `$malloc`; Gen1 fallback (nursery full) still takes the barrier.
-            self.line("     (local.get $__obj_young) (i32.eqz) (if (then");
-            self.line("       (local.get $__rel) (local.get $__src) (call $write_barrier)");
-            self.line("     ))");
             return;
         }
         self.line("     (local.get $__obj)");
@@ -675,7 +612,7 @@ impl Emitter<'_> {
         self.line(&format!("     ({})", self.store_instr(value_ty)));
     }
 
-        /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
+    /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
     /// Used to clear a struct before a user constructor runs (reused heap blocks are not zeroed).
     pub(super) fn zero_at_obj(&mut self, offset: u32, field_ty: TypeId) {
         self.line("     (local.get $__obj)");

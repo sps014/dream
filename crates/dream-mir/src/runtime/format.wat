@@ -124,13 +124,13 @@
     i32.store
     local.get $ipstr
     local.get $buf
-    call $concat_strings
+    call $__str_take_append_drop_right
     local.set $res
     local.get $neg
     (if (then
         i32.const {minus}
         local.get $res
-        call $concat_strings
+        call $__str_take_append_drop_right
         local.set $res
     ))
     local.get $res

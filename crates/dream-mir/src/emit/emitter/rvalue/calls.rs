@@ -17,8 +17,7 @@ impl Emitter<'_> {
     ///
     /// MIR [`Operand`]s are locals/globals/constants (or field/index loads of those). Evaluating
     /// them cannot allocate, so leaving a ref on the WASM operand stack while later args are
-    /// pushed is safe: no Gen0 collect can run between `local.get`s. The callee prologue roots
-    /// params after the `call` instruction has transferred the stack into locals.
+    /// pushed is safe.
     pub(in crate::emit::emitter) fn emit_call_args(
         &mut self,
         callee: &crate::Callee,

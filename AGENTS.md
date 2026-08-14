@@ -14,7 +14,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 ## What Dream is
 
-A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via a custom stop-the-world generational GC in linear memory (Gen0/Gen1/Gen2/LOH; not WasmGC), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
+A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, **Zig-like allocators** in linear memory (default GPA / freelist; debug leak reports), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
 
 Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in `wasmtime`.
 
@@ -75,7 +75,7 @@ Each arrow is a **total** lowering: the producer records everything the consumer
 | Names | Identifiers | Resolved `Binding`/`Callee` | `Local`/`Global` indices |
 | Control flow | if/while/for/... | Same (structured) | goto/if/switch terminators |
 | Generics | Type-param syntax | Explicit `MonoInstance` worklist | Already monomorphized |
-| GC/alloc | Implicit | Implicit | Explicit `New` + barriers / safepoints |
+| Alloc | Implicit | Implicit | Explicit `$malloc`/`$free` |
 
 ## Crate dependency graph
 
@@ -104,16 +104,16 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 - **Lexer** (`crates/dream-syntax/src/lexer.rs`): tokens only. No syntactic rules, no diagnostics assumptions.
 - **Parser** (`crates/dream-syntax/src/parser/`): builds AST from tokens. No type-checking, no scope enforcement. **Recover-and-continue**: `match_token` synthesizes a placeholder + reports an error instead of bailing; `parse_program`/`parse_block` recover at declaration/statement boundaries. `parse()` *always* returns a `ProgramNode` no matter how malformed the input. Every token-consuming loop needs its `ensure_progress` guard so recovery can't spin forever. Fuzz/property tests in `crates/dream-syntax/src/tests/parser_tests.rs` (`fuzz_*`) lock in "never panics, always returns a ProgramNode" — keep green.
 - **Analyzer** (`crates/dream-sema/`): validates types/scopes/async constraints, emits HIR. Never mutates AST structure, never generates target code (WAT/WASM).
-- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → WAT. Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
+- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → WAT. Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported. Heap is the size-class allocator in linear memory (see `docs/compiler/12-allocators.md`).
 
 ## Backend non-goals
 
 Do not implement these (decision record: `docs/compiler/10-stack-alloc-and-mono-design-note.md`):
 
-- **Small-string SSO** — `string` stays a heap GC `i32` pointer; no tagged inline representation.
+- **Small-string SSO** — `string` stays a heap `i32` pointer; no tagged inline representation.
 - **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`@stack` on unions is shipped and unrelated.)
 - **Size-class-keyed unmanaged monomorphization** — mono stays `(DefId, args)`; `unmanaged` stdlib code uses runtime `esize`, not a compiler size-class key.
-- **WasmGC / ARC** — heap is the custom tiered GC in linear memory; ARC (`Retain`/`Release`, sink/borrow ABI) is deleted. See `docs/compiler/12-tiered-gc.md`.
+- **Tracing collector / retain-release / Wasm typed-heap** — heap is the size-class allocator in linear memory. See `docs/compiler/12-allocators.md`.
 
 Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll functions keep `$__pc` + `br_table` (suspend/resume).
 

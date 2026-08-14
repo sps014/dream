@@ -49,12 +49,12 @@ internal class RegexParser {
 
     // Names given to capturing groups via `(?<name>...)`, in the order their groups were opened.
     public fun names(): List<string> {
-        return this.group_names;
+        return move this.group_names;
     }
 
     // The (outer) capturing-group index for each entry in `names()`, same order.
     public fun name_indices(): List<int> {
-        return this.group_name_indices;
+        return move this.group_name_indices;
     }
 
     fun resolve_name(name: string): int {

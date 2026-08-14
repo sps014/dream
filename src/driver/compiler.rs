@@ -320,9 +320,7 @@ impl Compiler {
             } else {
                 dream_mir::passes::PassManager::default_pipeline()
             };
-            for f in &mut mir.functions {
-                pipeline.run(f, interner);
-            }
+            pipeline.run_module(&mut mir, interner);
             let live_imports: Vec<(String, String)> = mir
                 .imports
                 .iter()

@@ -4,6 +4,7 @@ use super::*;
 use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_hir::{HExpr, HExprKind};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
@@ -317,6 +318,18 @@ impl<'a> Analyzer<'a> {
                 let right_type =
                     self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
                 let operand = self.hir_take();
+                if opr.kind == TokenKind::MoveToken {
+                    self.hir_set_last(operand.map(|operand| {
+                        HExpr::new(
+                            operand.ty,
+                            HExprKind::Move {
+                                operand: Box::new(operand),
+                            },
+                        )
+                    }));
+                    self.note_move_expr(right, &right_type);
+                    return Ok(right_type);
+                }
                 // User-defined unary operator overload: `@operator("-")`/`@operator("!")`/
                 // `@operator("~")` on the operand's type, checked before the built-in
                 // bool/numeric/integer rules below so a struct's overload always wins.

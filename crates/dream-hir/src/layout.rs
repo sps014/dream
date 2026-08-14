@@ -37,6 +37,9 @@ pub struct FieldLayout {
     /// True when declared `weak` (an `Option<T>` field, `T` a class; the GC clears it when the
     /// referent becomes unreachable). Always `false` for union-variant fields.
     pub is_weak: bool,
+    /// Field was assigned from an explicit `borrow` parameter. Nested `$dream_drop` must not
+    /// walk it: the referent is owned elsewhere (e.g. `RegexVM.prog` aliases `Regex.prog`).
+    pub skip_nested_drop: bool,
 }
 
 /// The full layout of one nominal type.
@@ -74,6 +77,7 @@ impl TypeLayout {
                 ty,
                 name: field_name,
                 is_weak,
+                skip_nested_drop: false,
             });
             offset += size;
             max_align = max_align.max(align);
@@ -103,6 +107,7 @@ impl TypeLayout {
                 ty,
                 name: field_name,
                 is_weak,
+                skip_nested_drop: false,
             });
             offset += size;
         }

@@ -64,7 +64,7 @@ let buf = Buffer.alloc<int>(4);   // int[] of length 4, all zero
 buf[0] = 10;
 ```
 
-`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through the GC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
+`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory.md#unsafe-buffers)) manage an array's backing block through the allocator: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
 
 ## `Span<T>`: a bounds-checked view without copying
 
@@ -82,11 +82,11 @@ println(xs[1]);                    // 20
 let owned = mid.to_array();        // copies into a fresh, independently-owned array
 ```
 
-`Span<T>` keeps its backing array strongly referenced (unlike `Pointer<T>` below), so the memory it views can never be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
+`Span<T>` keeps the backing array alive for the span's lifetime (unlike `Pointer<T>` below), so the memory it views cannot be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
 
 ## `Pointer<T>`: manual allocation (`@unsafe`)
 
-`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc`/`Buffer.realloc`/`Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
+`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator (`Buffer.alloc`/`Buffer.realloc`/`Buffer.free`). Every operation that touches the block's lifetime is [`@unsafe`](memory.md#unsafe-buffers): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
 
 ```dream
 @unsafe

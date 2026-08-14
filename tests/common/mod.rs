@@ -65,9 +65,7 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
         pm.add(dream_mir::passes::ConstFold);
         pm.add(dream_mir::passes::SimplifyCfg);
         pm.add(dream_mir::passes::Dce);
-        for f in &mut mir.functions {
-            pm.run(f, interner);
-        }
+        pm.run_module(&mut mir, interner);
         (dream_mir::emit::emit_program(&mir, interner), count)
     })
 }
@@ -181,10 +179,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);
         dream_mir::passes::optimize_module(&mut mir, interner);
-        let pm = dream_mir::passes::PassManager::default_pipeline();
-        for f in &mut mir.functions {
-            pm.run(f, interner);
-        }
+        dream_mir::passes::PassManager::default_pipeline().run_module(&mut mir, interner);
         dream_mir::emit::emit_module(&mir, interner, false)
     })
 }

@@ -23,9 +23,7 @@ p2.x = 10;
 println(p1.x);  // 10
 ```
 
-Classes are managed by the tracing garbage collector — no manual frees. Define a `del()`
-finalizer if you need cleanup when the object becomes unreachable (timing is not guaranteed —
-see [Memory Management](memory.md)).
+Classes are heap objects. Owning locals drop them automatically; you do not call `free`. Define a `del()` destructor if the type needs prompt cleanup when it is dropped — see [Memory Management](memory.md).
 
 ### Overloaded constructors
 
@@ -78,7 +76,7 @@ v2.x = 10;
 println(v1.x);  // 3 (unaffected)
 ```
 
-Structs need no heap allocation and have no GC overhead, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
+Structs need no heap allocation, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
 
 ### `ref struct`: a stack-only value type
 
@@ -132,8 +130,8 @@ public class Counter {
 }
 ```
 
-A field may also carry `weak` (combinable with visibility in any order) when it should not
-keep its target alive — see [Memory > `weak` references](memory.md#weak-references).
+A field may also carry `weak` (combinable with visibility in any order). The runtime does not
+clear `weak` fields; prefer borrow parameters or explicit back-edges — see [Memory](memory.md#cycles-and-weak).
 
 ### Methods
 
@@ -211,10 +209,9 @@ extend Token { public fun describe(): string { return "token"; } }
 
 ## Advanced: `@shared` classes
 
-Prefix a `class` with `@shared` to make it safe to pass by reference across [`WebWorker`](webworkers.md) threads. A `@shared` class pays two costs, and only when opted in:
+Prefix a `class` with `@shared` to make it safe to pass by reference across [`WebWorker`](webworkers.md) threads. A `@shared` class pays an extra header word, and only when opted in:
 
-- **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a `@shared` instance's refcount can be touched from more than one thread.
-- **An extra header word** reserved for a reentrant lock, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking.
+- **A lock word** in the object header, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking. Linear memory is shared across workers, so mutations are visible without copying.
 
 ```dream
 @shared

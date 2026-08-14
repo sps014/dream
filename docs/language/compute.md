@@ -240,8 +240,8 @@ fun reduce(data: GpuBuffer<float>, out: GpuBuffer<float>): void {
 
 ### `@shared` is not GPU shared memory
 
-Dream's existing `@shared` attribute marks **CPU / WebWorker** heap classes (lock word +
-atomic RC). It is illegal inside `@compute`. GPU scratch uses `@workgroup`, not `@shared`.
+Dream's existing `@shared` attribute marks **CPU / WebWorker** heap classes (lock word).
+It is illegal inside `@compute`. GPU scratch uses `@workgroup`, not `@shared`.
 
 ## Multi-pass sync
 

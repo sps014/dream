@@ -86,7 +86,9 @@ internal class RegexCompiler {
         this.emit(root);
         this.prog[this.pc] = RegexInst.match_inst();
         this.pc = this.pc + 1;
-        return this.prog;
+        // Unique transfer: dropping `RegexCompiler` must not `__drop_array` this program.
+        // `Regex` (and the VMs, which `borrow` it) keep the only remaining owner.
+        return move this.prog;
     }
 
     // Allocates the next slot for a non-branching leaf instruction (`CharClass`/`Capture`/

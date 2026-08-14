@@ -27,6 +27,7 @@ fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
         | StatementNode::While(e, _)
         | StatementNode::DoWhile(_, e)
         | StatementNode::Lock(e, _)
+        | StatementNode::With(e, _)
         | StatementNode::IfElse(e, _, _, _)
         | StatementNode::Switch(e, _, _) => e.position(),
         StatementNode::For(_, Some(cond), _, _) => cond.position(),
@@ -132,7 +133,7 @@ fn scan_stmt_nameof(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
                 reject_gpu_nameof(db, ctx);
             }
         }
-        StatementNode::Lock(e, body) => {
+        StatementNode::Lock(e, body) | StatementNode::With(e, body) => {
             scan_expr_nameof(e, ctx);
             reject_gpu_nameof(body, ctx);
         }
@@ -468,11 +469,13 @@ fn emit_stmt(
         StatementNode::ForEach(..)
         | StatementNode::AwaitStmt(_)
         | StatementNode::Lock(..)
+        | StatementNode::With(..)
         | StatementNode::TupleDeclaration { .. } => {
             let kind = match stmt {
                 StatementNode::ForEach(..) => "for-each",
                 StatementNode::AwaitStmt(_) => "await",
                 StatementNode::Lock(..) => "lock",
+                StatementNode::With(..) => "with",
                 StatementNode::TupleDeclaration { .. } => "tuple declaration",
                 _ => "statement",
             };

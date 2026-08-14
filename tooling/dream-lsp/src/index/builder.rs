@@ -822,7 +822,7 @@ impl Builder {
                     self.walk_block(body, scope);
                 }
             }
-            StatementNode::Lock(target, body) => {
+            StatementNode::Lock(target, body) | StatementNode::With(target, body) => {
                 self.walk_expr(target, scope);
                 self.walk_block(body, scope);
             }

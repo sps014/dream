@@ -410,8 +410,8 @@ println(inc());   // 2
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
 
-Capturing closures are ordinary GC-managed `fun(...)` values. Cycles through closures are
-collected like any other heap graph — see [Memory Management](memory.md).
+Capturing closures are ordinary heap `fun(...)` values. Cycles through closures are not
+dropped automatically — see [Memory Management](memory.md).
 
 Capturing closures **cannot** be passed to JavaScript APIs — the JS bridges drop the closure environment. See [Callbacks](callbacks.md).
 

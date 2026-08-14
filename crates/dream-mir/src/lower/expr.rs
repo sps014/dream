@@ -68,6 +68,7 @@ impl Lowerer<'_> {
                 let o = self.lower_operand(operand);
                 Rvalue::Unary(*op, o)
             }
+            HExprKind::Move { operand } => Rvalue::Use(self.lower_operand(operand)),
             HExprKind::Call { callee, args } => {
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                 Rvalue::Call {
@@ -378,6 +379,144 @@ impl Lowerer<'_> {
                 let idx = self.lower_operand(index);
                 Place::index(base, idx)
             }
+        }
+    }
+
+    /// After a statement has consumed `e`, null locals that were explicitly `move`d (except `skip`,
+    /// used when that local is the value being returned).
+    pub(super) fn null_move_sources(&mut self, e: &HExpr, skip: Option<u32>) {
+        match &e.kind {
+            HExprKind::Move { operand } => {
+                self.null_move_sources(operand, skip);
+                match &operand.kind {
+                    HExprKind::Var(Binding::Local(l)) => {
+                        if skip != Some(l.0) {
+                            let m = self.mir_local(*l);
+                            self.b.assign(
+                                Place::Local(m),
+                                Rvalue::Use(Operand::Const(Const::Null)),
+                            );
+                        }
+                    }
+                    HExprKind::Field { obj, field } => {
+                        let base = self.operand_into_local(obj);
+                        self.b.assign_no_drop(
+                            Place::Field {
+                                base,
+                                field: *field,
+                            },
+                            Rvalue::Use(Operand::Const(Const::Null)),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            HExprKind::Call { args, .. }
+            | HExprKind::New { args, .. }
+            | HExprKind::UnionNew { args, .. } => {
+                for a in args {
+                    self.null_move_sources(a, skip);
+                }
+            }
+            HExprKind::MethodCall {
+                receiver, args, ..
+            } => {
+                self.null_move_sources(receiver, skip);
+                for a in args {
+                    self.null_move_sources(a, skip);
+                }
+            }
+            HExprKind::IndirectCall { target, args, .. } => {
+                self.null_move_sources(target, skip);
+                for a in args {
+                    self.null_move_sources(a, skip);
+                }
+            }
+            HExprKind::InterfaceCall {
+                receiver, args, ..
+            } => {
+                self.null_move_sources(receiver, skip);
+                for a in args {
+                    self.null_move_sources(a, skip);
+                }
+            }
+            HExprKind::JsCall {
+                target,
+                via,
+                method,
+                args,
+                ..
+            } => {
+                self.null_move_sources(target, skip);
+                if let Some(v) = via {
+                    self.null_move_sources(v, skip);
+                }
+                if let Some(m) = method {
+                    self.null_move_sources(m, skip);
+                }
+                for a in args {
+                    self.null_move_sources(a, skip);
+                }
+            }
+            HExprKind::Binary { lhs, rhs, .. } | HExprKind::Concat(lhs, rhs) => {
+                self.null_move_sources(lhs, skip);
+                self.null_move_sources(rhs, skip);
+            }
+            HExprKind::Unary { operand: x, .. }
+            | HExprKind::Field { obj: x, .. }
+            | HExprKind::ArrayLen(x)
+            | HExprKind::StrLen(x)
+            | HExprKind::StrByteSize(x)
+            | HExprKind::HashCode(x)
+            | HExprKind::ToString(x)
+            | HExprKind::EnumName { value: x, .. }
+            | HExprKind::ArrayNew { len: x, .. }
+            | HExprKind::ToBytes(x)
+            | HExprKind::FromBytes(x)
+            | HExprKind::Cast(x)
+            | HExprKind::Await(x)
+            | HExprKind::Discriminant(x)
+            | HExprKind::UnionField { base: x, .. }
+            | HExprKind::IsType { value: x, .. }
+            | HExprKind::ForceFree(x)
+            | HExprKind::Print { arg: x, .. } => self.null_move_sources(x, skip),
+            HExprKind::CharAt(a, b) | HExprKind::ByteAt(a, b) | HExprKind::Index { array: a, index: b } => {
+                self.null_move_sources(a, skip);
+                self.null_move_sources(b, skip);
+            }
+            HExprKind::ArrayRealloc { array, new_len, .. } => {
+                self.null_move_sources(array, skip);
+                self.null_move_sources(new_len, skip);
+            }
+            HExprKind::ArrayElemsCopy {
+                dst,
+                dst_off,
+                src,
+                src_off,
+                count,
+                ..
+            } => {
+                self.null_move_sources(dst, skip);
+                self.null_move_sources(dst_off, skip);
+                self.null_move_sources(src, skip);
+                self.null_move_sources(src_off, skip);
+                self.null_move_sources(count, skip);
+            }
+            HExprKind::ArrayLit { elems, .. } | HExprKind::Tuple { elems } => {
+                for el in elems {
+                    self.null_move_sources(el, skip);
+                }
+            }
+            HExprKind::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                self.null_move_sources(cond, skip);
+                self.null_move_sources(then_expr, skip);
+                self.null_move_sources(else_expr, skip);
+            }
+            _ => {}
         }
     }
 }

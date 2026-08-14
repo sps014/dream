@@ -90,14 +90,20 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let index_before = self.current_token_index;
 
-            // A `ref name: T` / `borrow name: T` lambda parameter (real keywords, same slot).
-            // Unmarked = sink.
+            // A `ref` / `borrow` / `move` lambda parameter (real keywords, same slot).
+            // Unmarked and `borrow` are borrows; `move` transfers ownership into the lambda.
             let is_ref = self.current_token().kind == TokenKind::RefToken;
             if is_ref {
                 self.match_token(TokenKind::RefToken);
             }
             let is_borrow = if !is_ref && self.current_token().kind == TokenKind::BorrowToken {
                 self.match_token(TokenKind::BorrowToken);
+                true
+            } else {
+                false
+            };
+            let is_move = if !is_ref && !is_borrow && self.current_token().kind == TokenKind::MoveToken {
+                self.match_token(TokenKind::MoveToken);
                 true
             } else {
                 false
@@ -116,6 +122,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some("ref")
             } else if is_borrow {
                 Some("borrow")
+            } else if is_move {
+                Some("move")
             } else {
                 None
             };
@@ -132,6 +140,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 if is_ref {
                     params.push(ParameterNode::by_ref(param, param_type));
+                } else if is_move {
+                    params.push(ParameterNode::by_move(param, param_type));
                 } else {
                     params.push(ParameterNode::borrow(param, param_type));
                 }
@@ -161,7 +171,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             if self.current_token().kind == TokenKind::CommaToken
                 && matches!(
                     self.peek_token(1).kind,
-                    TokenKind::IdentifierToken | TokenKind::RefToken | TokenKind::BorrowToken
+                    TokenKind::IdentifierToken
+                        | TokenKind::RefToken
+                        | TokenKind::BorrowToken
+                        | TokenKind::MoveToken
                 )
             {
                 self.match_token(TokenKind::CommaToken);

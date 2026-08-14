@@ -90,6 +90,18 @@ public class List<T> : IndexedCollection<T> {
         return Option.Some(this.items[index]);
     }
 
+    // Element at `index`, or `fallback`. Avoids `Option` so an aliased element is not nested-dropped.
+    public fun get_or(index: int, fallback: T): T {
+        if ((index < 0) || (index >= this.count)) {
+            return fallback;
+        }
+        return this.items[index];
+    }
+
+    public fun get_at(index: int): T {
+        return this.items[index];
+    }
+
     // Overwrites the element at `index`, returning true on success or false if `index` is out of
     // range (no value is written in that case).
     @set_indexer

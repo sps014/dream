@@ -1,6 +1,6 @@
 # Cookbook
 
-Small programs you can copy. Each one is a complete `fun main()`.
+Small programs you can copy. Start with the first three if you are new; GPU and generators need a bit more setup.
 
 <div class="dream-compact-cards" markdown>
 
@@ -30,8 +30,32 @@ Small programs you can copy. Each one is a complete `fun main()`.
 
     [:octicons-arrow-right-24: Recipe](sum-a-list.md)
 
-</div>
+-   :material-expansion-card: **GPU SAXPY**
+
+    ---
+
+    A `@compute` kernel, dispatch, readback.
+
+    [:octicons-arrow-right-24: Recipe](gpu-saxpy.md)
+
+-   :material-triangle: **GPU triangle**
+
+    ---
+
+    `@vertex` / `@fragment` colored triangle.
+
+    [:octicons-arrow-right-24: Recipe](gpu-triangle.md)
+
+-   :material-auto-fix: **Quote generator**
+
+    ---
+
+    `quote { … }` becomes a string at compile time.
+
+    [:octicons-arrow-right-24: Recipe](quote-generator.md)
 
 </div>
 
-New to Dream? Start with the [Quickstart](../learn/quickstart.md) and [Language tour](../learn/tour.md).
+</div>
+
+New to Dream? [Quickstart](../learn/quickstart.md) · [Language tour](../learn/tour.md).

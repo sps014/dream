@@ -1,0 +1,423 @@
+// Fullscreen Elevated raymarch after Inigo Quilez (Shadertoy MdX3Rr).
+// Heightfield tracing + derivative fbm; a mesh cannot match that look.
+// iChannel0 is 2D gradient noise remapped to [0,1] (value-noise cells look cubic).
+//
+// Native: cargo run -- run sample/graphics/elevated/elevated.dream
+// Browser: cargo run -- --runtime --web sample/graphics/elevated/elevated.dream
+//          then serve sample/graphics/elevated → elevated.html
+
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    @builtin("position")
+    public clip: GpuVec4;
+    public pad: float;
+}
+
+@gpu
+fun mix3(a: GpuVec3, b: GpuVec3, t: float): GpuVec3 {
+    return GpuVec3.of(
+        GpuMath.mix(a.x, b.x, t),
+        GpuMath.mix(a.y, b.y, t),
+        GpuMath.mix(a.z, b.z, t)
+    );
+}
+
+@gpu
+fun scale3(v: GpuVec3, s: float): GpuVec3 {
+    return GpuVec3.of(v.x * s, v.y * s, v.z * s);
+}
+
+@gpu
+fun add3(a: GpuVec3, b: GpuVec3): GpuVec3 {
+    return GpuVec3.of(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+@gpu
+fun rot2(px: float, pz: float, k: float): GpuVec2 {
+    // GLSL `mat2(0.8,-0.6,0.6,0.8) * p * k` (column-major).
+    return GpuVec2.of(
+        (0.8 * px + 0.6 * pz) * k,
+        (-0.6 * px + 0.8 * pz) * k
+    );
+}
+
+@gpu
+fun hash21(ix: float, iz: float): float {
+    let sx: float = 50.0 * GpuMath.fract(ix * 0.3183099 + 0.71);
+    let sz: float = 50.0 * GpuMath.fract(iz * 0.3183099 + 0.113);
+    return GpuMath.fract(sx * sz * (sx + sz));
+}
+
+@gpu
+fun fade5(t: float): float {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+@gpu
+fun fade5_d(t: float): float {
+    return 30.0 * t * t * (t * (t - 2.0) + 1.0);
+}
+
+// Unit-ish 2D gradient at lattice point.
+@gpu
+fun hash22(ix: float, iz: float): GpuVec2 {
+    return GpuVec2.of(
+        2.0 * hash21(ix, iz) - 1.0,
+        2.0 * hash21(ix + 19.1, iz + 73.7) - 1.0
+    );
+}
+
+// Gradient noise in [0,1] + analytic derivatives (iq `noised` / Shadertoy 4dXBRH).
+@gpu
+fun noised(x: float, z: float): GpuVec3 {
+    let ix: float = GpuMath.floor(x);
+    let iz: float = GpuMath.floor(z);
+    let fx: float = GpuMath.fract(x);
+    let fz: float = GpuMath.fract(z);
+    let ux: float = fade5(fx);
+    let uz: float = fade5(fz);
+    let dux: float = fade5_d(fx);
+    let duz: float = fade5_d(fz);
+    let ga = hash22(ix, iz);
+    let gb = hash22(ix + 1.0, iz);
+    let gc = hash22(ix, iz + 1.0);
+    let gd = hash22(ix + 1.0, iz + 1.0);
+    let va: float = ga.x * fx + ga.y * fz;
+    let vb: float = gb.x * (fx - 1.0) + gb.y * fz;
+    let vc: float = gc.x * fx + gc.y * (fz - 1.0);
+    let vd: float = gd.x * (fx - 1.0) + gd.y * (fz - 1.0);
+    let k: float = va - vb - vc + vd;
+    let h: float = va + ux * (vb - va) + uz * (vc - va) + ux * uz * k;
+    let dx: float = ga.x + ux * (gb.x - ga.x) + uz * (gc.x - ga.x) + ux * uz * (ga.x - gb.x - gc.x + gd.x)
+        + dux * (uz * k + vb - va);
+    let dz: float = ga.y + ux * (gb.y - ga.y) + uz * (gc.y - ga.y) + ux * uz * (ga.y - gb.y - gc.y + gd.y)
+        + duz * (ux * k + vc - va);
+    return GpuVec3.of(0.5 + 0.5 * h, 0.5 * dx, 0.5 * dz);
+}
+
+@gpu
+fun noise2(x: float, z: float): float {
+    let ix: float = GpuMath.floor(x);
+    let iz: float = GpuMath.floor(z);
+    let fx: float = GpuMath.fract(x);
+    let fz: float = GpuMath.fract(z);
+    let ux: float = fx * fx * (3.0 - 2.0 * fx);
+    let uz: float = fz * fz * (3.0 - 2.0 * fz);
+    let a: float = hash21(ix, iz);
+    let b: float = hash21(ix + 1.0, iz);
+    let c: float = hash21(ix, iz + 1.0);
+    let d: float = hash21(ix + 1.0, iz + 1.0);
+    return GpuMath.mix(GpuMath.mix(a, b, ux), GpuMath.mix(c, d, ux), uz);
+}
+
+@gpu
+fun terrain_n(wx: float, wz: float, octaves: int): float {
+    // Unscaled MdX3Rr units (`p *= 0.003`, height `140*a`). SC=250 blew up hit
+    // epsilon (`0.002*t`) into hundreds of world units — that's the pixelation.
+    let x: float = wx * 0.003;
+    let z: float = wz * 0.003;
+    let a: float = 0.0;
+    let b: float = 1.0;
+    let dx: float = 0.0;
+    let dz: float = 0.0;
+    for (let i = 0; i < octaves; i = i + 1) {
+        let n = noised(x, z);
+        dx = dx + n.y;
+        dz = dz + n.z;
+        a = a + b * n.x / (1.0 + dx * dx + dz * dz);
+        b = b * 0.5;
+        let r = rot2(x, z, 2.0);
+        x = r.x;
+        z = r.y;
+    }
+    return 140.0 * a;
+}
+
+@gpu
+fun fbm(px: float, pz: float): float {
+    let x: float = px;
+    let z: float = pz;
+    let f: float = 0.0;
+    f = f + 0.5 * noise2(x, z);
+    let r1 = rot2(x, z, 2.02);
+    x = r1.x;
+    z = r1.y;
+    f = f + 0.25 * noise2(x, z);
+    let r2 = rot2(x, z, 2.03);
+    x = r2.x;
+    z = r2.y;
+    f = f + 0.125 * noise2(x, z);
+    let r3 = rot2(x, z, 2.01);
+    x = r3.x;
+    z = r3.y;
+    f = f + 0.0625 * noise2(x, z);
+    return f / 0.9375;
+}
+
+@gpu
+fun interesct(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: float, tmin: float, tmax: float): float {
+    // MdX3Rr: keep `t` even if the loop runs out — treating that as a miss punches
+    // grainy sky holes through the mountains.
+    let t: float = tmin;
+    for (let i = 0; i < 200; i = i + 1) {
+        let px: float = rox + t * rdx;
+        let py: float = roy + t * rdy;
+        let pz: float = roz + t * rdz;
+        let h: float = py - terrain_n(px, pz, 6);
+        if (GpuMath.abs(h) < 0.002 * t || t > tmax) {
+            break;
+        }
+        t = t + 0.4 * h;
+    }
+    return t;
+}
+
+@gpu
+fun soft_shadow(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: float): float {
+    let res: float = 1.0;
+    let t: float = 0.02;
+    for (let i = 0; i < 20; i = i + 1) {
+        let px: float = rox + t * rdx;
+        let py: float = roy + t * rdy;
+        let pz: float = roz + t * rdz;
+        let h: float = py - terrain_n(px, pz, 3);
+        res = GpuMath.min(res, 16.0 * h / t);
+        t = t + GpuMath.max(h, 0.12);
+        if (res < 0.001 || py > 220.0 || t > 140.0) {
+            break;
+        }
+    }
+    return GpuMath.clamp(res, 0.0, 1.0);
+}
+
+@gpu
+fun calc_normal(px: float, pz: float, t: float, res_x: float): GpuVec3 {
+    let eps: float = GpuMath.max(0.05, GpuMath.min(0.0008 * t, t / GpuMath.max(res_x, 1.0)));
+    let hL: float = terrain_n(px - eps, pz, 6);
+    let hR: float = terrain_n(px + eps, pz, 6);
+    let hD: float = terrain_n(px, pz - eps, 6);
+    let hU: float = terrain_n(px, pz + eps, 6);
+    return GpuMath.normalize(GpuVec3.of(hL - hR, 2.0 * eps, hD - hU));
+}
+
+@gpu
+fun cam_path(time: float): GpuVec3 {
+    return GpuVec3.of(
+        1400.0 * GpuMath.cos(0.23 * time),
+        0.0,
+        1400.0 * GpuMath.cos(1.5 + 0.21 * time)
+    );
+}
+
+@gpu
+fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: float, res_x: float): GpuVec3 {
+    let light1 = GpuMath.normalize(GpuVec3.of(-0.8, 0.4, -0.3));
+    let tmin: float = 0.5;
+    let tmax: float = 2000.0;
+    let maxh: float = 300.0;
+    if (GpuMath.abs(rdy) > 0.00001) {
+        let tp: float = (maxh - roy) / rdy;
+        if (tp > 0.0) {
+            if (roy > maxh) {
+                tmin = GpuMath.max(tmin, tp);
+            } else {
+                tmax = GpuMath.min(tmax, tp);
+            }
+        }
+    }
+
+    let sundot: float = GpuMath.clamp(GpuMath.dot(GpuVec3.of(rdx, rdy, rdz), light1), 0.0, 1.0);
+    let t: float = interesct(rox, roy, roz, rdx, rdy, rdz, tmin, tmax);
+    let col = GpuVec3.of(0.0, 0.0, 0.0);
+
+    if (t > tmax) {
+        let sky0 = GpuVec3.of(0.3 - rdy * rdy * 0.5, 0.5 - rdy * rdy * 0.5, 0.85 - rdy * rdy * 0.5);
+        let hz: float = GpuMath.pow(1.0 - GpuMath.max(rdy, 0.0), 4.0);
+        col = mix3(sky0, scale3(GpuVec3.of(0.7, 0.75, 0.85), 0.85), hz);
+        col = add3(col, scale3(GpuVec3.of(1.0, 0.7, 0.4), 0.25 * GpuMath.pow(sundot, 5.0)));
+        col = add3(col, scale3(GpuVec3.of(1.0, 0.8, 0.6), 0.25 * GpuMath.pow(sundot, 64.0)));
+        col = add3(col, scale3(GpuVec3.of(1.0, 0.8, 0.6), 0.2 * GpuMath.pow(sundot, 512.0)));
+        if (rdy > 0.05) {
+            let scx: float = rox + rdx * (1000.0 - roy) / rdy;
+            let scz: float = roz + rdz * (1000.0 - roy) / rdy;
+            let cl: float = 0.5 * GpuMath.smoothstep(0.5, 0.8, fbm(0.0005 * scx, 0.0005 * scz));
+            col = mix3(col, GpuVec3.of(1.0, 0.95, 1.0), cl);
+        }
+        let hor: float = GpuMath.pow(1.0 - GpuMath.max(rdy, 0.0), 16.0);
+        col = mix3(col, scale3(GpuVec3.of(0.4, 0.65, 1.0), 0.68), hor);
+    } else {
+        let px: float = rox + t * rdx;
+        let py: float = roy + t * rdy;
+        let pz: float = roz + t * rdz;
+        let nor = calc_normal(px, pz, t, res_x);
+        let refl = GpuMath.reflect(GpuVec3.of(rdx, rdy, rdz), nor);
+        let fre: float = GpuMath.clamp(1.0 + GpuMath.dot(GpuVec3.of(rdx, rdy, rdz), nor), 0.0, 1.0);
+        let hal = GpuMath.normalize(GpuVec3.of(light1.x - rdx, light1.y - rdy, light1.z - rdz));
+
+        let rtex: float = noise2(px * 0.15, pz * 0.15);
+        let rtex2: float = noise2(px * 0.018, py * 0.86);
+        col = scale3(
+            mix3(GpuVec3.of(0.08, 0.05, 0.03), GpuVec3.of(0.10, 0.09, 0.08), rtex2),
+            (rtex * 0.25 + 0.75) * 0.9
+        );
+        col = mix3(
+            col,
+            scale3(GpuVec3.of(0.45, 0.30, 0.15), 0.20 * (0.50 + 0.50 * rtex)),
+            GpuMath.smoothstep(0.70, 0.9, nor.y)
+        );
+        col = mix3(
+            col,
+            scale3(GpuVec3.of(0.30, 0.30, 0.10), 0.15 * (0.25 + 0.75 * rtex)),
+            GpuMath.smoothstep(0.95, 1.0, nor.y)
+        );
+
+        let h: float = GpuMath.smoothstep(55.0, 80.0, py + 25.0 * fbm(0.01 * px, 0.01 * pz));
+        let e: float = GpuMath.smoothstep(1.0 - 0.5 * h, 1.0 - 0.1 * h, nor.y);
+        let o: float = 0.3 + 0.7 * GpuMath.smoothstep(0.0, 0.1, nor.x + h * h);
+        let s: float = h * e * o;
+        col = mix3(col, scale3(GpuVec3.of(0.62, 0.65, 0.7), 0.29), GpuMath.smoothstep(0.1, 0.9, s));
+
+        let amb: float = GpuMath.clamp(0.5 + 0.5 * nor.y, 0.0, 1.0);
+        let dif0: float = GpuMath.clamp(GpuMath.dot(light1, nor), 0.0, 1.0);
+        let bacn = GpuMath.normalize(GpuVec3.of(-light1.x, 0.0, light1.z));
+        let bac: float = GpuMath.clamp(0.2 + 0.8 * GpuMath.dot(bacn, nor), 0.0, 1.0);
+        let dom: float = GpuMath.smoothstep(-0.1, 0.1, refl.y);
+        let fre2: float = fre * fre * fre * fre;
+        let spe: float = GpuMath.pow(GpuMath.clamp(GpuMath.dot(nor, hal), 0.0, 1.0), 16.0);
+        let dif: float = dif0 * soft_shadow(px, py, pz, light1.x, light1.y, light1.z);
+
+        let lin = scale3(GpuVec3.of(1.80, 1.30, 1.00), 1.8 * dif);
+        lin = add3(lin, scale3(GpuVec3.of(0.10, 0.20, 0.30), 2.0 * amb));
+        lin = add3(lin, scale3(GpuVec3.of(0.40, 0.30, 0.20), 0.07 * bac));
+        lin = add3(lin, scale3(GpuVec3.of(0.40, 0.50, 0.60), 0.06 * dom));
+        lin = add3(lin, scale3(GpuVec3.of(0.30, 0.30, 0.25), 0.3 * fre2));
+        col = GpuVec3.of(col.x * lin.x, col.y * lin.y, col.z * lin.z);
+        col = add3(col, scale3(GpuVec3.of(1.0, 0.9, 0.7), (s * 0.15 + 0.05) * spe * dif));
+
+        let fo: float = 1.0 - GpuMath.exp(-GpuMath.pow(0.001 * t, 1.5));
+        let fco = add3(
+            scale3(GpuVec3.of(0.4, 0.65, 1.0), 0.65),
+            scale3(GpuVec3.of(1.0, 0.8, 0.5), 0.1 * GpuMath.pow(sundot, 4.0))
+        );
+        col = mix3(col, fco, fo);
+    }
+
+    col = add3(col, scale3(GpuVec3.of(1.0, 0.8, 0.4), 0.3 * GpuMath.pow(sundot, 8.0)));
+    return GpuVec3.of(GpuMath.sqrt(col.x), GpuMath.sqrt(col.y), GpuMath.sqrt(col.z));
+}
+
+@gpu
+fun cam_rd(xyx: float, xyy: float, cu: GpuVec3, cv: GpuVec3, cw: GpuVec3): GpuVec3 {
+    return GpuMath.normalize(GpuVec3.of(
+        xyx * cu.x + xyy * cv.x + 2.0 * cw.x,
+        xyx * cu.y + xyy * cv.y + 2.0 * cw.y,
+        xyx * cu.z + xyy * cv.z + 2.0 * cw.z
+    ));
+}
+
+@vertex
+fun elev_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.clip = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.pad = 0.0;
+    return o;
+}
+
+@fragment
+fun elev_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
+    let cam_t: float = time * 0.15;
+
+    let fx: float = frag_coord.x;
+    let fy: float = res_y - frag_coord.y;
+    let xyx: float = (2.0 * fx - res_x) / res_y;
+    let xyy: float = (2.0 * fy - res_y) / res_y;
+
+    let ro = cam_path(cam_t);
+    let ta = cam_path(cam_t + 3.0);
+    // Path look-ahead is ~900 units; MdX3Rr's 20*SC/path ratio is ~5°, so drop ~80.
+    ro.y = terrain_n(ro.x, ro.z, 6) + 19.0;
+    ta.y = ro.y - 80.0;
+    let cr: float = 0.2 * GpuMath.cos(0.1 * cam_t);
+
+    let cw = GpuMath.normalize(GpuVec3.of(ta.x - ro.x, ta.y - ro.y, ta.z - ro.z));
+    let cp = GpuVec3.of(GpuMath.sin(cr), GpuMath.cos(cr), 0.0);
+    let cu = GpuMath.normalize(GpuMath.cross(cw, cp));
+    let cv = GpuMath.normalize(GpuMath.cross(cu, cw));
+
+    let rd = cam_rd(xyx, xyy, cu, cv, cw);
+    let col = render(ro.x, ro.y, ro.z, rd.x, rd.y, rd.z, res_x);
+
+    let qx: float = fx / res_x;
+    let qy: float = fy / res_y;
+    let vig: float = 0.5 + 0.5 * GpuMath.pow(16.0 * qx * qy * (1.0 - qx) * (1.0 - qy), 0.1);
+    return GpuVec4.of(col.x * vig, col.y * vig, col.z * vig, 1.0);
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("WebGPU unavailable — elevated needs Gpu.try_init");
+        return;
+    }
+
+    let surface_r = GpuSurface.create("elevated", 1280, 720);
+    if (surface_r.is_err()) {
+        System.println("GpuSurface.create failed");
+        return;
+    }
+    let surface = surface_r.unwrap_or(GpuSurface());
+
+    let w: int = surface.width();
+    let h: int = surface.height();
+    if (w < 1) { w = 1280; }
+    if (h < 1) { h = 720; }
+
+    let desc = GpuRenderPipelineDesc.defaults();
+    let pipe_r = await GpuRenderPipeline.create_ex("elev_vs", "elev_fs", desc);
+    if (pipe_r.is_err()) {
+        System.println("GpuRenderPipeline.create_ex failed");
+        return;
+    }
+    let pipe = pipe_r.unwrap_or(GpuRenderPipeline());
+
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
+    ]);
+
+    let sky = GpuVec4.of(0.3, 0.5, 0.85, 1.0);
+    let t0: long = Time.nano_time();
+
+    while (!surface.close_requested()) {
+        for (let ev in surface.poll_events()) {
+            switch (ev) {
+                _ => {},
+            }
+        }
+        w = surface.width();
+        h = surface.height();
+        if (w < 1) { w = 1280; }
+        if (h < 1) { h = 720; }
+        let rw: float = (float)w;
+        let rh: float = (float)h;
+        let now: long = Time.nano_time();
+        let t: float = (float)(now - t0) / 1000000000.0;
+        let uniforms = Uniforms.pack_f32([t, rw, rh]);
+        let _ = await GpuRenderPass.draw_ex(surface, pipe, verts, 3, uniforms, sky);
+        let _ = await surface.present();
+        await Gpu.frame();
+    }
+}

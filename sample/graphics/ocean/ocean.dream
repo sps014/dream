@@ -30,7 +30,7 @@ fun sea_noise(x: float, z: float): float {
     let h10: float = GpuMath.fract(GpuMath.sin((ix + 1.0) * 127.1 + iz * 311.7) * 43758.5453123);
     let h01: float = GpuMath.fract(GpuMath.sin(ix * 127.1 + (iz + 1.0) * 311.7) * 43758.5453123);
     let h11: float = GpuMath.fract(GpuMath.sin((ix + 1.0) * 127.1 + (iz + 1.0) * 311.7) * 43758.5453123);
-    return 0.0 - 1.0 + 2.0 * GpuMath.mix(GpuMath.mix(h00, h10, ux), GpuMath.mix(h01, h11, ux), uz);
+    return -1.0 + 2.0 * GpuMath.mix(GpuMath.mix(h00, h10, ux), GpuMath.mix(h01, h11, ux), uz);
 }
 
 @gpu
@@ -60,7 +60,7 @@ fun sea_height(px: float, pz: float, sea_time: float, octaves: int): float {
         h = h + (sea_octave((uvx + sea_time) * freq, (uvz + sea_time) * freq, choppy)
             + sea_octave((uvx - sea_time) * freq, (uvz - sea_time) * freq, choppy)) * amp;
         let nux: float = uvx * 1.6 + uvz * 1.2;
-        let nuz: float = uvx * (0.0 - 1.2) + uvz * 1.6;
+        let nuz: float = uvx * -1.2 + uvz * 1.6;
         uvx = nux;
         uvz = nuz;
         freq = freq * 1.9;
@@ -97,7 +97,7 @@ fun get_sea_color(p: GpuVec3, n: GpuVec3, l: GpuVec3, eye: GpuVec3, dist2: float
     let SEA_BASE = GpuVec3.of(0.0, 0.09, 0.18);
     let SEA_WATER = GpuVec3.of(0.8 * 0.6, 0.9 * 0.6, 0.6 * 0.6);
 
-    let ndote: float = GpuMath.dot(n, GpuVec3.of(0.0 - eye.x, 0.0 - eye.y, 0.0 - eye.z));
+    let ndote: float = GpuMath.dot(n, GpuVec3.of(-eye.x, -eye.y, -eye.z));
     let fres: float = GpuMath.clamp(1.0 - ndote, 0.0, 1.0);
     fres = GpuMath.min(fres * fres * fres, 0.5);
 
@@ -184,8 +184,8 @@ fun apply_euler(dir: GpuVec3, ax: float, ay: float, az: float): GpuVec3 {
 
     let c0x: float = a1c * a3c + a1s * a2s * a3s;
     let c0y: float = a1c * a2s * a3s + a3c * a1s;
-    let c0z: float = 0.0 - a2c * a3s;
-    let c1x: float = 0.0 - a2c * a1s;
+    let c0z: float = -a2c * a3s;
+    let c1x: float = -a2c * a1s;
     let c1y: float = a1c * a2c;
     let c1z: float = a2s;
     let c2x: float = a3c * a1s * a2s + a1c * a3s;
@@ -225,7 +225,7 @@ fun sea_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
     let ang_z: float = cam_t;
 
     let ori = GpuVec3.of(0.0, 3.5, cam_t * 5.0);
-    let dir0 = GpuMath.normalize(GpuVec3.of(uvx, uvy, 0.0 - 2.0));
+    let dir0 = GpuMath.normalize(GpuVec3.of(uvx, uvy, -2.0));
     let pull: float = GpuMath.sqrt(uvx * uvx + uvy * uvy) * 0.14;
     let dir1 = GpuMath.normalize(GpuVec3.of(dir0.x, dir0.y, dir0.z + pull));
     let dir = apply_euler(dir1, ang_x, ang_y, ang_z);
@@ -240,7 +240,7 @@ fun sea_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
     let sea = get_sea_color(p, n, light, dir, dist2);
     let sky = get_sky_color(dir);
     // smoothstep(0.0, -0.02, dir.y) then pow(_, 0.2) — sky above horizon.
-    let t: float = GpuMath.clamp((0.0 - dir.y) / 0.02, 0.0, 1.0);
+    let t: float = GpuMath.clamp((-dir.y) / 0.02, 0.0, 1.0);
     t = t * t * (3.0 - 2.0 * t);
     let mix_k: float = GpuMath.pow(t, 0.2);
 
@@ -289,9 +289,9 @@ async fun main(): void {
 
     // Fullscreen triangle covers clip space.
     let verts = GpuBuffer<Vertex>.vertex_from([
-        make_vert(0.0 - 1.0, 0.0 - 1.0),
-        make_vert(3.0, 0.0 - 1.0),
-        make_vert(0.0 - 1.0, 3.0),
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
     ]);
 
     let sky = GpuVec4.of(0.44, 0.77, 0.99, 1.0);

@@ -1779,6 +1779,30 @@ function makeGpuHost(getInstance) {
     input.y = y;
   }
 
+  // Match native `reconfigure_surface`: drawable = CSS/client pixels, not DPR.
+  // Setting canvas.width retriggers ResizeObserver; skip when size is unchanged.
+  function syncSurfaceClientSize(surface) {
+    const canvas = surface.canvas;
+    if (!canvas) return false;
+    const cw = canvas.clientWidth | 0;
+    const ch = canvas.clientHeight | 0;
+    if (cw < 1 || ch < 1) return false;
+    if (
+      cw === surface.width &&
+      ch === surface.height &&
+      canvas.width === cw &&
+      canvas.height === ch
+    ) {
+      return false;
+    }
+    surface.width = cw;
+    surface.height = ch;
+    canvas.width = cw;
+    canvas.height = ch;
+    surface.configured = false;
+    return true;
+  }
+
   function canvasPointerPos(canvas, clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const rw = rect.width || 1;
@@ -2006,10 +2030,8 @@ function makeGpuHost(getInstance) {
 
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => {
-        const w = canvas.clientWidth | 0;
-        const h = canvas.clientHeight | 0;
-        if (w > 0 && h > 0) {
-          pushEvent(input, { tag: 10, width: w, height: h });
+        if (syncSurfaceClientSize(surface)) {
+          pushEvent(input, { tag: 10, width: surface.width, height: surface.height });
         }
         const dpr = globalThis.devicePixelRatio || 1;
         pushEvent(input, { tag: 11, scale: dpr });
@@ -2967,6 +2989,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       };
       surfaces.set(id, surface);
       attachSurfaceInput(surface);
+      syncSurfaceClientSize(surface);
       return id;
     },
     gpuSurfaceConfigure: (id, width, height) => {

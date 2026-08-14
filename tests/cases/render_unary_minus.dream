@@ -1,0 +1,44 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public pad: float;
+}
+
+@gpu
+fun neg_scale(x: float): float {
+    return -x * -1.0;
+}
+
+@vertex
+fun um_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.pad = 0.0;
+    return o;
+}
+
+@fragment
+fun um_fs(v: VsOut, t: float): GpuVec4 {
+    let n = GpuMath.normalize(GpuVec3.of(-0.8, 0.4, -0.3));
+    let k: float = neg_scale(t);
+    let ok: float = 0.0;
+    if (t > -2.0) {
+        ok = 1.0;
+    }
+    return GpuVec4.of(n.x + k, n.y, n.z, ok);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+    System.println("ok");
+}

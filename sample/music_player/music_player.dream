@@ -20,7 +20,7 @@ class Track {
         this.title = title;
         this.artist = artist;
         this.url = url;
-        this.is_ncs = artist.contains("NCS");
+        this.is_ncs = this.artist.contains("NCS");
     }
 }
 

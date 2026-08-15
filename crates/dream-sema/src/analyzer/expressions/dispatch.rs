@@ -343,6 +343,15 @@ impl<'a> Analyzer<'a> {
                         Ok(result)
                     }
                     TokenKind::PlusToken | TokenKind::MinusToken => {
+                        if opr.kind == TokenKind::MinusToken
+                            && self.try_gpu_unary_neg(&right_type, operand.clone())
+                        {
+                            return Ok(right_type);
+                        }
+                        if Analyzer::is_gpu_vec(&right_type) && opr.kind == TokenKind::PlusToken {
+                            self.hir_set_unary(opr, operand, &right_type);
+                            return Ok(right_type);
+                        }
                         if !right_type.is_unknown()
                             && !matches!(
                                 right_type,

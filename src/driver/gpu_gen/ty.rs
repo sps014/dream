@@ -78,28 +78,117 @@ pub(super) fn is_bool_producing_binop(kind: TokenKind) -> bool {
     )
 }
 
+pub(super) fn is_vec_wgsl(t: &str) -> bool {
+    t.starts_with("vec")
+}
+
+pub(super) fn is_mat_wgsl(t: &str) -> bool {
+    t.starts_with("mat")
+}
+
+pub(super) fn common_arith_wgsl_ty(lt: &str, rt: &str) -> String {
+    if is_vec_wgsl(lt) && (lt == rt || rt == "f32") {
+        return lt.to_string();
+    }
+    if is_vec_wgsl(rt) && (lt == "f32" || lt == rt) {
+        return rt.to_string();
+    }
+    if is_mat_wgsl(lt) && is_vec_wgsl(rt) {
+        return rt.to_string();
+    }
+    if is_mat_wgsl(lt) && is_mat_wgsl(rt) {
+        return lt.to_string();
+    }
+    common_numeric_wgsl_ty(lt, rt)
+}
+
+fn first_arg_ty(args: &[ExpressionNode<'_>], ctx: &EmitCtx<'_>) -> String {
+    args.first()
+        .map(|a| infer_wgsl_ty(a, ctx))
+        .unwrap_or_else(|| "f32".into())
+}
+
+pub(super) fn receiver_wgsl_ty(obj: &ExpressionNode<'_>) -> Option<&'static str> {
+    let name = match obj {
+        ExpressionNode::Identifier(n) => n.text.as_str(),
+        _ => return None,
+    };
+    match name {
+        "GpuVec2" => Some("vec2<f32>"),
+        "GpuVec3" => Some("vec3<f32>"),
+        "GpuVec4" => Some("vec4<f32>"),
+        "GpuMat2" => Some("mat2x2<f32>"),
+        "GpuMat3" => Some("mat3x3<f32>"),
+        "GpuMat4" => Some("mat4x4<f32>"),
+        _ => None,
+    }
+}
+
 /// WGSL return type for a known GPU builtin / GpuMath call, if any.
-pub(super) fn builtin_return_wgsl_ty(name: &str, arg_count: usize) -> Option<&'static str> {
+pub(super) fn builtin_return_wgsl_ty(
+    name: &str,
+    args: &[ExpressionNode<'_>],
+    ctx: &EmitCtx<'_>,
+) -> Option<String> {
+    let a0 = first_arg_ty(args, ctx);
     match name {
         "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "floor" | "ceil"
         | "fract" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "log" | "sign"
-        | "saturate" | "step" | "smoothstep" | "fma" | "inversesqrt" | "length" | "length2"
-        | "length4" | "dot" | "dot2" | "dot4" => Some("f32"),
-        "normalize" | "cross" | "reflect" => Some("vec3<f32>"),
-        "normalize2" => Some("vec2<f32>"),
-        "normalize4" => Some("vec4<f32>"),
-        "mul2" => Some("vec2<f32>"),
-        "mul3" => Some("vec3<f32>"),
-        "mul4" => Some("vec4<f32>"),
-        "matmul4" | "transpose4" | "identity" => Some("mat4x4<f32>"),
-        "atomic_load" | "atomic_add" | "atomic_exchange" => Some("i32"),
-        "texture_load" | "texture_sample_level" => Some("f32"),
-        "texture_sample" => Some("vec4<f32>"),
-        "of" => Some(match arg_count {
-            2 => "vec2<f32>",
-            3 => "vec3<f32>",
-            _ => "vec4<f32>",
-        }),
+        | "saturate" | "step" | "smoothstep" | "fma" | "inversesqrt" => {
+            if is_vec_wgsl(&a0) {
+                Some(a0)
+            } else {
+                Some("f32".into())
+            }
+        }
+        "length" | "dot" => Some("f32".into()),
+        "normalize" | "cross" | "reflect" => {
+            if is_vec_wgsl(&a0) {
+                Some(a0)
+            } else {
+                Some("vec3<f32>".into())
+            }
+        }
+        "mul" => {
+            let a1 = args
+                .get(1)
+                .map(|a| infer_wgsl_ty(a, ctx))
+                .unwrap_or_else(|| a0.clone());
+            if is_vec_wgsl(&a1) {
+                Some(a1)
+            } else if is_mat_wgsl(&a0) {
+                Some(a0)
+            } else {
+                Some("vec4<f32>".into())
+            }
+        }
+        "transpose" => {
+            if is_mat_wgsl(&a0) {
+                Some(a0)
+            } else {
+                Some("mat4x4<f32>".into())
+            }
+        }
+        "identity" => Some("mat4x4<f32>".into()),
+        "atomic_load" | "atomic_add" | "atomic_exchange" => Some("i32".into()),
+        "texture_load" | "texture_sample_level" => Some("f32".into()),
+        "texture_sample" => Some("vec4<f32>".into()),
+        "splat" => None,
+        "of" => {
+            if is_vec_wgsl(&a0) {
+                Some(match args.len() {
+                    2 => "mat2x2<f32>".into(),
+                    3 => "mat3x3<f32>".into(),
+                    _ => "mat4x4<f32>".into(),
+                })
+            } else {
+                Some(match args.len() {
+                    2 => "vec2<f32>".into(),
+                    3 => "vec3<f32>".into(),
+                    _ => "vec4<f32>".into(),
+                })
+            }
+        }
         _ => None,
     }
 }
@@ -126,12 +215,12 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             }
             let lt = infer_wgsl_ty(l, ctx);
             let rt = infer_wgsl_ty(r, ctx);
-            common_numeric_wgsl_ty(&lt, &rt)
+            common_arith_wgsl_ty(&lt, &rt)
         }
         ExpressionNode::Ternary(_, t, e) => {
             let tt = infer_wgsl_ty(t, ctx);
             let et = infer_wgsl_ty(e, ctx);
-            common_numeric_wgsl_ty(&tt, &et)
+            common_arith_wgsl_ty(&tt, &et)
         }
         ExpressionNode::IndexAccess(arr, _) => {
             if let ExpressionNode::Identifier(name) = &**arr {
@@ -185,12 +274,34 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             }
             "i32".into()
         }
-        ExpressionNode::FunctionCall(name, _, args) | ExpressionNode::MethodCall(_, name, _, args) => {
-            if let Some(ty) = builtin_return_wgsl_ty(&name.text, args.len()) {
-                return ty.into();
+        ExpressionNode::FunctionCall(name, _, args) => {
+            if let Some(ty) = builtin_return_wgsl_ty(&name.text, args, ctx) {
+                return ty;
             }
             match name.text.as_str() {
-                // Zero-arg `StructName()` constructor → WGSL struct type.
+                other if args.is_empty() => escape_wgsl_ident(other),
+                other => ctx
+                    .helper_returns
+                    .get(other)
+                    .cloned()
+                    .unwrap_or_else(|| "i32".into()),
+            }
+        }
+        ExpressionNode::MethodCall(obj, name, _, args) => {
+            if name.text == "splat" {
+                if let Some(ty) = receiver_wgsl_ty(obj) {
+                    return ty.into();
+                }
+            }
+            if name.text == "identity" {
+                if let Some(ty) = receiver_wgsl_ty(obj) {
+                    return ty.into();
+                }
+            }
+            if let Some(ty) = builtin_return_wgsl_ty(&name.text, args, ctx) {
+                return ty;
+            }
+            match name.text.as_str() {
                 other if args.is_empty() => escape_wgsl_ident(other),
                 other => ctx
                     .helper_returns
@@ -201,8 +312,8 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
         }
         ExpressionNode::Call(callee, _, args) => match &**callee {
             ExpressionNode::Identifier(n) => {
-                if let Some(ty) = builtin_return_wgsl_ty(&n.text, args.len()) {
-                    return ty.into();
+                if let Some(ty) = builtin_return_wgsl_ty(&n.text, args, ctx) {
+                    return ty;
                 }
                 if args.is_empty() {
                     return escape_wgsl_ident(&n.text);
@@ -212,9 +323,19 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                     .cloned()
                     .unwrap_or_else(|| "i32".into())
             }
-            ExpressionNode::MemberAccess(_, method) => {
-                if let Some(ty) = builtin_return_wgsl_ty(&method.text, args.len()) {
-                    return ty.into();
+            ExpressionNode::MemberAccess(obj, method) => {
+                if method.text == "splat" {
+                    if let Some(ty) = receiver_wgsl_ty(obj) {
+                        return ty.into();
+                    }
+                }
+                if method.text == "identity" {
+                    if let Some(ty) = receiver_wgsl_ty(obj) {
+                        return ty.into();
+                    }
+                }
+                if let Some(ty) = builtin_return_wgsl_ty(&method.text, args, ctx) {
+                    return ty;
                 }
                 "i32".into()
             }

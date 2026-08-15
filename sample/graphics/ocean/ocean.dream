@@ -97,36 +97,25 @@ fun get_sea_color(p: GpuVec3, n: GpuVec3, l: GpuVec3, eye: GpuVec3, dist2: float
     let SEA_BASE = GpuVec3.of(0.0, 0.09, 0.18);
     let SEA_WATER = GpuVec3.of(0.8 * 0.6, 0.9 * 0.6, 0.6 * 0.6);
 
-    let ndote: float = GpuMath.dot(n, GpuVec3.of(-eye.x, -eye.y, -eye.z));
+    let ndote: float = GpuMath.dot(n, -eye);
     let fres: float = GpuMath.clamp(1.0 - ndote, 0.0, 1.0);
     fres = GpuMath.min(fres * fres * fres, 0.5);
 
     let reflected = get_sky_color(GpuMath.reflect(eye, n));
     let diff: float = GpuMath.pow(GpuMath.max(GpuMath.dot(n, l) * 0.4 + 0.6, 0.0), 80.0);
-    let refracted = GpuVec3.of(
-        SEA_BASE.x + diff * SEA_WATER.x * 0.12,
-        SEA_BASE.y + diff * SEA_WATER.y * 0.12,
-        SEA_BASE.z + diff * SEA_WATER.z * 0.12
-    );
+    let refracted = SEA_BASE + SEA_WATER * (diff * 0.12);
 
-    let cr: float = GpuMath.mix(refracted.x, reflected.x, fres);
-    let cg: float = GpuMath.mix(refracted.y, reflected.y, fres);
-    let cb: float = GpuMath.mix(refracted.z, reflected.z, fres);
+    let col = GpuMath.mix(refracted, reflected, fres);
 
     let atten: float = GpuMath.max(1.0 - dist2 * 0.001, 0.0);
     let peak: float = (p.y - SEA_HEIGHT) * 0.18 * atten;
-    cr = cr + SEA_WATER.x * peak;
-    cg = cg + SEA_WATER.y * peak;
-    cb = cb + SEA_WATER.z * peak;
+    col = col + SEA_WATER * peak;
 
     let spec_pow: float = 600.0 / GpuMath.sqrt(GpuMath.max(dist2, 1.0));
     let spec_dir = GpuMath.reflect(eye, n);
     let nrm: float = (spec_pow + 8.0) / (3.141592 * 8.0);
     let spec: float = GpuMath.pow(GpuMath.max(GpuMath.dot(spec_dir, l), 0.0), spec_pow) * nrm;
-    cr = cr + spec;
-    cg = cg + spec;
-    cb = cb + spec;
-    return GpuVec3.of(cr, cg, cb);
+    return col + GpuVec3.splat(spec);
 }
 
 @gpu
@@ -175,12 +164,12 @@ fun height_map_tracing(
 // GLSL `dir * fromEuler(ang)`.
 @gpu
 fun apply_euler(dir: GpuVec3, ax: float, ay: float, az: float): GpuVec3 {
-    let a1s: float = GpuMath.sin(ax);
-    let a1c: float = GpuMath.cos(ax);
-    let a2s: float = GpuMath.sin(ay);
-    let a2c: float = GpuMath.cos(ay);
-    let a3s: float = GpuMath.sin(az);
-    let a3c: float = GpuMath.cos(az);
+    let a1s = GpuMath.sin(ax);
+    let a1c = GpuMath.cos(ax);
+    let a2s = GpuMath.sin(ay);
+    let a2c = GpuMath.cos(ay);
+    let a3s = GpuMath.sin(az);
+    let a3c = GpuMath.cos(az);
 
     let c0x: float = a1c * a3c + a1s * a2s * a3s;
     let c0y: float = a1c * a2s * a3s + a3c * a1s;
@@ -231,7 +220,7 @@ fun sea_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
     let dir = apply_euler(dir1, ang_x, ang_y, ang_z);
 
     let p = height_map_tracing(ori.x, ori.y, ori.z, dir.x, dir.y, dir.z, sea_time);
-    let dist = GpuVec3.of(p.x - ori.x, p.y - ori.y, p.z - ori.z);
+    let dist = p - ori;
     let dist2: float = GpuMath.dot(dist, dist);
     let eps: float = dist2 * (0.1 / res_x);
     let n = get_normal(p.x, p.y, p.z, eps, sea_time);
@@ -244,14 +233,9 @@ fun sea_fs(v: VsOut, time: float, res_x: float, res_y: float): GpuVec4 {
     t = t * t * (3.0 - 2.0 * t);
     let mix_k: float = GpuMath.pow(t, 0.2);
 
-    let cr: float = GpuMath.mix(sky.x, sea.x, mix_k);
-    let cg: float = GpuMath.mix(sky.y, sea.y, mix_k);
-    let cb: float = GpuMath.mix(sky.z, sea.z, mix_k);
-
-    cr = GpuMath.pow(GpuMath.saturate(cr), 0.65);
-    cg = GpuMath.pow(GpuMath.saturate(cg), 0.65);
-    cb = GpuMath.pow(GpuMath.saturate(cb), 0.65);
-    return GpuVec4.of(cr, cg, cb, 1.0);
+    let rgb = GpuMath.mix(sky, sea, mix_k);
+    rgb = GpuMath.pow(GpuMath.saturate(rgb), 0.65);
+    return GpuVec4.of(rgb.x, rgb.y, rgb.z, 1.0);
 }
 
 fun make_vert(x: float, y: float): Vertex {

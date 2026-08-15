@@ -1,0 +1,261 @@
+module system.gpu;
+
+// Vector overloads of `GpuMath` that map to the same WGSL builtins as the scalar originals.
+extend GpuMath {
+    // Component-wise min (WGSL `min`).
+    public static fun min(a: GpuVec2, b: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.min(a.x, b.x), GpuMath.min(a.y, b.y));
+    }
+    // Component-wise min (WGSL `min`).
+    public static fun min(a: GpuVec3, b: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.min(a.x, b.x), GpuMath.min(a.y, b.y), GpuMath.min(a.z, b.z));
+    }
+    // Component-wise min (WGSL `min`).
+    public static fun min(a: GpuVec4, b: GpuVec4): GpuVec4 {
+        return GpuVec4.of(
+            GpuMath.min(a.x, b.x), GpuMath.min(a.y, b.y), GpuMath.min(a.z, b.z), GpuMath.min(a.w, b.w)
+        );
+    }
+
+    // Component-wise max (WGSL `max`).
+    public static fun max(a: GpuVec2, b: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.max(a.x, b.x), GpuMath.max(a.y, b.y));
+    }
+    // Component-wise max (WGSL `max`).
+    public static fun max(a: GpuVec3, b: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.max(a.x, b.x), GpuMath.max(a.y, b.y), GpuMath.max(a.z, b.z));
+    }
+    // Component-wise max (WGSL `max`).
+    public static fun max(a: GpuVec4, b: GpuVec4): GpuVec4 {
+        return GpuVec4.of(
+            GpuMath.max(a.x, b.x), GpuMath.max(a.y, b.y), GpuMath.max(a.z, b.z), GpuMath.max(a.w, b.w)
+        );
+    }
+
+    // Component-wise abs (WGSL `abs`).
+    public static fun abs(a: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.abs(a.x), GpuMath.abs(a.y));
+    }
+    // Component-wise abs (WGSL `abs`).
+    public static fun abs(a: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.abs(a.x), GpuMath.abs(a.y), GpuMath.abs(a.z));
+    }
+    // Component-wise abs (WGSL `abs`).
+    public static fun abs(a: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.abs(a.x), GpuMath.abs(a.y), GpuMath.abs(a.z), GpuMath.abs(a.w));
+    }
+
+    // Component-wise clamp into `[lo, hi]` (WGSL `clamp`).
+    public static fun clamp(x: GpuVec2, lo: float, hi: float): GpuVec2 {
+        return GpuVec2.of(GpuMath.clamp(x.x, lo, hi), GpuMath.clamp(x.y, lo, hi));
+    }
+    // Component-wise clamp into `[lo, hi]` (WGSL `clamp`).
+    public static fun clamp(x: GpuVec3, lo: float, hi: float): GpuVec3 {
+        return GpuVec3.of(
+            GpuMath.clamp(x.x, lo, hi), GpuMath.clamp(x.y, lo, hi), GpuMath.clamp(x.z, lo, hi)
+        );
+    }
+    // Component-wise clamp into `[lo, hi]` (WGSL `clamp`).
+    public static fun clamp(x: GpuVec4, lo: float, hi: float): GpuVec4 {
+        return GpuVec4.of(
+            GpuMath.clamp(x.x, lo, hi), GpuMath.clamp(x.y, lo, hi),
+            GpuMath.clamp(x.z, lo, hi), GpuMath.clamp(x.w, lo, hi)
+        );
+    }
+
+    // Per-component clamp (WGSL `clamp` with vector bounds).
+    public static fun clamp(x: GpuVec2, lo: GpuVec2, hi: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.clamp(x.x, lo.x, hi.x), GpuMath.clamp(x.y, lo.y, hi.y));
+    }
+    // Per-component clamp (WGSL `clamp` with vector bounds).
+    public static fun clamp(x: GpuVec3, lo: GpuVec3, hi: GpuVec3): GpuVec3 {
+        return GpuVec3.of(
+            GpuMath.clamp(x.x, lo.x, hi.x), GpuMath.clamp(x.y, lo.y, hi.y), GpuMath.clamp(x.z, lo.z, hi.z)
+        );
+    }
+    // Per-component clamp (WGSL `clamp` with vector bounds).
+    public static fun clamp(x: GpuVec4, lo: GpuVec4, hi: GpuVec4): GpuVec4 {
+        return GpuVec4.of(
+            GpuMath.clamp(x.x, lo.x, hi.x), GpuMath.clamp(x.y, lo.y, hi.y),
+            GpuMath.clamp(x.z, lo.z, hi.z), GpuMath.clamp(x.w, lo.w, hi.w)
+        );
+    }
+
+    // Clamps each component into `[0, 1]` (WGSL `saturate` / `clamp(x, 0, 1)`).
+    public static fun saturate(x: GpuVec2): GpuVec2 {
+        return GpuMath.clamp(x, 0.0, 1.0);
+    }
+    // Clamps each component into `[0, 1]` (WGSL `saturate` / `clamp(x, 0, 1)`).
+    public static fun saturate(x: GpuVec3): GpuVec3 {
+        return GpuMath.clamp(x, 0.0, 1.0);
+    }
+    // Clamps each component into `[0, 1]` (WGSL `saturate` / `clamp(x, 0, 1)`).
+    public static fun saturate(x: GpuVec4): GpuVec4 {
+        return GpuMath.clamp(x, 0.0, 1.0);
+    }
+
+    // Component-wise sign: −1, 0, or 1 (WGSL `sign`).
+    public static fun sign(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.sign(x.x), GpuMath.sign(x.y));
+    }
+    // Component-wise sign: −1, 0, or 1 (WGSL `sign`).
+    public static fun sign(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.sign(x.x), GpuMath.sign(x.y), GpuMath.sign(x.z));
+    }
+    // Component-wise sign: −1, 0, or 1 (WGSL `sign`).
+    public static fun sign(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.sign(x.x), GpuMath.sign(x.y), GpuMath.sign(x.z), GpuMath.sign(x.w));
+    }
+
+    // Component-wise floor (WGSL `floor`).
+    public static fun floor(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.floor(x.x), GpuMath.floor(x.y));
+    }
+    // Component-wise floor (WGSL `floor`).
+    public static fun floor(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.floor(x.x), GpuMath.floor(x.y), GpuMath.floor(x.z));
+    }
+    // Component-wise floor (WGSL `floor`).
+    public static fun floor(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.floor(x.x), GpuMath.floor(x.y), GpuMath.floor(x.z), GpuMath.floor(x.w));
+    }
+
+    // Component-wise ceil (WGSL `ceil`).
+    public static fun ceil(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.ceil(x.x), GpuMath.ceil(x.y));
+    }
+    // Component-wise ceil (WGSL `ceil`).
+    public static fun ceil(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.ceil(x.x), GpuMath.ceil(x.y), GpuMath.ceil(x.z));
+    }
+    // Component-wise ceil (WGSL `ceil`).
+    public static fun ceil(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.ceil(x.x), GpuMath.ceil(x.y), GpuMath.ceil(x.z), GpuMath.ceil(x.w));
+    }
+
+    // Component-wise fract (WGSL `fract`).
+    public static fun fract(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.fract(x.x), GpuMath.fract(x.y));
+    }
+    // Component-wise fract (WGSL `fract`).
+    public static fun fract(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.fract(x.x), GpuMath.fract(x.y), GpuMath.fract(x.z));
+    }
+    // Component-wise fract (WGSL `fract`).
+    public static fun fract(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.fract(x.x), GpuMath.fract(x.y), GpuMath.fract(x.z), GpuMath.fract(x.w));
+    }
+
+    // Component-wise square root (WGSL `sqrt`).
+    public static fun sqrt(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.sqrt(x.x), GpuMath.sqrt(x.y));
+    }
+    // Component-wise square root (WGSL `sqrt`).
+    public static fun sqrt(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.sqrt(x.x), GpuMath.sqrt(x.y), GpuMath.sqrt(x.z));
+    }
+    // Component-wise square root (WGSL `sqrt`).
+    public static fun sqrt(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.sqrt(x.x), GpuMath.sqrt(x.y), GpuMath.sqrt(x.z), GpuMath.sqrt(x.w));
+    }
+
+    // Component-wise `e^x` (WGSL `exp`).
+    public static fun exp(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.exp(x.x), GpuMath.exp(x.y));
+    }
+    // Component-wise `e^x` (WGSL `exp`).
+    public static fun exp(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.exp(x.x), GpuMath.exp(x.y), GpuMath.exp(x.z));
+    }
+    // Component-wise `e^x` (WGSL `exp`).
+    public static fun exp(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.exp(x.x), GpuMath.exp(x.y), GpuMath.exp(x.z), GpuMath.exp(x.w));
+    }
+
+    // Component-wise `x^e` (WGSL `pow`). Scalar exponent is splat on the shader path.
+    public static fun pow(x: GpuVec2, e: float): GpuVec2 {
+        return GpuVec2.of(GpuMath.pow(x.x, e), GpuMath.pow(x.y, e));
+    }
+    // Component-wise `x^e` (WGSL `pow`). Scalar exponent is splat on the shader path.
+    public static fun pow(x: GpuVec3, e: float): GpuVec3 {
+        return GpuVec3.of(GpuMath.pow(x.x, e), GpuMath.pow(x.y, e), GpuMath.pow(x.z, e));
+    }
+    // Component-wise `x^e` (WGSL `pow`). Scalar exponent is splat on the shader path.
+    public static fun pow(x: GpuVec4, e: float): GpuVec4 {
+        return GpuVec4.of(
+            GpuMath.pow(x.x, e), GpuMath.pow(x.y, e), GpuMath.pow(x.z, e), GpuMath.pow(x.w, e)
+        );
+    }
+
+    // Component-wise `x^e` (WGSL `pow`).
+    public static fun pow(x: GpuVec2, e: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.pow(x.x, e.x), GpuMath.pow(x.y, e.y));
+    }
+    // Component-wise `x^e` (WGSL `pow`).
+    public static fun pow(x: GpuVec3, e: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.pow(x.x, e.x), GpuMath.pow(x.y, e.y), GpuMath.pow(x.z, e.z));
+    }
+    // Component-wise `x^e` (WGSL `pow`).
+    public static fun pow(x: GpuVec4, e: GpuVec4): GpuVec4 {
+        return GpuVec4.of(
+            GpuMath.pow(x.x, e.x), GpuMath.pow(x.y, e.y), GpuMath.pow(x.z, e.z), GpuMath.pow(x.w, e.w)
+        );
+    }
+
+    // Linear blend `a * (1 - t) + b * t` (WGSL `mix`).
+    public static fun mix(a: GpuVec2, b: GpuVec2, t: float): GpuVec2 {
+        return a * (1.0 - t) + b * t;
+    }
+    // Linear blend `a * (1 - t) + b * t` (WGSL `mix`).
+    public static fun mix(a: GpuVec3, b: GpuVec3, t: float): GpuVec3 {
+        return a * (1.0 - t) + b * t;
+    }
+    // Linear blend `a * (1 - t) + b * t` (WGSL `mix`).
+    public static fun mix(a: GpuVec4, b: GpuVec4, t: float): GpuVec4 {
+        return a * (1.0 - t) + b * t;
+    }
+
+    // Per-component mix (WGSL `mix` with a vector factor).
+    public static fun mix(a: GpuVec2, b: GpuVec2, t: GpuVec2): GpuVec2 {
+        return a * (GpuVec2.splat(1.0) - t) + b * t;
+    }
+    // Per-component mix (WGSL `mix` with a vector factor).
+    public static fun mix(a: GpuVec3, b: GpuVec3, t: GpuVec3): GpuVec3 {
+        return a * (GpuVec3.splat(1.0) - t) + b * t;
+    }
+    // Per-component mix (WGSL `mix` with a vector factor).
+    public static fun mix(a: GpuVec4, b: GpuVec4, t: GpuVec4): GpuVec4 {
+        return a * (GpuVec4.splat(1.0) - t) + b * t;
+    }
+
+    // Euclidean length of a `GpuVec2` (WGSL `length`).
+    public static fun length(v: GpuVec2): float {
+        return GpuMath.sqrt(v.x * v.x + v.y * v.y);
+    }
+    // Euclidean length of a `GpuVec4` (WGSL `length`).
+    public static fun length(v: GpuVec4): float {
+        return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+    }
+
+    // Unit `GpuVec2`; near-zero input yields `(1, 0)` on CPU (WGSL `normalize`).
+    public static fun normalize(v: GpuVec2): GpuVec2 {
+        let len = GpuMath.length(v);
+        if (len < 0.000001) { return GpuVec2.of(1.0, 0.0); }
+        return v / len;
+    }
+    // Unit `GpuVec4`; near-zero input yields `(0, 0, 0, 1)` on CPU (WGSL `normalize`).
+    public static fun normalize(v: GpuVec4): GpuVec4 {
+        let len = GpuMath.length(v);
+        if (len < 0.000001) { return GpuVec4.of(0.0, 0.0, 0.0, 1.0); }
+        return v / len;
+    }
+
+    // Dot product of two `GpuVec2`s (WGSL `dot`).
+    public static fun dot(a: GpuVec2, b: GpuVec2): float {
+        return a.x * b.x + a.y * b.y;
+    }
+    // Dot product of two `GpuVec4`s (WGSL `dot`).
+    public static fun dot(a: GpuVec4, b: GpuVec4): float {
+        return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    }
+}

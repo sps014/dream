@@ -45,8 +45,8 @@ fun fs(v: VsOut): FsOut {
 
 @gpu
 fun use_math(m: GpuMat4, v: GpuVec4): GpuVec4 {
-    let n = GpuMath.mul4(m, v);
-    return GpuMath.normalize4(n);
+    let n = GpuMath.mul(m, v);
+    return GpuMath.normalize(n);
 }
 
 async fun main(): void {

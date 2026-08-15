@@ -2,24 +2,42 @@ module system.gpu;
 
 // Queued input events drained by `GpuSurface.poll_events` (web + native).
 public enum GpuInputEvent {
+    // Pointer button pressed (client pixels).
     PointerDown(x: float, y: float, button: int, pointer_id: int),
+    // Pointer button released.
     PointerUp(x: float, y: float, button: int, pointer_id: int),
+    // Pointer moved while tracked.
     PointerMove(x: float, y: float, pointer_id: int),
+    // Pointer entered the surface.
     PointerEnter(x: float, y: float, pointer_id: int),
+    // Pointer left the surface.
     PointerLeave(x: float, y: float, pointer_id: int),
+    // Pointer capture cancelled by the host.
     PointerCancel(pointer_id: int),
+    // Mouse wheel / trackpad scroll deltas.
     Wheel(dx: float, dy: float, x: float, y: float),
     // `code` is physical; `key` is the typed glyph when available.
     KeyDown(code: KeyCode, key: string, repeat: bool),
+    // Key released (physical `code`).
     KeyUp(code: KeyCode, key: string),
+    // Composed text input (IME / dead keys).
     TextInput(text: string),
+    // Surface client size changed (logical pixels).
     Resize(width: int, height: int),
+    // Device pixel ratio / window scale factor changed.
     ScaleFactor(scale: float),
+    // Surface gained keyboard focus.
     Focus,
+    // Surface lost keyboard focus.
     Blur,
+    // User asked to close the window (native).
     Close,
+    // Gamepad at slot `pad` connected.
     GamepadConnected(pad: int),
+    // Gamepad at slot `pad` disconnected.
     GamepadDisconnected(pad: int),
+    // Gamepad button pressed.
     GamepadButtonDown(pad: int, button: GamepadButton),
+    // Gamepad button released.
     GamepadButtonUp(pad: int, button: GamepadButton),
 }

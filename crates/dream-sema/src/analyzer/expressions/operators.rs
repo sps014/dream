@@ -112,6 +112,18 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        // WGSL-shaped `GpuVecN` / `GpuMatN` arithmetic (`v+w`, `s*v`, `m*v`, …). Must run before
+        // `@operator` and the numeric same-type check so `float * GpuVecN` is not a type error.
+        if let Some(gpu) = self.try_gpu_binary(
+            &left_value,
+            opr,
+            &right_value,
+            left_hir.clone(),
+            right_hir.clone(),
+        ) {
+            return gpu;
+        }
+
         // User-defined operator overload: `@operator("+")`/`@operator("==")`/etc. on the left
         // operand's type. Checked before the built-in numeric/string rules below so a struct's
         // overload always wins over (what would otherwise be) a type error. `!=` is handled

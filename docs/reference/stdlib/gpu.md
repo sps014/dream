@@ -44,4 +44,37 @@ async fun main(): void {
 
 Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*`.
 
+## Vector math
+
+`GpuVec2` / `GpuVec3` / `GpuVec4` are packed float vectors (`vecN<f32>` in WGSL). The
+same operators work in `@compute` / `@vertex` / `@fragment` and on the CPU:
+
+| Expression | Meaning (WGSL) |
+| --- | --- |
+| `v + w`, `v - w`, `v * w`, `v / w` | component-wise |
+| `v * s`, `s * v`, `v / s` | scale / divide by `float` |
+| `s + v`, `v + s`, `v - s`, `s - v`, `s / v` | scalar on either side |
+| `-v` | negate |
+| `m * v`, `m * n` | `GpuMatN` × vector / matrix |
+| `GpuVecN.of(...)` | `vecN(x, y, …)` |
+| `GpuVecN.splat(s)` | `vecN(s)` |
+| `GpuMatN.of(c0, …)` | `matNxN(c0, …)` column-major |
+| `GpuMatN.identity()` | identity matrix |
+
+`GpuMath` overloads (same names as the scalar builtins):
+
+| Call | Vector args |
+| --- | --- |
+| `mix(a, b, t)` | `vec, vec, float` or `vec, vec, vec` |
+| `min` / `max` | `vec, vec` |
+| `abs` / `sign` / `floor` / `ceil` / `fract` / `sqrt` / `exp` / `saturate` | `vec` |
+| `clamp(x, lo, hi)` | `vec, float, float` or `vec, vec, vec` |
+| `pow(x, e)` | `vec, float` or `vec, vec` |
+| `normalize` / `length` / `dot` | `GpuVec2` / `GpuVec3` / `GpuVec4` |
+| `transpose` | `GpuMat2` / `GpuMat3` / `GpuMat4` |
+| `mul` | `GpuMatN × GpuVecN` or `GpuMatN × GpuMatN` |
+
+Near-zero `normalize` on the CPU returns a unit axis (`(1,0)`, `(0,1,0)`, or `(0,0,0,1)`);
+shaders use WGSL `normalize`.
+
 Native `dream run` uses wgpu; the browser uses `navigator.gpu`. More samples: [`life/`](https://github.com/sps014/dream/tree/main/sample/compute/life), [`fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid), [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean), [`elevated/`](https://github.com/sps014/dream/tree/main/sample/graphics/elevated).

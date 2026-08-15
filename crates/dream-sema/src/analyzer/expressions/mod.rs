@@ -11,6 +11,7 @@ use super::*;
 pub(in crate::analyzer) mod capture_scan;
 mod casts;
 mod dispatch;
+mod gpu_arith;
 mod identifiers;
 mod lambda;
 mod member_access;

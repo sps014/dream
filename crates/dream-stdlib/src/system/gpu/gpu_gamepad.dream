@@ -3,32 +3,55 @@ module system.gpu;
 // Standard gamepad face / D-pad / shoulder / menu buttons (Xbox layout names).
 // Discriminants 0… are shared with the host wire format — keep in sync with `gpu/input.rs`.
 public enum GamepadButton {
+    // Unrecognized host button id.
     Unknown = 0,
+    // Bottom face button (Xbox A / DualShock ×).
     South = 1,
+    // Right face button (Xbox B / DualShock ○).
     East = 2,
+    // Left face button (Xbox X / DualShock □).
     West = 3,
+    // Top face button (Xbox Y / DualShock △).
     North = 4,
+    // D-pad up.
     DPadUp = 5,
+    // D-pad down.
     DPadDown = 6,
+    // D-pad left.
     DPadLeft = 7,
+    // D-pad right.
     DPadRight = 8,
+    // Left bumper.
     LeftShoulder = 9,
+    // Right bumper.
     RightShoulder = 10,
+    // Left analog trigger (as a button latch).
     LeftTrigger = 11,
+    // Right analog trigger (as a button latch).
     RightTrigger = 12,
+    // Click of the left stick.
     LeftStick = 13,
+    // Click of the right stick.
     RightStick = 14,
+    // Start / Options / Menu.
     Start = 15,
+    // Select / Share / Back.
     Select = 16,
 }
 
 // Analog axes (sticks −1…1, triggers 0…1 after host deadzone).
 public enum GamepadAxis {
+    // Left stick horizontal (−1 left … 1 right).
     LeftStickX = 0,
+    // Left stick vertical (−1 up … 1 down, host convention).
     LeftStickY = 1,
+    // Right stick horizontal.
     RightStickX = 2,
+    // Right stick vertical.
     RightStickY = 3,
+    // Left trigger analog (0…1).
     LeftTrigger = 4,
+    // Right trigger analog (0…1).
     RightTrigger = 5,
 }
 

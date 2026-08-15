@@ -2,19 +2,26 @@ module system.gpu;
 
 // Color attachment load operation for draw helpers (matches host `load_op` ints).
 public enum GpuLoadOp {
+    // Clear the attachment to the draw clear color.
     Clear = 0,
+    // Keep the previous contents of the attachment.
     Load = 1,
 }
 
 // Mag/min filter for `GpuSampler.create` (matches host filter ints).
 public enum GpuFilterMode {
+    // Nearest-neighbor sampling.
     Nearest = 0,
+    // Linear interpolation between texels.
     Linear = 1,
 }
 
 // Address mode for `GpuSampler.create` (matches host address ints).
 public enum GpuAddressMode {
+    // Clamp UVs to the edge texel.
     ClampToEdge = 0,
+    // Repeat the texture.
     Repeat = 1,
+    // Mirror on every other repeat.
     MirrorRepeat = 2,
 }

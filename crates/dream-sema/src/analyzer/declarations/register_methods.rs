@@ -159,14 +159,23 @@ impl<'a> Analyzer<'a> {
         }
         // Register a distinct `DefId` for each overloaded method under its emitted (signature-mangled)
         // name, so overloads don't collide on the single base-mangled def (mirrors free functions).
-        for (mangled_name, param_types) in &registered {
-            let emitted = self.function_table.resolve_emitted_name(
-                mangled_name,
-                param_types,
-                &mut self.type_ctx,
-            );
-            if emitted != *mangled_name {
-                self.type_ctx.register(DefKind::Function, &emitted, vec![]);
+        // When `extend` adds an overload, the original singleton is promoted to a mangled key too —
+        // intern every key in the set, not only the methods in this `extend` block.
+        let mut seen = indexmap::IndexSet::new();
+        for (mangled_name, _) in &registered {
+            if !seen.insert(mangled_name.clone()) {
+                continue;
+            }
+            let keys: Vec<String> = self
+                .function_table
+                .overloads
+                .get(mangled_name)
+                .cloned()
+                .unwrap_or_else(|| vec![mangled_name.clone()]);
+            for key in keys {
+                if key != *mangled_name {
+                    self.type_ctx.register(DefKind::Function, &key, vec![]);
+                }
             }
         }
     }

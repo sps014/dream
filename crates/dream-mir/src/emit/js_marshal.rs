@@ -34,9 +34,10 @@ pub(super) fn cast_sym(
 /// type is not marshalable (maps, interfaces, functions, ...) are skipped on the way out and
 /// zeroed on the way in.
 ///
-/// Every struct gets both helpers; the whole-module WAT DCE drops the ones no `Cast` references, and
-/// [`prune_dead_imports`](crate::prune) keeps the `js*` host bridges alive whenever a
-/// struct<->js cast survives.
+/// Every remaining struct layout gets both helpers when the module actually uses `js` (a `JsCall`
+/// or struct<->js `Cast`). Debug builds skip WAT DCE, so emitting marshalers without the matching
+/// `js*` imports would fail to assemble. [`prune_dead_imports`](crate::prune) keeps those bridges
+/// in the same case.
 pub(super) fn emit_js_marshal(
     out: &mut String,
     mir: &crate::Mir,
@@ -44,6 +45,9 @@ pub(super) fn emit_js_marshal(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
 ) {
+    if !crate::module_uses_js_bridges(mir, interner) {
+        return;
+    }
     for (ty, layout) in &mir.layouts.structs {
         if matches!(interner.kind(*ty), TyKind::Tuple(_)) {
             continue;

@@ -24,11 +24,14 @@ fn rvalue_callees(rv: &Rvalue, out: &mut Vec<FnKey>) {
 
 /// Removes functions unreachable from the module's entry points, then tree-shakes the module's other
 /// symbol tables. Dead pure stores to never-read globals are removed (then the now-unreferenced
-/// globals are dropped), and unreferenced `extern` imports are dropped. See [`prune_functions`] for
-/// the reachability core; the extra shaking lives in [`prune_dead_globals`] / [`prune_dead_imports`].
+/// globals are dropped), layouts that no surviving function references are dropped (so protocol
+/// strings / `$release_*` / marshalers are not emitted for the unused prelude), and unreferenced
+/// `extern` imports are dropped. See [`prune_functions`] for the reachability core; the extra
+/// shaking lives in [`prune_dead_globals`] / [`prune_dead_layouts`] / [`prune_dead_imports`].
 pub fn prune_module(mir: &mut Mir, interner: &TypeInterner) {
     prune_functions(mir);
     prune_dead_globals(mir);
+    prune_dead_layouts(mir, interner);
     prune_dead_imports(mir, interner);
 }
 
@@ -36,32 +39,19 @@ pub fn prune_module(mir: &mut Mir, interner: &TypeInterner) {
 ///
 /// Generated struct↔js marshalers (emitted later as WAT) call the `js*` host bridges by symbol, so
 /// whenever a surviving `Cast` involves `js` — or any `JsCall` remains — every import whose host
-/// `field` starts with `js` is kept even if no MIR call edge names it.
+/// `field` starts with `js` is kept even if no MIR call edge names it. GPU-only modules keep
+/// `jsRetain`/`jsRelease` so host handle RC stays bound.
 fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
     let mut live_defs: HashSet<dream_types::DefId> = HashSet::new();
-    let mut keep_js_bridges = false;
     for f in &mir.functions {
         for b in &f.blocks {
             for s in &b.stmts {
                 match s {
                     Statement::Call { callee, .. } | Statement::JsCall { callee, .. } => {
                         live_defs.insert(callee.def);
-                        if matches!(s, Statement::JsCall { .. }) {
-                            keep_js_bridges = true;
-                        }
                     }
                     Statement::Assign(_, rv) => {
                         collect_import_defs_rvalue(rv, &mut live_defs);
-                        if let Rvalue::JsCall { .. } = rv {
-                            keep_js_bridges = true;
-                        }
-                        if let Rvalue::Cast(_, from, to) = rv {
-                            if matches!(interner.kind(*from), TyKind::Js)
-                                || matches!(interner.kind(*to), TyKind::Js)
-                            {
-                                keep_js_bridges = true;
-                            }
-                        }
                     }
                     _ => {}
                 }
@@ -81,12 +71,224 @@ fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
         }
     }
 
-    let keep_js_for_layouts = keep_js_bridges || !mir.layouts.structs.is_empty();
+    let keep_js_bridges = module_uses_js_bridges(mir, interner);
+    // GPU resources are `js` handles; `$release_js` calls `$js_release` even when no `js*` stdlib
+    // bridge remains. Keep the stdlib `jsRetain`/`jsRelease` externs so the ABI/runtime bind them
+    // (the emitter still replaces the WAT with compiler-emitted `$js_retain`/`$js_release`).
+    let keep_js_rc = keep_js_bridges
+        || mir
+            .imports
+            .iter()
+            .any(|imp| live_defs.contains(&imp.def) && imp.field.starts_with("gpu"));
     mir.imports.retain(|imp| {
         // Generated `$Foo_to_js` / `$js_to_Foo` marshalers call `js*` bridges by symbol. Keep every
-        // `js*` import when a cast/`JsCall` needs them or when layouts exist (marshaler emission).
-        live_defs.contains(&imp.def) || (imp.field.starts_with("js") && keep_js_for_layouts)
+        // `js*` import only when a live `JsCall` or `js` Cast actually needs them — not merely
+        // because some struct layout survived.
+        live_defs.contains(&imp.def)
+            || (imp.field.starts_with("js") && keep_js_bridges)
+            || (keep_js_rc && (imp.field == "jsRetain" || imp.field == "jsRelease"))
     });
+}
+
+/// True when a surviving `JsCall` or a `Cast` involving `js` remains. Generated marshalers and the
+/// `js*` host-bridge imports are only needed in that case (debug builds skip WAT DCE, so unused
+/// marshalers would otherwise call dropped `$js_object` / `$js_array` imports).
+pub(crate) fn module_uses_js_bridges(mir: &Mir, interner: &TypeInterner) -> bool {
+    let is_js = |ty: TypeId| matches!(interner.kind(ty), TyKind::Js);
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::JsCall { .. } => return true,
+                    Statement::Assign(_, Rvalue::JsCall { .. }) => return true,
+                    Statement::Assign(_, Rvalue::Cast(_, from, to))
+                        if is_js(*from) || is_js(*to) =>
+                    {
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Drops struct/union layouts that no surviving function, global, or live interface impl references.
+///
+/// `mir.layouts` is filled from the full analyzed prelude, so a `println` program otherwise interned
+/// hundreds of `to_string` field-label strings and emitted `$release_*`/`$Type_to_string` for every
+/// stdlib type. WAT DCE drops dead funcs but keeps every data segment, so unused layouts dominated
+/// tiny `--release` binaries. Remaining layouts still drive protocol strings, release helpers, tags,
+/// and JS marshalers.
+fn prune_dead_layouts(mir: &mut Mir, interner: &TypeInterner) {
+    let live = live_layout_types(mir, interner);
+    mir.layouts.structs.retain(|ty, _| live.contains(ty));
+    mir.layouts.unions.retain(|ty, _| live.contains(ty));
+}
+
+fn live_layout_types(mir: &Mir, interner: &TypeInterner) -> HashSet<TypeId> {
+    let mut live: HashSet<TypeId> = HashSet::new();
+    let mut work: Vec<TypeId> = Vec::new();
+    let seed = |ty: TypeId, live: &mut HashSet<TypeId>, work: &mut Vec<TypeId>| {
+        if live.insert(ty) {
+            work.push(ty);
+        }
+    };
+
+    for g in &mir.globals {
+        seed(g.ty, &mut live, &mut work);
+    }
+    for f in &mir.functions {
+        seed(f.ret, &mut live, &mut work);
+        for ty in &f.instance {
+            seed(*ty, &mut live, &mut work);
+        }
+        for l in &f.locals {
+            seed(l.ty, &mut live, &mut work);
+        }
+        for b in &f.blocks {
+            for s in &b.stmts {
+                collect_stmt_types(s, &mut |ty| seed(ty, &mut live, &mut work));
+            }
+        }
+        if f.is_async {
+            if let Some(hir_fn) = &f.hir_fn {
+                let mut edges = HirEdges::default();
+                hir_body_edges(&hir_fn.body, &mut edges);
+                for ty in edges.types {
+                    seed(ty, &mut live, &mut work);
+                }
+            }
+        }
+    }
+
+    let kept_names: HashSet<&str> = mir.functions.iter().map(|f| f.name.as_str()).collect();
+    for imp in &mir.interfaces.impls {
+        if imp
+            .entries
+            .iter()
+            .any(|(_, syms)| syms.iter().any(|s| kept_names.contains(s.as_str())))
+        {
+            seed(imp.class_ty, &mut live, &mut work);
+        }
+    }
+
+    while let Some(ty) = work.pop() {
+        let nested: Vec<TypeId> = match interner.kind(ty) {
+            TyKind::Array(elem) => vec![*elem],
+            TyKind::Struct(_, args) | TyKind::Union(_, args) | TyKind::Interface(_, args) => {
+                args.clone()
+            }
+            TyKind::Func(params, ret) => {
+                let mut v = params.clone();
+                v.push(*ret);
+                v
+            }
+            TyKind::Tuple(elems) => elems.clone(),
+            TyKind::Prim(_)
+            | TyKind::Object
+            | TyKind::Void
+            | TyKind::Error
+            | TyKind::Enum(_)
+            | TyKind::Js => Vec::new(),
+        };
+        for n in nested {
+            seed(n, &mut live, &mut work);
+        }
+        if let Some(l) = mir.layouts.structs.get(&ty) {
+            for f in &l.fields {
+                seed(f.ty, &mut live, &mut work);
+            }
+        }
+        if let Some(l) = mir.layouts.unions.get(&ty) {
+            for v in &l.variants {
+                for f in &v.fields {
+                    seed(f.ty, &mut live, &mut work);
+                }
+            }
+        }
+    }
+    live
+}
+
+fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
+    match s {
+        Statement::Assign(_, rv) => collect_rvalue_types(rv, seed),
+        Statement::Call { callee, .. } => collect_callee_types(callee, seed),
+        Statement::JsCall { callee, args, .. } => {
+            collect_callee_types(callee, seed);
+            for (_, ty) in args {
+                seed(*ty);
+            }
+        }
+        Statement::InterfaceCall { sig, .. } => seed(*sig),
+        Statement::IndirectCall { sig, .. } => seed(*sig),
+        Statement::Print { ty, .. } | Statement::ArrayElemsCopy { elem_ty: ty, .. } => seed(*ty),
+        Statement::Retain(_)
+        | Statement::Release(_)
+        | Statement::Panic(_)
+        | Statement::Nop
+        | Statement::DebugLine(_)
+        | Statement::SourceLine(_)
+        | Statement::ForceFree(_)
+        | Statement::LockAcquire(_)
+        | Statement::LockRelease(_)
+        | Statement::SimdF32x4 { .. }
+        | Statement::ValueDrop(_) => {}
+    }
+}
+
+fn collect_callee_types(callee: &crate::Callee, seed: &mut impl FnMut(TypeId)) {
+    for a in &callee.args {
+        seed(*a);
+    }
+    seed(callee.ret);
+}
+
+fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
+    match rv {
+        Rvalue::New { ty, .. }
+        | Rvalue::UnionNew { ty, .. }
+        | Rvalue::Tuple { ty, .. }
+        | Rvalue::ToBytes { ty, .. }
+        | Rvalue::FromBytes { ty, .. }
+        | Rvalue::UnionField { ty, .. }
+        | Rvalue::IsType(_, ty) => seed(*ty),
+        Rvalue::ArrayNew { elem_ty, .. }
+        | Rvalue::ArrayLit { elem_ty, .. }
+        | Rvalue::ArrayRealloc { elem_ty, .. } => seed(*elem_ty),
+        Rvalue::Cast(_, from, to) => {
+            seed(*from);
+            seed(*to);
+        }
+        Rvalue::Call { callee, .. } | Rvalue::FuncRef(callee) => collect_callee_types(callee, seed),
+        Rvalue::JsCall { callee, args, .. } => {
+            collect_callee_types(callee, seed);
+            for (_, ty) in args {
+                seed(*ty);
+            }
+        }
+        Rvalue::IndirectCall { sig, .. } => seed(*sig),
+        Rvalue::InterfaceCall { sig, ret, .. } => {
+            seed(*sig);
+            seed(*ret);
+        }
+        Rvalue::Use(_)
+        | Rvalue::Select { .. }
+        | Rvalue::Binary(_, _, _)
+        | Rvalue::Unary(_, _)
+        | Rvalue::StrLen(_)
+        | Rvalue::StrByteSize(_)
+        | Rvalue::CharAt(_, _)
+        | Rvalue::ByteAt(_, _)
+        | Rvalue::HashCode(_)
+        | Rvalue::ToString(_)
+        | Rvalue::Concat(_, _)
+        | Rvalue::EnumName { .. }
+        | Rvalue::ArrayLen(_)
+        | Rvalue::Discriminant(_) => {}
+    }
 }
 
 fn collect_import_defs_rvalue(rv: &Rvalue, out: &mut HashSet<dream_types::DefId>) {

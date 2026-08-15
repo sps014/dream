@@ -92,14 +92,17 @@ fn rewrite_stmt(stmt: &mut Statement, map: &HashMap<(usize, usize), Callee>) -> 
             };
             true
         }
-        Statement::Assign(place, Rvalue::InterfaceCall {
-            receiver,
-            iface_id,
-            method_slot,
-            args,
-            ret,
-            ..
-        }) => {
+        Statement::Assign(
+            place,
+            Rvalue::InterfaceCall {
+                receiver,
+                iface_id,
+                method_slot,
+                args,
+                ret,
+                ..
+            },
+        ) => {
             let Some(mut callee) = map.get(&(*iface_id, *method_slot)).cloned() else {
                 return false;
             };

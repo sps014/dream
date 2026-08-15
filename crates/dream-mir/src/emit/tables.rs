@@ -76,17 +76,82 @@ pub(super) fn signature_table(
     table
 }
 
-/// Maps each function's `(DefId, instance args)` to its slot in the module's function table, in
-/// `mir.functions` order (so the slot index matches the `(elem ...)` position below). A `FuncRef`
-/// resolves to this index; `call_indirect` uses it as the table entry.
-///
-/// Slot `0` is reserved as the null funcref (never populated). Host trampolines (JS/`@c`) treat a
-/// bare funcidx of `0` as a null callback, so real functions must start at index `1`.
-pub(super) fn func_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>), usize> {
+/// The sparse `$__ft` table: only address-taken functions, used interface methods, and async poll
+/// bodies. Slot `0` is the null funcref sentinel (never populated).
+pub(super) struct IndirectTable {
+    /// Constructor / sync body `(def, instance)` → table index (`>= 1`).
+    pub slots: HashMap<(DefId, Vec<TypeId>), usize>,
+    /// Async poll `(def, instance)` → table index (`>= 1`).
+    pub polls: HashMap<(DefId, Vec<TypeId>), usize>,
+    /// Elem symbols in slot order (`elem[i]` lives at index `i + 1`).
+    pub elem: Vec<String>,
+}
+
+/// Builds [`IndirectTable`] from first-class `FuncRef`s, live itable methods, and async polls.
+/// Walking `mir.functions` for emission order keeps the table deterministic.
+pub(super) fn func_table(mir: &crate::Mir) -> IndirectTable {
+    let mut needed: HashSet<(DefId, Vec<TypeId>)> = HashSet::new();
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                funcrefs_in_stmt(s, &mut needed);
+            }
+        }
+        if let Some(hir_fn) = &f.hir_fn {
+            let mut edges = crate::HirEdges::default();
+            crate::hir_body_edges(&hir_fn.body, &mut edges);
+            needed.extend(edges.funcrefs);
+        }
+    }
+    let used_slots = used_iface_slots(mir);
+    for imp in &mir.interfaces.impls {
+        for (iid, symbols) in &imp.entries {
+            for (slot, sym) in symbols.iter().enumerate() {
+                if !used_slots.contains(&(*iid, slot)) {
+                    continue;
+                }
+                if let Some(f) = mir.functions.iter().find(|f| f.name == *sym) {
+                    needed.insert((f.def, f.instance.clone()));
+                }
+            }
+        }
+    }
+
+    let mut elem = Vec::new();
+    let mut slots = HashMap::new();
+    for f in &mir.functions {
+        let key = (f.def, f.instance.clone());
+        if needed.contains(&key) {
+            elem.push(format!("${}", func_symbol(f)));
+            slots.insert(key, elem.len());
+        }
+    }
+    let mut polls = HashMap::new();
+    for f in mir.functions.iter().filter(|f| f.is_async) {
+        elem.push(format!("${}", poll_symbol(f)));
+        polls.insert((f.def, f.instance.clone()), elem.len());
+    }
+    IndirectTable { slots, polls, elem }
+}
+
+fn funcrefs_in_stmt(s: &crate::Statement, out: &mut HashSet<(DefId, Vec<TypeId>)>) {
+    if let crate::Statement::Assign(_, rv) = s {
+        funcrefs_in_rvalue(rv, out);
+    }
+}
+
+fn funcrefs_in_rvalue(rv: &crate::Rvalue, out: &mut HashSet<(DefId, Vec<TypeId>)>) {
+    if let crate::Rvalue::FuncRef(callee) = rv {
+        out.insert((callee.def, callee.args.clone()));
+    }
+}
+
+/// Every MIR function, used to distinguish in-module callees from host imports (the sparse
+/// [`IndirectTable::slots`] map is *not* a complete defined-function set).
+pub(super) fn defined_functions(mir: &crate::Mir) -> HashSet<(DefId, Vec<TypeId>)> {
     mir.functions
         .iter()
-        .enumerate()
-        .map(|(i, f)| ((f.def, f.instance.clone()), i + 1))
+        .map(|f| (f.def, f.instance.clone()))
         .collect()
 }
 
@@ -154,28 +219,17 @@ pub(crate) fn poll_symbol(func: &MirFunction) -> String {
     format!("poll_{}", func_symbol(func))
 }
 
-/// Emits the function table and its element section (constructors/sync functions first, then async
+/// Emits the function table and its element section (address-taken functions first, then async
 /// poll functions), plus the `__indirect_function_table` export.
 ///
 /// Index `0` is left empty (null funcref) so host-side `0` stays a null callback sentinel; real
 /// entries are installed starting at `(elem (i32.const 1) …)`.
-pub(super) fn emit_func_table(out: &mut String, mir: &crate::Mir) {
-    let poll_count = mir.functions.iter().filter(|f| f.is_async).count();
-    let n = mir.functions.len() + poll_count;
-    if n == 0 {
-        return;
-    }
-    // +1: reserved null slot at index 0 (see [`func_table`]).
+pub(super) fn emit_func_table(out: &mut String, table: &IndirectTable) {
+    let n = table.elem.len();
     let _ = writeln!(out, "(table $__ft {} funcref)", n + 1);
-    let mut syms: Vec<String> = mir
-        .functions
-        .iter()
-        .map(|f| format!("${}", func_symbol(f)))
-        .collect();
-    for f in mir.functions.iter().filter(|f| f.is_async) {
-        syms.push(format!("${}", poll_symbol(f)));
+    if n > 0 {
+        let _ = writeln!(out, "(elem (i32.const 1) {})", table.elem.join(" "));
     }
-    let _ = writeln!(out, "(elem (i32.const 1) {})", syms.join(" "));
     out.push_str("(export \"__indirect_function_table\" (table $__ft))\n");
 }
 
@@ -266,6 +320,7 @@ pub(super) fn emit_interface_dispatch(
     interner: &TypeInterner,
     itab_base: u32,
     used_slots: &std::collections::HashSet<(usize, usize)>,
+    ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
 ) -> InterfaceDispatch {
     let ifaces = &mir.interfaces.interfaces;
     // No surviving interface call sites means nothing loads from these tables — skip emitting the
@@ -291,12 +346,15 @@ pub(super) fn emit_interface_dispatch(
     };
 
     // Concrete method symbol -> its `$__ft` slot. Matches [`func_table`]: index 0 is the reserved
-    // null funcref sentinel, so MIR function `i` lives at table index `i + 1`.
+    // null funcref sentinel; only address-taken / itable / poll functions occupy later slots.
     let by_symbol: HashMap<&str, usize> = mir
         .functions
         .iter()
-        .enumerate()
-        .map(|(i, f)| (f.name.as_str(), i + 1))
+        .filter_map(|f| {
+            ftable
+                .get(&(f.def, f.instance.clone()))
+                .map(|&idx| (f.name.as_str(), idx))
+        })
         .collect();
 
     // One dense [num_tags * method_count] table per interface, filled from each class's impl.

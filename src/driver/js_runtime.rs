@@ -417,7 +417,9 @@ pub(crate) fn assemble_selective_runtime(
         if !chunks.contains(chunk) {
             continue;
         }
-        let Some(rel) = chunk_file(chunk) else { continue };
+        let Some(rel) = chunk_file(chunk) else {
+            continue;
+        };
         let path = src.join(rel);
         let text = fs::read_to_string(&path)?;
         out.push_str(&transform_module(&text, rel));

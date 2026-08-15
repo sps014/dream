@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::io::Error;
 use std::rc::Rc;
 
-use dream_diagnostics::DiagnosticBag;
 use crate::driver::source_loader::collect_declarations;
+use dream_diagnostics::DiagnosticBag;
 use dream_stdlib::{resolve_packages_to_load, StdPackage};
 use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;

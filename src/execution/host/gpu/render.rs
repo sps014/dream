@@ -145,10 +145,12 @@ fn create_inner(
     let bgl = if layout_entries.is_empty() {
         None
     } else {
-        Some(device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("dream-render-bgl"),
-            entries: &layout_entries,
-        }))
+        Some(
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("dream-render-bgl"),
+                entries: &layout_entries,
+            }),
+        )
     };
     let pl = match &bgl {
         Some(l) => device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -564,7 +566,11 @@ fn draw_to_inner(
         if let Some(bg) = &bg {
             pass.set_bind_group(0, bg, &[]);
         }
-        if let Some(vb) = st.buffers.get(&vertex_buffer_id).and_then(|b| b.gpu.as_ref()) {
+        if let Some(vb) = st
+            .buffers
+            .get(&vertex_buffer_id)
+            .and_then(|b| b.gpu.as_ref())
+        {
             pass.set_vertex_buffer(0, vb.slice(..));
         }
         let instances = instance_count.max(1) as u32;
@@ -665,25 +671,20 @@ fn draw_inner(
                 Ok(f) => f,
                 Err(e) => {
                     // One reconfigure retry for Lost/Outdated.
-                    if matches!(
-                        e,
-                        wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated
-                    ) {
+                    if matches!(e, wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) {
                         if let Some(cfg) = surf.config.clone() {
                             surface.configure(&device, &cfg);
                         }
-                        surface
-                            .get_current_texture()
-                            .map_err(|e2| {
-                                format!(
-                                    "surface acquire failed ({})",
-                                    match classify_surface_error(&e2) {
-                                        c if c == super::state::ERR_TIMEOUT => "timeout",
-                                        c if c == super::state::ERR_VALIDATION => "validation",
-                                        _ => "other",
-                                    }
-                                )
-                            })?
+                        surface.get_current_texture().map_err(|e2| {
+                            format!(
+                                "surface acquire failed ({})",
+                                match classify_surface_error(&e2) {
+                                    c if c == super::state::ERR_TIMEOUT => "timeout",
+                                    c if c == super::state::ERR_VALIDATION => "validation",
+                                    _ => "other",
+                                }
+                            )
+                        })?
                     } else {
                         return Err(format!(
                             "surface acquire failed ({})",
@@ -905,7 +906,11 @@ fn draw_inner(
         if let Some(bg) = &bg {
             pass.set_bind_group(0, bg, &[]);
         }
-        if let Some(vb) = st.buffers.get(&vertex_buffer_id).and_then(|b| b.gpu.as_ref()) {
+        if let Some(vb) = st
+            .buffers
+            .get(&vertex_buffer_id)
+            .and_then(|b| b.gpu.as_ref())
+        {
             pass.set_vertex_buffer(0, vb.slice(..));
         }
         let instances = instance_count.max(1) as u32;
@@ -926,10 +931,7 @@ fn draw_inner(
         super::profile::note_encode(s.elapsed());
     }
     if let Some(frame) = pending_frame {
-        st.surfaces
-            .get_mut(&surface_id)
-            .unwrap()
-            .pending_frame = Some(frame);
+        st.surfaces.get_mut(&surface_id).unwrap().pending_frame = Some(frame);
     }
     // Don't stall the CPU on GPU completion every draw — FIFO present paces frames.
     let _ = device.poll(wgpu::Maintain::Poll);

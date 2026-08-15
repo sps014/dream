@@ -344,8 +344,10 @@ fn collection_fn_suffix(mangled: &str) -> String {
 
 #[cfg(feature = "native")]
 fn json_elem_supported(name: &str, jsonable: &HashSet<String>) -> bool {
-    matches!(name, "int" | "long" | "string" | "bool" | "double" | "float")
-        || jsonable.contains(name)
+    matches!(
+        name,
+        "int" | "long" | "string" | "bool" | "double" | "float"
+    ) || jsonable.contains(name)
 }
 
 #[cfg(feature = "native")]
@@ -384,14 +386,7 @@ fn collect_collections_from_type(
 ) {
     match ty {
         Type::Array(inner) => {
-            insert_collection_spec(
-                out,
-                "array",
-                inner.get_type(),
-                String::new(),
-                ty,
-                jsonable,
-            );
+            insert_collection_spec(out, "array", inner.get_type(), String::new(), ty, jsonable);
             collect_collections_from_type(inner, jsonable, out);
         }
         Type::Struct(token, Some(args)) => match token.text.as_str() {
@@ -411,14 +406,7 @@ fn collect_collections_from_type(
                 collect_collections_from_type(&args[0], jsonable, out);
             }
             "Map" if args.len() == 2 && args[0].get_type() == "string" => {
-                insert_collection_spec(
-                    out,
-                    "map",
-                    String::new(),
-                    args[1].get_type(),
-                    ty,
-                    jsonable,
-                );
+                insert_collection_spec(out, "map", String::new(), args[1].get_type(), ty, jsonable);
                 collect_collections_from_type(&args[1], jsonable, out);
             }
             "SortedMap" if args.len() == 2 && args[0].get_type() == "string" => {
@@ -492,7 +480,9 @@ fn collect_collections_from_expr(
             collect_collections_from_expr(b, jsonable, out);
         }
         ExpressionNode::Unary(_, a) => collect_collections_from_expr(a, jsonable, out),
-        ExpressionNode::IncDec { target, .. } => collect_collections_from_expr(target, jsonable, out),
+        ExpressionNode::IncDec { target, .. } => {
+            collect_collections_from_expr(target, jsonable, out)
+        }
         ExpressionNode::Parenthesized(_, a) => collect_collections_from_expr(a, jsonable, out),
         ExpressionNode::IndexAccess(a, b) => {
             collect_collections_from_expr(a, jsonable, out);
@@ -573,9 +563,11 @@ fn collect_collections_from_stmts(
 ) {
     use dream_syntax::nodes::StatementNode;
     match stmt {
-        StatementNode::ExpressionStatement(expr)
-        | StatementNode::AwaitStmt(expr) => collect_collections_from_expr(expr, jsonable, out),
-        StatementNode::Declaration(_, _, init, _) | StatementNode::TupleDeclaration { init, .. } => {
+        StatementNode::ExpressionStatement(expr) | StatementNode::AwaitStmt(expr) => {
+            collect_collections_from_expr(expr, jsonable, out)
+        }
+        StatementNode::Declaration(_, _, init, _)
+        | StatementNode::TupleDeclaration { init, .. } => {
             collect_collections_from_expr(init, jsonable, out);
         }
         StatementNode::Return(expr) => {
@@ -649,8 +641,7 @@ fn collect_collections_from_stmts(
                 collect_collections_from_stmts(s, jsonable, out);
             }
         }
-        StatementNode::Assignment(_, rhs)
-        | StatementNode::MemberAssignment(_, _, rhs) => {
+        StatementNode::Assignment(_, rhs) | StatementNode::MemberAssignment(_, _, rhs) => {
             collect_collections_from_expr(rhs, jsonable, out);
         }
         StatementNode::IndexAssignment(a, b, rhs) => {
@@ -679,7 +670,9 @@ fn collect_collections_from_stmts(
                 collect_collections_from_expr(arg, jsonable, out);
             }
         }
-        StatementNode::Break(_) | StatementNode::Continue(_) | StatementNode::WorkgroupDecl(_, _, _) => {}
+        StatementNode::Break(_)
+        | StatementNode::Continue(_)
+        | StatementNode::WorkgroupDecl(_, _, _) => {}
     }
 }
 
@@ -745,9 +738,7 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     // The harness reads the snapshot path from process-global `DREAM_JSON_GEN_SNAPSHOT`.
     // Concurrent `compile()` calls (e2e rayon pool) must not interleave set_var/run/remove_var.
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
-    let _guard = SNAPSHOT_GUARD
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
     let wat_path = harness_wat_path().map_err(|e| JsonGenError {
         message: e,
@@ -927,13 +918,14 @@ fn harness_wat_path() -> Result<String, String> {
             .hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_collection.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream")
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_collection.dream")
             .hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream")
+            .hash(&mut h);
         include_str!("../../../crates/dream-mir/src/runtime/strings.wat").hash(&mut h);
         include_str!("../../../crates/dream-mir/src/runtime/allocator.wat").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
@@ -941,6 +933,10 @@ fn harness_wat_path() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
         // GC runtime changes emitted harness WAT without touching the Dream sources above.
         include_str!("../../../crates/dream-mir/src/runtime/gc.wat").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/passes/gvn.rs").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/emit/tables.rs").hash(&mut h);
+        // Bump when harness compile flags change (release/wasm-opt are not hashed above).
+        4u64.hash(&mut h);
         h.finish()
     };
     let entry = super::current_entry_file();
@@ -956,10 +952,9 @@ fn harness_wat_path() -> Result<String, String> {
         .map_err(|e| format!("@json generator: write harness source: {e}"))?;
     let src = src_path.to_string_lossy().into_owned();
     let out = wat_path.to_string_lossy().into_owned();
-    let compiler =
-        crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
-            .with_skip_generators(true)
-            .with_release(true);
+    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+        .with_skip_generators(true)
+        .with_release(true);
     compiler
         .compile(&src, &out)
         .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;

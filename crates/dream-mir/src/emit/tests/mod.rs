@@ -36,7 +36,7 @@ fn module_wraps_and_resolves_call_symbols() {
         functions: vec![callee, caller],
         ..Default::default()
     };
-    let wat = emit_module(&mir, &i, false);
+    let wat = emit_module(&mir, &i, true);
     assert!(
         wat.starts_with("(module"),
         "should be wrapped in a module:\n{}",
@@ -51,7 +51,7 @@ fn module_wraps_and_resolves_call_symbols() {
     );
     assert!(
         wat.contains("(export \"caller\""),
-        "non-instance funcs are exported:\n{}",
+        "debug modules export non-instance funcs:\n{}",
         wat
     );
 }
@@ -138,8 +138,8 @@ fn field_access_uses_layout_offsets_and_widths() {
 
 #[test]
 fn new_allocates_and_initializes_fields() {
-    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use crate::Rvalue;
+    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use dream_types::DefId;
     let mut i = TypeInterner::new();
     let def = DefId(5);
@@ -246,8 +246,8 @@ fn strings_get_data_segments_and_addresses() {
 
 #[test]
 fn emit_module_assembles_to_valid_wasm() {
-    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use crate::{Callee, MirGlobal, Rvalue};
+    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use dream_types::DefId;
     let mut i = TypeInterner::new();
     let int = i.int();
@@ -393,7 +393,10 @@ fn shape_emit_while_uses_nested_loop() {
     });
     b.switch_to(body);
     let one = b.new_temp(i.int());
-    b.assign(Place::Local(one), Rvalue::Use(Operand::Const(Const::Int(1))));
+    b.assign(
+        Place::Local(one),
+        Rvalue::Use(Operand::Const(Const::Int(1))),
+    );
     let sum = b.new_temp(i.int());
     b.assign(
         Place::Local(sum),
@@ -403,7 +406,10 @@ fn shape_emit_while_uses_nested_loop() {
             Operand::Copy(Place::Local(one)),
         ),
     );
-    b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(sum))));
+    b.assign(
+        Place::Local(s),
+        Rvalue::Use(Operand::Copy(Place::Local(sum))),
+    );
     b.terminate(Terminator::Goto(cond));
     b.switch_to(after);
     b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
@@ -483,14 +489,25 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
 /// path stays clean. Single-threaded modules also drop the allocator spinlock.
 #[test]
 fn debug_toggles_allocator_instrumentation() {
-    assert!(runtime_prelude(true, false, 0, false).contains("global.set $live_objects"));
-    assert!(!runtime_prelude(false, false, 0, false).contains("global.set $live_objects"));
+    assert!(runtime_prelude(true, false, 0, false, false, false).contains("global.set $live_objects"));
+    assert!(!runtime_prelude(false, false, 0, false, false, false).contains("global.set $live_objects"));
+    let threaded = runtime_prelude(false, true, 0, false, false, false);
+    let single = runtime_prelude(false, false, 0, false, false, false);
     assert!(
-        runtime_prelude(false, true, 0, false).contains("call $__alloc_lock_acquire"),
+        threaded.contains("call $__alloc_lock_acquire"),
         "threaded modules must keep the allocator spinlock"
     );
+    let bump_from_shared = format!(
+        "i32.const {}\n    i32.load\n    global.set $__gc_nursery_bump",
+        crate::abi::NURSERY_BUMP_ADDR
+    );
     assert!(
-        !runtime_prelude(false, false, 0, false).contains("call $__alloc_lock_acquire"),
+        threaded.matches(bump_from_shared.as_str()).count()
+            > single.matches(bump_from_shared.as_str()).count(),
+        "threaded malloc/GC must reload the shared nursery bump"
+    );
+    assert!(
+        !runtime_prelude(false, false, 0, false, false, false).contains("call $__alloc_lock_acquire"),
         "single-threaded modules must elide the allocator spinlock"
     );
 }
@@ -528,7 +545,7 @@ fn debug_line_module(i: &TypeInterner) -> crate::Mir {
 fn debug_info_emits_hooks_and_source_map() {
     let i = TypeInterner::new();
     let mir = debug_line_module(&i);
-    let (wat, map) = emit_module_with_debug(&mir, &i, false, true);
+    let (wat, map) = emit_module_with_debug(&mir, &i, false, true, true);
 
     assert!(
         wat.contains("(import \"dream_debug\" \"line\""),
@@ -575,10 +592,8 @@ fn debug_info_emits_hooks_and_source_map() {
 fn release_build_has_no_debug_hooks() {
     let i = TypeInterner::new();
     let mir = debug_line_module(&i);
-    let (wat, map) = emit_module_with_debug(&mir, &i, false, false);
+    let (wat, map) = emit_module_with_debug(&mir, &i, false, false, false);
     assert!(map.is_none(), "release build must not produce a source map");
     assert!(!wat.contains("dream_debug"), "no debug imports:\n{}", wat);
     assert!(!wat.contains("__dbg_"), "no debug hooks/pool:\n{}", wat);
 }
-
-

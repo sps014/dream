@@ -192,7 +192,9 @@ fn retarget(t: &mut Terminator, from: BlockId, to: BlockId) {
                 *else_blk = to;
             }
         }
-        Terminator::Switch { targets, default, .. } => {
+        Terminator::Switch {
+            targets, default, ..
+        } => {
             for (_, b) in targets {
                 if *b == from {
                     *b = to;

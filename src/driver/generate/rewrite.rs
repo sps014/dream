@@ -3,11 +3,11 @@
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::lexer::Lexer;
+use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::{
     ExpressionNode, LambdaBody, StatementNode, SwitchArm, SwitchArmBody, SyntaxBlockPart,
 };
 use dream_syntax::parser::Parser;
-use dream_syntax::nodes::function::FunctionNode;
 use indexmap::IndexMap;
 use std::io::Error;
 
@@ -32,10 +32,12 @@ pub fn parse_expression_source<'a>(
     };
     diagnostics.extend(&local);
     let program = ast.get_root();
-    let f = program
-        .functions
-        .first()
-        .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidData, "replace parse produced no function"))?;
+    let f = program.functions.first().ok_or_else(|| {
+        Error::new(
+            std::io::ErrorKind::InvalidData,
+            "replace parse produced no function",
+        )
+    })?;
     for stmt in f.body {
         if let StatementNode::Return(Some(e)) = stmt {
             return Ok(e.clone());
@@ -135,12 +137,10 @@ fn rewrite_expr<'a>(
             open.clone(),
             arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
         ),
-        ExpressionNode::Await(await_tok, x) => {
-            ExpressionNode::Await(
-                await_tok.clone(),
-                arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
-            )
-        }
+        ExpressionNode::Await(await_tok, x) => ExpressionNode::Await(
+            await_tok.clone(),
+            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
+        ),
         ExpressionNode::Try(x) => {
             ExpressionNode::Try(arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?))
         }
@@ -258,9 +258,13 @@ fn rewrite_expr<'a>(
         }
         ExpressionNode::Lambda(l) => {
             let body = match &l.body {
-                LambdaBody::Expr(e) => {
-                    LambdaBody::Expr(arena.alloc(rewrite_expr(arena, e, by_site, diagnostics, changed)?))
-                }
+                LambdaBody::Expr(e) => LambdaBody::Expr(arena.alloc(rewrite_expr(
+                    arena,
+                    e,
+                    by_site,
+                    diagnostics,
+                    changed,
+                )?)),
                 LambdaBody::Block(stmts) => {
                     LambdaBody::Block(rewrite_function_body(arena, stmts, by_site, diagnostics)?)
                 }
@@ -286,7 +290,11 @@ fn rewrite_stmt<'a>(
 ) -> Result<StatementNode<'a>, Error> {
     Ok(match stmt {
         StatementNode::ExpressionStatement(e) => StatementNode::ExpressionStatement(rewrite_expr(
-            arena, e, by_site, diagnostics, changed,
+            arena,
+            e,
+            by_site,
+            diagnostics,
+            changed,
         )?),
         StatementNode::AwaitStmt(e) => {
             StatementNode::AwaitStmt(rewrite_expr(arena, e, by_site, diagnostics, changed)?)
@@ -295,9 +303,10 @@ fn rewrite_stmt<'a>(
             StatementNode::Return(Some(rewrite_expr(arena, e, by_site, diagnostics, changed)?))
         }
         StatementNode::Return(None) => StatementNode::Return(None),
-        StatementNode::Assignment(n, e) => {
-            StatementNode::Assignment(n.clone(), rewrite_expr(arena, e, by_site, diagnostics, changed)?)
-        }
+        StatementNode::Assignment(n, e) => StatementNode::Assignment(
+            n.clone(),
+            rewrite_expr(arena, e, by_site, diagnostics, changed)?,
+        ),
         StatementNode::Declaration(n, ty, e, c) => StatementNode::Declaration(
             n.clone(),
             ty.clone(),
@@ -374,9 +383,9 @@ fn rewrite_stmt<'a>(
         ),
         StatementNode::For(init, cond, inc, body) => {
             let ninit = match init {
-                Some(s) => Some(
-                    &*arena.alloc(rewrite_stmt(arena, s, by_site, diagnostics, changed)?),
-                ),
+                Some(s) => {
+                    Some(&*arena.alloc(rewrite_stmt(arena, s, by_site, diagnostics, changed)?))
+                }
                 None => None,
             };
             let ncond = match cond {
@@ -384,9 +393,9 @@ fn rewrite_stmt<'a>(
                 None => None,
             };
             let ninc = match inc {
-                Some(s) => Some(
-                    &*arena.alloc(rewrite_stmt(arena, s, by_site, diagnostics, changed)?),
-                ),
+                Some(s) => {
+                    Some(&*arena.alloc(rewrite_stmt(arena, s, by_site, diagnostics, changed)?))
+                }
                 None => None,
             };
             StatementNode::For(
@@ -428,6 +437,8 @@ fn rewrite_stmt<'a>(
         ),
         StatementNode::Break(x) => StatementNode::Break(x.clone()),
         StatementNode::Continue(x) => StatementNode::Continue(x.clone()),
-        StatementNode::WorkgroupDecl(n, ty, size) => StatementNode::WorkgroupDecl(n.clone(), ty.clone(), *size),
+        StatementNode::WorkgroupDecl(n, ty, size) => {
+            StatementNode::WorkgroupDecl(n.clone(), ty.clone(), *size)
+        }
     })
 }

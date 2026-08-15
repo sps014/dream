@@ -75,10 +75,7 @@ impl MirPass for Sccp {
 
 /// Runs the reachability + constant fixpoint, returning which blocks are reachable and each local's
 /// lattice value.
-fn solve(
-    func: &MirFunction,
-    interner: &TypeInterner,
-) -> (Vec<bool>, BTreeMap<crate::Local, Lat>) {
+fn solve(func: &MirFunction, interner: &TypeInterner) -> (Vec<bool>, BTreeMap<crate::Local, Lat>) {
     let n = func.blocks.len();
     let mut reachable = vec![false; n];
     reachable[func.entry.0 as usize] = true;

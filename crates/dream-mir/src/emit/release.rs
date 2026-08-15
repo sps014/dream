@@ -81,9 +81,7 @@ pub(super) fn emit_gc_funcs(
             continue;
         }
         let _ = writeln!(out, "(func $gc_trace_array_t{} (param $ptr i32)", elem.0);
-        out.push_str(
-            "  (local $slot i32) (local $len i32) (local $i i32) (local $elem i32)\n",
-        );
+        out.push_str("  (local $slot i32) (local $len i32) (local $i i32) (local $elem i32)\n");
         out.push_str("  (local.get $ptr) (i32.load) (local.set $len)\n");
         out.push_str("  (i32.const 0) (local.set $i)\n");
         out.push_str("  (block $done (loop $scan\n");
@@ -189,10 +187,11 @@ pub(super) fn emit_gc_funcs(
         out.push_str("    (return)\n  ))\n");
     }
     for (ty, layout) in &mir.layouts.unions {
-        let has_js = layout
-            .variants
-            .iter()
-            .any(|v| v.fields.iter().any(|f| field_has_js(mir, interner, value_glue, f.ty)));
+        let has_js = layout.variants.iter().any(|v| {
+            v.fields
+                .iter()
+                .any(|f| field_has_js(mir, interner, value_glue, f.ty))
+        });
         if !has_js {
             continue;
         }
@@ -292,7 +291,9 @@ fn emit_unregister_js_at(
             let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", base_off);
         }
         out.push_str(indent);
-        out.push_str("(i32.load) (local.tee $h) (if (then (local.get $h) (call $js_unregister)))\n");
+        out.push_str(
+            "(i32.load) (local.tee $h) (if (then (local.get $h) (call $js_unregister)))\n",
+        );
         return;
     }
     if !(interner.is_value_type(ty) && value_glue.contains(&ty)) {
@@ -323,8 +324,14 @@ fn emit_trace_ref_slot(out: &mut String, indent: &str, offset: u32) {
         let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", offset);
     }
     let _ = writeln!(out, "{indent}(local.set $slot)");
-    let _ = writeln!(out, "{indent}(global.get $gc_trace_mode) (i32.const 1) (i32.eq) (if (then");
-    let _ = writeln!(out, "{indent}  (local.get $slot) (i32.load) (call $gc_mark_object)");
+    let _ = writeln!(
+        out,
+        "{indent}(global.get $gc_trace_mode) (i32.const 1) (i32.eq) (if (then"
+    );
+    let _ = writeln!(
+        out,
+        "{indent}  (local.get $slot) (i32.load) (call $gc_mark_object)"
+    );
     let _ = writeln!(out, "{indent}) (else");
     let _ = writeln!(out, "{indent}  (local.get $slot) (call $gc_update_slot)");
     let _ = writeln!(out, "{indent}))");

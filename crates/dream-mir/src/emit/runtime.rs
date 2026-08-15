@@ -13,6 +13,8 @@ pub(super) fn runtime_prelude(
     needs_threads: bool,
     empty_string: u32,
     dead_nursery: bool,
+    include_simd: bool,
+    has_async: bool,
 ) -> String {
     let (malloc_count, free_count) = if debug {
         (
@@ -33,6 +35,13 @@ pub(super) fn runtime_prelude(
     } else {
         ""
     };
+    // Per-instance `$__gc_nursery_bump` is a cache of shared `NURSERY_BUMP_ADDR`. Reload under the
+    // alloc lock so a worker cannot bump over the owner's live nursery objects (and vice versa).
+    let bump_reload = if needs_threads {
+        "i32.const {NURSERY_BUMP_ADDR}\n    i32.load\n    global.set $__gc_nursery_bump"
+    } else {
+        ""
+    };
     let mut out = RUNTIME_ALLOCATOR
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count)
@@ -43,10 +52,7 @@ pub(super) fn runtime_prelude(
             &crate::abi::ALLOC_LOCK_ADDR.to_string(),
         )
         .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
-        .replace(
-            "{GC_META_FREE}",
-            &crate::abi::GC_META_FREE.to_string(),
-        );
+        .replace("{GC_META_FREE}", &crate::abi::GC_META_FREE.to_string());
     out.push('\n');
     out.push_str(&substitute_gc_runtime(
         lock_acquire,
@@ -54,7 +60,8 @@ pub(super) fn runtime_prelude(
         malloc_count,
         free_count,
         dead_nursery,
-        bump_commit,
+        (bump_commit, bump_reload),
+        has_async,
     ));
     out.push('\n');
     // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
@@ -68,7 +75,9 @@ pub(super) fn runtime_prelude(
             .replace("{STRING_EMPTY}", &empty_string.to_string()),
     );
     out.push('\n');
-    out.push_str(RUNTIME_SIMD);
+    if include_simd {
+        out.push_str(RUNTIME_SIMD);
+    }
     out
 }
 
@@ -78,15 +87,29 @@ fn substitute_gc_runtime(
     malloc_count: &str,
     free_count: &str,
     dead_nursery: bool,
-    bump_commit: &str,
+    bump: (&str, &str),
+    has_async: bool,
 ) -> String {
     use crate::abi as a;
+    let tag0 = if has_async {
+        "local.get $ptr\n        i32.const 12\n        i32.sub\n        i32.load\n        i32.const 32\n        i32.gt_u\n        if\n          local.get $ptr\n          call $gc_trace_future_frame\n        else\n          local.get $ptr\n          call $gc_trace_funcbox\n        end"
+    } else {
+        "local.get $ptr\n        call $gc_trace_funcbox"
+    };
+    let scan_sched = if has_async {
+        "call $gc_scan_scheduler_roots"
+    } else {
+        ""
+    };
     RUNTIME_GC
         .replace(";;@ALLOC_LOCK_ACQUIRE@", lock_acquire)
         .replace(";;@ALLOC_LOCK_RELEASE@", lock_release)
-        .replace(";;@NURSERY_BUMP_COMMIT@", bump_commit)
+        .replace(";;@NURSERY_BUMP_COMMIT@", bump.0)
+        .replace(";;@NURSERY_BUMP_RELOAD@", bump.1)
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count)
+        .replace(";;@GC_TRACE_TAG0@", tag0)
+        .replace(";;@GC_SCAN_SCHEDULER@", scan_sched)
         .replace("{ALLOC_LOCK_ADDR}", &a::ALLOC_LOCK_ADDR.to_string())
         .replace("{HEAP_PTR_ADDR}", &a::HEAP_PTR_ADDR.to_string())
         .replace("{GC_META_GEN_MASK}", &a::GC_META_GEN_MASK.to_string())
@@ -115,15 +138,24 @@ fn substitute_gc_runtime(
             "{GC_SAFEPOINT_EXPECT_ADDR}",
             &a::GC_SAFEPOINT_EXPECT_ADDR.to_string(),
         )
-        .replace("{GC_SAFEPOINT_ACK_ADDR}", &a::GC_SAFEPOINT_ACK_ADDR.to_string())
-        .replace("{GC_COLLECT_KIND_ADDR}", &a::GC_COLLECT_KIND_ADDR.to_string())
+        .replace(
+            "{GC_SAFEPOINT_ACK_ADDR}",
+            &a::GC_SAFEPOINT_ACK_ADDR.to_string(),
+        )
+        .replace(
+            "{GC_COLLECT_KIND_ADDR}",
+            &a::GC_COLLECT_KIND_ADDR.to_string(),
+        )
         .replace("{GC_ROOT_COUNT_ADDR}", &a::GC_ROOT_COUNT_ADDR.to_string())
         .replace(
             "{GC_ROOT_TABLE_PTR_ADDR}",
             &a::GC_ROOT_TABLE_PTR_ADDR.to_string(),
         )
         .replace("{GC_ROOT_TABLE_CAP}", &a::GC_ROOT_TABLE_CAP.to_string())
-        .replace("{GC_REMSET_COUNT_ADDR}", &a::GC_REMSET_COUNT_ADDR.to_string())
+        .replace(
+            "{GC_REMSET_COUNT_ADDR}",
+            &a::GC_REMSET_COUNT_ADDR.to_string(),
+        )
         .replace(
             "{GC_REMSET_TABLE_PTR_ADDR}",
             &a::GC_REMSET_TABLE_PTR_ADDR.to_string(),
@@ -139,10 +171,7 @@ fn substitute_gc_runtime(
             &a::GC_CARD_TABLE_PTR_ADDR.to_string(),
         )
         .replace("{GC_CARD_SHIFT}", &a::GC_CARD_SHIFT.to_string())
-        .replace(
-            "{GC_CARD_TABLE_BYTES}",
-            &a::GC_CARD_TABLE_BYTES.to_string(),
-        )
+        .replace("{GC_CARD_TABLE_BYTES}", &a::GC_CARD_TABLE_BYTES.to_string())
         .replace(
             "{GC_FINALIZER_HEAD_ADDR}",
             &a::GC_FINALIZER_HEAD_ADDR.to_string(),
@@ -177,6 +206,77 @@ pub(super) fn module_needs_threads(mir: &crate::Mir) -> bool {
                     | "workerPoolDispatch"
             )
     })
+}
+
+/// True when some surviving function uses the SIMD helpers in `simd.wat` (or inlined `v128` autovec).
+pub(super) fn module_has_simd(mir: &crate::Mir) -> bool {
+    if mir.intrinsics.iter().any(|(_, k)| k.starts_with("simd_")) {
+        return true;
+    }
+    mir.functions.iter().any(|f| {
+        f.blocks.iter().any(|b| {
+            b.stmts
+                .iter()
+                .any(|s| matches!(s, crate::Statement::SimdF32x4 { .. }))
+        })
+    })
+}
+
+/// True when a live layout has a `weak` field, so the weak side-table runtime is required.
+pub(super) fn module_has_weak(mir: &crate::Mir) -> bool {
+    mir.layouts
+        .structs
+        .values()
+        .any(|l| l.fields.iter().any(|f| f.is_weak))
+}
+
+/// True when the module uses `lock` / `WebWorker` synchronization helpers from `sync.wat`.
+pub(super) fn module_needs_sync(mir: &crate::Mir) -> bool {
+    if module_needs_threads(mir) {
+        return true;
+    }
+    if mir.intrinsics.iter().any(|(_, k)| {
+        k.starts_with("shared_lock") || k.starts_with("shared_semaphore") || k.starts_with("__lock")
+    }) {
+        return true;
+    }
+    mir.functions.iter().any(|f| {
+        f.blocks.iter().any(|b| {
+            b.stmts.iter().any(|s| {
+                matches!(
+                    s,
+                    crate::Statement::LockAcquire(_) | crate::Statement::LockRelease(_)
+                )
+            })
+        })
+    })
+}
+
+/// True when `print` / `to_string` / `hash_code` appear, so object/format WAT must be spliced.
+pub(super) fn module_needs_to_string(mir: &crate::Mir) -> bool {
+    use crate::{Rvalue, Statement};
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::Print { .. } => return true,
+                    Statement::Assign(
+                        _,
+                        Rvalue::ToString(_) | Rvalue::HashCode(_) | Rvalue::Cast(..),
+                    ) => return true,
+                    _ => {}
+                }
+            }
+        }
+        if let Some(hir_fn) = &f.hir_fn {
+            let mut edges = crate::HirEdges::default();
+            crate::hir_body_edges(&hir_fn.body, &mut edges);
+            if edges.needs_format {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Builds the `*_to_string` runtime (object formatters + generated `$bool_to_string` + the float/

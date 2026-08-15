@@ -281,12 +281,7 @@ impl Emitter<'_> {
 
     /// Spills one named local into its `i64` pool global, widening/reinterpreting to preserve the
     /// exact bits so the host can decode the value back using the variable's declared kind.
-    fn emit_var_spill(
-        &mut self,
-        local: u32,
-        global: u32,
-        kind: crate::emit::debug_map::SpillKind,
-    ) {
+    fn emit_var_spill(&mut self, local: u32, global: u32, kind: crate::emit::debug_map::SpillKind) {
         use crate::emit::debug_map::SpillKind as K;
         let value = match kind {
             K::I64 => format!("(local.get ${})", local),
@@ -408,7 +403,11 @@ impl Emitter<'_> {
             Place::Deref { ptr, elem_ty } => {
                 let p = *ptr;
                 let ety = *elem_ty;
-                self.emit_place_store(ety, move |s| s.line(&format!("     (local.get ${})", p.0)), rvalue);
+                self.emit_place_store(
+                    ety,
+                    move |s| s.line(&format!("     (local.get ${})", p.0)),
+                    rvalue,
+                );
             }
         }
     }
@@ -463,35 +462,21 @@ impl Emitter<'_> {
         self.emit_rvalue(rvalue);
         self.line("     (local.set $__src)");
         if matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line(
-                "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
-            );
+            self.line("     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))");
         }
         self.line(&format!("     (local.get $__src) (local.set ${})", local));
-        self.line(
-            "     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))",
-        );
+        self.line("     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))");
     }
 
     fn emit_js_global_assign(&mut self, gid: u32, rvalue: &Rvalue) {
-        self.line(&format!(
-            "     (global.get $g{}) (local.set $__rel)",
-            gid
-        ));
+        self.line(&format!("     (global.get $g{}) (local.set $__rel)", gid));
         self.emit_rvalue(rvalue);
         self.line("     (local.set $__src)");
         if matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line(
-                "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
-            );
+            self.line("     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))");
         }
-        self.line(&format!(
-            "     (local.get $__src) (global.set $g{})",
-            gid
-        ));
-        self.line(
-            "     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))",
-        );
+        self.line(&format!("     (local.get $__src) (global.set $g{})", gid));
+        self.line("     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))");
     }
 
     /// Memory store of a `js` handle: retain on Copy, store, unregister previous.
@@ -501,15 +486,11 @@ impl Emitter<'_> {
         self.emit_rvalue(rvalue);
         self.line("     (local.set $__src)");
         if matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line(
-                "     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))",
-            );
+            self.line("     (local.get $__src) (if (then (local.get $__src) (call $js_retain)))");
         }
         addr(self);
         self.line("     (local.get $__src) (i32.store)");
-        self.line(
-            "     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))",
-        );
+        self.line("     (local.get $__rel) (if (then (local.get $__rel) (call $js_unregister)))");
     }
 
     /// Same as [`Self::emit_place_store`] for the realloc-self-store idiom (old block already
@@ -675,7 +656,7 @@ impl Emitter<'_> {
         self.line(&format!("     ({})", self.store_instr(value_ty)));
     }
 
-        /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
+    /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
     /// Used to clear a struct before a user constructor runs (reused heap blocks are not zeroed).
     pub(super) fn zero_at_obj(&mut self, offset: u32, field_ty: TypeId) {
         self.line("     (local.get $__obj)");

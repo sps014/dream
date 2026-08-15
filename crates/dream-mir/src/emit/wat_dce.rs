@@ -13,10 +13,11 @@
 //!
 //! The AST is used only to decide *which* function definitions are live; the surviving text is
 //! spliced from the original module by top-level item byte-ranges, so formatting is preserved
-//! exactly. Imports, memory, globals, types, tables, data, and every non-`func` item are always
-//! kept, so the module stays structurally valid; `wat::parse_str` in the driver is the final
-//! correctness gate. If the module cannot be parsed as a single core module, the input is returned
-//! unchanged (no trimming — always sound).
+//! exactly. Function imports whose `$name` is not reachable are dropped with dead funcs (so unused
+//! `print_*` host imports disappear). Memory, globals, types, tables, data, and other non-func
+//! items are always kept, so the module stays structurally valid; `wat::parse_str` in the driver is
+//! the final correctness gate. If the module cannot be parsed as a single core module, the input is
+//! returned unchanged (no trimming — always sound).
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use wast::core::{ElemPayload, Func, FuncKind, Instruction, ModuleField, ModuleKind};
@@ -97,6 +98,10 @@ fn live_function_names(module: &str) -> Option<HashSet<String>> {
                     if !f.exports.names.is_empty() {
                         roots.push(name);
                     }
+                } else if !f.exports.names.is_empty() {
+                    // Anonymous exported shims (`(func (export "main") call $main)`) are kept as
+                    // text but have no `$name` in the call graph — treat their callees as roots.
+                    roots.extend(func_refs(f));
                 }
             }
             ModuleField::Export(e) => {
@@ -422,6 +427,22 @@ mod tests {
     }
 
     #[test]
+    fn anonymous_exported_shim_keeps_callees() {
+        let m = "(module\n\
+                 (func $main (result i32) i32.const 1)\n\
+                 (func $dead (result i32) i32.const 2)\n\
+                 (func (export \"main\") (result i32) call $main)\n\
+                 )\n";
+        let out = strip_dead_functions(m);
+        assert!(out.contains("(func $main"), "shim callee kept:\n{}", out);
+        assert!(
+            !out.contains("$dead"),
+            "unrelated func still dropped:\n{}",
+            out
+        );
+    }
+
+    #[test]
     fn keeps_transitively_reachable() {
         let m = "(module\n\
                  (func $a (result i32) call $b)\n\
@@ -496,6 +517,25 @@ mod tests {
         assert!(
             !out.contains("func $commented"),
             "func mentioned only in a comment must be dropped:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn drops_unreferenced_func_import() {
+        let m = "(module\n\
+                 (import \"env\" \"print_int\" (func $print_int (param i32)))\n\
+                 (import \"env\" \"print_string\" (func $print_string (param i32)))\n\
+                 (func (export \"main\") (result i32)\n\
+                   i32.const 1\n\
+                   call $print_int\n\
+                   i32.const 0)\n\
+                 )\n";
+        let out = strip_dead_functions(m);
+        assert!(out.contains("$print_int"), "used import kept:\n{}", out);
+        assert!(
+            !out.contains("print_string"),
+            "unused func import dropped:\n{}",
             out
         );
     }

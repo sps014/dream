@@ -67,10 +67,7 @@ pub(super) fn build_struct_field_tys(
         &[("x", "f32"), ("y", "f32"), ("z", "f32"), ("w", "f32")],
     );
     insert_builtin("GpuId3", &[("x", "i32"), ("y", "i32"), ("z", "i32")]);
-    insert_builtin(
-        "GpuMat2",
-        &[("c0", "vec2<f32>"), ("c1", "vec2<f32>")],
-    );
+    insert_builtin("GpuMat2", &[("c0", "vec2<f32>"), ("c1", "vec2<f32>")]);
     insert_builtin(
         "GpuMat3",
         &[

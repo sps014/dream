@@ -195,9 +195,7 @@ fn maybe_add(name: &str, out: &mut IndexSet<String>) {
 }
 
 /// `@gpu` free-function name → WGSL return type.
-pub(super) fn build_helper_return_tys(
-    program: &ProgramNode<'_>,
-) -> IndexMap<String, String> {
+pub(super) fn build_helper_return_tys(program: &ProgramNode<'_>) -> IndexMap<String, String> {
     use super::ty::dream_ty_to_wgsl;
     let mut map = IndexMap::new();
     for f in &program.functions {
@@ -274,7 +272,10 @@ pub(super) fn emit_helpers_wgsl(
             }
             let mut deps = IndexSet::new();
             collect_helper_calls(func.body, &mut deps);
-            if deps.iter().any(|d| needed.contains(d) && !emitted.contains(d)) {
+            if deps
+                .iter()
+                .any(|d| needed.contains(d) && !emitted.contains(d))
+            {
                 continue;
             }
             out.push_str(&emit_one_helper(
@@ -292,10 +293,7 @@ pub(super) fn emit_helpers_wgsl(
     }
     for name in &needed {
         if !emitted.contains(name) {
-            diagnostics.report_error(
-                format!("GPU helper '{name}' has a cyclic dependency"),
-                None,
-            );
+            diagnostics.report_error(format!("GPU helper '{name}' has a cyclic dependency"), None);
         }
     }
     out
@@ -363,7 +361,8 @@ fn emit_one_helper(
 }
 
 fn find_helper<'a>(program: &'a ProgramNode<'a>, name: &str) -> Option<&'a FunctionNode<'a>> {
-    program.functions.iter().find(|f| {
-        f.name.text == name && dream_abi::attributes::has_gpu_helper_attr(&f.attributes)
-    })
+    program
+        .functions
+        .iter()
+        .find(|f| f.name.text == name && dream_abi::attributes::has_gpu_helper_attr(&f.attributes))
 }

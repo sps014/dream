@@ -3,8 +3,8 @@
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
 use super::ty::{
-    cast_wgsl_if_needed, common_arith_wgsl_ty, dream_ty_to_wgsl,
-    infer_wgsl_ty, is_mat_wgsl, is_vec_wgsl, receiver_wgsl_ty,
+    cast_wgsl_if_needed, common_arith_wgsl_ty, dream_ty_to_wgsl, infer_wgsl_ty, is_mat_wgsl,
+    is_vec_wgsl, receiver_wgsl_ty,
 };
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::types::Type;
@@ -15,7 +15,11 @@ use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
 
 /// Emit `expr`, inserting a WGSL constructor cast when the inferred type differs from `want`.
-pub(super) fn coerce_expr_to_wgsl_ty(expr: &ExpressionNode<'_>, want: &str, ctx: &EmitCtx<'_>) -> String {
+pub(super) fn coerce_expr_to_wgsl_ty(
+    expr: &ExpressionNode<'_>,
+    want: &str,
+    ctx: &EmitCtx<'_>,
+) -> String {
     let got = infer_wgsl_ty(expr, ctx);
     let rendered = emit_expr(expr, ctx);
     cast_wgsl_if_needed(rendered, &got, want)
@@ -225,10 +229,10 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 .unwrap_or_else(|| "0.0".into());
             format!("vec3<f32>({s})")
         }
-        "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin" | "cos" | "tan"
-        | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
-        | "reflect" | "mix" | "pow" | "exp" | "log" | "sign" | "saturate" | "step" | "smoothstep"
-        | "fma" | "inversesqrt" => {
+        "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin" | "cos"
+        | "tan" | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
+        | "reflect" | "mix" | "pow" | "exp" | "log" | "sign" | "saturate" | "step"
+        | "smoothstep" | "fma" | "inversesqrt" => {
             let arg_tys: Vec<String> = args.iter().map(|a| infer_wgsl_ty(a, ctx)).collect();
             let any_vec = arg_tys.iter().any(|t| is_vec_wgsl(t));
             let vec_ty = arg_tys.iter().find(|t| is_vec_wgsl(t)).cloned();
@@ -388,8 +392,8 @@ fn literal_text(ty: &Type, ctx: &EmitCtx<'_>) -> String {
         | Type::Double(t) => {
             let raw = t.text.as_str();
             let (body, _) = split_numeric_literal(raw).unwrap_or((raw, ""));
-            let is_float = matches!(ty, Type::Float(_) | Type::Double(_))
-                || numeric_body_is_float(body);
+            let is_float =
+                matches!(ty, Type::Float(_) | Type::Double(_)) || numeric_body_is_float(body);
             if is_float {
                 match parse_float_literal(body) {
                     Some(v) => {
@@ -563,7 +567,8 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                         emit_call(&method.text, args, ctx)
                     }
                 }
-                _ => ctx.unsupported_expr("call whose callee is not a name or member", expr.position()),
+                _ => ctx
+                    .unsupported_expr("call whose callee is not a name or member", expr.position()),
             }
         }
         ExpressionNode::Ternary(c, t, e) => {

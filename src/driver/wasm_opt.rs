@@ -53,7 +53,7 @@ impl FromStr for OptLevel {
 /// Runs Binaryen's `wasm-opt` over the `.wasm` file at `path` in place, at the given [`OptLevel`].
 #[cfg(feature = "wasm-opt")]
 pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
-    use wasm_opt::{Feature, FeatureBaseline, OptimizationOptions};
+    use wasm_opt::{Feature, FeatureBaseline, OptimizationOptions, Pass};
 
     let mut options = match level {
         OptLevel::O0 => OptimizationOptions::new_opt_level_0(),
@@ -64,6 +64,17 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
         OptLevel::Size => OptimizationOptions::new_optimize_for_size(),
         OptLevel::SizeAggressive => OptimizationOptions::new_optimize_for_size_aggressively(),
     };
+
+    // Dream does not emit DWARF; the WAT assembler still produces a name custom section from `$id`
+    // identifiers. Size builds drop that (and producers) so downloadable modules stay compact.
+    options.debug_info(false);
+    let size_build = matches!(level, OptLevel::Size | OptLevel::SizeAggressive);
+    if size_build {
+        options.add_pass(Pass::StripDebug);
+        options.add_pass(Pass::StripProducers);
+        // `--web` defaults to `-Os`; `-Oz` always converges. Extra compile time, smaller code.
+        options.set_converge();
+    }
 
     // Codegen unconditionally emits bulk-memory ops (`memory.fill`/`memory.copy`, see
     // `src/mir/emit/emitter/`) and other post-MVP instructions, so `wasm-opt`'s narrow default

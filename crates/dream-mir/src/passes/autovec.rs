@@ -3,9 +3,7 @@
 
 use super::cfg;
 use super::MirPass;
-use crate::{
-    BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement,
-};
+use crate::{BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::{PrimTy, TyKind, TypeInterner};
 use std::collections::BTreeSet;
 

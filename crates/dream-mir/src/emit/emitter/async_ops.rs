@@ -28,7 +28,6 @@ impl Emitter<'_> {
         // Debug-info: the coroutine is finishing, so pop its shadow call-stack frame. This is the only
         // exit path (awaits return without popping), so the frame count stays balanced.
         self.emit_debug_exit();
-        self.emit_gc_root_epilogue();
         match value {
             Some(v) => {
                 let wt = self.wasm_ty(self.operand_ty(v));
@@ -66,6 +65,7 @@ impl Emitter<'_> {
             }
         }
         self.line("     (call $dream_complete)");
+        self.emit_gc_root_epilogue();
         self.line("     (i32.const 0)");
         self.line("     (return)");
     }
@@ -124,6 +124,9 @@ impl Emitter<'_> {
             let root_locals = self.gc_root_locals.clone();
             for li in root_locals {
                 self.line(&format!(" (local $__rg{} i32)", li));
+            }
+            if self.async_parent.is_some() {
+                self.line(" (local $__rg_self i32)");
             }
         }
 
@@ -261,6 +264,22 @@ impl Emitter<'_> {
                 self.line("     (local.get $__scratch)");
                 self.line(&format!("     (i32.store offset={})", F_AWAITING));
                 self.line("     (local.get $self)");
+                self.line(&format!("     (i32.const {})", F_AWAITING));
+                self.line("     (i32.add)");
+                self.line("     (local.get $__scratch)");
+                self.line("     (call $write_barrier)");
+                // Native host `extern async` settles before returning; continue this poll so the
+                // result string stays in the root table instead of surviving only in F_RESULT
+                // across a trip through the scheduler (worker-shared nursery collections).
+                self.line("     (local.get $__scratch)");
+                self.line("     (i32.load offset=4)");
+                self.line("     (if (then");
+                self.line(&format!(
+                    "       (i32.const {}) (local.set $__pc) (br $__loop)",
+                    resume.0
+                ));
+                self.line("     ))");
+                self.line("     (local.get $self)");
                 self.line(&format!("     (i32.const {})", resume.0));
                 self.line(&format!("     (i32.store offset={})", F_STATE));
                 for (idx, _, wt) in &slots.entries {
@@ -273,6 +292,13 @@ impl Emitter<'_> {
                     self.line("     (local.get $self)");
                     self.line(&format!("     (local.get ${})", idx));
                     self.line(&format!("     ({} offset={})", slot_store(wt), off));
+                    if slots.ref_locals.contains(idx) {
+                        self.line("     (local.get $self)");
+                        self.line(&format!("     (i32.const {})", off));
+                        self.line("     (i32.add)");
+                        self.line(&format!("     (local.get ${})", idx));
+                        self.line("     (call $write_barrier)");
+                    }
                 }
                 self.line("     (local.get $self)");
                 self.line("     (local.get $__scratch)");

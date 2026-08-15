@@ -3,6 +3,237 @@
 (global $rq_tail (mut i32) (i32.const 0))
 (global $timer_head (mut i32) (i32.const 0))
 (global $vclock (mut i32) (i32.const 0))
+;; Owner instance only: write-through so a worker Gen0 can trace the owner's queues
+;; (WASM globals are per-instance; linear memory is shared).
+(global $__sched_publish (mut i32) (i32.const 0))
+(func $rq_head_get (result i32)
+    global.get $rq_head)
+(func $rq_head_set (param $v i32)
+    local.get $v
+    global.set $rq_head
+    global.get $__sched_publish
+    if
+        i32.const {RQ_HEAD_ADDR}
+        local.get $v
+        i32.store
+    end)
+(func $rq_tail_get (result i32)
+    global.get $rq_tail)
+(func $rq_tail_set (param $v i32)
+    local.get $v
+    global.set $rq_tail
+    global.get $__sched_publish
+    if
+        i32.const {RQ_TAIL_ADDR}
+        local.get $v
+        i32.store
+    end)
+(func $timer_head_get (result i32)
+    global.get $timer_head)
+(func $timer_head_set (param $v i32)
+    local.get $v
+    global.set $timer_head
+    global.get $__sched_publish
+    if
+        i32.const {TIMER_HEAD_ADDR}
+        local.get $v
+        i32.store
+    end)
+(func $vclock_get (result i32)
+    global.get $vclock)
+(func $vclock_set (param $v i32)
+    local.get $v
+    global.set $vclock
+    global.get $__sched_publish
+    if
+        i32.const {VCLOCK_ADDR}
+        local.get $v
+        i32.store
+    end)
+(func $wb_off (param $obj i32) (param $off i32) (param $val i32)
+    local.get $obj
+    local.get $off
+    i32.add
+    local.get $val
+    call $write_barrier)
+(func $gc_update_or_mark (param $slot i32)
+    global.get $gc_trace_mode
+    i32.const 1
+    i32.eq
+    if
+        local.get $slot
+        i32.load
+        call $gc_mark_object
+    else
+        local.get $slot
+        call $gc_update_slot
+    end)
+
+;; Old Futures are not evacuated this Gen0, so `$gc_update_slot` on a slot holding one
+;; does not walk `$F_RESULT`. Young results (worker-reply strings) would otherwise die.
+(func $gc_touch_old_future (param $ptr i32)
+    local.get $ptr
+    i32.eqz
+    br_if 0
+    local.get $ptr
+    call $__gc_in_nursery
+    br_if 0
+    local.get $ptr
+    i32.const 12
+    i32.lt_u
+    br_if 0
+    local.get $ptr
+    call $object_tag
+    br_if 0
+    local.get $ptr
+    i32.const 12
+    i32.sub
+    i32.load
+    i32.const 32
+    i32.le_u
+    br_if 0
+    local.get $ptr
+    i32.const {F_RESULT}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_AWAITING}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_CHILDREN}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_RESULTS}
+    i32.add
+    call $gc_update_or_mark
+)
+
+;; Conservatively update every i32 word in a Future frame (header pointer fields + user slots).
+;; Tag 0 is shared with 8-byte funcboxes; only oversized tag-0 blocks reach here.
+(func $gc_trace_future_frame (param $ptr i32)
+    (local $slot i32)
+    (local $end i32)
+    local.get $ptr
+    i32.eqz
+    br_if 0
+    local.get $ptr
+    i32.const 12
+    i32.sub
+    i32.load
+    i32.const 12
+    i32.sub
+    local.get $ptr
+    i32.add
+    local.set $end
+    local.get $ptr
+    i32.const 8
+    i32.add
+    local.set $slot
+    ;; Pointer fields in the Future header; skip scalars (state/status/poll/kind/counts/due/wide).
+    local.get $ptr
+    i32.const {F_RESULT}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_WAKER}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_AWAITING}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_CHILDREN}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_RESULTS}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_NEXT}
+    i32.add
+    call $gc_update_or_mark
+    local.get $ptr
+    i32.const {F_SLOTS}
+    i32.add
+    local.set $slot
+    (loop $words
+        local.get $slot
+        local.get $end
+        i32.ge_u
+        br_if 1
+        local.get $slot
+        call $gc_update_or_mark
+        local.get $slot
+        i32.load
+        call $gc_touch_old_future
+        local.get $slot
+        i32.const 4
+        i32.add
+        local.set $slot
+        br $words
+    )
+)
+
+(func $gc_scan_future_chain (param $f i32)
+    (local $w i32)
+    (loop $q
+        local.get $f
+        i32.eqz
+        br_if 1
+        local.get $f
+        call $gc_trace_future_frame
+        local.get $f
+        i32.load offset={F_WAKER}
+        local.set $w
+        local.get $w
+        if
+            local.get $w
+            call $gc_trace_future_frame
+        end
+        local.get $f
+        i32.load offset={F_AWAITING}
+        local.set $w
+        local.get $w
+        if
+            local.get $w
+            call $gc_trace_future_frame
+        end
+        local.get $f
+        i32.const {F_NEXT}
+        i32.add
+        call $gc_update_slot
+        local.get $f
+        i32.load offset={F_NEXT}
+        local.set $f
+        br $q
+    )
+)
+
+(func $gc_scan_scheduler_roots
+    (local $f i32)
+    call $rq_head_get
+    call $gc_forward
+    local.set $f
+    local.get $f
+    call $rq_head_set
+    call $rq_tail_get
+    call $gc_forward
+    call $rq_tail_set
+    local.get $f
+    call $gc_scan_future_chain
+    call $timer_head_get
+    call $gc_forward
+    local.set $f
+    local.get $f
+    call $timer_head_set
+    local.get $f
+    call $gc_scan_future_chain
+)
+
 (func $dream_new_future (param $size i32) (param $poll i32) (param $kind i32) (result i32)
     (local $p i32)
     local.get $size
@@ -34,21 +265,25 @@
     local.get $f
     i32.const 0
     i32.store offset={F_NEXT}
-    global.get $rq_tail
+    call $rq_tail_get
     i32.eqz
     (if
         (then
             local.get $f
-            global.set $rq_head
+            call $rq_head_set
             local.get $f
-            global.set $rq_tail
+            call $rq_tail_set
         )
         (else
-            global.get $rq_tail
+            call $rq_tail_get
             local.get $f
             i32.store offset={F_NEXT}
+            call $rq_tail_get
+            i32.const {F_NEXT}
             local.get $f
-            global.set $rq_tail
+            call $wb_off
+            local.get $f
+            call $rq_tail_set
         )
     )
 )
@@ -60,6 +295,10 @@
     local.get $f
     local.get $res
     i32.store offset={F_RESULT}
+    local.get $f
+    i32.const {F_RESULT}
+    local.get $res
+    call $wb_off
     local.get $f
     i32.const 1
     i32.store offset={F_STATUS}
@@ -97,6 +336,10 @@
     local.get $parent
     i32.store offset={F_WAKER}
     local.get $child
+    i32.const {F_WAKER}
+    local.get $parent
+    call $wb_off
+    local.get $child
     i32.load offset={F_STATUS}
     (if
         (then
@@ -126,17 +369,17 @@
     i32.const 0
     i32.store offset={F_WAKER}
     ;; unlink $c from the timer list so a pending timer never fires it
-    global.get $timer_head
+    call $timer_head_get
     local.get $c
     i32.eq
     (if
         (then
             local.get $c
             i32.load offset={F_NEXT}
-            global.set $timer_head
+            call $timer_head_set
         )
         (else
-            global.get $timer_head
+            call $timer_head_get
             local.set $cur
             (block $unlinked
                 (loop $scan
@@ -170,14 +413,14 @@
     (local $due i32)
     (local $cur i32)
     (local $nxt i32)
-    global.get $vclock
+    call $vclock_get
     local.get $delay
     i32.add
     local.set $due
     local.get $f
     local.get $due
     i32.store offset={F_DUE}
-    global.get $timer_head
+    call $timer_head_get
     i32.eqz
     (if
         (then
@@ -185,25 +428,25 @@
             i32.const 0
             i32.store offset={F_NEXT}
             local.get $f
-            global.set $timer_head
+            call $timer_head_set
             return
         )
     )
-    global.get $timer_head
+    call $timer_head_get
     i32.load offset={F_DUE}
     local.get $due
     i32.gt_s
     (if
         (then
             local.get $f
-            global.get $timer_head
+            call $timer_head_get
             i32.store offset={F_NEXT}
             local.get $f
-            global.set $timer_head
+            call $timer_head_set
             return
         )
     )
-    global.get $timer_head
+    call $timer_head_get
     local.set $cur
     (block $done
         (loop $scan
@@ -238,20 +481,20 @@
         (loop $outer
             (block $drained
                 (loop $drain
-                    global.get $rq_head
+                    call $rq_head_get
                     local.set $f
                     local.get $f
                     i32.eqz
                     br_if $drained
                     local.get $f
                     i32.load offset={F_NEXT}
-                    global.set $rq_head
-                    global.get $rq_head
+                    call $rq_head_set
+                    call $rq_head_get
                     i32.eqz
                     (if
                         (then
                             i32.const 0
-                            global.set $rq_tail
+                            call $rq_tail_set
                         )
                     )
                     local.get $f
@@ -272,27 +515,27 @@
                     br $drain
                 )
             )
-            global.get $timer_head
+            call $timer_head_get
             i32.eqz
             br_if $alldone
-            global.get $timer_head
+            call $timer_head_get
             i32.load offset={F_DUE}
-            global.set $vclock
+            call $vclock_set
             (block $timers_done
                 (loop $tloop
-                    global.get $timer_head
+                    call $timer_head_get
                     local.set $t
                     local.get $t
                     i32.eqz
                     br_if $timers_done
                     local.get $t
                     i32.load offset={F_DUE}
-                    global.get $vclock
+                    call $vclock_get
                     i32.gt_s
                     br_if $timers_done
                     local.get $t
                     i32.load offset={F_NEXT}
-                    global.set $timer_head
+                    call $timer_head_set
                     local.get $t
                     i32.const 0
                     i32.store offset={F_NEXT}

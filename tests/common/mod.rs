@@ -32,10 +32,7 @@ pub fn analyze_code(code: &str) -> DiagnosticBag {
 /// resulting HIR and type interner to `emit`, returning whatever it produces. This is the shared
 /// front half — parse -> analyze -> assert clean -> borrow the interner — that every emit helper
 /// below otherwise duplicated; each now differs only in the `emit` closure (how it lowers/runs).
-pub fn compile_test_pipeline<R>(
-    code: &str,
-    emit: impl FnOnce(&Hir, &TypeInterner) -> R,
-) -> R {
+pub fn compile_test_pipeline<R>(code: &str, emit: impl FnOnce(&Hir, &TypeInterner) -> R) -> R {
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(code.to_string());
     let parse_arena = bumpalo::Bump::new();
@@ -101,8 +98,8 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
     let config = host::threaded_wasm_config();
     let engine = Engine::new(&config).expect("engine should build");
     let module = Module::new(&engine, &wasm).expect("module should compile");
-    let shared_mem = host::shared_memory_for(&engine, &module)
-        .expect("module should import env.memory");
+    let shared_mem =
+        host::shared_memory_for(&engine, &module).expect("module should import env.memory");
 
     let out = Arc::new(Mutex::new(String::new()));
     let mut store = Store::new(&engine, out.clone());
@@ -156,7 +153,11 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
             "env",
             "print_string",
             |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
-                let mem = c.get_export("memory").unwrap().into_shared_memory().unwrap();
+                let mem = c
+                    .get_export("memory")
+                    .unwrap()
+                    .into_shared_memory()
+                    .unwrap();
                 let s = host::read_string_from_memory(&mem, ptr);
                 c.data().lock().unwrap().push_str(&s);
             },

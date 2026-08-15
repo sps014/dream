@@ -11,7 +11,7 @@ use super::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Termin
 use dream_hir::{scalar_size, LayoutTable};
 use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 /// Runtime type tag for reference-element arrays passed to `$malloc` (see [`super::abi::TAG_ARRAY`]).
@@ -148,10 +148,10 @@ pub mod debug_map;
 mod emitter;
 mod js_marshal;
 mod module;
-mod safepoint;
 mod protocol;
 mod release;
 mod runtime;
+mod safepoint;
 mod strings;
 mod tables;
 mod types;
@@ -165,8 +165,8 @@ use emitter::*;
 use js_marshal::*;
 use protocol::*;
 use release::*;
-use safepoint::*;
 use runtime::*;
+use safepoint::*;
 use strings::*;
 use tables::*;
 use types::*;

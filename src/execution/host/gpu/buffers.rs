@@ -148,7 +148,11 @@ pub fn copy(src_id: i32, dst_id: i32, src_off: i32, dst_off: i32, size: i32) {
         }
     }
 
-    let src = st.buffers.get(&src_id).map(|b| b.cpu.clone()).unwrap_or_default();
+    let src = st
+        .buffers
+        .get(&src_id)
+        .map(|b| b.cpu.clone())
+        .unwrap_or_default();
     let dst = st.buffers.entry(dst_id).or_insert_with(|| BufEntry {
         cpu: Vec::new(),
         gpu: None,
@@ -177,8 +181,7 @@ pub fn ensure_gpu_buffer(
     entry: &mut BufEntry,
     extra: wgpu::BufferUsages,
 ) -> Result<bool, String> {
-    let needed =
-        entry.usage | extra | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC;
+    let needed = entry.usage | extra | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC;
     entry.usage = needed;
     let size = entry.cpu.len().max(4) as u64;
     let size = (size + 3) & !3;
@@ -186,9 +189,10 @@ pub fn ensure_gpu_buffer(
         entry.cpu.resize(size as usize, 0);
     }
 
-    let can_reuse = entry.gpu.as_ref().is_some_and(|b| {
-        b.size() >= size && entry.created_usage.contains(needed)
-    });
+    let can_reuse = entry
+        .gpu
+        .as_ref()
+        .is_some_and(|b| b.size() >= size && entry.created_usage.contains(needed));
     if can_reuse {
         if entry.dirty_cpu {
             if let Some(gpu) = entry.gpu.as_ref() {

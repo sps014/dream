@@ -10,8 +10,8 @@
 //! the `.wat`/`.wasm`.
 
 use crate::debug_schema::{EnumMemberDesc, FieldDesc, ScalarKind, TypeDesc, VariantDesc};
-use dream_hir::{scalar_size, LayoutTable};
 use crate::{Mir, MirFunction, Statement};
+use dream_hir::{scalar_size, LayoutTable};
 use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 use std::collections::HashMap;
 
@@ -407,10 +407,7 @@ fn type_to_json(t: &TypeDesc) -> String {
         }
         TypeDesc::Tuple { fields } => {
             let fs: Vec<String> = fields.iter().map(field_to_json).collect();
-            format!(
-                "{{\"kind\": \"tuple\", \"fields\": [{}]}}",
-                fs.join(",")
-            )
+            format!("{{\"kind\": \"tuple\", \"fields\": [{}]}}", fs.join(","))
         }
         TypeDesc::Struct {
             name,

@@ -4,7 +4,7 @@
 // Dream code compiled straight to WebAssembly - there is no hand-written JavaScript logic behind
 // this player, only the shared generic loader in `runtime/dream.js` (see music_player.html).
 //
-//   cargo run -- sample/music_player/music_player.dream
+//   cargo run -- --release --runtime --web -Oz sample/music_player/music_player.dream
 //
 // See README.md in this folder for how to run it in a browser.
 

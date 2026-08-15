@@ -174,9 +174,7 @@ fn prune_functions(mir: &mut Mir) {
                             match rv {
                                 Rvalue::New { ty, .. }
                                 | Rvalue::UnionNew { ty, .. }
-                                | Rvalue::Tuple { ty, .. } => {
-                                    type_worklist.push(*ty)
-                                }
+                                | Rvalue::Tuple { ty, .. } => type_worklist.push(*ty),
                                 _ => {}
                             }
                         }
@@ -332,9 +330,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             }
             collect_global_reads_rvalue(rv, out);
         }
-        Statement::Panic(o) => {
-            collect_global_reads_operand(o, out)
-        }
+        Statement::Panic(o) => collect_global_reads_operand(o, out),
         Statement::Call { args, .. } => args
             .iter()
             .for_each(|a| collect_global_reads_operand(a, out)),
@@ -431,7 +427,10 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             collect_global_reads_operand(array, out);
             collect_global_reads_operand(new_len, out);
         }
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CharAt(a, b)
+        | Rvalue::ByteAt(a, b)
+        | Rvalue::Concat(a, b) => {
             collect_global_reads_operand(a, out);
             collect_global_reads_operand(b, out);
         }
@@ -480,9 +479,9 @@ fn collect_global_reads_terminator(t: &Terminator, out: &mut HashSet<Global>) {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
             collect_global_reads_operand(o, out)
         }
-        Terminator::TailCall { args, .. } => {
-            args.iter().for_each(|a| collect_global_reads_operand(a, out))
-        }
+        Terminator::TailCall { args, .. } => args
+            .iter()
+            .for_each(|a| collect_global_reads_operand(a, out)),
         _ => {}
     }
 }

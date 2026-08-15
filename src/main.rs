@@ -1,8 +1,8 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
-use dream_abi::attributes::CompileTargets;
 use dream::execution::wasm_runner::execute_wasm;
+use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -102,7 +102,10 @@ fn main() -> ExitCode {
                     web: true,
                 },
                 other => {
-                    error!("unknown --target '{}': expected native, node, or web", other);
+                    error!(
+                        "unknown --target '{}': expected native, node, or web",
+                        other
+                    );
                     return ExitCode::FAILURE;
                 }
             });
@@ -124,7 +127,10 @@ fn main() -> ExitCode {
                     web: true,
                 },
                 other => {
-                    error!("unknown --target '{}': expected native, node, or web", other);
+                    error!(
+                        "unknown --target '{}': expected native, node, or web",
+                        other
+                    );
                     return ExitCode::FAILURE;
                 }
             });
@@ -307,7 +313,11 @@ fn main() -> ExitCode {
     if let Some(parent) = Path::new(&out_path).parent() {
         if !parent.as_os_str().is_empty() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-                error!("could not create output directory {}: {}", parent.display(), e);
+                error!(
+                    "could not create output directory {}: {}",
+                    parent.display(),
+                    e
+                );
                 return ExitCode::FAILURE;
             }
         }
@@ -368,7 +378,9 @@ fn print_usage(program: &str) {
     );
     error!("  --web                 With --runtime: browser-targeted *.web.runtime.js");
     error!("  --node                With --runtime: Node-targeted *.node.runtime.js");
-    error!("  --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR");
+    error!(
+        "  --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR"
+    );
     error!("  -h, --help            Show this help message");
     error!("  run                   Execute the compiled module after a successful build");
     error!("  test                  Discover and run @test functions in a file or directory");
@@ -376,9 +388,18 @@ fn print_usage(program: &str) {
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
     error!(r"Example: {} test tests/", program);
     error!(r"Example: {} --filter adds test tests/math.dream", program);
-    error!(r"Example: {} --release run src/sample/test_arrays.dream", program);
-    error!(r"Example: {} --runtime --web sample/interop/js.dream", program);
-    error!(r"Example: {} --runtime --node sample/interop/js.dream", program);
+    error!(
+        r"Example: {} --release run src/sample/test_arrays.dream",
+        program
+    );
+    error!(
+        r"Example: {} --runtime --web sample/interop/js.dream",
+        program
+    );
+    error!(
+        r"Example: {} --runtime --node sample/interop/js.dream",
+        program
+    );
     error!(
         r"Example: {} --runtime --web --node sample/interop/js.dream",
         program

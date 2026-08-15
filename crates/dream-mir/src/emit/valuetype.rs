@@ -462,14 +462,10 @@ fn emit_field_glue(
         out.push_str(" (i32.load)");
         match op {
             GlueOp::Retain => {
-                out.push_str(
-                    " (local.tee $h) (if (then (local.get $h) (call $js_retain)))\n",
-                );
+                out.push_str(" (local.tee $h) (if (then (local.get $h) (call $js_retain)))\n");
             }
             GlueOp::Drop => {
-                out.push_str(
-                    " (local.tee $h) (if (then (local.get $h) (call $js_unregister)))\n",
-                );
+                out.push_str(" (local.tee $h) (if (then (local.get $h) (call $js_unregister)))\n");
             }
         }
     } else if interner.is_reference(f.ty) || interner.is_gc_tracked(f.ty) {

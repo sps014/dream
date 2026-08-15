@@ -46,12 +46,7 @@ pub(super) fn cast_wgsl_if_needed(rendered: String, got: &str, want: &str) -> St
 
 pub(super) fn common_numeric_wgsl_ty(lt: &str, rt: &str) -> String {
     if lt.starts_with("array<") || rt.starts_with("array<") {
-        return if lt.starts_with("array<") {
-            lt
-        } else {
-            rt
-        }
-        .into();
+        return if lt.starts_with("array<") { lt } else { rt }.into();
     }
     if lt == "f32" || rt == "f32" {
         "f32".into()
@@ -225,7 +220,8 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
         ExpressionNode::IndexAccess(arr, _) => {
             if let ExpressionNode::Identifier(name) = &**arr {
                 if let Some(t) = ctx.lookup_local(&name.text) {
-                    if let Some(inner) = t.strip_prefix("array<").and_then(|s| s.strip_suffix('>')) {
+                    if let Some(inner) = t.strip_prefix("array<").and_then(|s| s.strip_suffix('>'))
+                    {
                         return inner.to_string();
                     }
                     return t;
@@ -258,7 +254,7 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                 return ft;
             }
             "i32".into()
-        },
+        }
         ExpressionNode::Identifier(name) => {
             if let Some(t) = ctx.lookup_local(&name.text) {
                 return t;

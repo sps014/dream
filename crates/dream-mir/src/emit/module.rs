@@ -10,7 +10,8 @@ struct ModuleTables {
     sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
     strings: IndexMap<String, u32>,
     tags: HashMap<TypeId, i32>,
-    ftable: HashMap<(DefId, Vec<TypeId>), usize>,
+    indirect: IndirectTable,
+    defined: HashSet<(DefId, Vec<TypeId>)>,
     value_glue: std::collections::HashSet<TypeId>,
     non_safepoint: std::collections::HashSet<(DefId, Vec<TypeId>)>,
 }
@@ -25,7 +26,8 @@ fn build_tables(mir: &crate::Mir, interner: &TypeInterner, locate_panics: bool) 
         sigs: signature_table(mir, interner),
         strings: string_table(mir, interner, locate_panics),
         tags: struct_tags(mir),
-        ftable: func_table(mir),
+        indirect: func_table(mir),
+        defined: defined_functions(mir),
         value_glue: value_glue_types(mir, interner),
         non_safepoint: non_safepoint_functions(mir),
     }
@@ -39,7 +41,8 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
         sigs,
         strings,
         tags,
-        ftable,
+        indirect,
+        defined,
         value_glue,
         non_safepoint,
     } = build_tables(mir, interner, true);
@@ -54,7 +57,8 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
             &mir.layouts,
             &strings,
             &tags,
-            &ftable,
+            &indirect.slots,
+            &defined,
             &value_glue,
             &global_tys,
             &non_safepoint,
@@ -70,18 +74,26 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
 /// Emits a whole MIR program as a single `(module ...)`, exporting every (non-instance) function
 /// under its source name. This is the self-contained unit the driver hands to the WASM assembler.
 pub fn emit_module(mir: &crate::Mir, interner: &TypeInterner, debug: bool) -> String {
-    emit_module_with_debug(mir, interner, debug, false).0
+    let has_main = mir
+        .functions
+        .iter()
+        .any(|f| f.instance.is_empty() && f.name == crate::abi::ENTRY_FN);
+    // Snippets without `main` (unit tests) still export surviving user functions so WAT DCE
+    // cannot delete the bodies under inspection. Real binaries pass `export_user_fns` explicitly.
+    emit_module_with_debug(mir, interner, debug, false, debug || !has_main).0
 }
 
 /// Like [`emit_module`], but when `debug_info` is set it also instruments every function with the
 /// `dream_debug` source-line hooks + local spilling and returns the [`DebugModule`] source map
 /// describing them. When `debug_info` is false the returned map is `None` and the WAT is identical
-/// to [`emit_module`].
+/// to [`emit_module`]. `export_user_fns` exports every non-generic user function (debug / `-g` /
+/// `--crate-type lib`); release binaries export only `main` plus the host ABI.
 pub fn emit_module_with_debug(
     mir: &crate::Mir,
     interner: &TypeInterner,
     debug: bool,
     debug_info: bool,
+    export_user_fns: bool,
 ) -> (String, Option<crate::emit::debug_map::DebugModule>) {
     // Located (file:line) panic strings are useful while debugging; release builds (`!debug &&
     // !debug_info`) share four compact base messages instead to keep the data section small.
@@ -91,7 +103,8 @@ pub fn emit_module_with_debug(
         sigs,
         strings,
         tags,
-        ftable,
+        indirect,
+        defined,
         value_glue,
         non_safepoint,
     } = build_tables(mir, interner, locate_panics);
@@ -144,13 +157,13 @@ pub fn emit_module_with_debug(
 
     // `call_indirect` signature types (declared before use), plus the function table + its export.
     emit_func_signatures(&mut out, interner);
-    emit_func_table(&mut out, mir);
+    emit_func_table(&mut out, &indirect);
 
     // Interface dispatch tables live in linear memory just past the interned strings and any
     // value-struct global BSS; the heap bump pointer then starts past those.
     let used_slots = used_iface_slots(mir);
     let (vg_addrs, static_end) = value_global_addrs(mir, interner, heap_base(&strings));
-    let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots);
+    let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots, &indirect.slots);
 
     // Linear memory + allocator runtime state. Layout (low -> high): static data (strings +
     // value-struct global BSS + itables) | shadow-stack region (grows down) | heap (grows up).
@@ -190,11 +203,7 @@ pub fn emit_module_with_debug(
     // address of their permanent BSS slot (constructed in `$__dream_init`).
     for g in &mir.globals {
         if let Some(&addr) = vg_addrs.get(&g.id.0) {
-            let _ = writeln!(
-                out,
-                "(global $g{} (mut i32) (i32.const {}))",
-                g.id.0, addr
-            );
+            let _ = writeln!(out, "(global $g{} (mut i32) (i32.const {}))", g.id.0, addr);
         } else {
             let zero = zero_literal(wasm_ty_of(interner, g.ty));
             let _ = writeln!(
@@ -224,27 +233,42 @@ pub fn emit_module_with_debug(
         module_needs_threads(mir),
         strings[""],
         module_has_js_fields(mir, interner),
+        module_has_simd(mir),
+        crate::async_emit::module_has_async(&mir.functions),
     ));
     out.push('\n');
-    out.push_str(RUNTIME_WEAK);
+    if module_has_weak(mir) {
+        out.push_str(RUNTIME_WEAK);
+    } else {
+        // GC always calls `$weak_clear_all` from sweep/finalizer paths; a nop stub keeps those
+        // calls valid without splicing the full weak side-table runtime.
+        out.push_str("(global $weak_list_head (mut i32) (i32.const 0))\n");
+        out.push_str("(func $weak_clear_all (param $target i32))\n");
+    }
     out.push('\n');
     out.push_str(RUNTIME_CLOSURE);
     out.push('\n');
-    out.push_str(&RUNTIME_SYNC.replace(
-        "{THREAD_ID_COUNTER_ADDR}",
-        &crate::abi::THREAD_ID_COUNTER_ADDR.to_string(),
-    ));
-    out.push('\n');
+    if module_needs_sync(mir) {
+        out.push_str(&RUNTIME_SYNC.replace(
+            "{THREAD_ID_COUNTER_ADDR}",
+            &crate::abi::THREAD_ID_COUNTER_ADDR.to_string(),
+        ));
+        out.push('\n');
+    }
     if crate::async_emit::module_has_async(&mir.functions) {
         out.push_str(&crate::async_emit::async_runtime_wat());
         out.push('\n');
     }
-    out.push_str(&to_string_runtime(&strings));
-    out.push('\n');
+    if module_needs_to_string(mir) {
+        out.push_str(&to_string_runtime(&strings));
+        out.push('\n');
+    }
     out.push_str(RUNTIME_PANIC);
     out.push('\n');
-    emit_object_protocol(&mut out, mir, interner, &strings, &tags);
-    out.push('\n');
+    if module_needs_to_string(mir) {
+        emit_object_protocol(&mut out, mir, interner, &strings, &tags);
+        out.push('\n');
+    }
     emit_js_marshal(&mut out, mir, interner, &strings, &tags);
     out.push('\n');
     emit_gc_funcs(&mut out, mir, interner, &tags, &value_trace, &value_glue);
@@ -269,7 +293,7 @@ pub fn emit_module_with_debug(
     // Interface itable data segments (tag-indexed method tables), past the string region.
     out.push_str(&iface.data);
 
-    let polls = crate::async_emit::poll_indices(&mir.functions);
+    let polls = &indirect.polls;
     let mut has_init = false;
     for f in &mir.functions {
         if f.is_async {
@@ -281,7 +305,8 @@ pub fn emit_module_with_debug(
                 &mir.layouts,
                 &strings,
                 &tags,
-                &ftable,
+                &indirect.slots,
+                &defined,
                 &value_glue,
                 *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
                 debug,
@@ -299,7 +324,8 @@ pub fn emit_module_with_debug(
                 &mir.layouts,
                 &strings,
                 &tags,
-                &ftable,
+                &indirect.slots,
+                &defined,
                 &value_glue,
                 &global_tys,
                 &non_safepoint,
@@ -315,10 +341,7 @@ pub fn emit_module_with_debug(
                 &func_symbol(f),
                 !f.params.is_empty(),
             ));
-        } else if f.instance.is_empty()
-            && f.name == crate::abi::ENTRY_FN
-            && !f.params.is_empty()
-        {
+        } else if f.instance.is_empty() && f.name == crate::abi::ENTRY_FN && !f.params.is_empty() {
             // `main(args: string[])`: the exported entry takes no args, so wrap the real `main` with a
             // `()` shim that passes an empty `string[]` (a zero-length, TAG_ARRAY block).
             let _ = writeln!(
@@ -327,68 +350,43 @@ pub fn emit_module_with_debug(
                 crate::abi::TAG_ARRAY,
                 func_symbol(f),
             );
-        } else if f.instance.is_empty() {
+        } else if f.instance.is_empty() && (export_user_fns || f.name == crate::abi::ENTRY_FN) {
             let _ = writeln!(out, "(export \"{}\" (func ${}))", f.name, func_symbol(f));
         }
         out.push('\n');
     }
 
-    // Worker-thread trampoline: given a `fun(string): string` body's funcref index, its closure
-    // environment word (0 for a non-capturing body; an `@shared`-object pointer or a by-value
-    // `CaptureCell`/`object[]` env for a capturing one — see `analyze_lambda`'s `WebWorker` capture
-    // check), and a message string pointer, publish the env to `$g0` (the synthetic
-    // `__closure_env` global every module registers first — see `register_globals` — so a
-    // capturing callee's own prologue reads the right environment on whichever thread invokes it)
-    // then perform one indirect call and return the reply pointer. Emitted for every module (it
-    // only depends on the always-present `$__ft` table and `$g0`) so a freshly instantiated worker
-    // of the same module can be driven from the host (see `src/stdlib/core/webworker.dream`).
-    //
-    // A body's funcref index may name an `async fun`'s *constructor* rather than an ordinary
-    // function (the analyzer allows this specifically for a `WebWorker`/`.map`/`.dispatch` body
-    // argument — see `Analyzer::is_webworker_body_call`); calling it synchronously here would hand
-    // back a raw `Future` frame pointer where the caller expects the real reply value. Every heap
-    // allocation carries a tag except a `Future` frame (`dream_new_future` mallocs with tag `0`,
-    // a value never used by any real Dream type — see `abi::TAG_*`), so that is the exact, cheap
-    // signal to distinguish the two cases: an untagged, non-null result means the call_indirect hit
-    // an async constructor, so drive it to completion (`$dream_run_loop` — sound only because every
-    // native host `async` op resolves synchronously before returning, so one drain pass always
-    // finishes the task; see `docs/language/webworkers.md`'s async-body section for why this does
-    // *not* hold for the browser `Worker` backend) and unwrap its settled `Future.result` in place
-    // of the constructor's own return value. An ordinary (non-async) body's result is already
-    // tagged (`string`, at minimum) and passes straight through untouched.
-    out.push_str("(type $__worker_sig (func (param i32) (result i32)))\n");
-    // `$g0` (the synthetic `__closure_env` global — see `register_globals`) only exists in modules
-    // that went through the full front-end; a handful of backend unit tests assemble a minimal
-    // `Mir` directly (skipping `register_globals` entirely) and have no globals at all, so guard
-    // the env-publishing write on it actually being present rather than assuming it unconditionally.
-    let has_closure_env = mir.globals.iter().any(|g| g.id.0 == 0);
-    // `$dream_run_loop` (and hence a `Future`'s `F_RESULT` slot) only exists once the async runtime
-    // is spliced in (see above) — a module with no `async fun` at all (so no `WebWorker` body could
-    // possibly be one) never needs the drive-to-completion check.
-    let has_async_runtime = crate::async_emit::module_has_async(&mir.functions);
-    let publish_env = if has_closure_env {
-        " local.get $env\n global.set $g0\n"
-    } else {
-        ""
-    };
-    // The raw call: publish the closure env (if any) then one `call_indirect`. Exported as-is for
-    // the browser driver (see `EXPORT_WORKER_INVOKE_RAW`'s doc comment); wrapped below with the
-    // drive-to-completion check for the native driver.
-    let _ = writeln!(
-        out,
-        "(func $__dream_worker_invoke_raw (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n{publish_env} local.get $arg\n local.get $fn\n call_indirect $__ft (type $__worker_sig))"
-    );
-    if has_async_runtime {
+    let needs_workers = module_needs_threads(mir);
+    if needs_workers {
+        // Worker-thread trampoline: given a `fun(string): string` body's funcref index, its closure
+        // environment word, and a message string pointer, publish the env to `$g0` then perform one
+        // indirect call and return the reply pointer. Only modules that import WebWorker host
+        // functions need this (and exporting it would keep the trampoline alive for WAT DCE).
+        out.push_str("(type $__worker_sig (func (param i32) (result i32)))\n");
+        let has_closure_env = mir.globals.iter().any(|g| g.id.0 == 0);
+        let has_async_runtime = crate::async_emit::module_has_async(&mir.functions);
+        let publish_env = if has_closure_env {
+            " local.get $env\n global.set $g0\n"
+        } else {
+            ""
+        };
         let _ = writeln!(
             out,
-            "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n (local $r i32)\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw\n local.set $r\n local.get $r\n i32.const 0\n i32.ne\n local.get $r\n call $object_tag\n i32.eqz\n i32.and\n (if\n  (then\n   call $dream_run_loop\n   local.get $r\n   i32.load offset={}\n   local.set $r\n  )\n )\n local.get $r)",
-            crate::async_emit::F_RESULT,
+            "(func $__dream_worker_invoke_raw (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n{publish_env} local.get $arg\n local.get $fn\n call_indirect $__ft (type $__worker_sig))"
         );
-    } else {
-        let _ = writeln!(
-            out,
-            "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw)"
-        );
+        // `$g0` is an untyped int, so the env pointer is invisible to GC unless we root it for
+        // the whole invoke (including `$dream_run_loop` for async wrappers).
+        if has_async_runtime {
+            let _ = writeln!(
+                out,
+                "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n (local $r i32)\n (local $root i32)\n local.get $env\n call $gc_root_push\n local.set $root\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw\n local.set $r\n local.get $r\n i32.const 0\n i32.ne\n local.get $r\n call $object_tag\n i32.eqz\n i32.and\n (if\n  (then\n   call $dream_run_loop\n   local.get $r\n   i32.load offset={}\n   local.set $r\n  )\n )\n local.get $root\n call $gc_root_pop\n local.get $r)",
+                crate::async_emit::F_RESULT,
+            );
+        } else {
+            out.push_str(
+                "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n (local $r i32)\n (local $root i32)\n local.get $env\n call $gc_root_push\n local.set $root\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw\n local.set $r\n local.get $root\n call $gc_root_pop\n local.get $r)\n",
+            );
+        }
     }
 
     // Every instantiation of this module (the owner, and every `WebWorker` spawned afterward) runs
@@ -405,12 +403,33 @@ pub fn emit_module_with_debug(
         .collect();
     let _ = writeln!(out, "(func $__runtime_init");
     out.push_str("  (local $first i32)\n");
+    if needs_workers {
+        out.push_str("  (local $lane i32)\n");
+    }
     let _ = writeln!(
         out,
         "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  i32.eqz\n  local.set $first\n  local.get $first\n  (if (then\n    i32.const {}\n    call $__gc_init\n  ))\n  call $__gc_cache_bounds",
         crate::abi::NURSERY_START_ADDR,
         heap_base,
         heap_base
+    );
+    if needs_workers {
+        let n_lanes = crate::abi::SHADOW_STACK_SIZE / crate::abi::SHADOW_STACK_LANE_SIZE;
+        let _ = writeln!(
+            out,
+            "  i32.const {}\n  i32.const 1\n  i32.atomic.rmw.add\n  i32.const {}\n  i32.rem_u\n  local.set $lane\n  global.get $__sp\n  local.get $lane\n  i32.const {}\n  i32.mul\n  i32.sub\n  global.set $__sp",
+            crate::abi::SHADOW_STACK_LANE_ADDR,
+            n_lanes,
+            crate::abi::SHADOW_STACK_LANE_SIZE
+        );
+    }
+    if crate::async_emit::module_has_async(&mir.functions) {
+        out.push_str(
+            "  local.get $first\n  (if (then (i32.const 1) (global.set $__sched_publish)))\n",
+        );
+    }
+    out.push_str(
+        "  local.get $first\n  i32.eqz\n  (if (then (i32.const 0) (global.set $__gc_may_collect)))\n",
     );
     if has_init {
         let _ = writeln!(out, "  call ${}", crate::lower::INIT_FN_NAME);
@@ -433,16 +452,18 @@ pub fn emit_module_with_debug(
     let _ = writeln!(out, "(export \"{}\" (memory 0))", abi::EXPORT_MEMORY);
     let _ = writeln!(out, "(export \"{}\" (func $malloc))", abi::EXPORT_MALLOC);
     let _ = writeln!(out, "(export \"{}\" (func $free))", abi::EXPORT_FREE);
-    let _ = writeln!(
-        out,
-        "(export \"{}\" (func $__dream_worker_invoke))",
-        abi::EXPORT_WORKER_INVOKE
-    );
-    let _ = writeln!(
-        out,
-        "(export \"{}\" (func $__dream_worker_invoke_raw))",
-        abi::EXPORT_WORKER_INVOKE_RAW
-    );
+    if needs_workers {
+        let _ = writeln!(
+            out,
+            "(export \"{}\" (func $__dream_worker_invoke))",
+            abi::EXPORT_WORKER_INVOKE
+        );
+        let _ = writeln!(
+            out,
+            "(export \"{}\" (func $__dream_worker_invoke_raw))",
+            abi::EXPORT_WORKER_INVOKE_RAW
+        );
+    }
     if crate::async_emit::module_has_async(&mir.functions) {
         let _ = writeln!(
             out,

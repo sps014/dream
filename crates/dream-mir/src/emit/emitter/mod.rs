@@ -27,6 +27,7 @@ mod value_struct;
 /// this is for layout-free unit tests; the pipeline uses [`emit_program`]/[`emit_module`]).
 pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
     let empty_globals = HashMap::new();
+    let empty_defined = HashSet::new();
     emit_function_with(
         func,
         interner,
@@ -36,6 +37,7 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &IndexMap::new(),
         &HashMap::new(),
         &HashMap::new(),
+        &empty_defined,
         &HashSet::new(),
         &empty_globals,
         &HashSet::new(),
@@ -55,6 +57,7 @@ pub(super) fn emit_function_with(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
     func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
+    defined_funcs: &HashSet<(DefId, Vec<TypeId>)>,
     value_glue: &HashSet<TypeId>,
     global_tys: &HashMap<u32, TypeId>,
     non_safepoint: &HashSet<(DefId, Vec<TypeId>)>,
@@ -71,6 +74,7 @@ pub(super) fn emit_function_with(
         strings,
         tags,
         func_table,
+        defined_funcs,
         value_glue,
         global_tys,
         non_safepoint,
@@ -96,6 +100,7 @@ pub(crate) fn emit_async_poll(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
     ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
+    defined_funcs: &HashSet<(DefId, Vec<TypeId>)>,
     value_glue: &HashSet<TypeId>,
     slots: &AsyncSlots,
     poll_sym: &str,
@@ -119,6 +124,7 @@ pub(crate) fn emit_async_poll(
         strings,
         tags,
         ftable,
+        defined_funcs,
         value_glue,
         &global_tys,
         non_safepoint,
@@ -142,6 +148,9 @@ struct Emitter<'a> {
     strings: &'a IndexMap<String, u32>,
     tags: &'a HashMap<TypeId, i32>,
     func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
+    /// In-module function defs (not host imports). Distinct from [`Self::func_table`], which is the
+    /// sparse `$__ft` map of address-taken functions only.
+    defined_funcs: &'a HashSet<(DefId, Vec<TypeId>)>,
     /// Value-struct types that require retain/drop glue (see [`valuetype`]).
     value_glue: &'a HashSet<TypeId>,
     /// Module global id → type (for value-struct global stores/addresses).
@@ -207,6 +216,7 @@ impl<'a> Emitter<'a> {
         strings: &'a IndexMap<String, u32>,
         tags: &'a HashMap<TypeId, i32>,
         func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
+        defined_funcs: &'a HashSet<(DefId, Vec<TypeId>)>,
         value_glue: &'a HashSet<TypeId>,
         global_tys: &'a HashMap<u32, TypeId>,
         non_safepoint: &'a HashSet<(DefId, Vec<TypeId>)>,
@@ -238,11 +248,14 @@ impl<'a> Emitter<'a> {
         } else {
             function_may_safepoint(func)
         };
+        // Async poll's `$self` (the Future frame) is a WASM param, not a MIR local, so it would
+        // otherwise never be a GC root — `Debug.gc_collect()` then treats the running task as dead
+        // (`async_rc_*` `live_delta=-1`).
         let gc_frame_active = may_safepoint
-            && (!gc_root_locals.is_empty() || !gc_slot_root_offs.is_empty());
-        let has_ref_globals = global_tys
-            .values()
-            .any(|t| interner.is_reference(*t));
+            && (async_parent.is_some()
+                || !gc_root_locals.is_empty()
+                || !gc_slot_root_offs.is_empty());
+        let has_ref_globals = global_tys.values().any(|t| interner.is_reference(*t));
         let scratch = scratch_needs(func, interner, layouts);
         Emitter {
             func,
@@ -253,6 +266,7 @@ impl<'a> Emitter<'a> {
             strings,
             tags,
             func_table,
+            defined_funcs,
             value_glue,
             global_tys,
             frame,
@@ -440,6 +454,9 @@ impl Emitter<'_> {
                 "     (local.get ${li}) (call $gc_root_push) (local.set $__rg{li})"
             ));
         }
+        if self.async_parent.is_some() {
+            self.line("     (local.get $self) (call $gc_root_push) (local.set $__rg_self)");
+        }
     }
 
     fn emit_gc_root_epilogue(&mut self) {
@@ -479,15 +496,18 @@ impl Emitter<'_> {
         if !self.gc_frame_active && !self.has_ref_globals {
             return;
         }
-        self.line(
-            "     (global.get $__gc_epoch) (local.get $__gc_epoch) (i32.ne) (if (then",
-        );
+        self.line("     (global.get $__gc_epoch) (local.get $__gc_epoch) (i32.ne) (if (then");
         if self.gc_frame_active {
             let root_locals = self.gc_root_locals.clone();
             for li in root_locals {
                 self.line(&format!(
                     "       (global.get $__gc_root_table) (local.get $__rg{li}) (i32.const 2) (i32.shl) (i32.add) (i32.load) (local.set ${li})"
                 ));
+            }
+            if self.async_parent.is_some() {
+                self.line(
+                    "       (global.get $__gc_root_table) (local.get $__rg_self) (i32.const 2) (i32.shl) (i32.add) (i32.load) (local.set $self)",
+                );
             }
         }
         if self.has_ref_globals {
@@ -875,7 +895,10 @@ fn scratch_needs(
 
 fn scan_rvalue(n: &mut ScratchNeeds, rv: &Rvalue) {
     match rv {
-        Rvalue::New { .. } | Rvalue::UnionNew { .. } | Rvalue::ArrayLit { .. } | Rvalue::Cast(_, _, _) => {
+        Rvalue::New { .. }
+        | Rvalue::UnionNew { .. }
+        | Rvalue::ArrayLit { .. }
+        | Rvalue::Cast(_, _, _) => {
             n.obj = true;
         }
         Rvalue::ArrayNew { .. } => {
@@ -893,6 +916,15 @@ fn scan_rvalue(n: &mut ScratchNeeds, rv: &Rvalue) {
             n.src = true;
         }
         Rvalue::JsCall { .. } => n.jsp = true,
+        // Value tuples store reference/js fields through `$__rel`/`$__src` without going through
+        // `$__obj` (`construct_value_tuple`). UnionNew already sets `obj`, which implies those
+        // scratches.
+        Rvalue::Tuple { .. } => {
+            n.rel = true;
+            n.src = true;
+        }
+        // `enum.to_string()` parks the discriminant in `$__len` while building the nested select.
+        Rvalue::EnumName { .. } => n.len = true,
         _ => {}
     }
 }
@@ -937,18 +969,16 @@ fn scan_place_store(
                 n.slot = true;
             }
         }
-        Place::Index { base, .. } => {
-            match interner.kind(func.local_ty(*base)) {
-                TyKind::Array(e)
-                    if interner.is_reference(*e) || matches!(interner.kind(*e), TyKind::Js) =>
-                {
-                    n.slot = true;
-                    n.src = true;
-                    n.rel = true;
-                }
-                _ => {}
+        Place::Index { base, .. } => match interner.kind(func.local_ty(*base)) {
+            TyKind::Array(e)
+                if interner.is_reference(*e) || matches!(interner.kind(*e), TyKind::Js) =>
+            {
+                n.slot = true;
+                n.src = true;
+                n.rel = true;
             }
-        }
+            _ => {}
+        },
         Place::Deref { elem_ty, .. } => {
             if interner.is_reference(*elem_ty) || matches!(interner.kind(*elem_ty), TyKind::Js) {
                 n.slot = true;

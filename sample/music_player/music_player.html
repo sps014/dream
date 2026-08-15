@@ -360,7 +360,12 @@
     </main>
 
     <script type="module">
-      import { run } from "../../runtime/dream.js";
+      let run;
+      try {
+        ({ run } = await import("./music_player.web.runtime.js"));
+      } catch (_) {
+        ({ run } = await import("../../runtime/dream.js"));
+      }
       await run("music_player.wasm");
     </script>
   </body>

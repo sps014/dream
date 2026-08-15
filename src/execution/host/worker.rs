@@ -188,8 +188,7 @@ fn store_write_string(
     if base + STRING_UTF8 + bytes.len() > data.len() {
         return None;
     }
-    data[base..base + LEN_PREFIX as usize]
-        .copy_from_slice(&(bytes.len() as i32).to_le_bytes());
+    data[base..base + LEN_PREFIX as usize].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
     data[base + LEN_PREFIX as usize..base + STRING_HEADER as usize]
         .copy_from_slice(&(s.chars().count() as i32).to_le_bytes());
     data[base + STRING_UTF8..base + STRING_UTF8 + bytes.len()].copy_from_slice(bytes);

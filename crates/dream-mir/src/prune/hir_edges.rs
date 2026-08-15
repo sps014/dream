@@ -16,6 +16,11 @@ pub(crate) struct HirEdges {
     /// `(iface_id, method_slot)` of every interface call, so reachability can keep the concrete
     /// implementations dispatched through it.
     pub iface_calls: Vec<(usize, usize)>,
+    /// First-class function values (`Binding::Func` / `Rvalue::FuncRef`), distinct from call
+    /// targets — only these need a `$__ft` slot.
+    pub funcrefs: Vec<FnKey>,
+    /// `print` / `to_string` / `hash_code` in the body, so the emitter can splice object/format WAT.
+    pub needs_format: bool,
 }
 
 pub(crate) fn hir_body_edges(body: &[dream_hir::HStmt], out: &mut HirEdges) {
@@ -164,19 +169,19 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         | K::ArrayLen(x)
         | K::StrLen(x)
         | K::StrByteSize(x)
-        | K::HashCode(x)
-        | K::ToString(x)
         | K::EnumName { value: x, .. }
         | K::ArrayNew { len: x, .. }
         | K::ToBytes(x)
         | K::FromBytes(x)
-        | K::Cast(x)
         | K::Await(x)
         | K::Discriminant(x)
         | K::UnionField { base: x, .. }
         | K::IsType { value: x, .. }
-        | K::ForceFree(x)
-        | K::Print { arg: x, .. } => hir_expr_edges(x, out),
+        | K::ForceFree(x) => hir_expr_edges(x, out),
+        K::Cast(x) | K::HashCode(x) | K::ToString(x) | K::Print { arg: x, .. } => {
+            out.needs_format = true;
+            hir_expr_edges(x, out);
+        }
         K::ArrayRealloc { array, new_len, .. } => {
             hir_expr_edges(array, out);
             hir_expr_edges(new_len, out);
@@ -235,7 +240,9 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         // from these HIR edges, so record the callee here or it would be pruned and its funcref
         // slot would be missing from the function table.
         K::Var(dream_hir::Binding::Func(callee)) => {
-            out.callees.push((callee.def, callee.instance.clone()))
+            let key = (callee.def, callee.instance.clone());
+            out.callees.push(key.clone());
+            out.funcrefs.push(key);
         }
         K::IntLit(_)
         | K::FloatLit(_)

@@ -11,13 +11,13 @@
 //!   * [`console`]  - `src/stdlib/system/system.dream`'s `readLine`/`readKey`/`exit` (the `crossterm` crate).
 //!   * [`datetime`] - `src/stdlib/system/datetime.dream`'s wall clock + local timezone offset (the `chrono` crate).
 
-mod console;
 #[cfg(feature = "c-ffi")]
 mod c_ffi;
-#[cfg(feature = "c-ffi")]
-mod ffi_helpers;
+mod console;
 mod crypto;
 mod datetime;
+#[cfg(feature = "c-ffi")]
+mod ffi_helpers;
 mod file;
 mod gpu;
 mod http;
@@ -31,13 +31,13 @@ mod text;
 mod webview;
 mod worker;
 
-pub use console::{enable_ansi_support, link_console_functions};
 #[cfg(feature = "c-ffi")]
 pub use c_ffi::{attach_c_abi_from_json, attach_c_abi_from_wat_path, link_c_ffi_imports};
-#[cfg(feature = "c-ffi")]
-pub use ffi_helpers::link_ffi_helpers;
+pub use console::{enable_ansi_support, link_console_functions};
 pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;
+#[cfg(feature = "c-ffi")]
+pub use ffi_helpers::link_ffi_helpers;
 pub use file::link_file_functions;
 pub use gpu::{attach_abi_from_wat_path, link_gpu_functions, set_packaged_app_icon};
 pub use http::link_http_functions;
@@ -48,10 +48,10 @@ pub use memory::{
 };
 pub use net::link_net_functions;
 pub use process::link_process_functions;
-pub use text::link_text_functions;
-pub use webview::link_webview_functions;
 pub use shared_memory::{shared_memory_for, threaded_wasm_config};
 pub use stack_size::{dream_async_stack_size, dream_stack_size, parse_size_bytes};
+pub use text::link_text_functions;
+pub use webview::link_webview_functions;
 pub use worker::{
     link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
 };
@@ -196,9 +196,7 @@ mod contract_tests {
                 if end > 0 {
                     let name = &ident[..end];
                     let after = ident[end..].trim_start();
-                    if after.starts_with(':')
-                        || (after.starts_with('(') && trimmed.contains('{'))
-                    {
+                    if after.starts_with(':') || (after.starts_with('(') && trimmed.contains('{')) {
                         keys.insert(name.to_string());
                     }
                 }

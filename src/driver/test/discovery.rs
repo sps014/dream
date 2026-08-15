@@ -12,10 +12,7 @@ pub struct DiscoveredTest {
 
 /// Parse `source` and return every top-level `@test` function name (declaration order).
 /// Does not type-check — shape is validated later during the synthesized compile.
-pub fn discover_tests_in_source(
-    path: &str,
-    source: &str,
-) -> Result<Vec<DiscoveredTest>, String> {
+pub fn discover_tests_in_source(path: &str, source: &str) -> Result<Vec<DiscoveredTest>, String> {
     let arena = Bump::new();
     let mut diagnostics = DiagnosticBag::new(Some(path.to_string()));
     let lexer = Lexer::new(source.to_string());

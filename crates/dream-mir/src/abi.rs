@@ -193,6 +193,18 @@ pub const GC_REMSET_OVERFLOW_ADDR: u32 = 140;
 pub const GC_EPOCH_ADDR: u32 = 144;
 /// Pointer to the old-space card table (one byte per [`GC_CARD_SIZE`] bytes of old/LOH).
 pub const GC_CARD_TABLE_PTR_ADDR: u32 = 148;
+/// Atomic fetch-add counter assigning each module instance a disjoint slice of the
+/// shadow-stack region. `$__sp` is per-instance, but the bytes it addresses live in
+/// *shared* linear memory — without lanes, a worker's frames overwrite the owner's.
+pub const SHADOW_STACK_LANE_ADDR: u32 = 152;
+/// Bytes reserved for one instance's shadow stack (grows down from that lane's top).
+pub const SHADOW_STACK_LANE_SIZE: u32 = 4 * WASM_PAGE_SIZE;
+/// Shared async run-queue / timer list heads. WASM globals are per-instance; workers
+/// collect the owner's nursery objects, so these must live in shared linear memory.
+pub const ASYNC_RQ_HEAD_ADDR: u32 = 156;
+pub const ASYNC_RQ_TAIL_ADDR: u32 = 160;
+pub const ASYNC_TIMER_HEAD_ADDR: u32 = 164;
+pub const ASYNC_VCLOCK_ADDR: u32 = 168;
 
 /// Card size in bytes (`1 << GC_CARD_SHIFT`).
 pub const GC_CARD_SHIFT: u32 = 9;

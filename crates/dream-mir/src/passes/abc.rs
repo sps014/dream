@@ -115,7 +115,11 @@ fn mark_rvalue(rv: &mut Rvalue, facts: &Facts) -> bool {
             cond,
             then_val,
             else_val,
-        } => mark_operand(cond, facts) | mark_operand(then_val, facts) | mark_operand(else_val, facts),
+        } => {
+            mark_operand(cond, facts)
+                | mark_operand(then_val, facts)
+                | mark_operand(else_val, facts)
+        }
         Rvalue::Call { args, .. } | Rvalue::New { args, .. } => {
             let mut c = false;
             for a in args {
@@ -282,7 +286,10 @@ mod tests {
         let len = b.new_temp(i.int());
         let cmp = b.new_temp(i.bool());
         let elem = b.new_temp(i.int());
-        b.assign(Place::Local(idx), Rvalue::Use(Operand::Const(Const::Int(0))));
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
         b.assign(
             Place::Local(len),
             Rvalue::ArrayLen(Operand::Copy(Place::Local(arr))),

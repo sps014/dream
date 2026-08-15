@@ -398,9 +398,8 @@ fn codegen_is_deterministic() {
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
             let wat = fs::read_to_string(&out).unwrap();
             let rt_path = out.with_extension("web.runtime.js");
-            let rt = fs::read_to_string(&rt_path).unwrap_or_else(|e| {
-                panic!("missing selective runtime for {}: {}", name, e)
-            });
+            let rt = fs::read_to_string(&rt_path)
+                .unwrap_or_else(|e| panic!("missing selective runtime for {}: {}", name, e));
             let _ = fs::remove_file(&out);
             let _ = fs::remove_file(&rt_path);
             let _ = fs::remove_file(out.with_extension("wasm"));
@@ -463,7 +462,10 @@ fn selective_runtime_omits_unused_host_chunks() {
     let _ = fs::remove_file(out.with_extension("abi.json"));
     assert!(!rt.contains("makeGpuHost"), "gpu chunk should be absent");
     assert!(!rt.contains("makeFsHost"), "fs chunk should be absent");
-    assert!(!rt.contains("makeCryptoHost"), "crypto chunk should be absent");
+    assert!(
+        !rt.contains("makeCryptoHost"),
+        "crypto chunk should be absent"
+    );
     assert!(rt.contains("function load("));
 }
 
@@ -486,4 +488,3 @@ fn dream_test_runs_attr_marked_functions() {
     assert_eq!(result.files_run, 1);
     assert_eq!(result.tests_run, 3);
 }
-

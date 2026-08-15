@@ -32,11 +32,7 @@ fn read_byte_array_len(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<usize> {
 }
 
 /// Overwrites the payload of an existing `byte[]` at `ptr` with `bytes` (truncating to the array length).
-fn fill_byte_array_in_memory(
-    caller: &mut Caller<'_, ()>,
-    ptr: i32,
-    bytes: &[u8],
-) -> Result<()> {
+fn fill_byte_array_in_memory(caller: &mut Caller<'_, ()>, ptr: i32, bytes: &[u8]) -> Result<()> {
     let memory = caller
         .get_export(dream_mir::abi::EXPORT_MEMORY)
         .and_then(Extern::into_shared_memory)

@@ -44,23 +44,35 @@ fn normalize_string(text: &str, form: i32) -> String {
 
 /// Registers `Unicode.*` host functions on `linker`.
 pub fn link_text_functions(linker: &mut Linker<()>) -> Result<()> {
-    linker.func_wrap("Dream", "unicodeNormalize", |mut caller: Caller<'_, ()>, ptr: i32, form: i32| {
-        let text = read_arg_string(&mut caller, ptr)?;
-        let normalized = normalize_string(&text, form);
-        write_string_to_memory(&mut caller, &normalized)
-    })?;
+    linker.func_wrap(
+        "Dream",
+        "unicodeNormalize",
+        |mut caller: Caller<'_, ()>, ptr: i32, form: i32| {
+            let text = read_arg_string(&mut caller, ptr)?;
+            let normalized = normalize_string(&text, form);
+            write_string_to_memory(&mut caller, &normalized)
+        },
+    )?;
 
-    linker.func_wrap("Dream", "unicodeToLower", |mut caller: Caller<'_, ()>, ptr: i32| {
-        let text = read_arg_string(&mut caller, ptr)?;
-        let lowered = text.to_lowercase();
-        write_string_to_memory(&mut caller, &lowered)
-    })?;
+    linker.func_wrap(
+        "Dream",
+        "unicodeToLower",
+        |mut caller: Caller<'_, ()>, ptr: i32| {
+            let text = read_arg_string(&mut caller, ptr)?;
+            let lowered = text.to_lowercase();
+            write_string_to_memory(&mut caller, &lowered)
+        },
+    )?;
 
-    linker.func_wrap("Dream", "unicodeToUpper", |mut caller: Caller<'_, ()>, ptr: i32| {
-        let text = read_arg_string(&mut caller, ptr)?;
-        let uppered = text.to_uppercase();
-        write_string_to_memory(&mut caller, &uppered)
-    })?;
+    linker.func_wrap(
+        "Dream",
+        "unicodeToUpper",
+        |mut caller: Caller<'_, ()>, ptr: i32| {
+            let text = read_arg_string(&mut caller, ptr)?;
+            let uppered = text.to_uppercase();
+            write_string_to_memory(&mut caller, &uppered)
+        },
+    )?;
 
     linker.func_wrap(
         "Dream",

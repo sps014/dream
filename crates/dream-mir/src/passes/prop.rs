@@ -58,10 +58,7 @@ fn subst_operand(op: &mut Operand, known: &HashMap<Local, Operand>) -> bool {
     false
 }
 
-fn subst_place_reads(
-    place: &mut Place,
-    known: &HashMap<Local, Operand>,
-) -> bool {
+fn subst_place_reads(place: &mut Place, known: &HashMap<Local, Operand>) -> bool {
     // Only the index operand of an `Index` place is a *read*; the base local is a destination/base.
     if let Place::Index { index, .. } = place {
         return subst_operand(index, known);
@@ -69,19 +66,14 @@ fn subst_place_reads(
     false
 }
 
-pub(super) fn subst_stmt_reads(
-    stmt: &mut Statement,
-    known: &HashMap<Local, Operand>,
-) -> bool {
+pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Operand>) -> bool {
     match stmt {
         Statement::Assign(place, rvalue) => {
             let mut c = subst_place_reads(place, known);
             c |= subst_rvalue_reads(rvalue, known);
             c
         }
-        Statement::Panic(o) => {
-            subst_operand(o, known)
-        }
+        Statement::Panic(o) => subst_operand(o, known),
         Statement::Call { args, .. } => args
             .iter_mut()
             .fold(false, |c, a| c | subst_operand(a, known)),
@@ -152,10 +144,7 @@ pub(super) fn subst_stmt_reads(
     }
 }
 
-fn subst_rvalue_reads(
-    rvalue: &mut Rvalue,
-    known: &HashMap<Local, Operand>,
-) -> bool {
+fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> bool {
     match rvalue {
         Rvalue::Select {
             cond,
@@ -176,9 +165,10 @@ fn subst_rvalue_reads(
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => subst_operand(o, known),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
-            subst_operand(a, known) | subst_operand(b, known)
-        }
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CharAt(a, b)
+        | Rvalue::ByteAt(a, b)
+        | Rvalue::Concat(a, b) => subst_operand(a, known) | subst_operand(b, known),
         Rvalue::EnumName { value, .. } => subst_operand(value, known),
         Rvalue::ArrayNew { len, .. } => subst_operand(len, known),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
@@ -232,10 +222,7 @@ fn subst_rvalue_reads(
     }
 }
 
-pub(super) fn subst_terminator_reads(
-    t: &mut Terminator,
-    known: &HashMap<Local, Operand>,
-) -> bool {
+pub(super) fn subst_terminator_reads(t: &mut Terminator, known: &HashMap<Local, Operand>) -> bool {
     match t {
         Terminator::If { cond, .. } => subst_operand(cond, known),
         Terminator::Switch { value, .. } => subst_operand(value, known),
@@ -259,8 +246,8 @@ pub(super) fn update_known(
         // The destination's old value is gone, and any entry that *copied* it is now stale.
         invalidate(*dest, known);
         if let Rvalue::Use(op @ (Operand::Const(_) | Operand::Copy(Place::Local(_)))) = rvalue {
-            let value_typed = is_value(*dest)
-                || matches!(op, Operand::Copy(Place::Local(src)) if is_value(*src));
+            let value_typed =
+                is_value(*dest) || matches!(op, Operand::Copy(Place::Local(src)) if is_value(*src));
             if !value_typed {
                 known.insert(*dest, op.clone());
             }

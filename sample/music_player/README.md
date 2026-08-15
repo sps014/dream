@@ -4,10 +4,9 @@ A playable music player — playlist, play/pause, prev/next, seek bar, volume, l
 written entirely in [`music_player.dream`](music_player.dream). Every DOM query, `<audio>`
 element, event listener, and property get/set is ordinary Dream code compiled to WebAssembly via
 the dynamic [`js` interop type](../../docs/reference/language/js-type.md); there is **no hand-written
-JavaScript logic** anywhere in this sample. The page loads only the shared, program-agnostic
-runtime in [`runtime/dream.js`](../../runtime/dream.js) — the exact same loader every sample under
-[`sample/interop/`](../interop/) uses — via a three-line `<script type="module">` that just calls
-`run(...)`.
+JavaScript logic** anywhere in this sample. Prefer the tree-shaken host emitted next to the `.wasm`
+(`music_player.web.runtime.js`); the page falls back to [`runtime/dream.js`](../../runtime/dream.js)
+if that sibling is missing.
 
 ## Build the artifacts first
 
@@ -16,22 +15,22 @@ The compiled `music_player.wasm`, `music_player.wat`, and `music_player.abi.json
 
 ```sh
 # from the repository root
-cargo run -- sample/music_player/music_player.dream
+cargo run -- --release --runtime --web -Oz sample/music_player/music_player.dream
 ```
 
 ## Run in the browser
 
-`music_player.html` imports the runtime with `import { run } from "../../runtime/dream.js"`. That
-path resolves relative to the page, so **serve the repository root** (not this folder):
+`music_player.html` prefers `./music_player.web.runtime.js` (from `--runtime --web`). Serve this
+folder, or the repository root:
 
 ```sh
 # from the repository root
-npx serve .
-# then open http://localhost:3000/sample/music_player/music_player.html
+npx serve sample/music_player
+# then open http://localhost:3000/music_player.html
 ```
 
-Serving `sample/music_player/` directly would put `../../runtime/dream.js` above the served root
-and the page would 404 on the runtime.
+If the selective runtime is missing, the page falls back to `../../runtime/dream.js`, which
+requires serving the repository root (`npx serve .`).
 
 If you later add [`WebWorker`](../../docs/reference/language/webworkers.md) calls to a browser sample, the
 host page needs [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated)

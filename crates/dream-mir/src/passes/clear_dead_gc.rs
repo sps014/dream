@@ -3,7 +3,7 @@
 
 use super::{MirFunction, MirPass};
 use crate::{Const, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::TypeInterner;
+use dream_types::{TyKind, TypeInterner};
 use std::collections::HashSet;
 
 pub struct ClearDeadGcRoots;
@@ -83,6 +83,13 @@ impl MirPass for ClearDeadGcRoots {
             }
         }
 
+        // `funcidx`/`env` are unmanaged ints; the box must stay rooted until every `await` in this
+        // function has settled (the last use is often in a block *before* the `Await`).
+        let pin_fun_across_await = func
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::Await { .. }));
+
         #[allow(clippy::needless_range_loop)] // indexes `live_out` and `func.blocks` together
         for bi in 0..n {
             let stmts = std::mem::take(&mut func.blocks[bi].stmts);
@@ -126,6 +133,14 @@ impl MirPass for ClearDeadGcRoots {
                     }
                 }
                 for l in to_clear {
+                    if pin_fun_across_await
+                        && matches!(
+                            interner.kind(func.locals[l as usize].ty),
+                            TyKind::Func(..)
+                        )
+                    {
+                        continue;
+                    }
                     out_stmts.push(Statement::Assign(
                         Place::Local(crate::Local(l)),
                         Rvalue::Use(Operand::Const(Const::Null)),
@@ -145,7 +160,9 @@ fn successors(t: &Terminator) -> Vec<usize> {
         Terminator::If {
             then_blk, else_blk, ..
         } => vec![then_blk.0 as usize, else_blk.0 as usize],
-        Terminator::Switch { targets, default, .. } => {
+        Terminator::Switch {
+            targets, default, ..
+        } => {
             let mut v: Vec<usize> = targets.iter().map(|(_, b)| b.0 as usize).collect();
             v.push(default.0 as usize);
             v
@@ -223,9 +240,7 @@ fn stmt_uses(s: &Statement) -> Vec<u32> {
                 }
             }
         }
-        Statement::InterfaceCall {
-            receiver, args, ..
-        } => {
+        Statement::InterfaceCall { receiver, args, .. } => {
             if let Some(l) = operand_local(receiver) {
                 u.push(l);
             }
@@ -340,9 +355,7 @@ fn rvalue_uses(rv: &Rvalue, u: &mut Vec<u32>) {
                 push(a);
             }
         }
-        Rvalue::InterfaceCall {
-            receiver, args, ..
-        } => {
+        Rvalue::InterfaceCall { receiver, args, .. } => {
             push(receiver);
             for a in args {
                 push(a);

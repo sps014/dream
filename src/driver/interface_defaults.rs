@@ -85,7 +85,10 @@ fn collect_inherited_defaults<'a>(
         let Some(iface_name) = interface_base_name(impl_ty) else {
             continue;
         };
-        let Some(iface_idx) = all_interfaces.iter().position(|i| i.name.text == iface_name) else {
+        let Some(iface_idx) = all_interfaces
+            .iter()
+            .position(|i| i.name.text == iface_name)
+        else {
             continue;
         };
         let mut visited = Vec::new();

@@ -21,6 +21,9 @@
 (global $__gc_nursery_bump (mut i32) (i32.const 0))
 ;; Non-zero if this nursery allocated an object with a `del` finalizer.
 (global $__gc_finalize_live (mut i32) (i32.const 0))
+;; Owner instance only. Workers share the heap but cannot see the owner's WASM locals /
+;; scheduler globals, so a worker Gen0 would treat live owner objects as dead.
+(global $__gc_may_collect (mut i32) (i32.const 1))
 (global $__gc_epoch (mut i32) (i32.const 0))
 (global $__gc_request (mut i32) (i32.const 0))
 
@@ -507,9 +510,7 @@
     local.get $tag
     i32.eqz
     if
-        ;; funcbox tag 0
-        local.get $ptr
-        call $gc_trace_funcbox
+        ;;@GC_TRACE_TAG0@
         return
     end
     local.get $ptr
@@ -602,6 +603,7 @@
         local.set $i
         br $roots
     )
+    ;;@GC_SCAN_SCHEDULER@
 )
 
 (func $gc_scan_remset
@@ -832,7 +834,20 @@
             i32.const 12
             i32.add
             call $gc_drop_js_handles
-            ;;@DEBUG_FREE_COUNT@
+            ;; Immortal interned blocks are never `$malloc`'d; bump-reset must not debit them.
+            local.get $meta
+            i32.const {GC_META_IMMORTAL}
+            i32.and
+            i32.eqz
+            if
+                local.get $meta
+                i32.const {GC_META_FREE}
+                i32.and
+                i32.eqz
+                if
+                    ;;@DEBUG_FREE_COUNT@
+                end
+            end
         else
             ;; Forwarded blocks: the source was counted at its original `$malloc`, and the copied
             ;; target was counted again in `$__gc_alloc_old` during evacuation. Nursery reset
@@ -854,6 +869,7 @@
 
 (func $gc_collect_gen0
     (local $overflow i32)
+    ;;@NURSERY_BUMP_RELOAD@
     i32.const {GC_REQUEST_ADDR}
     i32.const 1
     i32.store
@@ -1517,6 +1533,7 @@
     (local $end i32)
     (local $need i32)
     ;;@ALLOC_LOCK_ACQUIRE@
+    ;;@NURSERY_BUMP_RELOAD@
     ;; Large object: skip the nursery entirely.
     local.get $payload
     i32.const {LOH_THRESHOLD}
@@ -1528,6 +1545,8 @@
         i32.const {GC_GEN1_THRESHOLD}
         i32.ge_u
         i32.or
+        global.get $__gc_may_collect
+        i32.and
         if
             call $__gc_collect_kind
             call $__gc_collect_locked
@@ -1571,6 +1590,8 @@
         local.set $need
     end
     local.get $need
+    global.get $__gc_may_collect
+    i32.and
     if
         call $__gc_collect_kind
         call $__gc_collect_locked
@@ -1580,6 +1601,22 @@
         local.get $size
         i32.add
         global.get $__gc_nursery_end
+        i32.gt_u
+        if
+            local.get $payload
+            local.get $tag
+            i32.const {GC_GEN1}
+            call $__gc_alloc_old
+            local.set $block
+            ;;@ALLOC_LOCK_RELEASE@
+            local.get $block
+            return
+        end
+    else
+        local.get $bump
+        local.get $size
+        i32.add
+        local.get $end
         i32.gt_u
         if
             local.get $payload

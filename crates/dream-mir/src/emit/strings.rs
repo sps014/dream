@@ -175,7 +175,10 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::IsType(o, _)
         | Rvalue::Discriminant(o)
         | Rvalue::UnionField { base: o, .. } => strings_in_operand(o, out),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CharAt(a, b)
+        | Rvalue::ByteAt(a, b)
+        | Rvalue::Concat(a, b) => {
             strings_in_operand(a, out);
             strings_in_operand(b, out);
         }
@@ -197,9 +200,7 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
         | Rvalue::ArrayLit { elems: args, .. }
-        | Rvalue::Tuple { elems: args, .. } => {
-            args.iter().for_each(|a| strings_in_operand(a, out))
-        }
+        | Rvalue::Tuple { elems: args, .. } => args.iter().for_each(|a| strings_in_operand(a, out)),
         Rvalue::IndirectCall { target, args, .. } => {
             strings_in_operand(target, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
@@ -236,9 +237,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             }
             strings_in_rvalue(rv, out);
         }
-        Statement::Panic(o) => {
-            strings_in_operand(o, out)
-        }
+        Statement::Panic(o) => strings_in_operand(o, out),
         Statement::Call { args, .. } => args.iter().for_each(|a| strings_in_operand(a, out)),
         Statement::JsCall {
             target,
@@ -280,7 +279,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(src, out);
             strings_in_operand(src_off, out);
             strings_in_operand(count, out);
-        },
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => strings_in_operand(o, out),
         Statement::SimdF32x4 {
             dest,
@@ -310,7 +309,9 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
 fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
     fn in_place(p: &Place, out: &mut Vec<&'static str>) {
         match p {
-            Place::Index { index, unchecked, .. } => {
+            Place::Index {
+                index, unchecked, ..
+            } => {
                 if !unchecked {
                     out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
                 }
@@ -455,12 +456,7 @@ fn located_panics_in_function(f: &MirFunction) -> Vec<String> {
     }
     for line in lines {
         for base in &bases {
-            out.push(panic_msgs::located(
-                base,
-                f.file.as_deref(),
-                &f.name,
-                line,
-            ));
+            out.push(panic_msgs::located(base, f.file.as_deref(), &f.name, line));
         }
     }
     out

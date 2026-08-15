@@ -439,7 +439,7 @@ Capturing closures are ordinary ARC-managed `fun(...)` values: the funcbox owns 
 
 Capturing closures **cannot** be passed to JavaScript APIs — the JS bridges drop the closure environment. See [Callbacks](callbacks.md).
 
-See [Parameters: shared refs and `ref`](#parameters-shared-refs-and-ref) for how a captured variable composes with a `ref` parameter on another function (they share the same underlying storage), and why a lambda cannot capture an enclosing `ref` parameter itself.
+See [`ref` and closures](#ref-and-closures) for how a captured variable composes with a `ref` parameter on another function (they share the same underlying storage), and why a lambda cannot capture an enclosing `ref` parameter itself.
 
 Capturing more than one variable, and reaching past an immediate parent lambda to a grandparent's local, both work the same way:
 

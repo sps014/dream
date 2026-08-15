@@ -18,7 +18,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 12-byte `[size][tag][ref_count]` header.
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
-  ([`weak.wat`](../../crates/dream-mir/src/runtime/weak.wat)).
+  ([`weak.wat`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/runtime/weak.wat)).
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
   (never under-retain); last-use move in `RcInsertion` via CFG liveness (including loops).
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.
@@ -56,9 +56,9 @@ levers (no SSO / `@stack` class / value collections):
 4. **Contiguous / SOA hot paths** — regex Pike-VM uses parallel `List<int>` / `List<int[]>`
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
-   [`functions.md`](../language/functions.md)).
+   [`functions.md`](../reference/language/functions.md#ownership-sink-default-and-borrow)).
 
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.
 
-Measure: `./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](../../tests/bench/BASELINE.md).
+Measure: `./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](https://github.com/sps014/dream/blob/main/tests/bench/BASELINE.md).

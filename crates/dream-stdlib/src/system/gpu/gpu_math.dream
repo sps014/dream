@@ -104,49 +104,22 @@ public class GpuMath {
         return a * b + c;
     }
 
-    // Euclidean length of a `GpuVec2` (WGSL `length`).
-    public static fun length2(v: GpuVec2): float {
-        return GpuMath.sqrt(v.x * v.x + v.y * v.y);
-    }
-    // Euclidean length of a `GpuVec3` (WGSL `length`).
+    // Euclidean length of a `GpuVec3` (WGSL `length`). Overloaded for `GpuVec2` / `GpuVec4`.
     public static fun length(v: GpuVec3): float {
         return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     }
-    // Euclidean length of a `GpuVec4` (WGSL `length`).
-    public static fun length4(v: GpuVec4): float {
-        return GpuMath.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
-    }
 
-    // Unit `GpuVec2`; near-zero input yields `(1, 0)` on CPU (WGSL `normalize`).
-    public static fun normalize2(v: GpuVec2): GpuVec2 {
-        let len = GpuMath.length2(v);
-        if (len < 0.000001) { return GpuVec2.of(1.0, 0.0); }
-        return GpuVec2.of(v.x / len, v.y / len);
-    }
     // Unit `GpuVec3`; near-zero input yields `(0, 1, 0)` on CPU (WGSL `normalize`).
+    // Overloaded for `GpuVec2` / `GpuVec4`.
     public static fun normalize(v: GpuVec3): GpuVec3 {
         let len = GpuMath.length(v);
         if (len < 0.000001) { return GpuVec3.of(0.0, 1.0, 0.0); }
-        return GpuVec3.of(v.x / len, v.y / len, v.z / len);
-    }
-    // Unit `GpuVec4`; near-zero input yields `(0, 0, 0, 1)` on CPU (WGSL `normalize`).
-    public static fun normalize4(v: GpuVec4): GpuVec4 {
-        let len = GpuMath.length4(v);
-        if (len < 0.000001) { return GpuVec4.of(0.0, 0.0, 0.0, 1.0); }
-        return GpuVec4.of(v.x / len, v.y / len, v.z / len, v.w / len);
+        return v / len;
     }
 
-    // Dot product of two `GpuVec2`s (WGSL `dot`).
-    public static fun dot2(a: GpuVec2, b: GpuVec2): float {
-        return a.x * b.x + a.y * b.y;
-    }
-    // Dot product of two `GpuVec3`s (WGSL `dot`).
+    // Dot product of two `GpuVec3`s (WGSL `dot`). Overloaded for `GpuVec2` / `GpuVec4`.
     public static fun dot(a: GpuVec3, b: GpuVec3): float {
         return a.x * b.x + a.y * b.y + a.z * b.z;
-    }
-    // Dot product of two `GpuVec4`s (WGSL `dot`).
-    public static fun dot4(a: GpuVec4, b: GpuVec4): float {
-        return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     }
 
     // Cross product of two `GpuVec3`s (WGSL `cross`).
@@ -160,8 +133,7 @@ public class GpuMath {
 
     // Reflects incident `i` about unit normal `n` (WGSL `reflect`).
     public static fun reflect(i: GpuVec3, n: GpuVec3): GpuVec3 {
-        let d = 2.0 * GpuMath.dot(i, n);
-        return GpuVec3.of(i.x - n.x * d, i.y - n.y * d, i.z - n.z * d);
+        return i - n * (2.0 * GpuMath.dot(i, n));
     }
 
     // Linear blend `a * (1 - t) + b * t` (WGSL `mix`).
@@ -179,8 +151,25 @@ public class GpuMath {
         return GpuMath.pow(2.718281828, x);
     }
 
+    // Matrix × vector (`mat2 * vec2` in WGSL). Overloaded for mat3/mat4 and mat×mat.
+    public static fun mul(m: GpuMat2, v: GpuVec2): GpuVec2 {
+        return GpuVec2.of(
+            m.c0.x * v.x + m.c1.x * v.y,
+            m.c0.y * v.x + m.c1.y * v.y
+        );
+    }
+
+    // Matrix × vector (`mat3 * vec3` in WGSL).
+    public static fun mul(m: GpuMat3, v: GpuVec3): GpuVec3 {
+        return GpuVec3.of(
+            m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z,
+            m.c0.y * v.x + m.c1.y * v.y + m.c2.y * v.z,
+            m.c0.z * v.x + m.c1.z * v.y + m.c2.z * v.z
+        );
+    }
+
     // Matrix × vector (`mat4 * vec4` in WGSL).
-    public static fun mul4(m: GpuMat4, v: GpuVec4): GpuVec4 {
+    public static fun mul(m: GpuMat4, v: GpuVec4): GpuVec4 {
         return GpuVec4.of(
             m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z + m.c3.x * v.w,
             m.c0.y * v.x + m.c1.y * v.y + m.c2.y * v.z + m.c3.y * v.w,
@@ -189,35 +178,45 @@ public class GpuMath {
         );
     }
 
-    // Matrix × vector (`mat3 * vec3` in WGSL).
-    public static fun mul3(m: GpuMat3, v: GpuVec3): GpuVec3 {
-        return GpuVec3.of(
-            m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z,
-            m.c0.y * v.x + m.c1.y * v.y + m.c2.y * v.z,
-            m.c0.z * v.x + m.c1.z * v.y + m.c2.z * v.z
-        );
+    // Matrix × matrix (`mat2 * mat2` in WGSL).
+    public static fun mul(a: GpuMat2, b: GpuMat2): GpuMat2 {
+        return GpuMat2.of(GpuMath.mul(a, b.c0), GpuMath.mul(a, b.c1));
     }
 
-    // Matrix × vector (`mat2 * vec2` in WGSL).
-    public static fun mul2(m: GpuMat2, v: GpuVec2): GpuVec2 {
-        return GpuVec2.of(
-            m.c0.x * v.x + m.c1.x * v.y,
-            m.c0.y * v.x + m.c1.y * v.y
-        );
+    // Matrix × matrix (`mat3 * mat3` in WGSL).
+    public static fun mul(a: GpuMat3, b: GpuMat3): GpuMat3 {
+        return GpuMat3.of(GpuMath.mul(a, b.c0), GpuMath.mul(a, b.c1), GpuMath.mul(a, b.c2));
     }
 
     // Matrix × matrix (`mat4 * mat4` in WGSL).
-    public static fun matmul4(a: GpuMat4, b: GpuMat4): GpuMat4 {
+    public static fun mul(a: GpuMat4, b: GpuMat4): GpuMat4 {
         return GpuMat4.of(
-            GpuMath.mul4(a, b.c0),
-            GpuMath.mul4(a, b.c1),
-            GpuMath.mul4(a, b.c2),
-            GpuMath.mul4(a, b.c3)
+            GpuMath.mul(a, b.c0),
+            GpuMath.mul(a, b.c1),
+            GpuMath.mul(a, b.c2),
+            GpuMath.mul(a, b.c3)
+        );
+    }
+
+    // Transpose of a `GpuMat2` (WGSL `transpose`). Overloaded for mat3/mat4.
+    public static fun transpose(m: GpuMat2): GpuMat2 {
+        return GpuMat2.of(
+            GpuVec2.of(m.c0.x, m.c1.x),
+            GpuVec2.of(m.c0.y, m.c1.y)
+        );
+    }
+
+    // Transpose of a `GpuMat3` (WGSL `transpose`).
+    public static fun transpose(m: GpuMat3): GpuMat3 {
+        return GpuMat3.of(
+            GpuVec3.of(m.c0.x, m.c1.x, m.c2.x),
+            GpuVec3.of(m.c0.y, m.c1.y, m.c2.y),
+            GpuVec3.of(m.c0.z, m.c1.z, m.c2.z)
         );
     }
 
     // Transpose of a `GpuMat4` (WGSL `transpose`).
-    public static fun transpose4(m: GpuMat4): GpuMat4 {
+    public static fun transpose(m: GpuMat4): GpuMat4 {
         return GpuMat4.of(
             GpuVec4.of(m.c0.x, m.c1.x, m.c2.x, m.c3.x),
             GpuVec4.of(m.c0.y, m.c1.y, m.c2.y, m.c3.y),

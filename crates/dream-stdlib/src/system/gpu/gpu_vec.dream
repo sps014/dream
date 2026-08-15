@@ -5,6 +5,9 @@ module system.gpu;
 // Prefer `GpuVecN.of(...)` when constructing values in a shader body.
 // Layout (for `GpuBuffer` / vertex attributes): tightly packed floats, no SIMD padding —
 // `GpuVec2` = 8 bytes, `GpuVec3` = 12 bytes, `GpuVec4` = 16 bytes.
+//
+// Component-wise `+ - * /` with the same `GpuVecN` or `float` (including `s * v` and `-v`)
+// match WGSL. `GpuMatN * GpuVecN` and `GpuMatN * GpuMatN` match WGSL matrix `*`.
 
 // Two-component float vector (`vec2<f32>` in WGSL).
 public struct GpuVec2 {
@@ -13,12 +16,72 @@ public struct GpuVec2 {
     // Y component.
     public y: float;
 
-    // Builds `(x, y)`.
+    // Builds `(x, y)` (WGSL `vec2(x, y)`).
     public static fun of(x: float, y: float): GpuVec2 {
         let v = GpuVec2();
         v.x = x;
         v.y = y;
         return v;
+    }
+
+    // All components equal to `s` (WGSL `vec2(s)`).
+    public static fun splat(s: float): GpuVec2 {
+        return GpuVec2.of(s, s);
+    }
+
+    // Component-wise add (WGSL `+`).
+    public fun add(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x + other.x, this.y + other.y);
+    }
+
+    // Component-wise subtract (WGSL `-`).
+    public fun sub(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x - other.x, this.y - other.y);
+    }
+
+    // Component-wise multiply (WGSL `*`).
+    public fun mul(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x * other.x, this.y * other.y);
+    }
+
+    // Component-wise divide (WGSL `/`).
+    public fun div(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x / other.x, this.y / other.y);
+    }
+
+    // Scale by a scalar (WGSL `v * s` / `s * v`).
+    public fun scale(s: float): GpuVec2 {
+        return GpuVec2.of(this.x * s, this.y * s);
+    }
+
+    // Divide by a scalar (WGSL `v / s`).
+    public fun div_scalar(s: float): GpuVec2 {
+        return GpuVec2.of(this.x / s, this.y / s);
+    }
+
+    // Add a scalar to each component (WGSL `v + s`).
+    public fun add_scalar(s: float): GpuVec2 {
+        return GpuVec2.of(this.x + s, this.y + s);
+    }
+
+    // Subtract a scalar from each component (WGSL `v - s`).
+    public fun sub_scalar(s: float): GpuVec2 {
+        return GpuVec2.of(this.x - s, this.y - s);
+    }
+
+    // Scalar divided by each component (WGSL `s / v`).
+    public fun div_from_scalar(s: float): GpuVec2 {
+        return GpuVec2.of(s / this.x, s / this.y);
+    }
+
+    // Scalar minus each component (WGSL `s - v`).
+    public fun sub_from_scalar(s: float): GpuVec2 {
+        return GpuVec2.of(s - this.x, s - this.y);
+    }
+
+    // Negate each component (WGSL `-v`).
+    public fun neg(): GpuVec2 {
+        return GpuVec2.of(-this.x, -this.y);
     }
 }
 
@@ -31,13 +94,73 @@ public struct GpuVec3 {
     // Z component.
     public z: float;
 
-    // Builds `(x, y, z)`.
+    // Builds `(x, y, z)` (WGSL `vec3(x, y, z)`).
     public static fun of(x: float, y: float, z: float): GpuVec3 {
         let v = GpuVec3();
         v.x = x;
         v.y = y;
         v.z = z;
         return v;
+    }
+
+    // All components equal to `s` (WGSL `vec3(s)`).
+    public static fun splat(s: float): GpuVec3 {
+        return GpuVec3.of(s, s, s);
+    }
+
+    // Component-wise add (WGSL `+`).
+    public fun add(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
+
+    // Component-wise subtract (WGSL `-`).
+    public fun sub(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x - other.x, this.y - other.y, this.z - other.z);
+    }
+
+    // Component-wise multiply (WGSL `*`).
+    public fun mul(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x * other.x, this.y * other.y, this.z * other.z);
+    }
+
+    // Component-wise divide (WGSL `/`).
+    public fun div(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x / other.x, this.y / other.y, this.z / other.z);
+    }
+
+    // Scale by a scalar (WGSL `v * s` / `s * v`).
+    public fun scale(s: float): GpuVec3 {
+        return GpuVec3.of(this.x * s, this.y * s, this.z * s);
+    }
+
+    // Divide by a scalar (WGSL `v / s`).
+    public fun div_scalar(s: float): GpuVec3 {
+        return GpuVec3.of(this.x / s, this.y / s, this.z / s);
+    }
+
+    // Add a scalar to each component (WGSL `v + s`).
+    public fun add_scalar(s: float): GpuVec3 {
+        return GpuVec3.of(this.x + s, this.y + s, this.z + s);
+    }
+
+    // Subtract a scalar from each component (WGSL `v - s`).
+    public fun sub_scalar(s: float): GpuVec3 {
+        return GpuVec3.of(this.x - s, this.y - s, this.z - s);
+    }
+
+    // Scalar divided by each component (WGSL `s / v`).
+    public fun div_from_scalar(s: float): GpuVec3 {
+        return GpuVec3.of(s / this.x, s / this.y, s / this.z);
+    }
+
+    // Scalar minus each component (WGSL `s - v`).
+    public fun sub_from_scalar(s: float): GpuVec3 {
+        return GpuVec3.of(s - this.x, s - this.y, s - this.z);
+    }
+
+    // Negate each component (WGSL `-v`).
+    public fun neg(): GpuVec3 {
+        return GpuVec3.of(-this.x, -this.y, -this.z);
     }
 }
 
@@ -53,7 +176,7 @@ public struct GpuVec4 {
     // W / A component.
     public w: float;
 
-    // Builds `(x, y, z, w)`.
+    // Builds `(x, y, z, w)` (WGSL `vec4(x, y, z, w)`).
     public static fun of(x: float, y: float, z: float, w: float): GpuVec4 {
         let v = GpuVec4();
         v.x = x;
@@ -61,6 +184,66 @@ public struct GpuVec4 {
         v.z = z;
         v.w = w;
         return v;
+    }
+
+    // All components equal to `s` (WGSL `vec4(s)`).
+    public static fun splat(s: float): GpuVec4 {
+        return GpuVec4.of(s, s, s, s);
+    }
+
+    // Component-wise add (WGSL `+`).
+    public fun add(other: GpuVec4): GpuVec4 {
+        return GpuVec4.of(this.x + other.x, this.y + other.y, this.z + other.z, this.w + other.w);
+    }
+
+    // Component-wise subtract (WGSL `-`).
+    public fun sub(other: GpuVec4): GpuVec4 {
+        return GpuVec4.of(this.x - other.x, this.y - other.y, this.z - other.z, this.w - other.w);
+    }
+
+    // Component-wise multiply (WGSL `*`).
+    public fun mul(other: GpuVec4): GpuVec4 {
+        return GpuVec4.of(this.x * other.x, this.y * other.y, this.z * other.z, this.w * other.w);
+    }
+
+    // Component-wise divide (WGSL `/`).
+    public fun div(other: GpuVec4): GpuVec4 {
+        return GpuVec4.of(this.x / other.x, this.y / other.y, this.z / other.z, this.w / other.w);
+    }
+
+    // Scale by a scalar (WGSL `v * s` / `s * v`).
+    public fun scale(s: float): GpuVec4 {
+        return GpuVec4.of(this.x * s, this.y * s, this.z * s, this.w * s);
+    }
+
+    // Divide by a scalar (WGSL `v / s`).
+    public fun div_scalar(s: float): GpuVec4 {
+        return GpuVec4.of(this.x / s, this.y / s, this.z / s, this.w / s);
+    }
+
+    // Add a scalar to each component (WGSL `v + s`).
+    public fun add_scalar(s: float): GpuVec4 {
+        return GpuVec4.of(this.x + s, this.y + s, this.z + s, this.w + s);
+    }
+
+    // Subtract a scalar from each component (WGSL `v - s`).
+    public fun sub_scalar(s: float): GpuVec4 {
+        return GpuVec4.of(this.x - s, this.y - s, this.z - s, this.w - s);
+    }
+
+    // Scalar divided by each component (WGSL `s / v`).
+    public fun div_from_scalar(s: float): GpuVec4 {
+        return GpuVec4.of(s / this.x, s / this.y, s / this.z, s / this.w);
+    }
+
+    // Scalar minus each component (WGSL `s - v`).
+    public fun sub_from_scalar(s: float): GpuVec4 {
+        return GpuVec4.of(s - this.x, s - this.y, s - this.z, s - this.w);
+    }
+
+    // Negate each component (WGSL `-v`).
+    public fun neg(): GpuVec4 {
+        return GpuVec4.of(-this.x, -this.y, -this.z, -this.w);
     }
 }
 
@@ -71,7 +254,7 @@ public struct GpuMat2 {
     // Second column.
     public c1: GpuVec2;
 
-    // Builds a matrix from column vectors.
+    // Builds a matrix from column vectors (WGSL `mat2x2(c0, c1)`).
     public static fun of(c0: GpuVec2, c1: GpuVec2): GpuMat2 {
         let m = GpuMat2();
         m.c0 = c0;
@@ -79,9 +262,22 @@ public struct GpuMat2 {
         return m;
     }
 
-    // 2×2 identity matrix.
+    // 2×2 identity matrix (WGSL `mat2x2(1, 0, 0, 1)`).
     public static fun identity(): GpuMat2 {
         return GpuMat2.of(GpuVec2.of(1.0, 0.0), GpuVec2.of(0.0, 1.0));
+    }
+
+    // Matrix × vector (WGSL `*`).
+    public fun mul(v: GpuVec2): GpuVec2 {
+        return GpuVec2.of(
+            this.c0.x * v.x + this.c1.x * v.y,
+            this.c0.y * v.x + this.c1.y * v.y
+        );
+    }
+
+    // Matrix × matrix (WGSL `*`).
+    public fun mul_mat(other: GpuMat2): GpuMat2 {
+        return GpuMat2.of(this.mul(other.c0), this.mul(other.c1));
     }
 }
 
@@ -94,7 +290,7 @@ public struct GpuMat3 {
     // Third column.
     public c2: GpuVec3;
 
-    // Builds a matrix from column vectors.
+    // Builds a matrix from column vectors (WGSL `mat3x3(c0, c1, c2)`).
     public static fun of(c0: GpuVec3, c1: GpuVec3, c2: GpuVec3): GpuMat3 {
         let m = GpuMat3();
         m.c0 = c0;
@@ -111,6 +307,20 @@ public struct GpuMat3 {
             GpuVec3.of(0.0, 0.0, 1.0)
         );
     }
+
+    // Matrix × vector (WGSL `*`).
+    public fun mul(v: GpuVec3): GpuVec3 {
+        return GpuVec3.of(
+            this.c0.x * v.x + this.c1.x * v.y + this.c2.x * v.z,
+            this.c0.y * v.x + this.c1.y * v.y + this.c2.y * v.z,
+            this.c0.z * v.x + this.c1.z * v.y + this.c2.z * v.z
+        );
+    }
+
+    // Matrix × matrix (WGSL `*`).
+    public fun mul_mat(other: GpuMat3): GpuMat3 {
+        return GpuMat3.of(this.mul(other.c0), this.mul(other.c1), this.mul(other.c2));
+    }
 }
 
 // 4×4 column-major float matrix (`mat4x4<f32>` in WGSL).
@@ -124,7 +334,7 @@ public struct GpuMat4 {
     // Fourth column.
     public c3: GpuVec4;
 
-    // Builds a matrix from column vectors.
+    // Builds a matrix from column vectors (WGSL `mat4x4(c0, c1, c2, c3)`).
     public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4 {
         let m = GpuMat4();
         m.c0 = c0;
@@ -141,6 +351,26 @@ public struct GpuMat4 {
             GpuVec4.of(0.0, 1.0, 0.0, 0.0),
             GpuVec4.of(0.0, 0.0, 1.0, 0.0),
             GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+
+    // Matrix × vector (WGSL `*`).
+    public fun mul(v: GpuVec4): GpuVec4 {
+        return GpuVec4.of(
+            this.c0.x * v.x + this.c1.x * v.y + this.c2.x * v.z + this.c3.x * v.w,
+            this.c0.y * v.x + this.c1.y * v.y + this.c2.y * v.z + this.c3.y * v.w,
+            this.c0.z * v.x + this.c1.z * v.y + this.c2.z * v.z + this.c3.z * v.w,
+            this.c0.w * v.x + this.c1.w * v.y + this.c2.w * v.z + this.c3.w * v.w
+        );
+    }
+
+    // Matrix × matrix (WGSL `*`).
+    public fun mul_mat(other: GpuMat4): GpuMat4 {
+        return GpuMat4.of(
+            this.mul(other.c0),
+            this.mul(other.c1),
+            this.mul(other.c2),
+            this.mul(other.c3)
         );
     }
 }

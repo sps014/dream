@@ -20,31 +20,10 @@ struct VsOut {
 }
 
 @gpu
-fun mix3(a: GpuVec3, b: GpuVec3, t: float): GpuVec3 {
-    return GpuVec3.of(
-        GpuMath.mix(a.x, b.x, t),
-        GpuMath.mix(a.y, b.y, t),
-        GpuMath.mix(a.z, b.z, t)
-    );
-}
-
-@gpu
-fun scale3(v: GpuVec3, s: float): GpuVec3 {
-    return GpuVec3.of(v.x * s, v.y * s, v.z * s);
-}
-
-@gpu
-fun add3(a: GpuVec3, b: GpuVec3): GpuVec3 {
-    return GpuVec3.of(a.x + b.x, a.y + b.y, a.z + b.z);
-}
-
-@gpu
 fun rot2(px: float, pz: float, k: float): GpuVec2 {
     // GLSL `mat2(0.8,-0.6,0.6,0.8) * p * k` (column-major).
-    return GpuVec2.of(
-        (0.8 * px + 0.6 * pz) * k,
-        (-0.6 * px + 0.8 * pz) * k
-    );
+    let m = GpuMat2.of(GpuVec2.of(0.8, -0.6), GpuVec2.of(0.6, 0.8));
+    return (m * GpuVec2.of(px, pz)) * k;
 }
 
 @gpu
@@ -198,12 +177,18 @@ fun soft_shadow(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz:
 
 @gpu
 fun calc_normal(px: float, pz: float, t: float, res_x: float): GpuVec3 {
-    let eps: float = GpuMath.max(0.05, GpuMath.min(0.0008 * t, t / GpuMath.max(res_x, 1.0)));
-    let hL: float = terrain_n(px - eps, pz, 6);
-    let hR: float = terrain_n(px + eps, pz, 6);
-    let hD: float = terrain_n(px, pz - eps, 6);
-    let hU: float = terrain_n(px, pz + eps, 6);
-    return GpuMath.normalize(GpuVec3.of(hL - hR, 2.0 * eps, hD - hU));
+    // Iq uses ~15 octaves here; 8 + a high-freq bump reads rocky without marching 15.
+    let eps: float = GpuMath.max(0.02, GpuMath.min(0.00045 * t, t / GpuMath.max(res_x, 1.0)));
+    let hL: float = terrain_n(px - eps, pz, 8);
+    let hR: float = terrain_n(px + eps, pz, 8);
+    let hD: float = terrain_n(px, pz - eps, 8);
+    let hU: float = terrain_n(px, pz + eps, 8);
+    let nx: float = hL - hR;
+    let nz: float = hD - hU;
+    let g: float = noise2(px * 0.42, pz * 0.42) - 0.5;
+    let g2: float = noise2(px * 1.35, pz * 1.35) - 0.5;
+    let bump: float = 0.55 * g + 0.22 * g2;
+    return GpuMath.normalize(GpuVec3.of(nx + bump * (2.0 * eps), 2.0 * eps, nz + bump * (2.0 * eps)));
 }
 
 @gpu
@@ -239,18 +224,18 @@ fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: floa
     if (t > tmax) {
         let sky0 = GpuVec3.of(0.3 - rdy * rdy * 0.5, 0.5 - rdy * rdy * 0.5, 0.85 - rdy * rdy * 0.5);
         let hz: float = GpuMath.pow(1.0 - GpuMath.max(rdy, 0.0), 4.0);
-        col = mix3(sky0, scale3(GpuVec3.of(0.7, 0.75, 0.85), 0.85), hz);
-        col = add3(col, scale3(GpuVec3.of(1.0, 0.7, 0.4), 0.25 * GpuMath.pow(sundot, 5.0)));
-        col = add3(col, scale3(GpuVec3.of(1.0, 0.8, 0.6), 0.25 * GpuMath.pow(sundot, 64.0)));
-        col = add3(col, scale3(GpuVec3.of(1.0, 0.8, 0.6), 0.2 * GpuMath.pow(sundot, 512.0)));
+        col = GpuMath.mix(sky0, GpuVec3.of(0.7, 0.75, 0.85) * 0.85, hz);
+        col = col + GpuVec3.of(1.0, 0.7, 0.4) * (0.25 * GpuMath.pow(sundot, 5.0));
+        col = col + GpuVec3.of(1.0, 0.8, 0.6) * (0.25 * GpuMath.pow(sundot, 64.0));
+        col = col + GpuVec3.of(1.0, 0.8, 0.6) * (0.2 * GpuMath.pow(sundot, 512.0));
         if (rdy > 0.05) {
             let scx: float = rox + rdx * (1000.0 - roy) / rdy;
             let scz: float = roz + rdz * (1000.0 - roy) / rdy;
             let cl: float = 0.5 * GpuMath.smoothstep(0.5, 0.8, fbm(0.0005 * scx, 0.0005 * scz));
-            col = mix3(col, GpuVec3.of(1.0, 0.95, 1.0), cl);
+            col = GpuMath.mix(col, GpuVec3.of(1.0, 0.95, 1.0), cl);
         }
         let hor: float = GpuMath.pow(1.0 - GpuMath.max(rdy, 0.0), 16.0);
-        col = mix3(col, scale3(GpuVec3.of(0.4, 0.65, 1.0), 0.68), hor);
+        col = GpuMath.mix(col, GpuVec3.of(0.4, 0.65, 1.0) * 0.68, hor);
     } else {
         let px: float = rox + t * rdx;
         let py: float = roy + t * rdy;
@@ -262,18 +247,16 @@ fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: floa
 
         let rtex: float = noise2(px * 0.15, pz * 0.15);
         let rtex2: float = noise2(px * 0.018, py * 0.86);
-        col = scale3(
-            mix3(GpuVec3.of(0.08, 0.05, 0.03), GpuVec3.of(0.10, 0.09, 0.08), rtex2),
-            (rtex * 0.25 + 0.75) * 0.9
-        );
-        col = mix3(
+        col = GpuMath.mix(GpuVec3.of(0.14, 0.08, 0.04), GpuVec3.of(0.16, 0.12, 0.08), rtex2)
+            * (rtex * 0.35 + 0.85);
+        col = GpuMath.mix(
             col,
-            scale3(GpuVec3.of(0.45, 0.30, 0.15), 0.20 * (0.50 + 0.50 * rtex)),
+            GpuVec3.of(0.62, 0.38, 0.14) * (0.55 * (0.45 + 0.55 * rtex)),
             GpuMath.smoothstep(0.70, 0.9, nor.y)
         );
-        col = mix3(
+        col = GpuMath.mix(
             col,
-            scale3(GpuVec3.of(0.30, 0.30, 0.10), 0.15 * (0.25 + 0.75 * rtex)),
+            GpuVec3.of(0.38, 0.42, 0.12) * (0.35 * (0.25 + 0.75 * rtex)),
             GpuMath.smoothstep(0.95, 1.0, nor.y)
         );
 
@@ -281,7 +264,7 @@ fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: floa
         let e: float = GpuMath.smoothstep(1.0 - 0.5 * h, 1.0 - 0.1 * h, nor.y);
         let o: float = 0.3 + 0.7 * GpuMath.smoothstep(0.0, 0.1, nor.x + h * h);
         let s: float = h * e * o;
-        col = mix3(col, scale3(GpuVec3.of(0.62, 0.65, 0.7), 0.29), GpuMath.smoothstep(0.1, 0.9, s));
+        col = GpuMath.mix(col, GpuVec3.of(0.78, 0.82, 0.88), GpuMath.smoothstep(0.1, 0.9, s) * 0.55);
 
         let amb: float = GpuMath.clamp(0.5 + 0.5 * nor.y, 0.0, 1.0);
         let dif0: float = GpuMath.clamp(GpuMath.dot(light1, nor), 0.0, 1.0);
@@ -292,24 +275,22 @@ fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: floa
         let spe: float = GpuMath.pow(GpuMath.clamp(GpuMath.dot(nor, hal), 0.0, 1.0), 16.0);
         let dif: float = dif0 * soft_shadow(px, py, pz, light1.x, light1.y, light1.z);
 
-        let lin = scale3(GpuVec3.of(1.80, 1.30, 1.00), 1.8 * dif);
-        lin = add3(lin, scale3(GpuVec3.of(0.10, 0.20, 0.30), 2.0 * amb));
-        lin = add3(lin, scale3(GpuVec3.of(0.40, 0.30, 0.20), 0.07 * bac));
-        lin = add3(lin, scale3(GpuVec3.of(0.40, 0.50, 0.60), 0.06 * dom));
-        lin = add3(lin, scale3(GpuVec3.of(0.30, 0.30, 0.25), 0.3 * fre2));
-        col = GpuVec3.of(col.x * lin.x, col.y * lin.y, col.z * lin.z);
-        col = add3(col, scale3(GpuVec3.of(1.0, 0.9, 0.7), (s * 0.15 + 0.05) * spe * dif));
+        let lin = GpuVec3.of(2.10, 1.45, 0.85) * (2.15 * dif);
+        lin = lin + GpuVec3.of(0.12, 0.22, 0.38) * (1.35 * amb);
+        lin = lin + GpuVec3.of(0.50, 0.32, 0.16) * (0.10 * bac);
+        lin = lin + GpuVec3.of(0.40, 0.55, 0.70) * (0.08 * dom);
+        lin = lin + GpuVec3.of(0.35, 0.32, 0.22) * (0.35 * fre2);
+        col = col * lin;
+        col = col + GpuVec3.of(1.0, 0.85, 0.55) * ((s * 0.22 + 0.08) * spe * dif);
 
-        let fo: float = 1.0 - GpuMath.exp(-GpuMath.pow(0.001 * t, 1.5));
-        let fco = add3(
-            scale3(GpuVec3.of(0.4, 0.65, 1.0), 0.65),
-            scale3(GpuVec3.of(1.0, 0.8, 0.5), 0.1 * GpuMath.pow(sundot, 4.0))
-        );
-        col = mix3(col, fco, fo);
+        let fo: float = 1.0 - GpuMath.exp(-GpuMath.pow(0.00055 * t, 1.45));
+        let fco = GpuVec3.of(0.42, 0.62, 0.95) * 0.55
+            + GpuVec3.of(1.0, 0.72, 0.35) * (0.18 * GpuMath.pow(sundot, 4.0));
+        col = GpuMath.mix(col, fco, fo * 0.82);
     }
 
-    col = add3(col, scale3(GpuVec3.of(1.0, 0.8, 0.4), 0.3 * GpuMath.pow(sundot, 8.0)));
-    return GpuVec3.of(GpuMath.sqrt(col.x), GpuMath.sqrt(col.y), GpuMath.sqrt(col.z));
+    col = col + GpuVec3.of(1.0, 0.72, 0.32) * (0.42 * GpuMath.pow(sundot, 8.0));
+    return GpuMath.sqrt(GpuMath.saturate(col));
 }
 
 @gpu

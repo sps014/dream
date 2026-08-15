@@ -312,6 +312,9 @@ impl<'a> Analyzer<'a> {
                 || callee.name.starts_with("GpuVec2_")
                 || callee.name.starts_with("GpuVec3_")
                 || callee.name.starts_with("GpuVec4_")
+                || callee.name.starts_with("GpuMat2_")
+                || callee.name.starts_with("GpuMat3_")
+                || callee.name.starts_with("GpuMat4_")
                 || callee.name == "Gpu_workgroup_barrier"
                 || callee.name == "Gpu_storage_barrier";
             if !allowed_helper {

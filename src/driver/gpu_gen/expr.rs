@@ -3,7 +3,8 @@
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
 use super::ty::{
-    cast_wgsl_if_needed, common_numeric_wgsl_ty, dream_ty_to_wgsl, infer_wgsl_ty,
+    cast_wgsl_if_needed, common_arith_wgsl_ty, dream_ty_to_wgsl,
+    infer_wgsl_ty, is_mat_wgsl, is_vec_wgsl, receiver_wgsl_ty,
 };
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::types::Type;
@@ -195,7 +196,7 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             );
             "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into()
         }
-        "mul2" | "mul3" | "mul4" | "matmul4" => {
+        "mul" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
             format!(
                 "({} * {})",
@@ -203,50 +204,53 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 args_s.get(1).cloned().unwrap_or_else(|| "v".into())
             )
         }
-        "transpose4" => {
+        "transpose" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
             format!(
                 "transpose({})",
                 args_s.first().cloned().unwrap_or_else(|| "m".into())
             )
         }
-        "length2" | "length4" => {
-            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
-            format!(
-                "length({})",
-                args_s.first().cloned().unwrap_or_else(|| "v".into())
-            )
-        }
-        "normalize2" | "normalize4" => {
-            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
-            format!(
-                "normalize({})",
-                args_s.first().cloned().unwrap_or_else(|| "v".into())
-            )
-        }
-        "dot2" | "dot4" => {
-            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
-            format!(
-                "dot({}, {})",
-                args_s.first().cloned().unwrap_or_else(|| "a".into()),
-                args_s.get(1).cloned().unwrap_or_else(|| "b".into())
-            )
+        "splat" => {
+            ctx.report_error(
+                format!(
+                    "GPU shader '{}' cannot lower a free splat() call; use GpuVec2/3/4.splat()",
+                    ctx.kernel
+                ),
+                None,
+            );
+            let s = args
+                .first()
+                .map(|a| coerce_expr_to_wgsl_ty(a, "f32", ctx))
+                .unwrap_or_else(|| "0.0".into());
+            format!("vec3<f32>({s})")
         }
         "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin" | "cos" | "tan"
         | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
         | "reflect" | "mix" | "pow" | "exp" | "log" | "sign" | "saturate" | "step" | "smoothstep"
         | "fma" | "inversesqrt" => {
-            let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
-            let scalar = matches!(
-                name,
-                "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin"
-                    | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "mix" | "pow" | "exp"
-                    | "log" | "sign" | "saturate" | "step" | "smoothstep" | "fma" | "inversesqrt"
-            );
-            let args_s = if scalar {
-                coerce_all("f32")
+            let arg_tys: Vec<String> = args.iter().map(|a| infer_wgsl_ty(a, ctx)).collect();
+            let any_vec = arg_tys.iter().any(|t| is_vec_wgsl(t));
+            let vec_ty = arg_tys.iter().find(|t| is_vec_wgsl(t)).cloned();
+            let args_s: Vec<String> = if any_vec {
+                args.iter()
+                    .zip(arg_tys.iter())
+                    .map(|(a, ty)| {
+                        let rendered = emit_expr(a, ctx);
+                        if *ty == "f32" {
+                            if let Some(vty) = vec_ty.as_deref() {
+                                if name == "mix" {
+                                    // WGSL `mix(vec, vec, f32)` keeps a scalar factor.
+                                    return rendered;
+                                }
+                                return format!("{vty}({rendered})");
+                            }
+                        }
+                        rendered
+                    })
+                    .collect()
             } else {
-                args_s
+                coerce_all("f32")
             };
             match name {
                 "min" => format!(
@@ -270,10 +274,19 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
                 ),
-                "saturate" => format!(
-                    "clamp({}, 0.0, 1.0)",
-                    args_s.first().cloned().unwrap_or_else(|| "0.0".into())
-                ),
+                "saturate" => {
+                    if let Some(vty) = vec_ty.as_deref() {
+                        format!(
+                            "clamp({}, {vty}(0.0), {vty}(1.0))",
+                            args_s.first().cloned().unwrap_or_else(|| "0.0".into())
+                        )
+                    } else {
+                        format!(
+                            "clamp({}, 0.0, 1.0)",
+                            args_s.first().cloned().unwrap_or_else(|| "0.0".into())
+                        )
+                    }
+                }
                 "atan2" | "step" | "pow" => format!(
                     "{}({}, {})",
                     name,
@@ -340,6 +353,23 @@ fn mat_identity_wgsl(obj: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
                 obj.position(),
             );
             "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into()
+        }
+    }
+}
+
+fn splat_wgsl(obj: &ExpressionNode<'_>, arg: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
+    let s = coerce_expr_to_wgsl_ty(arg, "f32", ctx);
+    match receiver_wgsl_ty(obj) {
+        Some(ty) => format!("{ty}({s})"),
+        None => {
+            ctx.report_error(
+                format!(
+                    "GPU shader '{}' cannot emit splat() for a non-GpuVec receiver",
+                    ctx.kernel
+                ),
+                obj.position(),
+            );
+            format!("vec3<f32>({s})")
         }
     }
 }
@@ -444,7 +474,15 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             }
             let lt = infer_wgsl_ty(l, ctx);
             let rt = infer_wgsl_ty(r, ctx);
-            let common = common_numeric_wgsl_ty(&lt, &rt);
+            let common = common_arith_wgsl_ty(&lt, &rt);
+            // WGSL already allows `vecN op f32` / `f32 op vecN` without constructor casts.
+            if ((is_vec_wgsl(&lt) || is_mat_wgsl(&lt)) && rt == "f32")
+                || (is_vec_wgsl(&rt) && lt == "f32")
+                || (is_mat_wgsl(&lt) && is_vec_wgsl(&rt))
+                || (is_mat_wgsl(&lt) && is_mat_wgsl(&rt))
+            {
+                return format!("({ls} {op_s} {rs})");
+            }
             format!(
                 "({} {} {})",
                 cast_wgsl_if_needed(ls, &lt, &common),
@@ -504,6 +542,8 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
             } else if method.text == "identity" && args.is_empty() {
                 mat_identity_wgsl(obj, ctx)
+            } else if method.text == "splat" && args.len() == 1 {
+                splat_wgsl(obj, &args[0], ctx)
             } else {
                 emit_call(&method.text, args, ctx)
             }
@@ -517,6 +557,8 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                         format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
                     } else if method.text == "identity" && args.is_empty() {
                         mat_identity_wgsl(obj, ctx)
+                    } else if method.text == "splat" && args.len() == 1 {
+                        splat_wgsl(obj, &args[0], ctx)
                     } else {
                         emit_call(&method.text, args, ctx)
                     }
@@ -527,7 +569,7 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
         ExpressionNode::Ternary(c, t, e) => {
             let tt = infer_wgsl_ty(t, ctx);
             let et = infer_wgsl_ty(e, ctx);
-            let common = common_numeric_wgsl_ty(&tt, &et);
+            let common = common_arith_wgsl_ty(&tt, &et);
             format!(
                 "select({}, {}, {})",
                 coerce_expr_to_wgsl_ty(e, &common, ctx),

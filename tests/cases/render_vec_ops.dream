@@ -1,0 +1,43 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public pad: float;
+}
+
+@vertex
+fun vo_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.pad = 0.0;
+    return o;
+}
+
+@fragment
+fun vo_fs(v: VsOut, t: float): GpuVec4 {
+    let a = GpuVec3.of(0.2, 0.4, 0.6);
+    let b = GpuVec3.of(0.8, 0.1, 0.3);
+    let s = GpuMath.sin(t);
+    let mixed = GpuMath.mix(a, b, s * 0.5 + 0.25);
+    let scaled = mixed * 2.0 + a * s;
+    let n = GpuMath.abs(-scaled);
+    let m = GpuMat2.of(GpuVec2.of(0.8, -0.6), GpuVec2.of(0.6, 0.8));
+    let p = m * GpuVec2.of(t, v.pad);
+    let q = GpuMath.transpose(m) * p;
+    let sp = GpuVec3.splat(q.x);
+    return GpuVec4.of(n.x + sp.x, n.y, n.z, 1.0);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+    System.println("ok");
+}

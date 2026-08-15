@@ -2,6 +2,7 @@ module system.gpu;
 
 // Decode packed host input bytes (see native `gpu/input.rs` / JS `gpu.js`).
 public class GpuInputCodec {
+    // Reads a little-endian i32 at byte `off`.
     public static fun read_i32(buf: byte[], off: int): int {
         let b0 = (int)buf[off] & 255;
         let b1 = (int)buf[off + 1] & 255;
@@ -10,6 +11,7 @@ public class GpuInputCodec {
         return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
     }
 
+    // Reads a little-endian f32 at byte `off`.
     public static fun read_f32(buf: byte[], off: int): float {
         let slice = Buffer.alloc<byte>(4);
         slice[0] = buf[off];
@@ -19,6 +21,7 @@ public class GpuInputCodec {
         return Bytes.to<float>(slice);
     }
 
+    // Reads a length-prefixed UTF-8 string at byte `off`.
     public static fun read_string(buf: byte[], off: int): string {
         let n = GpuInputCodec.read_i32(buf, off);
         if (n < 0) { n = 0; }
@@ -34,12 +37,14 @@ public class GpuInputCodec {
         return Encoding.utf8_decode(slice);
     }
 
+    // Byte length of a length-prefixed string starting at `off` (header + payload).
     public static fun string_byte_len(buf: byte[], off: int): int {
         let n = GpuInputCodec.read_i32(buf, off);
         if (n < 0) { n = 0; }
         return 4 + n;
     }
 
+    // Decodes a packed pointer latch blob into `GpuPointer`.
     public static fun decode_pointer(buf: byte[]): GpuPointer {
         let p = GpuPointer();
         if (buf.length < 32) {
@@ -57,6 +62,7 @@ public class GpuInputCodec {
         return p;
     }
 
+    // Decodes a packed modifier latch blob into `GpuMods`.
     public static fun decode_mods(buf: byte[]): GpuMods {
         let m = GpuMods();
         if (buf.length < 4) { return m; }
@@ -67,6 +73,7 @@ public class GpuInputCodec {
         return m;
     }
 
+    // Decodes a packed event queue into `GpuInputEvent` values.
     public static fun decode_events(buf: byte[]): GpuInputEvent[] {
         if (buf.length < 4) {
             return Buffer.alloc<GpuInputEvent>(0);

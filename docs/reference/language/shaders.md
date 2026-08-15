@@ -102,6 +102,30 @@ fun fs(v: VsOut): FsOut {
 - Fragment: `frag_coord`, `front_facing`; `sample_index` / `primitive_index` when referenced
   (the latter emits `enable primitive_index;`)
 
+## Vector math
+
+`GpuVec2` / `GpuVec3` / `GpuVec4` support WGSL-shaped arithmetic inside shaders
+(and the same expressions on the CPU):
+
+- `v + w`, `v - w`, `v * w`, `v / w` (component-wise)
+- `v * s`, `v / s`, `s * v` (and `s + v`, `v + s`, …)
+- `-v`
+- `GpuMatN * GpuVecN` and `GpuMatN * GpuMatN`
+
+`GpuMath.mix` / `min` / `max` / `abs` / `clamp` / `saturate` / `sign` / `floor` /
+`ceil` / `fract` / `sqrt` / `exp` / `pow` take `float` or `GpuVecN`. `normalize` /
+`length` / `dot` use the same name for vec2/3/4. `GpuVecN.splat(s)` is WGSL `vecN(s)`.
+`GpuMat2.of(c0, c1)` lowers to `mat2x2<f32>(c0, c1)`. `GpuMath.transpose` maps to WGSL
+`transpose` (overloaded for `GpuMat2` / `GpuMat3` / `GpuMat4`). Shader `let` is inferred
+from the initializer — `let s = GpuMath.sin(t)` needs no `: float`.
+
+```dream
+@gpu
+fun shade(a: GpuVec3, b: GpuVec3, t: float): GpuVec3 {
+    return GpuMath.mix(a, b, t) * 0.8 + GpuVec3.splat(0.1);
+}
+```
+
 ## `@gpu` helpers
 
 Shaders may only call other GPU stages / `@gpu` helpers and `GpuMath` / `GpuVec*` /
@@ -118,8 +142,9 @@ Rules: top-level only; not generic/async/extern; explicit non-void return type.
 
 ## Matrices
 
-`GpuMat2` / `GpuMat3` / `GpuMat4` (column-major) plus `GpuMath.mul4` / `matmul4` /
-`transpose4` map to WGSL `matN` ops inside shaders.
+`GpuMat2` / `GpuMat3` / `GpuMat4` (column-major). Prefer `m * v` / `m * n` in shaders;
+`GpuMath.mul` is the named form (mat×vec or mat×mat). `GpuMath.transpose` maps to WGSL
+`transpose`.
 
 ## Rules
 

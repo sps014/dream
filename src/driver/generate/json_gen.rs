@@ -177,7 +177,7 @@ fn snapshot_class(s: &StructDeclarationNode<'_>) -> String {
         first = false;
         fields.push_str(&snapshot_field(
             &field.name.text,
-            field.type_token.text.as_str(),
+            &field.field_type.display_name(),
             &field.field_type,
             &field.attributes,
             &generic_params,
@@ -215,7 +215,7 @@ fn snapshot_union(e: &EnumDeclarationNode<'_>) -> String {
             first_f = false;
             fields.push_str(&snapshot_field(
                 &field.name.text,
-                field.type_token.text.as_str(),
+                &field.field_type.display_name(),
                 &field.field_type,
                 &field.attributes,
                 &generic_params,

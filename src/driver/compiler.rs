@@ -391,6 +391,10 @@ impl Compiler {
             }
         }
 
+        if self.emit_abi {
+            crate::driver::abi::embed_abi_in_wasm(out_path)?;
+        }
+
         Ok(())
     }
 }

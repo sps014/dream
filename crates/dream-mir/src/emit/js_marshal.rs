@@ -52,7 +52,9 @@ pub(super) fn emit_js_marshal(
         emit_js_to_struct(out, *ty, layout, interner, mir, strings, tags);
     }
     for elem in array_elem_types(mir, interner) {
-        if is_marshalable(interner, elem) {
+        if is_marshalable(interner, elem)
+            && value_to_js(interner, mir, "(local.get $arr)", elem).is_some()
+        {
             emit_array_to_js(out, elem, interner, mir);
             emit_js_to_array(out, elem, interner, mir, strings);
         }

@@ -10,7 +10,6 @@ module system.text;
 // See docs/stdlib/regex.md for the supported syntax.
 public class Regex {
     pattern: string;
-    flags: RegexFlags;
     prog: RegexInst[];
     table: RegexSubTable;
     ngroup: int;
@@ -26,11 +25,10 @@ public class Regex {
 
     public constructor(pattern: string, flags: RegexFlags = 0) {
         this.pattern = pattern;
-        this.flags = flags;
-        this.ignore_case = this.flags.has(RegexFlags.IgnoreCase);
-        this.multiline = this.flags.has(RegexFlags.Multiline);
-        this.dot_all = this.flags.has(RegexFlags.DotAll);
-        this.global = this.flags.has(RegexFlags.Global);
+        this.ignore_case = flags.has(RegexFlags.IgnoreCase);
+        this.multiline = flags.has(RegexFlags.Multiline);
+        this.dot_all = flags.has(RegexFlags.DotAll);
+        this.global = flags.has(RegexFlags.Global);
 
         let parser = RegexParser(this.pattern);
         let ast = parser.parse();

@@ -534,6 +534,41 @@ function wrapInPlaceByteArrayFill(getInstance, fillBytes) {
 const FUTURE_KIND_HOST = 1;
 const FUTURE_SLOTS_SIZE = 64; // F_SLOTS: a host future has no saved-locals region.
 
+const runLoopPumps = new WeakMap();
+
+/**
+ * Drain `__dream_run_loop` without nesting. Browsers flush microtasks at wasm→JS import
+ * boundaries, so a Promise `then` can run while poll is still on the stack. Calling the
+ * scheduler there re-enters poll until `$malloc` OOBs. Key state by the Dream instance
+ * (the WASM exports object is not a reliable WeakMap key) and always hop to a microtask
+ * so `run_loop` never starts from inside an import.
+ */
+function pumpRunLoop(inst) {
+  let s = runLoopPumps.get(inst);
+  if (!s) {
+    s = { running: false, queued: false };
+    runLoopPumps.set(inst, s);
+  }
+  s.queued = true;
+  if (s.running) return;
+  s.running = true;
+  const drain = () => {
+    try {
+      while (s.queued) {
+        s.queued = false;
+        inst.exports.__dream_run_loop();
+      }
+    } finally {
+      s.running = false;
+      if (s.queued) {
+        s.running = true;
+        queueMicrotask(drain);
+      }
+    }
+  };
+  queueMicrotask(drain);
+}
+
 /**
  * Wraps an `extern async` import. The JS implementation returns a Promise; the wrapper
  * synchronously allocates a host `Future` and hands its pointer back to Dream, then resolves it
@@ -565,7 +600,7 @@ function wrapAsyncImport(getInstance, fn, signature) {
         ? boxLong64(inst, rawResult, boxTag)
         : marshalResult(inst, result, rawResult);
       exports.__dream_resolve(future, marshaled);
-      exports.__dream_run_loop();
+      pumpRunLoop(inst);
     };
     Promise.resolve(fn(...args)).then(
       (value) => settle(value),
@@ -1549,11 +1584,46 @@ function makeCryptoHost() {
   };
 }
 
+// ----- urls.js -----
+/** WASM custom-section name written by `embed_abi_in_wasm` (`src/driver/abi.rs`). */
+const ABI_CUSTOM_SECTION = "dream-abi";
+
+/**
+ * ABI JSON baked into the module. `run("./mod.wasm")` should not need a sibling fetch.
+ */
+function readEmbeddedAbi(wasmModule) {
+  if (typeof WebAssembly.Module.customSections !== "function") return null;
+  const secs = WebAssembly.Module.customSections(wasmModule, ABI_CUSTOM_SECTION);
+  if (!secs.length) return null;
+  return JSON.parse(new TextDecoder("utf-8").decode(secs[0]));
+}
+
+/**
+ * Swap a Dream artifact extension (`.wasm` / `.abi.json` / `.wgsl`), keeping `?query` / `#hash`.
+ * Fallback when an older `.wasm` has no embedded ABI section.
+ */
+function replaceArtifactExt(source, ext) {
+  if (typeof source !== "string") return undefined;
+  const q = source.search(/[?#]/);
+  const path = q < 0 ? source : source.slice(0, q);
+  const extra = q < 0 ? "" : source.slice(q);
+  const stem = path.endsWith(".abi.json")
+    ? path.slice(0, -9)
+    : path.endsWith(".wasm")
+      ? path.slice(0, -5)
+      : path.endsWith(".wgsl")
+        ? path.slice(0, -5)
+        : null;
+  if (stem == null) return undefined;
+  return stem + ext + extra;
+}
+
 // ----- hosts/gpu.js -----
 /**
  * WebGPU host for `system.gpu`. Buffers/textures/surfaces/samplers are tracked by integer id;
  * kernels come from the sibling `.wgsl` + `abi.gpu.kernels` metadata attached via `attachGpuAbi`.
  */
+
 function makeGpuHost(getInstance) {
   const buffers = new Map(); // id -> { gpuBuffer, nbytes, cpu, usage }
   const shaders = new Map();
@@ -1616,7 +1686,7 @@ function makeGpuHost(getInstance) {
   function attachFromAbi(abi, sourceHint) {
     gpuAbi = abi && abi.gpu ? abi.gpu : null;
     if (gpuAbi && typeof sourceHint === "string") {
-      wgslSource = sourceHint.replace(/\.wasm$/, ".wgsl").replace(/\.abi\.json$/, ".wgsl");
+      wgslSource = replaceArtifactExt(sourceHint, ".wgsl");
     }
   }
 
@@ -2252,9 +2322,43 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       layout: dev.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module, entryPoint: meta.entry },
     });
-    pipe = { pipeline, layout, meta };
+    pipe = { pipeline, layout, meta, uniformPool: [], uniformCursor: 0 };
     pipelineCache.set(kernel, pipe);
     return pipe;
+  }
+
+  const UNIFORM_BYTES = 256;
+
+  function resetComputeUniformCursors() {
+    for (const pipe of pipelineCache.values()) {
+      pipe.uniformCursor = 0;
+    }
+  }
+
+  function allocComputeUniform(dev, pipe) {
+    if (!pipe.uniformPool) {
+      pipe.uniformPool = [];
+      pipe.uniformCursor = 0;
+    }
+    const slot = pipe.uniformCursor++;
+    if (slot >= pipe.uniformPool.length) {
+      pipe.uniformPool.push(dev.createBuffer({
+        size: UNIFORM_BYTES,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      }));
+    }
+    return pipe.uniformPool[slot];
+  }
+
+  function ensureRenderUniform(dev, rp) {
+    if (!rp.uniformBuf) {
+      rp.uniformBuf = dev.createBuffer({
+        size: UNIFORM_BYTES,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      rp.uniformBindGroup = null;
+    }
+    return rp.uniformBuf;
   }
 
   async function buildBindGroup(dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
@@ -2272,17 +2376,14 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       if (usedBindings.has(bind.binding)) continue;
       usedBindings.add(bind.binding);
       if (bind.kind === "uniform") {
-        const ubuf = dev.createBuffer({
-          size: 256,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        const bytes = new Uint8Array(256);
+        const ubuf = allocComputeUniform(dev, pipe);
+        const bytes = new Uint8Array(UNIFORM_BYTES);
         const i32 = new Int32Array(bytes.buffer);
         i32[0] = ex | 0;
         i32[1] = ey | 0;
         i32[2] = ez | 0;
         if (extra.byteLength > 0) {
-          bytes.set(extra.subarray(0, Math.min(extra.byteLength, 256 - 12)), 12);
+          bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES - 12)), 12);
         }
         dev.queue.writeBuffer(ubuf, 0, bytes);
         resources.push({ binding: bind.binding, resource: { buffer: ubuf } });
@@ -2333,6 +2434,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
   async function runDispatch(kernel, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
     const dev = await ensureDevice();
+    resetComputeUniformCursors();
     const pipe = await getPipeline(dev, kernel);
     const bg = await buildBindGroup(
       dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms,
@@ -2348,6 +2450,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     kernel, bufferIds, textureIds, samplerIds, indirectId, indirectOffset,
   ) {
     const dev = await ensureDevice();
+    resetComputeUniformCursors();
     const pipe = await getPipeline(dev, kernel);
     const bg = await buildBindGroup(
       dev, pipe, bufferIds, textureIds, samplerIds, 1, 1, 1, [],
@@ -2365,28 +2468,31 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     const used = new Set();
     const entries = [];
     const extra = toU8(uniforms);
+    let wroteUniform = false;
     for (const bind of binds) {
       if (used.has(bind.binding)) continue;
       used.add(bind.binding);
       if (bind.kind === "uniform") {
-        const ubuf = dev.createBuffer({
-          size: 256,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        const bytes = new Uint8Array(256);
-        if (extra.byteLength > 0) {
-          bytes.set(extra.subarray(0, Math.min(extra.byteLength, 256)), 0);
+        const ubuf = ensureRenderUniform(dev, rp);
+        if (!wroteUniform) {
+          const bytes = new Uint8Array(UNIFORM_BYTES);
+          if (extra.byteLength > 0) {
+            bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES)), 0);
+          }
+          dev.queue.writeBuffer(ubuf, 0, bytes);
+          wroteUniform = true;
         }
-        dev.queue.writeBuffer(ubuf, 0, bytes);
         entries.push({ binding: bind.binding, resource: { buffer: ubuf } });
       }
       // textures/samplers for render draws can be added later via dedicated APIs
     }
     if (entries.length === 0) return null;
-    return dev.createBindGroup({
+    if (rp.uniformBindGroup) return rp.uniformBindGroup;
+    rp.uniformBindGroup = dev.createBindGroup({
       layout: rp.pipeline.getBindGroupLayout(0),
       entries,
     });
+    return rp.uniformBindGroup;
   }
 
   const host = {
@@ -3568,6 +3674,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         passes.delete(passId);
         if (ops.length === 0) return 0;
         const dev = await ensureDevice();
+        resetComputeUniformCursors();
         const encoder = dev.createCommandEncoder();
         for (const op of ops) {
           const pipe = await getPipeline(dev, op.kernel);
@@ -4543,6 +4650,17 @@ async function loadAbi(abi) {
   return JSON.parse(new TextDecoder("utf-8").decode(bytes));
 }
 
+async function resolveAbi(wasmModule, source, options) {
+  if (options.abi && typeof options.abi === "object" && options.abi.externs) {
+    return options.abi;
+  }
+  const embedded = readEmbeddedAbi(wasmModule);
+  if (embedded) return embedded;
+  const url =
+    typeof options.abi === "string" ? options.abi : replaceArtifactExt(source, ".abi.json");
+  return loadAbi(url);
+}
+
 function makeLinearMemory(wasmModule) {
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
@@ -4568,8 +4686,8 @@ function makeLinearMemory(wasmModule) {
  */
 async function load(source, options = {}) {
   const wasmBytes = await fetchBytes(source);
-  const abi = await loadAbi(options.abi);
   const wasmModule = await WebAssembly.compile(wasmBytes);
+  const abi = await resolveAbi(wasmModule, source, options);
 
   if (isNode && !options.__skipNodePreload) {
     try {
@@ -4648,6 +4766,20 @@ async function load(source, options = {}) {
     }
   }
 
+  // Compiler-emitted imports (e.g. `jsRetain` / `jsRelease`) appear in the WASM module but are not
+  // listed in `.abi.json` — bind any still-missing Dream functions from the host factory.
+  for (const imp of WebAssembly.Module.imports(wasmModule)) {
+    if (imp.kind !== "function" || imp.module !== "Dream") continue;
+    const bucket = (importObject.Dream ||= {});
+    if (bucket[imp.name]) continue;
+    const resolved = builtinDream[imp.name];
+    bucket[imp.name] = resolved
+      ? wrapFor(resolved, null)
+      : () => {
+          throw new Error(`no JS implementation for Dream.${imp.name}`);
+        };
+  }
+
   const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
   instance = new DreamInstance(wasmInstance);
   return instance;
@@ -4659,9 +4791,7 @@ async function load(source, options = {}) {
  * @returns {Promise<DreamInstance>} the loaded instance (after `main` has run).
  */
 async function run(source, options = {}) {
-  const abi =
-    options.abi ?? (typeof source === "string" ? source.replace(/\.wasm$/, ".abi.json") : undefined);
-  const mod = await load(source, { ...options, abi });
+  const mod = await load(source, options);
   mod.run();
   return mod;
 }

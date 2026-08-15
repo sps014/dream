@@ -15,6 +15,59 @@ use dream_syntax::nodes::{AttributeNode, FunctionNode, ProgramNode, Type};
 /// One live host import after MIR pruning: `(module, field)` as emitted on the WASM import.
 pub type LiveImport = (String, String);
 
+/// WASM custom-section name the JS loader reads with `WebAssembly.Module.customSections`.
+pub const ABI_CUSTOM_SECTION: &str = "dream-abi";
+
+fn uleb32(mut n: u32) -> Vec<u8> {
+    let mut out = Vec::new();
+    loop {
+        let mut b = (n & 0x7f) as u8;
+        n >>= 7;
+        if n != 0 {
+            b |= 0x80;
+        }
+        out.push(b);
+        if n == 0 {
+            break;
+        }
+    }
+    out
+}
+
+/// A WASM custom section (`id = 0`) named `name` with `payload` bytes.
+pub(crate) fn wasm_custom_section(name: &str, payload: &[u8]) -> Vec<u8> {
+    let mut body = uleb32(name.len() as u32);
+    body.extend(name.as_bytes());
+    body.extend(payload);
+    let mut sec = vec![0u8];
+    sec.extend(uleb32(body.len() as u32));
+    sec.extend(body);
+    sec
+}
+
+/// Appends the sibling `.abi.json` into the `.wasm` as a `dream-abi` custom section so
+/// `run("./mod.wasm")` does not need a second fetch. Call **after** wasm-opt (Binaryen drops
+/// unknown custom sections). Missing files are a no-op — assembly may have failed earlier.
+pub(crate) fn embed_abi_in_wasm(wat_path: &str) -> Result<(), Error> {
+    let base = Path::new(wat_path);
+    let wasm_path = base.with_extension("wasm");
+    let abi_path = base.with_extension("abi.json");
+    if !wasm_path.exists() || !abi_path.exists() {
+        return Ok(());
+    }
+    let abi = fs::read(&abi_path)?;
+    let mut wasm = fs::read(&wasm_path)?;
+    if wasm
+        .windows(ABI_CUSTOM_SECTION.len())
+        .any(|w| w == ABI_CUSTOM_SECTION.as_bytes())
+    {
+        return Ok(());
+    }
+    wasm.extend(wasm_custom_section(ABI_CUSTOM_SECTION, &abi));
+    fs::write(&wasm_path, wasm)?;
+    Ok(())
+}
+
 /// Emits a binary `.wasm` next to the `.wat`, and optionally an `.abi.json` describing the module's
 /// **live** extern imports (for JS interop marshaling) and exported functions. When `gpu` is
 /// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI (when ABI
@@ -585,5 +638,14 @@ mod tests {
             json
         );
         assert!(json.contains("\"align\": 1"), "expected align 1: {}", json);
+    }
+
+    #[test]
+    fn wasm_custom_section_carries_name_and_payload() {
+        let sec = wasm_custom_section(ABI_CUSTOM_SECTION, br#"{"externs":[]}"#);
+        assert_eq!(sec[0], 0, "custom section id");
+        let joined = String::from_utf8_lossy(&sec);
+        assert!(joined.contains(ABI_CUSTOM_SECTION));
+        assert!(joined.contains("externs"));
     }
 }

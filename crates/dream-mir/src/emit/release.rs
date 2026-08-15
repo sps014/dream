@@ -55,11 +55,7 @@ pub(super) fn retain_call(interner: &TypeInterner, ty: TypeId) -> &'static str {
 /// the `$rc`/`$nc` locals, which every release function declares. Matches `$release_generic`'s ABI
 /// (refcount word at `ptr - 4`).
 pub(super) fn emit_release_prologue(out: &mut String) {
-    out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
-    out.push_str("  (local.get $ptr) (i32.const 4) (i32.sub) (local.set $rc)\n");
-    out.push_str("  (local.get $rc) (i32.load) (i32.const 1) (i32.sub) (local.set $nc)\n");
-    out.push_str("  (local.get $rc) (local.get $nc) (i32.store)\n");
-    out.push_str("  (local.get $nc) (i32.eqz) (if (then\n");
+    emit_release_prologue_atomic(out);
 }
 
 /// Like [`emit_release_prologue`], but for an `@shared class`'s generated `$release_<Type>`: the

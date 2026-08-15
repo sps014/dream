@@ -23,10 +23,9 @@ public class Bytes {
     public static fun toWireString(borrow bytes: byte[]): string {
         let n = bytes.length;
         let s = string.alloc(n);
-        let src = Span<byte>.of(bytes);
         let i = 0;
         while (i < n) {
-            string.set(s, i, (char)src.get(i));
+            string.set(s, i, (char)bytes[i]);
             i = i + 1;
         }
         return s;
@@ -36,10 +35,9 @@ public class Bytes {
     public static fun fromWireString(borrow s: string): byte[] {
         let n = s.length;
         let out = Buffer.alloc<byte>(n);
-        let dst = Span<byte>.of(out);
         let i = 0;
         while (i < n) {
-            dst.set(i, (byte)s.char_at(i).to_int());
+            out[i] = (byte)s.char_at(i).to_int();
             i = i + 1;
         }
         return out;

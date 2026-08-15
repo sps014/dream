@@ -12,7 +12,11 @@ internal class RegexCompiler {
         this.pc = 0;
         this.ignore_case = ignore_case;
         this.dot_all = dot_all;
-        this.table = table;
+        this.table = RegexCompiler.share_table(table);
+    }
+
+    static fun share_table(t: RegexSubTable): RegexSubTable {
+        return t;
     }
 
     static fun fold_ranges(ranges: List<char>): List<char> {

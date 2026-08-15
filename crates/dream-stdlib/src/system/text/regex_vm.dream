@@ -14,6 +14,14 @@ internal class RegexThreadq {
     }
 
     public fun clear(): void {
+        if (this.count > 0) {
+            let z = Buffer.alloc<int[]>(1);
+            let i = 0;
+            while (i < this.count) {
+                this.caps[i] = z[0];
+                i = i + 1;
+            }
+        }
         this.count = 0;
     }
 
@@ -23,7 +31,7 @@ internal class RegexThreadq {
         this.caps = Buffer.realloc<int[]>(this.caps, n);
     }
 
-    public fun push(pc: int, caps: int[]): void {
+    public fun push(pc: int, borrow caps: int[]): void {
         if (this.count == this.pcs.length) {
             this.grow();
         }
@@ -70,10 +78,10 @@ internal class RegexVM {
     hint_pc: int;
 
     public constructor(borrow prog: RegexInst[], ngroup: int, multiline: bool, borrow table: RegexSubTable) {
-        this.prog = prog;
+        this.prog = RegexVM.share_prog(prog);
         this.ngroup = ngroup;
         this.multiline = multiline;
-        this.table = table;
+        this.table = RegexVM.share_table(table);
         this.stack = RegexThreadq();
         this.clist = RegexThreadq();
         this.nlist = RegexThreadq();
@@ -83,6 +91,14 @@ internal class RegexVM {
         this.prefix_pc = 0 - 1;
         this.hint_pc = 0 - 1;
         this.analyze_skip_hint();
+    }
+
+    static fun share_prog(p: RegexInst[]): RegexInst[] {
+        return p;
+    }
+
+    static fun share_table(t: RegexSubTable): RegexSubTable {
+        return t;
     }
 
     // The compiled program is `.*?` (non-greedy star of any-char) then group 0. If the body is

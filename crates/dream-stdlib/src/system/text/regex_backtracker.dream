@@ -19,10 +19,18 @@ internal class RegexBacktrackVM {
     table: RegexSubTable;
 
     public constructor(borrow prog: RegexInst[], ngroup: int, multiline: bool, borrow table: RegexSubTable) {
-        this.prog = prog;
+        this.prog = RegexBacktrackVM.share_prog(prog);
         this.ngroup = ngroup;
         this.multiline = multiline;
-        this.table = table;
+        this.table = RegexBacktrackVM.share_table(table);
+    }
+
+    static fun share_prog(p: RegexInst[]): RegexInst[] {
+        return p;
+    }
+
+    static fun share_table(t: RegexSubTable): RegexSubTable {
+        return t;
     }
 
     fun copy_caps(src: int[]): int[] {

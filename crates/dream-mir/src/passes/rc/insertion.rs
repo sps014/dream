@@ -264,6 +264,13 @@ fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])> {
         Statement::Assign(_, Rvalue::New { ctor: Some(_), args, .. }) => {
             Some((vec![true; args.len()], args))
         }
+        // Indirect `fun` values carry no `take_params` ABI, but async constructors (and other
+        // sink-default callees) still consume the argument. Treat every indirect arg as a sink so
+        // the wrapper does not release a pointer the callee stored on a Future frame.
+        Statement::IndirectCall { args, .. } => Some((vec![true; args.len()], args)),
+        Statement::Assign(_, Rvalue::IndirectCall { args, .. }) => {
+            Some((vec![true; args.len()], args))
+        }
         _ => None,
     }
 }

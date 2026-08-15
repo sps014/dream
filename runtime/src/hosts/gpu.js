@@ -2,6 +2,8 @@
  * WebGPU host for `system.gpu`. Buffers/textures/surfaces/samplers are tracked by integer id;
  * kernels come from the sibling `.wgsl` + `abi.gpu.kernels` metadata attached via `attachGpuAbi`.
  */
+import { replaceArtifactExt } from "../urls.js";
+
 function makeGpuHost(getInstance) {
   const buffers = new Map(); // id -> { gpuBuffer, nbytes, cpu, usage }
   const shaders = new Map();
@@ -64,7 +66,7 @@ function makeGpuHost(getInstance) {
   function attachFromAbi(abi, sourceHint) {
     gpuAbi = abi && abi.gpu ? abi.gpu : null;
     if (gpuAbi && typeof sourceHint === "string") {
-      wgslSource = sourceHint.replace(/\.wasm$/, ".wgsl").replace(/\.abi\.json$/, ".wgsl");
+      wgslSource = replaceArtifactExt(sourceHint, ".wgsl");
     }
   }
 
@@ -700,9 +702,43 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       layout: dev.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module, entryPoint: meta.entry },
     });
-    pipe = { pipeline, layout, meta };
+    pipe = { pipeline, layout, meta, uniformPool: [], uniformCursor: 0 };
     pipelineCache.set(kernel, pipe);
     return pipe;
+  }
+
+  const UNIFORM_BYTES = 256;
+
+  function resetComputeUniformCursors() {
+    for (const pipe of pipelineCache.values()) {
+      pipe.uniformCursor = 0;
+    }
+  }
+
+  function allocComputeUniform(dev, pipe) {
+    if (!pipe.uniformPool) {
+      pipe.uniformPool = [];
+      pipe.uniformCursor = 0;
+    }
+    const slot = pipe.uniformCursor++;
+    if (slot >= pipe.uniformPool.length) {
+      pipe.uniformPool.push(dev.createBuffer({
+        size: UNIFORM_BYTES,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      }));
+    }
+    return pipe.uniformPool[slot];
+  }
+
+  function ensureRenderUniform(dev, rp) {
+    if (!rp.uniformBuf) {
+      rp.uniformBuf = dev.createBuffer({
+        size: UNIFORM_BYTES,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      rp.uniformBindGroup = null;
+    }
+    return rp.uniformBuf;
   }
 
   async function buildBindGroup(dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
@@ -720,17 +756,14 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       if (usedBindings.has(bind.binding)) continue;
       usedBindings.add(bind.binding);
       if (bind.kind === "uniform") {
-        const ubuf = dev.createBuffer({
-          size: 256,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        const bytes = new Uint8Array(256);
+        const ubuf = allocComputeUniform(dev, pipe);
+        const bytes = new Uint8Array(UNIFORM_BYTES);
         const i32 = new Int32Array(bytes.buffer);
         i32[0] = ex | 0;
         i32[1] = ey | 0;
         i32[2] = ez | 0;
         if (extra.byteLength > 0) {
-          bytes.set(extra.subarray(0, Math.min(extra.byteLength, 256 - 12)), 12);
+          bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES - 12)), 12);
         }
         dev.queue.writeBuffer(ubuf, 0, bytes);
         resources.push({ binding: bind.binding, resource: { buffer: ubuf } });
@@ -781,6 +814,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
   async function runDispatch(kernel, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
     const dev = await ensureDevice();
+    resetComputeUniformCursors();
     const pipe = await getPipeline(dev, kernel);
     const bg = await buildBindGroup(
       dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms,
@@ -796,6 +830,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     kernel, bufferIds, textureIds, samplerIds, indirectId, indirectOffset,
   ) {
     const dev = await ensureDevice();
+    resetComputeUniformCursors();
     const pipe = await getPipeline(dev, kernel);
     const bg = await buildBindGroup(
       dev, pipe, bufferIds, textureIds, samplerIds, 1, 1, 1, [],
@@ -813,28 +848,31 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     const used = new Set();
     const entries = [];
     const extra = toU8(uniforms);
+    let wroteUniform = false;
     for (const bind of binds) {
       if (used.has(bind.binding)) continue;
       used.add(bind.binding);
       if (bind.kind === "uniform") {
-        const ubuf = dev.createBuffer({
-          size: 256,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        const bytes = new Uint8Array(256);
-        if (extra.byteLength > 0) {
-          bytes.set(extra.subarray(0, Math.min(extra.byteLength, 256)), 0);
+        const ubuf = ensureRenderUniform(dev, rp);
+        if (!wroteUniform) {
+          const bytes = new Uint8Array(UNIFORM_BYTES);
+          if (extra.byteLength > 0) {
+            bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES)), 0);
+          }
+          dev.queue.writeBuffer(ubuf, 0, bytes);
+          wroteUniform = true;
         }
-        dev.queue.writeBuffer(ubuf, 0, bytes);
         entries.push({ binding: bind.binding, resource: { buffer: ubuf } });
       }
       // textures/samplers for render draws can be added later via dedicated APIs
     }
     if (entries.length === 0) return null;
-    return dev.createBindGroup({
+    if (rp.uniformBindGroup) return rp.uniformBindGroup;
+    rp.uniformBindGroup = dev.createBindGroup({
       layout: rp.pipeline.getBindGroupLayout(0),
       entries,
     });
+    return rp.uniformBindGroup;
   }
 
   const host = {
@@ -2016,6 +2054,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         passes.delete(passId);
         if (ops.length === 0) return 0;
         const dev = await ensureDevice();
+        resetComputeUniformCursors();
         const encoder = dev.createCommandEncoder();
         for (const op of ops) {
           const pipe = await getPipeline(dev, op.kernel);

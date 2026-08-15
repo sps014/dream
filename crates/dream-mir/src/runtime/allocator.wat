@@ -416,21 +416,18 @@
     )
 )
 
+;; Atomic: owner + `WebWorker` instances share linear memory, so a non-atomic load/add/store on the
+;; refcount word is a data race even for ordinary (non-`@shared`) strings and futures.
 (func $retain (param $ptr i32)
-    (local $ref_count_ptr i32)
     local.get $ptr
     i32.eqz
     br_if 0
     local.get $ptr
     i32.const 4
     i32.sub
-    local.set $ref_count_ptr
-    local.get $ref_count_ptr
-    local.get $ref_count_ptr
-    i32.load
     i32.const 1
-    i32.add
-    i32.store
+    i32.atomic.rmw.add
+    drop
 )
 
 (func $object_tag (param $ptr i32) (result i32)
@@ -448,25 +445,19 @@
 )
 
 (func $release_generic (param $ptr i32)
-    (local $ref_count_ptr i32)
-    (local $new_count i32)
+    (local $old i32)
     local.get $ptr
     i32.eqz
     br_if 0
     local.get $ptr
     i32.const 4
     i32.sub
-    local.set $ref_count_ptr
-    local.get $ref_count_ptr
-    i32.load
     i32.const 1
-    i32.sub
-    local.set $new_count
-    local.get $ref_count_ptr
-    local.get $new_count
-    i32.store
-    local.get $new_count
-    i32.eqz
+    i32.atomic.rmw.sub
+    local.set $old
+    local.get $old
+    i32.const 1
+    i32.eq
     (if (then
         local.get $ptr
         call $free

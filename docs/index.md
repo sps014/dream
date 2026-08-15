@@ -9,7 +9,7 @@ hide:
   <p class="dream-hero-subtitle">
     A typed language with familiar <code>fun</code> / <code>let</code> syntax.
     Write once, compile to WebAssembly, and run on your computer, in the browser, or in Node.
-    Memory is automatic reference counting (ARC) — no GC pauses.
+    Memory is automatic reference counting (ARC).
   </p>
   <div class="dream-hero-actions">
     <a href="learn/quickstart/" class="md-button md-button--primary">Get started</a>
@@ -35,7 +35,7 @@ fun main() {
 <div class="dream-feature-strip" markdown>
 
 - **Static types** with inference
-- **ARC** memory (no GC pauses)
+- **ARC** memory
 - **Generics** monomorphized to WASM
 - **Classes / structs / interfaces**
 - **Enums & unions** with `switch`

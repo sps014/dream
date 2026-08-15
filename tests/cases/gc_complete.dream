@@ -1,4 +1,4 @@
-// Comprehensive garbage-collection (ARC) coverage. Uses the `Debug.*` allocator probes to assert,
+// Comprehensive ARC coverage. Uses the `Debug.*` allocator probes to assert,
 // at runtime, that every allocation pattern is reference-counted correctly:
 //   * ref_count()        - retain/release arithmetic on shared values
 //   * live_objects()     - net live blocks (leak detection)

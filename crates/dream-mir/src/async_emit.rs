@@ -183,7 +183,6 @@ pub fn emit_async_function(
     // Poll MIR is lowered here (stubs skip module-wide RcInsertion), so insert RC on this CFG
     // before emit — otherwise mid-body aliasing/reassign and return handoff corrupt counts.
     let mut body = lower_async_poll_body(hir, interner);
-    // HIR sink flags (parallel to `body.params`) — needed before we mark poll params owned.
     let param_is_sink: Vec<bool> = hir.params.iter().map(|p| p.is_take).collect();
     // Frame owns each RC param's +1 (sink transfer or borrow retain in the ctor). Mark them take
     // so poll RcInsertion releases them at AsyncComplete.

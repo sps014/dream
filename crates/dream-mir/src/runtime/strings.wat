@@ -480,14 +480,21 @@
         i32.eqz
         if
             i32.const {STRING_EMPTY}
+            call $retain
+            i32.const {STRING_EMPTY}
             return
         end
+        ;; Identity return still transfers an owned ref to the caller.
+        local.get $str2
+        call $retain
         local.get $str2
         return
     end
     local.get $len2
     i32.eqz
     if
+        local.get $str1
+        call $retain
         local.get $str1
         return
     end

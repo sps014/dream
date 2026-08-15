@@ -389,6 +389,16 @@ pub(super) fn array_elem_types(mir: &crate::Mir, interner: &TypeInterner) -> Vec
     for g in &mir.globals {
         push_array_elem(&mut order, interner, g.ty);
     }
+    // Every interned array type, not just those that appear as locals/fields: a `Release` of a
+    // temporary can name `$release_array_t<E>` for an element type that never sat in a local
+    // (e.g. `Promise.all` argument arrays, value-tuple arrays).
+    for (_id, kind) in interner.iter_kinds() {
+        if let TyKind::Array(elem) = kind {
+            if !order.contains(elem) {
+                order.push(*elem);
+            }
+        }
+    }
     // Fixpoint: an element type that is *itself* an array (`int[][]` → element `int[]`) needs its own
     // inner-element helper; `push_array_elem` unwraps one array level, so re-pushing each element adds it.
     let mut i = 0;

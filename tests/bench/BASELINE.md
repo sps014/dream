@@ -21,7 +21,7 @@ in our WASM assembler target).
 | list_insert_mid | ~170 | ~3× faster |
 | map_clear_reuse | ~65 | ~1.6× faster |
 
-## After (beat-GC levers: clear reuse / SROA ctor expand / ScratchArena / regex SOA)
+## After (clear reuse / SROA ctor expand / ScratchArena / regex SOA)
 
 | Bench | ns_per_op (approx) | notes |
 |-------|-------------------:|-------|

@@ -1,6 +1,6 @@
 # Memory Management
 
-Dream manages heap memory with **Automatic Reference Counting (ARC)**. You never call `free`, and there is no garbage collector to pause your program — memory is reclaimed the moment the last reference to an object drops.
+Dream manages heap memory with **Automatic Reference Counting (ARC)**. You never call `free` — memory is reclaimed the moment the last reference to an object drops.
 
 ## What lives on the heap
 

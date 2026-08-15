@@ -112,6 +112,41 @@ export function wrapInPlaceByteArrayFill(getInstance, fillBytes) {
 export const FUTURE_KIND_HOST = 1;
 export const FUTURE_SLOTS_SIZE = 64; // F_SLOTS: a host future has no saved-locals region.
 
+const runLoopPumps = new WeakMap();
+
+/**
+ * Drain `__dream_run_loop` without nesting. Browsers flush microtasks at wasm→JS import
+ * boundaries, so a Promise `then` can run while poll is still on the stack. Calling the
+ * scheduler there re-enters poll until `$malloc` OOBs. Key state by the Dream instance
+ * (the WASM exports object is not a reliable WeakMap key) and always hop to a microtask
+ * so `run_loop` never starts from inside an import.
+ */
+export function pumpRunLoop(inst) {
+  let s = runLoopPumps.get(inst);
+  if (!s) {
+    s = { running: false, queued: false };
+    runLoopPumps.set(inst, s);
+  }
+  s.queued = true;
+  if (s.running) return;
+  s.running = true;
+  const drain = () => {
+    try {
+      while (s.queued) {
+        s.queued = false;
+        inst.exports.__dream_run_loop();
+      }
+    } finally {
+      s.running = false;
+      if (s.queued) {
+        s.running = true;
+        queueMicrotask(drain);
+      }
+    }
+  };
+  queueMicrotask(drain);
+}
+
 /**
  * Wraps an `extern async` import. The JS implementation returns a Promise; the wrapper
  * synchronously allocates a host `Future` and hands its pointer back to Dream, then resolves it
@@ -143,7 +178,7 @@ export function wrapAsyncImport(getInstance, fn, signature) {
         ? boxLong64(inst, rawResult, boxTag)
         : marshalResult(inst, result, rawResult);
       exports.__dream_resolve(future, marshaled);
-      exports.__dream_run_loop();
+      pumpRunLoop(inst);
     };
     Promise.resolve(fn(...args)).then(
       (value) => settle(value),

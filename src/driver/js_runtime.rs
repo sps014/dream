@@ -36,6 +36,7 @@ impl JsRuntimeTarget {
 
 const ALWAYS_MODULES: &[&str] = &[
     "platform.js",
+    "urls.js",
     "core.js",
     "instance.js",
     "marshal.js",
@@ -261,8 +262,12 @@ function makeLinearMemory(wasmModule) {{
 
 async function load(source, options = {{}}) {{
   const wasmBytes = await fetchBytes(source);
-  const abi = await loadAbi(options.abi);
   const wasmModule = await WebAssembly.compile(wasmBytes);
+  let abi = options.abi;
+  if (!(abi && typeof abi === "object" && abi.externs)) {{
+    abi = readEmbeddedAbi(wasmModule)
+      || await loadAbi(typeof abi === "string" ? abi : replaceArtifactExt(source, ".abi.json"));
+  }}
 {fs_preload}{crypto_preload}{child_process_preload}{net_preload}
   let instance = null;
   const getInstance = () => {{
@@ -323,9 +328,7 @@ async function load(source, options = {{}}) {{
 }}
 
 async function run(source, options = {{}}) {{
-  const abi =
-    options.abi ?? (typeof source === "string" ? source.replace(/\.wasm$/, ".abi.json") : undefined);
-  const mod = await load(source, {{ ...options, abi }});
+  const mod = await load(source, {{ ...options }});
   mod.run();
   return mod;
 }}
@@ -442,6 +445,7 @@ mod tests {
         assert!(!text.contains("makeFsHost"));
         assert!(!text.contains("makeCryptoHost"));
         assert!(text.contains("function load("));
+        assert!(text.contains("readEmbeddedAbi"));
         assert!(text.contains("const isNode = false;"));
         assert!(!text.contains("node:fs"));
     }

@@ -11,6 +11,7 @@ import { defaultEnv } from "./hosts/env.js";
 import { defaultDreamModule } from "./hosts.js";
 import { csprngBytes } from "./hosts/crypto.js";
 import { makeWorkerModule } from "./workers.js";
+import { readEmbeddedAbi, replaceArtifactExt } from "./urls.js";
 
 export { TAGS, HEAP_HEADER_SIZE, DreamInstance };
 
@@ -34,6 +35,17 @@ async function loadAbi(abi) {
   if (typeof abi === "object" && abi.externs) return abi;
   const bytes = await fetchBytes(abi);
   return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+}
+
+async function resolveAbi(wasmModule, source, options) {
+  if (options.abi && typeof options.abi === "object" && options.abi.externs) {
+    return options.abi;
+  }
+  const embedded = readEmbeddedAbi(wasmModule);
+  if (embedded) return embedded;
+  const url =
+    typeof options.abi === "string" ? options.abi : replaceArtifactExt(source, ".abi.json");
+  return loadAbi(url);
 }
 
 function makeLinearMemory(wasmModule) {
@@ -61,8 +73,8 @@ function makeLinearMemory(wasmModule) {
  */
 export async function load(source, options = {}) {
   const wasmBytes = await fetchBytes(source);
-  const abi = await loadAbi(options.abi);
   const wasmModule = await WebAssembly.compile(wasmBytes);
+  const abi = await resolveAbi(wasmModule, source, options);
 
   if (isNode && !options.__skipNodePreload) {
     try {
@@ -141,6 +153,20 @@ export async function load(source, options = {}) {
     }
   }
 
+  // Compiler-emitted imports (e.g. `jsRetain` / `jsRelease`) appear in the WASM module but are not
+  // listed in `.abi.json` — bind any still-missing Dream functions from the host factory.
+  for (const imp of WebAssembly.Module.imports(wasmModule)) {
+    if (imp.kind !== "function" || imp.module !== "Dream") continue;
+    const bucket = (importObject.Dream ||= {});
+    if (bucket[imp.name]) continue;
+    const resolved = builtinDream[imp.name];
+    bucket[imp.name] = resolved
+      ? wrapFor(resolved, null)
+      : () => {
+          throw new Error(`no JS implementation for Dream.${imp.name}`);
+        };
+  }
+
   const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
   instance = new DreamInstance(wasmInstance);
   return instance;
@@ -152,9 +178,7 @@ export async function load(source, options = {}) {
  * @returns {Promise<DreamInstance>} the loaded instance (after `main` has run).
  */
 export async function run(source, options = {}) {
-  const abi =
-    options.abi ?? (typeof source === "string" ? source.replace(/\.wasm$/, ".abi.json") : undefined);
-  const mod = await load(source, { ...options, abi });
+  const mod = await load(source, options);
   mod.run();
   return mod;
 }

@@ -36,17 +36,16 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 
 ## Non-goals
 
-- Tracing GC / Nim ORC
 - User `=copy` / `=sink` operators (`del` remains the destructor)
 - Keeping `take` as a synonym of unmarked sink
 - String SSO, `@stack` classes, value-struct `List`/`Map`/`Set`
 - Atomic RC by default
 - CPU SIMD language surface / Dream-owned tiered JIT
 
-## Beat GC(C# like) gen0 throughput (shipped levers)
+## Heap throughput (shipped levers)
 
-ARC alone removes RC *tax*; beating a generational GC still needs fewer heap hits and amortized
-`$malloc`. These are the active levers (no SSO / `@stack` class / value collections):
+ARC alone removes RC *tax*; remaining cost is heap hits and `$malloc`. These are the active
+levers (no SSO / `@stack` class / value collections):
 
 1. **Silent SROA** — including post–simple-user-ctor expand (`ExpandSimpleCtors`): non-escaping
    instances with only non-ref field accesses promote to locals (`crates/dream-mir/src/passes/sroa.rs`).

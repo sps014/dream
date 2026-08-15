@@ -195,6 +195,10 @@ impl<'a> Analyzer<'a> {
                 Some(concrete) => concrete,
                 None => ty.clone(),
             },
+            Type::Generic(name) => match lookup_binding(bindings, name) {
+                Some(concrete) => concrete,
+                None => ty.clone(),
+            },
             // A generic struct applied to type arguments (e.g. `List<T>`): substitute inside the
             // arguments so a generic function/method returning `List<T>` resolves to `List<int>`.
             Type::Struct(token, Some(args)) => Type::Struct(

@@ -60,15 +60,17 @@ public struct GpuBuffer<T : unmanaged> {
 
     // Overwrites the whole buffer from CPU `data` (must match `length`).
     public fun write(data: T[]): void {
+        let id = this._id;
+        let stride = this._stride;
         let n = data.length;
-        let out = Buffer.alloc<byte>(n * this._stride);
+        let out = Buffer.alloc<byte>(n * stride);
         for (let i = 0; i < n; i = i + 1) {
             let eb = Bytes.of(data[i]);
-            for (let j = 0; j < this._stride; j = j + 1) {
-                out[i * this._stride + j] = eb[j];
+            for (let j = 0; j < stride; j = j + 1) {
+                out[i * stride + j] = eb[j];
             }
         }
-        Gpu.buffer_write_bytes(this._id, out);
+        Gpu.buffer_write_bytes(id, out);
     }
 
     // Partial CPU→GPU write starting at element `offset`.
@@ -78,15 +80,17 @@ public struct GpuBuffer<T : unmanaged> {
             System.println("GpuBuffer.write_at: out of bounds");
             return;
         }
+        let id = this._id;
+        let stride = this._stride;
         let n = data.length;
-        let out = Buffer.alloc<byte>(n * this._stride);
+        let out = Buffer.alloc<byte>(n * stride);
         for (let i = 0; i < n; i = i + 1) {
             let eb = Bytes.of(data[i]);
-            for (let j = 0; j < this._stride; j = j + 1) {
-                out[i * this._stride + j] = eb[j];
+            for (let j = 0; j < stride; j = j + 1) {
+                out[i * stride + j] = eb[j];
             }
         }
-        Gpu.buffer_write_bytes_at(this._id, offset * this._stride, out);
+        Gpu.buffer_write_bytes_at(id, offset * stride, out);
     }
 
     // Reads the entire buffer back to a CPU array.

@@ -188,54 +188,18 @@ Rules:
 
 ## Ownership: sink-default and `borrow`
 
-Unmarked parameters **sink** (callee takes ownership of a +1). When the argument is still
-used afterward, the compiler inserts a copy (retain) — same as Nim. Use `borrow` (a reserved
-keyword, like `ref`) for an explicit read-only/share parameter.
+Unmarked parameters **sink**; `borrow` shares; last-use **moves** with no keyword. Full guide:
+[Ownership](ownership.md).
 
 | Modifier | Meaning |
 |----------|---------|
-| *(none)* | Sink — callee owns a +1 (move if last use, else copy) |
-| `borrow` | Callee borrows; caller keeps ownership |
-| `ref` | Mutable place alias — unchanged |
+| *(none)* | Sink — callee takes it (move if last use, else copy) |
+| `borrow` | Callee reads it; you keep it |
+| `ref` | Mutable place alias ([below](#ref-parameters)) |
 
-After a sink parameter is **stored into a field or index**, that binding is moved: further uses of
-the parameter name are a compile error. Read through the destination instead:
+The implicit `this` receiver is never a sink.
 
-```dream
-public constructor(items: List<T>) {
-    this.items = items;
-    this.end = this.items.length; // OK — not `items.length` after the store
-}
-```
-
-```dream
-fun sink(s: string): void {
-    // `s` is owned here; storing it does not need an extra retain.
-}
-
-fun peek(borrow s: string): void {
-    println(s);
-}
-
-fun demo() {
-    let a = "hi";
-    sink(a);       // last use → move
-    let b = "yo";
-    peek(b);
-    sink(b);       // still need b? mark borrow on peek; here b may copy into sink if live
-    peek(b);
-}
-```
-
-`List.push` sinks the pushed element (move when last use):
-
-```dream
-let xs = List<string>();
-let s = "item";
-xs.push(s);        // last use of `s` → move into the list
-```
-
-The implicit `this` receiver is never a sink — methods do not consume the instance.
+## `ref` parameters {#ref-parameters}
 
 ```dream
 fun swap(ref a: int, ref b: int): void {

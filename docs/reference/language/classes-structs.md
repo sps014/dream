@@ -4,7 +4,7 @@ Classes and structs both group related data with fields, constructors, and metho
 
 ## Classes are reference types
 
-A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object:
+A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](ownership.md) (sink parameters, last-use move):
 
 ```dream
 class Point {
@@ -57,7 +57,7 @@ let c = Point(5);     // (5, 5)
 
 ## Structs are value types
 
-A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy**:
+A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy** (not a last-use [move](ownership.md)):
 
 ```dream
 struct Vec2 {

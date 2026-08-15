@@ -82,6 +82,7 @@ nav:
         - Operators: reference/language/operators.md
         - Control Flow: reference/language/control-flow.md
         - Functions: reference/language/functions.md
+        - Ownership: reference/language/ownership.md
         - Comments: reference/language/comments.md
         - Panics: reference/language/panics.md
       - Types:
@@ -102,6 +103,7 @@ nav:
         - Compute shaders: reference/language/compute.md
         - Vertex & fragment shaders: reference/language/shaders.md
         - Memory Management: reference/language/memory.md
+        - Ownership: reference/language/ownership.md
       - Metaprogramming:
         - Source Generators: reference/language/generators.md
         - CodeBuilder: reference/stdlib/codegen.md

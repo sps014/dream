@@ -23,7 +23,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   (never under-retain); last-use move in `RcInsertion` via CFG liveness (including loops).
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.
 - `ref name: T` parameters for mutable place / value-struct aliasing.
-- Flow-sensitive use-after-move diagnostics on sink call arguments.
+- Flow-sensitive use-after-move diagnostics after a sink parameter is stored into a field or index.
 
 ## Locked design choices
 
@@ -56,7 +56,7 @@ levers (no SSO / `@stack` class / value collections):
 4. **Contiguous / SOA hot paths** — regex Pike-VM uses parallel `List<int>` / `List<int[]>`
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
-   [`functions.md`](../reference/language/functions.md#ownership-sink-default-and-borrow)).
+   [`ownership.md`](../reference/language/ownership.md)).
 
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.

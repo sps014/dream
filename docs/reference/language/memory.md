@@ -20,6 +20,7 @@ Every heap object tracks how many references point to it. The compiler inserts `
 - When a variable goes out of scope, its reference is released.
 - Reassigning a variable releases the value it held before.
 - When a count reaches zero, the object is freed immediately (its `del` destructor runs first, if it has one).
+- Passing and assigning heap values uses [ownership](ownership.md): unmarked parameters sink, `borrow` shares, and a last use **moves** (no extra retain) instead of copying.
 
 The same ownership rules apply to `js` values: each Dream owner holds one host-side count; when it hits zero the handle is unregistered.
 
@@ -158,7 +159,7 @@ What `@unsafe` does **not** do: it does not insert runtime checks, and it does n
   when you need the ABI byte size of an unmanaged element type.
 - `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release). Under `--release`, the inliner erases small `Span` / value-struct method call boundaries (including into `List.insert` / `push_all`), so those hot paths compile down to the same WAT as hand-written bulk copies.
 - The compiler's ARC passes elide retain/release pairs along Goto chains, transparent diamonds/loops, and postdominated transparent regions; last-use moves transfer ownership without an extra retain. Prefer clear ownership so elision has an easy cancel pattern.
-- Unmarked parameters sink into the callee (see [Functions](functions.md#ownership-sink-default-and-borrow)); mark readers `borrow`. Stores like `List.push(value)` skip a redundant retain when the arg is moved.
+- Unmarked parameters sink into the callee (see [Ownership](ownership.md)); mark readers `borrow`. Stores like `List.push(value)` skip a redundant retain when the arg is moved.
 - Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths; silent SROA may promote non-escaping class instances whose accessed fields are non-references.
 
 ## WASM call stack (`dream run`)

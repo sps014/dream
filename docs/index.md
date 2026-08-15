@@ -98,6 +98,7 @@ fun main() {
 
     [Variables](reference/language/variables.md) · [Operators](reference/language/operators.md) ·
     [Control flow](reference/language/control-flow.md) · [Functions](reference/language/functions.md) ·
+    [Ownership](reference/language/ownership.md) ·
     [Comments](reference/language/comments.md) · [Panics](reference/language/panics.md)
 
 -   :material-cube: **Types**
@@ -121,7 +122,7 @@ fun main() {
     [Generics](reference/language/generics.md) · [Interfaces](reference/language/interfaces.md) ·
     [Async](reference/language/async.md) · [WebWorkers](reference/language/webworkers.md) ·
     [Compute](reference/language/compute.md) · [Shaders](reference/language/shaders.md) ·
-    [Memory](reference/language/memory.md)
+    [Memory](reference/language/memory.md) · [Ownership](reference/language/ownership.md)
 
 -   :material-language-javascript: **Interop**
 

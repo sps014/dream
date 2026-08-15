@@ -268,6 +268,7 @@ const SMOKE_CASES: &[&str] = &[
     "enum_basic",
     "generic_structs",
     "async_basic",
+    "async_generic_sink_reuse",
     "collection_literals",
     "interfaces",
     "object_protocol",

@@ -526,7 +526,13 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|t| self.type_ctx.lower(t))
                 .collect();
-            self.hir_set_generic_call(&base_name, instance, arg_hirs, &ret_type);
+            self.hir_set_generic_call(
+                &base_name,
+                instance,
+                arg_hirs,
+                &ret_type,
+                store_sig.is_take.clone(),
+            );
         } else {
             self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
         }

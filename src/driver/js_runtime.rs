@@ -322,6 +322,23 @@ async function load(source, options = {{}}) {{
     }}
   }}
 
+  // Compiler-emitted imports (e.g. `jsRetain` / `jsRelease`) appear in the WASM module but are not
+  // listed in `.abi.json` — bind any still-missing Dream functions from the host factory.
+  // WASM passes a handle id; marshal `js` so the host sees the registered value.
+  const jsRcSig = {{ params: ["js"], result: "void" }};
+  for (const imp of WebAssembly.Module.imports(wasmModule)) {{
+    if (imp.kind !== "function" || imp.module !== "Dream") continue;
+    const bucket = (importObject.Dream ||= {{}});
+    if (bucket[imp.name]) continue;
+    const resolved = builtinDream[imp.name];
+    const rcSig = (imp.name === "jsRetain" || imp.name === "jsRelease") ? jsRcSig : null;
+    bucket[imp.name] = resolved
+      ? wrapFor(resolved, rcSig)
+      : () => {{
+          throw new Error(`no JS implementation for Dream.${{imp.name}}`);
+        }};
+  }}
+
   const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
   instance = new DreamInstance(wasmInstance);
   return instance;
@@ -369,6 +386,11 @@ pub(crate) fn assemble_selective_runtime(
         if let Some(c) = chunk_for_field(field) {
             chunks.insert(c);
         }
+    }
+    // GPU resources are `js` handles; WAT emits `$js_retain`/`$js_release` even when no other
+    // `js*` bridge survives import pruning.
+    if chunks.contains("gpu") {
+        chunks.insert("js");
     }
 
     let src = runtime_src_dir();
@@ -462,7 +484,14 @@ mod tests {
         let live = vec![("Dream".into(), "gpuDispatch".into())];
         let text = assemble_selective_runtime(&live, JsRuntimeTarget::Web).expect("assemble");
         assert!(text.contains("makeGpuHost"));
+        assert!(text.contains("makeJsHost"));
         assert!(!text.contains("makeFsHost"));
+    }
+
+    #[test]
+    fn compiler_emitted_js_rc_is_bound_from_wasm_imports() {
+        let text = assemble_selective_runtime(&[], JsRuntimeTarget::Web).expect("assemble");
+        assert!(text.contains(r#"imp.name === "jsRetain" || imp.name === "jsRelease""#));
     }
 
     #[test]

@@ -1,0 +1,22 @@
+import system;
+
+// A generic async callee must still advertise sink params at the call site so a live
+// class argument is retained across the await (otherwise the poll frame releases it).
+class Handle {
+    public id: int;
+}
+
+async fun id_of<T>(h: Handle, _t: T): int {
+    await Time.sleep(0);
+    return h.id;
+}
+
+async fun main(): void {
+    let h = Handle();
+    h.id = 7;
+    let a = await id_of(h, 1);
+    let b = await id_of(h, 2);
+    System.println(a);
+    System.println(b);
+    System.println(h.id);
+}

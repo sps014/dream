@@ -567,6 +567,7 @@ impl<'a> Analyzer<'a> {
         instance: Vec<TypeId>,
         args: Vec<Option<HExpr>>,
         ret: &Type,
+        take_params: Vec<bool>,
     ) {
         if !self.active() {
             self.hir.last = None;
@@ -585,7 +586,7 @@ impl<'a> Analyzer<'a> {
             def,
             instance,
             ret: ret_ty,
-        take_params: vec![],
+            take_params,
         };
         self.hir.last = Some(HExpr::new(
             ret_ty,

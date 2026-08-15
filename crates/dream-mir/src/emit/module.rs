@@ -453,9 +453,9 @@ pub fn emit_module_with_debug(
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which
 /// `print`/`println` lower to) followed by user `extern fun` interop imports. When any Dream `js*`
-/// bridge is imported, also emit `$js_retain` / `$js_release` for host-side handle RC (compiler-
-/// emitted — not declared in the stdlib prelude). Call sites reference each import's internal
-/// `$name`; the `module`/`field` pair names the host binding.
+/// bridge or GPU import is live, also emit `$js_retain` / `$js_release` for host-side handle RC
+/// (compiler-emitted — not declared in the stdlib prelude). Call sites reference each import's
+/// internal `$name`; the `module`/`field` pair names the host binding.
 pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeInterner) {
     for (name, param) in [
         ("print_string", "i32"),
@@ -470,7 +470,11 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::Mir, interner: &TypeIn
             crate::abi::ENV_MODULE
         );
     }
-    let needs_js_rc = mir.imports.iter().any(|imp| imp.field.starts_with("js"));
+    let needs_js_rc = mir.imports.iter().any(|imp| {
+        // GPU resources are `js` handles; `$release_js` calls `$js_release` even when no `js*`
+        // stdlib bridge remains after import pruning.
+        imp.field.starts_with("js") || imp.field.starts_with("gpu")
+    });
     for imp in &mir.imports {
         // Compiler-emitted `$js_retain`/`$js_release` below replace any stdlib `jsRelease` extern.
         if imp.field == "jsRelease" || imp.field == "jsRetain" {

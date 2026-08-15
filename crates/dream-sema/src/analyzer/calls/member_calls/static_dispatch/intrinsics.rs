@@ -755,7 +755,7 @@ impl<'a> Analyzer<'a> {
             .map(|t| self.type_ctx.lower(t))
             .collect();
         // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
-        self.hir_set_generic_call(base, instance, arg_hirs, &ret_type);
+        self.hir_set_generic_call(base, instance, arg_hirs, &ret_type, store_sig.is_take.clone());
         Ok(ret_type)
     }
 }

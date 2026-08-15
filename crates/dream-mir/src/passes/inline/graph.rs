@@ -45,10 +45,7 @@ pub(super) fn address_taken(mir: &crate::Mir) -> HashSet<FnKey> {
 
 /// The set of functions that lie on a call cycle (an SCC of size > 1, or a self-loop). Inlining is
 /// never attempted for these, guaranteeing termination over the remaining (acyclic) call graph.
-pub(super) fn recursive_set(
-    mir: &crate::Mir,
-    index: &HashMap<FnKey, usize>,
-) -> HashSet<FnKey> {
+pub(super) fn recursive_set(mir: &crate::Mir, index: &HashMap<FnKey, usize>) -> HashSet<FnKey> {
     let n = mir.functions.len();
     // Adjacency over all statically visible call edges (including constructors + async HIR edges), so
     // any cyclic function is excluded even if the cycle runs through a non-inlined edge.

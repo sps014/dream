@@ -205,10 +205,7 @@ fn eligible(
 /// Remaps a callee [`LocalDecl`] into the caller using the callee's [`ValueFrame`] classification:
 /// borrows stay aliases (`is_ref`); Param/Owning get `manual_drop` so call-site [`Statement::ValueDrop`]
 /// owns teardown (caller frame exit must not drop them again).
-fn remap_local_decl(
-    decl: &LocalDecl,
-    kind: Option<crate::emit::ValueLocalKind>,
-) -> LocalDecl {
+fn remap_local_decl(decl: &LocalDecl, kind: Option<crate::emit::ValueLocalKind>) -> LocalDecl {
     let mut d = decl.clone();
     match kind {
         Some(crate::emit::ValueLocalKind::Borrow) => {
@@ -334,10 +331,8 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
         f.blocks.push(bb);
     }
     // Continuation: drop inlined owning value locals (call-site lifetime), then the caller's tail.
-    let mut cont_stmts: Vec<Statement> = drop_locals
-        .into_iter()
-        .map(Statement::ValueDrop)
-        .collect();
+    let mut cont_stmts: Vec<Statement> =
+        drop_locals.into_iter().map(Statement::ValueDrop).collect();
     cont_stmts.extend(tail);
     f.blocks.push(BasicBlock {
         stmts: cont_stmts,
@@ -431,10 +426,7 @@ mod tests {
             let mut b = FunctionBuilder::new("make", int);
             b.set_def(callee_def, vec![]);
             let p = b.new_local(point, Some("p".into()));
-            b.assign(
-                Place::Local(p),
-                Rvalue::Use(Operand::Copy(Place::Local(p))),
-            );
+            b.assign(Place::Local(p), Rvalue::Use(Operand::Copy(Place::Local(p))));
             b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(1)))));
             b.finish()
         };
@@ -470,7 +462,10 @@ mod tests {
                 Statement::Call { .. } | Statement::Assign(_, Rvalue::Call { .. })
             )
         });
-        assert!(!has_call, "call to value callee should have been inlined away");
+        assert!(
+            !has_call,
+            "call to value callee should have been inlined away"
+        );
         assert!(
             caller
                 .locals

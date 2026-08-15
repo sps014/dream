@@ -101,7 +101,13 @@ pub(super) fn emit_vertex(
     }
 
     if has_uniform {
-        finalize_uniforms(&entry, binding_idx, &uniform_fields, &mut header, &mut bindings);
+        finalize_uniforms(
+            &entry,
+            binding_idx,
+            &uniform_fields,
+            &mut header,
+            &mut bindings,
+        );
     }
 
     if let Some(Type::Struct(tok, None)) = &func.return_type {
@@ -238,9 +244,9 @@ pub(super) enum ResClass {
 pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
     let readonly = has_readonly_attr(&param.attributes);
     match &param.type_ {
-        Type::Struct(tok, None) if tok.text == "GpuTexture" => ResClass::Texture {
-            storage: !readonly,
-        },
+        Type::Struct(tok, None) if tok.text == "GpuTexture" => {
+            ResClass::Texture { storage: !readonly }
+        }
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ResClass::Sampler,
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
             ResClass::Storage {

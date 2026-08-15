@@ -11,7 +11,7 @@ A displaced mesh cannot match Shadertoy; this sample uses the same tracing appro
 ## Build
 
 ```sh
-cargo run -- --runtime --web sample/graphics/ocean/ocean.dream
+cargo run -- --release --runtime --web -Oz sample/graphics/ocean/ocean.dream
 ```
 
 ## Run

@@ -17,9 +17,9 @@ fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
         | StatementNode::ForEach(tok, _, _, _, _) => Some(tok.position),
-        StatementNode::TupleDeclaration { pattern, init, .. } => pattern
-            .position()
-            .or_else(|| init.position()),
+        StatementNode::TupleDeclaration { pattern, init, .. } => {
+            pattern.position().or_else(|| init.position())
+        }
         StatementNode::IndexAssignment(arr, _, _) => arr.position(),
         StatementNode::Return(Some(e))
         | StatementNode::ExpressionStatement(e)
@@ -66,9 +66,7 @@ fn scan_stmt_nameof(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
         | StatementNode::Return(Some(e))
         | StatementNode::Assignment(_, e)
         | StatementNode::Declaration(_, _, e, _)
-        | StatementNode::TupleDeclaration { init: e, .. } => {
-            scan_expr_nameof(e, ctx)
-        }
+        | StatementNode::TupleDeclaration { init: e, .. } => scan_expr_nameof(e, ctx),
         StatementNode::IndexAssignment(a, i, v) => {
             scan_expr_nameof(a, ctx);
             scan_expr_nameof(i, ctx);
@@ -205,9 +203,7 @@ fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
                     scan_expr_nameof(g, ctx);
                 }
                 match &arm.body {
-                    dream_syntax::nodes::SwitchArmBody::Expr(e) => {
-                        scan_expr_nameof(e, ctx)
-                    }
+                    dream_syntax::nodes::SwitchArmBody::Expr(e) => scan_expr_nameof(e, ctx),
                     dream_syntax::nodes::SwitchArmBody::Block(stmts) => {
                         reject_gpu_nameof(stmts, ctx)
                     }
@@ -216,9 +212,7 @@ fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
         }
         ExpressionNode::Lambda(l) => match &l.body {
             dream_syntax::nodes::LambdaBody::Expr(e) => scan_expr_nameof(e, ctx),
-            dream_syntax::nodes::LambdaBody::Block(stmts) => {
-                reject_gpu_nameof(stmts, ctx)
-            }
+            dream_syntax::nodes::LambdaBody::Block(stmts) => reject_gpu_nameof(stmts, ctx),
         },
         ExpressionNode::Literal(_)
         | ExpressionNode::Identifier(_)
@@ -361,7 +355,7 @@ fn emit_stmt(
         StatementNode::Return(Some(e)) => {
             let rhs = emit_expr(e, ctx);
             out.push_str(&format!("{}return {};\n", p, rhs));
-        },
+        }
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             out.push_str(&format!("{}if ({}) {{\n", p, emit_expr(cond, ctx)));
             emit_stmts(then_b, out, wg, indent + 1, ctx);
@@ -454,10 +448,7 @@ fn emit_stmt(
             out.push_str(&format!("{}{};\n", p, call));
         }
         StatementNode::ExpressionStatement(e) => {
-            if let ExpressionNode::IncDec {
-                is_inc, target, ..
-            } = e
-            {
+            if let ExpressionNode::IncDec { is_inc, target, .. } = e {
                 let place = emit_expr(target, ctx);
                 let op = if *is_inc { "+" } else { "-" };
                 out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));

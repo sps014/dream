@@ -173,12 +173,7 @@ impl Emitter<'_> {
 
     /// Constructs a tuple in place at `dst`: zero the block, then store each element at its field
     /// offset (value elements are copied; references are stored and retained).
-    fn construct_value_tuple(
-        &mut self,
-        dst: impl Fn(&mut Self),
-        ty: TypeId,
-        elems: &[Operand],
-    ) {
+    fn construct_value_tuple(&mut self, dst: impl Fn(&mut Self), ty: TypeId, elems: &[Operand]) {
         let size = self.value_size(ty);
         dst(self);
         self.line("     (i32.const 0)");

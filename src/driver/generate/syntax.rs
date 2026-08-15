@@ -233,7 +233,11 @@ impl SyntaxTreeView {
         }
     }
 
-    fn walk_stmt(&mut self, stmt: &dream_syntax::nodes::StatementNode<'_>, parent: Option<SyntaxNodeId>) {
+    fn walk_stmt(
+        &mut self,
+        stmt: &dream_syntax::nodes::StatementNode<'_>,
+        parent: Option<SyntaxNodeId>,
+    ) {
         use dream_syntax::nodes::StatementNode;
         match stmt {
             StatementNode::ExpressionStatement(e)

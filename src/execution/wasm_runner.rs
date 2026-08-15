@@ -110,8 +110,7 @@ fn run_wasm_bytes(
 
     let instance = linker.instantiate(&mut store, &module)?;
 
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, dream_mir::abi::ENTRY_FN)
-    {
+    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, dream_mir::abi::ENTRY_FN) {
         main_func.call(&mut store, ())?;
     } else if !capturing {
         println!("No main function found in module");

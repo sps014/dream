@@ -251,12 +251,7 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
                 Ok(file) => {
                     let id = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
                     let mut table = handles().lock().unwrap_or_else(|e| e.into_inner());
-                    table.insert(
-                        id,
-                        HandleEntry {
-                            file,
-                        },
-                    );
+                    table.insert(id, HandleEntry { file });
                     Ok(id as i32)
                 }
                 Err(e) => Ok(map_open_error(e)),
@@ -270,10 +265,7 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
         |mut caller: Caller<'_, ()>, id: i32, n: i32| -> Result<i32> {
             let count = n.max(0) as usize;
             let mut buf = vec![0u8; count];
-            let read_len = with_handle(id, |file| {
-                file.read(&mut buf).unwrap_or(0)
-            })
-                .unwrap_or(0);
+            let read_len = with_handle(id, |file| file.read(&mut buf).unwrap_or(0)).unwrap_or(0);
             write_bytes_to_memory(&mut caller, &buf[..read_len])
         },
     )?;
@@ -283,8 +275,7 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
         "fileHandleWrite",
         |mut caller: Caller<'_, ()>, id: i32, data_ptr: i32| -> Result<i64> {
             let bytes = read_arg_bytes(&mut caller, data_ptr)?;
-            let written = with_handle(id, |file| file.write(&bytes).unwrap_or(0))
-                .unwrap_or(0);
+            let written = with_handle(id, |file| file.write(&bytes).unwrap_or(0)).unwrap_or(0);
             if written == 0 && !bytes.is_empty() {
                 Ok(-1)
             } else {
@@ -297,18 +288,20 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
         "Dream",
         "fileHandleSeek",
         |_: Caller<'_, ()>, id: i32, pos: i64| -> Result<i32> {
-            let ok = with_handle(id, |file| {
-                file.seek(SeekFrom::Start(pos as u64)).is_ok()
-            })
+            let ok = with_handle(id, |file| file.seek(SeekFrom::Start(pos as u64)).is_ok())
                 .unwrap_or(false);
             Ok(if ok { 0 } else { -1 })
         },
     )?;
 
-    linker.func_wrap("Dream", "fileHandleClose", |_: Caller<'_, ()>, id: i32| -> Result<()> {
-        take_handle(id as u32);
-        Ok(())
-    })?;
+    linker.func_wrap(
+        "Dream",
+        "fileHandleClose",
+        |_: Caller<'_, ()>, id: i32| -> Result<()> {
+            take_handle(id as u32);
+            Ok(())
+        },
+    )?;
 
     Ok(())
 }

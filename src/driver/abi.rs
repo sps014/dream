@@ -156,8 +156,7 @@ pub(crate) fn build_abi_json(
         if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
         }
-        let (import_module, import_name) =
-            extern_import_target(&func.attributes, &func.name.text);
+        let (import_module, import_name) = extern_import_target(&func.attributes, &func.name.text);
         let is_c = has_c_attr(&func.attributes);
         let params: Vec<String> = if is_c {
             func.parameters
@@ -376,7 +375,7 @@ fn c_field_layout(
             if let Some(inner) = by_name.get(name) {
                 let packed = has_packed_attr(&inner.attributes);
                 let (size, align) = compute_c_struct_size(inner, packed, by_name, memo);
-                return (size, align, format!("struct:{name}")); 
+                return (size, align, format!("struct:{name}"));
             }
             (4, 4, "ptr".to_string())
         }
@@ -428,7 +427,6 @@ fn compute_c_struct_size(
     result
 }
 
-
 /// Full layout for one struct: `(size, align, formatted field JSON)`.
 fn compute_c_struct_layout(
     decl: &StructDeclarationNode<'_>,
@@ -473,9 +471,9 @@ fn compute_c_struct_layout(
 mod tests {
     use super::*;
     use bumpalo::Bump;
+    use dream_diagnostics::DiagnosticBag;
     use dream_syntax::lexer::Lexer;
     use dream_syntax::parser::Parser;
-    use dream_diagnostics::DiagnosticBag;
 
     fn abi_json_for(source: &str) -> String {
         let mut diagnostics = DiagnosticBag::new(None);
@@ -491,7 +489,8 @@ mod tests {
             .iter()
             .filter(|f| f.is_extern)
             .map(|f| {
-                let (m, fld) = dream_abi::attributes::extern_import_target(&f.attributes, &f.name.text);
+                let (m, fld) =
+                    dream_abi::attributes::extern_import_target(&f.attributes, &f.name.text);
                 (m, fld)
             })
             .collect();
@@ -559,11 +558,7 @@ mod tests {
             "expected Point entry: {}",
             json
         );
-        assert!(
-            json.contains("\"size\": 8"),
-            "expected size 8: {}",
-            json
-        );
+        assert!(json.contains("\"size\": 8"), "expected size 8: {}", json);
     }
 
     #[test]
@@ -578,9 +573,17 @@ mod tests {
             extern fun header_read(h: Header): int;
         "#;
         let json = abi_json_for(source);
-        assert!(json.contains("\"packed\": true"), "expected packed: {}", json);
+        assert!(
+            json.contains("\"packed\": true"),
+            "expected packed: {}",
+            json
+        );
         // byte(1) + int(4), packed → size 5, no trailing padding.
-        assert!(json.contains("\"size\": 5"), "expected packed size 5: {}", json);
+        assert!(
+            json.contains("\"size\": 5"),
+            "expected packed size 5: {}",
+            json
+        );
         assert!(json.contains("\"align\": 1"), "expected align 1: {}", json);
     }
 }

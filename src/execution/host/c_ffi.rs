@@ -291,10 +291,7 @@ fn system_library_dirs() -> Vec<PathBuf> {
 fn library_file_names(lib_name: &str) -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
-        vec![
-            format!("{lib_name}.dll"),
-            format!("lib{lib_name}.dll"),
-        ]
+        vec![format!("{lib_name}.dll"), format!("lib{lib_name}.dll")]
     }
     #[cfg(target_os = "macos")]
     {

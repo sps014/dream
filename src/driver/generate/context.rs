@@ -102,7 +102,11 @@ impl GeneratorContext {
         self.errors.push((None, message.into()));
     }
 
-    pub fn emit_file(&mut self, synthetic_path: impl Into<String>, dream_source: impl Into<String>) {
+    pub fn emit_file(
+        &mut self,
+        synthetic_path: impl Into<String>,
+        dream_source: impl Into<String>,
+    ) {
         self.emits.push(EmitRequest::File {
             path: synthetic_path.into(),
             source: dream_source.into(),

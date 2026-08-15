@@ -9,9 +9,9 @@
 
 pub mod abi;
 pub mod compiler;
-pub mod gpu_gen;
 pub mod error;
 pub mod generate;
+pub mod gpu_gen;
 pub mod interface_defaults;
 pub mod js_runtime;
 pub mod prelude;

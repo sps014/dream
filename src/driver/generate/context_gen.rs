@@ -117,20 +117,21 @@ fn run_context_body(
         func = gen.name,
     );
 
-    let temp = write_temp_harness(dir, &gen.name, &harness_source)
-        .map_err(HarnessError::General)?;
+    let temp =
+        write_temp_harness(dir, &gen.name, &harness_source).map_err(HarnessError::General)?;
 
     let wat_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
     let snap_file = write_snapshot_tempfile(&gen.name, snapshot).map_err(HarnessError::General)?;
 
     std::env::set_var(SNAPSHOT_ENV, snap_file.to_string_lossy().as_ref());
     let wat_path_str = wat_path.to_string_lossy().into_owned();
-    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path_str).map_err(|e| {
-        HarnessError::General(format!(
-            "generator '{}': failed to run generated harness: {e}",
-            gen.name
-        ))
-    });
+    let output =
+        crate::execution::wasm_runner::execute_wasm_capturing(&wat_path_str).map_err(|e| {
+            HarnessError::General(format!(
+                "generator '{}': failed to run generated harness: {e}",
+                gen.name
+            ))
+        });
     std::env::remove_var(SNAPSHOT_ENV);
     let _ = std::fs::remove_file(&snap_file);
     let _ = std::fs::remove_file(&wat_path);
@@ -196,10 +197,9 @@ fn compile_harness(src_path: &Path) -> Result<PathBuf, String> {
         std::process::id(),
         unique
     ));
-    let compiler =
-        crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
-            .with_skip_generators(true)
-            .with_release(true);
+    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+        .with_skip_generators(true)
+        .with_release(true);
     let src = src_path
         .to_str()
         .ok_or_else(|| "generator: non-UTF-8 auto-harness path".to_string())?

@@ -27,10 +27,7 @@ pub struct TestRunResult {
 pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, String> {
     let files = collect_test_files(path)?;
     if files.is_empty() {
-        return Err(format!(
-            "no .dream test files under '{}'",
-            path.display()
-        ));
+        return Err(format!("no .dream test files under '{}'", path.display()));
     }
 
     let mut result = TestRunResult::default();
@@ -57,7 +54,8 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
     let _ = writeln!(
         io::stderr(),
         "test result: ok. {} passed in {} file(s)",
-        result.tests_run, result.files_run
+        result.tests_run,
+        result.files_run
     );
     Ok(result)
 }
@@ -65,10 +63,7 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
 fn collect_test_files(path: &Path) -> Result<Vec<PathBuf>, String> {
     if path.is_file() {
         if path.extension().and_then(|e| e.to_str()) != Some("dream") {
-            return Err(format!(
-                "expected a .dream file, got '{}'",
-                path.display()
-            ));
+            return Err(format!("expected a .dream file, got '{}'", path.display()));
         }
         return Ok(vec![path.to_path_buf()]);
     }
@@ -132,12 +127,8 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
 
     let runner_source = synthesize_runner(&source, &tests);
     let out_dir = test_cache_dir(path);
-    fs::create_dir_all(&out_dir)
-        .map_err(|e| format!("create {}: {}", out_dir.display(), e))?;
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("tests");
+    fs::create_dir_all(&out_dir).map_err(|e| format!("create {}: {}", out_dir.display(), e))?;
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("tests");
     let runner_path = out_dir.join(format!("{stem}.runner.dream"));
     fs::write(&runner_path, &runner_source)
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
@@ -182,8 +173,7 @@ fn source_has_main(source: &str) -> bool {
 
 fn synthesize_runner(original: &str, tests: &[DiscoveredTest]) -> String {
     let mut out = String::new();
-    if !original.contains("import system.testing") && !original.contains("import system.testing;")
-    {
+    if !original.contains("import system.testing") && !original.contains("import system.testing;") {
         if !original.contains("import system;") && !original.contains("import system\n") {
             out.push_str("import system;\n");
         }

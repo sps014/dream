@@ -302,7 +302,11 @@ fn place(p: &Place) -> String {
         Place::Local(l) => format!("_{}", l.0),
         Place::Global(g) => format!("@{}", g.0),
         Place::Field { base, field } => format!("_{}.{}", base.0, field),
-        Place::Index { base, index, unchecked } => {
+        Place::Index {
+            base,
+            index,
+            unchecked,
+        } => {
             let u = if *unchecked { "u" } else { "" };
             format!("_{}[{}{}]", base.0, operand(index), u)
         }

@@ -19,7 +19,17 @@ pub fn dispatch(
     ez: i32,
     uniforms: &[u8],
 ) -> i32 {
-    match run(kernel, buffer_ids, texture_ids, sampler_ids, ex, ey, ez, uniforms, None) {
+    match run(
+        kernel,
+        buffer_ids,
+        texture_ids,
+        sampler_ids,
+        ex,
+        ey,
+        ez,
+        uniforms,
+        None,
+    ) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Dream gpuDispatch: {e}");
@@ -127,12 +137,13 @@ fn alloc_uniform_slot(
         .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
     let slot = pipe.uniform_cursor;
     if slot >= pipe.uniform_pool.len() {
-        pipe.uniform_pool.push(device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("dream-compute-uniform"),
-            size: 256,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        }));
+        pipe.uniform_pool
+            .push(device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("dream-compute-uniform"),
+                size: 256,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
     }
     let buf = pipe.uniform_pool[slot].clone();
     pipe.uniform_cursor = slot + 1;
@@ -164,7 +175,9 @@ fn encode_op(
         Some(meta) => meta,
         None => {
             st.warn_if_gpu_abi_missing();
-            return Err(format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"));
+            return Err(format!(
+                "unknown @compute kernel '{kernel}' (is .abi.json loaded?)"
+            ));
         }
     };
 
@@ -329,32 +342,33 @@ fn encode_op(
     }
 
     let wg = meta.workgroup;
-    let dispatch = |pass: &mut wgpu::ComputePass<'_>, st: &super::state::GpuState| -> Result<(), String> {
-        let pipe = st
-            .compute_pipes
-            .get(kernel)
-            .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
-        let bg = pipe
-            .bg_cache
-            .get(&bg_key)
-            .ok_or_else(|| "missing cached bind group".to_string())?;
-        pass.set_pipeline(&pipe.pipeline);
-        pass.set_bind_group(0, bg, &[]);
-        if let Some((iid, off)) = indirect {
-            let indirect_buf = st
-                .buffers
-                .get(&iid)
-                .and_then(|b| b.gpu.as_ref())
-                .ok_or_else(|| format!("missing indirect {iid}"))?;
-            pass.dispatch_workgroups_indirect(indirect_buf, off.max(0) as u64);
-        } else {
-            let gx = (ex.max(1) as u32).div_ceil(wg[0].max(1));
-            let gy = (ey.max(1) as u32).div_ceil(wg[1].max(1));
-            let gz = (ez.max(1) as u32).div_ceil(wg[2].max(1));
-            pass.dispatch_workgroups(gx.max(1), gy.max(1), gz.max(1));
-        }
-        Ok(())
-    };
+    let dispatch =
+        |pass: &mut wgpu::ComputePass<'_>, st: &super::state::GpuState| -> Result<(), String> {
+            let pipe = st
+                .compute_pipes
+                .get(kernel)
+                .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
+            let bg = pipe
+                .bg_cache
+                .get(&bg_key)
+                .ok_or_else(|| "missing cached bind group".to_string())?;
+            pass.set_pipeline(&pipe.pipeline);
+            pass.set_bind_group(0, bg, &[]);
+            if let Some((iid, off)) = indirect {
+                let indirect_buf = st
+                    .buffers
+                    .get(&iid)
+                    .and_then(|b| b.gpu.as_ref())
+                    .ok_or_else(|| format!("missing indirect {iid}"))?;
+                pass.dispatch_workgroups_indirect(indirect_buf, off.max(0) as u64);
+            } else {
+                let gx = (ex.max(1) as u32).div_ceil(wg[0].max(1));
+                let gy = (ey.max(1) as u32).div_ceil(wg[1].max(1));
+                let gz = (ez.max(1) as u32).div_ceil(wg[2].max(1));
+                pass.dispatch_workgroups(gx.max(1), gy.max(1), gz.max(1));
+            }
+            Ok(())
+        };
     if let Some(pass) = shared_pass {
         dispatch(pass, st)?;
     } else {
@@ -402,7 +416,9 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         Some(meta) => meta,
         None => {
             st.warn_if_gpu_abi_missing();
-            return Err(format!("unknown @compute kernel '{kernel}' (is .abi.json loaded?)"));
+            return Err(format!(
+                "unknown @compute kernel '{kernel}' (is .abi.json loaded?)"
+            ));
         }
     };
     if meta.source.is_empty() {
@@ -671,10 +687,8 @@ pub fn pass_dispatch_indirect(
 pub fn shader_from_wgsl(source: String, entry: String) -> i32 {
     let mut st = lock_state();
     let id = st.alloc_id();
-    st.shaders.insert(
-        id,
-        super::state::RawShader { source, entry },
-    );
+    st.shaders
+        .insert(id, super::state::RawShader { source, entry });
     id
 }
 
@@ -709,7 +723,16 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
         st.abi = Some(abi);
         st.compute_pipes.shift_remove(&name);
     }
-    dispatch(&name, buffer_ids, &[], &[], wx.max(1), wy.max(1), wz.max(1), &[])
+    dispatch(
+        &name,
+        buffer_ids,
+        &[],
+        &[],
+        wx.max(1),
+        wy.max(1),
+        wz.max(1),
+        &[],
+    )
 }
 
 pub fn pass_submit(pass_id: i32) -> i32 {

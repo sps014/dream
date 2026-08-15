@@ -829,9 +829,7 @@ pub fn link_webview_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "webviewCloseRequested",
-        |_caller: Caller<'_, ()>, id: i32| -> Result<i32> {
-            Ok(i32::from(close_requested(id)))
-        },
+        |_caller: Caller<'_, ()>, id: i32| -> Result<i32> { Ok(i32::from(close_requested(id))) },
     )?;
     linker.func_wrap(
         "Dream",

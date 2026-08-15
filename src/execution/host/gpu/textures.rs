@@ -212,10 +212,18 @@ pub fn texture_copy(
     let dy = dst_y.max(0) as u32;
     let mut w = width.max(0) as u32;
     let mut h = height.max(0) as u32;
-    if sx + w > src_meta.0 { w = src_meta.0.saturating_sub(sx); }
-    if sy + h > src_meta.1 { h = src_meta.1.saturating_sub(sy); }
-    if dx + w > dst_meta.0 { w = dst_meta.0.saturating_sub(dx); }
-    if dy + h > dst_meta.1 { h = dst_meta.1.saturating_sub(dy); }
+    if sx + w > src_meta.0 {
+        w = src_meta.0.saturating_sub(sx);
+    }
+    if sy + h > src_meta.1 {
+        h = src_meta.1.saturating_sub(sy);
+    }
+    if dx + w > dst_meta.0 {
+        w = dst_meta.0.saturating_sub(dx);
+    }
+    if dy + h > dst_meta.1 {
+        h = dst_meta.1.saturating_sub(dy);
+    }
     if w == 0 || h == 0 {
         return;
     }
@@ -257,7 +265,11 @@ pub fn texture_copy(
     }
 
     // CPU-shadow fallback.
-    let src_cpu = st.textures.get(&src_id).map(|t| t.cpu.clone()).unwrap_or_default();
+    let src_cpu = st
+        .textures
+        .get(&src_id)
+        .map(|t| t.cpu.clone())
+        .unwrap_or_default();
     if let Some(dst) = st.textures.get_mut(&dst_id) {
         let stride_src = (src_meta.0 * bpp) as usize;
         let stride_dst = (dst_meta.0 * bpp) as usize;
@@ -469,15 +481,18 @@ pub fn texture_copy_to_buffer(
     let Some(tex_cpu) = st.textures.get(&tex_id).map(|t| t.cpu.clone()) else {
         return;
     };
-    let dst = st.buffers.entry(buf_id).or_insert_with(|| super::state::BufEntry {
-        cpu: Vec::new(),
-        gpu: None,
-        usage: wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC,
-        created_usage: wgpu::BufferUsages::empty(),
-        dirty_cpu: true,
-    });
+    let dst = st
+        .buffers
+        .entry(buf_id)
+        .or_insert_with(|| super::state::BufEntry {
+            cpu: Vec::new(),
+            gpu: None,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            created_usage: wgpu::BufferUsages::empty(),
+            dirty_cpu: true,
+        });
     let off = byte_offset.max(0) as usize;
     let n = (w.max(0) * h.max(0) * 4) as usize;
     let end = off + n;

@@ -199,7 +199,10 @@ impl GpuState {
             return;
         }
         if let Some(reason) = self.missing_gpu_abi.as_ref() {
-            eprintln!("Dream GPU: {}; kernels/shaders will fail validation", reason);
+            eprintln!(
+                "Dream GPU: {}; kernels/shaders will fail validation",
+                reason
+            );
             self.warned_missing_gpu_abi = true;
         }
     }
@@ -227,7 +230,9 @@ pub struct StateGuard {
 impl Deref for StateGuard {
     type Target = GpuState;
     fn deref(&self) -> &GpuState {
-        self.map.get(&self.id).expect("gpu state missing for thread")
+        self.map
+            .get(&self.id)
+            .expect("gpu state missing for thread")
     }
 }
 

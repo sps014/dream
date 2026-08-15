@@ -17,7 +17,11 @@ thread_local! {
     static EVENT_LOOP: RefCell<Option<EventLoop<()>>> = const { RefCell::new(None) };
 }
 
-fn surface_config(format: wgpu::TextureFormat, width: u32, height: u32) -> wgpu::SurfaceConfiguration {
+fn surface_config(
+    format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+) -> wgpu::SurfaceConfiguration {
     wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
         format,
@@ -210,11 +214,7 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 let i = &st.surfaces.get(&sid).unwrap().input;
                 (i.x, i.y)
             };
-            st.surfaces
-                .get_mut(&sid)
-                .unwrap()
-                .input
-                .wheel(dx, dy, x, y);
+            st.surfaces.get_mut(&sid).unwrap().input.wheel(dx, dy, x, y);
         }
         WindowEvent::KeyboardInput { event, .. } => {
             let code = physical_code_string(event.physical_key);
@@ -245,11 +245,7 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
             input.meta = m.super_key();
         }
         WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
-            st.surfaces
-                .get_mut(&sid)
-                .unwrap()
-                .input
-                .text_input(text);
+            st.surfaces.get_mut(&sid).unwrap().input.text_input(text);
         }
         WindowEvent::Resized(size) => {
             let pw = size.width.max(1);
@@ -475,18 +471,12 @@ pub fn configure(id: i32, width: i32, height: i32) {
 
 pub fn width(id: i32) -> i32 {
     let st = lock_state();
-    st.surfaces
-        .get(&id)
-        .map(|s| s.width as i32)
-        .unwrap_or(0)
+    st.surfaces.get(&id).map(|s| s.width as i32).unwrap_or(0)
 }
 
 pub fn height(id: i32) -> i32 {
     let st = lock_state();
-    st.surfaces
-        .get(&id)
-        .map(|s| s.height as i32)
-        .unwrap_or(0)
+    st.surfaces.get(&id).map(|s| s.height as i32).unwrap_or(0)
 }
 
 pub fn present(id: i32) -> i32 {
@@ -537,24 +527,15 @@ fn present_inner(id: i32) -> Result<(), String> {
     let frame = match surface.get_current_texture() {
         Ok(f) => f,
         Err(e) => {
-            if matches!(
-                e,
-                wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated
-            ) {
+            if matches!(e, wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) {
                 if let Some(cfg) = surf.config.clone() {
                     surface.configure(&device, &cfg);
                 }
-                surface.get_current_texture().map_err(|e2| {
-                    format!(
-                        "surface acquire failed ({})",
-                        surface_err_word(&e2)
-                    )
-                })?
+                surface
+                    .get_current_texture()
+                    .map_err(|e2| format!("surface acquire failed ({})", surface_err_word(&e2)))?
             } else {
-                return Err(format!(
-                    "surface acquire failed ({})",
-                    surface_err_word(&e)
-                ));
+                return Err(format!("surface acquire failed ({})", surface_err_word(&e)));
             }
         }
     };
@@ -822,11 +803,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
                 },
             ],
         });
-        st.blit
-            .as_mut()
-            .unwrap()
-            .bg_by_tex
-            .insert(texture_id, bg);
+        st.blit.as_mut().unwrap().bg_by_tex.insert(texture_id, bg);
     }
 
     if can_swapchain {

@@ -2,7 +2,6 @@ use bumpalo::Bump;
 use std::fs;
 use tracing::{info, warn};
 
-use dream_diagnostics::{render, DiagnosticBag};
 use crate::driver::abi::emit_wasm_and_abi;
 use crate::driver::error::CompileError;
 use crate::driver::generate::run_generators;
@@ -10,8 +9,9 @@ use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::wasm_opt::OptLevel;
-use dream_sema::analyzer::Analyzer;
 use dream_abi::attributes::CompileTargets;
+use dream_diagnostics::{render, DiagnosticBag};
+use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
 
@@ -169,12 +169,10 @@ impl Compiler {
         // Opt-in stdlib packages (`import system.net;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
         if program_uses_json_attr(&acc) {
-            acc.requested_std_packages
-                .insert("system.json".to_string());
+            acc.requested_std_packages.insert("system.json".to_string());
         }
         if program_uses_gpu_shader_attr(&acc) {
-            acc.requested_std_packages
-                .insert("system.gpu".to_string());
+            acc.requested_std_packages.insert("system.gpu".to_string());
         }
         merge_prelude(
             &arena,
@@ -329,9 +327,15 @@ impl Compiler {
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
             let (text, debug_map) = match target {
-                Target::Wasm => {
-                    dream_mir::emit::emit_module_with_debug(&mir, interner, debug, debug_info)
-                }
+                Target::Wasm => dream_mir::emit::emit_module_with_debug(
+                    &mir,
+                    interner,
+                    debug,
+                    debug_info,
+                    debug
+                        || debug_info
+                        || matches!(self.crate_type, dream_sema::analyzer::CrateType::Lib),
+                ),
             };
             (text, debug_map, live_imports)
         }));
@@ -423,15 +427,13 @@ fn debug_map_path(out_path: &str) -> String {
 
 /// True when any collected user type carries `@json` (derived converters need `system.json`).
 fn program_uses_json_attr(acc: &ProgramAccumulator<'_>) -> bool {
-    acc.all_structs.iter().any(|s| {
-        s.attributes
+    acc.all_structs
+        .iter()
+        .any(|s| s.attributes.iter().any(|a| a.name.text == "json"))
+        || acc
+            .all_enums
             .iter()
-            .any(|a| a.name.text == "json")
-    }) || acc.all_enums.iter().any(|e| {
-        e.attributes
-            .iter()
-            .any(|a| a.name.text == "json")
-    })
+            .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
 }
 
 /// True when any top-level function carries `@compute` / `@vertex` / `@fragment` (needs `system.gpu`).

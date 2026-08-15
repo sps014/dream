@@ -9,13 +9,13 @@
 //! case fails the suite.
 
 use dream::driver::compiler::{Compiler, Target};
-use dream_abi::attributes::CompileTargets;
 use dream::execution::host::{
     attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
     link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
     link_math_functions, link_net_functions, link_process_functions, link_text_functions,
     link_worker_functions, read_string_from_memory, set_worker_module,
 };
+use dream_abi::attributes::CompileTargets;
 use rayon::prelude::*;
 use std::collections::BTreeSet;
 use std::fs;

@@ -1065,12 +1065,12 @@ fn test_indirect_call_emits_table_and_signature() {
     let (mir, interner) = indirect_call_demo();
     let wat = dream_mir::emit::emit_module(&mir, &interner, false);
     assert!(
-        wat.contains("(table $__ft 3 funcref)"),
+        wat.contains("(table $__ft 2 funcref)"),
         "function table missing:\n{}",
         wat
     );
     assert!(
-        wat.contains("(elem (i32.const 1) $add $main)"),
+        wat.contains("(elem (i32.const 1) $add)"),
         "elem section missing:\n{}",
         wat
     );
@@ -1666,10 +1666,9 @@ fn test_hir_switch_or_pattern_expands_to_multi_const_arms() {
             "five vowel alternatives should become five Const arms, got {:?}",
             arms.len()
         );
-        assert!(arms.iter().all(|a| matches!(
-            a.pattern,
-            dream_hir::HPattern::Const(_)
-        )));
+        assert!(arms
+            .iter()
+            .all(|a| matches!(a.pattern, dream_hir::HPattern::Const(_))));
     });
 }
 
@@ -1701,10 +1700,9 @@ fn test_hir_switch_range_pattern_expands_to_multi_const_arms() {
             "10..12 should expand to three Const arms, got {}",
             arms.len()
         );
-        assert!(arms.iter().all(|a| matches!(
-            a.pattern,
-            dream_hir::HPattern::Const(_)
-        )));
+        assert!(arms
+            .iter()
+            .all(|a| matches!(a.pattern, dream_hir::HPattern::Const(_))));
     });
 }
 
@@ -1824,9 +1822,6 @@ fn exec_async_sleep_and_await() {
     );
     assert_eq!(run_and_capture(&code, "main"), "42");
 }
-
-
-
 
 #[test]
 fn test_interface_call_emits_dynamic_dispatch() {

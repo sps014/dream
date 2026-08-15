@@ -1,9 +1,9 @@
 //! Generator registration: `@generator` functions, imports, optional `dream.toml` [[generators]].
 
+use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
-use bumpalo::Bump;
 
 use crate::driver::source_loader::ProgramAccumulator;
 
@@ -85,7 +85,11 @@ fn scan_generator_file(
             .attributes
             .iter()
             .filter(|a| a.name.text == "syntax_block")
-            .filter_map(|a| a.args.first().and_then(|t| t.as_string().map(|s| s.to_string())))
+            .filter_map(|a| {
+                a.args
+                    .first()
+                    .and_then(|t| t.as_string().map(|s| s.to_string()))
+            })
             .collect();
         let has_context_body = !f.body.is_empty()
             && f.parameters.len() == 1

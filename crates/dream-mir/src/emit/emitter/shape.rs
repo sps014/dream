@@ -21,9 +21,8 @@ pub(super) struct ShapeScope {
 impl Emitter<'_> {
     /// Reloop the CFG and emit nested structured control flow (sync functions only).
     pub(super) fn emit_shaped_body(&mut self) {
-        let shape = crate::relooper::reloop(self.func).unwrap_or_else(|| {
-            crate::internal_error!("relooper failed on reducible Dream CFG")
-        });
+        let shape = crate::relooper::reloop(self.func)
+            .unwrap_or_else(|| crate::internal_error!("relooper failed on reducible Dream CFG"));
         if shape_needs_pc_dispatch(&shape) {
             self.emit_pc_dispatch();
             return;
@@ -48,7 +47,10 @@ impl Emitter<'_> {
     /// emit cannot label every edge.
     pub(super) fn emit_pc_dispatch(&mut self) {
         let n = self.func.blocks.len();
-        self.line(&format!("  ;; entry = bb{} (pc dispatch fallback)", self.func.entry.0));
+        self.line(&format!(
+            "  ;; entry = bb{} (pc dispatch fallback)",
+            self.func.entry.0
+        ));
         self.line(&format!("  (i32.const {})", self.func.entry.0));
         self.line("  (local.set $__pc)");
         self.line("  (block $host_exit");
@@ -147,7 +149,10 @@ impl Emitter<'_> {
         fallthrough: Option<BlockId>,
     ) -> Result<(), ()> {
         match next {
-            Some(Shape::Multiple { handled, next: join }) => {
+            Some(Shape::Multiple {
+                handled,
+                next: join,
+            }) => {
                 let join_ft = join.as_deref().and_then(shape_entry).or(fallthrough);
                 let then_shape = find_arm(handled, then_blk);
                 let else_shape = find_arm(handled, else_blk);
@@ -360,11 +365,7 @@ impl Emitter<'_> {
 
     /// `br` to a structured label for `target`, or no-op when `target == fallthrough`.
     /// Returns `Err` when no label exists — caller falls back to PC dispatch.
-    fn shape_branch_to(
-        &mut self,
-        target: BlockId,
-        fallthrough: Option<BlockId>,
-    ) -> Result<(), ()> {
+    fn shape_branch_to(&mut self, target: BlockId, fallthrough: Option<BlockId>) -> Result<(), ()> {
         if Some(target) == fallthrough {
             return Ok(());
         }

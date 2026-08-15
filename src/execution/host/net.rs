@@ -279,9 +279,11 @@ pub fn link_net_functions(linker: &mut Linker<()>) -> Result<()> {
             resolve_host_future_bytes(&mut caller, &response)
         },
     )?;
-    linker.func_wrap("Dream", "tcpClose", |_: Caller<'_, ()>, handle: i32| -> i32 {
-        tcp_close(handle)
-    })?;
+    linker.func_wrap(
+        "Dream",
+        "tcpClose",
+        |_: Caller<'_, ()>, handle: i32| -> i32 { tcp_close(handle) },
+    )?;
 
     linker.func_wrap(
         "Dream",

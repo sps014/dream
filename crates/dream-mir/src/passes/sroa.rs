@@ -256,10 +256,7 @@ fn promote_one(func: &mut MirFunction, interner: &TypeInterner) -> bool {
         }
         // Only unlock numeric / unmanaged helper structs: a reference-typed field store would leave
         // the promoted local without the retain/release the heap object path would have done.
-        if fields
-            .values()
-            .any(|ty| interner.is_reference(*ty))
-        {
+        if fields.values().any(|ty| interner.is_reference(*ty)) {
             continue;
         }
         transform(func, interner, o, &fields);
@@ -713,12 +710,11 @@ mod tests {
             "simple ctor New should expand"
         );
         let caller = &mut mir.functions[1];
-        let has_ctor_new = caller.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
-            matches!(
-                s,
-                Statement::Assign(_, Rvalue::New { ctor: Some(_), .. })
-            )
-        });
+        let has_ctor_new = caller
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .any(|s| matches!(s, Statement::Assign(_, Rvalue::New { ctor: Some(_), .. })));
         assert!(!has_ctor_new, "ctor should be cleared from New");
         assert!(
             Sroa.run(caller, &i),

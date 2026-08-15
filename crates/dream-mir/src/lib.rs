@@ -8,9 +8,9 @@
 //! structured WASM control flow from this CFG via a relooper.
 
 pub mod abi;
-pub mod debug_schema;
 pub mod async_emit;
 pub mod build;
+pub mod debug_schema;
 pub mod emit;
 pub mod lower;
 pub mod passes;
@@ -566,9 +566,9 @@ pub struct Callee {
 
 #[cfg(test)]
 mod tests {
-    use dream_hir::{Binding, HExpr, HExprKind, HFunction, HParam, HStmt, LocalId};
     use crate::lower::lower_function;
     use crate::passes::PassManager;
+    use dream_hir::{Binding, HExpr, HExprKind, HFunction, HParam, HStmt, LocalId};
     use dream_types::{DefKind, TypeCtx};
 
     /// Exercises the whole middle/back-end: build typed HIR, lower to a MIR CFG, run the

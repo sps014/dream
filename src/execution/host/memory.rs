@@ -147,14 +147,22 @@ pub(crate) fn read_arg_i32_array(caller: &mut Caller<'_, ()>, ptr: i32) -> Resul
     let mut out = Vec::with_capacity(count);
     let mut i = start;
     while i + 4 <= end && out.len() < count {
-        out.push(i32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]));
+        out.push(i32::from_le_bytes([
+            data[i],
+            data[i + 1],
+            data[i + 2],
+            data[i + 3],
+        ]));
         i += 4;
     }
     Ok(out)
 }
 
 /// Allocates a Dream `int[]` holding `values` via the module's exported `malloc`.
-pub(crate) fn write_i32_array_to_memory(caller: &mut Caller<'_, ()>, values: &[i32]) -> Result<i32> {
+pub(crate) fn write_i32_array_to_memory(
+    caller: &mut Caller<'_, ()>,
+    values: &[i32],
+) -> Result<i32> {
     let malloc = required_malloc(caller)?;
     let count = values.len() as i32;
     let nbytes = LEN_PREFIX as i32 + count.saturating_mul(4);

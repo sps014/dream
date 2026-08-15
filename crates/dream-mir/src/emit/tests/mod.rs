@@ -535,7 +535,7 @@ fn debug_line_module(i: &TypeInterner) -> crate::Mir {
 fn debug_info_emits_hooks_and_source_map() {
     let i = TypeInterner::new();
     let mir = debug_line_module(&i);
-    let (wat, map) = emit_module_with_debug(&mir, &i, false, true);
+    let (wat, map) = emit_module_with_debug(&mir, &i, false, true, true);
 
     assert!(
         wat.contains("(import \"dream_debug\" \"line\""),
@@ -582,7 +582,7 @@ fn debug_info_emits_hooks_and_source_map() {
 fn release_build_has_no_debug_hooks() {
     let i = TypeInterner::new();
     let mir = debug_line_module(&i);
-    let (wat, map) = emit_module_with_debug(&mir, &i, false, false);
+    let (wat, map) = emit_module_with_debug(&mir, &i, false, false, false);
     assert!(map.is_none(), "release build must not produce a source map");
     assert!(!wat.contains("dream_debug"), "no debug imports:\n{}", wat);
     assert!(!wat.contains("__dbg_"), "no debug hooks/pool:\n{}", wat);

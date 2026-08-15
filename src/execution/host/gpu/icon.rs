@@ -93,7 +93,9 @@ fn parse_package_icon_text(text: &str) -> Option<String> {
         }
         let end = rest[1..].find(quote)?;
         let value = rest[1..1 + end].to_string();
-        if value.is_empty() || Path::new(&value).is_absolute() || value.split('/').any(|p| p == "..")
+        if value.is_empty()
+            || Path::new(&value).is_absolute()
+            || value.split('/').any(|p| p == "..")
         {
             return None;
         }

@@ -4,9 +4,7 @@
 //! the first poll, returns the frame pointer) and a **poll** function (resumable state machine between
 //! `await` points). The cooperative scheduler runtime lives in `mir/runtime/async.wat`.
 
-use super::emit::{
-    emit_async_poll, func_symbol, poll_symbol, vs_retain_sym, wasm_ty_of,
-};
+use super::emit::{emit_async_poll, func_symbol, poll_symbol, vs_retain_sym, wasm_ty_of};
 use super::lower::lower_async_poll_body;
 use super::passes::MirPass;
 use super::MirFunction;
@@ -35,20 +33,6 @@ pub const HOST_POLL_INDEX: i32 = -1;
 const SLOT_SIZE: i32 = 8;
 
 const RUNTIME_ASYNC: &str = include_str!("runtime/async.wat");
-
-pub fn poll_indices(
-    functions: &[MirFunction],
-) -> HashMap<(dream_types::DefId, Vec<TypeId>), usize> {
-    // Match [`crate::emit::tables::func_table`]: slot 0 is the null funcref sentinel, so constructor
-    // and poll entries begin at 1 / `functions.len() + 1`.
-    let base = functions.len() + 1;
-    functions
-        .iter()
-        .filter(|f| f.is_async)
-        .enumerate()
-        .map(|(i, f)| ((f.def, f.instance.clone()), base + i))
-        .collect()
-}
 
 pub fn module_has_async(functions: &[MirFunction]) -> bool {
     functions.iter().any(|f| f.is_async)
@@ -79,6 +63,7 @@ pub fn async_runtime_wat() -> String {
         .replace("{F_RESULT}", &F_RESULT.to_string())
         .replace("{F_STATUS}", &F_STATUS.to_string())
         .replace("{F_WAKER}", &F_WAKER.to_string())
+        .replace("{F_AWAITING}", &F_AWAITING.to_string())
         .replace("{F_DUE}", &F_DUE.to_string())
         .replace("{F_CHILDREN}", &F_CHILDREN.to_string())
         .replace("{F_COUNT}", &F_COUNT.to_string())
@@ -88,6 +73,10 @@ pub fn async_runtime_wat() -> String {
         .replace("{KIND_ANY}", &KIND_ANY.to_string())
         .replace("{STATUS_CANCELLED}", &STATUS_CANCELLED.to_string())
         .replace("{tag_array}", &super::abi::TAG_ARRAY.to_string())
+        .replace("{RQ_HEAD_ADDR}", &super::abi::ASYNC_RQ_HEAD_ADDR.to_string())
+        .replace("{RQ_TAIL_ADDR}", &super::abi::ASYNC_RQ_TAIL_ADDR.to_string())
+        .replace("{TIMER_HEAD_ADDR}", &super::abi::ASYNC_TIMER_HEAD_ADDR.to_string())
+        .replace("{VCLOCK_ADDR}", &super::abi::ASYNC_VCLOCK_ADDR.to_string())
 }
 
 pub(crate) struct AsyncSlots {
@@ -177,6 +166,7 @@ pub fn emit_async_function(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
     ftable: &HashMap<(dream_types::DefId, Vec<TypeId>), usize>,
+    defined_funcs: &HashSet<(dream_types::DefId, Vec<TypeId>)>,
     value_glue: &HashSet<TypeId>,
     poll_idx: usize,
     debug: bool,
@@ -300,6 +290,7 @@ pub fn emit_async_function(
         strings,
         tags,
         ftable,
+        defined_funcs,
         value_glue,
         &slots,
         &poll_symbol(func),

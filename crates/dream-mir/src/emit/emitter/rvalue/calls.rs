@@ -20,7 +20,9 @@ impl Emitter<'_> {
         args: &[Operand],
     ) {
         let params = self.sigs.get(&(callee.def, callee.args.clone())).cloned();
-        let is_host_import = !self.func_table.contains_key(&(callee.def, callee.args.clone()));
+        let is_host_import = !self
+            .defined_funcs
+            .contains(&(callee.def, callee.args.clone()));
         for (i, a) in args.iter().enumerate() {
             self.emit_operand(a);
             if let Some(pty) = params.as_ref().and_then(|p| p.get(i)) {

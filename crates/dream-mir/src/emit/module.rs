@@ -10,7 +10,7 @@ struct ModuleTables {
     sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
     strings: IndexMap<String, u32>,
     tags: HashMap<TypeId, i32>,
-    ftable: HashMap<(DefId, Vec<TypeId>), usize>,
+    ftable: IndirectTable,
     value_glue: std::collections::HashSet<TypeId>,
 }
 
@@ -40,6 +40,7 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
         ftable,
         value_glue,
     } = build_tables(mir, interner, true);
+    let defined = defined_functions(mir);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
     let mut out = String::new();
     for f in &mir.functions {
@@ -51,9 +52,10 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
             &mir.layouts,
             &strings,
             &tags,
-            &ftable,
+            &ftable.slots,
             &value_glue,
             &global_tys,
+            &defined,
             false,
             true,
             None,
@@ -66,18 +68,24 @@ pub fn emit_program(mir: &crate::Mir, interner: &TypeInterner) -> String {
 /// Emits a whole MIR program as a single `(module ...)`, exporting every (non-instance) function
 /// under its source name. This is the self-contained unit the driver hands to the WASM assembler.
 pub fn emit_module(mir: &crate::Mir, interner: &TypeInterner, debug: bool) -> String {
-    emit_module_with_debug(mir, interner, debug, false).0
+    let has_main = mir
+        .functions
+        .iter()
+        .any(|f| f.instance.is_empty() && f.name == crate::abi::ENTRY_FN);
+    emit_module_with_debug(mir, interner, debug, false, debug || !has_main).0
 }
 
 /// Like [`emit_module`], but when `debug_info` is set it also instruments every function with the
 /// `dream_debug` source-line hooks + local spilling and returns the [`DebugModule`] source map
 /// describing them. When `debug_info` is false the returned map is `None` and the WAT is identical
-/// to [`emit_module`].
+/// to [`emit_module`]. `export_user_fns` exports every non-generic user function (debug / `-g` /
+/// `--crate-type lib`); release binaries export only `main` plus the host ABI.
 pub fn emit_module_with_debug(
     mir: &crate::Mir,
     interner: &TypeInterner,
     debug: bool,
     debug_info: bool,
+    export_user_fns: bool,
 ) -> (String, Option<crate::emit::debug_map::DebugModule>) {
     // Located (file:line) panic strings are useful while debugging; release builds (`!debug &&
     // !debug_info`) share four compact base messages instead to keep the data section small.
@@ -91,6 +99,7 @@ pub fn emit_module_with_debug(
         value_glue,
     } = build_tables(mir, interner, locate_panics);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
+    let defined = defined_functions(mir);
 
     // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
     // front so both the instrumentation below and the returned source map agree on ids/slots.
@@ -138,13 +147,13 @@ pub fn emit_module_with_debug(
 
     // `call_indirect` signature types (declared before use), plus the function table + its export.
     emit_func_signatures(&mut out, interner);
-    emit_func_table(&mut out, mir);
+    emit_func_table(&mut out, &ftable);
 
     // Interface dispatch tables live in linear memory just past the interned strings and any
     // value-struct global BSS; the heap bump pointer then starts past those.
     let used_slots = used_iface_slots(mir);
     let (vg_addrs, static_end) = value_global_addrs(mir, interner, heap_base(&strings));
-    let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots);
+    let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots, &ftable.slots);
 
     // Linear memory + allocator runtime state. Layout (low -> high): static data (strings +
     // value-struct global BSS + itables) | shadow-stack region (grows down) | heap (grows up).
@@ -257,7 +266,6 @@ pub fn emit_module_with_debug(
     // Interface itable data segments (tag-indexed method tables), past the string region.
     out.push_str(&iface.data);
 
-    let polls = crate::async_emit::poll_indices(&mir.functions);
     let mut has_init = false;
     for f in &mir.functions {
         if f.is_async {
@@ -269,9 +277,10 @@ pub fn emit_module_with_debug(
                 &mir.layouts,
                 &strings,
                 &tags,
-                &ftable,
+                &ftable.slots,
+                &defined,
                 &value_glue,
-                *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
+                *ftable.polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
                 debug,
                 locate_panics,
                 debug_fn,
@@ -286,9 +295,10 @@ pub fn emit_module_with_debug(
                 &mir.layouts,
                 &strings,
                 &tags,
-                &ftable,
+                &ftable.slots,
                 &value_glue,
                 &global_tys,
+                &defined,
                 debug,
                 locate_panics,
                 debug_fn,
@@ -313,7 +323,7 @@ pub fn emit_module_with_debug(
                 crate::abi::TAG_ARRAY,
                 func_symbol(f),
             );
-        } else if f.instance.is_empty() {
+        } else if f.instance.is_empty() && (export_user_fns || f.name == crate::abi::ENTRY_FN) {
             let _ = writeln!(out, "(export \"{}\" (func ${}))", f.name, func_symbol(f));
         }
         out.push('\n');

@@ -473,8 +473,8 @@ pub fn is_reference(interner: &TypeInterner, ty: TypeId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dream_hir::{Binding, HExpr, HExprKind, HFunction, HStmt, LocalId};
     use crate::Terminator;
+    use dream_hir::{Binding, HExpr, HExprKind, HFunction, HStmt, LocalId};
     use dream_types::{DefKind, TypeCtx};
 
     #[test]

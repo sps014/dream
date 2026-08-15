@@ -248,32 +248,20 @@ impl InputState {
     pub fn pointer_move(&mut self, x: f32, y: f32, pointer_id: i32) {
         self.set_pointer_pos(x, y);
         self.pointer_id = pointer_id;
-        self.push(InputEvent::PointerMove {
-            x,
-            y,
-            pointer_id,
-        });
+        self.push(InputEvent::PointerMove { x, y, pointer_id });
     }
 
     pub fn pointer_enter(&mut self, x: f32, y: f32, pointer_id: i32) {
         self.inside = true;
         self.set_pointer_pos(x, y);
         self.pointer_id = pointer_id;
-        self.push(InputEvent::PointerEnter {
-            x,
-            y,
-            pointer_id,
-        });
+        self.push(InputEvent::PointerEnter { x, y, pointer_id });
     }
 
     pub fn pointer_leave(&mut self, x: f32, y: f32, pointer_id: i32) {
         self.inside = false;
         self.set_pointer_pos(x, y);
-        self.push(InputEvent::PointerLeave {
-            x,
-            y,
-            pointer_id,
-        });
+        self.push(InputEvent::PointerLeave { x, y, pointer_id });
     }
 
     pub fn pointer_cancel(&mut self, pointer_id: i32) {
@@ -472,31 +460,19 @@ fn pack_event(out: &mut Vec<u8>, ev: &InputEvent) {
             out.extend_from_slice(&button.to_le_bytes());
             out.extend_from_slice(&pointer_id.to_le_bytes());
         }
-        InputEvent::PointerMove {
-            x,
-            y,
-            pointer_id,
-        } => {
+        InputEvent::PointerMove { x, y, pointer_id } => {
             out.push(TAG_POINTER_MOVE);
             out.extend_from_slice(&x.to_le_bytes());
             out.extend_from_slice(&y.to_le_bytes());
             out.extend_from_slice(&pointer_id.to_le_bytes());
         }
-        InputEvent::PointerEnter {
-            x,
-            y,
-            pointer_id,
-        } => {
+        InputEvent::PointerEnter { x, y, pointer_id } => {
             out.push(TAG_POINTER_ENTER);
             out.extend_from_slice(&x.to_le_bytes());
             out.extend_from_slice(&y.to_le_bytes());
             out.extend_from_slice(&pointer_id.to_le_bytes());
         }
-        InputEvent::PointerLeave {
-            x,
-            y,
-            pointer_id,
-        } => {
+        InputEvent::PointerLeave { x, y, pointer_id } => {
             out.push(TAG_POINTER_LEAVE);
             out.extend_from_slice(&x.to_le_bytes());
             out.extend_from_slice(&y.to_le_bytes());

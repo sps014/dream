@@ -11,7 +11,7 @@ use super::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Termin
 use dream_hir::{scalar_size, LayoutTable};
 use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 /// Runtime type tag for arrays passed to `$malloc`, matching the object protocol's `$object_tag`

@@ -2,9 +2,7 @@
 
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
-use super::layout::{
-    build_struct_field_tys, emit_value_struct_wgsl, find_struct,
-};
+use super::layout::{build_struct_field_tys, emit_value_struct_wgsl, find_struct};
 use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
@@ -101,11 +99,7 @@ pub(super) fn emit_kernel(
                 read_write,
                 atomic,
             } => {
-                let access = if read_write {
-                    "read_write"
-                } else {
-                    "read"
-                };
+                let access = if read_write { "read_write" } else { "read" };
                 let elem_ty = if atomic {
                     format!("atomic<{elem}>")
                 } else {
@@ -248,13 +242,7 @@ pub(super) fn emit_kernel(
     let mut workgroup_decls = String::new();
     let mut body = String::new();
     reject_gpu_nameof(func.body, &ctx);
-    emit_stmts(
-        func.body,
-        &mut body,
-        &mut workgroup_decls,
-        1,
-        &ctx,
-    );
+    emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
 
     let mut wgsl = String::new();
     wgsl.push_str(&header);
@@ -274,8 +262,12 @@ pub(super) fn emit_kernel(
     wgsl.push_str(") {\n");
     // Shadow builtins as i32 structs so Dream-style `.x` field access typechecks in source
     // (`GpuId3`) while WGSL uses `vec3<u32>` builtins.
-    wgsl.push_str("  let global_id_i = vec3<i32>(i32(global_id.x), i32(global_id.y), i32(global_id.z));\n");
-    wgsl.push_str("  let local_id_i = vec3<i32>(i32(local_id.x), i32(local_id.y), i32(local_id.z));\n");
+    wgsl.push_str(
+        "  let global_id_i = vec3<i32>(i32(global_id.x), i32(global_id.y), i32(global_id.z));\n",
+    );
+    wgsl.push_str(
+        "  let local_id_i = vec3<i32>(i32(local_id.x), i32(local_id.y), i32(local_id.z));\n",
+    );
     wgsl.push_str(
         "  let workgroup_id_i = vec3<i32>(i32(workgroup_id.x), i32(workgroup_id.y), i32(workgroup_id.z));\n",
     );
@@ -331,9 +323,7 @@ fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
         }
         Type::Struct(tok, None) if tok.text == "GpuTexture" => {
             // `@readonly GpuTexture` → sampled; otherwise storage texture (write).
-            ParamClass::Texture {
-                storage: !readonly,
-            }
+            ParamClass::Texture { storage: !readonly }
         }
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ParamClass::Sampler,
         other => ParamClass::Uniform {
@@ -345,24 +335,22 @@ fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
 fn is_builtin_gpu_type(name: &str) -> bool {
     matches!(
         name,
-        "GpuBuffer"
-            | "GpuTexture"
-            | "GpuSampler"
-            | "GpuVec2"
-            | "GpuVec3"
-            | "GpuVec4"
-            | "GpuId3"
+        "GpuBuffer" | "GpuTexture" | "GpuSampler" | "GpuVec2" | "GpuVec3" | "GpuVec4" | "GpuId3"
     )
 }
 
 /// User value structs referenced as `GpuBuffer<T>` element types (need WGSL `struct` decls).
-fn collect_value_struct_names(func: &FunctionNode<'_>, program: &ProgramNode<'_>) -> IndexSet<String> {
+fn collect_value_struct_names(
+    func: &FunctionNode<'_>,
+    program: &ProgramNode<'_>,
+) -> IndexSet<String> {
     let mut names = IndexSet::new();
     for param in &func.parameters {
         if let Type::Struct(tok, Some(args)) = &param.type_ {
             if tok.text == "GpuBuffer" {
                 if let Some(Type::Struct(inner, None)) = args.first() {
-                    if !is_builtin_gpu_type(&inner.text) && find_struct(program, &inner.text).is_some()
+                    if !is_builtin_gpu_type(&inner.text)
+                        && find_struct(program, &inner.text).is_some()
                     {
                         names.insert(inner.text.clone());
                     }
@@ -453,7 +441,9 @@ fn walk_stmts_atomics(stmts: &[StatementNode<'_>], out: &mut IndexSet<String>) {
                     walk_stmts_atomics(d, out);
                 }
             }
-            StatementNode::Labeled(_, inner) => walk_stmts_atomics(std::slice::from_ref(inner), out),
+            StatementNode::Labeled(_, inner) => {
+                walk_stmts_atomics(std::slice::from_ref(inner), out)
+            }
             StatementNode::Lock(e, body) => {
                 walk_expr_atomics(e, out);
                 walk_stmts_atomics(body, out);

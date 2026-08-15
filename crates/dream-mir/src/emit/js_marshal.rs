@@ -129,10 +129,7 @@ fn value_to_js(
             let (pre, boxm) = box_prim(*p);
             Some(format!("{addr} ({load}) {pre} (call {})", bridge_sym(boxm)))
         }
-        TyKind::Enum(_) => Some(format!(
-            "{addr} ({load}) (call {})",
-            bridge_sym("box_int")
-        )),
+        TyKind::Enum(_) => Some(format!("{addr} ({load}) (call {})", bridge_sym("box_int"))),
         TyKind::Js => Some(format!("{addr} ({load})")),
         TyKind::Array(elem) if is_marshalable(interner, *elem) => {
             Some(format!("{addr} ({load}) (call {})", array_to_js_sym(*elem)))
@@ -304,12 +301,7 @@ fn emit_js_to_struct(
 }
 
 /// `$array_to_js_t<id>`: a Dream `elem[]` -> a JS array, deep-copying each element.
-fn emit_array_to_js(
-    out: &mut String,
-    elem: TypeId,
-    interner: &TypeInterner,
-    mir: &crate::Mir,
-) {
+fn emit_array_to_js(out: &mut String, elem: TypeId, interner: &TypeInterner, mir: &crate::Mir) {
     let (esize, _) = scalar_size(interner, elem);
     let addr = format!(
         "(local.get $arr) (i32.const 4) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)"

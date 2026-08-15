@@ -111,6 +111,13 @@ pub const HEAP_PTR_ADDR: u32 = 48;
 /// { ... }`, and `Lock`) — see `HEADER_LOCK_WORD_SIZE` below for the lock word's own layout.
 pub const THREAD_ID_COUNTER_ADDR: u32 = 52;
 
+/// Shared async run-queue / timer list heads. WASM globals are per-instance; these live in
+/// shared linear memory so workers and the owner see the same scheduler lists.
+pub const ASYNC_RQ_HEAD_ADDR: u32 = 76;
+pub const ASYNC_RQ_TAIL_ADDR: u32 = 80;
+pub const ASYNC_TIMER_HEAD_ADDR: u32 = 84;
+pub const ASYNC_VCLOCK_ADDR: u32 = 88;
+
 // -- `@shared class` header extension --------------------------------------------------------
 //
 // An `@shared class` instance carries one extra `i32` word, right past its last field (i.e. at

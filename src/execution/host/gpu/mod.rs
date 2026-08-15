@@ -300,11 +300,9 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         "gpuTextureCreateRgba16Float",
         |w: i32, h: i32| -> i32 { textures::texture_create_rgba16float(w, h) },
     )?;
-    linker.func_wrap(
-        "Dream",
-        "gpuTextureCreateCubeRgba8",
-        |size: i32| -> i32 { textures::texture_create_cube_rgba8(size) },
-    )?;
+    linker.func_wrap("Dream", "gpuTextureCreateCubeRgba8", |size: i32| -> i32 {
+        textures::texture_create_cube_rgba8(size)
+    })?;
     linker.func_wrap(
         "Dream",
         "gpuTextureWriteRgba",
@@ -376,13 +374,9 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             Ok(surface::create(&title, width, height))
         },
     )?;
-    linker.func_wrap(
-        "Dream",
-        "gpuSurfaceConfigure",
-        |id: i32, w: i32, h: i32| {
-            surface::configure(id, w, h);
-        },
-    )?;
+    linker.func_wrap("Dream", "gpuSurfaceConfigure", |id: i32, w: i32, h: i32| {
+        surface::configure(id, w, h);
+    })?;
     linker.func_wrap(
         "Dream",
         "gpuSurfacePresent",
@@ -440,16 +434,12 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         "gpuSurfaceGamepadAxis",
         |id: i32, pad: i32, axis: i32| -> f32 { surface::gamepad_axis(id, pad, axis) },
     )?;
-    linker.func_wrap(
-        "Dream",
-        "gpuSurfaceFocused",
-        |id: i32| -> i32 { i32::from(surface::focused(id)) },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "gpuSurfaceCloseRequested",
-        |id: i32| -> i32 { i32::from(surface::close_requested(id)) },
-    )?;
+    linker.func_wrap("Dream", "gpuSurfaceFocused", |id: i32| -> i32 {
+        i32::from(surface::focused(id))
+    })?;
+    linker.func_wrap("Dream", "gpuSurfaceCloseRequested", |id: i32| -> i32 {
+        i32::from(surface::close_requested(id))
+    })?;
     linker.func_wrap(
         "Dream",
         "gpuSurfacePollEvents",
@@ -543,8 +533,18 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
          load: i32|
          -> Result<i32> {
             let u = read_arg_bytes(&mut caller, uniforms)?;
-            let code =
-                render::draw_ex(sid, pid, vb, n, inst, &u, [cr, cg, cb, ca], depth, load, None);
+            let code = render::draw_ex(
+                sid,
+                pid,
+                vb,
+                n,
+                inst,
+                &u,
+                [cr, cg, cb, ca],
+                depth,
+                load,
+                None,
+            );
             resolve_host_future_i32(&mut caller, code)
         },
     )?;
@@ -564,8 +564,18 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
          ca: f32|
          -> Result<i32> {
             let u = read_arg_bytes(&mut caller, uniforms)?;
-            let code =
-                render::draw_ex(sid, pid, vb, 0, 1, &u, [cr, cg, cb, ca], -1, 0, Some((ib, n)));
+            let code = render::draw_ex(
+                sid,
+                pid,
+                vb,
+                0,
+                1,
+                &u,
+                [cr, cg, cb, ca],
+                -1,
+                0,
+                Some((ib, n)),
+            );
             resolve_host_future_i32(&mut caller, code)
         },
     )?;
@@ -587,8 +597,17 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
          load: i32|
          -> Result<i32> {
             let u = read_arg_bytes(&mut caller, uniforms)?;
-            let code =
-                render::draw_to(color_tex, pid, vb, n, inst, &u, [cr, cg, cb, ca], depth, load);
+            let code = render::draw_to(
+                color_tex,
+                pid,
+                vb,
+                n,
+                inst,
+                &u,
+                [cr, cg, cb, ca],
+                depth,
+                load,
+            );
             resolve_host_future_i32(&mut caller, code)
         },
     )?;

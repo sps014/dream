@@ -1,7 +1,7 @@
 //! The MIR optimization pass manager and passes.
 
-mod algebraic;
 mod abc;
+mod algebraic;
 mod autovec;
 mod cfg;
 mod const_fold;

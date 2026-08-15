@@ -32,18 +32,15 @@ fun main() {
 
 ## What you get
 
-<div class="dream-feature-strip" markdown>
+<div class="dream-highlights" markdown>
 
-- **Static types** with inference
-- **ARC** memory
-- **Generics** monomorphized to WASM
-- **Classes / structs / interfaces**
-- **Enums & unions** with `switch`
-- **`async` / `await`** in-module
-- **`WebWorker`** parallelism
-- **`js` + `extern`** interop
-- **`@compute`** → WebGPU
-- **Stdlib** collections, JSON, I/O, GPU, crypto
+-   :material-shield-check: **Types checked before you run**
+-   :material-memory: **No manual memory**
+-   :material-web: **Runs in the browser and on your machine**
+-   :material-toolbox-outline: **Lists, files, HTTP, JSON, GPU, crypto in the stdlib**
+-   :material-language-javascript: **Talk to JavaScript when you need the DOM**
+-   :material-language-c: **Talk to C on the native host**
+-   :material-sync: **`async` / WebWorkers for concurrency**
 
 </div>
 

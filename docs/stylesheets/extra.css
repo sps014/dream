@@ -198,34 +198,63 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
-/* Feature strip on the docs home page */
-.dream-feature-strip ul {
+/* Home-page highlights: two-column feature list, not chips */
+.dream-highlights ul {
   list-style: none !important;
-  margin: 0 0 2rem !important;
+  margin: 0.5rem 0 2.25rem !important;
   padding: 0 !important;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.65rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.85rem;
 }
 
-.dream-feature-strip ul > li {
+.dream-highlights ul > li {
   margin: 0 !important;
-  padding: 0.35rem 0.75rem !important;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 0.82rem;
-  color: #cbd5e1;
+  padding: 0.85rem 1rem 0.85rem 0.9rem !important;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
   line-height: 1.35;
 }
 
-.dream-feature-strip ul > li::marker {
+.dream-highlights ul > li::marker {
   content: none;
 }
 
-.dream-feature-strip strong {
-  color: #f1f5f9;
+.dream-highlights ul > li p {
+  margin: 0 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: #e2e8f0;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.dream-highlights ul > li .twemoji {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  color: #a855f7;
+}
+
+.dream-highlights ul > li strong {
   font-weight: 600;
+  color: #f1f5f9;
+}
+
+.dream-highlights ul > li:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+@media screen and (max-width: 44.99em) {
+  .dream-highlights ul {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Default grid cards */

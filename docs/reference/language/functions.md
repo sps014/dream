@@ -289,7 +289,7 @@ Rules:
   a dangling reference. This is a compile-time error, mirroring C#'s rule against capturing
   `ref`/`out` parameters.
 
-### `ref` and closures
+### `ref` and closures {#ref-and-closures}
 
 A `ref` argument aliases the caller's storage. If that local is also captured by a closure, both
 see the same storage — mutations through the `ref` and through the closure are visible to both:

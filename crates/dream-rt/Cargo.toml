@@ -6,9 +6,34 @@ edition = "2018"
 [lib]
 name = "dream_rt"
 path = "src/lib.rs"
+crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 dream-mir = { path = "../dream-mir" }
+indexmap = "2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+sha2 = "0.10"
+hmac = "0.12"
+getrandom = "0.2"
+aes-gcm = "0.10"
+unicode-normalization = "0.1"
+unicode-segmentation = "1.12"
+chrono = "0.4"
+chrono-tz = "0.10"
+iana-time-zone = "0.1"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tungstenite = { version = "0.24", default-features = false, features = ["handshake", "native-tls"] }
+wgpu = "24"
+pollster = "0.4"
+winit = "0.30"
+gilrs = "0.11"
+image = { version = "0.25", default-features = false, features = ["png"] }
+wry = "0.53"
+libloading = "0.8"
+libffi = { version = "3.2", features = ["system"] }
 
 [build-dependencies]
 cc = "1.2"

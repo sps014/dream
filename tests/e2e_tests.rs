@@ -44,11 +44,6 @@ const DEBUG_ONLY_CASES: &[&str] = &[
 ];
 
 fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
-    let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    if stem.starts_with("webworker") {
-        // `WebWorker` / `js` stay WASM/JS-only; native LLVM has no JS host.
-        return;
-    }
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
     let expected_trap_file = dream_file.with_extension("expected_trap");
@@ -81,15 +76,24 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     .unwrap_or_else(|_| panic!("Missing .expected/.expected_trap file for {:?}", dream_file));
 
     let bin = wat_path.with_extension("out");
-    let output = std::process::Command::new(&bin)
-        .output()
-        .unwrap_or_else(|e| panic!("run {}: {e}", bin.display()));
-    let actual_output = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let output = match dream::execution::native_runner::execute_native_capturing(&bin) {
+        Ok(stdout) => {
+            (
+                true,
+                stdout,
+                String::new(),
+            )
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            (false, String::new(), msg)
+        }
+    };
+    let (ok, actual_output, stderr) = output;
 
     if expects_trap {
         assert!(
-            !output.status.success(),
+            !ok,
             "Expected a runtime panic for {:?}, but execution completed normally",
             dream_file
         );
@@ -105,7 +109,7 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
         );
     } else {
         assert!(
-            output.status.success(),
+            ok,
             "Execution failed for {:?}: {}",
             dream_file,
             stderr

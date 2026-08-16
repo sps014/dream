@@ -39,9 +39,11 @@ Do not grow that set. Trimming it is a follow-up, not a reason to reimplement th
 ## Host functions (`@js`)
 
 `@js("Dream", field)` / `@js("env", field)` was the wasmtime import ABI. Native LLVM does **not**
-embed a JS engine. `dream-rt` implements the OS-level hosts in C (`dream_host.c`: math, time,
-files, process). Remaining `js` object APIs, `WebWorker`, GPU, HTTP, and webview stay WASM/JS-only
-and trap with `dream_unimplemented("<field>")` — not a generic `"js"` string.
+embed a JS engine. `js` object APIs (`@node` / `@web`) are a **compile-time error** on native
+(`CompileTargets::native_only()`), same as wasmtime. GPU, HTTP, files, crypto, process, and
+datetime run **inside the user binary** via `libdream_rt.a` (wgpu in-process, not a JS engine).
+Webview, `@c` libffi, and `WebWorker` (OS threads on the shared `dream-rt` heap) run in
+`libdream_rt.a` the same way GPU/HTTP do. `js` stays WASM/JS-only.
 
 ## Emitter layout (`crates/dream-llvm/src/emit/`)
 

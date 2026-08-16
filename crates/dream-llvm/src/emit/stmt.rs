@@ -361,6 +361,7 @@ impl<'a> ModuleEmitter<'a> {
                     self.buf.push_str("  ret void\n");
                 } else {
                     let v = self.operand(func, o);
+                    let v = self.coerce(&v, self.op_ty(func, o), ty);
                     let _ = writeln!(self.buf, "  ret {} {}", ty, v);
                 }
             }
@@ -383,6 +384,7 @@ impl<'a> ModuleEmitter<'a> {
                             self.buf.push_str("  ret void\n");
                         } else {
                             let val = self.operand(func, o);
+                            let val = self.coerce(&val, self.op_ty(func, o), ty);
                             let _ = writeln!(self.buf, "  ret {} {}", ty, val);
                         }
                     }
@@ -407,17 +409,21 @@ impl<'a> ModuleEmitter<'a> {
             Terminator::Await { future, dest, resume } => {
                 let v = self.operand(func, future);
                 if let Some(d) = dest {
-                    let ty = llvm_val_ty(self.interner, func.local_ty(*d));
+                    let dest_ty = func.local_ty(*d);
+                    let ty = llvm_val_ty(self.interner, dest_ty);
+                    let v = self.coerce(&v, self.op_ty(func, future), ty);
                     let _ = writeln!(self.buf, "  store {} {}, {}* %l{}", ty, v, ty, d.0);
                 }
                 let _ = writeln!(self.buf, "  br label %bb{}", resume.0);
             }
             Terminator::TailCall { callee, args } => {
                 let v = self.emit_call(func, callee, args, false);
-                let ty = llvm_val_ty(self.interner, callee.ret);
-                if matches!(self.interner.kind(callee.ret), TyKind::Void) {
+                let ret_id = llvm_fn_ret_callee(self.interner, self.mir, callee);
+                let ty = llvm_val_ty(self.interner, ret_id);
+                if matches!(self.interner.kind(ret_id), TyKind::Void | TyKind::Error) {
                     self.buf.push_str("  ret void\n");
                 } else {
+                    let v = self.coerce(&v, ret_id, ty);
                     let _ = writeln!(self.buf, "  ret {} {}", ty, v);
                 }
             }

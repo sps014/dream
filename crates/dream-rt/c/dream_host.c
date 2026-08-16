@@ -76,39 +76,22 @@ double dream_math_acos(double x) { return acos(x); }
 double dream_math_atan(double x) { return atan(x); }
 double dream_math_atan2(double y, double x) { return atan2(y, x); }
 
+#ifdef DREAM_FREESTANDING
 int32_t dream_date_local_offset_minutes(int64_t millis) {
-#ifndef DREAM_FREESTANDING
-    time_t t = (time_t)(millis / 1000);
-    struct tm local;
-    localtime_r(&t, &local);
-    return (int32_t)(local.tm_gmtoff / 60);
-#else
     (void)millis;
     return 0;
-#endif
 }
 
 int32_t dream_date_zone_offset_minutes(int32_t zone_ptr, int64_t millis) {
-    char name[256];
-    guest_path(zone_ptr, name, sizeof(name));
-    if (name[0] == 0 || strcmp(name, "UTC") == 0 || strcmp(name, "GMT") == 0) {
-        (void)millis;
-        return 0;
-    }
+    (void)zone_ptr;
+    (void)millis;
     return UNKNOWN_ZONE_OFFSET;
 }
 
 int32_t dream_date_local_zone_name(void) {
-#ifndef DREAM_FREESTANDING
-    const char *tz = getenv("TZ");
-    if (!tz || !tz[0]) {
-        tz = "";
-    }
-    return dream_intern_utf8(tz, (int32_t)strlen(tz));
-#else
     return dream_intern_utf8("", 0);
-#endif
 }
+#endif
 
 int32_t dream_file_read(int32_t path) {
 #ifndef DREAM_FREESTANDING

@@ -86,15 +86,35 @@ pub fn compile_ir(ir: &str, out: &Path, opts: &CodegenOptions) -> Result<PathBuf
     }
     cmd.arg("-I");
     cmd.arg(dream_rt::c_include_dir());
-    for src in dream_rt::c_sources() {
-        if opts.triple.is_wasm() && src.ends_with("entry.c") {
-            continue;
+    if opts.triple.is_wasm() {
+        for src in dream_rt::c_sources() {
+            if src.ends_with("entry.c") {
+                continue;
+            }
+            cmd.arg(src);
         }
-        cmd.arg(src);
-    }
-    cmd.arg(&ll);
-    if !opts.triple.is_wasm() {
+        cmd.arg(&ll);
+    } else {
+        for src in dream_rt::c_sources() {
+            if src.ends_with("dream_rt.c") || src.ends_with("dream_host.c") {
+                continue;
+            }
+            cmd.arg(src);
+        }
+        cmd.arg(&ll);
+        let archive = dream_rt::native_archive();
+        if !archive.exists() {
+            return Err(ClangError::Spawn(format!(
+                "missing {} (rebuild dream-rt as staticlib)",
+                archive.display()
+            )));
+        }
+        cmd.arg(&archive);
+        for arg in dream_rt::native_sys_libs() {
+            cmd.arg(arg);
+        }
         cmd.arg("-lm");
+        cmd.arg("-lpthread");
     }
     cmd.arg("-o");
     cmd.arg(out);

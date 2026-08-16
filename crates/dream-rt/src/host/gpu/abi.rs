@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct GpuAbi {
@@ -70,9 +70,19 @@ struct AbiFile {
     gpu: Option<GpuAbi>,
 }
 
-/// Load `abi.gpu` from the sibling `.abi.json` next to a `.wat` / `.wasm` path.
+/// `.abi.json` next to an artifact, or the path itself if it already is that file.
+pub fn abi_json_path(path: &Path) -> PathBuf {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name.ends_with(".abi.json") {
+        path.to_path_buf()
+    } else {
+        path.with_extension("abi.json")
+    }
+}
+
+/// Load `abi.gpu` from the sibling `.abi.json` next to a `.wat` / `.wasm` / `.out` path.
 pub fn load_gpu_abi_beside(wat_path: &Path) -> Option<GpuAbi> {
-    let abi_path = wat_path.with_extension("abi.json");
+    let abi_path = abi_json_path(wat_path);
     let text = fs::read_to_string(&abi_path).ok()?;
     let file: AbiFile = serde_json::from_str(&text).ok()?;
     file.gpu

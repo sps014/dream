@@ -14,14 +14,30 @@ impl<'a> ModuleEmitter<'a> {
         func: &MirFunction,
         callee: &dream_mir::Callee,
         args: &[Operand],
-        drop: bool,
+        _drop: bool,
     ) -> String {
+        let expected: Vec<TypeId> = self
+            .mir
+            .functions
+            .iter()
+            .find(|f| f.def == callee.def && f.instance == callee.args)
+            .map(|f| f.params.iter().map(|p| f.local_ty(*p)).collect())
+            .or_else(|| {
+                self.mir
+                    .imports
+                    .iter()
+                    .find(|imp| imp.def == callee.def)
+                    .map(|imp| imp.params.clone())
+            })
+            .unwrap_or_default();
         let mut alist = Vec::new();
         let mut arg_tys = Vec::new();
-        for a in args {
-            let ty = self.op_ty(func, a);
-            let v = self.operand(func, a);
-            let lty = llvm_val_ty(self.interner, ty);
+        for (i, a) in args.iter().enumerate() {
+            let from = self.op_ty(func, a);
+            let raw = self.operand(func, a);
+            let to_id = expected.get(i).copied().unwrap_or(from);
+            let lty = llvm_val_ty(self.interner, to_id);
+            let v = self.coerce(&raw, from, lty);
             arg_tys.push(lty.to_string());
             alist.push(format!("{} {}", lty, v));
         }
@@ -32,31 +48,16 @@ impl<'a> ModuleEmitter<'a> {
             llvm_val_ty(self.interner, ret_id).to_string()
         };
         let name = self.resolve_callee(callee, &ret, &arg_tys);
-        let ret_void = ret == "void";
-        if ret_void {
+        if ret == "void" {
             let _ = writeln!(self.buf, "  call void @{}({})", name, alist.join(", "));
             return "0".into();
         }
-        if drop {
-            let ty = llvm_val_ty(self.interner, callee.ret);
-            let t = self.tmp();
-            let _ = writeln!(
-                self.buf,
-                "  {} = call {} @{}({})",
-                t,
-                ty,
-                name,
-                alist.join(", ")
-            );
-            return t;
-        }
-        let ty = llvm_val_ty(self.interner, callee.ret);
         let t = self.tmp();
         let _ = writeln!(
             self.buf,
             "  {} = call {} @{}({})",
             t,
-            ty,
+            ret,
             name,
             alist.join(", ")
         );
@@ -92,9 +93,13 @@ impl<'a> ModuleEmitter<'a> {
                 else_val,
             } => {
                 let c = self.operand(func, cond);
-                let t = self.operand(func, then_val);
-                let e = self.operand(func, else_val);
                 let ty = llvm_val_ty(self.interner, dest_ty);
+                let t_raw = self.operand(func, then_val);
+                let t_from = self.op_ty(func, then_val);
+                let t = self.coerce(&t_raw, t_from, ty);
+                let e_raw = self.operand(func, else_val);
+                let e_from = self.op_ty(func, else_val);
+                let e = self.coerce(&e_raw, e_from, ty);
                 let ic = self.tmp();
                 let r = self.tmp();
                 let _ = writeln!(self.buf, "  {} = icmp ne i32 {}, 0", ic, c);
@@ -180,7 +185,9 @@ impl<'a> ModuleEmitter<'a> {
                 );
                 let _ = writeln!(self.buf, "  call void @dream_store_i32(i32 {}, i32 {})", p, n);
                 for (i, el) in elems.iter().enumerate() {
-                    let v = self.operand(func, el);
+                    let raw = self.operand(func, el);
+                    let from = self.op_ty(func, el);
+                    let v = self.coerce(&raw, from, llvm_val_ty(self.interner, *elem_ty));
                     let addr = self.tmp();
                     let _ = writeln!(
                         self.buf,

@@ -85,7 +85,8 @@ pub(crate) fn emit_abi_sidecars(
         info!("created file: {}", wgsl_path.display());
     }
 
-    if emit_abi {
+    // Native GPU hosts load kernels from sibling `.abi.json`; always write when GPU is used.
+    if emit_abi || !gpu.is_empty() {
         let abi_path = base.with_extension("abi.json");
         fs::write(&abi_path, build_abi_json(program, gpu, live_imports))?;
         info!("created file: {}", abi_path.display());

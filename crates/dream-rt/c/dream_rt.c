@@ -9,8 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 #else
 typedef unsigned long size_t;
+#ifndef INT32_MAX
+#define INT32_MAX 2147483647
+#endif
 void *memcpy(void *dst, const void *src, size_t n) { return __builtin_memcpy(dst, src, n); }
 void *memmove(void *dst, const void *src, size_t n) { return __builtin_memmove(dst, src, n); }
 void *memset(void *dst, int c, size_t n) { return __builtin_memset(dst, c, n); }
@@ -33,6 +37,26 @@ static int32_t g_live;
 static int32_t g_total_alloc;
 
 __attribute__((weak)) void dream_drop(int32_t ptr) { (void)ptr; }
+__attribute__((weak)) int32_t __dream_worker_invoke(int32_t a, int32_t b, int32_t c) {
+    (void)a;
+    (void)b;
+    (void)c;
+    return 0;
+}
+__attribute__((weak)) int64_t dream_call_guest(int32_t idx, int64_t a0, int64_t a1, int64_t a2,
+                                               int64_t a3, int64_t a4, int64_t a5, int64_t a6,
+                                               int64_t a7) {
+    (void)idx;
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    (void)a4;
+    (void)a5;
+    (void)a6;
+    (void)a7;
+    return 0;
+}
 
 static void grow(uint32_t need) {
 #ifdef DREAM_FREESTANDING
@@ -74,6 +98,11 @@ void dream_rt_init(void) {
 uint8_t *dream_heap_base(void) {
     dream_rt_init();
     return g_heap;
+}
+
+int32_t dream_heap_cap(void) {
+    dream_rt_init();
+    return (int32_t)g_cap;
 }
 
 static void lock_acq(void) {
@@ -175,58 +204,96 @@ void dream_release_shared(int32_t ptr) {
     }
 }
 
+static int in_heap(int32_t addr, int32_t n) {
+    return addr >= 0 && g_heap && (uint32_t)addr + (uint32_t)n <= g_cap;
+}
+
 int32_t dream_load_i32(int32_t addr) {
-    int32_t v;
+    int32_t v = 0;
+    if (!in_heap(addr, 4)) {
+        return 0;
+    }
     memcpy(&v, g_heap + (uint32_t)addr, 4);
     return v;
 }
 
 void dream_store_i32(int32_t addr, int32_t value) {
+    if (!in_heap(addr, 4)) {
+        return;
+    }
     memcpy(g_heap + (uint32_t)addr, &value, 4);
 }
 
 int64_t dream_load_i64(int32_t addr) {
-    int64_t v;
+    int64_t v = 0;
+    if (!in_heap(addr, 8)) {
+        return 0;
+    }
     memcpy(&v, g_heap + (uint32_t)addr, 8);
     return v;
 }
 
 void dream_store_i64(int32_t addr, int64_t value) {
+    if (!in_heap(addr, 8)) {
+        return;
+    }
     memcpy(g_heap + (uint32_t)addr, &value, 8);
 }
 
 float dream_load_f32(int32_t addr) {
-    float v;
+    float v = 0;
+    if (!in_heap(addr, 4)) {
+        return 0;
+    }
     memcpy(&v, g_heap + (uint32_t)addr, 4);
     return v;
 }
 
 void dream_store_f32(int32_t addr, float value) {
+    if (!in_heap(addr, 4)) {
+        return;
+    }
     memcpy(g_heap + (uint32_t)addr, &value, 4);
 }
 
 double dream_load_f64(int32_t addr) {
-    double v;
+    double v = 0;
+    if (!in_heap(addr, 8)) {
+        return 0;
+    }
     memcpy(&v, g_heap + (uint32_t)addr, 8);
     return v;
 }
 
 void dream_store_f64(int32_t addr, double value) {
+    if (!in_heap(addr, 8)) {
+        return;
+    }
     memcpy(g_heap + (uint32_t)addr, &value, 8);
 }
 
-uint8_t dream_load_u8(int32_t addr) { return g_heap[(uint32_t)addr]; }
+uint8_t dream_load_u8(int32_t addr) {
+    if (!in_heap(addr, 1) || g_heap == NULL) {
+        return 0;
+    }
+    return g_heap[(uint32_t)addr];
+}
 
-void dream_store_u8(int32_t addr, uint8_t value) { g_heap[(uint32_t)addr] = value; }
+void dream_store_u8(int32_t addr, uint8_t value) {
+    if (!in_heap(addr, 1) || g_heap == NULL) {
+        return;
+    }
+    g_heap[(uint32_t)addr] = value;
+}
 
 void dream_memzero(int32_t addr, int32_t n) {
-    if (n > 0) {
+    if (n > 0 && in_heap(addr, n)) {
         memset(g_heap + (uint32_t)addr, 0, (size_t)n);
     }
 }
 
 void dream_memcpy(int32_t dst, int32_t src, int32_t n) {
-    if (n > 0) {
+    if (n > 0 && in_heap(dst, n) && in_heap(src, n)) {
         memmove(g_heap + (uint32_t)dst, g_heap + (uint32_t)src, (size_t)n);
     }
 }
@@ -604,11 +671,16 @@ int32_t dream_string_compare(int32_t a, int32_t b) {
 }
 
 int32_t dream_utf8_width_at(int32_t ptr, int32_t byte_off) {
-    if (ptr <= 0) {
+    if (ptr <= 0 || byte_off < 0) {
         return 1;
     }
     dream_rt_init();
-    return utf8_width(g_heap[(uint32_t)ptr + DREAM_STRING_UTF8_OFFSET + (uint32_t)byte_off]);
+    int32_t addr = ptr + (int32_t)DREAM_STRING_UTF8_OFFSET + byte_off;
+    if (!in_heap(addr, 1)) {
+        return 1;
+    }
+    int32_t w = utf8_width(g_heap[(uint32_t)addr]);
+    return w < 1 ? 1 : w;
 }
 
 int32_t dream_utf8_decode_at(int32_t ptr, int32_t byte_off) {
@@ -749,19 +821,15 @@ void dream_simd_i32x4_add(int32_t dest, int32_t doff, int32_t a, int32_t aoff, i
     }
 }
 
+#ifdef DREAM_FREESTANDING
 int64_t dream_nano_time(void) {
-#ifndef DREAM_FREESTANDING
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
-#else
     return 0;
-#endif
 }
 
 int64_t dream_now_millis(void) {
-    return dream_nano_time() / 1000000LL;
+    return 0;
 }
+#endif
 
 int32_t dream_box_i32(int32_t v, int32_t tag) {
     int32_t p = dream_malloc(4, tag);

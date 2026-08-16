@@ -107,11 +107,7 @@ pub(crate) fn llvm_fn_ret(interner: &TypeInterner, layouts: &dream_hir::LayoutTa
 }
 
 pub(crate) fn llvm_fn_ret_callee(interner: &TypeInterner, mir: &Mir, callee: &Callee) -> TypeId {
-    if mir.functions.iter().any(|f| f.def == callee.def && f.is_async) {
-        unwrap_future(interner, &mir.layouts, callee.ret)
-    } else {
-        callee.ret
-    }
+    unwrap_future(interner, &mir.layouts, callee.ret)
 }
 
 pub(crate) fn unwrap_future(interner: &TypeInterner, layouts: &dream_hir::LayoutTable, ty: TypeId) -> TypeId {
@@ -146,12 +142,15 @@ pub(crate) fn llvm_extern_name(key: &str) -> String {
     }
 }
 
-/// Maps `@intrinsic` runtime helpers and `@js` host fields that have a `dream-rt` C
-/// implementation. `js` object/worker/gpu/http stay `None` (WASM/JS-only).
+/// Maps `@intrinsic` runtime helpers and `@js` host fields that have a `dream-rt`
+/// implementation. `js*` (browser/Node) stay `None` — native is a compile-time error.
 pub(crate) fn native_c_sym(key: &str) -> Option<&'static str> {
     let k = key.rsplit(['.', ':']).next().unwrap_or(key);
     let k = k.strip_suffix("_host").unwrap_or(k);
     match k {
+        "funcbox_new" => Some("d_funcbox_new"),
+        "funcbox_funcidx" => Some("d_funcbox_funcidx"),
+        "funcbox_env" => Some("d_funcbox_env"),
         "string_alloc" => Some("dream_string_alloc"),
         "string_from_utf8" => Some("dream_string_from_utf8"),
         "string_from_utf8_prefix" => Some("dream_string_from_utf8_prefix"),
@@ -208,6 +207,127 @@ pub(crate) fn native_c_sym(key: &str) -> Option<&'static str> {
         "consoleReadLine" => Some("dream_console_read_line"),
         "consoleReadKey" => Some("dream_console_read_key"),
         "delayMs" => Some("dream_delay_ms"),
+        "fileOpen" => Some("dream_file_open"),
+        "fileHandleRead" => Some("dream_file_handle_read"),
+        "fileHandleWrite" => Some("dream_file_handle_write"),
+        "fileHandleSeek" => Some("dream_file_handle_seek"),
+        "fileHandleClose" => Some("dream_file_handle_close"),
+        "processRun" => Some("dream_process_run"),
+        "processSpawn" => Some("dream_process_spawn"),
+        "processWriteStdin" => Some("dream_process_write_stdin"),
+        "processReadStream" => Some("dream_process_read_stream"),
+        "processReadStreamLine" => Some("dream_process_read_stream_line"),
+        "processWait" => Some("dream_process_wait"),
+        "processKill" => Some("dream_process_kill"),
+        "cryptoSha256" => Some("dream_crypto_sha256"),
+        "cryptoSha512" => Some("dream_crypto_sha512"),
+        "cryptoHmacSha256" => Some("dream_crypto_hmac_sha256"),
+        "cryptoSecureRandomBytes" => Some("dream_crypto_secure_random_bytes"),
+        "cryptoSecureRandomFill" => Some("dream_crypto_secure_random_fill"),
+        "cryptoAesGcmEncrypt" => Some("dream_crypto_aes_gcm_encrypt"),
+        "cryptoAesGcmDecrypt" => Some("dream_crypto_aes_gcm_decrypt"),
+        "unicodeNormalize" => Some("dream_unicode_normalize"),
+        "unicodeToLower" => Some("dream_unicode_to_lower"),
+        "unicodeToUpper" => Some("dream_unicode_to_upper"),
+        "unicodeGraphemes" => Some("dream_unicode_graphemes"),
+        "httpRequest" => Some("dream_http_request"),
+        "httpRequestBytes" => Some("dream_http_request_bytes"),
+        "httpRequestStream" => Some("dream_http_request_stream"),
+        "httpRequestStreamBytes" => Some("dream_http_request_stream_bytes"),
+        "httpReadChunk" => Some("dream_http_read_chunk"),
+        "httpCloseStream" => Some("dream_http_close_stream"),
+        "tcpConnect" => Some("dream_tcp_connect"),
+        "tcpSend" => Some("dream_tcp_send"),
+        "tcpSendText" => Some("dream_tcp_send_text"),
+        "tcpReceive" => Some("dream_tcp_receive"),
+        "tcpClose" => Some("dream_tcp_close"),
+        "wsConnect" => Some("dream_ws_connect"),
+        "wsSendText" => Some("dream_ws_send_text"),
+        "wsSendBinary" => Some("dream_ws_send_binary"),
+        "wsReceive" => Some("dream_ws_receive"),
+        "wsClose" => Some("dream_ws_close"),
+        "gpuIsAvailable" => Some("dream_gpu_is_available"),
+        "gpuReady" => Some("dream_gpu_ready"),
+        "gpuLastError" => Some("dream_gpu_last_error"),
+        "gpuTryInit" => Some("dream_gpu_try_init"),
+        "gpuFrame" => Some("dream_gpu_frame"),
+        "gpuTimestamp" => Some("dream_gpu_timestamp"),
+        "gpuBufferAllocBytes" => Some("dream_gpu_buffer_alloc_bytes"),
+        "gpuBufferAllocVertexBytes" => Some("dream_gpu_buffer_alloc_vertex_bytes"),
+        "gpuBufferWriteBytes" => Some("dream_gpu_buffer_write_bytes"),
+        "gpuBufferWriteBytesAt" => Some("dream_gpu_buffer_write_bytes_at"),
+        "gpuBufferReadBytes" => Some("dream_gpu_buffer_read_bytes"),
+        "gpuBufferReadBytesAt" => Some("dream_gpu_buffer_read_bytes_at"),
+        "gpuBufferCopy" => Some("dream_gpu_buffer_copy"),
+        "gpuBufferDestroy" => Some("dream_gpu_buffer_destroy"),
+        "gpuDispatch" => Some("dream_gpu_dispatch"),
+        "gpuDispatchIndirect" => Some("dream_gpu_dispatch_indirect"),
+        "gpuShaderFromWgsl" => Some("dream_gpu_shader_from_wgsl"),
+        "gpuDispatchShader" => Some("dream_gpu_dispatch_shader"),
+        "gpuSamplerCreate" => Some("dream_gpu_sampler_create"),
+        "gpuSamplerCreateEx" => Some("dream_gpu_sampler_create_ex"),
+        "gpuTextureCreateRgba8" => Some("dream_gpu_texture_create_rgba8"),
+        "gpuTextureCreateDepth" => Some("dream_gpu_texture_create_depth"),
+        "gpuTextureCreateRgba16Float" => Some("dream_gpu_texture_create_rgba16_float"),
+        "gpuTextureCreateCubeRgba8" => Some("dream_gpu_texture_create_cube_rgba8"),
+        "gpuTextureWriteRgba" => Some("dream_gpu_texture_write_rgba"),
+        "gpuTextureReadRgba" => Some("dream_gpu_texture_read_rgba"),
+        "gpuTextureCopyFromBuffer" => Some("dream_gpu_texture_copy_from_buffer"),
+        "gpuTextureCopyToBuffer" => Some("dream_gpu_texture_copy_to_buffer"),
+        "gpuTextureCopy" => Some("dream_gpu_texture_copy"),
+        "gpuTextureGenerateMipmaps" => Some("dream_gpu_texture_generate_mipmaps"),
+        "gpuTextureDestroy" => Some("dream_gpu_texture_destroy"),
+        "gpuSamplerDestroy" => Some("dream_gpu_sampler_destroy"),
+        "gpuSurfaceFromCanvas" => Some("dream_gpu_surface_from_canvas"),
+        "gpuSurfaceCreate" => Some("dream_gpu_surface_create"),
+        "gpuSurfaceConfigure" => Some("dream_gpu_surface_configure"),
+        "gpuSurfacePresent" => Some("dream_gpu_surface_present"),
+        "gpuSurfacePointer" => Some("dream_gpu_surface_pointer"),
+        "gpuSurfaceMods" => Some("dream_gpu_surface_mods"),
+        "gpuSurfaceKeyDown" => Some("dream_gpu_surface_key_down"),
+        "gpuSurfaceGamepads" => Some("dream_gpu_surface_gamepads"),
+        "gpuSurfaceGamepadConnected" => Some("dream_gpu_surface_gamepad_connected"),
+        "gpuSurfaceGamepadButtonDown" => Some("dream_gpu_surface_gamepad_button_down"),
+        "gpuSurfaceGamepadAxis" => Some("dream_gpu_surface_gamepad_axis"),
+        "gpuSurfaceFocused" => Some("dream_gpu_surface_focused"),
+        "gpuSurfaceCloseRequested" => Some("dream_gpu_surface_close_requested"),
+        "gpuSurfacePollEvents" => Some("dream_gpu_surface_poll_events"),
+        "gpuSurfaceWidth" => Some("dream_gpu_surface_width"),
+        "gpuSurfaceHeight" => Some("dream_gpu_surface_height"),
+        "gpuSurfaceDestroy" => Some("dream_gpu_surface_destroy"),
+        "gpuRenderBlit" => Some("dream_gpu_render_blit"),
+        "gpuRenderPipelineCreate" => Some("dream_gpu_render_pipeline_create"),
+        "gpuRenderPipelineCreateEx" => Some("dream_gpu_render_pipeline_create_ex"),
+        "gpuRenderDraw" => Some("dream_gpu_render_draw"),
+        "gpuRenderDrawEx" => Some("dream_gpu_render_draw_ex"),
+        "gpuRenderDrawIndexed" => Some("dream_gpu_render_draw_indexed"),
+        "gpuRenderDrawIndexedEx" => Some("dream_gpu_render_draw_indexed_ex"),
+        "gpuRenderDrawTo" => Some("dream_gpu_render_draw_to"),
+        "gpuRenderPipelineDestroy" => Some("dream_gpu_render_pipeline_destroy"),
+        "gpuPassBegin" => Some("dream_gpu_pass_begin"),
+        "gpuPassDispatch" => Some("dream_gpu_pass_dispatch"),
+        "gpuPassDispatchIndirect" => Some("dream_gpu_pass_dispatch_indirect"),
+        "gpuPassSubmit" => Some("dream_gpu_pass_submit"),
+        "workerSpawn" => Some("dream_worker_spawn"),
+        "workerPost" => Some("dream_worker_post"),
+        "workerRecv" => Some("dream_worker_recv"),
+        "workerTerminate" => Some("dream_worker_terminate"),
+        "workerPoolSpawn" => Some("dream_worker_pool_spawn"),
+        "workerPoolDispatch" => Some("dream_worker_pool_dispatch"),
+        "webviewCreate" => Some("dream_webview_create"),
+        "webviewLoadUrl" => Some("dream_webview_load_url"),
+        "webviewLoadHtml" => Some("dream_webview_load_html"),
+        "webviewLoadFile" => Some("dream_webview_load_file"),
+        "webviewClose" => Some("dream_webview_close"),
+        "webviewCloseRequested" => Some("dream_webview_close_requested"),
+        "webviewTick" => Some("dream_webview_tick"),
+        "webviewPoll" => Some("dream_webview_poll"),
+        "webviewReply" => Some("dream_webview_reply"),
+        "webviewReplyErr" => Some("dream_webview_reply_err"),
+        "webviewReplyBytes" => Some("dream_webview_reply_bytes"),
+        "webviewEmit" => Some("dream_webview_emit"),
+        "webviewEmitBytes" => Some("dream_webview_emit_bytes"),
+        "webviewEval" => Some("dream_webview_eval"),
         _ => None,
     }
 }
@@ -270,6 +390,8 @@ declare i32 @dream_byte_at(i32, i32)
 declare i32 @dream_array_len(i32)
 declare i32 @dream_load_i32(i32)
 declare void @dream_store_i32(i32, i32)
+declare i8 @dream_load_u8(i32)
+declare void @dream_store_u8(i32, i8)
 declare i64 @dream_load_i64(i32)
 declare void @dream_store_i64(i32, i64)
 declare float @dream_load_f32(i32)
@@ -360,6 +482,128 @@ declare void @dream_console_exit(i32)
 declare i32 @dream_console_read_line()
 declare i32 @dream_console_read_key()
 declare void @dream_delay_ms(i32)
+declare i32 @dream_file_open(i32, i32)
+declare i32 @dream_file_handle_read(i32, i32)
+declare i64 @dream_file_handle_write(i32, i32)
+declare i32 @dream_file_handle_seek(i32, i64)
+declare void @dream_file_handle_close(i32)
+declare i32 @dream_process_run(i32, i32, i32)
+declare i32 @dream_process_spawn(i32, i32, i32)
+declare i32 @dream_process_write_stdin(i32, i32)
+declare i32 @dream_process_read_stream(i32, i32, i32)
+declare i32 @dream_process_read_stream_line(i32, i32)
+declare i32 @dream_process_wait(i32)
+declare i32 @dream_process_kill(i32)
+declare i32 @dream_crypto_sha256(i32)
+declare i32 @dream_crypto_sha512(i32)
+declare i32 @dream_crypto_hmac_sha256(i32, i32)
+declare i32 @dream_crypto_secure_random_bytes(i32)
+declare void @dream_crypto_secure_random_fill(i32)
+declare i32 @dream_crypto_aes_gcm_encrypt(i32, i32, i32, i32)
+declare i32 @dream_crypto_aes_gcm_decrypt(i32, i32, i32, i32)
+declare i32 @dream_unicode_normalize(i32, i32)
+declare i32 @dream_unicode_to_lower(i32)
+declare i32 @dream_unicode_to_upper(i32)
+declare i32 @dream_unicode_graphemes(i32)
+declare i32 @dream_http_request(i32, i32, i32, i32, i32, i32)
+declare i32 @dream_http_request_bytes(i32, i32, i32, i32, i32, i32)
+declare i32 @dream_http_request_stream(i32, i32, i32, i32, i32, i32)
+declare i32 @dream_http_request_stream_bytes(i32, i32, i32, i32, i32, i32)
+declare i32 @dream_http_read_chunk(i32, i32)
+declare i32 @dream_http_close_stream(i32)
+declare i32 @dream_tcp_connect(i32, i32, i32)
+declare i32 @dream_tcp_send(i32, i32)
+declare i32 @dream_tcp_send_text(i32, i32)
+declare i32 @dream_tcp_receive(i32, i32)
+declare i32 @dream_tcp_close(i32)
+declare i32 @dream_ws_connect(i32, i32)
+declare i32 @dream_ws_send_text(i32, i32)
+declare i32 @dream_ws_send_binary(i32, i32)
+declare i32 @dream_ws_receive(i32)
+declare i32 @dream_ws_close(i32, i32, i32)
+declare i32 @dream_gpu_is_available()
+declare i32 @dream_gpu_ready()
+declare i32 @dream_gpu_last_error()
+declare i32 @dream_gpu_try_init()
+declare i32 @dream_gpu_frame()
+declare i64 @dream_gpu_timestamp()
+declare i32 @dream_gpu_buffer_alloc_bytes(i32)
+declare i32 @dream_gpu_buffer_alloc_vertex_bytes(i32)
+declare void @dream_gpu_buffer_write_bytes(i32, i32)
+declare void @dream_gpu_buffer_write_bytes_at(i32, i32, i32)
+declare i32 @dream_gpu_buffer_read_bytes(i32, i32)
+declare i32 @dream_gpu_buffer_read_bytes_at(i32, i32, i32)
+declare void @dream_gpu_buffer_copy(i32, i32, i32, i32, i32)
+declare void @dream_gpu_buffer_destroy(i32)
+declare i32 @dream_gpu_dispatch(i32, i32, i32, i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_dispatch_indirect(i32, i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_shader_from_wgsl(i32, i32)
+declare i32 @dream_gpu_dispatch_shader(i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_sampler_create(i32)
+declare i32 @dream_gpu_sampler_create_ex(i32, i32, i32)
+declare i32 @dream_gpu_texture_create_rgba8(i32, i32)
+declare i32 @dream_gpu_texture_create_depth(i32, i32)
+declare i32 @dream_gpu_texture_create_rgba16_float(i32, i32)
+declare i32 @dream_gpu_texture_create_cube_rgba8(i32)
+declare i32 @dream_gpu_texture_write_rgba(i32, i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_texture_read_rgba(i32)
+declare void @dream_gpu_texture_copy_from_buffer(i32, i32, i32, i32, i32, i32, i32)
+declare void @dream_gpu_texture_copy_to_buffer(i32, i32, i32, i32, i32, i32, i32)
+declare void @dream_gpu_texture_copy(i32, i32, i32, i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_texture_generate_mipmaps(i32)
+declare void @dream_gpu_texture_destroy(i32)
+declare void @dream_gpu_sampler_destroy(i32)
+declare i32 @dream_gpu_surface_from_canvas(i32)
+declare i32 @dream_gpu_surface_create(i32, i32, i32)
+declare void @dream_gpu_surface_configure(i32, i32, i32)
+declare i32 @dream_gpu_surface_present(i32)
+declare i32 @dream_gpu_surface_pointer(i32)
+declare i32 @dream_gpu_surface_mods(i32)
+declare i32 @dream_gpu_surface_key_down(i32, i32)
+declare i32 @dream_gpu_surface_gamepads(i32)
+declare i32 @dream_gpu_surface_gamepad_connected(i32, i32)
+declare i32 @dream_gpu_surface_gamepad_button_down(i32, i32, i32)
+declare float @dream_gpu_surface_gamepad_axis(i32, i32, i32)
+declare i32 @dream_gpu_surface_focused(i32)
+declare i32 @dream_gpu_surface_close_requested(i32)
+declare i32 @dream_gpu_surface_poll_events(i32)
+declare i32 @dream_gpu_surface_width(i32)
+declare i32 @dream_gpu_surface_height(i32)
+declare void @dream_gpu_surface_destroy(i32)
+declare i32 @dream_gpu_render_blit(i32, i32)
+declare i32 @dream_gpu_render_pipeline_create(i32, i32)
+declare i32 @dream_gpu_render_pipeline_create_ex(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_render_draw(i32, i32, i32, i32, i32, float, float, float, float)
+declare i32 @dream_gpu_render_draw_ex(i32, i32, i32, i32, i32, i32, float, float, float, float, i32, i32)
+declare i32 @dream_gpu_render_draw_indexed(i32, i32, i32, i32, i32, i32, float, float, float, float)
+declare i32 @dream_gpu_render_draw_indexed_ex(i32, i32, i32, i32, i32, i32, i32, float, float, float, float, i32, i32)
+declare i32 @dream_gpu_render_draw_to(i32, i32, i32, i32, i32, i32, float, float, float, float, i32, i32)
+declare void @dream_gpu_render_pipeline_destroy(i32)
+declare i32 @dream_gpu_pass_begin()
+declare void @dream_gpu_pass_dispatch(i32, i32, i32, i32, i32, i32, i32, i32, i32)
+declare void @dream_gpu_pass_dispatch_indirect(i32, i32, i32, i32, i32, i32, i32)
+declare i32 @dream_gpu_pass_submit(i32)
+declare i32 @dream_worker_spawn(i32, i32)
+declare void @dream_worker_post(i32, i32)
+declare i32 @dream_worker_recv(i32)
+declare void @dream_worker_terminate(i32)
+declare i32 @dream_worker_pool_spawn()
+declare i32 @dream_worker_pool_dispatch(i32, i32, i32, i32)
+declare i32 @dream_webview_create(i32, i32, i32)
+declare i32 @dream_webview_load_url(i32, i32)
+declare i32 @dream_webview_load_html(i32, i32)
+declare i32 @dream_webview_load_file(i32, i32)
+declare void @dream_webview_close(i32)
+declare i32 @dream_webview_close_requested(i32)
+declare i32 @dream_webview_tick(i32)
+declare i32 @dream_webview_poll(i32)
+declare void @dream_webview_reply(i32, i32, i32)
+declare void @dream_webview_reply_err(i32, i32, i32)
+declare void @dream_webview_reply_bytes(i32, i32, i32)
+declare void @dream_webview_emit(i32, i32, i32)
+declare void @dream_webview_emit_bytes(i32, i32, i32)
+declare i32 @dream_webview_eval(i32, i32)
+declare i64 @dream_c_invoke(i8*, i8*, i32, i32)
 "#;
 
 pub(crate) const DEBUG_DECLS: &str = r#"

@@ -8,7 +8,6 @@ use rayon::prelude::*;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 const XFAIL: &[(&str, &str)] = &[];
 
@@ -36,20 +35,13 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
         .map_err(|e| format!("compile: {e:?}"))?;
 
     let bin = out_path.with_extension("out");
-    let output = Command::new(&bin)
-        .output()
-        .map_err(|e| format!("run {}: {e}", bin.display()))?;
+    let stdout = dream::execution::native_runner::execute_native_capturing(&bin)
+        .map_err(|e| format!("execute: {e}"))?;
     let _ = fs::remove_file(&out_path);
     let _ = fs::remove_file(&bin);
     let _ = fs::remove_file(out_path.with_extension("abi.json"));
     let _ = fs::remove_file(dream_file.with_extension("mir.abi.json"));
-    if !output.status.success() {
-        return Err(format!(
-            "execute: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(stdout)
 }
 
 #[test]
@@ -79,9 +71,6 @@ fn mir_backend_e2e_coverage() {
         .par_iter()
         .filter_map(|path| {
             let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
-            if stem.starts_with("webworker") {
-                return None;
-            }
             if path.with_extension("expected_error").exists() {
                 return None;
             }

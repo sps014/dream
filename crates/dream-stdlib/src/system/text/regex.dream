@@ -40,6 +40,13 @@ public class Regex {
         this.table = RegexSubTable();
         let compiler = RegexCompiler(this.ignore_case, this.dot_all, this.table);
         this.prog = compiler.compile(ast);
+        System.println(this.prog.length);
+        if (this.prog.length > 0) {
+            System.println(this.prog[0].opcode);
+            System.println(this.prog[0].class_kind);
+            System.println(this.prog[0].out);
+            System.println(this.prog[0].out1);
+        }
         this.pike = RegexVM(this.prog, this.ngroup, this.multiline, this.table);
         this.back = RegexBacktrackVM(this.prog, this.ngroup, this.multiline, this.table);
     }

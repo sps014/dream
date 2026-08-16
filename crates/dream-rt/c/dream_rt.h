@@ -30,6 +30,7 @@ enum {
 
 void dream_rt_init(void);
 uint8_t *dream_heap_base(void);
+int32_t dream_heap_cap(void);
 int32_t dream_malloc(int32_t size, int32_t tag);
 void dream_free(int32_t ptr);
 void dream_retain(int32_t ptr);

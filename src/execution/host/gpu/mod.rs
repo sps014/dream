@@ -1,22 +1,10 @@
-//! Native wgpu host for `system.gpu` (`Dream` wasm imports).
+//! Wasmtime linker for `system.gpu`. wgpu logic lives in `dream_rt::host::gpu`.
 
-mod abi;
-mod buffers;
-mod compute;
-mod device;
-mod error;
-mod gamepad;
-mod icon;
-mod input;
-mod profile;
-mod render;
-mod state;
-mod surface;
-mod textures;
+pub use dream_rt::host::gpu::set_packaged_app_icon;
+use dream_rt::host::gpu::{
+    buffers, compute, device, error, profile, render, state, surface, textures,
+};
 
-pub use icon::set_packaged_app_icon;
-
-use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -79,24 +67,8 @@ fn resolve_host_future_long(caller: &mut Caller<'_, ()>, value: i64) -> Result<i
 }
 
 /// Load sibling `.abi.json` `gpu` section into this thread's GPU state (for `dream run` / e2e).
-/// Missing `gpu` metadata is recorded quietly; a warning is emitted only if kernels/shaders are used.
 pub fn attach_abi_from_wat_path(wat_path: &str) {
-    let path = Path::new(wat_path);
-    let abi_path = path.with_extension("abi.json");
-    let gpu = abi::load_gpu_abi_beside(path);
-    let missing = if gpu.is_some() {
-        None
-    } else if !abi_path.exists() {
-        Some(format!("sibling ABI missing ({})", abi_path.display()))
-    } else {
-        Some(format!("no `gpu` section in {}", abi_path.display()))
-    };
-    let mut st = lock_state();
-    // Fresh slot per compile+run so parallel e2e cases never share ids/pipelines.
-    st.reset();
-    st.abi = gpu;
-    st.missing_gpu_abi = missing;
-    st.warned_missing_gpu_abi = false;
+    dream_rt::host::gpu::attach_abi_from_path(wat_path);
 }
 
 /// Link `Dream` gpu* imports used by `system.gpu`.

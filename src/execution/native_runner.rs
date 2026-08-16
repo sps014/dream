@@ -3,8 +3,16 @@
 use std::path::Path;
 use std::process::Command;
 
+fn with_gpu_abi(mut cmd: Command, bin: &Path) -> Command {
+    let abi = bin.with_extension("abi.json");
+    if abi.exists() {
+        cmd.env("DREAM_ABI_JSON", &abi);
+    }
+    cmd
+}
+
 pub fn execute_native(bin: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let status = Command::new(bin).status()?;
+    let status = with_gpu_abi(Command::new(bin), bin).status()?;
     if status.success() {
         Ok(())
     } else {
@@ -13,7 +21,7 @@ pub fn execute_native(bin: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn execute_native_capturing(bin: &Path) -> Result<String, Box<dyn std::error::Error>> {
-    let out = Command::new(bin).output()?;
+    let out = with_gpu_abi(Command::new(bin), bin).output()?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {

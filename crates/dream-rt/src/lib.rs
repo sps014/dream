@@ -2,7 +2,13 @@
 //!
 //! Guest references are `i32` offsets into a linear heap so MIR layouts stay identical to WASM.
 
+mod guest;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod host;
+
 use std::os::raw::c_char;
+use std::path::PathBuf;
 
 extern "C" {
     pub fn dream_rt_init();
@@ -28,6 +34,60 @@ pub fn c_sources() -> [&'static str; 3] {
 
 pub fn c_include_dir() -> &'static str {
     concat!(env!("CARGO_MANIFEST_DIR"), "/c")
+}
+
+/// `libdream_rt.a` for clang to link into native guest binaries (heap C + Rust hosts + libstd).
+pub fn native_archive() -> PathBuf {
+    let mut p = PathBuf::from(env!("OUT_DIR"));
+    p.pop();
+    p.pop();
+    p.pop();
+    p.join("libdream_rt.a")
+}
+
+/// System libraries rustc expects when linking a staticlib on this host.
+pub fn native_sys_libs() -> &'static [&'static str] {
+    #[cfg(target_os = "macos")]
+    {
+        &[
+            "-lSystem",
+            "-lc++",
+            "-lresolv",
+            "-framework",
+            "Security",
+            "-framework",
+            "CoreFoundation",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "AppKit",
+            "-framework",
+            "Metal",
+            "-framework",
+            "QuartzCore",
+            "-framework",
+            "IOKit",
+            "-framework",
+            "CoreVideo",
+            "-framework",
+            "CoreGraphics",
+            "-framework",
+            "Foundation",
+            "-framework",
+            "Carbon",
+            "-framework",
+            "WebKit",
+            "-lffi",
+        ]
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        &["-lpthread", "-ldl", "-lm", "-lstdc++", "-lffi"]
+    }
+    #[cfg(not(unix))]
+    {
+        &[]
+    }
 }
 
 #[cfg(test)]

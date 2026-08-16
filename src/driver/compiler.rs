@@ -54,8 +54,8 @@ pub struct Compiler {
     /// Active compile-time runtime target(s) for semantic availability checks. Defaults to
     /// native-only; overridden by `--target` or inferred from `--runtime --web`/`--node`.
     compile_targets: CompileTargets,
-    /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. Native
-    /// `run` / `debug-adapter` set this to `false` — wasmtime does not read the ABI.
+    /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. GPU
+    /// kernels are still written whenever the program emits GPU (native `dream-rt` loads them).
     emit_abi: bool,
     /// Library vs binary; libs reject a primary-file `main`.
     crate_type: dream_sema::analyzer::CrateType,

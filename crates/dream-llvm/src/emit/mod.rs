@@ -79,6 +79,7 @@ impl<'a> ModuleEmitter<'a> {
         self.emit_default_protocol();
         self.emit_sleep_stub();
         self.emit_funcbox_stubs();
+        self.emit_worker_invoke();
         self.emit_call_stubs();
         if let Some(main) = self.mir.functions.iter().find(|f| f.name == "main") {
             let sym = llvm_fn_name(&func_symbol(main));

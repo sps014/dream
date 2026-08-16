@@ -104,11 +104,13 @@ impl<'a> ModuleEmitter<'a> {
     pub(crate) fn store_place(&mut self, func: &MirFunction, place: &Place, val: &str, retain: bool) {
         match place {
             Place::Local(l) => {
-                let ty = llvm_val_ty(self.interner, func.local_ty(*l));
+                let dest = func.local_ty(*l);
+                let ty = llvm_val_ty(self.interner, dest);
                 let _ = writeln!(self.buf, "  store {} {}, {}* %l{}", ty, val, ty, l.0);
             }
             Place::Global(g) => {
-                let ty = llvm_val_ty(self.interner, self.mir.globals[g.0 as usize].ty);
+                let dest = self.mir.globals[g.0 as usize].ty;
+                let ty = llvm_val_ty(self.interner, dest);
                 let _ = writeln!(self.buf, "  store {} {}, {}* @g{}", ty, val, ty, g.0);
             }
             Place::Field { base, field } => {
@@ -181,24 +183,35 @@ impl<'a> ModuleEmitter<'a> {
 
     pub(crate) fn load_width(&mut self, ty: TypeId, addr: &str) -> String {
         let t = self.tmp();
+        let (sz, _) = scalar_size(self.interner, ty);
         match llvm_val_ty(self.interner, ty) {
             "i64" => {
                 let _ = writeln!(self.buf, "  {} = call i64 @dream_load_i64(i32 {})", t, addr);
+                t
             }
             "float" => {
                 let _ = writeln!(self.buf, "  {} = call float @dream_load_f32(i32 {})", t, addr);
+                t
             }
             "double" => {
                 let _ = writeln!(self.buf, "  {} = call double @dream_load_f64(i32 {})", t, addr);
+                t
+            }
+            _ if sz == 1 => {
+                let b = self.tmp();
+                let _ = writeln!(self.buf, "  {} = call i8 @dream_load_u8(i32 {})", b, addr);
+                let _ = writeln!(self.buf, "  {} = zext i8 {} to i32", t, b);
+                t
             }
             _ => {
                 let _ = writeln!(self.buf, "  {} = call i32 @dream_load_i32(i32 {})", t, addr);
+                t
             }
         }
-        t
     }
 
     pub(crate) fn store_width(&mut self, ty: TypeId, addr: &str, val: &str) {
+        let (sz, _) = scalar_size(self.interner, ty);
         match llvm_val_ty(self.interner, ty) {
             "i64" => {
                 let _ = writeln!(
@@ -221,6 +234,11 @@ impl<'a> ModuleEmitter<'a> {
                     addr, val
                 );
             }
+            _ if sz == 1 => {
+                let b = self.tmp();
+                let _ = writeln!(self.buf, "  {} = trunc i32 {} to i8", b, val);
+                let _ = writeln!(self.buf, "  call void @dream_store_u8(i32 {}, i8 {})", addr, b);
+            }
             _ => {
                 let _ = writeln!(
                     self.buf,
@@ -230,5 +248,4 @@ impl<'a> ModuleEmitter<'a> {
             }
         }
     }
-
 }

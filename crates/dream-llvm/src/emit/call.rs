@@ -14,7 +14,8 @@ impl<'a> ModuleEmitter<'a> {
             .functions
             .iter()
             .position(|f| f.def == c.def && f.instance == c.args)
-            .unwrap_or(0) as i32
+            .or_else(|| self.mir.functions.iter().position(|f| f.def == c.def))
+            .expect("ICE: FuncRef has no MIR function") as i32
     }
 
     pub(crate) fn emit_import_stubs(&mut self) {
@@ -22,13 +23,15 @@ impl<'a> ModuleEmitter<'a> {
             if is_c_runtime_sym(&imp.name)
                 || native_c_sym(&imp.name).is_some()
                 || native_c_sym(&imp.field).is_some()
+                || imp.field.starts_with("js")
+                || imp.name.starts_with("js")
             {
                 continue;
             }
             let name = llvm_extern_name(&imp.name);
             let ret = imp
                 .ret
-                .map(|t| llvm_val_ty(self.interner, t))
+                .map(|t| llvm_val_ty(self.interner, unwrap_future(self.interner, &self.mir.layouts, t)))
                 .unwrap_or("void");
             let mut args = Vec::new();
             for (i, p) in imp.params.iter().enumerate() {
@@ -45,6 +48,10 @@ impl<'a> ModuleEmitter<'a> {
                     args.join(", ")
                 );
             }
+            if imp.module.starts_with("c/") {
+                self.emit_c_import_body(imp, ret);
+                continue;
+            }
             let label = if imp.field.is_empty() {
                 imp.name.as_str()
             } else {
@@ -60,6 +67,85 @@ impl<'a> ModuleEmitter<'a> {
         }
     }
 
+    fn emit_c_import_body(&mut self, imp: &dream_hir::HImport, ret: &str) {
+        let m = self.intern_cstr(&imp.module);
+        let f = self.intern_cstr(&imp.field);
+        let n = imp.params.len() as i32;
+        let pack = self.tmp();
+        let _ = writeln!(
+            self.buf,
+            "  {} = call i32 @dream_malloc(i32 {}, i32 {})",
+            pack,
+            n * 8,
+            dream_mir::abi::TAG_ARRAY
+        );
+        for (i, p) in imp.params.iter().enumerate() {
+            let lty = llvm_val_ty(self.interner, *p);
+            let bits = self.tmp();
+            match lty {
+                "float" => {
+                    let _ = writeln!(self.buf, "  {} = bitcast float %a{} to i32", bits, i);
+                    let z = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = zext i32 {} to i64", z, bits);
+                    let addr = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, pack, i * 8);
+                    let _ = writeln!(self.buf, "  call void @dream_store_i64(i32 {}, i64 {})", addr, z);
+                }
+                "double" => {
+                    let _ = writeln!(self.buf, "  {} = bitcast double %a{} to i64", bits, i);
+                    let addr = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, pack, i * 8);
+                    let _ = writeln!(self.buf, "  call void @dream_store_i64(i32 {}, i64 {})", addr, bits);
+                }
+                "i64" => {
+                    let addr = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, pack, i * 8);
+                    let _ = writeln!(
+                        self.buf,
+                        "  call void @dream_store_i64(i32 {}, i64 %a{})",
+                        addr, i
+                    );
+                }
+                _ => {
+                    let z = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = zext i32 %a{} to i64", z, i);
+                    let addr = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, pack, i * 8);
+                    let _ = writeln!(self.buf, "  call void @dream_store_i64(i32 {}, i64 {})", addr, z);
+                }
+            }
+        }
+        let r = self.tmp();
+        let _ = writeln!(
+            self.buf,
+            "  {} = call i64 @dream_c_invoke(i8* {}, i8* {}, i32 {}, i32 {})",
+            r, m, f, n, pack
+        );
+        match ret {
+            "void" => self.buf.push_str("  ret void\n}\n"),
+            "i64" => {
+                let _ = writeln!(self.buf, "  ret i64 {}\n}}\n", r);
+            }
+            "float" => {
+                let t = self.tmp();
+                let _ = writeln!(self.buf, "  {} = trunc i64 {} to i32", t, r);
+                let f32v = self.tmp();
+                let _ = writeln!(self.buf, "  {} = bitcast i32 {} to float", f32v, t);
+                let _ = writeln!(self.buf, "  ret float {}\n}}\n", f32v);
+            }
+            "double" => {
+                let d = self.tmp();
+                let _ = writeln!(self.buf, "  {} = bitcast i64 {} to double", d, r);
+                let _ = writeln!(self.buf, "  ret double {}\n}}\n", d);
+            }
+            _ => {
+                let t = self.tmp();
+                let _ = writeln!(self.buf, "  {} = trunc i64 {} to i32", t, r);
+                let _ = writeln!(self.buf, "  ret i32 {}\n}}\n", t);
+            }
+        }
+    }
+
     pub(crate) fn emit_indirect(
         &mut self,
         func: &MirFunction,
@@ -71,6 +157,15 @@ impl<'a> ModuleEmitter<'a> {
         let raw = self.operand(func, target);
         let tgt_ty = self.op_ty(func, target);
         let idx = if matches!(self.interner.kind(tgt_ty), TyKind::Func(..)) {
+            if !self.mir.globals.is_empty() {
+                let e = self.tmp();
+                let _ = writeln!(
+                    self.buf,
+                    "  {} = call i32 @d_funcbox_env(i32 {})",
+                    e, raw
+                );
+                let _ = writeln!(self.buf, "  store i32 {}, i32* @g0", e);
+            }
             let t = self.tmp();
             let _ = writeln!(
                 self.buf,
@@ -293,7 +388,12 @@ impl<'a> ModuleEmitter<'a> {
         if let Some(var) = layout.and_then(|l| l.variants.get(variant)) {
             for (i, a) in args.iter().enumerate() {
                 if let Some(f) = var.fields.get(i) {
-                    let v = self.operand(func, a);
+                    let raw = self.operand(func, a);
+                    let v = self.coerce(
+                        &raw,
+                        self.op_ty(func, a),
+                        llvm_val_ty(self.interner, f.ty),
+                    );
                     let addr = self.tmp();
                     let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, p, f.offset);
                     self.store_width(f.ty, &addr, &v);
@@ -337,7 +437,12 @@ impl<'a> ModuleEmitter<'a> {
         if let Some(layout) = self.mir.layouts.get(ty) {
             for (i, el) in elems.iter().enumerate() {
                 if let Some(f) = layout.fields.get(i) {
-                    let v = self.operand(func, el);
+                    let raw = self.operand(func, el);
+                    let v = self.coerce(
+                        &raw,
+                        self.op_ty(func, el),
+                        llvm_val_ty(self.interner, f.ty),
+                    );
                     let addr = self.tmp();
                     let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, p, f.offset);
                     self.store_width(f.ty, &addr, &v);
@@ -497,7 +602,12 @@ impl<'a> ModuleEmitter<'a> {
 
     pub(crate) fn emit_to_bytes(&mut self, func: &MirFunction, value: &Operand, ty: TypeId) -> String {
         let (es, _) = scalar_size(self.interner, ty);
-        let v = self.operand(func, value);
+        let raw = self.operand(func, value);
+        let v = self.coerce(
+            &raw,
+            self.op_ty(func, value),
+            llvm_val_ty(self.interner, ty),
+        );
         let payload = 4 + es as i32;
         let p = self.tmp();
         let _ = writeln!(
@@ -507,7 +617,8 @@ impl<'a> ModuleEmitter<'a> {
             payload,
             dream_mir::abi::TAG_ARRAY
         );
-        let _ = writeln!(self.buf, "  call void @dream_store_i32(i32 {}, i32 1)", p);
+        // `byte[]` length is the raw size in bytes (`Bytes.of` is one element per byte).
+        let _ = writeln!(self.buf, "  call void @dream_store_i32(i32 {}, i32 {})", p, es);
         let addr = self.tmp();
         let _ = writeln!(self.buf, "  {} = add i32 {}, 4", addr, p);
         self.store_width(ty, &addr, &v);
@@ -519,6 +630,9 @@ impl<'a> ModuleEmitter<'a> {
         let b = self.operand(func, bytes);
         let src = self.tmp();
         let _ = writeln!(self.buf, "  {} = add i32 {}, 4", src, b);
+        if matches!(self.interner.kind(ty), TyKind::Prim(p) if *p != PrimTy::String) {
+            return self.load_width(ty, &src);
+        }
         let tag = self.tags.get(&ty).copied().unwrap_or(dream_mir::abi::TAG_INT);
         let p = self.tmp();
         let _ = writeln!(

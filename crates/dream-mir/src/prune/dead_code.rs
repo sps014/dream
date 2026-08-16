@@ -235,7 +235,9 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
         | Statement::SimdF32x4 { .. }
-        | Statement::ValueDrop(_) => {}
+        | Statement::ValueDrop(_)
+        | Statement::ValueRetain(_)
+        | Statement::ValueKill(_) => {}
     }
 }
 
@@ -567,7 +569,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
         }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
         Statement::ForceFree(o) => collect_global_reads_operand(o, out),
-        Statement::ValueDrop(_) => {}
+        Statement::ValueDrop(_) | Statement::ValueRetain(_) | Statement::ValueKill(_) => {}
         Statement::ArrayElemsCopy {
             dst,
             dst_off,

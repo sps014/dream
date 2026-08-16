@@ -35,7 +35,7 @@ b.x = 9;
 println(a.x);   // 1
 ```
 
-Automatic **move** (the rest of this page) applies to **share** types. A `struct` is always copied; nested class fields inside it are retained, not moved out of the struct.
+Automatic **move** (the rest of this page) applies to **share** types. A `struct` always copies its bytes; on last use of a struct **local**, nested share fields are not retained again (the destination inherits those counts). A still-live local, or a field/index, still retains nested share fields.
 
 ## Passing to a function
 
@@ -130,7 +130,7 @@ Giving a new value to the same name (`items = List<int>();`) makes the name usab
 ## What is *not* a move
 
 - Last **read**, then the function does other work: the value is still released at the **end** of the function, not the moment you finish reading it.
-- `struct` assign or pass: always a copy.
+- `struct` assign or pass: always a byte copy. Last use of a struct **local** does not retain nested share fields; a field or `list[i]` still does.
 - Reading `obj.field` or `xs[i]` into a sink: always a copy; the object/array still owns its slot.
 - `borrow` / `ref` arguments: never consumed.
 

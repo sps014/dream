@@ -39,14 +39,17 @@ impl Emitter<'_> {
             Terminator::Return(Some(o)) => {
                 self.emit_debug_exit();
                 if self.returns_value_struct() {
-                    // sret ABI: copy the result into the caller-provided `$__sret` slot (retaining
-                    // its reference fields) before the frame teardown drops the source local.
+                    // sret ABI: blit into `$__sret`. A returned local transfers nested refs
+                    // (no retain; RcInsertion marks it `manual_drop` so teardown skips it).
+                    // A place copy still retains (the container keeps its slot).
                     let o = o.clone();
                     let ty = self.func.ret;
+                    let retain = !matches!(o, Operand::Copy(Place::Local(_)));
                     self.emit_value_copy(
                         |s| s.line("     (local.get $__sret)"),
                         |s| s.emit_operand_addr(&o),
                         ty,
+                        retain,
                     );
                     self.emit_frame_teardown();
                     self.line("     (return)");

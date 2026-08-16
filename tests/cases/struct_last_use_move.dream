@@ -1,0 +1,37 @@
+// Last-use of a glue struct local transfers nested share counts (no extra retain).
+// A still-live copy and a field extract still bump.
+
+import system;
+
+class Node {
+    public constructor() {}
+}
+
+struct Wrap {
+    public n: Node;
+    public constructor(n: Node) {
+        this.n = n;
+    }
+}
+
+fun take(w: Wrap): void {
+    System.println(Debug.ref_count(w.n).to_string());
+}
+
+fun take_node(x: Node): void {
+    System.println(Debug.ref_count(x).to_string());
+}
+
+fun main(): void {
+    let a = Wrap(Node());
+    take(a);
+
+    let b = Wrap(Node());
+    let c = b;
+    take(b);
+    take(c);
+
+    let d = Wrap(Node());
+    take_node(d.n);
+    take(d);
+}

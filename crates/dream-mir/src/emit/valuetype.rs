@@ -63,19 +63,20 @@ impl ValueFrame {
                 continue;
             }
             let local = Local(i as u32);
-            let kind = if decl.manual_drop {
-                // Inliner-owned slots: must stay Owning so drop/fill target the private frame slot,
-                // never a borrowed address the emitter might otherwise infer from defs.
-                ValueLocalKind::Owning
-            } else if decl.is_ref || decl.name.as_deref() == Some("this") {
+            let kind = if decl.is_ref || decl.name.as_deref() == Some("this") {
                 // `ref` params and method `this` alias the caller's storage. The inliner also sets
                 // `is_ref` when remapping those into the caller so they stay borrows after ceasing
                 // to be formal parameters.
                 ValueLocalKind::Borrow
             } else if i < param_count {
                 // A value param arrives as a pointer to the caller's value; the callee owns a
-                // private copy (frame slot + entry copy + scope-exit drop).
+                // private copy (frame slot + entry copy + scope-exit drop). Last-use `ValueKill`
+                // may set `manual_drop` on this param — still Param so the incoming memcpy runs.
                 ValueLocalKind::Param
+            } else if decl.manual_drop {
+                // Inliner-owned slots: must stay Owning so drop/fill target the private frame slot,
+                // never a borrowed address the emitter might otherwise infer from defs.
+                ValueLocalKind::Owning
             } else {
                 let alias = decl.name.is_none()
                     && defs

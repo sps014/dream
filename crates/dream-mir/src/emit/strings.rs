@@ -267,7 +267,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         }
         Statement::Print { arg, .. } => strings_in_operand(arg, out),
         Statement::ForceFree(o) => strings_in_operand(o, out),
-        Statement::ValueDrop(_) => {}
+        Statement::ValueDrop(_) | Statement::ValueRetain(_) | Statement::ValueKill(_) => {}
         Statement::ArrayElemsCopy {
             dst,
             dst_off,
@@ -432,6 +432,8 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::LockRelease(_)
         | Statement::SimdF32x4 { .. }
         | Statement::ValueDrop(_)
+        | Statement::ValueRetain(_)
+        | Statement::ValueKill(_)
         | Statement::Nop
         | Statement::DebugLine(_)
         | Statement::SourceLine(_) => {}

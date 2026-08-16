@@ -24,6 +24,7 @@ impl Emitter<'_> {
             .defined_funcs
             .contains(&(callee.def, callee.args.clone()));
         for (i, a) in args.iter().enumerate() {
+            self.emit_place_value_arg_retain(a);
             self.emit_operand(a);
             if let Some(pty) = params.as_ref().and_then(|p| p.get(i)) {
                 if matches!(self.interner.kind(*pty), TyKind::Func(..)) {
@@ -52,6 +53,7 @@ impl Emitter<'_> {
         args: &[Operand],
     ) -> Option<&'static str> {
         for a in args {
+            self.emit_place_value_arg_retain(a);
             self.emit_operand(a);
         }
         self.emit_operand(target);
@@ -114,6 +116,7 @@ impl Emitter<'_> {
         };
         self.emit_operand(receiver);
         for (i, a) in args.iter().enumerate() {
+            self.emit_place_value_arg_retain(a);
             self.emit_operand(a);
             // param_tys[0] is the receiver (`this`); real args start at index 1.
             if let Some(pty) = param_tys.get(i + 1) {
@@ -136,6 +139,7 @@ impl Emitter<'_> {
     ) {
         dst(self);
         for a in args {
+            self.emit_place_value_arg_retain(a);
             self.emit_operand(a);
         }
         self.emit_operand(target);

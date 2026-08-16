@@ -41,6 +41,7 @@ impl Emitter<'_> {
                     slot_addr,
                     |s| s.line(&format!("     (local.get ${})", l0)),
                     ty,
+                    false,
                 );
             }
             slot_addr(self);
@@ -102,6 +103,22 @@ impl Emitter<'_> {
         }
     }
 
+    /// Retain nested refs of a value-struct *place* argument (field/index/global). Locals are
+    /// handled by [`crate::Statement::ValueRetain`] so last-use call args can skip this.
+    pub(super) fn emit_place_value_arg_retain(&mut self, o: &Operand) {
+        if matches!(o, Operand::Copy(Place::Local(_))) {
+            return;
+        }
+        let ty = self.operand_ty(o);
+        if !self.interner.is_value_type(ty) || !self.value_has_glue(ty) {
+            return;
+        }
+        if let Some(name) = self.value_name(ty) {
+            self.emit_operand_addr(o);
+            self.line(&format!("     (call {})", vs_retain_sym(&name)));
+        }
+    }
+
     /// Pushes the address of a value-struct operand.
     pub(super) fn emit_operand_addr(&mut self, o: &Operand) {
         match o {
@@ -117,13 +134,14 @@ impl Emitter<'_> {
         dst: impl Fn(&mut Self),
         src: impl Fn(&mut Self),
         ty: TypeId,
+        retain: bool,
     ) {
         let size = self.value_size(ty);
         dst(self);
         src(self);
         self.line(&format!("     (i32.const {})", size));
         self.line("     (memory.copy)");
-        if self.value_has_glue(ty) {
+        if retain && self.value_has_glue(ty) {
             if let Some(name) = self.value_name(ty) {
                 dst(self);
                 self.line(&format!("     (call {})", vs_retain_sym(&name)));
@@ -196,7 +214,7 @@ impl Emitter<'_> {
             };
             if self.interner.is_value_type(fty) {
                 let arg = arg.clone();
-                self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty);
+                self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty, true);
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
@@ -259,7 +277,7 @@ impl Emitter<'_> {
             };
             if self.interner.is_value_type(fty) {
                 let arg = arg.clone();
-                self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty);
+                self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty, true);
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
@@ -277,6 +295,7 @@ impl Emitter<'_> {
         dst: impl Fn(&mut Self),
         ty: TypeId,
         rvalue: &Rvalue,
+        copy_retain: bool,
     ) {
         self.emit_value_drop(&dst, ty);
         match rvalue {
@@ -307,7 +326,7 @@ impl Emitter<'_> {
             } => self.emit_interface_sret_call(&dst, receiver, *iface_id, *method_slot, *sig, args),
             Rvalue::Use(Operand::Copy(src)) => {
                 let src = src.clone();
-                self.emit_value_copy(&dst, |s| s.emit_place_addr(&src), ty);
+                self.emit_value_copy(&dst, |s| s.emit_place_addr(&src), ty, copy_retain);
             }
             // JS → value struct: fill `dst` in place via `$js_to_<Name>(j, dst)` (no heap alloc).
             Rvalue::Cast(o, from, to)
@@ -326,7 +345,7 @@ impl Emitter<'_> {
                 // Any other value-struct-producing rvalue (e.g. a `UnionField` payload extraction)
                 // yields the *address* of an existing value; copy those bytes into the destination.
                 let other = other.clone();
-                self.emit_value_copy(&dst, |s| s.emit_rvalue(&other), ty);
+                self.emit_value_copy(&dst, |s| s.emit_rvalue(&other), ty, true);
             }
         }
     }

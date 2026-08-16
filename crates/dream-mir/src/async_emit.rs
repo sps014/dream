@@ -4,7 +4,7 @@
 //! the first poll, returns the frame pointer) and a **poll** function (resumable state machine between
 //! `await` points). The cooperative scheduler runtime lives in `mir/runtime/async.wat`.
 
-use super::emit::{emit_async_poll, func_symbol, poll_symbol, vs_retain_sym, wasm_ty_of};
+use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of};
 use super::lower::lower_async_poll_body;
 use super::passes::MirPass;
 use super::MirFunction;
@@ -242,27 +242,13 @@ pub fn emit_async_function(
         let idx = p.0 as usize;
         let off = slots.offsets[&idx];
         if let Some(&size) = slots.value_locals.get(&idx) {
-            // Same by-value contract as `emit_value_copy` / `emit_value_frame_prologue`: copy bytes
-            // into the frame's private inline region, then retain reference fields so the frame owns
-            // its own refs (the caller's value may be dropped before the first poll runs).
-            let ty = body.locals[idx].ty;
+            // Same by-value contract as `emit_value_frame_prologue`: memcpy only. Still-live
+            // callers emit `ValueRetain` before the async ctor; last-use callers `ValueKill`
+            // after so this frame inherits the nested refs.
             let _ = writeln!(
                 out,
                 " local.get $self\n i32.const {off}\n i32.add\n local.get ${idx}\n i32.const {size}\n memory.copy"
             );
-            if value_glue.contains(&ty) {
-                let name = layouts
-                    .get(ty)
-                    .map(|l| l.name.as_str())
-                    .or_else(|| layouts.union(ty).map(|u| u.name.as_str()));
-                if let Some(name) = name {
-                    let _ = writeln!(
-                        out,
-                        " local.get $self\n i32.const {off}\n i32.add\n call {}",
-                        vs_retain_sym(name)
-                    );
-                }
-            }
             continue;
         }
         let wt = wasm_ty_of(interner, body.locals[idx].ty);

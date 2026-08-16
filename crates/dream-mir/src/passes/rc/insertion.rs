@@ -180,6 +180,8 @@ impl MirPass for RcInsertion {
         // excludes them from Rule 3 below).
         func.locals.extend(extra_locals);
 
+        insert_value_struct_moves(func, interner, &mut changed);
+
         // Last-use destroy: Release+null after the last statement that uses an owned RC local, so
         // UI temps and `js` handles unpin before later unrelated work. Scope-exit Release at Return
         // stays (nop on null). Skip terminator-only last uses (`if x`).
@@ -198,6 +200,7 @@ impl MirPass for RcInsertion {
             insert_early_releases(func, interner, &is_owned_ref, &take_params, &mut changed);
             insert_early_value_drops(func, interner, &mut changed);
         }
+        mark_returned_value_locals_moved(func, interner, &mut changed);
 
         // Rule 3: scope-exit release at every `Return` / `AsyncComplete`. Await must not release —
         // coroutine locals stay live across suspend (ownership moves to the Future frame).
@@ -476,6 +479,199 @@ fn insert_early_releases(
     }
 }
 
+/// Last-use move for glue value structs: still-live copies/args get [`Statement::ValueRetain`];
+/// last-use transfers get [`Statement::ValueKill`] (callee / dest inherits nested refs).
+fn insert_value_struct_moves(func: &mut MirFunction, interner: &TypeInterner, changed: &mut bool) {
+    let is_value_src = |idx: usize| {
+        let d = &func.locals[idx];
+        interner.is_value_type(d.ty)
+            && !d.is_ref
+            && d.name.is_some()
+            && d.name.as_deref() != Some("this")
+    };
+    let live_out = liveness::live_out(func);
+    let mut retain_before: Vec<(usize, usize, u32, u32)> = Vec::new();
+    let mut retain_after: Vec<(usize, usize, u32)> = Vec::new();
+    let mut kill_after: Vec<(usize, usize, u32)> = Vec::new();
+    for (bi, block) in func.blocks.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            if matches!(
+                stmt,
+                Statement::ValueRetain(_) | Statement::ValueKill(_) | Statement::ValueDrop(_)
+            ) {
+                continue;
+            }
+            if let Statement::Assign(
+                Place::Local(dest),
+                Rvalue::Use(Operand::Copy(Place::Local(src))),
+            ) = stmt
+            {
+                if dest.0 != src.0
+                    && is_value_src(src.0 as usize)
+                    && func.locals[dest.0 as usize].name.is_some()
+                    && !func.locals[dest.0 as usize].is_ref
+                    && interner.is_value_type(func.locals[dest.0 as usize].ty)
+                {
+                    if live_after_stmt(func, &live_out, bi, si, src.0) {
+                        retain_after.push((bi, si, dest.0));
+                    } else {
+                        kill_after.push((bi, si, src.0));
+                    }
+                }
+            }
+            let mut counts: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+            for local in value_arg_locals(func, stmt, interner, &is_value_src) {
+                *counts.entry(local).or_insert(0) += 1;
+            }
+            for (local, n) in counts {
+                let last_use = !live_after_stmt(func, &live_out, bi, si, local);
+                let retains = if last_use { n.saturating_sub(1) } else { n };
+                if retains > 0 {
+                    retain_before.push((bi, si, local, retains));
+                }
+                if last_use {
+                    kill_after.push((bi, si, local));
+                }
+            }
+        }
+    }
+    if retain_before.is_empty() && retain_after.is_empty() && kill_after.is_empty() {
+        return;
+    }
+    let mut before_by: HashMap<usize, Vec<(usize, u32, u32)>> = HashMap::new();
+    let mut after_by: HashMap<usize, Vec<(usize, u32)>> = HashMap::new();
+    let mut kill_by: HashMap<usize, Vec<(usize, u32)>> = HashMap::new();
+    for (bi, si, local, n) in retain_before {
+        before_by.entry(bi).or_default().push((si, local, n));
+    }
+    for (bi, si, local) in retain_after {
+        after_by.entry(bi).or_default().push((si, local));
+    }
+    for (bi, si, local) in kill_after {
+        func.locals[local as usize].manual_drop = true;
+        kill_by.entry(bi).or_default().push((si, local));
+    }
+    let mut blocks: Vec<usize> = before_by
+        .keys()
+        .chain(after_by.keys())
+        .chain(kill_by.keys())
+        .copied()
+        .collect();
+    blocks.sort_unstable();
+    blocks.dedup();
+    for bi in blocks {
+        let before = before_by.remove(&bi).unwrap_or_default();
+        let after = after_by.remove(&bi).unwrap_or_default();
+        let kills = kill_by.remove(&bi).unwrap_or_default();
+        let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + 4);
+        for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
+            for (rsi, local, n) in &before {
+                if *rsi == si {
+                    for _ in 0..*n {
+                        out.push(Statement::ValueRetain(Local(*local)));
+                    }
+                    *changed = true;
+                }
+            }
+            out.push(stmt);
+            for (asi, local) in &after {
+                if *asi == si {
+                    out.push(Statement::ValueRetain(Local(*local)));
+                    *changed = true;
+                }
+            }
+            for (ksi, local) in &kills {
+                if *ksi == si {
+                    out.push(Statement::ValueKill(Local(*local)));
+                    *changed = true;
+                }
+            }
+        }
+        func.blocks[bi].stmts = out;
+    }
+}
+
+fn value_arg_locals(
+    func: &MirFunction,
+    stmt: &Statement,
+    interner: &TypeInterner,
+    is_value_src: &dyn Fn(usize) -> bool,
+) -> Vec<u32> {
+    let Some((take_params, args)) = sink_call_args(stmt) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, arg) in args.iter().enumerate() {
+        if !take_params.get(i).copied().unwrap_or(false) {
+            continue;
+        }
+        if let Operand::Copy(Place::Local(l)) = arg {
+            let root = value_copy_root(func, l.0);
+            if is_value_src(root as usize) && interner.is_value_type(func.locals[root as usize].ty) {
+                out.push(root);
+            }
+        }
+    }
+    out
+}
+
+/// Unnamed value temps that only copy a local are aliases of that local (emitter Borrow).
+fn value_copy_root(func: &MirFunction, local: u32) -> u32 {
+    let decl = &func.locals[local as usize];
+    if decl.name.is_some() || decl.is_ref {
+        return local;
+    }
+    let mut src = None;
+    let mut defs = 0u32;
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) =
+                stmt
+            {
+                if d.0 == local {
+                    defs += 1;
+                    src = Some(s.0);
+                }
+            } else if let Statement::Assign(Place::Local(d), _) = stmt {
+                if d.0 == local {
+                    defs += 1;
+                    src = None;
+                }
+            }
+        }
+    }
+    if defs == 1 {
+        if let Some(s) = src {
+            return value_copy_root(func, s);
+        }
+    }
+    local
+}
+
+/// Returning a value local transfers nested refs via sret blit; skip frame-exit drop.
+fn mark_returned_value_locals_moved(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    changed: &mut bool,
+) {
+    if !interner.is_value_type(func.ret) {
+        return;
+    }
+    for block in &func.blocks {
+        if let Terminator::Return(Some(Operand::Copy(Place::Local(l))))
+        | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) = &block.terminator
+        {
+            if interner.is_value_type(func.locals[l.0 as usize].ty)
+                && !func.locals[l.0 as usize].is_ref
+                && !func.locals[l.0 as usize].manual_drop
+            {
+                func.locals[l.0 as usize].manual_drop = true;
+                *changed = true;
+            }
+        }
+    }
+}
+
 fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize) -> bool {
     let decl = &func.locals[idx];
     if !interner.is_value_type(decl.ty) || decl.is_ref || decl.manual_drop {
@@ -508,7 +704,11 @@ fn insert_early_value_drops(func: &mut MirFunction, interner: &TypeInterner, cha
     for (bi, block) in func.blocks.iter().enumerate() {
         for (si, stmt) in block.stmts.iter().enumerate() {
             for &local in &owning {
-                if matches!(stmt, Statement::ValueDrop(l) if l.0 == local) {
+                if matches!(
+                    stmt,
+                    Statement::ValueDrop(l) | Statement::ValueKill(l) | Statement::ValueRetain(l)
+                        if l.0 == local
+                ) {
                     continue;
                 }
                 let whole_copy_out = matches!(
@@ -644,4 +844,127 @@ fn take_owned_arg_locals(stmt: &Statement, is_owned_ref: &dyn Fn(u32) -> bool) -
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build::FunctionBuilder;
+    use crate::Callee;
+    use dream_types::{DefKind, TypeCtx};
+
+    fn point_ty(ctx: &mut TypeCtx) -> dream_types::TypeId {
+        let vs_def = ctx.register(DefKind::Struct, "Point", vec![]);
+        ctx.defs.mark_value(vs_def);
+        ctx.interner.mark_value_def(vs_def);
+        let point = ctx.interner.struct_ty(vs_def, vec![]);
+        ctx.interner.set_value_layout(point, 8, 4);
+        point
+    }
+
+    #[test]
+    fn last_use_value_assign_kills_source() {
+        let mut ctx = TypeCtx::new();
+        let point = point_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let s = b.new_local(point, Some("s".into()));
+        let t = b.new_local(point, Some("t".into()));
+        b.assign(Place::Local(t), Rvalue::Use(Operand::Copy(Place::Local(s))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let kills: Vec<u32> = func.blocks[0]
+            .stmts
+            .iter()
+            .filter_map(|st| match st {
+                Statement::ValueKill(l) => Some(l.0),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(kills, vec![s.0], "last-use dest=src should ValueKill src");
+        assert!(func.locals[s.0 as usize].manual_drop);
+        let retains = func.blocks[0]
+            .stmts
+            .iter()
+            .filter(|st| matches!(st, Statement::ValueRetain(_)))
+            .count();
+        assert_eq!(retains, 0);
+    }
+
+    #[test]
+    fn still_live_value_assign_retains_dest() {
+        let mut ctx = TypeCtx::new();
+        let point = point_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let s = b.new_local(point, Some("s".into()));
+        let t = b.new_local(point, Some("t".into()));
+        b.assign(Place::Local(t), Rvalue::Use(Operand::Copy(Place::Local(s))));
+        b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(s))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let has_retain_t = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|st| matches!(st, Statement::ValueRetain(l) if l.0 == t.0));
+        assert!(has_retain_t, "still-live dest=src should ValueRetain dest");
+    }
+
+    #[test]
+    fn last_use_value_call_kills_arg() {
+        let mut ctx = TypeCtx::new();
+        let point = point_ty(&mut ctx);
+        let take_def = ctx.register(DefKind::Function, "take", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let s = b.new_local(point, Some("s".into()));
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take_def,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(s))],
+        });
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let has_kill = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|st| matches!(st, Statement::ValueKill(l) if l.0 == s.0));
+        let has_retain = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|st| matches!(st, Statement::ValueRetain(l) if l.0 == s.0));
+        assert!(has_kill, "last-use call arg should ValueKill");
+        assert!(!has_retain, "last-use call arg should not ValueRetain");
+    }
+
+    #[test]
+    fn still_live_value_call_retains_arg() {
+        let mut ctx = TypeCtx::new();
+        let point = point_ty(&mut ctx);
+        let take_def = ctx.register(DefKind::Function, "take", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let s = b.new_local(point, Some("s".into()));
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take_def,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(s))],
+        });
+        b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(s))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let has_retain = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|st| matches!(st, Statement::ValueRetain(l) if l.0 == s.0));
+        assert!(has_retain, "still-live call arg should ValueRetain");
+    }
 }

@@ -249,7 +249,9 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_operand(rhs, base);
             remap_operand(index, base);
         }
-        Statement::ValueDrop(l) => remap_local(l, base),
+        Statement::ValueDrop(l) | Statement::ValueRetain(l) | Statement::ValueKill(l) => {
+            remap_local(l, base)
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }

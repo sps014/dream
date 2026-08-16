@@ -114,7 +114,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         }
         Statement::Print { arg, .. } => subst_operand(arg, known),
         Statement::ForceFree(o) => subst_operand(o, known),
-        Statement::ValueDrop(_) => false,
+        Statement::ValueDrop(_) | Statement::ValueRetain(_) | Statement::ValueKill(_) => false,
         Statement::ArrayElemsCopy {
             dst,
             dst_off,
@@ -257,7 +257,10 @@ pub(super) fn update_known(
     } else if let Statement::Assign(_, _) = stmt {
         // Stores through field/index/global may alias; be conservative and keep only consts.
         known.retain(|_, v| matches!(v, Operand::Const(_)));
-    } else if let Statement::ValueDrop(l) = stmt {
+    } else if let Statement::ValueDrop(l)
+        | Statement::ValueRetain(l)
+        | Statement::ValueKill(l) = stmt
+    {
         invalidate(*l, known);
     }
     // Calls may mutate through references; constants stay valid, copies of locals are kept (locals

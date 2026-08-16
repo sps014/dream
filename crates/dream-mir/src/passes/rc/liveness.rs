@@ -108,7 +108,7 @@ fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
         }
         Statement::Print { arg, .. } => add_operand_reads(arg, live),
         Statement::ForceFree(o) => add_operand_reads(o, live),
-        Statement::ValueDrop(l) => {
+        Statement::ValueDrop(l) | Statement::ValueRetain(l) | Statement::ValueKill(l) => {
             live.insert(l.0);
         }
         Statement::ArrayElemsCopy {

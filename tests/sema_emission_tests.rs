@@ -964,6 +964,7 @@ fn exec_container_store_retains_no_double_free() {
             let b: Node = Node();
             a.next = b;
             System.print(0);
+            let keep = a;
         }}"
     );
     assert_eq!(run_and_capture_rc(&code, "main"), "011");

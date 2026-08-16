@@ -246,6 +246,33 @@ impl Emitter<'_> {
                     }
                 }
             }
+            Statement::ValueRetain(local) => {
+                let ty = self.func.local_ty(*local);
+                debug_assert!(
+                    self.interner.is_value_type(ty),
+                    "ValueRetain on non-value local"
+                );
+                if self.value_has_glue(ty) {
+                    if let Some(name) = self.value_name(ty) {
+                        self.line(&format!("     (local.get ${})", local.0));
+                        self.line(&format!("     (call {})", vs_retain_sym(&name)));
+                    }
+                }
+            }
+            Statement::ValueKill(local) => {
+                let ty = self.func.local_ty(*local);
+                debug_assert!(
+                    self.interner.is_value_type(ty),
+                    "ValueKill on non-value local"
+                );
+                let size = self.value_size(ty);
+                if size > 0 {
+                    self.line(&format!("     (local.get ${})", local.0));
+                    self.line("     (i32.const 0)");
+                    self.line(&format!("     (i32.const {})", size));
+                    self.line("     (memory.fill)");
+                }
+            }
         }
     }
 
@@ -313,10 +340,15 @@ impl Emitter<'_> {
                     let l0 = l.0;
                     match self.frame.kind(*l) {
                         Some(ValueLocalKind::Owning) => {
+                            let copy_retain = !matches!(
+                                rvalue,
+                                Rvalue::Use(Operand::Copy(Place::Local(_)))
+                            );
                             self.emit_value_store(
                                 |s| s.line(&format!("     (local.get ${})", l0)),
                                 ty,
                                 rvalue,
+                                copy_retain,
                             );
                         }
                         // A borrow/param value local just holds an address: rebind it to the source
@@ -342,6 +374,7 @@ impl Emitter<'_> {
                             |s| s.line(&format!("     (global.get $g{})", g0)),
                             ty,
                             rvalue,
+                            true,
                         );
                         return;
                     }
@@ -425,7 +458,7 @@ impl Emitter<'_> {
     /// store+retain+release when `$__rel != $__src`.
     fn emit_place_store(&mut self, ty: TypeId, addr: impl Fn(&mut Self), rvalue: &Rvalue) {
         if self.interner.is_value_type(ty) {
-            self.emit_value_store(addr, ty, rvalue);
+            self.emit_value_store(addr, ty, rvalue, true);
             return;
         }
         let take_transfer = matches!(
@@ -667,6 +700,7 @@ impl Emitter<'_> {
                 },
                 |s| s.emit_operand_addr(&value),
                 value_ty,
+                true,
             );
             return;
         }

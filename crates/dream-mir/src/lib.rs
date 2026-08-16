@@ -260,6 +260,13 @@ pub enum Statement {
     /// inlined continuation rather than the caller's function exit (see [`LocalDecl::manual_drop`]).
     /// Side-effecting: passes must not delete it.
     ValueDrop(Local),
+    /// `$__vs_retain_<T>` on an owning value local (still-live struct copy or call-arg).
+    /// Side-effecting: passes must not delete it.
+    ValueRetain(Local),
+    /// Zero a moved-from value local's slot without `$__vs_drop_<T>` (nested refs transferred).
+    /// Pairs with [`LocalDecl::manual_drop`] so frame teardown does not drop it again.
+    /// Side-effecting: passes must not delete it.
+    ValueKill(Local),
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.

@@ -275,6 +275,7 @@ const SMOKE_CASES: &[&str] = &[
     "object_protocol",
     "diagnostics",
     "last_use_destroy",
+    "struct_last_use_move",
     "ui_render_tree",
 ];
 

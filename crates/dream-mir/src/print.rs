@@ -119,6 +119,8 @@ fn stmt(s: &Statement) -> String {
             operand(index)
         ),
         Statement::ValueDrop(l) => format!("value_drop _{}", l.0),
+        Statement::ValueRetain(l) => format!("value_retain _{}", l.0),
+        Statement::ValueKill(l) => format!("value_kill _{}", l.0),
     }
 }
 

@@ -153,7 +153,9 @@ fn analyze_simple_ctor(
                     | Statement::IndirectCall { .. }
                     | Statement::InterfaceCall { .. }
                     | Statement::Panic(_)
-                    | Statement::ValueDrop(_) => return None,
+                    | Statement::ValueDrop(_)
+                    | Statement::ValueRetain(_)
+                    | Statement::ValueKill(_) => return None,
                     _ => {}
                 }
             }

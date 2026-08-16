@@ -1,0 +1,22 @@
+// Class type arguments on `WebWorker.spawn` / `.map` are inferred from the arguments.
+import system;
+
+fun shout(msg: string): string {
+    return msg + "!";
+}
+
+async fun main(): void {
+    let w = WebWorker.spawn("hello", shout);
+    System.println(await w.join());
+    w.terminate();
+
+    let squarer = WebWorker.spawn(6, (n) => n * n);
+    System.println((await squarer.join()).to_string());
+    squarer.terminate();
+
+    let items = ["1", "2"];
+    let results = await WebWorker.map(items, shout);
+    for (let r in results) {
+        System.println(r);
+    }
+}

@@ -244,7 +244,7 @@ impl<'a> Analyzer<'a> {
     /// Infers a lambda's return type by analyzing its body with the given concrete parameter types
     /// in scope. HIR produced during the probe is discarded — the deferred body pass emits the
     /// real HIR later.
-    fn infer_lambda_return_type(
+    pub(in crate::analyzer) fn infer_lambda_return_type(
         &mut self,
         lambda: &'a LambdaNode<'a>,
         param_types: &[Type],

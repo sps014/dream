@@ -1759,3 +1759,155 @@ fn test_analyze_illegal_let_pattern() {
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
 }
+
+#[test]
+fn test_infer_generic_class_static_from_args() {
+    let code = "
+        class Box<T> {
+            public value: T;
+            public constructor(value: T) { this.value = value; }
+            public static fun of(value: T): Box<T> { return Box<T>(value); }
+        }
+        fun main(): void {
+            let b = Box.of(1);
+            let n: int = b.value;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_infer_generic_class_static_lambda() {
+    let code = "
+        class Worker<A, B> {
+            public constructor() {}
+            public static fun spawn(input: A, body: fun(A): B): Worker<A, B> {
+                let _ = input;
+                let _ = body;
+                return Worker<A, B>();
+            }
+        }
+        fun main(): void {
+            let w = Worker.spawn(6, (n) => n * n);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_no_type_errors(&diagnostics);
+}
+
+#[test]
+fn test_infer_generic_class_static_named_fun() {
+    let code = "
+        class Worker<A, B> {
+            public constructor() {}
+            public static fun spawn(input: A, body: fun(A): B): Worker<A, B> {
+                let _ = input;
+                let _ = body;
+                return Worker<A, B>();
+            }
+        }
+        fun work(x: string): string { return x; }
+        fun main(): void {
+            let w = Worker.spawn(\"alpha\", work);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_no_type_errors(&diagnostics);
+}
+
+#[test]
+fn test_infer_generic_class_static_from_array() {
+    let code = "
+        class Box<T> {
+            public value: T;
+            public constructor(value: T) { this.value = value; }
+            public static fun from_array(items: T[]): Box<T> { return Box<T>(items[0]); }
+        }
+        fun main(): void {
+            let b = Box.from_array([1, 2, 3]);
+            let n: int = b.value;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_infer_generic_class_static_from_expected_type() {
+    let code = "
+        class Worker<A, B> {
+            public constructor() {}
+            public static fun spawn(body: fun(): B): Worker<A, B> {
+                let _ = body;
+                return Worker<A, B>();
+            }
+        }
+        fun main(): void {
+            let w: Worker<string, int> = Worker.spawn(() => 1);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_no_type_errors(&diagnostics);
+}
+
+#[test]
+fn test_infer_generic_class_static_cannot_infer_unused_param() {
+    let code = "
+        class Worker<A, B> {
+            public constructor() {}
+            public static fun spawn(body: fun(): B): Worker<A, B> {
+                let _ = body;
+                return Worker<A, B>();
+            }
+        }
+        fun main(): void {
+            let w = Worker.spawn(() => 1);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Cannot infer type arguments")),
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_infer_generic_class_static_unused_class_param_still_errors() {
+    let code = "
+        class Pair<T> {
+            public a: int;
+            public b: int;
+            public constructor(a: int, b: int) { this.a = a; this.b = b; }
+            public static fun of(a: int, b: int): Pair<T> { return Pair<T>(a, b); }
+        }
+        fun main(): void {
+            let p = Pair.of(3, 4);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Cannot infer type arguments")),
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}

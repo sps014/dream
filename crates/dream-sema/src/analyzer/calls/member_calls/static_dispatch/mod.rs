@@ -10,6 +10,7 @@ use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::ExpressionNode;
 use dream_types::method_fn;
 
+mod class_infer;
 mod intrinsics;
 mod plain;
 
@@ -79,26 +80,27 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        // A static method on a *generic class* (`Cache<int>.make(...)`). The class's type arguments
-        // ride on the call's generic-argument slot (attached by the parser). Monomorphize the class
-        // so its concrete static methods (`Cache_int_make`, ...) are registered, then dispatch the
-        // concrete method through the normal static-call path (which enforces class-level privacy).
+        // A static method on a *generic class* (`Cache<int>.make(...)` or inferred `Cache.make(...)`).
+        // Explicit type arguments ride on the call's generic-argument slot; otherwise they are
+        // inferred from the expected type or the arguments. Monomorphize the class so its concrete
+        // static methods (`Cache_int_make`, ...) are registered, then dispatch through the normal
+        // static-call path (which enforces class-level privacy).
         if self.generic_structs.contains_key(&type_name) {
             let args: Vec<Type> = match generic_args {
                 Some(a) if !a.is_empty() => a
                     .iter()
                     .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
                     .collect(),
-                _ => {
-                    diagnostics.report_error(
-                        format!(
-                            "Generic class '{}' requires type arguments to call a static method, e.g. {}<int>.{}(...)",
-                            type_name, type_name, method.text
-                        ),
-                        Some(id.position),
-                    );
-                    return Ok(Some(Type::Unknown));
-                }
+                _ => match self.infer_generic_class_static_type_args(
+                    &type_name,
+                    method,
+                    params,
+                    ctx,
+                    diagnostics,
+                ) {
+                    Some(inferred) => inferred,
+                    None => return Ok(Some(Type::Unknown)),
+                },
             };
             self.ensure_struct_instantiated(&type_name, &args, &id.position, diagnostics);
             let mangled_type = mangle_generic(&type_name, &args);

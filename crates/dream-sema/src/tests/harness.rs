@@ -1,12 +1,32 @@
 //! Shared test harness for analyzer unit tests: `analyze_code` plus reusable Dream source stubs.
 
 use super::super::*;
-use dream_diagnostics::DiagnosticBag;
+use dream_diagnostics::{DiagnosticBag, Severity};
 use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 
 pub(super) fn analyze_code(code: &str) -> DiagnosticBag {
     analyze_code_with_crate_type(code, CrateType::Bin, None)
+}
+
+/// Unit tests don't load the prelude, so first-class `fun` values have no funcbox HIR. Ignore that
+/// backend-coverage diagnostic when the program otherwise type-checks.
+pub(super) fn assert_no_type_errors(diagnostics: &DiagnosticBag) {
+    let type_errors: Vec<_> = diagnostics
+        .diagnostics
+        .iter()
+        .filter(|d| {
+            d.severity == Severity::Error
+                && !d
+                    .message
+                    .contains("failed to produce code for the compiler backend")
+        })
+        .collect();
+    assert!(
+        type_errors.is_empty(),
+        "unexpected type errors: {:?}",
+        type_errors
+    );
 }
 
 pub(super) fn analyze_code_with_crate_type(

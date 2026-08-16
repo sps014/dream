@@ -527,6 +527,21 @@ impl<'a> Analyzer<'a> {
         self.hir.name_span = None;
     }
 
+    /// Pauses HIR collection so a type-only probe (generic-class argument inference) cannot
+    /// mark the enclosing function unemittable or steal `last`.
+    pub(in crate::analyzer) fn hir_pause_collection(&mut self) -> (bool, bool) {
+        let collecting = self.hir.collecting;
+        let ok = self.hir.ok;
+        self.hir.collecting = false;
+        (collecting, ok)
+    }
+
+    pub(in crate::analyzer) fn hir_resume_collection(&mut self, collecting: bool, ok: bool) {
+        self.hir.collecting = collecting;
+        self.hir.ok = ok;
+        self.hir.last = None;
+    }
+
     /// Takes the HIR recorded for the most-recently-analyzed expression.
     pub(in crate::analyzer) fn hir_take(&mut self) -> Option<HExpr> {
         self.hir.last.take()

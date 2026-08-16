@@ -835,7 +835,7 @@ impl<'a> Analyzer<'a> {
 
     /// Builds a concrete `Type` from a type name, used when substituting a generic
     /// parameter `T` with the concrete type chosen at the call/instantiation site.
-    fn concrete_type_from_str(name: &str) -> Type {
+    pub(in crate::analyzer) fn concrete_type_from_str(name: &str) -> Type {
         let token = synthetic_token(TokenKind::DataTypeToken, name);
         primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
     }

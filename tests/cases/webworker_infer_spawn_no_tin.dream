@@ -1,0 +1,7 @@
+// Capture-only spawn cannot infer unused TIn.
+import system;
+
+async fun main(): void {
+    let w = WebWorker.spawn(() => 1);
+    let _ = await w.join();
+}

@@ -36,7 +36,11 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn match_generic_type(formal: &Type, arg: &str, param_name: &str) -> Option<String> {
+    pub(in crate::analyzer) fn match_generic_type(
+        formal: &Type,
+        arg: &str,
+        param_name: &str,
+    ) -> Option<String> {
         match formal {
             Type::Struct(token, None) if token.text == param_name => Some(arg.to_string()),
             Type::Generic(name) if name == param_name => Some(arg.to_string()),

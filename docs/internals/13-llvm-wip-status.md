@@ -35,7 +35,10 @@ LLVM `Await` stores the host return value as the result (no Future unwrap). Asyn
 
 ## Still broken / next
 
-1. Debug `libdream_rt.a` is large (reqwest + wgpu + wry).
+Debug `libdream_rt.a`: workspace `[profile.dev.package."*"] debug = false` plus guest
+`-Wl,-dead_strip`. Standalone `cargo build -p dream-rt` (no `full`) is ~41MB stubs.
+The `dream` crate enables `full` so wasmtime GPU and LLVM-native HTTP/webview/GPU share one
+archive (~146MB vs ~216MB with dep DWARF).
 
 `@shared` locks/semaphores and worker-shared objects run on a **non-moving mmap heap** with 4-byte
 allocation alignment so ARM64 atomics do not SIGBUS. Un-awaited `async` calls run on a helper

@@ -25,7 +25,7 @@ dream-abi = { path = "crates/dream-abi" }
 dream-stdlib = { path = "crates/dream-stdlib" }
 dream-sema = { path = "crates/dream-sema" }
 dream-mir = { path = "crates/dream-mir" }
-dream-rt = { path = "crates/dream-rt" }
+dream-rt = { path = "crates/dream-rt", features = ["full"] }
 dream-llvm = { path = "crates/dream-llvm" }
 bumpalo = "3.20.3"
 # Insertion-ordered map used for the codegen tables whose iteration order reaches emitted
@@ -97,6 +97,10 @@ rayon = "1"
 
 [profile.dev]
 debug = "line-tables-only"
+
+# wgpu/wry/reqwest debuginfo dominates `libdream_rt.a` and every debug guest `.out`.
+[profile.dev.package."*"]
+debug = false
 
 [profile.test]
 opt-level = 3

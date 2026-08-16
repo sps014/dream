@@ -62,7 +62,9 @@ MIR layouts assume **4-byte reference slots**. Native LLVM keeps **guest `i32` o
 
 C library: `malloc` / `retain` / `release` / strings / panic / print / locks / realloc. Same
 `[size][tag][ref_count]` header as [`mir::abi`](../../crates/dream-mir/src/abi.rs). One protocol
-for wasm32 and native.
+for wasm32 and native. Optional `http` / `net` / `gpu` / `webview` (or `full`) pull reqwest,
+tungstenite, wgpu, and wry into the archive; debug default is stubs so `libdream_rt.a` stays
+small. Workspace `[profile.dev.package."*"] debug = false` drops dependency DWARF.
 
 ## C ABI, LTO, DWARF, ASan, WASM attrs
 

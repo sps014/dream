@@ -341,14 +341,16 @@ pub fn from_canvas(name: &str) -> i32 {
 /// Create a surface / native window at `width`×`height`, titled `name`.
 /// Returns `-1` if the window or wgpu surface cannot be created (no hollow entries).
 pub fn create(name: &str, width: i32, height: i32) -> i32 {
-    let mut st = lock_state();
-    if !st.ready {
-        return -1;
-    }
-    let w = width.max(1) as u32;
-    let h = height.max(1) as u32;
+    let (w, h) = {
+        let st = lock_state();
+        if !st.ready {
+            return -1;
+        }
+        (width.max(1) as u32, height.max(1) as u32)
+    };
 
     let title = name.to_string();
+    // winit 0.30 often does not fire `resumed` on a zero-timeout first pump (macOS).
     let created = with_event_loop(|el| {
         let mut app = WindowCreateApp {
             title,
@@ -356,7 +358,12 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
             height: h,
             window: None,
         };
-        let _ = el.pump_app_events(Some(Duration::ZERO), &mut app);
+        for _ in 0..32 {
+            let _ = el.pump_app_events(Some(Duration::from_millis(16)), &mut app);
+            if app.window.is_some() {
+                break;
+            }
+        }
         app.window
     });
 
@@ -372,6 +379,10 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
         }
     };
 
+    let mut st = lock_state();
+    if !st.ready {
+        return -1;
+    }
     let instance = st.instance.as_ref().unwrap();
     let surface = match instance.create_surface(window.clone()) {
         Ok(surface) => surface,

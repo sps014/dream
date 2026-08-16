@@ -47,6 +47,7 @@ void dream_rt_set_args(int argc, char **argv) {
 }
 
 
+#ifndef DREAM_FREESTANDING
 static void guest_path(int32_t ptr, char *out, size_t cap) {
     int32_t n = dream_str_byte_size(ptr);
     uint8_t *h = dream_heap_base();
@@ -61,6 +62,7 @@ static void guest_path(int32_t ptr, char *out, size_t cap) {
     }
     out[n] = 0;
 }
+#endif
 
 double dream_math_abs(double x) { return fabs(x); }
 double dream_math_floor(double x) { return floor(x); }

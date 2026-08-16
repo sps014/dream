@@ -46,10 +46,11 @@ pub fn native_archive() -> PathBuf {
 }
 
 /// System libraries rustc expects when linking a staticlib on this host.
-pub fn native_sys_libs() -> &'static [&'static str] {
+pub fn native_sys_libs() -> Vec<&'static str> {
     #[cfg(target_os = "macos")]
     {
-        &[
+        #[allow(unused_mut)]
+        let mut libs = vec![
             "-lSystem",
             "-lc++",
             "-lresolv",
@@ -62,31 +63,39 @@ pub fn native_sys_libs() -> &'static [&'static str] {
             "-framework",
             "AppKit",
             "-framework",
-            "Metal",
-            "-framework",
-            "QuartzCore",
-            "-framework",
             "IOKit",
-            "-framework",
-            "CoreVideo",
             "-framework",
             "CoreGraphics",
             "-framework",
             "Foundation",
             "-framework",
             "Carbon",
-            "-framework",
-            "WebKit",
             "-lffi",
-        ]
+        ];
+        #[cfg(feature = "gpu")]
+        {
+            libs.extend([
+                "-framework",
+                "Metal",
+                "-framework",
+                "QuartzCore",
+                "-framework",
+                "CoreVideo",
+            ]);
+        }
+        #[cfg(feature = "webview")]
+        {
+            libs.extend(["-framework", "WebKit"]);
+        }
+        libs
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        &["-lpthread", "-ldl", "-lm", "-lstdc++", "-lffi"]
+        vec!["-lpthread", "-ldl", "-lm", "-lstdc++", "-lffi"]
     }
     #[cfg(not(unix))]
     {
-        &[]
+        vec![]
     }
 }
 

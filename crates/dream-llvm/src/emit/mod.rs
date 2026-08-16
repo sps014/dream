@@ -76,7 +76,7 @@ impl<'a> ModuleEmitter<'a> {
             }
         }
         for (i, f) in self.mir.functions.iter().enumerate() {
-            if native_c_sym(&func_symbol(f)).is_some() {
+            if native_c_sym(&func_symbol(f)).is_some() || is_c_runtime_sym(&func_symbol(f)) {
                 continue;
             }
             self.emit_function(f, i as i32);

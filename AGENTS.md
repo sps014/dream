@@ -140,6 +140,11 @@ Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll 
 # Build (release)
 cargo build --release            # binary at target/release/dream
 
+# LLVM-native runtime archive (clang links `target/debug/libdream_rt.a`)
+cargo build -p dream-rt                    # slim (~41MB): no wgpu/wry/reqwest
+cargo build -p dream-rt --features full    # GPU / HTTP / webview in the guest
+cargo build -p dream-rt --release --features full
+
 # Run a program
 cargo run -- run path/to/file.dream        # compile + execute (wasmtime)
 cargo run -- path/to/file.dream            # compile to .wat / .wasm / .abi.json

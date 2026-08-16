@@ -112,6 +112,7 @@ pub fn fill_bytes(ptr: i32, bytes: &[u8]) {
     }
 }
 
+#[cfg(feature = "gpu")]
 pub fn read_i32_array(ptr: i32) -> Vec<i32> {
     if ptr <= 0 {
         return Vec::new();
@@ -132,6 +133,7 @@ pub fn read_i32_array(ptr: i32) -> Vec<i32> {
     }
 }
 
+#[cfg(feature = "gpu")]
 pub fn write_i32_array(values: &[i32]) -> i32 {
     let n = values.len() as i32;
     unsafe {

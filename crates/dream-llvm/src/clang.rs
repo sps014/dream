@@ -113,6 +113,8 @@ pub fn compile_ir(ir: &str, out: &Path, opts: &CodegenOptions) -> Result<PathBuf
             cmd.arg(src);
         }
         cmd.arg(&ll);
+        cmd.arg("-ffunction-sections");
+        cmd.arg("-fdata-sections");
         let archive = dream_rt::native_archive();
         if !archive.exists() {
             return Err(ClangError::Spawn(format!(
@@ -123,6 +125,11 @@ pub fn compile_ir(ir: &str, out: &Path, opts: &CodegenOptions) -> Result<PathBuf
         cmd.arg(&archive);
         for arg in dream_rt::native_sys_libs() {
             cmd.arg(arg);
+        }
+        if cfg!(target_os = "macos") {
+            cmd.arg("-Wl,-dead_strip");
+        } else if cfg!(unix) {
+            cmd.arg("-Wl,--gc-sections");
         }
         cmd.arg("-lm");
         cmd.arg("-lpthread");

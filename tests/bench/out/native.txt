@@ -1,14 +1,14 @@
-== native (LLVM + dream-rt) ==
-bench arc_locals ns_total=2037000 iters=20000 ns_per_op=101
-bench string_concat ns_total=3412000 iters=20000 ns_per_op=170
-bench string_eq ns_total=0 iters=100000 ns_per_op=0
-bench char_scan ns_total=2928000 iters=2000 ns_per_op=1464
-bench substring ns_total=2236000 iters=20000 ns_per_op=111
-bench list_push ns_total=125000 iters=20000 ns_per_op=6
-bench list_insert_mid ns_total=3015000 iters=19968 ns_per_op=150
-bench map_get_set ns_total=1058000 iters=20000 ns_per_op=52
-bench map_clear_reuse ns_total=660000 iters=19968 ns_per_op=33
-bench list_clear_reuse ns_total=314000 iters=19968 ns_per_op=15
-bench alloc_churn ns_total=1474000 iters=20000 ns_per_op=73
-bench scratch_arena ns_total=698000 iters=20000 ns_per_op=34
-# regex_find: SIGSEGV in dream_drop (recursive drop / stack overflow)
+bench arc_locals ns_total=3331667 iters=20000 ns_per_op=166
+bench string_concat ns_total=4248000 iters=20000 ns_per_op=212
+bench string_eq ns_total=1708 iters=100000 ns_per_op=0
+bench char_scan ns_total=3369459 iters=2000 ns_per_op=1684
+bench substring ns_total=2029625 iters=20000 ns_per_op=101
+bench list_push ns_total=230375 iters=20000 ns_per_op=11
+bench list_insert_mid ns_total=2044583 iters=19968 ns_per_op=102
+bench map_get_set ns_total=964125 iters=20000 ns_per_op=48
+bench map_clear_reuse ns_total=940208 iters=19968 ns_per_op=47
+bench list_clear_reuse ns_total=305708 iters=19968 ns_per_op=15
+bench alloc_churn ns_total=937209 iters=20000 ns_per_op=46
+bench scratch_arena ns_total=864667 iters=20000 ns_per_op=43
+bench regex_find ns_total=12752417 iters=2000 ns_per_op=6376
+bench string_builder ns_total=253250 iters=4000 ns_per_op=63

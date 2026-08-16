@@ -130,6 +130,8 @@ pub(crate) fn unwrap_future(interner: &TypeInterner, layouts: &dream_hir::Layout
 pub(crate) fn resolved_symbol(sym: &str) -> String {
     if let Some(c) = native_c_sym(sym) {
         c.to_string()
+    } else if is_c_runtime_sym(sym) {
+        c_runtime_leaf(sym)
     } else {
         llvm_fn_name(sym)
     }
@@ -156,6 +158,8 @@ pub(crate) fn llvm_extern_name(key: &str) -> String {
         c.to_string()
     } else if key == "sleep" || key.ends_with("sleep") {
         "d_sleep".into()
+    } else if is_c_runtime_sym(key) {
+        c_runtime_leaf(key)
     } else {
         llvm_fn_name(key)
     }
@@ -361,7 +365,12 @@ pub(crate) fn native_c_sym(key: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn is_c_runtime_sym(key: &str) -> bool {
-    key.starts_with("dream_") || key.starts_with("debug_")
+    let k = c_runtime_leaf(key);
+    k.starts_with("dream_") || k.starts_with("debug_")
+}
+
+fn c_runtime_leaf(key: &str) -> String {
+    key.rsplit(['.', ':']).next().unwrap_or(key).to_string()
 }
 
 pub(crate) fn llvm_fn_name(sym: &str) -> String {

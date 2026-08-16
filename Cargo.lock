@@ -1249,7 +1249,9 @@ dependencies = [
  "dream-abi",
  "dream-diagnostics",
  "dream-hir",
+ "dream-llvm",
  "dream-mir",
+ "dream-rt",
  "dream-sema",
  "dream-stdlib",
  "dream-syntax",
@@ -1312,6 +1314,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dream-llvm"
+version = "0.1.0"
+dependencies = [
+ "dream-hir",
+ "dream-mir",
+ "dream-rt",
+ "dream-types",
+ "indexmap",
+]
+
+[[package]]
 name = "dream-lsp"
 version = "0.1.0"
 dependencies = [
@@ -1342,8 +1355,14 @@ dependencies = [
  "dream-types",
  "indexmap",
  "pretty_assertions",
- "wast",
- "wat",
+]
+
+[[package]]
+name = "dream-rt"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "dream-mir",
 ]
 
 [[package]]

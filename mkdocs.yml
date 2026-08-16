@@ -164,3 +164,5 @@ nav:
       - Nullable purge: internals/09-nullable-purge-design-note.md
       - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
       - Swift-like ARC: internals/11-swift-like-arc-roadmap.md
+      - LLVM backend: internals/12-llvm-backend.md
+      - LLVM WIP status: internals/13-llvm-wip-status.md

@@ -135,14 +135,14 @@ fn sink_store_skips_retain_vs_borrow() {
         .lines()
         .filter(|l| {
             let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $retain")
+            !t.starts_with(";;") && t.contains("call void @dream_retain")
         })
         .count();
     let borrow_retains = borrow_wat
         .lines()
         .filter(|l| {
             let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $retain")
+            !t.starts_with(";;") && t.contains("call void @dream_retain")
         })
         .count();
     assert!(

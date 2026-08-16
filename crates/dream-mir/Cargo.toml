@@ -14,8 +14,6 @@ dream-abi = { path = "../dream-abi" }
 dream-stdlib = { path = "../dream-stdlib" }
 dream-syntax = { path = "../dream-syntax" }
 indexmap = "2"
-wat = "1.252.0"
-wast = "252.0.0"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

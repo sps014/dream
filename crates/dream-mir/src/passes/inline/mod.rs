@@ -205,14 +205,14 @@ fn eligible(
 /// Remaps a callee [`LocalDecl`] into the caller using the callee's [`ValueFrame`] classification:
 /// borrows stay aliases (`is_ref`); Param/Owning get `manual_drop` so call-site [`Statement::ValueDrop`]
 /// owns teardown (caller frame exit must not drop them again).
-fn remap_local_decl(decl: &LocalDecl, kind: Option<crate::emit::ValueLocalKind>) -> LocalDecl {
+fn remap_local_decl(decl: &LocalDecl, kind: Option<crate::valuetype::ValueLocalKind>) -> LocalDecl {
     let mut d = decl.clone();
     match kind {
-        Some(crate::emit::ValueLocalKind::Borrow) => {
+        Some(crate::valuetype::ValueLocalKind::Borrow) => {
             d.is_ref = true;
             d.manual_drop = false;
         }
-        Some(crate::emit::ValueLocalKind::Param | crate::emit::ValueLocalKind::Owning) => {
+        Some(crate::valuetype::ValueLocalKind::Param | crate::valuetype::ValueLocalKind::Owning) => {
             d.manual_drop = true;
             d.is_ref = false;
             if d.name.is_none() {
@@ -241,7 +241,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // reclassified as owning in the caller. Locals already marked `manual_drop` (from a prior
     // inline into this callee) keep their existing `ValueDrop` in the remapped body; do not drop
     // them again at this site's continuation.
-    let callee_frame = crate::emit::ValueFrame::compute(&mir.functions[site.callee], interner);
+    let callee_frame = crate::valuetype::ValueFrame::compute(&mir.functions[site.callee], interner);
     let local_base = mir.functions[fi].locals.len() as u32;
     let drop_locals: Vec<Local> = g_locals
         .iter()
@@ -250,7 +250,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
             !d.manual_drop
                 && matches!(
                     callee_frame.kind(Local(*i as u32)),
-                    Some(crate::emit::ValueLocalKind::Param | crate::emit::ValueLocalKind::Owning)
+                    Some(crate::valuetype::ValueLocalKind::Param | crate::valuetype::ValueLocalKind::Owning)
                 )
         })
         .map(|(i, _)| Local(local_base + i as u32))

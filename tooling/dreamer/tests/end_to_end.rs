@@ -218,11 +218,11 @@ fn build_compiles_a_project_using_an_installed_dependency() {
         project_dir
             .join("target")
             .join("debug")
-            .join("main.wat")
+            .join("main.ll")
             .is_file(),
         "expected artifacts under target/debug/"
     );
-    assert!(!project_dir.join("src").join("main.wat").exists());
+    assert!(!project_dir.join("src").join("main.ll").exists());
 }
 
 #[test]
@@ -338,7 +338,7 @@ fn build_lib_writes_under_target_debug() {
     assert!(project_dir
         .join("target")
         .join("debug")
-        .join("mylib.wat")
+        .join("mylib.ll")
         .is_file());
 }
 
@@ -441,7 +441,7 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     assert!(commands::build::run(&root, false, None).is_err());
     if dreamer::dream_bin::locate().is_ok() {
         commands::build::run(&root, false, Some("cli")).unwrap();
-        assert!(cli.join("target").join("debug").join("main.wat").is_file());
+        assert!(cli.join("target").join("debug").join("main.ll").is_file());
         commands::build::run(&cli, false, None).unwrap();
     }
 

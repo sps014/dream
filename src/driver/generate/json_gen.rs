@@ -760,7 +760,9 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     let snap_path = snap_file.path.to_string_lossy().into_owned();
 
     std::env::set_var(SNAPSHOT_ENV, &snap_path);
-    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path).map_err(|e| {
+    let output = crate::execution::native_runner::execute_native_capturing(
+        &std::path::Path::new(&wat_path).with_extension("out"),
+    ).map_err(|e| {
         JsonGenError {
             message: format!("@json generator: failed to run Dream harness: {e}"),
             type_name: None,
@@ -926,8 +928,7 @@ fn harness_wat_path() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream")
             .hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/runtime/strings.wat").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/runtime/allocator.wat").hash(&mut h);
+        include_str!("../../../crates/dream-rt/c/dream_rt.c").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
@@ -949,7 +950,7 @@ fn harness_wat_path() -> Result<String, String> {
         .map_err(|e| format!("@json generator: write harness source: {e}"))?;
     let src = src_path.to_string_lossy().into_owned();
     let out = wat_path.to_string_lossy().into_owned();
-    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Native)
         .with_skip_generators(true)
         .with_release(true);
     compiler

@@ -2,7 +2,6 @@
 
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
 use crate::driver::compiler::{Compiler, Target};
-use crate::execution::wasm_runner::execute_wasm;
 use dream_sema::analyzer::CrateType;
 use std::fs;
 use std::io::{self, Write};
@@ -134,12 +133,12 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
 
     let wat_path = out_dir.join(format!("{stem}.wat"));
-    let compiler = Compiler::new(Target::Wasm)
+    let compiler = Compiler::new(Target::Native)
         .with_release(opts.release)
         .with_crate_type(CrateType::Bin)
         .with_emit_abi(false);
     let runner_str = runner_path.to_string_lossy().into_owned();
-    let wat_str = wat_path.to_string_lossy().into_owned();
+    let out_str = wat_path.to_string_lossy().into_owned();
     if opts.verbose {
         let _ = writeln!(
             io::stderr(),
@@ -149,11 +148,13 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         );
     }
     compiler
-        .compile(&runner_str, &wat_str)
+        .compile(&runner_str, &out_str)
         .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
 
     let _ = writeln!(io::stderr(), "running {}:", path.display());
-    execute_wasm(&wat_str).map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
+    let bin = wat_path.with_extension("out");
+    crate::execution::native_runner::execute_native(&bin)
+        .map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
     Ok(tests.len())
 }
 

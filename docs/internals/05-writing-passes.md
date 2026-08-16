@@ -1,6 +1,8 @@
 # 05 — Writing Optimization Passes (`src/mir/passes/`)
 
-Read this when you want to **make the compiler produce better code**. It covers the pass infrastructure, the whole-module driver, the passes that ship today, and a step-by-step tutorial for adding your own. Passes operate on MIR — read [04-mir.md](./04-mir.md) first.
+Read this when you want to **make the compiler produce better code**. New **generic** value-numbering / LICM / unroll / algebraic passes are a **non-goal**: LLVM (`dream --llvm`) and wasm-opt own those. MIR passes that remain in-tree exist for **ARC correctness** (RcInsertion before inlining, RcElision, SROA of non-escaping instances) and CFG cleanup that exposes RC pairs.
+
+It covers the pass infrastructure, the whole-module driver, the passes that ship today, and a step-by-step tutorial. Passes operate on MIR — read [04-mir.md](./04-mir.md) first. LLVM lowering: [12-llvm-backend.md](./12-llvm-backend.md).
 
 ## Two contracts: `MirPass` and `ModulePass`
 

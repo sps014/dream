@@ -21,13 +21,14 @@ flowchart TD
     rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
     opt --> emit["mir::emit\nMIR → WAT (via relooper)"]
 
-    emit --> wat["WAT text (.wat)"]
+    emit --> wat["WAT text (.wat) — default until LLVM bench gate"]
+    emit --> llvm["LLVM IR — dream --llvm / --triple"]
     wat --> abi["driver::abi::emit_wasm_and_abi\nwat→wasm [+ .abi.json for JS]"]
 ```
 
 Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.
 
-The `hir → mir → emit` pipeline is the **only** backend.
+The `hir → mir` pipeline is the language IR. Codegen is WAT (default) or LLVM (`--llvm` / `--triple`).
 
 ## Stage by stage
 
@@ -72,13 +73,13 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `RcInsertion` makes ownership explicit (module-wide, before inlining); `optimize_module` inlines and prunes, then the per-function `PassManager` runs the optimization pipeline to a fixpoint. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `RcInsertion` makes ownership explicit (module-wide, before inlining); `optimize_module` inlines and prunes, then the per-function `PassManager` runs. **Do not add new generic value-opt passes** (GVN/LICM/unroll/…); those belong to LLVM. Keep RC, inlining, prune, SROA, and RcElision. See [04-mir.md](./04-mir.md), [05-writing-passes.md](./05-writing-passes.md), and [12-llvm-backend.md](./12-llvm-backend.md).
 
-### 7. Backend — `src/mir/relooper.rs` + `src/mir/emit/`
+### 7. Backend — WAT (`src/mir/relooper.rs` + `src/mir/emit/`) or LLVM (`crates/dream-llvm`)
 
 - **In:** optimized MIR.
-- **Out:** WAT text.
-- **How:** the relooper recovers structured shapes from the CFG; `emit` walks the function and emits WAT, reusing the runtime/memory/object/string layers. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
+- **WAT (default):** the relooper recovers structured shapes; `emit` writes WAT. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
+- **LLVM (`--llvm` / `--triple`):** CFG → LLVM IR; clang links [`dream-rt`](./12-llvm-backend.md). Guest references stay `i32` heap offsets.
 
 ### 8. Assembly emission — `src/driver/abi.rs`
 

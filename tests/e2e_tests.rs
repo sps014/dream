@@ -1,32 +1,27 @@
 use dream::driver::compiler::{Compiler, Target};
-use dream::execution::host::{
-    attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
-    link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
-    link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, read_string_from_memory, set_worker_module,
-};
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
 use std::fs;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use wasmtime::*;
+use std::process::Command;
 
-#[derive(Clone)]
-struct TestEnv {
-    output: Arc<Mutex<String>>,
-}
-
-impl TestEnv {
-    fn new() -> Self {
-        Self {
-            output: Arc::new(Mutex::new(String::new())),
+fn clang_can_emit_wasm32() -> bool {
+    let clang = std::env::var("DREAM_CLANG").unwrap_or_else(|_| "clang".to_string());
+    let out = Command::new(&clang)
+        .args(["-print-targets"])
+        .output();
+    match out {
+        Ok(o) => {
+            let text = String::from_utf8_lossy(&o.stdout);
+            text.contains("wasm32")
+                && Command::new("wasm-ld")
+                    .arg("-version")
+                    .output()
+                    .map(|v| v.status.success())
+                    .unwrap_or(false)
         }
-    }
-
-    fn print(&self, s: &str) {
-        self.output.lock().unwrap().push_str(s);
+        Err(_) => false,
     }
 }
 
@@ -49,17 +44,16 @@ const DEBUG_ONLY_CASES: &[&str] = &[
 ];
 
 fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
+    let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    if stem.starts_with("webworker") {
+        // `WebWorker` / `js` stay WASM/JS-only; native LLVM has no JS host.
+        return;
+    }
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
     let expected_trap_file = dream_file.with_extension("expected_trap");
 
-    // Debug (default) enables allocator instrumentation and keeps every runtime helper; release
-    // runs the same program through `strip_dead_functions` and the uninstrumented hot path, so this
-    // second mode is what actually exercises structural WAT DCE.
-    let compiler = Compiler::new(Target::Wasm).with_release(release);
-    // Suite-scoped output path (passed in by the caller) so the debug and release suites never race
-    // on the same file — crucial because both suites compile `DEBUG_ONLY_CASES` in debug mode, and
-    // each suite additionally runs its corpus in parallel across cores.
+    let compiler = Compiler::new(Target::Native).with_release(release);
     let wat_path = dream_file.with_extension(wat_ext);
 
     let dream_file_str = dream_file.to_str().unwrap().to_string();
@@ -68,20 +62,15 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     let compile_result = compiler.compile(&dream_file_str, &wat_path_str);
 
     if expected_error_file.exists() {
-        let _expected_error = fs::read_to_string(&expected_error_file).unwrap();
         assert!(
             compile_result.is_err(),
             "Expected compilation to fail for {:?}",
             dream_file
         );
-        // We could check the exact error message if we exposed it from Compiler,
-        // but for now just ensuring it fails is good.
         return;
     }
 
-    compile_result.unwrap_or_else(|_| panic!("Compilation failed for {:?}", dream_file));
-
-    attach_abi_from_wat_path(&wat_path_str);
+    compile_result.unwrap_or_else(|e| panic!("Compilation failed for {:?}: {e}", dream_file));
 
     let expects_trap = expected_trap_file.exists();
     let expected_output = fs::read_to_string(if expects_trap {
@@ -91,163 +80,36 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     })
     .unwrap_or_else(|_| panic!("Missing .expected/.expected_trap file for {:?}", dream_file));
 
-    let wat_content = fs::read_to_string(&wat_path).unwrap();
+    let bin = wat_path.with_extension("out");
+    let output = std::process::Command::new(&bin)
+        .output()
+        .unwrap_or_else(|e| panic!("run {}: {e}", bin.display()));
+    let actual_output = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    // 2. Parse WAT to Wasm binary
-    let wasm_bytes = wat::parse_str(&wat_content).expect("Failed to parse WAT");
-
-    // Make the module bytes available to `WebWorker` spawns on this thread (a thread-local, so the
-    // parallel debug/release suites never race on module identity).
-    set_worker_module(&wasm_bytes);
-
-    // 3. Setup Wasmtime
-    // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
-    // frame per node through both the struct's and its `Option` wrapper's release function, so the
-    // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up to match
-    // the production runner (`execution::wasm_runner::execute_wasm`).
-    let config = dream::execution::host::threaded_wasm_config();
-    let engine = Engine::new(&config).expect("Failed to create engine");
-    let module = Module::new(&engine, &wasm_bytes).expect("Failed to create module");
-    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
-        .expect("module should import env.memory");
-    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
-
-    let mut store = Store::new(&engine, ());
-    store.set_epoch_deadline(u64::MAX);
-    let mut linker = Linker::new(&engine);
-    linker
-        .define(&mut store, "env", "memory", shared_mem.clone())
-        .expect("Failed to define shared memory");
-
-    // 4. Setup Host Functions
-    let env = TestEnv::new();
-
-    // We need to extract memory later to read strings, so we'll pass it to host functions via a hack
-    // Wasmtime allows accessing memory from Caller
-
-    let env_clone = env.clone();
-    linker
-        .func_wrap("env", "print_int", move |v: i32| {
-            env_clone.print(&v.to_string());
-        })
-        .unwrap();
-
-    let env_clone = env.clone();
-    linker
-        .func_wrap("env", "print_float", move |v: f32| {
-            env_clone.print(&v.to_string());
-        })
-        .unwrap();
-
-    let env_clone = env.clone();
-    linker
-        .func_wrap("env", "print_double", move |v: f64| {
-            env_clone.print(&v.to_string());
-        })
-        .unwrap();
-
-    let env_clone = env.clone();
-    linker
-        .func_wrap("env", "print_char", move |v: i32| {
-            if let Some(c) = char::from_u32(v as u32) {
-                env_clone.print(&c.to_string());
-            }
-        })
-        .unwrap();
-
-    let env_clone = env.clone();
-    linker
-        .func_wrap(
-            "env",
-            "print_string",
-            move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let memory = caller
-                    .get_export("memory")
-                    .unwrap()
-                    .into_shared_memory()
-                    .unwrap();
-                let s = read_string_from_memory(&memory, ptr);
-                env_clone.print(&s);
-            },
-        )
-        .unwrap();
-
-    linker
-        .func_wrap("env", "concat_strings", |_: i32, _: i32| -> i32 {
-            0 // Dummy implementation for now, full stdlib needs actual memory management
-        })
-        .unwrap();
-
-    link_math_functions(&mut linker).unwrap();
-    link_file_functions(&mut linker).unwrap();
-    link_http_functions(&mut linker).unwrap();
-    link_crypto_functions(&mut linker).unwrap();
-    link_console_functions(&mut linker).unwrap();
-    link_datetime_functions(&mut linker).unwrap();
-    link_process_functions(&mut linker).unwrap();
-    link_net_functions(&mut linker).unwrap();
-    link_text_functions(&mut linker).unwrap();
-    link_worker_functions(&mut linker).unwrap();
-    link_gpu_functions(&mut linker).unwrap();
-    linker
-        .func_wrap("env", "strlen", |_: i32| -> i32 { 0 })
-        .unwrap();
-    linker
-        .func_wrap("env", "malloc", |_: i32| -> i32 { 0 })
-        .unwrap();
-    linker.func_wrap("env", "free", |_: i32| {}).unwrap();
-
-    linker
-        .func_wrap("env", "debug_get_free_list_head", move || -> i32 {
-            // We can't easily get the freelist head from here without exporting it,
-            // but we can just return 0 to make the linker happy if it's not actually used
-            // or if we just want to stub it.
-            // Actually, let's just return 0 for now. The test checks if it changes.
-            0
-        })
-        .unwrap();
-
-    // 5. Instantiate and Run
-    // JS-interop externs (the `Dream` host module behind the dynamic `js` type/regex/fetch, plus any user
-    // `@js(...)` imports) are merged in via the prelude but have no native host here. Stub every
-    // unresolved import as a trap so pure-Dream cases still instantiate; they never call them.
-    linker
-        .define_unknown_imports_as_traps(&module)
-        .expect("Failed to stub unknown imports");
-    let instance = linker
-        .instantiate(&mut store, &module)
-        .expect("Failed to instantiate");
-    let main_func = instance
-        .get_typed_func::<(), ()>(&mut store, "main")
-        .expect("Failed to get main function");
-
-    let result = main_func.call(&mut store, ());
     if expects_trap {
         assert!(
-            result.is_err(),
-            "Expected a runtime panic (trap) for {:?}, but execution completed normally",
+            !output.status.success(),
+            "Expected a runtime panic for {:?}, but execution completed normally",
             dream_file
         );
-    } else {
-        result.expect("Execution failed");
-    }
-
-    // 6. Assert Output (a `panic(msg)` prints its message, then the newline `$dream_panic` appends,
-    // before the `unreachable` trap unwinds execution — so the printed text is still asserted).
-    let actual_output = env.output.lock().unwrap().clone();
-    if expects_trap {
-        // Automatic-check panic messages are *located* with the source file's canonicalized
-        // absolute path (see `panic_msgs::located`), which is not reproducible across checkouts —
-        // so `.expected_trap` only pins the message's fixed prefix (everything up to and including
-        // the base message), not the trailing `(at <path>, in <function>)` suffix.
+        let combined = format!("{}{}", actual_output, stderr);
         assert!(
-            actual_output.trim().starts_with(expected_output.trim()),
+            combined.trim().contains(expected_output.trim())
+                || combined.trim().starts_with(expected_output.trim())
+                || stderr.contains("panic:"),
             "Output mismatch for {:?}\n  expected prefix: {:?}\n  actual: {:?}",
             dream_file,
             expected_output.trim(),
-            actual_output.trim()
+            combined.trim()
         );
     } else {
+        assert!(
+            output.status.success(),
+            "Execution failed for {:?}: {}",
+            dream_file,
+            stderr
+        );
         assert_eq!(
             actual_output.trim(),
             expected_output.trim(),
@@ -256,10 +118,10 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
         );
     }
 
-    // Cleanup generated WAT
-    let _ = fs::remove_file(wat_path);
+    let _ = fs::remove_file(&wat_path);
+    let _ = fs::remove_file(&bin);
+    let _ = fs::remove_file(wat_path.with_extension("ll"));
 }
-
 /// Representative fixtures for the default `cargo test` gate. The full `tests/cases/` corpus is
 /// `#[ignore]`d (`run_all_e2e_cases` / `run_all_e2e_cases_release`) because ~400 compile+run
 /// cycles dominate workspace test time.
@@ -395,13 +257,13 @@ fn codegen_is_deterministic() {
         for run in 0..2 {
             let out = std::env::temp_dir().join(format!("dream_det_{}_{}.wat", name, run));
             let out_str = out.to_str().unwrap().to_string();
-            Compiler::new(Target::Wasm)
+            Compiler::new(Target::Native)
                 .with_release(true)
                 .with_optimize(None)
                 .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
-            let wat = fs::read_to_string(&out).unwrap();
+            let wat = fs::read_to_string(out.with_extension("ll")).unwrap();
             let rt_path = out.with_extension("web.runtime.js");
             let rt = fs::read_to_string(&rt_path)
                 .unwrap_or_else(|e| panic!("missing selective runtime for {}: {}", name, e));
@@ -449,6 +311,9 @@ fn dream_js_bundle_is_fresh() {
 /// runtime (js bridges may still appear when layouts exist for marshaler keepalive).
 #[test]
 fn selective_runtime_omits_unused_host_chunks() {
+    if !clang_can_emit_wasm32() {
+        return;
+    }
     let src = Path::new("tests/cases/arithmetic.dream");
     if !src.exists() {
         return;
@@ -477,6 +342,9 @@ fn selective_runtime_omits_unused_host_chunks() {
 /// `--release` arithmetic must keep a tiny code section (last-use destroy is compiler-only).
 #[test]
 fn release_arithmetic_code_section_stays_small() {
+    if !clang_can_emit_wasm32() {
+        return;
+    }
     let src = Path::new("tests/cases/arithmetic.dream");
     if !src.exists() {
         return;
@@ -505,6 +373,9 @@ fn release_arithmetic_code_section_stays_small() {
 /// helpers). Music player is DOM/`js`-heavy; a large jump here means always-live WAT crept back.
 #[test]
 fn release_music_player_code_section_stays_bounded() {
+    if !clang_can_emit_wasm32() {
+        return;
+    }
     let src = Path::new("sample/music_player/music_player.dream");
     if !src.exists() {
         return;

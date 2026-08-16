@@ -25,6 +25,8 @@ dream-abi = { path = "crates/dream-abi" }
 dream-stdlib = { path = "crates/dream-stdlib" }
 dream-sema = { path = "crates/dream-sema" }
 dream-mir = { path = "crates/dream-mir" }
+dream-rt = { path = "crates/dream-rt" }
+dream-llvm = { path = "crates/dream-llvm" }
 bumpalo = "3.20.3"
 # Insertion-ordered map used for the codegen tables whose iteration order reaches emitted
 # `.wat` output, so compilation is reproducible (std `HashMap` randomizes iteration per run).
@@ -117,6 +119,8 @@ members = [
     "crates/dream-stdlib",
     "crates/dream-sema",
     "crates/dream-mir",
+    "crates/dream-rt",
+    "crates/dream-llvm",
     "tooling/dream-lsp",
     "tooling/dreamer",
     "tooling/dream-runner",

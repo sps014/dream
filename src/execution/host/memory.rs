@@ -7,9 +7,16 @@
 //! *not* shared, so it cannot be used here at all. [`shared_bytes`]/[`shared_bytes_mut`] are the
 //! single place that casts `SharedMemory`'s `&[UnsafeCell<u8>]` view to ordinary byte slices.
 
+use super::guest_memory::{read_string_from_slice, GuestMemory};
 use dream_mir::abi;
 use std::slice;
 use wasmtime::*;
+
+impl GuestMemory for SharedMemory {
+    fn guest_bytes(&self) -> &[u8] {
+        shared_bytes(self)
+    }
+}
 
 /// Casts a `SharedMemory`'s `&[UnsafeCell<u8>]` view to an ordinary read-only `&[u8]`.
 ///
@@ -68,17 +75,7 @@ fn read_len_prefix(data: &[u8], base: usize) -> Option<usize> {
 /// (no NUL terminator). A negative or out-of-bounds pointer yields an empty string rather than
 /// panicking.
 pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
-    let data = shared_bytes(memory);
-    if ptr < 0 {
-        return String::new();
-    }
-    let base = ptr as usize;
-    let Some(len) = read_len_prefix(data, base) else {
-        return String::new();
-    };
-    let start = base + STRING_UTF8;
-    let end = start.saturating_add(len).min(data.len());
-    String::from_utf8_lossy(&data[start..end]).into_owned()
+    read_string_from_slice(shared_bytes(memory), ptr)
 }
 
 /// Resolves the caller module's exported linear `memory`, or a wasm trap (`Err`) if it is absent —

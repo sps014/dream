@@ -14,6 +14,7 @@ use dream::driver::wasm_opt::OptLevel;
 use dream::execution::wasm_runner::link_host_functions;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 const ALL_LEVELS: [OptLevel; 7] = [
     OptLevel::O0,
@@ -36,6 +37,21 @@ fn unique_temp_path(name: &str, ext: &str) -> PathBuf {
     path
 }
 
+fn clang_can_emit_wasm32() -> bool {
+    let clang = std::env::var("DREAM_CLANG").unwrap_or_else(|_| "clang".to_string());
+    match Command::new(&clang).args(["-print-targets"]).output() {
+        Ok(o) => {
+            String::from_utf8_lossy(&o.stdout).contains("wasm32")
+                && Command::new("wasm-ld")
+                    .arg("-version")
+                    .output()
+                    .map(|v| v.status.success())
+                    .unwrap_or(false)
+        }
+        Err(_) => false,
+    }
+}
+
 /// Instantiates `bytes` under the same `wasmtime::Config`/host bindings the CLI's `run` command
 /// uses (`src/execution/wasm_runner.rs`) and calls `main`, so a module that merely "validates" but
 /// can't actually be loaded/executed under this project's runtime config still fails the test.
@@ -51,7 +67,9 @@ fn run_wasm_binary(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     linker.define(&mut store, "env", "memory", shared_mem.clone())?;
     linker.define_unknown_imports_as_traps(&module)?;
     let instance = linker.instantiate(&mut store, &module)?;
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "main") {
+    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "dream_user_main") {
+        main_func.call(&mut store, ())?;
+    } else if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "main") {
         main_func.call(&mut store, ())?;
     }
     Ok(())
@@ -60,6 +78,10 @@ fn run_wasm_binary(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 #[ignore = "Binaryen at every -O level; cargo test --workspace -- --ignored"]
 fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
+    if !clang_can_emit_wasm32() {
+        eprintln!("skipping: clang/wasm-ld cannot emit wasm32");
+        return;
+    }
     let dream_file = "tests/cases/collection_literals.dream".to_string();
 
     let plain_wat = unique_temp_path("plain", "wat");

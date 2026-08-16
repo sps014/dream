@@ -1,6 +1,7 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
+use dream::execution::native_runner::execute_native;
 use dream::execution::wasm_runner::execute_wasm;
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
@@ -34,6 +35,11 @@ fn main() -> ExitCode {
     let mut want_web = false;
     let mut want_node = false;
     let mut explicit_target: Option<CompileTargets> = None;
+    let mut llvm_triple: Option<String> = None;
+    let mut llvm_lto: Option<String> = None;
+    let mut llvm_sanitize = false;
+    let mut llvm_mattr: Option<String> = None;
+    let mut llvm_sysroot: Option<String> = None;
     let mut crate_type = CrateType::Bin;
     let mut crate_type_explicit = false;
 
@@ -79,6 +85,46 @@ fn main() -> ExitCode {
             want_web = true;
         } else if arg == "--node" {
             want_node = true;
+        } else if arg == "--llvm" {
+            // LLVM is the only backend; accepted so old invocations still parse.
+        } else if arg == "--triple" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--triple requires an LLVM triple");
+                return ExitCode::FAILURE;
+            };
+            llvm_triple = Some(val.clone());
+        } else if let Some(val) = arg.strip_prefix("--triple=") {
+            llvm_triple = Some(val.to_string());
+        } else if arg == "--lto" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--lto requires none, thin, or full");
+                return ExitCode::FAILURE;
+            };
+            llvm_lto = Some(val.clone());
+        } else if let Some(val) = arg.strip_prefix("--lto=") {
+            llvm_lto = Some(val.to_string());
+        } else if arg == "--sanitize" || arg == "--sanitize=address" {
+            llvm_sanitize = true;
+        } else if arg == "--mattr" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--mattr requires a feature list");
+                return ExitCode::FAILURE;
+            };
+            llvm_mattr = Some(val.clone());
+        } else if let Some(val) = arg.strip_prefix("--mattr=") {
+            llvm_mattr = Some(val.to_string());
+        } else if arg == "--sysroot" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--sysroot requires a path");
+                return ExitCode::FAILURE;
+            };
+            llvm_sysroot = Some(val.clone());
+        } else if let Some(val) = arg.strip_prefix("--sysroot=") {
+            llvm_sysroot = Some(val.to_string());
         } else if arg == "--target" {
             i += 1;
             let Some(val) = args.get(i) else {
@@ -287,12 +333,13 @@ fn main() -> ExitCode {
     info!("========================");
     info!("Compiling file: {}", file_name);
 
-    // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides. Do not call
-    // `with_optimize(None)` after release — that would clear the default.
-    // Always emit `.abi.json`: JS hosts need imports/exports, and native `run` / `debug-adapter`
-    // load `abi.gpu` for `@compute` / shader metadata.
     let emit_abi = true;
-    let mut compiler = Compiler::new(Target::Wasm)
+    let target = if want_web || debug_adapter {
+        Target::Wasm
+    } else {
+        Target::Native
+    };
+    let mut compiler = Compiler::new(target)
         .with_release(release)
         .with_debug_info(debug_info)
         .with_runtimes(runtimes)
@@ -302,6 +349,45 @@ fn main() -> ExitCode {
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
+    let mut opts = dream_llvm::CodegenOptions::default();
+    if want_web || debug_adapter {
+        opts.triple = dream_llvm::Triple::parse("wasm32-unknown-unknown")
+            .expect("wasm32-unknown-unknown");
+    }
+    if let Some(t) = llvm_triple {
+        match dream_llvm::Triple::parse(&t) {
+            Ok(tr) => opts.triple = tr,
+            Err(e) => {
+                error!("{}", e);
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    if release {
+        opts = opts.release();
+    }
+    if let Some(lto) = llvm_lto {
+        opts.lto = match lto.as_str() {
+            "none" => dream_llvm::Lto::None,
+            "thin" => dream_llvm::Lto::Thin,
+            "full" => dream_llvm::Lto::Full,
+            other => {
+                error!("unknown --lto '{}': expected none, thin, or full", other);
+                return ExitCode::FAILURE;
+            }
+        };
+    }
+    if llvm_sanitize {
+        opts.sanitize = dream_llvm::Sanitize::Address;
+    }
+    if let Some(m) = llvm_mattr {
+        opts.mattr = m;
+    }
+    if let Some(s) = llvm_sysroot {
+        opts.sysroot = Some(s);
+    }
+    opts.debug_info = debug_info;
+    compiler = compiler.with_llvm(opts);
     let out_path = match get_path_from_file_path(file_name, release) {
         Some(path) => path,
         None => {
@@ -338,10 +424,20 @@ fn main() -> ExitCode {
             }
 
             if run_after_compile {
-                info!("Executing via Wasmtime...");
-                if let Err(e) = execute_wasm(&out_path) {
-                    error!("Execution failed: {}", e);
-                    return ExitCode::FAILURE;
+                if want_web {
+                    info!("Executing via Wasmtime...");
+                    let wasm = Path::new(&out_path).with_extension("wasm");
+                    if let Err(e) = execute_wasm(wasm.to_str().unwrap_or(&out_path)) {
+                        error!("Execution failed: {}", e);
+                        return ExitCode::FAILURE;
+                    }
+                } else {
+                    let bin = Path::new(&out_path).with_extension("out");
+                    info!("Executing native binary...");
+                    if let Err(e) = execute_native(&bin) {
+                        error!("Execution failed: {}", e);
+                        return ExitCode::FAILURE;
+                    }
                 }
             }
             ExitCode::SUCCESS
@@ -356,7 +452,7 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--triple TRIPLE] [--lto none|thin|full] [--sanitize=address] [--mattr ATTRS] [--sysroot PATH] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir>",
         program
     );
     error!("  -v, --verbose         Print progress information");
@@ -373,6 +469,11 @@ fn print_usage(program: &str) {
     error!(
         "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
     );
+    error!("  --triple TRIPLE       LLVM target (default host; wasm32-unknown-unknown with --web)");
+    error!("  --lto none|thin|full  Link-time optimization (thin default with --release)");
+    error!("  --sanitize=address    ASan on native LLVM + dream-rt");
+    error!("  --mattr ATTRS         WASM LLVM features (default +bulk-memory,+simd128)");
+    error!("  --sysroot PATH        Sysroot for cross-link");
     error!(
         "  --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)"
     );
@@ -419,10 +520,7 @@ fn find_project_root(file_path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Derives the output `.wat` path.
-///
-/// When a `dream.toml` encloses the source file, artifacts go under
-/// `target/debug/` or `target/release/` at the project root. Otherwise they sit beside the source.
+/// Stem path for compiler artifacts (`.ll` / `.out` / `.wasm` via `with_extension`).
 fn get_path_from_file_path(file_path: &str, release: bool) -> Option<String> {
     let path = Path::new(file_path);
     let file_stem = path.file_stem()?.to_str()?;
@@ -432,6 +530,6 @@ fn get_path_from_file_path(file_path: &str, release: bool) -> Option<String> {
     } else {
         path.parent().unwrap_or_else(|| Path::new("")).to_path_buf()
     };
-    let result = out_dir.join(format!("{}.wat", file_stem));
+    let result = out_dir.join(format!("{}.bin", file_stem));
     Some(result.to_str()?.to_string())
 }

@@ -23,6 +23,8 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
 | 11 | [Nim-hard ARC](./11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
+| 12 | [LLVM backend](./12-llvm-backend.md) | Target-neutral slim MIR + `dream-rt`; LLVM isel for wasm32 and native triples |
+| 13 | [LLVM WIP status](./13-llvm-wip-status.md) | Continuation log: wasmtime hosts not yet in `dream-rt`, known bugs, next steps |
 
 ## Why a multi-pass architecture
 
@@ -42,14 +44,17 @@ flowchart LR
     AST --> SEMA[Semantic Analyzer]
     SEMA --> HIR[Typed HIR]
     HIR --> MIR[CFG MIR]
-    MIR --> OPT[Optimization passes]
-    OPT --> WAT[MIR to WAT backend]
+    MIR --> OPT[RC plus slim MIR passes]
+    OPT --> WAT[MIR to WAT]
+    OPT --> LLVM[MIR to LLVM IR]
     WAT --> WASM[.wasm + .abi.json]
+    LLVM --> NATIVE[native / wasm32 via clang]
 
     TYPES[(Type system: TypeInterner / DefTable)] -.feeds.-> SEMA
     TYPES -.feeds.-> HIR
     TYPES -.feeds.-> MIR
     TYPES -.feeds.-> WAT
+    TYPES -.feeds.-> LLVM
 ```
 
 Each arrow is a *total* lowering: the producer records everything the consumer needs, so the consumer never reaches backward. Types are interned once and referenced by a small integer (`TypeId`), so equality is `==` and there is no mangling.
@@ -67,14 +72,16 @@ Dream/
 │   ├── dream-abi/                  Attributes, intrinsics, JS ABI (shared by sema + MIR)
 │   ├── dream-stdlib/               Embedded prelude + package registry
 │   ├── dream-sema/                 Analyzer + tables + hir_emit (no MIR dependency)
-│   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit + runtime/
+│   ├── dream-mir/                  CFG MIR, RC passes, relooper, WAT emit + runtime/
+│   ├── dream-rt/                   Portable ARC heap (C) for LLVM native + wasm32
+│   ├── dream-llvm/                 MIR → LLVM IR + clang/lld driver
 ├── src/                            Root `dream`: driver, CLI, execution only
 │   ├── driver/                     Pipeline orchestration, source loading, errors
 │   └── execution/                  (feature "native") wasmtime runner
 └── docs/internals/                 ← you are here
 ```
 
-The `dream-types → dream-hir → dream-mir` pipeline is the **only** backend. (An earlier AST-walking `codegen/` backend was replaced by it and deleted.)
+The `dream-types → dream-hir → dream-mir` pipeline is the language IR. Codegen is WAT (default, until the LLVM bench gate) or LLVM (`dream-llvm` + `dream-rt`).
 
 ### Module conventions
 
@@ -96,6 +103,8 @@ flowchart TD
     stdlib[dream-stdlib]
     sema[dream-sema]
     mir[dream-mir]
+    rt[dream-rt]
+    llvm[dream-llvm]
     dream[dream driver CLI]
     lsp[dream-lsp]
 
@@ -115,8 +124,12 @@ flowchart TD
     mir --> types
     mir --> abi
     mir --> stdlib
+    llvm --> mir
+    llvm --> types
     dream --> sema
     dream --> mir
+    dream --> llvm
+    dream --> rt
     dream --> stdlib
     dream --> abi
     lsp --> dream

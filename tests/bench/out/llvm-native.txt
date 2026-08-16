@@ -1,0 +1,5 @@
+ERROR Compilation failed: clang exited with status 1: tests/bench/microbenches.ll:2194:44: error: '%t41' defined with type 'i32' but expected 'i64'
+ 2194 |   call void @dream_store_i64(i32 %t43, i64 %t41)
+      |                                            ^
+1 error generated.
+

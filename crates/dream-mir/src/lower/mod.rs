@@ -96,10 +96,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
 /// Lowers a single function.
 pub fn lower_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {
     if func.is_async {
-        // The pipeline representation of an async function is a stub carrying the HIR body; the poll
-        // state machine is lowered from it at emit time (see [`lower_async_poll_body`]), where each
-        // `await` becomes a CFG suspend point — so no statement-position normalization is needed.
-        return lower_async_stub(func);
+        return lower_async_poll_body(func, interner);
     }
     lower_sync_function(func, interner)
 }
@@ -129,17 +126,6 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
         locals.insert(decl.id.0, l);
     }
     (b, locals)
-}
-
-/// Preserves the HIR body for the async coroutine transform; the poll/constructor are emitted
-/// separately (see [`crate::async_emit`]).
-fn lower_async_stub(func: &HFunction) -> MirFunction {
-    let (mut b, _locals) = init_builder(func, true);
-    b.terminate(Terminator::Return(None));
-    let mut f = b.finish();
-    f.ret = func.ret;
-    f.hir_fn = Some(func.clone());
-    f
 }
 
 fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {

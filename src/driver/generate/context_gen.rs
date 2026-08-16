@@ -124,9 +124,10 @@ fn run_context_body(
     let snap_file = write_snapshot_tempfile(&gen.name, snapshot).map_err(HarnessError::General)?;
 
     std::env::set_var(SNAPSHOT_ENV, snap_file.to_string_lossy().as_ref());
-    let wat_path_str = wat_path.to_string_lossy().into_owned();
-    let output =
-        crate::execution::wasm_runner::execute_wasm_capturing(&wat_path_str).map_err(|e| {
+    let output = crate::execution::native_runner::execute_native_capturing(
+        &wat_path.with_extension("out"),
+    )
+    .map_err(|e| {
             HarnessError::General(format!(
                 "generator '{}': failed to run generated harness: {e}",
                 gen.name
@@ -197,7 +198,7 @@ fn compile_harness(src_path: &Path) -> Result<PathBuf, String> {
         std::process::id(),
         unique
     ));
-    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Native)
         .with_skip_generators(true)
         .with_release(true);
     let src = src_path

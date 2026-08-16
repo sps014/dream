@@ -1,0 +1,15 @@
+[package]
+name = "dream-llvm"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_llvm"
+path = "src/lib.rs"
+
+[dependencies]
+dream-hir = { path = "../dream-hir" }
+dream-mir = { path = "../dream-mir" }
+dream-rt = { path = "../dream-rt" }
+dream-types = { path = "../dream-types" }
+indexmap = "2"

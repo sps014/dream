@@ -14,6 +14,7 @@
 #[cfg(feature = "c-ffi")]
 mod c_ffi;
 mod console;
+mod guest_memory;
 mod crypto;
 mod datetime;
 #[cfg(feature = "c-ffi")]
@@ -33,6 +34,7 @@ mod worker;
 
 #[cfg(feature = "c-ffi")]
 pub use c_ffi::{attach_c_abi_from_json, attach_c_abi_from_wat_path, link_c_ffi_imports};
+pub use guest_memory::{read_string_from_guest, read_string_from_slice, GuestMemory};
 pub use console::{enable_ansi_support, link_console_functions};
 pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;

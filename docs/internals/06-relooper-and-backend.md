@@ -119,6 +119,8 @@ flowchart LR
 
 The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are the hand-written `.wat` files in `src/mir/runtime/`, embedded via `include_str!` and stitched into every module with their `{TAG_*}`/`{minus}` placeholders resolved from `mir::abi`.
 
+The WAT emitter is the **default** until the LLVM microbench gate in [12-llvm-backend.md](./12-llvm-backend.md) passes. `dream --llvm` lowers the same MIR CFG to LLVM IR (`crates/dream-llvm`) and links `dream-rt`. Relooper is not used on that path.
+
 ## Determinism in the backend
 
 The emitter must be a pure function of the MIR. Iterate `Vec`s in order; never iterate a `std::HashMap`. Any lookup tables you introduce (string pool, function index map) must be `IndexMap`/`BTreeMap` so two runs emit identical WAT. The `codegen_is_deterministic` e2e test enforces this.

@@ -3,27 +3,31 @@
 mod common;
 use common::*;
 
-fn count_calls(wat: &str, name: &str) -> usize {
-    let needle = format!("call ${}", name);
-    wat.lines()
+fn count_calls(ir: &str, name: &str) -> usize {
+    ir.lines()
         .filter(|l| {
             let t = l.trim();
-            !t.starts_with(";;") && t.contains(&needle)
+            !t.starts_with(';') && t.contains(&format!("@{}", name)) && t.contains("call")
         })
         .count()
 }
 
-fn retain_release_counts(wat: &str) -> (usize, usize) {
-    let retains = count_calls(wat, "retain")
-        + count_calls(wat, "retain_shared")
-        + count_calls(wat, "js_retain");
-    let releases = wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $release")
-        })
-        .count();
+fn llvm_fn_ir<'a>(ir: &'a str, name: &str) -> Option<&'a str> {
+    let needle = format!("@{}(", name);
+    ir.split("\ndefine ").find(|chunk| {
+        chunk
+            .split('{')
+            .next()
+            .map(|sig| sig.contains(&needle))
+            .unwrap_or(false)
+    })
+}
+
+fn retain_release_counts(ir: &str) -> (usize, usize) {
+    let retains = count_calls(ir, "dream_retain")
+        + count_calls(ir, "dream_retain_shared")
+        + count_calls(ir, "d_js_retain");
+    let releases = count_calls(ir, "dream_release") + count_calls(ir, "d_js_release");
     (retains, releases)
 }
 
@@ -112,10 +116,7 @@ fn rc_golden_field_walk_near_zero_retains() {
     "#;
     let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
     // Count retains inside the walk function body only (between its func header and the next).
-    let walk_wat = wat
-        .split("(func $")
-        .find(|s| s.starts_with("walk") || s.contains("walk"))
-        .unwrap_or(&wat);
+    let walk_wat = llvm_fn_ir(&wat, "d_walk").unwrap_or_else(|| llvm_fn_ir(&wat, "d_main").unwrap_or(&wat));
     let (retains, _) = retain_release_counts(walk_wat);
     assert!(
         retains <= 2,
@@ -173,12 +174,12 @@ fn rc_golden_js_rebuild_emits_js_release() {
             rebuild();
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
-    let rebuild = wat
-        .split("(func $")
-        .find(|s| s.starts_with("rebuild"))
-        .unwrap_or(&wat);
-    let js_rel = count_calls(rebuild, "js_release");
+    let ir = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
+    let rebuild = ir
+        .split("define ")
+        .find(|s| s.contains("@d_rebuild"))
+        .unwrap_or(&ir);
+    let js_rel = count_calls(rebuild, "d_js_release");
     assert!(
         js_rel >= 1,
         "rebuild should js_release temps at last use (got {}):\n{}",

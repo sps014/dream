@@ -22,31 +22,29 @@ fn list_insert_inlines_span_copy_from() {
     let src_s = src.to_str().unwrap().to_string();
     let wat_s = wat_path.to_str().unwrap().to_string();
 
-    Compiler::new(Target::Wasm)
+    Compiler::new(Target::Native)
         .with_release(true)
         .compile(&src_s, &wat_s)
         .expect("list_insert should compile under --release");
 
-    let wat = fs::read_to_string(&wat_path).expect("wat written");
+    let wat = fs::read_to_string(wat_path.with_extension("ll")).expect("ll written");
     let _ = fs::remove_file(&wat_path);
 
     assert!(
-        !wat.contains("copy_from"),
+        !wat.contains("@d_Span_int_copy_from"),
         "Span.copy_from should be inlined away under --release:\n{}",
         wat.lines()
-            .filter(|l| l.contains("copy_from") || l.contains("Span"))
+            .filter(|l| l.contains("copy_from") || l.contains("Span_int"))
             .take(40)
             .collect::<Vec<_>>()
             .join("\n")
     );
     assert!(
-        wat.contains("memory.copy"),
-        "unmanaged List.insert path should open-code memory.copy"
+        wat.contains("dream_memcpy") || wat.contains("llvm.memcpy"),
+        "unmanaged List.insert path should open-code a memcpy"
     );
-    // The insert helper itself should be gone (inlined into main); only constructor leftovers for
-    // temporary Span construction may remain.
     assert!(
-        !wat.contains("(func $List_int_insert"),
+        !wat.contains("define void @d_List_int_insert"),
         "List_int_insert should be inlined into main"
     );
 }

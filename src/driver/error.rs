@@ -15,6 +15,8 @@ pub enum CompileError {
     Generator,
     /// An I/O failure during the pipeline (reading sources, writing artifacts).
     Io(std::io::Error),
+    /// LLVM/clang driver failure (missing clang, bad triple, link error).
+    Backend(String),
     /// Code generation hit an internal invariant violation (see `crate::internal_error!`) - a
     /// compiler bug on an otherwise-valid program, not a problem with the user's source. Caught at
     /// the top of [`crate::driver::compiler::Compiler::compile`] so it surfaces as a clean message
@@ -29,6 +31,7 @@ impl fmt::Display for CompileError {
             CompileError::Semantic => write!(f, "Semantic errors found"),
             CompileError::Generator => write!(f, "Source generator errors found"),
             CompileError::Io(e) => write!(f, "{}", e),
+            CompileError::Backend(msg) => write!(f, "{}", msg),
             CompileError::Internal(msg) => write!(f, "{}", msg),
         }
     }

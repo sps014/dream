@@ -10,6 +10,21 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 
+fn clang_can_emit_wasm32() -> bool {
+    let clang = std::env::var("DREAM_CLANG").unwrap_or_else(|_| "clang".to_string());
+    match Command::new(&clang).args(["-print-targets"]).output() {
+        Ok(o) => {
+            String::from_utf8_lossy(&o.stdout).contains("wasm32")
+                && Command::new("wasm-ld")
+                    .arg("-version")
+                    .output()
+                    .map(|v| v.status.success())
+                    .unwrap_or(false)
+        }
+        Err(_) => false,
+    }
+}
+
 /// A tiny two-function program so the call stack has depth: a breakpoint inside `add` should show
 /// both `add` and `main`.
 const PROGRAM: &str = r#"import system;
@@ -156,6 +171,10 @@ fn read_messages(stdout: ChildStdout, tx: mpsc::Sender<serde_json::Value>) {
 #[test]
 #[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_breakpoint_stack_variables_step_continue() {
+    if !clang_can_emit_wasm32() {
+        eprintln!("skipping: clang/wasm-ld cannot emit wasm32 (DAP is wasmtime + dream_debug)");
+        return;
+    }
     // Write the program to a unique temp file (the adapter compiles it and emits sibling artifacts).
     let dir = std::env::temp_dir().join(format!("dream_dap_test_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -309,6 +328,10 @@ async fun main(): void {
 #[test]
 #[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_async_breakpoint_on_branch_with_locals() {
+    if !clang_can_emit_wasm32() {
+        eprintln!("skipping: clang/wasm-ld cannot emit wasm32 (DAP is wasmtime + dream_debug)");
+        return;
+    }
     let (dir, source_path) = write_temp_program("async", ASYNC_PROGRAM);
 
     // Line 16 is the `if (sum > 5)` header inside the async `main`.
@@ -381,6 +404,10 @@ async fun main(): void {
 #[test]
 #[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_worker_breakpoint_stops_worker_thread() {
+    if !clang_can_emit_wasm32() {
+        eprintln!("skipping: clang/wasm-ld cannot emit wasm32 (DAP is wasmtime + dream_debug)");
+        return;
+    }
     let (dir, source_path) = write_temp_program("worker", WORKER_PROGRAM);
 
     // Line 8 (`acc = acc + i;`) is inside `work`, which executes only on the worker thread.

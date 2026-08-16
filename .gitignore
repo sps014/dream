@@ -7,6 +7,8 @@ site/
 # Generated WASM/GPU artifacts emitted by the compiler/tests (e.g. tests/cases, sample/interop,
 # and root scratch files). Hand-written runtime assets under src/ are NOT generated and are
 # re-included below.
+*.ll
+*.out
 *.wat
 *.wasm
 *.abi.json

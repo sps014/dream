@@ -5,7 +5,6 @@
 
 #![allow(dead_code)]
 
-use dream::execution::host;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::Hir;
 use dream_sema::analyzer::Analyzer;
@@ -65,7 +64,7 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        (dream_mir::emit::emit_program(&mir, interner), count)
+        (dream_llvm::emit_ir(&mir, interner, &dream_llvm::CodegenOptions::default()), count)
     })
 }
 
@@ -73,8 +72,8 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
 /// `print_*` imports wired to a capture buffer, runs the exported `entry`, and returns everything it
 /// printed. This exercises the *runtime* — allocator, string ABI, and `*_to_string` — for real,
 /// rather than only asserting the emitted text assembles.
-pub fn run_and_capture(code: &str, entry: &str) -> String {
-    run_wat(&emit_hir_to_module(code), entry)
+pub fn run_and_capture(code: &str, _entry: &str) -> String {
+    run_llvm_ir(&emit_hir_to_module(code))
 }
 
 /// Like [`emit_hir_to_module`] but runs [`RcInsertion`] first, so `Retain`/`Release` statements are
@@ -86,97 +85,38 @@ pub fn emit_hir_to_module_rc(code: &str) -> String {
 }
 
 /// Compiles `code` with RC insertion enabled and runs it, capturing output (see [`run_and_capture`]).
-pub fn run_and_capture_rc(code: &str, entry: &str) -> String {
-    run_wat(&emit_hir_to_module_rc(code), entry)
+pub fn run_and_capture_rc(code: &str, _entry: &str) -> String {
+    run_llvm_ir(&emit_hir_to_module_rc(code))
 }
 
-/// Instantiates a WAT module under wasmtime with the host `print_*` imports wired to a capture
-/// buffer, runs the exported `entry`, and returns everything it printed. This exercises the *runtime*
-/// — allocator, string ABI, `*_to_string`, and deep release — for real, not just that it assembles.
-pub fn run_wat(wat: &str, entry: &str) -> String {
-    use std::sync::{Arc, Mutex};
-    use wasmtime::*;
+fn run_llvm_ir(ir: &str) -> String {
+    let dir = std::env::temp_dir();
+    let out = dir.join(format!(
+        "dream_unit_{}_{}.out",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    dream_llvm::compile_ir(ir, &out, &dream_llvm::CodegenOptions::default())
+        .unwrap_or_else(|e| panic!("clang failed: {}", e));
+    let output = std::process::Command::new(&out)
+        .output()
+        .unwrap_or_else(|e| panic!("run {}: {e}", out.display()));
+    let _ = std::fs::remove_file(&out);
+    let _ = std::fs::remove_file(out.with_extension("ll"));
+    assert!(
+        output.status.success(),
+        "native run failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
 
-    let wasm = wat::parse_str(wat).expect("module should assemble");
-    let config = host::threaded_wasm_config();
-    let engine = Engine::new(&config).expect("engine should build");
-    let module = Module::new(&engine, &wasm).expect("module should compile");
-    let shared_mem =
-        host::shared_memory_for(&engine, &module).expect("module should import env.memory");
-
-    let out = Arc::new(Mutex::new(String::new()));
-    let mut store = Store::new(&engine, out.clone());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
-    store.set_epoch_deadline(u64::MAX);
-    let mut linker = Linker::new(&engine);
-    linker
-        .define(&mut store, "env", "memory", shared_mem.clone())
-        .expect("failed to define shared memory");
-
-    linker
-        .func_wrap(
-            "env",
-            "print_int",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: i32| {
-                c.data().lock().unwrap().push_str(&v.to_string());
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_char",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: i32| {
-                if let Some(ch) = char::from_u32(v as u32) {
-                    c.data().lock().unwrap().push(ch);
-                }
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_float",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: f32| {
-                c.data().lock().unwrap().push_str(&v.to_string());
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_double",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: f64| {
-                c.data().lock().unwrap().push_str(&v.to_string());
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_string",
-            |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
-                let mem = c
-                    .get_export("memory")
-                    .unwrap()
-                    .into_shared_memory()
-                    .unwrap();
-                let s = host::read_string_from_memory(&mem, ptr);
-                c.data().lock().unwrap().push_str(&s);
-            },
-        )
-        .unwrap();
-
-    let instance = linker
-        .instantiate(&mut store, &module)
-        .expect("module should instantiate");
-    let func = instance
-        .get_typed_func::<(), ()>(&mut store, entry)
-        .unwrap_or_else(|_| panic!("module should export `{}`", entry));
-    func.call(&mut store, ())
-        .expect("entry should run without trapping");
-    let captured = out.lock().unwrap().clone();
-    captured
+/// Runs compiled LLVM IR (legacy name from the WAT harness).
+pub fn run_wat(ir: &str, _entry: &str) -> String {
+    run_llvm_ir(ir)
 }
 
 /// Compiles through the production-like MIR pipeline: RC insertion, module optimize (inline), then
@@ -189,7 +129,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_llvm::emit_ir(&mir, interner, &dream_llvm::CodegenOptions::default())
     })
 }
 
@@ -198,7 +138,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
 pub fn emit_hir_to_module(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_llvm::emit_ir(&mir, interner, &dream_llvm::CodegenOptions::default())
     })
 }
 
@@ -213,7 +153,7 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
         for f in &mut mir.functions {
             dream_mir::passes::RcInsertion.run(f, interner);
         }
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_llvm::emit_ir(&mir, interner, &dream_llvm::CodegenOptions::default())
     })
 }
 

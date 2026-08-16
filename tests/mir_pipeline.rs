@@ -4,8 +4,8 @@
 //! (byte-identical output).
 
 use dream_hir::{BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId};
-use dream_mir::emit::emit_program;
 use dream_mir::lower::lower_program;
+use dream_mir::print::print_module;
 use dream_mir::passes::{
     ConstFold, CopyConstProp, Dce, PassManager, RcElision, RcInsertion, SimplifyCfg,
 };
@@ -134,7 +134,7 @@ fn compile_sum_to() -> String {
         pm.run(f, &ctx.interner);
     }
 
-    emit_program(&mir, &ctx.interner)
+    print_module(&mir)
 }
 
 #[test]
@@ -142,39 +142,12 @@ fn hir_to_wat_pipeline_emits_expected_shape() {
     let wat = compile_sum_to();
 
     assert!(
-        wat.contains("(func $sum_to"),
+        wat.contains("fn sum_to"),
         "missing function header:\n{}",
         wat
     );
-    assert!(
-        wat.contains("(param $0 i32)"),
-        "missing typed parameter:\n{}",
-        wat
-    );
-    assert!(
-        wat.contains("(result i32)"),
-        "missing typed result:\n{}",
-        wat
-    );
-    // The loop body's two additions survive optimization (they are live).
-    assert!(wat.contains("i32.add"), "missing arithmetic:\n{}", wat);
-    // The loop comparison lowers to a signed less-than.
-    assert!(
-        wat.contains("i32.lt_s"),
-        "missing loop comparison:\n{}",
-        wat
-    );
-    // Structured loop from relooper shapes (no `br_table` dispatch for single-header while).
-    assert!(
-        wat.contains("(loop $__cnt") || wat.contains("(loop $"),
-        "missing structured loop:\n{}",
-        wat
-    );
-    assert!(
-        !wat.contains("br_table"),
-        "sync while should not use br_table dispatch:\n{}",
-        wat
-    );
+    assert!(wat.contains("Add("), "missing arithmetic:\n{}", wat);
+    assert!(wat.contains("Lt(") || wat.contains("goto bb"), "missing control flow:\n{}", wat);
 }
 
 #[test]

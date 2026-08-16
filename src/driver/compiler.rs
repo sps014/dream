@@ -2,7 +2,7 @@ use bumpalo::Bump;
 use std::fs;
 use tracing::{info, warn};
 
-use crate::driver::abi::emit_wasm_and_abi;
+use crate::driver::abi::emit_abi_sidecars;
 use crate::driver::error::CompileError;
 use crate::driver::generate::run_generators;
 use crate::driver::js_runtime::JsRuntimeTarget;
@@ -15,20 +15,27 @@ use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
 
+#[derive(Clone, Copy)]
 pub enum Target {
+    /// Host LLVM triple (desktop `dream run`).
+    Native,
+    /// `wasm32-unknown-unknown` via LLVM (`--web` / playground).
     Wasm,
+}
+
+fn llvm_opts_for(target: Target) -> dream_llvm::CodegenOptions {
+    let mut opts = dream_llvm::CodegenOptions::default();
+    if matches!(target, Target::Wasm) {
+        opts.triple =
+            dream_llvm::Triple::parse("wasm32-unknown-unknown").expect("wasm32-unknown-unknown");
+    }
+    opts
 }
 
 /// Orchestrates the compilation pipeline: source loading (delegated to `source_loader`/`prelude`),
 /// semantic analysis, code generation, and artifact emission (delegated to `abi`). Diagnostic
 /// rendering is delegated to the `diagnostics` module.
 pub struct Compiler {
-    target: Target,
-    /// When `true` (the default), codegen emits allocator instrumentation so the
-    /// `Debug.live_objects()` / `Debug.total_allocations()` probes report real values, and keeps
-    /// every runtime helper in the WAT (skips structural dead-function elimination). Release builds
-    /// (`--release` / [`Compiler::with_release`]) turn this off for a trimmed, uninstrumented module.
-    debug: bool,
     /// When `true`, the compiler threads source-line info through HIR/MIR and the backend emits
     /// source-line hooks + a `.dbg.json` source map for the interactive debugger. Off by default;
     /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
@@ -52,13 +59,13 @@ pub struct Compiler {
     emit_abi: bool,
     /// Library vs binary; libs reject a primary-file `main`.
     crate_type: dream_sema::analyzer::CrateType,
+    /// When set, emit LLVM IR and invoke clang instead of WAT.
+            llvm: dream_llvm::CodegenOptions,
 }
 
 impl Compiler {
     pub fn new(target: Target) -> Self {
         Self {
-            target,
-            debug: true,
             debug_info: false,
             optimize: None,
             skip_generators: false,
@@ -66,6 +73,7 @@ impl Compiler {
             compile_targets: CompileTargets::native_only(),
             emit_abi: true,
             crate_type: dream_sema::analyzer::CrateType::Bin,
+            llvm: llvm_opts_for(target),
         }
     }
 
@@ -75,15 +83,13 @@ impl Compiler {
         self
     }
 
-    /// Builder: when `on` is `true`, produce a release module — uninstrumented allocator, structural
-    /// WAT dead-function elimination (`strip_dead_functions`), and wasm-opt at
-    /// [`OptLevel::RELEASE_DEFAULT`] unless a level was already set via [`Compiler::with_optimize`].
-    /// When `false` (the default from [`Compiler::new`]), keep allocator probes and the full runtime
-    /// (does not clear a previously configured optimize level).
+    /// Builder: release LLVM (`-O3`, thin LTO) plus wasm-opt on wasm32 unless `-O` already set.
     pub fn with_release(mut self, on: bool) -> Self {
-        self.debug = !on;
-        if on && self.optimize.is_none() {
-            self.optimize = Some(OptLevel::RELEASE_DEFAULT);
+        if on {
+            self.llvm = self.llvm.clone().release();
+            if self.optimize.is_none() {
+                self.optimize = Some(OptLevel::RELEASE_DEFAULT);
+            }
         }
         self
     }
@@ -92,6 +98,7 @@ impl Compiler {
     /// interactive debugger.
     pub fn with_debug_info(mut self, on: bool) -> Self {
         self.debug_info = on;
+        self.llvm.debug_info = on;
         self
     }
 
@@ -154,6 +161,12 @@ impl Compiler {
     /// Builder: `lib` rejects a top-level `main` in the primary file; `bin` is the default.
     pub fn with_crate_type(mut self, crate_type: dream_sema::analyzer::CrateType) -> Self {
         self.crate_type = crate_type;
+        self
+    }
+
+    /// Builder: overlay LLVM flags (`--triple`, `--lto`, ASan, …).
+    pub fn with_llvm(mut self, opts: dream_llvm::CodegenOptions) -> Self {
+        self.llvm = opts;
         self
     }
 
@@ -281,8 +294,6 @@ impl Compiler {
         // its `TypeId`s, so both must come from this same analyzer instance).
         let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
         let interner = analyzer.interner();
-        let target = &self.target;
-        let debug = self.debug;
         let debug_info = self.debug_info;
 
         // Codegen (MIR lowering/optimization/emission) treats certain lookups - a type's layout, an
@@ -312,6 +323,11 @@ impl Compiler {
             // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
             // user variables and per-function call frames survive for the debugger; release builds
             // use the full optimizing pipeline.
+            let llvm = {
+                let mut llvm = self.llvm.clone();
+                llvm.debug_info = debug_info;
+                llvm
+            };
             dream_mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
             let pipeline = if debug_info {
                 dream_mir::passes::PassManager::debug_pipeline()
@@ -326,53 +342,52 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let (text, debug_map) = match target {
-                Target::Wasm => dream_mir::emit::emit_module_with_debug(
-                    &mir,
-                    interner,
-                    debug,
-                    debug_info,
-                    debug
-                        || debug_info
-                        || matches!(self.crate_type, dream_sema::analyzer::CrateType::Lib),
-                ),
+            let ir = dream_llvm::emit_ir(&mir, interner, &llvm);
+            let dbg = if debug_info {
+                Some(dream_llvm::debug_map_json(&mir, interner))
+            } else {
+                None
             };
-            (text, debug_map, live_imports)
+            (ir, live_imports, llvm, dbg)
         }));
         std::panic::set_hook(previous_hook);
         drop(hook_guard);
 
-        let (text, debug_map, live_imports) = codegen_result.map_err(|panic_payload| {
+        let (ir, live_imports, opts, dbg) = codegen_result.map_err(|panic_payload| {
             let message = panic_message(&panic_payload);
             render_internal_error(&message);
             CompileError::Internal(message)
         })?;
 
         info!("finished code generation");
-        fs::write(out_path, &text)?;
-        info!("created file: {}", out_path);
-
-        // Emit the debug-info source map next to the `.wat` when debug-info is enabled, so the
-        // interactive debugger can map hook calls back to source lines/variables.
-        if let Some(map) = debug_map {
-            let map_path = debug_map_path(out_path);
-            fs::write(&map_path, map.to_json())?;
-            info!("created debug map: {}", map_path);
+        let ll_path = std::path::Path::new(out_path).with_extension("ll");
+        fs::write(&ll_path, &ir)?;
+        info!("created file: {}", ll_path.display());
+        let bin = if opts.triple.is_wasm() {
+            std::path::Path::new(out_path).with_extension("wasm")
+        } else {
+            std::path::Path::new(out_path).with_extension("out")
+        };
+        dream_llvm::compile_ir(&ir, &bin, &opts)
+            .map_err(|e| CompileError::Backend(e.to_string()))?;
+        info!("created file: {}", bin.display());
+        if let Some(dbg) = dbg {
+            let dbg_path = std::path::Path::new(out_path).with_extension("dbg.json");
+            fs::write(&dbg_path, dbg)?;
+            info!("created file: {}", dbg_path.display());
         }
 
-        // Also emit a binary `.wasm` (what browsers/Node load) and, when requested, an `.abi.json`
-        // sidecar describing live extern imports and exports so the JS runtime can auto-marshal
-        // values. GPU shaders become a sibling `.wgsl` (+ `"gpu"` ABI section when ABI is on).
-        emit_wasm_and_abi(
+        emit_abi_sidecars(
             out_path,
-            &text,
             ast.get_root(),
             &gpu,
             &live_imports,
             self.emit_abi,
         )?;
+        if opts.triple.is_wasm() && self.emit_abi {
+            crate::driver::abi::embed_abi_in_wasm(out_path)?;
+        }
 
-        // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`).
         if !self.runtimes.is_empty() {
             crate::driver::js_runtime::emit_selective_runtimes(
                 out_path,
@@ -382,17 +397,12 @@ impl Compiler {
         }
 
         if let Some(level) = self.optimize {
-            let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
-            // Non-fatal, matching the existing `.wasm` assembly failure handling in
-            // `emit_wasm_and_abi`: the unoptimized `.wasm`/`.wat` are already valid output.
-            match crate::driver::wasm_opt::optimize_wasm_file(&wasm_path, level) {
-                Ok(()) => info!("optimized file with wasm-opt: {}", wasm_path.display()),
-                Err(e) => warn!("could not run wasm-opt on {}: {}", wasm_path.display(), e),
+            if opts.triple.is_wasm() {
+                match crate::driver::wasm_opt::optimize_wasm_file(&bin, level) {
+                    Ok(()) => info!("optimized file with wasm-opt: {}", bin.display()),
+                    Err(e) => warn!("could not run wasm-opt on {}: {}", bin.display(), e),
+                }
             }
-        }
-
-        if self.emit_abi {
-            crate::driver::abi::embed_abi_in_wasm(out_path)?;
         }
 
         Ok(())
@@ -416,17 +426,6 @@ fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
 /// compiler error looks like the rest of the CLI's output rather than a raw Rust panic dump.
 fn render_internal_error(message: &str) {
     eprintln!("error: {}", message);
-}
-
-/// Derives the `.dbg.json` debug-map path that sits next to the compiled `.wat` output.
-fn debug_map_path(out_path: &str) -> String {
-    let path = std::path::Path::new(out_path);
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("out");
-    let parent = path.parent().unwrap_or_else(|| std::path::Path::new(""));
-    parent
-        .join(format!("{}.dbg.json", stem))
-        .to_string_lossy()
-        .into_owned()
 }
 
 /// True when any collected user type carries `@json` (derived converters need `system.json`).

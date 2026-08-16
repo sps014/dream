@@ -19,7 +19,6 @@ use dream_types::{DefId, TypeId};
 mod dead_code;
 mod hir_edges;
 
-pub(crate) use dead_code::module_uses_js_bridges;
 pub use dead_code::prune_module;
 pub(crate) use hir_edges::{hir_body_edges, HirEdges};
 

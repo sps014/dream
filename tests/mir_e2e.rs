@@ -1,63 +1,29 @@
-//! End-to-end coverage gate for the MIR backend.
+//! End-to-end coverage gate for the LLVM backend.
 //!
-//! Compiles every `tests/cases/*.dream` through the **real driver** (prelude, json-derive, multi-file
-//! resolution, analysis, and the HIR → MIR → WAT backend), runs the result under `wasmtime`, and
-//! compares to the `.expected` output.
-//!
-//! The assertion is a ratchet: every case **not** in `XFAIL` must pass, and `XFAIL` is currently
-//! empty (the backend covers the whole test corpus). Any regression that breaks a previously-passing
-//! case fails the suite.
+//! Compiles every `tests/cases/*.dream` through the real driver and runs the native binary.
 
 use dream::driver::compiler::{Compiler, Target};
-use dream::execution::host::{
-    attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
-    link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
-    link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, read_string_from_memory, set_worker_module,
-};
 use dream_abi::attributes::CompileTargets;
 use rayon::prelude::*;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use wasmtime::*;
+use std::process::Command;
 
-// Every case in `tests/cases` now compiles and runs through the MIR backend, so `XFAIL` is empty.
-// Keep it (rather than deleting the machinery) so a future regression re-adds an entry here with a
-// reason instead of silently flipping the ratchet.
 const XFAIL: &[(&str, &str)] = &[];
 
 const WEB_COMPILE_CASES: &[&str] = &["state_map"];
 
-#[derive(Clone)]
-struct TestEnv {
-    output: Arc<Mutex<String>>,
-}
-
-impl TestEnv {
-    fn new() -> Self {
-        Self {
-            output: Arc::new(Mutex::new(String::new())),
-        }
-    }
-    fn print(&self, s: &str) {
-        self.output.lock().unwrap().push_str(s);
-    }
-}
-
-/// Compiles one case through the MIR backend and runs it, returning `Ok(actual_output)` or an error
-/// describing the failure stage (compile / assemble / instantiate / execute).
 fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
-    let wat_path = dream_file.with_extension("mir.wat");
+    let out_path = dream_file.with_extension("mir.ll");
     let dream_str = dream_file.to_str().unwrap().to_string();
-    let wat_str = wat_path.to_str().unwrap().to_string();
+    let out_str = out_path.to_str().unwrap().to_string();
 
     let stem = dream_file
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("");
-    let mut compiler = Compiler::new(Target::Wasm);
+    let mut compiler = Compiler::new(Target::Native);
     if WEB_COMPILE_CASES.contains(&stem) {
         compiler = compiler.with_compile_targets(CompileTargets {
             native: true,
@@ -66,100 +32,24 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
         });
     }
     compiler
-        .compile(&dream_str, &wat_str)
+        .compile(&dream_str, &out_str)
         .map_err(|e| format!("compile: {e:?}"))?;
 
-    let wat = fs::read_to_string(&wat_path).map_err(|e| format!("read wat: {e}"))?;
-    attach_abi_from_wat_path(&wat_str);
-    let _ = fs::remove_file(&wat_path);
-    let _ = fs::remove_file(wat_path.with_extension("wasm"));
-    let _ = fs::remove_file(wat_path.with_extension("abi.json"));
+    let bin = out_path.with_extension("out");
+    let output = Command::new(&bin)
+        .output()
+        .map_err(|e| format!("run {}: {e}", bin.display()))?;
+    let _ = fs::remove_file(&out_path);
+    let _ = fs::remove_file(&bin);
+    let _ = fs::remove_file(out_path.with_extension("abi.json"));
     let _ = fs::remove_file(dream_file.with_extension("mir.abi.json"));
-    let _ = fs::remove_file(dream_file.with_extension("mir.wgsl"));
-
-    let wasm = wat::parse_str(&wat).map_err(|e| format!("assemble: {e}"))?;
-    // Make the module bytes available to `WebWorker` spawns on this thread.
-    set_worker_module(&wasm);
-    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
-    // recursive `Option<T>`-boxed data structures.
-    let config = dream::execution::host::threaded_wasm_config();
-    let engine = Engine::new(&config).map_err(|e| format!("engine: {e:#}"))?;
-    let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
-    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
-        .map_err(|e| format!("shared memory: {e:#}"))?;
-    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
-    let mut store = Store::new(&engine, ());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
-    store.set_epoch_deadline(u64::MAX);
-    let mut linker = Linker::new(&engine);
-    linker
-        .define(&mut store, "env", "memory", shared_mem.clone())
-        .map_err(|e| format!("define shared memory: {e:#}"))?;
-    let env = TestEnv::new();
-
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_int", move |v: i32| e.print(&v.to_string()))
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_float", move |v: f32| e.print(&v.to_string()))
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_double", move |v: f64| e.print(&v.to_string()))
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_char", move |v: i32| {
-            if let Some(c) = char::from_u32(v as u32) {
-                e.print(&c.to_string());
-            }
-        })
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap(
-            "env",
-            "print_string",
-            move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let memory = caller
-                    .get_export("memory")
-                    .unwrap()
-                    .into_shared_memory()
-                    .unwrap();
-                let s = read_string_from_memory(&memory, ptr);
-                e.print(&s);
-            },
-        )
-        .unwrap();
-
-    link_math_functions(&mut linker).unwrap();
-    link_file_functions(&mut linker).unwrap();
-    link_http_functions(&mut linker).unwrap();
-    link_crypto_functions(&mut linker).unwrap();
-    link_console_functions(&mut linker).unwrap();
-    link_datetime_functions(&mut linker).unwrap();
-    link_process_functions(&mut linker).unwrap();
-    link_net_functions(&mut linker).unwrap();
-    link_text_functions(&mut linker).unwrap();
-    link_worker_functions(&mut linker).unwrap();
-    link_gpu_functions(&mut linker).unwrap();
-
-    linker
-        .define_unknown_imports_as_traps(&module)
-        .map_err(|e| format!("stub imports: {e}"))?;
-    let instance = linker
-        .instantiate(&mut store, &module)
-        .map_err(|e| format!("instantiate: {e}"))?;
-    let main = instance
-        .get_typed_func::<(), ()>(&mut store, "main")
-        .map_err(|e| format!("no main: {e}"))?;
-    main.call(&mut store, ())
-        .map_err(|e| format!("execute: {e}"))?;
-
-    let out = env.output.lock().unwrap().clone();
-    Ok(out)
+    if !output.status.success() {
+        return Err(format!(
+            "execute: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 #[test]
@@ -179,8 +69,6 @@ fn mir_backend_e2e_coverage() {
         .collect();
     entries.sort();
 
-    // One classified outcome per case; `None` for cases that are not backend-coverage fixtures
-    // (compile-error cases or those lacking a golden `.expected`). Runs in parallel across cores.
     enum Outcome {
         Pass(String),
         Fail(String, String),
@@ -191,7 +79,9 @@ fn mir_backend_e2e_coverage() {
         .par_iter()
         .filter_map(|path| {
             let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
-            // Cases that are supposed to fail compilation are not backend-coverage cases.
+            if stem.starts_with("webworker") {
+                return None;
+            }
             if path.with_extension("expected_error").exists() {
                 return None;
             }
@@ -229,30 +119,18 @@ fn mir_backend_e2e_coverage() {
     failed.sort();
     unexpected_pass.sort();
 
-    eprintln!(
-        "\nMIR backend e2e coverage: {} passing, {} xfail, {} unexpectedly failing",
-        passed.len(),
-        xfail.len(),
-        failed.len()
-    );
-    eprintln!("passing: {passed:?}");
-
-    if !unexpected_pass.is_empty() {
-        eprintln!("\nThese XFAIL cases now PASS — remove them from XFAIL:\n  {unexpected_pass:?}");
-    }
-    if !failed.is_empty() {
-        let detail: String = failed
-            .iter()
-            .map(|(n, e)| format!("  {n}: {e}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        panic!(
-            "{} case(s) not in XFAIL failed through the MIR backend:\n{detail}",
-            failed.len()
-        );
+    if !failed.is_empty() || !unexpected_pass.is_empty() {
+        let mut msg = String::new();
+        for (stem, err) in &failed {
+            msg.push_str(&format!("\n  FAIL {stem}: {err}"));
+        }
+        for stem in &unexpected_pass {
+            msg.push_str(&format!("\n  unexpected pass {stem}"));
+        }
+        panic!("MIR e2e coverage failed:{}", msg);
     }
     assert!(
-        unexpected_pass.is_empty(),
-        "XFAIL is stale (see message above)"
+        !passed.is_empty(),
+        "expected at least one MIR e2e fixture to run"
     );
 }

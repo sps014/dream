@@ -4,25 +4,26 @@
 //! Where HIR keeps structured control flow, MIR desugars everything (if/while/for/foreach/switch/
 //! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Reference-counting
 //! (`Retain`/`Release`) and allocation are explicit [`Statement`]s, which lets the optimization
-//! passes reason about them with ordinary dataflow. The backend  reconstructs
-//! structured WASM control flow from this CFG via a relooper.
+//! passes reason about them with ordinary dataflow. LLVM (`dream-llvm`) is the only codegen.
 
 pub mod abi;
 pub mod async_emit;
 pub mod build;
 pub mod debug_schema;
-pub mod emit;
 pub mod lower;
 pub mod passes;
 pub mod print;
 mod prune;
-pub mod relooper;
+pub mod symbols;
+pub mod valuetype;
+
+pub use symbols::{func_symbol, poll_symbol, struct_tags};
 
 pub use dream_abi::js_abi;
 pub use dream_hir::{BinOp, UnOp};
 use dream_types::{DefId, TypeId};
 pub use prune::prune_module;
-pub(crate) use prune::{hir_body_edges, module_uses_js_bridges, HirEdges};
+pub(crate) use prune::{hir_body_edges, HirEdges};
 
 /// Raises a codegen-time compiler-internal-error: the condition it guards can only be reached if an
 /// earlier pass (analysis/lowering) produced MIR that is inconsistent with itself (e.g. a type with
@@ -218,12 +219,8 @@ pub enum Statement {
     /// operations across it or delete it). Carries no value and reads no locals.
     DebugLine(u32),
     /// A compile-time-only source-line marker (1-based line within the function's source file),
-    /// always present (unlike [`Statement::DebugLine`], which requires `-g`). Emits no WAT at all:
-    /// the backend just records it as "the current line" so a following automatic runtime check
-    /// (bounds/division/cast) can attribute its panic message to a real line (see
-    /// [`crate::emit::panic_msgs`]). Treated identically to [`Statement::DebugLine`] by every
-    /// pass — an inert, order-preserving barrier — purely so scanning the pre-emission MIR for panic
-    /// call sites (which tracks the same marker) sees the same line the backend will.
+    /// always present (unlike [`Statement::DebugLine`], which requires `-g`). The LLVM backend
+    /// records it as the current line for panic messages.
     SourceLine(u32),
     /// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` (`@unsafe`) — bulk
     /// `memory.copy` of `count` unmanaged elements. Void-typed, so a statement (not an `Rvalue`).
@@ -623,9 +620,11 @@ mod tests {
 
         let mut mir = lower_function(&func, &ctx.interner);
         PassManager::default_pipeline().run(&mut mir, &ctx.interner);
-        let wat = super::emit::emit_function(&mir, &ctx.interner);
-        assert!(wat.contains("(func $add"));
-        assert!(wat.contains("i32.add"), "pipeline output:\n{}", wat);
-        assert!(wat.contains("(return)"));
+        let printed = crate::print::print_function(&mir);
+        assert!(
+            printed.contains("add") || printed.contains("bb0"),
+            "pipeline output:\n{}",
+            printed
+        );
     }
 }

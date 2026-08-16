@@ -71,12 +71,23 @@ fn run_program(
     writer: &Writer,
 ) -> Result<()> {
     crate::execution::host::enable_ansi_support();
-    // GPU state is per OS thread; attach on this execution thread (not the DAP stdio thread).
     crate::execution::host::attach_abi_from_wat_path(wat_path);
     crate::execution::host::attach_c_abi_from_wat_path(wat_path);
-    let wat_content = std::fs::read_to_string(wat_path)
-        .map_err(|e| Error::msg(format!("failed to read {}: {}", wat_path, e)))?;
-    let wasm_bytes = wat::parse_str(&wat_content)?;
+    let path = std::path::Path::new(wat_path);
+    let wasm_bytes = {
+        let sibling = path.with_extension("wasm");
+        if sibling.exists() {
+            std::fs::read(&sibling)
+                .map_err(|e| Error::msg(format!("failed to read {}: {}", sibling.display(), e)))?
+        } else if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
+            std::fs::read(path)
+                .map_err(|e| Error::msg(format!("failed to read {}: {}", path.display(), e)))?
+        } else {
+            let text = std::fs::read_to_string(path)
+                .map_err(|e| Error::msg(format!("failed to read {}: {}", path.display(), e)))?;
+            wat::parse_str(&text)?
+        }
+    };
     crate::execution::host::set_worker_module(&wasm_bytes);
 
     // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for

@@ -5,7 +5,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 ## Non-negotiable ground rules
 
 - **No backwards compatibility.** Dream is pre-1.0 with no external users to protect. Never add shims, deprecated aliases, dual code paths, or "legacy" fallbacks to preserve old behavior. When a design changes, migrate every call site and delete the old path outright — do not leave both.
-- **Prefer well-settled libraries over custom implementations.** Before hand-rolling something (arena allocation, ordered maps, tokenizing, CLI parsing, JSON, HTTP, terminal control, timezones, WASM text parsing), check `Cargo.toml` for an existing dependency, or reach for a mature crate instead of writing bespoke logic. Only hand-write something in-language when the project genuinely needs Dream-specific semantics that no crate can provide (e.g. the WAT emitter/relooper — the backend itself is intentionally custom).
+- **Prefer well-settled libraries over custom implementations.** Before hand-rolling something (arena allocation, ordered maps, tokenizing, CLI parsing, JSON, HTTP, terminal control, timezones, WASM text parsing), check `Cargo.toml` for an existing dependency, or reach for a mature crate instead of writing bespoke logic. Only hand-write something in-language when the project genuinely needs Dream-specific semantics that no crate can provide (ARC insertion, WAT emit until the LLVM bench gate, the cooperative scheduler). **Do not add new generic MIR opt passes** — LLVM and wasm-opt own GVN/LICM/unroll-class work. See `docs/internals/12-llvm-backend.md`.
 - **Never panic on user input.** Lexer/parser/analyzer errors go through `DiagnosticBag`, never `panic!`/`unwrap`/`expect` on attacker- or user-controlled input.
 - **The backend (`dream-mir`) only runs on validated programs.** A backend panic is an ICE (compiler bug), acceptable and expected there — but it must never be reachable from unvalidated input.
 - **Determinism is non-negotiable.** Two compiles of the same source must produce byte-identical `.wat`/`.wasm`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
@@ -31,7 +31,9 @@ Dream/
 │   ├── dream-abi/                  Shared constants: attributes, intrinsics, JS ABI names
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
-│   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit, runtime/*.wat
+│   ├── dream-mir/                  CFG MIR, RC-critical passes, relooper, WAT emit, runtime/*.wat
+│   ├── dream-rt/                   Portable ARC heap (C) for LLVM native + wasm32
+│   └── dream-llvm/                 MIR → LLVM IR + clang driver
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
@@ -61,9 +63,9 @@ Dream/
 ## The pipeline (mental model)
 
 ```
-.dream source → Lexer (logos) → Parser (recursive descent, arena AST) → Semantic Analyzer
-  → Typed HIR (types::TypeCtx feeds it) → MIR lowering (CFG) → Pass manager (opt passes)
-  → Relooper (structured control flow recovery) → WAT emission → .wat → wat crate assembles → .wasm + .abi.json
+.dream source → Lexer → Parser → Semantic Analyzer
+ → Typed HIR → MIR lowering → RC insertion + slim passes
+ → WAT (default) or LLVM IR (`--llvm` / `--triple`) → artifacts
 ```
 
 Each arrow is a **total** lowering: the producer records everything the consumer needs, so the consumer never looks backward. Types are interned once (`TypeId`), so equality is `==`, never string comparison/mangling (the old `"Box_int"`-style stringly-typed system is gone — do not reintroduce string-keyed types).

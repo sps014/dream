@@ -4,6 +4,15 @@
 use super::{BasicBlock, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use std::fmt::Write;
 
+pub fn print_module(mir: &super::Mir) -> String {
+    let mut out = String::new();
+    for f in &mir.functions {
+        out.push_str(&print_function(f));
+        out.push('\n');
+    }
+    out
+}
+
 pub fn print_function(func: &MirFunction) -> String {
     let mut out = String::new();
     let params: Vec<String> = func.params.iter().map(|l| format!("_{}", l.0)).collect();

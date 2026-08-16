@@ -56,8 +56,17 @@ pub fn execute_wasm_bytes_with_abi(
 fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
     super::host::attach_abi_from_wat_path(wat_path);
     attach_c_abi_from_wat_path(wat_path);
-    let wat_content = fs::read_to_string(wat_path)?;
-    let wasm_bytes = wat::parse_str(&wat_content)?;
+    let path = std::path::Path::new(wat_path);
+    let wasm_file = if path.extension().and_then(|e| e.to_str()) == Some("wasm") {
+        path.to_path_buf()
+    } else {
+        path.with_extension("wasm")
+    };
+    let wasm_bytes = if wasm_file.is_file() {
+        fs::read(&wasm_file)?
+    } else {
+        wat::parse_str(&fs::read_to_string(wat_path)?)?
+    };
     let search_roots = vec![std::path::Path::new(wat_path)
         .parent()
         .map(|p| p.to_path_buf())

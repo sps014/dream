@@ -34,6 +34,8 @@ in our WASM assembler target).
 
 Raw log: `out/native.txt` (from `./scripts/run-microbenches.sh`).
 
+LLVM native is the only backend (`dream --release run`). Compare new `out/native.txt` to the wasmtime-era numbers below; CPU benches should be faster on host LLVM.
+
 
 ```bash
 ./scripts/run-microbenches.sh

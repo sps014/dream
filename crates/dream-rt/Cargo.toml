@@ -1,0 +1,14 @@
+[package]
+name = "dream-rt"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_rt"
+path = "src/lib.rs"
+
+[dependencies]
+dream-mir = { path = "../dream-mir" }
+
+[build-dependencies]
+cc = "1.2"

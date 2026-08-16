@@ -31,25 +31,19 @@ async fun main(): void {
     let seq_ms = ms_between(seq_start, seq_end);
 
     let par_start = Time.nano_time();
-    let workers = Buffer.alloc<WebWorker<string, string>>(tasks);
+    let workers = Buffer.alloc<Future<string>>(tasks);
     let s = 0;
     while (s < tasks) {
-        workers[s] = WebWorker<string, string>.spawn("par", heavy);
+        workers[s] = WebWorker.spawn(() => heavy("par"));
         s = s + 1;
     }
     let c = 0;
     while (c < tasks) {
-        let r = await workers[c].join();
+        let r = await workers[c];
         c = c + 1;
     }
     let par_end = Time.nano_time();
     let par_ms = ms_between(par_start, par_end);
-
-    let t = 0;
-    while (t < tasks) {
-        workers[t].terminate();
-        t = t + 1;
-    }
 
     System.println("tasks:       " + tasks.to_string());
     System.println("sequential:  " + seq_ms.to_string() + " ms");

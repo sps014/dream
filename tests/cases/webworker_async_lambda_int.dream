@@ -1,10 +1,8 @@
-// Async lambda body with a non-string `TOut` — the Future-body overload awaits then wire-encodes.
 import system;
 async fun main(): void {
-    let w = WebWorker<int, int>.spawn(21, async (n) => {
+    let n = 21;
+    System.println((await WebWorker.spawn_async(async () => {
         await Time.sleep(1);
         return n * 2;
-    });
-    System.println((await w.join()).to_string());
-    w.terminate();
+    })).to_string());
 }

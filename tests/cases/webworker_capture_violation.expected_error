@@ -1,1 +1,1 @@
-cannot capture 'counter' of type 'Counter' in a `WebWorker_string_string.spawn` body: 'Counter' is not in worker-shared memory — mark its type '@shared', pass it as a wire `spawn` argument, or allocate it inside the worker body (only '@shared class' instances and unmanaged values may cross threads)
+cannot capture 'counter' of type 'Counter' in a `WebWorker.spawn` body: 'Counter' is not shared — mark the class '@shared', or capture a blittable value, string, or a struct of those

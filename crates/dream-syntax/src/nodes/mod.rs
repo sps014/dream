@@ -139,12 +139,15 @@ pub struct AttributeNode {
 /// A *kind* bound on a generic parameter (C#-aligned): `T : struct` requires a non-nullable value
 /// type (a `struct` or a non-`string` primitive) that *may* still contain reference-typed fields;
 /// `T : unmanaged` requires a *blittable* value type (recursively only value fields, no inner heap
-/// pointers - a strict subset of `struct`); `T : class` requires a reference type. Orthogonal to
-/// the interface `bounds` and combinable with them via `+` (e.g. `T : unmanaged + Comparable<T>`).
+/// pointers - a strict subset of `struct`); `T : shared` is the Sendable analogue (`unmanaged`,
+/// `string`, value structs of `shared` fields, or `@shared class`); `T : class` requires a
+/// reference type. Orthogonal to the interface `bounds` and combinable with them via `+`
+/// (e.g. `T : unmanaged + Comparable<T>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstraintKind {
     Struct,
     Unmanaged,
+    Shared,
     Class,
 }
 

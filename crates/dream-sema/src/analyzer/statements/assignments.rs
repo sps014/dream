@@ -253,6 +253,21 @@ impl<'a> Analyzer<'a> {
                 self.compare_data_type(&field_type, &right_type, &member.position, diagnostics)?;
                 self.note_sink_store_move(right, &right_type, parent_function);
 
+                let mut value_hir = value_hir;
+                if field_type.get_type() == "string" {
+                    let obj_tid = self.type_ctx.lower(&obj_type);
+                    if self.type_ctx.interner.is_shared_type(obj_tid)
+                        && self
+                            .function_table
+                            .get_function(&"string_clone".to_string())
+                            .is_ok()
+                    {
+                        let string_ty = field_type.clone();
+                        self.hir_set_call("string_clone", vec![value_hir], &string_ty);
+                        value_hir = self.hir_take();
+                    }
+                }
+
                 match self.struct_field_index(&struct_name, &member.text) {
                     Some(index) => {
                         let target = self.type_ctx.lower(&field_type);

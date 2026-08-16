@@ -1,5 +1,4 @@
-// Real parallel WebWorkers. Each worker runs a body once via spawn/join on its own OS thread
-// (native) / Web Worker (browser); wire args cross as copied values.
+// Real parallel WebWorkers. Capture-only spawn; await the Future.
 
 import system;
 fun shout(msg: string): string {
@@ -11,19 +10,11 @@ fun twice(msg: string): string {
 }
 
 async fun main(): void {
-    let w = WebWorker<string, string>.spawn("hello", shout);
-    System.println(await w.join());
-    w.terminate();
+    System.println(await WebWorker.spawn(() => shout("hello")));
+    System.println(await WebWorker.spawn(() => shout("world")));
 
-    let w2 = WebWorker<string, string>.spawn("world", shout);
-    System.println(await w2.join());
-    w2.terminate();
-
-    // Two workers running concurrently: spawn both, then join.
-    let a = WebWorker<string, string>.spawn("A", shout);
-    let b = WebWorker<string, string>.spawn("B", twice);
-    System.println(await a.join());
-    System.println(await b.join());
-    a.terminate();
-    b.terminate();
+    let a = WebWorker.spawn(() => shout("A"));
+    let b = WebWorker.spawn(() => twice("B"));
+    System.println(await a);
+    System.println(await b);
 }

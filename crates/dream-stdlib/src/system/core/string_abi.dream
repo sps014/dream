@@ -23,6 +23,10 @@ extend string {
     @intrinsic("string_substring_raw")
     static extern fun substring_raw(borrow s: string, start: int, end: int): string;
 
+    // Fresh heap copy of `s` (isolation boundary for `@shared` string fields / worker captures).
+    @intrinsic("string_clone")
+    static extern fun clone(borrow s: string): string;
+
     // Bulk-copies `count` UTF-8 bytes from `src` into `dst` at `dst_off`.
     @intrinsic("string_copy_utf8")
     static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void;

@@ -1,0 +1,7 @@
+// Arrays are not `shared`; capturing one into a worker body is an error.
+import system;
+
+async fun main(): void {
+    let nums = [1, 2, 3];
+    let _ = await WebWorker.spawn(() => nums.length);
+}

@@ -264,6 +264,44 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(items)
     }
 
+    /// One atom of a `:` constraint list: a kind (`struct` / `class` / `unmanaged` / contextual
+    /// `shared`) or an interface type. `shared` is not a keyword so `let shared: int` stays valid.
+    fn parse_constraint_atom(
+        &mut self,
+        bounds: &mut Vec<crate::nodes::Type>,
+        kinds: &mut Vec<crate::nodes::ConstraintKind>,
+    ) -> bool {
+        match self.current_token().kind {
+            TokenKind::StructToken => {
+                self.match_token(TokenKind::StructToken);
+                kinds.push(crate::nodes::ConstraintKind::Struct);
+                true
+            }
+            TokenKind::ClassToken => {
+                self.match_token(TokenKind::ClassToken);
+                kinds.push(crate::nodes::ConstraintKind::Class);
+                true
+            }
+            TokenKind::UnmanagedToken => {
+                self.match_token(TokenKind::UnmanagedToken);
+                kinds.push(crate::nodes::ConstraintKind::Unmanaged);
+                true
+            }
+            TokenKind::IdentifierToken if self.current_token().text == "shared" => {
+                self.match_token(TokenKind::IdentifierToken);
+                kinds.push(crate::nodes::ConstraintKind::Shared);
+                true
+            }
+            _ => match self.parse_type() {
+                Ok(t) => {
+                    bounds.push(t);
+                    true
+                }
+                Err(_) => false,
+            },
+        }
+    }
+
     /// Parses an optional generic *parameter* declaration list `<T, U, ...>` of bare identifiers,
     /// each optionally carrying interface bounds `T : Iface (+ Iface)*` (the declaration side;
     /// [`parse_generic_args`] parses concrete type *arguments*). Returns `None` when no `<` follows.
@@ -285,30 +323,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             let iter = self.current_token_index;
             let param = self.match_token(TokenKind::IdentifierToken);
             // Optional bounds: interface bounds (`T : Comparable<T>`), kind bounds
-            // (`T : struct` / `T : unmanaged` / `T : class`), or a `+`-combined mix
+            // (`T : struct` / `T : unmanaged` / `T : class` / `T : shared`), or a `+`-combined mix
             // (`T : unmanaged + Comparable<T>`).
             if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
                 let mut bounds = Vec::new();
                 let mut kinds = Vec::new();
                 loop {
-                    match self.current_token().kind {
-                        TokenKind::StructToken => {
-                            self.match_token(TokenKind::StructToken);
-                            kinds.push(crate::nodes::ConstraintKind::Struct);
-                        }
-                        TokenKind::ClassToken => {
-                            self.match_token(TokenKind::ClassToken);
-                            kinds.push(crate::nodes::ConstraintKind::Class);
-                        }
-                        TokenKind::UnmanagedToken => {
-                            self.match_token(TokenKind::UnmanagedToken);
-                            kinds.push(crate::nodes::ConstraintKind::Unmanaged);
-                        }
-                        _ => match self.parse_type() {
-                            Ok(t) => bounds.push(t),
-                            Err(_) => break,
-                        },
+                    if !self.parse_constraint_atom(&mut bounds, &mut kinds) {
+                        break;
                     }
                     if self.current_token().kind != TokenKind::PlusToken {
                         break;
@@ -363,23 +386,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             let mut bounds = Vec::new();
             let mut kinds = Vec::new();
             loop {
-                match self.current_token().kind {
-                    TokenKind::StructToken => {
-                        self.match_token(TokenKind::StructToken);
-                        kinds.push(crate::nodes::ConstraintKind::Struct);
-                    }
-                    TokenKind::ClassToken => {
-                        self.match_token(TokenKind::ClassToken);
-                        kinds.push(crate::nodes::ConstraintKind::Class);
-                    }
-                    TokenKind::UnmanagedToken => {
-                        self.match_token(TokenKind::UnmanagedToken);
-                        kinds.push(crate::nodes::ConstraintKind::Unmanaged);
-                    }
-                    _ => match self.parse_type() {
-                        Ok(t) => bounds.push(t),
-                        Err(_) => break,
-                    },
+                if !self.parse_constraint_atom(&mut bounds, &mut kinds) {
+                    break;
                 }
                 if self.current_token().kind != TokenKind::PlusToken {
                     break;

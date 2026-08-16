@@ -1,5 +1,3 @@
-// Typed instance `WebWorkerPool.dispatch` / `dispatch_async`.
-
 import system;
 fun square(n: int): int {
     return n * n;
@@ -12,9 +10,9 @@ async fun bump(n: int): int {
 
 async fun main(): void {
     let pool = WebWorkerPool(2);
-    let a = pool.dispatch(3, square);
-    let b = pool.dispatch(4, square);
-    let c = pool.dispatch_async(5, bump);
+    let a = pool.dispatch(() => square(3));
+    let b = pool.dispatch(() => square(4));
+    let c = pool.dispatch_async(() => bump(5));
     System.println((await a).to_string());
     System.println((await b).to_string());
     System.println((await c).to_string());

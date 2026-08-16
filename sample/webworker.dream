@@ -1,4 +1,4 @@
-// Real parallel WebWorkers — thread-like spawn / join over a shared heap.
+// Real parallel WebWorkers — capture-only spawn over a shared heap.
 //
 // Run natively:   dream run sample/webworker.dream
 
@@ -9,8 +9,6 @@ fun greet(name: string): string {
     return "hello, " + name + "!";
 }
 
-// A CPU-bound body: burn a few million iterations (so the work is really running off the main
-// thread) and then transform the message.
 fun work(input: string): string {
     let i = 0;
     while (i < 5000000) {
@@ -20,19 +18,12 @@ fun work(input: string): string {
 }
 
 async fun main(): void {
-    // 1) One-shot spawn / join.
-    let g = WebWorker<string, string>.spawn("dream", greet);
-    System.println(await g.join());
-    g.terminate();
+    System.println(await WebWorker.spawn(() => greet("dream")));
 
-    // 2) Fan work out to several workers that run concurrently.
-    let w1 = WebWorker<string, string>.spawn("alpha", work);
-    let w2 = WebWorker<string, string>.spawn("beta", work);
-    let w3 = WebWorker<string, string>.spawn("gamma", work);
-    System.println(await w1.join());
-    System.println(await w2.join());
-    System.println(await w3.join());
-    w1.terminate();
-    w2.terminate();
-    w3.terminate();
+    let w1 = WebWorker.spawn(() => work("alpha"));
+    let w2 = WebWorker.spawn(() => work("beta"));
+    let w3 = WebWorker.spawn(() => work("gamma"));
+    System.println(await w1);
+    System.println(await w2);
+    System.println(await w3);
 }

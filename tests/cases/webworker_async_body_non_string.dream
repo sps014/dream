@@ -1,13 +1,9 @@
-// Named async fun returning non-string: uses the Future-body spawn overload
-// (`fun(int): Future<int>`), which awaits then wire-encodes.
 import system;
-async fun computeInt(n: int): int {
+async fun computeInt(): int {
     await Time.sleep(1);
-    return n * 2;
+    return 21 * 2;
 }
 
 async fun main(): void {
-    let w = WebWorker<int, int>.spawn(21, computeInt);
-    System.println((await w.join()).to_string());
-    w.terminate();
+    System.println((await WebWorker.spawn_async(computeInt)).to_string());
 }

@@ -1,19 +1,13 @@
-// A `WebWorker`/`WebWorker.map`/`WebWorkerPool.dispatch` body *may* be a non-capturing top-level
-// `async fun` returning `string`, as long as its return type is `string` (see the constraint in
-// `Analyzer::analyze_identifier`): the worker-invoke trampoline detects the async constructor's
-// untagged `Future` result and drives it to completion in place before handing back the reply.
 import system;
 async fun tick(): void {
     await Time.sleep(1);
 }
 
-async fun work(msg: string): string {
+async fun work(): string {
     await tick();
-    return msg + "!";
+    return "hi!";
 }
 
 async fun main(): void {
-    let w = WebWorker<string, string>.spawn("hi", work);
-    System.println(await w.join());
-    w.terminate();
+    System.println(await WebWorker.spawn_async(work));
 }

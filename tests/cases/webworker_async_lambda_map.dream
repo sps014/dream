@@ -1,7 +1,7 @@
 import system;
 async fun main(): void {
     let urls = ["a", "b"];
-    let results = await WebWorker<string, string>.map(urls, async (url) => {
+    let results = await WebWorker.map_async(urls, async (url) => {
         await Time.sleep(1);
         return "resp:" + url;
     });

@@ -1911,3 +1911,72 @@ fn test_infer_generic_class_static_unused_class_param_still_errors() {
         diagnostics.diagnostics
     );
 }
+
+#[test]
+fn test_shared_kind_constraint() {
+    let code = "
+        fun send<T : shared>(v: T): T { return v; }
+        @shared
+        class Box {
+            public n: int;
+            public constructor(n: int) { this.n = n; }
+        }
+        fun main(): void {
+            let a = send(1);
+            let b = send(\"hi\");
+            let c = send(Box(2));
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_shared_kind_rejects_plain_class() {
+    let code = "
+        fun send<T : shared>(v: T): T { return v; }
+        class Plain {
+            public n: int;
+            public constructor(n: int) { this.n = n; }
+        }
+        fun main(): void {
+            let _ = send(Plain(1));
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("shared")),
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_shared_class_string_field_ok() {
+    let code = "
+        @shared
+        class Named {
+            public label: string;
+            public constructor(label: string) { this.label = label; }
+        }
+        fun main(): void {
+            let n = Named(\"x\");
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}

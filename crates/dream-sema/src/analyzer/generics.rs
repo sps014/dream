@@ -1,7 +1,7 @@
 use super::*;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::ParameterNode;
-use dream_syntax::nodes::types::mangle_generic;
+use dream_syntax::nodes::types::{is_unknown_type_name, mangle_generic};
 use dream_syntax::nodes::{FunctionNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
@@ -234,6 +234,47 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Replaces still-unbound generic parameter names with `Unknown` so a lambda expected type
+    /// like `fun(int): TOut` does not pin the return to the placeholder name `TOut`.
+    pub(super) fn erase_unbound_generics(
+        ty: &Type,
+        bindings: &GenericBindings,
+        gen_params: &[dream_syntax::token::syntax_token::SyntaxToken],
+    ) -> Type {
+        let unbound = |name: &str| {
+            gen_params.iter().any(|p| p.text == name) && lookup_binding(bindings, name).is_none()
+        };
+        match ty {
+            Type::Struct(token, None) if unbound(&token.text) => Type::Unknown,
+            Type::Generic(name) if unbound(name) => Type::Unknown,
+            Type::Function(params, ret) => Type::Function(
+                params
+                    .iter()
+                    .map(|p| Self::erase_unbound_generics(p, bindings, gen_params))
+                    .collect(),
+                Box::new(Self::erase_unbound_generics(ret, bindings, gen_params)),
+            ),
+            Type::Array(inner) => Type::Array(Box::new(Self::erase_unbound_generics(
+                inner, bindings, gen_params,
+            ))),
+            Type::Tuple(elems) => Type::Tuple(
+                elems
+                    .iter()
+                    .map(|e| Self::erase_unbound_generics(e, bindings, gen_params))
+                    .collect(),
+            ),
+            Type::Struct(token, Some(args)) => Type::Struct(
+                token.clone(),
+                Some(
+                    args.iter()
+                        .map(|a| Self::erase_unbound_generics(a, bindings, gen_params))
+                        .collect(),
+                ),
+            ),
+            _ => ty.clone(),
+        }
+    }
+
     /// Verifies that each concrete type bound by `bindings` satisfies its declared generic
     /// `constraints` (`T : Comparable<T>` etc.), reporting a clear error otherwise. Each bound is
     /// substituted with the same bindings so `Comparable<T>` becomes `Comparable<int>` before the
@@ -272,6 +313,10 @@ impl<'a> Analyzer<'a> {
                             "unmanaged",
                             "it is not a blittable value type (it contains reference-typed fields, or is a reference type)",
                         ),
+                        dream_syntax::nodes::ConstraintKind::Shared => (
+                            "shared",
+                            "it is not blittable, string, a struct of shared fields, or an '@shared class'",
+                        ),
                         dream_syntax::nodes::ConstraintKind::Class => {
                             ("class", "it is not a reference type")
                         }
@@ -291,16 +336,25 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when `concrete` satisfies a `struct`/`unmanaged`/`class` kind constraint (C#-aligned):
+    /// True when `concrete` satisfies a `struct`/`unmanaged`/`shared`/`class` kind constraint.
     /// `struct` requires a *value type* (a non-`string` scalar primitive or a value `struct`),
     /// which may still hold reference-typed fields; `unmanaged` additionally requires it to be
     /// *blittable* (recursively only value fields, no inner heap pointers - a self-contained run of
-    /// bytes); `class` requires a reference type.
+    /// bytes); `shared` is the Sendable analogue (see [`Self::name_is_shared`]); `class` requires a
+    /// reference type.
     pub(super) fn type_satisfies_kind(
         &self,
         concrete: &Type,
         kind: dream_syntax::nodes::ConstraintKind,
     ) -> bool {
+        if matches!(concrete, Type::Unknown) || is_unknown_type_name(&concrete.get_type()) {
+            return true;
+        }
+        if matches!(kind, dream_syntax::nodes::ConstraintKind::Shared)
+            && matches!(concrete, Type::Function(_, _) | Type::Void)
+        {
+            return true;
+        }
         if let Type::Tuple(elems) = concrete {
             return match kind {
                 dream_syntax::nodes::ConstraintKind::Struct => {
@@ -309,6 +363,9 @@ impl<'a> Analyzer<'a> {
                 dream_syntax::nodes::ConstraintKind::Unmanaged => elems.iter().all(|e| {
                     self.type_satisfies_kind(e, dream_syntax::nodes::ConstraintKind::Unmanaged)
                 }),
+                dream_syntax::nodes::ConstraintKind::Shared => {
+                    elems.iter().all(|e| self.type_satisfies_kind(e, kind))
+                }
                 dream_syntax::nodes::ConstraintKind::Class => false,
             };
         }
@@ -317,6 +374,9 @@ impl<'a> Analyzer<'a> {
             dream_syntax::nodes::ConstraintKind::Struct => self.name_is_value_type(&name),
             dream_syntax::nodes::ConstraintKind::Unmanaged => {
                 self.name_is_blittable_value(&name, &mut std::collections::HashSet::new())
+            }
+            dream_syntax::nodes::ConstraintKind::Shared => {
+                self.name_is_shared(&name, &mut std::collections::HashSet::new())
             }
             dream_syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(&name),
         }
@@ -427,6 +487,37 @@ impl<'a> Analyzer<'a> {
                 for f in info.fields.values() {
                     let fname = f.type_.get_type();
                     if !self.name_is_blittable_value(&fname, seen) {
+                        return false;
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    /// Sendable analogue: blittable values, `string`, value structs whose fields are all shared,
+    /// and `@shared class` instances. Arrays and ordinary classes are not shared.
+    fn name_is_shared(&self, name: &str, seen: &mut std::collections::HashSet<String>) -> bool {
+        if name == "void" {
+            return true;
+        }
+        match self.name_shape(name) {
+            NameShape::Array | NameShape::Unknown => false,
+            NameShape::String | NameShape::Primitive => true,
+            NameShape::Nominal(info) => {
+                if !info.is_value {
+                    return self
+                        .type_ctx
+                        .defs
+                        .lookup(dream_types::DefKind::Struct, name)
+                        .is_some_and(|def| self.type_ctx.interner.is_shared_def(def));
+                }
+                if !seen.insert(name.to_string()) {
+                    return true;
+                }
+                for f in info.fields.values() {
+                    let fname = f.type_.get_type();
+                    if !self.name_is_shared(&fname, seen) {
                         return false;
                     }
                 }

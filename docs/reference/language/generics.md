@@ -71,11 +71,17 @@ Combine bounds with `+`:
 struct Sorted<T : Comparable<T> + Equatable<T>> { /* ... */ }
 ```
 
+Kind constraints include `struct`, `class`, `unmanaged`, and `shared` (Sendable analogue: blittable, `string`, structs of shared fields, or `@shared class`):
+
+```dream
+fun send<T : shared>(value: T): void { /* … */ }
+```
+
 At each instantiation the compiler checks the concrete type satisfies the constraint, reporting an error otherwise (e.g. `List<int>().sort()` needs `int : Comparable<int>`). Because generics are monomorphized, a constrained call binds to the concrete method with **static dispatch and no boxing** — even for [value structs](classes-structs.md).
 
 ### Static methods on a generic class
 
-If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`). Write `WebWorker.spawn("alpha", work)` or `List.from_array(items)`. Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below, or `WebWorker.spawn(() => 1)`):
+If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`). Write `List.from_array(items)` or `WebWorker.spawn(() => n * n)` (`TOut` is a method type argument). Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below):
 
 ```dream
 class Cache<T> {

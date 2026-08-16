@@ -151,32 +151,6 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        let (body_ret, box_ret) = if lambda.is_async {
-            match Self::future_inner_type(&exp_ret) {
-                Some(inner) => (inner, exp_ret.clone()),
-                None => {
-                    self.hir_none();
-                    return Err(report(
-                        diagnostics,
-                        format!(
-                            "async lambda requires a `fun(...): Future<T>` context, but the expected type returns '{}'",
-                            exp_ret.get_type()
-                        ),
-                        Some(lambda.open_paren_position),
-                    ));
-                }
-            }
-        } else if Self::future_inner_type(&exp_ret).is_some() {
-            self.hir_none();
-            return Err(report(
-                diagnostics,
-                "sync lambda cannot be used where `fun(...): Future<T>` is expected; write `async (params) => ...` for an async lambda".to_string(),
-                Some(lambda.open_paren_position),
-            ));
-        } else {
-            (exp_ret.clone(), exp_ret)
-        };
-
         let mut parameters: Vec<ParameterNode> = Vec::with_capacity(lambda.parameters.len());
         for (param, exp) in lambda.parameters.iter().zip(exp_params.iter()) {
             let (exp_elem, exp_is_ref) = Self::peel_ref_box(exp);
@@ -221,6 +195,51 @@ impl<'a> Analyzer<'a> {
             }
         }
         let param_types: Vec<Type> = parameters.iter().map(|p| p.type_.clone()).collect();
+        let unknown_ty = |t: &Type| t.is_unknown() || t.get_type() == "unknown";
+        let (body_ret, box_ret) = if lambda.is_async {
+            match Self::future_inner_type(&exp_ret) {
+                Some(inner) if !unknown_ty(&inner) => (inner, exp_ret.clone()),
+                Some(_) => {
+                    let inferred = self.infer_lambda_return_type(
+                        lambda,
+                        &param_types,
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    )?;
+                    (inferred.clone(), Self::future_type(inferred))
+                }
+                None => {
+                    self.hir_none();
+                    return Err(report(
+                        diagnostics,
+                        format!(
+                            "async lambda requires a `fun(...): Future<T>` context, but the expected type returns '{}'",
+                            exp_ret.get_type()
+                        ),
+                        Some(lambda.open_paren_position),
+                    ));
+                }
+            }
+        } else if Self::future_inner_type(&exp_ret).is_some() {
+            self.hir_none();
+            return Err(report(
+                diagnostics,
+                "sync lambda cannot be used where `fun(...): Future<T>` is expected; write `async (params) => ...` for an async lambda".to_string(),
+                Some(lambda.open_paren_position),
+            ));
+        } else if unknown_ty(&exp_ret) {
+            let inferred = self.infer_lambda_return_type(
+                lambda,
+                &param_types,
+                parent_function,
+                symbol_table,
+                diagnostics,
+            )?;
+            (inferred.clone(), inferred)
+        } else {
+            (exp_ret.clone(), exp_ret)
+        };
         self.finish_lambda_with_expected(
             lambda,
             parent_function,
@@ -398,6 +417,24 @@ impl<'a> Analyzer<'a> {
                         )?;
                     }
                 }
+                StatementNode::Declaration(name, declared, init, _) => {
+                    let t = match declared {
+                        Some(ty) => ty.clone(),
+                        None => {
+                            let t = self.analyze_expression(
+                                init,
+                                parent_function,
+                                symbol_table,
+                                diagnostics,
+                            )?;
+                            let _ = self.hir_take();
+                            t
+                        }
+                    };
+                    let _ = (*symbol_table)
+                        .borrow_mut()
+                        .add_symbol(name.text.clone(), t);
+                }
                 _ => {}
             }
         }
@@ -493,10 +530,7 @@ impl<'a> Analyzer<'a> {
 
         if self.is_webworker_body_call() {
             if let Some((bad, bad_ty)) = captures.iter().find(|(_, ty)| {
-                let tid = self.type_ctx.lower(ty);
-                !matches!(ty, Type::Function(_, _))
-                    && !self.type_ctx.interner.is_shared_type(tid)
-                    && !self.type_satisfies_kind(ty, dream_syntax::nodes::ConstraintKind::Unmanaged)
+                !self.type_satisfies_kind(ty, dream_syntax::nodes::ConstraintKind::Shared)
             }) {
                 self.hir_none();
                 let who = self
@@ -506,7 +540,7 @@ impl<'a> Analyzer<'a> {
                 return Err(report(
                     diagnostics,
                     format!(
-                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not in worker-shared memory — mark its type '@shared', pass it as a wire `spawn` argument, or allocate it inside the worker body (only '@shared class' instances and unmanaged values may cross threads)",
+                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class '@shared', or capture a blittable value, string, or a struct of those",
                         bad,
                         bad_ty.get_type(),
                         who,
@@ -640,19 +674,17 @@ impl<'a> Analyzer<'a> {
     }
 
     // True when the lambda/function-value being analyzed is a `WebWorker.spawn` /
-    // `WebWorker.map` / `WebWorkerPool.dispatch` body argument — see `current_call_target_name`
-    // set by the call-argument analysis paths. `WebWorker<TOut>.spawn` / `.map` dispatch through
-    // the generic-class static-call path, which monomorphizes the receiver to a mangled name
-    // (`WebWorker_int`) before `plain.rs` sets the call target from *that* — so the receiver half
-    // is matched by its unmangled prefix (mangling only ever appends `_{arg}...`), not by exact
-    // string.
+    // `WebWorker.spawn_async` / `WebWorker.map` / `WebWorkerPool.dispatch` body argument.
     pub(in crate::analyzer) fn is_webworker_body_call(&self) -> bool {
         match self.current_call_target_name.as_deref() {
             Some("WebWorker") => true,
             Some(name) => match name.split_once('.') {
-                Some((recv, "spawn")) | Some((recv, "map")) => {
-                    recv == "WebWorker" || recv.starts_with("WebWorker_")
-                }
+                Some((recv, "spawn"))
+                | Some((recv, "spawn_async"))
+                | Some((recv, "spawn_mapped"))
+                | Some((recv, "spawn_mapped_async"))
+                | Some((recv, "map"))
+                | Some((recv, "map_async")) => recv == "WebWorker" || recv.starts_with("WebWorker_"),
                 Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => {
                     recv == "WebWorkerPool"
                 }

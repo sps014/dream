@@ -1,29 +1,19 @@
 module system.core;
 
-// Real OS-parallel workers with a shared heap — thread-like spawn / join.
+// Real OS-parallel workers with a shared heap.
 //
-// `WebWorker.spawn(input, body)` starts a body on its own OS thread (native wasmtime)
-// or Web Worker (browser/Node); `await join()` waits for the single result. Each worker
-// instantiates its OWN copy of the module (private globals/shadow stack), but every instance of
-// the same program shares the same linear memory — `@shared class` objects, `Lock`/`Semaphore`,
-// and `CancellationSource`/`CancellationToken` are visible across workers.
+// `await WebWorker.spawn(() => n * n)` starts a body on its own OS thread (native wasmtime)
+// or Web Worker (browser/Node). There is no spawn message and no `join()`: `spawn` is `async`
+// and *is* the wait. Overlap work by saving the Future and awaiting later.
 //
-// Capturing lambdas may only close over `@shared class` instances or unmanaged/value locals —
-// ordinary managed refs are a compile error (not in worker-shared memory). `TIn`/`TOut` must be
-// `string`, unmanaged, or a `T[]` of one (`Bytes.toWire`/`fromWire`).
+// Captures must be `shared` (blittable, `string`, a struct of those, or `@shared class`).
+// Ordinary classes / arrays / `List` are a compile error.
 //
 //   async fun main(): void {
-//       let w = WebWorker.spawn(6, (n) => n * n);
-//       System.println((await w.join()).to_string()); // 36
+//       let square = await WebWorker.spawn(() => 6 * 6);
+//       System.println(square.to_string());
 //   }
-public class WebWorker<TIn, TOut> {
-    // Opaque host handle identifying this worker's thread/instance.
-    id: int;
-    // Owns the spawn-time wrapping funcbox (and its capture env) for the worker's lifetime.
-    // Sync and async spawns use different fun types; the unused field stays null (release no-op).
-    sync_body: fun(string): string;
-    async_body: fun(string): Future<string>;
-
+public class WebWorker {
     @js("Dream", "workerSpawn")
     static extern fun spawn_host(funcidx: int, env: int): int;
 
@@ -48,93 +38,100 @@ public class WebWorker<TIn, TOut> {
     @js("Dream", "workerTerminate")
     static extern fun terminate_host(id: int): void;
 
-    // Sync-wrapper spawn: keep `sync_body` alive until this instance is released.
-    constructor(id: int, sync_body: fun(string): string) {
+    public static async fun spawn<TOut : shared>(body: fun(): TOut): TOut {
+        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
+        let id = WebWorker.spawn_host(WebWorker.funcidx(wrapped), WebWorker.env(wrapped));
+        let session = WorkerSession(id, wrapped);
+        WebWorker.post_host(id, "");
+        let result = Bytes.fromWire<TOut>(await WebWorker.recv_host(id));
+        let _ = session;
+        return result;
+    }
+
+    public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>): TOut {
+        let wrapped: fun(string): Future<string> = async (_raw: string) => {
+            return Bytes.toWire<TOut>(await body());
+        };
+        let id = WebWorker.spawn_host(WebWorker.funcidx_async(wrapped), WebWorker.env_async(wrapped));
+        let session = WorkerSession(id, wrapped);
+        WebWorker.post_host(id, "");
+        let result = Bytes.fromWire<TOut>(await WebWorker.recv_host(id));
+        let _ = session;
+        return result;
+    }
+
+    static async fun spawn_mapped<T : shared, TOut : shared>(
+        input: T,
+        body: fun(T): TOut
+    ): TOut {
+        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)));
+        let id = WebWorker.spawn_host(WebWorker.funcidx(wrapped), WebWorker.env(wrapped));
+        let session = WorkerSession(id, wrapped);
+        WebWorker.post_host(id, Bytes.toWire<T>(input));
+        let result = Bytes.fromWire<TOut>(await WebWorker.recv_host(id));
+        let _ = session;
+        return result;
+    }
+
+    static async fun spawn_mapped_async<T : shared, TOut : shared>(
+        input: T,
+        body: fun(T): Future<TOut>
+    ): TOut {
+        let wrapped: fun(string): Future<string> = async (raw: string) => {
+            return Bytes.toWire<TOut>(await body(Bytes.fromWire<T>(raw)));
+        };
+        let id = WebWorker.spawn_host(WebWorker.funcidx_async(wrapped), WebWorker.env_async(wrapped));
+        let session = WorkerSession(id, wrapped);
+        WebWorker.post_host(id, Bytes.toWire<T>(input));
+        let result = Bytes.fromWire<TOut>(await WebWorker.recv_host(id));
+        let _ = session;
+        return result;
+    }
+
+    public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut): TOut[] {
+        let n = items.length;
+        let futures = Buffer.alloc<Future<TOut>>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            futures[i] = WebWorker.spawn_mapped(items[i], body);
+        }
+        let results = Buffer.alloc<TOut>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            results[i] = await futures[i];
+        }
+        return results;
+    }
+
+    public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>): TOut[] {
+        let n = items.length;
+        let futures = Buffer.alloc<Future<TOut>>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            futures[i] = WebWorker.spawn_mapped_async(items[i], body);
+        }
+        let results = Buffer.alloc<TOut>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            results[i] = await futures[i];
+        }
+        return results;
+    }
+}
+
+// Owns the spawn-time funcbox and terminates the worker when dropped (await done or Future cancel).
+class WorkerSession {
+    id: int;
+    sync_body: fun(string): string;
+    async_body: fun(string): Future<string>;
+
+    public constructor(id: int, sync_body: fun(string): string) {
         this.id = id;
         this.sync_body = sync_body;
     }
 
-    // Async-wrapper spawn: keep `async_body` alive until this instance is released.
-    constructor(id: int, async_body: fun(string): Future<string>) {
+    public constructor(id: int, async_body: fun(string): Future<string>) {
         this.id = id;
         this.async_body = async_body;
     }
 
-    // Start `body(input)` on a new thread immediately; `input` is wire-copied.
-    public static fun spawn(input: TIn, body: fun(TIn): TOut): WebWorker<TIn, TOut> {
-        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
-        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
-        WebWorker<TIn, TOut>.post_host(id, Bytes.toWire<TIn>(input));
-        return WebWorker<TIn, TOut>(id, wrapped);
-    }
-
-    public static fun spawn(input: TIn, body: fun(TIn): Future<TOut>): WebWorker<TIn, TOut> {
-        let wrapped: fun(string): Future<string> = async (raw: string) => {
-            return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
-        };
-        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
-        WebWorker<TIn, TOut>.post_host(id, Bytes.toWire<TIn>(input));
-        return WebWorker<TIn, TOut>(id, wrapped);
-    }
-
-    // Capture-only entry: no wire argument. `TIn` is unused at the call site (pass any dummy type
-    // args, e.g. `WebWorker<string, int>.spawn(() => …)`).
-    public static fun spawn(body: fun(): TOut): WebWorker<TIn, TOut> {
-        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
-        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
-        WebWorker<TIn, TOut>.post_host(id, "");
-        return WebWorker<TIn, TOut>(id, wrapped);
-    }
-
-    public static fun spawn(body: fun(): Future<TOut>): WebWorker<TIn, TOut> {
-        let wrapped: fun(string): Future<string> = async (_raw: string) => {
-            return Bytes.toWire<TOut>(await body());
-        };
-        let id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
-        WebWorker<TIn, TOut>.post_host(id, "");
-        return WebWorker<TIn, TOut>(id, wrapped);
-    }
-
-    // Await the body's single result. After hard `terminate()`, the pending join settles.
-    public async fun join(): TOut {
-        return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.recv_host(this.id));
-    }
-
-    // Hard-abort the worker thread. Idempotent. Does not run Dream finally / orderly ARC unwind.
-    public fun terminate(): void {
-        WebWorker<TIn, TOut>.terminate_host(this.id);
-    }
-
     del() {
-        WebWorker<TIn, TOut>.terminate_host(this.id);
-    }
-
-    // Fan `body` over `items` (one worker per element, spawn-then-join); results in input order.
-    public static async fun map(borrow items: TIn[], body: fun(TIn): TOut): TOut[] {
-        let n = items.length;
-        let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
-        for (let i = 0; i < n; i = i + 1) {
-            workers[i] = WebWorker<TIn, TOut>.spawn(items[i], body);
-        }
-        let results = Buffer.alloc<TOut>(n);
-        for (let i = 0; i < n; i = i + 1) {
-            results[i] = await workers[i].join();
-            workers[i].terminate();
-        }
-        return results;
-    }
-
-    public static async fun map(borrow items: TIn[], body: fun(TIn): Future<TOut>): TOut[] {
-        let n = items.length;
-        let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
-        for (let i = 0; i < n; i = i + 1) {
-            workers[i] = WebWorker<TIn, TOut>.spawn(items[i], body);
-        }
-        let results = Buffer.alloc<TOut>(n);
-        for (let i = 0; i < n; i = i + 1) {
-            results[i] = await workers[i].join();
-            workers[i].terminate();
-        }
-        return results;
+        WebWorker.terminate_host(this.id);
     }
 }

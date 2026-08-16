@@ -63,12 +63,74 @@ impl<'a> Analyzer<'a> {
         } = call;
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
-        for param in params.iter() {
+        let call_target = format!("{}.{}", type_name, method.text);
+        let saved_call_target = self.current_call_target_name.take();
+        self.current_call_target_name = Some(call_target);
+
+        let expected_params: Option<Vec<Type>> = {
+            let has_lambda = params.iter().any(|p| matches!(p, ExpressionNode::Lambda(_)));
+            if has_lambda && generic_args.as_ref().is_none_or(|g| g.is_empty()) {
+                let (paused_collecting, paused_ok) = self.hir_pause_collection();
+                let mut probe = vec![String::new(); params.len()];
+                for (i, param) in params.iter().enumerate() {
+                    if matches!(param, ExpressionNode::Lambda(_)) {
+                        continue;
+                    }
+                    if let Ok(t) = self.analyze_expression(
+                        param,
+                        ctx.parent_function,
+                        ctx.symbol_table,
+                        diagnostics,
+                    ) {
+                        probe[i] = t.get_type();
+                    }
+                    let _ = self.hir_take();
+                }
+                self.hir_resume_collection(paused_collecting, paused_ok);
+                let gen_params = template.generic_parameters.as_deref().unwrap_or(&[]);
+                let mut bindings = GenericBindings::new();
+                for param in gen_params {
+                    let concrete = template.parameters.iter().enumerate().find_map(|(i, formal)| {
+                        probe.get(i).filter(|s| !s.is_empty()).and_then(|arg| {
+                            Self::match_generic_type(&formal.type_, arg, &param.text)
+                        })
+                    });
+                    if let Some(c) = concrete {
+                        bindings.insert(param.text.clone(), Self::concrete_type_from_str(&c));
+                    }
+                }
+                if bindings.is_empty() {
+                    None
+                } else {
+                    Some(
+                        template
+                            .parameters
+                            .iter()
+                            .map(|p| {
+                                Self::erase_unbound_generics(
+                                    &Self::monomorphize_type(&p.type_, &bindings),
+                                    &bindings,
+                                    gen_params,
+                                )
+                            })
+                            .collect(),
+                    )
+                }
+            } else {
+                None
+            }
+        };
+
+        for (i, param) in params.iter().enumerate() {
+            let saved_expected = self.current_expected_type.take();
+            self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
             let t =
                 self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
+            self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
             params_types.push(t.get_type());
         }
+        self.current_call_target_name = saved_call_target;
         // `System.print`/`println` are generic builtins (not real monomorphizations): they lower
         // to the host `print_*` imports, so handle them before the generic-instance machinery.
         if let Some(op @ (intrinsics::IntrinsicOp::Print | intrinsics::IntrinsicOp::Println)) =
@@ -328,6 +390,13 @@ impl<'a> Analyzer<'a> {
             // `string` (identity passthrough) rather than trying to validate an unresolvable bound.
             if self.is_unresolved_generic_type(&payload) || payload.get_type() == "string" {
                 self.hir_set_last(value);
+            } else if payload.get_type() == "void" {
+                let string_ty = named("string");
+                let ty_id = self.type_ctx.lower(&string_ty);
+                self.hir_set_last(Some(dream_hir::HExpr::new(
+                    ty_id,
+                    dream_hir::HExprKind::StringLit(String::new()),
+                )));
             } else {
                 self.require_unmanaged_or_array(
                     &payload,
@@ -358,6 +427,9 @@ impl<'a> Analyzer<'a> {
             // a generic struct's declaration-time analysis pass, never reached by a real call site.
             if self.is_unresolved_generic_type(&target) || target.get_type() == "string" {
                 self.hir_set_last(text);
+            } else if target.get_type() == "void" {
+                self.hir_none();
+                return Ok(Type::Void);
             } else {
                 self.require_unmanaged_or_array(
                     &target,

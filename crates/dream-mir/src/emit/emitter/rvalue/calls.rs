@@ -129,7 +129,7 @@ impl Emitter<'_> {
     /// destination address (`dst`) is passed as the hidden leading argument, then the real
     /// arguments, then the table index dispatched through `$__ft` with `sig`'s sret signature.
     /// Mirrors [`emit_value_sret_call`](Self::emit_value_sret_call) for first-class function values
-    /// (e.g. a worker body funcref of type `fun(TIn): TOut` where `TOut` is a struct).
+    /// (e.g. a worker body funcref of type `fun(): TOut` where `TOut` is a struct).
     pub(in crate::emit::emitter) fn emit_indirect_sret_call(
         &mut self,
         dst: impl Fn(&mut Self),

@@ -1,0 +1,6 @@
+import system;
+
+async fun main(): void {
+    let name = "dream";
+    System.println(await WebWorker.spawn(() => "hello, " + name));
+}

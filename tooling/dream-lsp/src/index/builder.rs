@@ -16,7 +16,7 @@ use super::{
     base_struct, detail_belongs_to, fn_value_type, method_detail, param_names,
     parse_angle_type_args, parse_method_signature, signature, split_fun_type_str,
     substitute_named_type_params, type_base, type_mentions_param, unify_type_param, Decl, Index,
-    InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
+    InlayHintOut, InlayKind, Ref, SymKind, GLOBAL, method_generic_param_names,
 };
 
 pub(crate) struct Builder {
@@ -308,23 +308,29 @@ impl Builder {
             if !Self::lambda_async_compatible(&formals, args) {
                 continue;
             }
+            let method_params = method_generic_param_names(&d.detail);
+            let infer_params: &[String] = if !class_params.is_empty() {
+                &class_params
+            } else {
+                &method_params
+            };
             let type_args = if !explicit.is_empty() {
                 explicit.clone()
-            } else if !class_params.is_empty() {
-                match self.infer_class_args_from_call(&class_params, &formals, args, scope) {
+            } else if !infer_params.is_empty() {
+                match self.infer_class_args_from_call(infer_params, &formals, args, scope) {
                     Some(a) => a,
                     None => continue,
                 }
             } else {
                 Vec::new()
             };
-            if !class_params.is_empty() && type_args.len() != class_params.len() {
+            if !infer_params.is_empty() && type_args.len() != infer_params.len() {
                 continue;
             }
             if type_args.iter().any(|t| t.is_empty()) {
                 continue;
             }
-            let subst_ret = if class_params.is_empty() {
+            let subst_ret = if infer_params.is_empty() {
                 let detail = Index::apply_type_args_to_detail(
                     &d.detail,
                     receiver_ty_opt.as_deref(),
@@ -334,9 +340,9 @@ impl Builder {
                     .map(|(_, r)| r)
                     .unwrap_or(ret)
             } else {
-                substitute_named_type_params(&ret, &class_params, &type_args)
+                substitute_named_type_params(&ret, infer_params, &type_args)
             };
-            if class_params
+            if infer_params
                 .iter()
                 .any(|p| type_mentions_param(&subst_ret, p))
             {

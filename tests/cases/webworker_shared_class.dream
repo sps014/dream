@@ -1,6 +1,3 @@
-// `WebWorker` body may capture an `@shared class` instance directly (no wrapper/handle): the
-// worker thread mutates it through the same `lock`/atomic-refcount machinery as any other thread.
-
 import system;
 @shared
 class Counter {
@@ -20,22 +17,19 @@ class Counter {
 async fun main(): void {
     let counter = Counter();
 
-    let a = WebWorker<string, string>.spawn("go", (msg) => {
+    let a = WebWorker.spawn(() => {
         lock (counter) {
             counter.value = counter.value + 1;
         }
-        return msg;
+        return 0;
     });
-    let b = WebWorker<string, string>.spawn("go", (msg) => {
+    let b = WebWorker.spawn(() => {
         counter.increment();
-        return msg;
+        return 0;
     });
 
-    await a.join();
-    await b.join();
+    await a;
+    await b;
 
     System.println(counter.value);
-
-    a.terminate();
-    b.terminate();
 }

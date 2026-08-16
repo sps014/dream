@@ -210,16 +210,19 @@ extend Token { public fun describe(): string { return "token"; } }
 
 ## Advanced: `@shared` classes
 
-Prefix a `class` with `@shared` to make it safe to pass by reference across [`WebWorker`](webworkers.md) threads. A `@shared` class pays two costs, and only when opted in:
+Prefix a `class` with `@shared` to make it a **shared** reference type — Dream's analogue of Swift `Sendable` for classes. A `@shared` class pays two costs, and only when opted in:
 
 - **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a `@shared` instance's refcount can be touched from more than one thread.
 - **An extra header word** reserved for a reentrant lock, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking.
+
+A type is **`shared`** (and may be captured by a [`WebWorker`](webworkers.md) body, or stored in an `@shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or an `@shared class`. `T[]`, `List<T>`, and ordinary classes are not. Constrain generics with `T : shared`.
 
 ```dream
 @shared
 class Counter {
     public value: int;
-    public constructor() { this.value = 0; }
+    public label: string;   // legal — string is shared
+    public constructor() { this.value = 0; this.label = ""; }
 
     public fun increment(): void {
         lock (this) {
@@ -229,19 +232,19 @@ class Counter {
 }
 ```
 
-**The closed-graph field rule:** every field of a `@shared class` must itself be either unmanaged (a primitive or a value `struct` with no reference fields) or another `@shared class` instance. This is enforced at compile time so there is no way to reach an unprotected, ordinary managed reference by following fields from a `@shared` object — every reachable piece of its state is either safe to copy or independently `@shared`.
+**The closed-graph field rule:** every field of an `@shared class` must itself be `shared`. This is enforced at compile time so there is no way to reach an unprotected, ordinary managed reference by following fields from a `@shared` object.
 
 ```dream
 class Plain { public x: int; }
 
 @shared
 class Bad {
-    // error: field 'p' of type 'Plain' is not unmanaged or '@shared'
+    // error: field 'p' of type 'Plain' is not shared
     public p: Plain;
 }
 ```
 
-`@shared struct` is not allowed. Wrap the value in a `@shared class` if it needs to cross threads.
+`@shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `@shared class` if it needs to be shared by pointer. `lock (x)` still requires an `@shared class` (a lock word), not every `shared` type.
 
 ## Advanced: boxing a struct
 

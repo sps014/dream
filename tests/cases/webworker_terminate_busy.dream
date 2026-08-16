@@ -1,13 +1,12 @@
-// Hard terminate aborts a busy worker; join settles (does not hang).
+// Hard terminate: cancelling the spawn Future aborts a busy worker.
 import system;
 
 async fun main(): void {
-    let w = WebWorker<string, string>.spawn(() => {
+    let f = WebWorker.spawn(() => {
         while (true) {
         }
-        return "never";
+        return 0;
     });
-    w.terminate();
-    let _ = await w.join();
+    Promise.cancel(f);
     System.println("done");
 }

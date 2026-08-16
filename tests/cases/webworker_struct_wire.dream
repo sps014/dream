@@ -1,6 +1,3 @@
-// `WebWorker` supports an arbitrary `unmanaged` (blittable) value `struct` for wire args /
-// results: it crosses as a raw byte-blit, reconstructed on the other side with the same layout.
-
 import system;
 struct Point {
     public x: int;
@@ -17,8 +14,7 @@ fun shift(p: Point): Point {
 }
 
 async fun main(): void {
-    let w = WebWorker<Point, Point>.spawn(Point(1, 2), shift);
-    let r = await w.join();
+    let p = Point(1, 2);
+    let r = await WebWorker.spawn(() => shift(p));
     System.println("" + r.x + "," + r.y);
-    w.terminate();
 }

@@ -128,7 +128,7 @@ impl<'a> Analyzer<'a> {
             // the method access to its own class's private members — the unrenamed original's bare
             // method name (e.g. `idx`, not `Helper_idx`) would never match that prefix.
             //
-            // Method-level generics (`map<U>`, `dispatch<TIn,TOut>`) mirror free generic functions:
+            // Method-level generics (`map<U>`, `spawn<TOut>`) mirror free generic functions:
             // stash the template only. Analyzing the unbound body would treat type params as
             // concrete names (e.g. `Option_U`) and emit the wrong calling convention for the
             // caller's monomorphized return type. Concrete instances are analyzed via

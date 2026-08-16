@@ -1,6 +1,4 @@
-// `WebWorker` also supports `T[]` (`T` itself `unmanaged`) for wire args/results: dynamic-length
-// raw byte-blit of the array's elements (never the array pointer).
-
+// Per-element map replaces array wire: `T[]` itself is not shared.
 import system;
 import system.text;
 struct Point {
@@ -13,38 +11,20 @@ struct Point {
     }
 }
 
-fun doubleAll(nums: int[]): int[] {
-    let out = Buffer.alloc<int>(nums.length);
-    for (let i = 0; i < nums.length; i = i + 1) {
-        out[i] = nums[i] * 2;
-    }
-    return out;
-}
-
-fun shiftAll(points: Point[]): Point[] {
-    let out = Buffer.alloc<Point>(points.length);
-    for (let i = 0; i < points.length; i = i + 1) {
-        out[i] = Point(points[i].x + 1, points[i].y + 1);
-    }
-    return out;
-}
-
 async fun main(): void {
-    let w1 = WebWorker<int[], int[]>.spawn([1, 2, 3, 4, 5], doubleAll);
-    let doubled = await w1.join();
+    let nums = [1, 2, 3, 4, 5];
+    let doubled = await WebWorker.map(nums, (n) => n * 2);
     let s1 = "";
     for (let i = 0; i < doubled.length; i = i + 1) {
         s1 = s1 + doubled[i] + " ";
     }
     System.println(s1.trim());
-    w1.terminate();
 
-    let w2 = WebWorker<Point[], Point[]>.spawn([Point(1, 2), Point(3, 4)], shiftAll);
-    let shifted = await w2.join();
+    let points = [Point(1, 2), Point(3, 4)];
+    let shifted = await WebWorker.map(points, (p) => Point(p.x + 1, p.y + 1));
     let s2 = "";
     for (let i = 0; i < shifted.length; i = i + 1) {
         s2 = s2 + shifted[i].x + "," + shifted[i].y + " ";
     }
     System.println(s2.trim());
-    w2.terminate();
 }

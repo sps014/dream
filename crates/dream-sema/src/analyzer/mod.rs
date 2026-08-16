@@ -305,8 +305,8 @@ pub struct Analyzer<'a> {
     instantiated_generics: IndexMap<String, (GenericBindings, &'a FunctionNode<'a>)>,
     /// Arrow-lambdas (capturing or not) lowered to synthesized top-level functions (`__lambda_0`,
     /// ...), keyed by their synthesized name, paired with the generic bindings active at the
-    /// lambda literal's own use site (e.g. `TIn`/`TOut` -> `int` for a lambda written inside a
-    /// `WebWorker<TIn, TOut>` method) so its body is re-checked under the same substitution when
+    /// lambda literal's own use site (e.g. `TOut` -> `int` for a lambda written inside a
+    /// `WebWorker.spawn<TOut>` method) so its body is re-checked under the same substitution when
     /// analyzed. Bodies are analyzed in the same deferred fixpoint pass as `instantiated_generics`
     /// (see `analyze_pending_instantiations`), since a function's body cannot be analyzed while
     /// another function's analysis is already in progress. The lambda literal itself is never

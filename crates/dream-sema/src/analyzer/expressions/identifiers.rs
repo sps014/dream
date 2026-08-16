@@ -54,28 +54,9 @@ impl<'a> Analyzer<'a> {
                     // A boxed `fun(...)` value is invoked through synchronous `call_indirect`. An
                     // `async fun`'s constructor returns an untagged `Future` frame pointer, so boxing
                     // it as `fun(...): Future<T>` matches the WASM result and lets the caller
-                    // `await f(...)` like a direct async call.
-                    //
-                    // `WebWorker`/`map`/`dispatch` have two body shapes:
-                    // - `fun(...): T` — including a string-returning top-level `async fun` boxed as
-                    //   `fun(string): string` so the sync wire-wrapper + trampoline identity-`toWire`
-                    //   path can drive the Future (string-only).
-                    // - `fun(...): Future<T>` — named async funs (any `T`) and `async` lambdas; the
-                    //   Future-body constructor awaits then wire-encodes, so any `TOut` works.
+                    // `await f(...)` like a direct async call. Worker bodies use the same shape
+                    // (`spawn_async` / `map_async` / `dispatch_async`).
                     if sig.is_async {
-                        let returns_string =
-                            matches!(&sig.return_type, Some(t) if t.get_type() == "string");
-                        if self.is_webworker_body_call() && returns_string {
-                            let params = sig
-                                .parameters
-                                .iter()
-                                .map(|p| Self::type_from_name(p))
-                                .collect();
-                            let ret = sig.return_type.clone().unwrap_or(Type::Void);
-                            let func_ty = Type::Function(params, Box::new(ret.clone()));
-                            self.hir_set_func_value(&id.text, &func_ty, &ret);
-                            return Ok(func_ty);
-                        }
                         let params = sig
                             .parameters
                             .iter()

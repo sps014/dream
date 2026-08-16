@@ -133,11 +133,8 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Reports an error unless `field`'s type is safe to store in an `@shared class`: unmanaged
-    /// (blittable, copied by value — a primitive or a value `struct` with no reference fields) or
-    /// itself another `@shared` type (guarded by its own embedded lock). A plain (non-`@shared`)
-    /// class/array/string field would let a second thread reach mutable, unlocked heap state
-    /// through this field without going through *any* lock.
+    /// Reports an error unless `field`'s type is `shared` (Sendable analogue: unmanaged, `string`,
+    /// a value struct of shared fields, or another `@shared` type).
     fn check_shared_field(
         &mut self,
         owner_name: &str,
@@ -146,23 +143,14 @@ impl<'a> Analyzer<'a> {
     ) {
         if self.type_satisfies_kind(
             &field.field_type,
-            dream_syntax::nodes::ConstraintKind::Unmanaged,
+            dream_syntax::nodes::ConstraintKind::Shared,
         ) {
             return;
         }
         let field_type_name = field.field_type.get_type();
-        if let Some(def) = self
-            .type_ctx
-            .defs
-            .lookup(DefKind::Struct, field_type_name.as_str())
-        {
-            if self.type_ctx.interner.is_shared_def(def) {
-                return;
-            }
-        }
         diagnostics.report_error(
             format!(
-                "field '{}' of '@shared class {}' has type '{}', which is neither unmanaged nor itself '@shared': an '@shared class' may only hold unmanaged/value fields or references to other '@shared' types",
+                "field '{}' of '@shared class {}' has type '{}', which is not shared: an '@shared class' may only hold blittable values, string, structs of shared fields, or other '@shared' types",
                 field.name.text,
                 owner_name,
                 field_type_name

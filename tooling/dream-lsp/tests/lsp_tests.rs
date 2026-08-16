@@ -658,7 +658,7 @@ fn method_generic_args_expanded_on_hover() {
 import system;
 async fun main(): void {
     let pool = WebWorkerPool(2);
-    pool.dispa|tch<int, string>(1, (n: int) => "x");
+    pool.dispa|tch<int>(() => 9);
 }
 "#,
     );
@@ -668,14 +668,13 @@ async fun main(): void {
         .expect("hover on dispatch");
     assert!(
         hover.contents.contains("WebWorkerPool.dispatch")
-            && hover.contents.contains("msg: int")
-            && hover.contents.contains("fun(int): string")
-            && hover.contents.contains(": string"),
-        "expected TIn/TOut substituted, got {}",
+            && hover.contents.contains("fun(): int")
+            && hover.contents.contains(": int"),
+        "expected TOut substituted, got {}",
         hover.contents
     );
     assert!(
-        !hover.contents.contains("TIn") && !hover.contents.contains("TOut"),
+        !hover.contents.contains("TOut"),
         "type params should be expanded away: {}",
         hover.contents
     );
@@ -1648,7 +1647,7 @@ fn webworker_spawn_inlay_infers_class_type_args() {
     let src = "
 fun k(x: string): string { return x; }
 fun main(): void {
-    let w = WebWorker.spawn(\"h\", k);
+    let w = WebWorker.spawn(() => k(\"h\"));
 }
 ";
     let index = Index::build(None, src);
@@ -1659,8 +1658,8 @@ fun main(): void {
         .map(|h| h.label.as_str())
         .collect();
     assert!(
-        labels.contains(&": WebWorker<string, string>"),
-        "`let w = WebWorker.spawn(\"h\", k)` should show `: WebWorker<string, string>`; got {:?}",
+        labels.contains(&": Future<string>"),
+        "`let w = WebWorker.spawn(() => k(\"h\"))` should show `: Future<string>`; got {:?}",
         labels
     );
 }
@@ -1670,7 +1669,7 @@ fn webworker_spawn_lambda_inlay_infers_class_type_args() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
 fun main(): void {
-    let squarer = WebWorker.spawn(6, (n) => n * n);
+    let squarer = WebWorker.spawn(() => 6 * 6);
 }
 ";
     let index = Index::build(None, src);
@@ -1681,8 +1680,8 @@ fun main(): void {
         .map(|h| h.label.as_str())
         .collect();
     assert!(
-        labels.contains(&": WebWorker<int, int>"),
-        "`let squarer = WebWorker.spawn(6, (n) => n * n)` should show `: WebWorker<int, int>`; got {:?}",
+        labels.contains(&": Future<int>"),
+        "`let squarer = WebWorker.spawn(() => 6 * 6)` should show `: Future<int>`; got {:?}",
         labels
     );
 }

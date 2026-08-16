@@ -1,4 +1,4 @@
-// Class type arguments on `WebWorker.spawn` / `.map` are inferred from the arguments.
+// Class/method type arguments on `WebWorker.spawn` / `.map` are inferred.
 import system;
 
 fun shout(msg: string): string {
@@ -6,13 +6,10 @@ fun shout(msg: string): string {
 }
 
 async fun main(): void {
-    let w = WebWorker.spawn("hello", shout);
-    System.println(await w.join());
-    w.terminate();
+    System.println(await WebWorker.spawn(() => shout("hello")));
 
-    let squarer = WebWorker.spawn(6, (n) => n * n);
-    System.println((await squarer.join()).to_string());
-    squarer.terminate();
+    let n = 6;
+    System.println((await WebWorker.spawn(() => n * n)).to_string());
 
     let items = ["1", "2"];
     let results = await WebWorker.map(items, shout);

@@ -1,0 +1,15 @@
+// `@shared class` may hold a `string` field (shared / Sendable analogue).
+import system;
+
+@shared
+class Named {
+    public label: string;
+    public constructor(label: string) {
+        this.label = label;
+    }
+}
+
+async fun main(): void {
+    let n = Named("hi");
+    System.println(await WebWorker.spawn(() => n.label + "!"));
+}

@@ -1,18 +1,16 @@
-// Capturing plain unmanaged/value locals (not an `@shared class`) into a `WebWorker` body is
-// allowed — it is safe to snapshot by value.
+// Capturing plain unmanaged/value locals into a `WebWorker` body is allowed.
 
 import system;
 async fun main(): void {
     let scale = 3;
     let offset = 3;
+    let prefix = "result=";
 
-    let w = WebWorker<string, string>.spawn("result=", (msg) => {
+    System.println(await WebWorker.spawn(() => {
         let result = scale + offset;
         if (result == 6) {
-            return msg + "ok";
+            return prefix + "ok";
         }
-        return msg + "bad";
-    });
-
-    System.println(await w.join());
+        return prefix + "bad";
+    }));
 }

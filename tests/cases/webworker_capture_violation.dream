@@ -1,6 +1,4 @@
-// Capturing an ordinary (non-`@shared`) managed object into a `WebWorker` body is a compile error:
-// it would hand the worker a live pointer into memory the creating thread may keep mutating
-// non-atomically.
+// Capturing an ordinary (non-`@shared`) managed object into a `WebWorker` body is a compile error.
 
 class Counter {
     public value: int;
@@ -13,10 +11,8 @@ class Counter {
 async fun main(): void {
     let counter = Counter();
 
-    let w = WebWorker<string, string>.spawn("go", (msg) => {
+    let _ = await WebWorker.spawn(() => {
         counter.value = counter.value + 1;
-        return msg;
+        return 0;
     });
-
-    await w.join();
 }

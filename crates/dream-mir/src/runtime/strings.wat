@@ -1034,6 +1034,21 @@
     local.get $p
 )
 
+;; Isolation-boundary copy: a new heap string with the same payload (empty stays interned).
+(func $string_clone (param $ptr i32) (result i32)
+    local.get $ptr
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $ptr
+    i32.const 0
+    local.get $ptr
+    call $str_scalar_len
+    call $string_substring_raw
+)
+
 ;; Bulk-copy `count` UTF-8 bytes from string `src` into `byte[]` `dst`.
 ;; Source payload is at src+8; destination array payload is at dst+4.
 (func $string_copy_utf8 (param $dst i32) (param $dst_off i32) (param $src i32) (param $src_off i32) (param $count i32)

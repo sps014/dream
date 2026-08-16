@@ -72,7 +72,7 @@ buf[0] = 10;
 
 ```dream
 let xs = [1, 2, 3, 4, 5];
-let whole = Span<int>.of(xs);      // a span over all of xs
+let whole = Span.of(xs);           // inferred Span<int> — a span over all of xs
 let mid = whole.slice(1, 3);       // [2, 3, 4] — still a view, no copy
 
 println(mid.get(0));               // 2

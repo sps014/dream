@@ -21,8 +21,8 @@ async fun main(): void {
         return;
     }
 
-    let x = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
-    let y = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
+    let x = GpuBuffer.from([1.0, 2.0, 3.0, 4.0]);
+    let y = GpuBuffer.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
     let r = await Compute.run_1d("saxpy", [x, y, out], 4);
     if (r.is_err()) {

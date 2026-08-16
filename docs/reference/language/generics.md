@@ -75,7 +75,7 @@ At each instantiation the compiler checks the concrete type satisfies the constr
 
 ### Static methods on a generic class
 
-Dispatch a `static` method by naming the class with concrete arguments on the receiver, `Class<Args>.method(...)`. The compiler monomorphizes the class for those arguments:
+If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`). Write `WebWorker.spawn("alpha", work)` or `List.from_array(items)`. Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below, or `WebWorker.spawn(() => 1)`):
 
 ```dream
 class Cache<T> {
@@ -86,7 +86,7 @@ class Cache<T> {
     }
 }
 
-let c = Cache<int>.make(5);   // monomorphizes Cache<int>, calls Cache<int>.make
+let c = Cache<int>.make(5);   // T is not in make's parameters — write it on the class
 println(c.seed);              // 5
 ```
 

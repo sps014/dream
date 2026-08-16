@@ -2,7 +2,7 @@ module system.core;
 
 // Real OS-parallel workers with a shared heap — thread-like spawn / join.
 //
-// `WebWorker<TIn, TOut>.spawn(input, body)` starts a body on its own OS thread (native wasmtime)
+// `WebWorker.spawn(input, body)` starts a body on its own OS thread (native wasmtime)
 // or Web Worker (browser/Node); `await join()` waits for the single result. Each worker
 // instantiates its OWN copy of the module (private globals/shadow stack), but every instance of
 // the same program shares the same linear memory — `@shared class` objects, `Lock`/`Semaphore`,
@@ -13,7 +13,7 @@ module system.core;
 // `string`, unmanaged, or a `T[]` of one (`Bytes.toWire`/`fromWire`).
 //
 //   async fun main(): void {
-//       let w = WebWorker<int, int>.spawn(6, (n) => n * n);
+//       let w = WebWorker.spawn(6, (n) => n * n);
 //       System.println((await w.join()).to_string()); // 36
 //   }
 public class WebWorker<TIn, TOut> {

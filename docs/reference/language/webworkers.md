@@ -42,6 +42,8 @@ public class WebWorker<TIn, TOut> {
 }
 ```
 
+`TIn` / `TOut` are inferred from the arguments when they appear there — write `WebWorker.spawn("dream", greet)`, not `WebWorker<string, string>.spawn(...)`. Explicit arguments still work, and are required when a parameter is unused (no-input `spawn(() => …)` cannot guess `TIn`).
+
 ## Spawn / join
 
 ```dream
@@ -52,11 +54,11 @@ fun greet(name: string): string {
 }
 
 async fun main(): void {
-    let w = WebWorker<string, string>.spawn("dream", greet);
+    let w = WebWorker.spawn("dream", greet);
     System.println(await w.join());   // hello, dream!
     w.terminate();
 
-    let squarer = WebWorker<int, int>.spawn(6, (n) => n * n);
+    let squarer = WebWorker.spawn(6, (n) => n * n);
     System.println((await squarer.join()).to_string()); // 36
     squarer.terminate();
 }
@@ -74,9 +76,9 @@ fun work(input: string): string {
 }
 
 async fun main(): void {
-    let w1 = WebWorker<string, string>.spawn("alpha", work);
-    let w2 = WebWorker<string, string>.spawn("beta", work);
-    let w3 = WebWorker<string, string>.spawn("gamma", work);
+    let w1 = WebWorker.spawn("alpha", work);
+    let w2 = WebWorker.spawn("beta", work);
+    let w3 = WebWorker.spawn("gamma", work);
 
     System.println(await w1.join());   // ALPHA
     System.println(await w2.join());   // BETA
@@ -92,7 +94,7 @@ For the common "run N independent computations and collect the results" shape, `
 
 ## `WebWorker.map` — parallel map
 
-`WebWorker<TIn, TOut>.map` fans a body out over an array in parallel and collects replies **in input order** — one worker per element, spawn-then-join:
+`WebWorker.map` fans a body out over an array in parallel and collects replies **in input order** — one worker per element, spawn-then-join:
 
 ```dream
 fun square(x: string): string {
@@ -102,7 +104,7 @@ fun square(x: string): string {
 
 async fun main(): void {
     let items = ["1", "2", "3", "4", "5"];
-    let results = await WebWorker<string, string>.map(items, square);
+    let results = await WebWorker.map(items, square);
     for (let r in results) {
         System.println(r);   // 1, 4, 9, 16, 25
     }
@@ -136,8 +138,8 @@ class Counter {
 async fun main(): void {
     let counter = Counter();
 
-    let a = WebWorker<string, string>.spawn("go", (msg) => { counter.increment(); return msg; });
-    let b = WebWorker<string, string>.spawn("go", (msg) => { counter.increment(); return msg; });
+    let a = WebWorker.spawn("go", (msg) => { counter.increment(); return msg; });
+    let b = WebWorker.spawn("go", (msg) => { counter.increment(); return msg; });
 
     await a.join();
     await b.join();
@@ -175,7 +177,7 @@ A worker body may `await` (named `async fun` or `async` lambda):
 
 ```dream
 async fun main(): void {
-    let squarer = WebWorker<int, int>.spawn(6, async (n) => {
+    let squarer = WebWorker.spawn(6, async (n) => {
         await Time.sleep(1);
         return n * n;
     });
@@ -209,7 +211,7 @@ Capture and wire rules match `spawn`.
 
 ## Notes and limits
 
-- Body is `fun(): TOut`, `fun(TIn): TOut`, or the `Future`-returning forms.
+- Body is `fun(): TOut`, `fun(TIn): TOut`, or the `Future`-returning forms. Type arguments on `spawn` / `map` are inferred from those arguments; write `WebWorker<string, int>.spawn(() => 1)` (or annotate `w`) when `TIn` is unused.
 - Wire types must be `string`, unmanaged, or a `T[]` of one. Pass `@shared` state by capturing it, not as the message type.
 - `terminate()` is idempotent and also runs when the handle is destroyed.
 

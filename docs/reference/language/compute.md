@@ -28,8 +28,8 @@ fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int)
 async fun main(): void {
     let init = await Gpu.try_init();
     if (init.is_err()) { return; }
-    let a = GpuBuffer<float>.from([1.0, 2.0, 3.0]);
-    let b = GpuBuffer<float>.from([10.0, 20.0, 30.0]);
+    let a = GpuBuffer.from([1.0, 2.0, 3.0]);
+    let b = GpuBuffer.from([10.0, 20.0, 30.0]);
     let out = GpuBuffer<float>.alloc(3);
     let r = await Compute.run_1d("add", [a, b, out], 3);
     if (r.is_err()) { return; }
@@ -61,8 +61,8 @@ fun saxpy(x: GpuBuffer<float>, y: GpuBuffer<float>, out: GpuBuffer<float>, n: in
 async fun main(): void {
     let init = await Gpu.try_init();
     if (init.is_err()) { return; }
-    let x = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
-    let y = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
+    let x = GpuBuffer.from([1.0, 2.0, 3.0, 4.0]);
+    let y = GpuBuffer.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
     let _ = await Compute.run_1d("saxpy", [x, y, out], 4);
     let vals = await out.read();

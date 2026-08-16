@@ -14,6 +14,9 @@ ratios are not an ARC-only scoreboard.
 | `substring` | `substring(start, end)` | `Substring(start, length)` |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
 | `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, `Compiled` |
+| `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` (no source-gen) |
+| `arr_add` | Scalar `c[i]=a[i]+b[i]` (`float[]`+`int[]`, n=256); Dream autovecs to `v128` | same scalar `for` (RyuJIT autovec) |
+| `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM sret copies of `v128`) | `System.Numerics.Vector<float>` |
 
 ## Campaign snapshots (Dream ns/op)
 
@@ -71,9 +74,27 @@ Representative Dream vs C# after those opts (same host):
 | byte_scan / char_scan | 228 / 286 | 21 / 23 |
 | regex_find | ~14k | ~820 |
 
+### After (JSON benches, autovec, `Vector<T>`)
+
+Same host as `./scripts/run-microbenches.sh`. `arr_add` is the autovec row (`f32x4.add` /
+`i32x4.add` in `--release` WAT plus a scalar remainder). `vec_add` is explicit `Vector<T>`
+and currently pays extra `v128` store/reload through struct sret (not a register SIMD loop
+like RyuJIT).
+
+| Bench | Dream | C# |
+|-------|------:|---:|
+| json_serialize | 1220 | 961 |
+| json_deserialize | 10121 | 1753 |
+| arr_add | 449 | 369 |
+| vec_add | 3375 | 79 |
+| regex_find | 13139 | 835 |
+| string_builder | 22 | 12 |
+| map_clear_reuse | 24 | 2 |
+| string_concat | 41 | 12 |
+
 Native LLVM path (floor for scan/substring/regex): see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md)
-(branch `llvm` / worktree).
+(branch `llvm` / worktree). Do not revive that backend for this scoreboard.
 
 Raw logs: `out/native.txt`, `out/csharp.txt`, `out/compare.txt`.
 

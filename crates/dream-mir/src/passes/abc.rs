@@ -49,22 +49,27 @@ fn range_facts(func: &MirFunction, nonneg: &HashSet<u32>) -> Facts {
         else {
             continue;
         };
-        let Some((idx, len)) = lt_operands(block, *cmp) else {
+        let Some((idx, bound)) = lt_bound(block, *cmp) else {
             continue;
         };
         if !nonneg.contains(&idx.0) {
             continue;
         }
-        let Some(&arr) = len_of.get(&len.0) else {
+        let arrs = arrays_bounded_by(func, &len_of, &bound);
+        if arrs.is_empty() {
             continue;
-        };
+        }
         let header = crate::BlockId(bi as u32);
         for (ti, _) in func.blocks.iter().enumerate() {
             let t = crate::BlockId(ti as u32);
             if (t == *then_blk || dom.dominates(*then_blk, t))
-                && !redefines_between(func, &dom, header, t, &[idx, len, Local(arr)])
+                && !redefines_between(func, &dom, header, t, &[idx])
             {
-                facts[ti].insert((idx.0, arr));
+                for &arr in &arrs {
+                    if !redefines_between(func, &dom, header, t, &[Local(arr)]) {
+                        facts[ti].insert((idx.0, arr));
+                    }
+                }
             }
         }
     }
@@ -170,17 +175,67 @@ fn mark_place(place: &mut Place, facts: &Facts, block_hint: usize) -> bool {
     }
 }
 
-fn lt_operands(block: &crate::BasicBlock, cmp: Local) -> Option<(Local, Local)> {
+fn lt_bound(block: &crate::BasicBlock, cmp: Local) -> Option<(Local, Operand)> {
     for stmt in block.stmts.iter().rev() {
         if let Statement::Assign(Place::Local(d), Rvalue::Binary(BinOp::Lt, a, b)) = stmt {
             if *d == cmp {
                 let ia = as_local(a)?;
-                let ib = as_local(b)?;
-                return Some((ia, ib));
+                return Some((ia, b.clone()));
             }
         }
     }
     None
+}
+
+fn arrays_bounded_by(
+    func: &MirFunction,
+    len_of: &std::collections::HashMap<u32, Vec<u32>>,
+    bound: &Operand,
+) -> Vec<u32> {
+    match bound {
+        Operand::Copy(Place::Local(n)) => {
+            let mut arrs = len_of.get(&n.0).cloned().unwrap_or_default();
+            if let Some(k) = local_const_int(func, *n) {
+                arrs.extend(arrays_alloced_with_const(func, k));
+            }
+            arrs
+        }
+        Operand::Const(Const::Int(k)) => arrays_alloced_with_const(func, *k),
+        _ => Vec::new(),
+    }
+}
+
+fn local_const_int(func: &MirFunction, local: Local) -> Option<i64> {
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Const(Const::Int(k)))) =
+                stmt
+            {
+                if *d == local {
+                    return Some(*k);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn arrays_alloced_with_const(func: &MirFunction, k: i64) -> Vec<u32> {
+    let mut arrs = Vec::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if let Statement::Assign(Place::Local(arr), Rvalue::ArrayNew { len, .. }) = stmt {
+                match len {
+                    Operand::Const(Const::Int(v)) if *v == k => arrs.push(arr.0),
+                    Operand::Copy(Place::Local(n)) if local_const_int(func, *n) == Some(k) => {
+                        arrs.push(arr.0);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    arrs
 }
 
 fn as_local(op: &Operand) -> Option<Local> {
@@ -190,16 +245,27 @@ fn as_local(op: &Operand) -> Option<Local> {
     }
 }
 
-fn array_len_locals(func: &MirFunction) -> std::collections::HashMap<u32, u32> {
-    let mut m = std::collections::HashMap::new();
+fn array_len_locals(func: &MirFunction) -> std::collections::HashMap<u32, Vec<u32>> {
+    let mut m: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
-            if let Statement::Assign(
-                Place::Local(d),
-                Rvalue::ArrayLen(Operand::Copy(Place::Local(arr))),
-            ) = stmt
-            {
-                m.insert(d.0, arr.0);
+            match stmt {
+                Statement::Assign(
+                    Place::Local(d),
+                    Rvalue::ArrayLen(Operand::Copy(Place::Local(arr))),
+                ) => {
+                    m.entry(d.0).or_default().push(arr.0);
+                }
+                Statement::Assign(
+                    Place::Local(arr),
+                    Rvalue::ArrayNew {
+                        len: Operand::Copy(Place::Local(n)),
+                        ..
+                    },
+                ) => {
+                    m.entry(n.0).or_default().push(arr.0);
+                }
+                _ => {}
             }
         }
     }
@@ -331,6 +397,74 @@ mod tests {
         b.terminate(Terminator::Goto(cond));
         b.switch_to(after);
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(elem)))));
+        let mut func = b.finish();
+        assert!(Abc.run(&mut func, &i));
+        match &func.blocks[body.0 as usize].stmts[0] {
+            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked, .. }))) => {
+                assert!(*unchecked);
+            }
+            other => panic!("expected unchecked index, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn alloc_len_bound_is_unchecked() {
+        let mut i = TypeInterner::new();
+        let arr_ty = i.array(i.float());
+        let mut b = FunctionBuilder::new("f", i.int());
+        let n = b.new_param(i.int(), Some("n".into()));
+        let arr = b.new_temp(arr_ty);
+        let idx = b.new_temp(i.int());
+        let cmp = b.new_temp(i.bool());
+        let elem = b.new_temp(i.float());
+        b.assign(
+            Place::Local(arr),
+            Rvalue::ArrayNew {
+                elem_ty: i.float(),
+                len: Operand::Copy(Place::Local(n)),
+            },
+        );
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
+        let cond = b.new_block();
+        let body = b.new_block();
+        let after = b.new_block();
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(cond);
+        b.assign(
+            Place::Local(cmp),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Copy(Place::Local(idx)),
+                Operand::Copy(Place::Local(n)),
+            ),
+        );
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(cmp)),
+            then_blk: body,
+            else_blk: after,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(elem),
+            Rvalue::Use(Operand::Copy(Place::index(
+                arr,
+                Operand::Copy(Place::Local(idx)),
+            ))),
+        );
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(idx)),
+                Operand::Const(Const::Int(1)),
+            ),
+        );
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(after);
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(n)))));
         let mut func = b.finish();
         assert!(Abc.run(&mut func, &i));
         match &func.blocks[body.0 as usize].stmts[0] {

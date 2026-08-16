@@ -1,28 +1,119 @@
 module system.simd;
 
-// Portable WASM SIMD (`v128`) kernels over `float[]` / `int[]` slices of length 4.
-public class Simd {
-    @intrinsic("simd_f32x4_add")
-    static extern fun add_f32x4_raw(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void;
-    public static fun add_f32x4(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void {
-        Simd.add_f32x4_raw(dest, dest_off, a, a_off, b, b_off);
+// Portable 16-byte SIMD vector (`v128`). `T` must be `byte`, `int`, `long`, `float`, or `double`.
+public struct Vector<T : unmanaged> {
+    // Raw 16-byte payload (four i32 words). An implementation detail of the WASM `v128` layout.
+    w0: int;
+    w1: int;
+    w2: int;
+    w3: int;
+
+    // Number of `T` lanes that fit in 16 bytes (`16 / sizeof(T)`).
+    public static fun count(): int {
+        return Vector<T>.lane_count();
     }
 
-    @intrinsic("simd_f32x4_sub")
-    static extern fun sub_f32x4_raw(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void;
-    public static fun sub_f32x4(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void {
-        Simd.sub_f32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    @intrinsic("simd_lane_count")
+    static extern fun lane_count(): int;
+
+    // Splats `value` into every lane.
+    public constructor(value: T) {
+        let s = Vector<T>.splat(value);
+        this.w0 = s.w0;
+        this.w1 = s.w1;
+        this.w2 = s.w2;
+        this.w3 = s.w3;
     }
 
-    @intrinsic("simd_f32x4_mul")
-    static extern fun mul_f32x4_raw(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void;
-    public static fun mul_f32x4(dest: float[], dest_off: int, a: float[], a_off: int, b: float[], b_off: int): void {
-        Simd.mul_f32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    // Splats `value` into every lane.
+    public static fun splat(value: T): Vector<T> {
+        return Vector<T>.splat_raw(value);
     }
 
-    @intrinsic("simd_i32x4_add")
-    static extern fun add_i32x4_raw(dest: int[], dest_off: int, a: int[], a_off: int, b: int[], b_off: int): void;
-    public static fun add_i32x4(dest: int[], dest_off: int, a: int[], a_off: int, b: int[], b_off: int): void {
-        Simd.add_i32x4_raw(dest, dest_off, a, a_off, b, b_off);
+    @intrinsic("simd_v128_splat")
+    static extern fun splat_raw(value: T): Vector<T>;
+
+    // Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.
+    public static fun load(borrow src: T[], offset: int): Vector<T> {
+        return Vector<T>.load_raw(src, offset);
     }
+
+    @intrinsic("simd_v128_load")
+    static extern fun load_raw(borrow src: T[], offset: int): Vector<T>;
+
+    // Writes this vector's lanes into `dest` starting at `offset`.
+    public fun store(dest: T[], offset: int): void {
+        Vector<T>.store_raw(this, dest, offset);
+    }
+
+    @intrinsic("simd_v128_store")
+    static extern fun store_raw(v: Vector<T>, dest: T[], offset: int): void;
+
+    // Returns lane `i` (`0 .. count`).
+    public fun lane(i: int): T {
+        let n = Vector<T>.count();
+        let tmp = Buffer.alloc<T>(n);
+        this.store(tmp, 0);
+        return tmp[i];
+    }
+
+    // Returns a copy with lane `i` replaced by `value`.
+    public fun with_lane(i: int, value: T): Vector<T> {
+        let n = Vector<T>.count();
+        let tmp = Buffer.alloc<T>(n);
+        this.store(tmp, 0);
+        tmp[i] = value;
+        return Vector<T>.load(tmp, 0);
+    }
+
+    // Lane-wise addition.
+    @operator("+")
+    fun add(other: Vector<T>): Vector<T> {
+        return Vector<T>.bin_add(this, other);
+    }
+
+    @intrinsic("simd_v128_add")
+    static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>;
+
+    // Lane-wise subtraction.
+    @operator("-")
+    fun sub(other: Vector<T>): Vector<T> {
+        return Vector<T>.bin_sub(this, other);
+    }
+
+    @intrinsic("simd_v128_sub")
+    static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>;
+
+    // Lane-wise multiplication.
+    @operator("*")
+    fun mul(other: Vector<T>): Vector<T> {
+        return Vector<T>.bin_mul(this, other);
+    }
+
+    @intrinsic("simd_v128_mul")
+    static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>;
+
+    // Lane-wise minimum of `a` and `b`.
+    public static fun min(a: Vector<T>, b: Vector<T>): Vector<T> {
+        return Vector<T>.bin_min(a, b);
+    }
+
+    @intrinsic("simd_v128_min")
+    static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>;
+
+    // Lane-wise maximum of `a` and `b`.
+    public static fun max(a: Vector<T>, b: Vector<T>): Vector<T> {
+        return Vector<T>.bin_max(a, b);
+    }
+
+    @intrinsic("simd_v128_max")
+    static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>;
+
+    // Horizontal sum of every lane.
+    public fun sum(): T {
+        return Vector<T>.reduce_sum(this);
+    }
+
+    @intrinsic("simd_v128_sum")
+    static extern fun reduce_sum(v: Vector<T>): T;
 }

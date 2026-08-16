@@ -16,6 +16,7 @@ The standard library ships with the compiler. Import each package you need — t
 | --- | --- |
 | [Strings](string.md) | `import system.text;` (also via `import system;`) |
 | [Regex](regex.md) | `import system.text;` |
+| [SIMD](simd.md) | `import system.simd;` |
 | [Encoding](encoding.md) | `import system.encoding;` |
 | [JSON](json.md) | `import system.json;` |
 

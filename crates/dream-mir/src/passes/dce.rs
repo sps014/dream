@@ -162,18 +162,32 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(src_off, read);
             read_operand(count, read);
         }
+        Statement::ArrayElemsFill {
+            dst,
+            dst_off,
+            count,
+            ..
+        } => {
+            read_operand(dst, read);
+            read_operand(dst_off, read);
+            read_operand(count, read);
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => read_operand(o, read),
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => {
             read_operand(dest, read);
             read_operand(lhs, read);
             read_operand(rhs, read);
             read_operand(index, read);
+            if let Some(s) = splat_rhs {
+                read_operand(s, read);
+            }
         }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }

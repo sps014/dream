@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace DreamBench;
@@ -278,6 +280,127 @@ public static class Program
         Sink = acc;
     }
 
+    sealed class BenchAddress
+    {
+        public string city { get; set; } = "";
+        public string zip { get; set; } = "";
+    }
+
+    sealed class BenchUser
+    {
+        public string name { get; set; } = "";
+        public int age { get; set; }
+        public bool active { get; set; }
+        public BenchAddress address { get; set; } = new();
+        public string[] tags { get; set; } = [];
+        public int[] scores { get; set; } = [];
+    }
+
+    static BenchUser MakeBenchUser() => new()
+    {
+        name = "Ada",
+        age = 36,
+        active = true,
+        address = new BenchAddress { city = "London", zip = "NW1" },
+        tags = ["dev", "math"],
+        scores = [10, 20, 30],
+    };
+
+    static void BenchJsonSerialize(int iters)
+    {
+        var u = MakeBenchUser();
+        var sw = Stopwatch.StartNew();
+        int acc = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            string text = JsonSerializer.Serialize(u);
+            acc += text.Length;
+        }
+        sw.Stop();
+        Report("json_serialize", ElapsedNs(sw), iters);
+        Sink = acc;
+    }
+
+    static void BenchJsonDeserialize(int iters)
+    {
+        string text = JsonSerializer.Serialize(MakeBenchUser());
+        var sw = Stopwatch.StartNew();
+        int acc = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            var back = JsonSerializer.Deserialize<BenchUser>(text)!;
+            acc += back.age + back.scores[2];
+        }
+        sw.Stop();
+        Report("json_deserialize", ElapsedNs(sw), iters);
+        Sink = acc;
+    }
+
+    static void BenchArrAdd(int iters)
+    {
+        int n = 256;
+        var a = new float[n];
+        var b = new float[n];
+        var c = new float[n];
+        var ai = new int[n];
+        var bi = new int[n];
+        var ci = new int[n];
+        for (int k = 0; k < n; k++)
+        {
+            a[k] = k;
+            b[k] = k + 1;
+            ai[k] = k;
+            bi[k] = k + 1;
+        }
+        var sw = Stopwatch.StartNew();
+        for (int r = 0; r < iters; r++)
+        {
+            for (int i = 0; i < n; i++)
+                c[i] = a[i] + b[i];
+            for (int j = 0; j < n; j++)
+                ci[j] = ai[j] + bi[j];
+        }
+        sw.Stop();
+        Report("arr_add", ElapsedNs(sw), iters);
+        int acc = 0;
+        for (int i = 0; i < n; i++)
+            acc += (int)c[i] + ci[i];
+        Sink = acc;
+    }
+
+    static void BenchVecAdd(int iters)
+    {
+        int n = 256;
+        var a = new float[n];
+        var b = new float[n];
+        var c = new float[n];
+        for (int k = 0; k < n; k++)
+        {
+            a[k] = k;
+            b[k] = k + 1;
+        }
+        int lanes = Vector<float>.Count;
+        var sw = Stopwatch.StartNew();
+        for (int r = 0; r < iters; r++)
+        {
+            int i = 0;
+            for (; i + lanes <= n; i += lanes)
+            {
+                var va = new Vector<float>(a, i);
+                var vb = new Vector<float>(b, i);
+                (va + vb).CopyTo(c, i);
+            }
+            for (; i < n; i++)
+                c[i] = a[i] + b[i];
+        }
+        sw.Stop();
+        Report("vec_add", ElapsedNs(sw), iters);
+        int acc = 0;
+        for (int i = 0; i < n; i++)
+            acc += (int)c[i];
+        Sink = acc;
+    }
+
     static void BenchStringBuilder(int iters)
     {
         string chunk = "abcdefghijklmnopqrstuvwxyz";
@@ -309,6 +432,10 @@ public static class Program
         BenchScratchArena(scale);
         BenchRegexFind(scale / 10);
         BenchStringBuilder(scale / 5);
+        BenchJsonSerialize(scale / 10);
+        BenchJsonDeserialize(scale / 10);
+        BenchArrAdd(scale / 10);
+        BenchVecAdd(scale / 10);
     }
 
     static void LoadDreamScores(string path)

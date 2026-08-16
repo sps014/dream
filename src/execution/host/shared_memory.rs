@@ -23,6 +23,7 @@ pub fn threaded_wasm_config() -> Config {
     config.max_wasm_stack(dream_stack_size());
     config.async_stack_size(dream_async_stack_size());
     config.wasm_threads(true);
+    config.wasm_simd(true);
     config.shared_memory(true);
     // Hard `WebWorker.terminate()` aborts an in-flight body via `Engine::increment_epoch` (see
     // `host::worker`). Owner stores must call `set_epoch_deadline(u64::MAX)` so they are not

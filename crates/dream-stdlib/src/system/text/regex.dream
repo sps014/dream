@@ -25,6 +25,7 @@ public class Regex {
     // True when the pattern is a simple unanchored ASCII digit run (`\d+` / `[0-9]+`).
     // Speeds that pattern only — microbench `regex_find` must not use bare `\d+`.
     ascii_digit_plus: bool;
+    match_scratch: List<string>;
 
     public constructor(pattern: string, flags: RegexFlags = 0) {
         this.pattern = pattern;
@@ -49,6 +50,7 @@ public class Regex {
             && (this.ignore_case == false)
             && (this.ngroup == 0)
             && this.pike.is_ascii_digit_plus();
+        this.match_scratch = List<string>(8);
     }
 
     // Finds the next match starting at or after `pos`, dispatching to whichever engine this
@@ -206,7 +208,7 @@ public class Regex {
         }
         let n = input.length;
         if (this.global) {
-            let results = List<string>(8);
+            this.match_scratch.clear();
             let pos = 0;
             let going = true;
             while (going) {
@@ -216,7 +218,7 @@ public class Regex {
                     let m_opt = this.find_at(input, pos);
                     switch (m_opt) {
                         Some(m) => {
-                            results.push(m.group_text(input, 0));
+                            this.match_scratch.push(m.group_text(input, 0));
                             let s = m.start();
                             let e = m.end();
                             if (e > s) {
@@ -231,7 +233,7 @@ public class Regex {
                     }
                 }
             }
-            return this.to_array(results);
+            return this.to_array(this.match_scratch);
         }
         let m_opt = this.find_at(input, 0);
         return switch (m_opt) {

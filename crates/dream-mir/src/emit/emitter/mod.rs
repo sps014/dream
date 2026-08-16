@@ -19,6 +19,7 @@ use std::collections::HashSet;
 mod async_ops;
 mod rvalue;
 mod shape;
+mod simd;
 mod statements;
 mod terminator;
 mod value_struct;
@@ -239,6 +240,7 @@ impl Emitter<'_> {
         self.symbols
             .get(&(callee.def, callee.args.clone()))
             .cloned()
+            .or_else(|| self.symbols.get(&(callee.def, vec![])).cloned())
             .unwrap_or_else(|| format!("def{}", callee.def.0))
     }
 
@@ -337,6 +339,7 @@ impl Emitter<'_> {
         // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
         // once the destination allocation starts overwriting `$__obj`.
         self.line("  (local $__src i32)");
+        self.line("  (local $__v128 v128)");
 
         self.emit_value_frame_prologue();
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
@@ -578,7 +581,7 @@ impl Emitter<'_> {
         }
     }
 
-    fn operand_ty(&self, op: &Operand) -> TypeId {
+    pub(super) fn operand_ty(&self, op: &Operand) -> TypeId {
         match op {
             Operand::Copy(Place::Local(l)) => self.func.local_ty(*l),
             Operand::Copy(Place::Field { base, field }) => self

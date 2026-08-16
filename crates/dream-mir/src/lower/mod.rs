@@ -397,6 +397,22 @@ impl Lowerer<'_> {
                         count,
                     });
                 }
+                HExprKind::ArrayElemsFill {
+                    elem_ty,
+                    dst,
+                    dst_off,
+                    count,
+                } => {
+                    let dst = self.lower_operand(dst);
+                    let dst_off = self.lower_operand(dst_off);
+                    let count = self.lower_operand(count);
+                    self.b.push(Statement::ArrayElemsFill {
+                        elem_ty: *elem_ty,
+                        dst,
+                        dst_off,
+                        count,
+                    });
+                }
                 // `print`/`println` lower to a dedicated statement the backend maps to `print_*`.
                 HExprKind::Print { arg, newline } => {
                     let ty = arg.ty;

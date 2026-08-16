@@ -294,6 +294,13 @@ pub enum HExprKind {
         src_off: Box<HExpr>,
         count: Box<HExpr>,
     },
+    /// `Buffer.elems_fill<T>(dst, dst_off, count)` (`@unsafe`) — zero `count` unmanaged elements.
+    ArrayElemsFill {
+        elem_ty: TypeId,
+        dst: Box<HExpr>,
+        dst_off: Box<HExpr>,
+        count: Box<HExpr>,
+    },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — immediately returns `array`'s backing block to the
     /// allocator via `$free`, bypassing reference counting. Any other live reference to the same
     /// block is left dangling; safe only when the caller holds the sole reference. Node type is

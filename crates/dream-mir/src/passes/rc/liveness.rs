@@ -125,18 +125,32 @@ fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
             add_operand_reads(src_off, live);
             add_operand_reads(count, live);
         }
+        Statement::ArrayElemsFill {
+            dst,
+            dst_off,
+            count,
+            ..
+        } => {
+            add_operand_reads(dst, live);
+            add_operand_reads(dst_off, live);
+            add_operand_reads(count, live);
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => add_operand_reads(o, live),
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => {
             add_operand_reads(dest, live);
             add_operand_reads(lhs, live);
             add_operand_reads(rhs, live);
             add_operand_reads(index, live);
+            if let Some(s) = splat_rhs {
+                add_operand_reads(s, live);
+            }
         }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }

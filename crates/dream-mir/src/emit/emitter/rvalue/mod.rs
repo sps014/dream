@@ -124,6 +124,8 @@ impl Emitter<'_> {
                 let sym = self.callee_symbol(callee);
                 if let Some(kind) = async_intrinsic_kind(&sym) {
                     self.emit_async_intrinsic(kind, args);
+                } else if self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>) {
+                    // Vector<T> lane_count / sum: result left on the stack.
                 } else {
                     self.emit_call_args(callee, args);
                     self.line(&format!("     (call ${sym})"));

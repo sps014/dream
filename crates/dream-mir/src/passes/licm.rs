@@ -313,18 +313,32 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(src_off, f);
             operand_reads(count, f);
         }
+        Statement::ArrayElemsFill {
+            dst,
+            dst_off,
+            count,
+            ..
+        } => {
+            operand_reads(dst, f);
+            operand_reads(dst_off, f);
+            operand_reads(count, f);
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => operand_reads(o, f),
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => {
             operand_reads(dest, f);
             operand_reads(lhs, f);
             operand_reads(rhs, f);
             operand_reads(index, f);
+            if let Some(s) = splat_rhs {
+                operand_reads(s, f);
+            }
         }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }

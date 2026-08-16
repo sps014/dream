@@ -33,6 +33,16 @@ public class Buffer {
         count: int
     ): void;
 
+    // Zeroes `count` unmanaged elements of `dst` starting at `dst_off` via `memory.fill`.
+    // `@unsafe` because the compiler does not check that the range fits in `dst`.
+    @intrinsic("array_elems_fill")
+    @unsafe
+    static extern fun elems_fill<T : unmanaged>(
+        borrow dst: T[],
+        dst_off: int,
+        count: int
+    ): void;
+
     // Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference
     // counting entirely. Any other live reference to the same block (including `arr` itself, if
     // read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot

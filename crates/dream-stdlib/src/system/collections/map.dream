@@ -101,17 +101,13 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
                 }
                 done = true;
             } else {
-                if (s == hash_slot_occupied()) {
-                    if (keys[idx] == key) {
-                        values[idx] = value;
-                        done = true;
-                    }
+                if ((s == hash_slot_occupied()) && (keys[idx] == key)) {
+                    values[idx] = value;
+                    done = true;
                 } else {
-                    if (first_tomb < 0) {
+                    if ((s != hash_slot_occupied()) && (first_tomb < 0)) {
                         first_tomb = idx;
                     }
-                }
-                if (done == false) {
                     idx = idx + 1;
                     if (idx == cap) {
                         idx = 0;
@@ -242,11 +238,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // Unmanaged keys/values: only reset probe states (no per-slot key/value zero).
     public fun clear(): void where K : unmanaged, V : unmanaged {
         let c = this.cap;
-        let i = 0;
-        while (i < c) {
-            this.states[i] = hash_slot_empty();
-            i = i + 1;
-        }
+        Buffer.elems_fill<int>(this.states, 0, c);
         this.count = 0;
         this.used = 0;
     }

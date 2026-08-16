@@ -312,7 +312,11 @@ impl Emitter<'_> {
                 args,
                 ..
             } => self.construct_value_union(&dst, *uty, *variant, args),
-            Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
+            Rvalue::Call { callee, args } => {
+                if !self.try_emit_simd_call(callee, args, Some(&dst)) {
+                    self.emit_value_sret_call(&dst, callee, args);
+                }
+            }
             Rvalue::IndirectCall { target, sig, args } => {
                 self.emit_indirect_sret_call(&dst, target, *sig, args)
             }

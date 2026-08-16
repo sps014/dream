@@ -291,6 +291,57 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Void);
         }
 
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::ArrayElemsFill)
+        {
+            self.check_unsafe_intrinsic_call(
+                "Buffer.elems_fill",
+                template,
+                method.position,
+                diagnostics,
+            );
+            self.check_runtime_intrinsic_call(
+                "Buffer.elems_fill",
+                template,
+                method.position,
+                diagnostics,
+            );
+            let element = match generic_args.as_ref().and_then(|g| g.first()) {
+                Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                None => {
+                    diagnostics.report_error(
+                        "'Buffer.elems_fill' requires a type argument, e.g. Buffer.elems_fill<int>(…)"
+                            .to_string(),
+                        Some(method.position),
+                    );
+                    Type::Unknown
+                }
+            };
+            if !self.is_unresolved_generic_type(&element) {
+                self.require_unmanaged(
+                    &element,
+                    "Buffer.elems_fill",
+                    &method.position,
+                    diagnostics,
+                );
+            }
+            if params_types.len() != 3 {
+                diagnostics.report_error(
+                    format!(
+                        "'Buffer.elems_fill' expects exactly 3 arguments (dst, dst_off, count), got {}",
+                        params_types.len()
+                    ),
+                    Some(method.position),
+                );
+            }
+            let mut args = arg_hirs.into_iter();
+            let dst = args.next().flatten();
+            let dst_off = args.next().flatten();
+            let count = args.next().flatten();
+            self.hir_set_array_elems_fill(&element, dst, dst_off, count);
+            return Ok(Type::Void);
+        }
+
         // `Buffer.free<T>(arr)` (`@unsafe`): unconditionally returns `arr`'s backing block to the
         // allocator, bypassing reference counting.
         if intrinsics::IntrinsicOp::from_attributes(&template.attributes)

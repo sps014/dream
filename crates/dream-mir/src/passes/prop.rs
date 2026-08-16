@@ -129,18 +129,33 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
                 | subst_operand(src_off, known)
                 | subst_operand(count, known)
         }
+        Statement::ArrayElemsFill {
+            dst,
+            dst_off,
+            count,
+            ..
+        } => {
+            subst_operand(dst, known)
+                | subst_operand(dst_off, known)
+                | subst_operand(count, known)
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => subst_operand(o, known),
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => {
             subst_operand(dest, known)
                 | subst_operand(lhs, known)
                 | subst_operand(rhs, known)
                 | subst_operand(index, known)
+                | splat_rhs
+                    .as_mut()
+                    .map(|s| subst_operand(s, known))
+                    .unwrap_or(false)
         }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => false,
     }

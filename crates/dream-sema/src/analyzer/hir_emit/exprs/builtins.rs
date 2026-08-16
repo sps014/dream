@@ -372,6 +372,36 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Records `Buffer.elems_fill<T>(dst, dst_off, count)` — zero a run of unmanaged elements.
+    pub(in crate::analyzer) fn hir_set_array_elems_fill(
+        &mut self,
+        elem_ty: &Type,
+        dst: Option<HExpr>,
+        dst_off: Option<HExpr>,
+        count: Option<HExpr>,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match (dst, dst_off, count) {
+            (Some(dst), Some(dst_off), Some(count)) => {
+                let elem = self.type_ctx.lower(elem_ty);
+                let void = self.type_ctx.interner.void();
+                self.hir.last = Some(HExpr::new(
+                    void,
+                    HExprKind::ArrayElemsFill {
+                        elem_ty: elem,
+                        dst: Box::new(dst),
+                        dst_off: Box::new(dst_off),
+                        count: Box::new(count),
+                    },
+                ));
+            }
+            _ => self.hir.last = None,
+        }
+    }
+
     /// Records `Buffer.free<T>(arr)` — an unconditional `$free` of `arr`'s backing block, bypassing
     /// reference counting. Drops out of coverage if the operand is not representable.
     pub(in crate::analyzer) fn hir_set_force_free(&mut self, array: Option<HExpr>) {

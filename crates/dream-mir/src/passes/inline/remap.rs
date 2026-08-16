@@ -249,18 +249,32 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_operand(src_off, base);
             remap_operand(count, base);
         }
+        Statement::ArrayElemsFill {
+            dst,
+            dst_off,
+            count,
+            ..
+        } => {
+            remap_operand(dst, base);
+            remap_operand(dst_off, base);
+            remap_operand(count, base);
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => remap_operand(o, base),
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => {
             remap_operand(dest, base);
             remap_operand(lhs, base);
             remap_operand(rhs, base);
             remap_operand(index, base);
+            if let Some(s) = splat_rhs {
+                remap_operand(s, base);
+            }
         }
         Statement::ValueDrop(l) | Statement::ValueRetain(l) | Statement::ValueKill(l) => {
             remap_local(l, base)

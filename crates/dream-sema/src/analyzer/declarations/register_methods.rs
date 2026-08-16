@@ -86,16 +86,6 @@ impl<'a> Analyzer<'a> {
             // user identifier can never spell, so `obj.prop`/`obj.prop = v` resolve to them without a
             // regular method (or the indexer `get`/`set` hooks) ever colliding.
             let mangled_name = method_fn(target_type_str, &member_name);
-            // Unlike the object-protocol/accessor checks above, `@operator`/`@cast` registration
-            // runs for every monomorphization (not gated on `bindings.is_empty()`): a generic
-            // type's overload table is keyed by the concrete `target_type_str` (e.g. `Box_int` vs.
-            // `Box_string`), so each instance needs its own entry.
-            self.validate_and_register_operator(
-                target_type_str,
-                method,
-                &mangled_name,
-                diagnostics,
-            );
             self.validate_and_register_protocol_hook(
                 target_type_str,
                 method,
@@ -114,6 +104,14 @@ impl<'a> Analyzer<'a> {
             if !bindings.is_empty() {
                 Self::substitute_generic_signature(&mut new_method, bindings);
             }
+
+            // Register after substitution so generic `@operator` params are `Vector<int>`, not `Vector<T>`.
+            self.validate_and_register_operator(
+                target_type_str,
+                &new_method,
+                &mangled_name,
+                diagnostics,
+            );
 
             // Static methods have no implicit receiver; instance methods get `this` at index 0.
             if !new_method.is_static {

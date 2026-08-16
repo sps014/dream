@@ -345,6 +345,26 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
+        if base_name == "Vector" {
+            if let Some(elem) = args.first() {
+                if !matches!(
+                    elem,
+                    Type::Byte(_)
+                        | Type::Integer(_)
+                        | Type::Long(_)
+                        | Type::Float(_)
+                        | Type::Double(_)
+                        | Type::Unknown
+                        | Type::Generic(_)
+                ) {
+                    diagnostics.report_error(
+                        "'Vector<T>' requires T to be byte, int, long, float, or double"
+                            .to_string(),
+                        Some(*position),
+                    );
+                }
+            }
+        }
 
         let new_fields: Vec<StructFieldNode> = template
             .fields

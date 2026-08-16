@@ -4,7 +4,8 @@ internal class RegexInst {
     public opcode: RegexOp;
     public ranges: List<char>;
     public range_pairs: char[];
-    // 0 = generic pairs, 1 = ASCII digits, 2 = ASCII word, 3 = ASCII space, 4 = any char.
+    // 0 = generic pairs, 1 = ASCII digits, 2 = ASCII word, 3 = ASCII space, 4 = any char,
+    // 5 = `[a-z]`, 6 = `[a-zA-Z]`, 7 = single character.
     public class_kind: int;
     public negate: bool;
     public foldcase: bool;
@@ -48,6 +49,24 @@ internal class RegexInst {
         if (ranges.length == 2) {
             if ((ranges.get(0).unwrap_or(' ') == '0') && (ranges.get(1).unwrap_or(' ') == '9')) {
                 return 1;
+            }
+            if ((foldcase == false) && (negate == false) && (ranges.get(0).unwrap_or(' ') == 'a') && (ranges.get(1).unwrap_or(' ') == 'z')) {
+                return 5;
+            }
+            if ((foldcase == false) && (negate == false)) {
+                let lo = ranges.get(0).unwrap_or(' ');
+                let hi = ranges.get(1).unwrap_or(' ');
+                if (lo == hi) {
+                    return 7;
+                }
+            }
+        }
+        if ((foldcase == false) && (negate == false) && (ranges.length == 4)) {
+            if ((ranges.get(0).unwrap_or(' ') == 'a')
+                && (ranges.get(1).unwrap_or(' ') == 'z')
+                && (ranges.get(2).unwrap_or(' ') == 'A')
+                && (ranges.get(3).unwrap_or(' ') == 'Z')) {
+                return 6;
             }
         }
         if ((foldcase == false) && (negate == false) && RegexInst.is_word_pairs(ranges)) {
@@ -114,6 +133,12 @@ internal class RegexInst {
             hit = RegexInst.ascii_word(c);
         } else if (k == 3) {
             hit = (c == ' ') || (c == '\t') || (c == '\n') || (c == '\r');
+        } else if (k == 5) {
+            hit = (c >= 'a') && (c <= 'z');
+        } else if (k == 6) {
+            hit = ((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'));
+        } else if (k == 7) {
+            hit = (this.range_pairs.length >= 1) && (c == this.range_pairs[0]);
         } else {
             let probe = c;
             if (this.foldcase) {

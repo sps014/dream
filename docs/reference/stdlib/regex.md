@@ -37,3 +37,5 @@ Combine with `|`. Default is `RegexFlags.None`.
 | `match_info(input)` | `Option<RegexMatchInfo>` with groups and indices |
 
 A full example: [`sample/interop/regex.dream`](https://github.com/sps014/dream/blob/main/sample/interop/regex.dream).
+
+The Pike VM can skip bytes that cannot start an unanchored match (digit class, `[a-z]` / `[a-zA-Z]`, and single-character prefixes). Bare `\d+` still has a dedicated digit-run fast path; that path is **not** what the `regex_find` microbench measures (that bench uses `[a-z]+\d+`).

@@ -103,20 +103,34 @@ fn stmt(s: &Statement) -> String {
             operand(src_off),
             operand(count)
         ),
+        Statement::ArrayElemsFill {
+            elem_ty,
+            dst,
+            dst_off,
+            count,
+        } => format!(
+            "array_elems_fill::<ty{}>({}, {}, {})",
+            elem_ty.0,
+            operand(dst),
+            operand(dst_off),
+            operand(count)
+        ),
         Statement::LockAcquire(o) => format!("lock_acquire {}", operand(o)),
         Statement::LockRelease(o) => format!("lock_release {}", operand(o)),
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => format!(
-            "simd_f32x4({}, {}, {}, {})",
+            "simd_v128({}, {}, {}, {}, splat={:?})",
             operand(dest),
             operand(lhs),
             operand(rhs),
-            operand(index)
+            operand(index),
+            splat_rhs.as_ref().map(operand)
         ),
         Statement::ValueDrop(l) => format!("value_drop _{}", l.0),
         Statement::ValueRetain(l) => format!("value_retain _{}", l.0),

@@ -277,6 +277,8 @@ const SMOKE_CASES: &[&str] = &[
     "last_use_destroy",
     "struct_last_use_move",
     "ui_render_tree",
+    "simd_f32x4",
+    "autovec_arr_add",
 ];
 
 /// Collect every `tests/cases/*.dream` fixture path.

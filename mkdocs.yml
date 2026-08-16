@@ -121,6 +121,7 @@ nav:
       - Text & Data:
         - Strings: reference/stdlib/string.md
         - Regex: reference/stdlib/regex.md
+        - SIMD: reference/stdlib/simd.md
         - Encoding: reference/stdlib/encoding.md
       - Collections: reference/stdlib/collections.md
       - System:

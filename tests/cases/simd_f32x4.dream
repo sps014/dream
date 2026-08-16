@@ -5,9 +5,17 @@ fun main(): void {
     let a = [1, 2, 3, 4];
     let b = [10, 20, 30, 40];
     let c = [0, 0, 0, 0];
-    Simd.add_i32x4(c, 0, a, 0, b, 0);
+    (Vector<int>.load(a, 0) + Vector<int>.load(b, 0)).store(c, 0);
     System.println(c[0]);
     System.println(c[1]);
     System.println(c[2]);
     System.println(c[3]);
+
+    let fa = [(float)1, (float)2, (float)3, (float)4];
+    let fb = [(float)1, (float)1, (float)1, (float)1];
+    let fc = [(float)0, (float)0, (float)0, (float)0];
+    (Vector<float>.load(fa, 0) + Vector<float>.load(fb, 0)).store(fc, 0);
+    System.println((int)fc[0]);
+    System.println(Vector<int>.count());
+    System.println(Vector<float>.count());
 }

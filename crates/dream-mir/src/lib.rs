@@ -17,6 +17,9 @@ pub mod passes;
 pub mod print;
 mod prune;
 pub mod relooper;
+mod simd;
+
+pub use simd::SimdLane;
 
 pub use dream_abi::js_abi;
 pub use dream_hir::{BinOp, UnOp};
@@ -235,6 +238,14 @@ pub enum Statement {
         src_off: Operand,
         count: Operand,
     },
+    /// `Buffer.elems_fill<T>(dst, dst_off, count)` (`@unsafe`) — zero `count` unmanaged elements
+    /// via `memory.fill`. Void-typed, so a statement (not an `Rvalue`).
+    ArrayElemsFill {
+        elem_ty: TypeId,
+        dst: Operand,
+        dst_off: Operand,
+        count: Operand,
+    },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditionally `$free`s `array`'s backing block via the
     /// allocator, bypassing reference counting. Modeled as a statement (not an `Rvalue`) since it
     /// has no result — `Buffer.free` is typed `void`.
@@ -247,13 +258,17 @@ pub enum Statement {
     /// Releases one level of the reentrant lock word acquired by a matching
     /// [`Statement::LockAcquire`].
     LockRelease(Operand),
-    /// `out[i..i+4] = a[i..i+4] ⊕ b[i..i+4]` for `float[]` (WASM `v128` / `f32x4`).
-    SimdF32x4 {
+    /// `out[i..i+L] = a[i..i+L] ⊕ b[i..i+L]` (or splat RHS) as one WASM `v128` op.
+    SimdV128 {
+        lane: SimdLane,
         op: crate::BinOp,
         dest: Operand,
         lhs: Operand,
         rhs: Operand,
         index: Operand,
+        splat_rhs: Option<Operand>,
+        /// When true, `dest`/`lhs`/`rhs` are already element addresses (IV bump pointers).
+        ptr_addr: bool,
     },
     /// Runs value-struct / value-union drop glue for an owning local (`$__vs_drop_<T>`), then zeros
     /// its shadow-stack slot. Used by the inliner so spliced callee locals are torn down at the

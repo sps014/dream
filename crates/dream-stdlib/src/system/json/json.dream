@@ -64,7 +64,7 @@ public class Json {
     }
 
     public static fun write_int(borrow sb: StringBuilder, n: int): void {
-        sb.append(n.to_string());
+        sb.append_int(n);
     }
 
     public static fun write_number(borrow sb: StringBuilder, n: double): void {

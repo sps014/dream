@@ -53,4 +53,4 @@ b.append_line(" world");
 System.println(b.build());
 ```
 
-Also: `append_char`, `.length`, `is_empty()`, `clear()`, `to_string()`.
+Also: `append_char`, `append_int`, `append_bool`, `.length`, `is_empty()`, `clear()`, `to_string()`. `append_int` writes decimal digits into the builder (no intermediate `to_string()` allocation).

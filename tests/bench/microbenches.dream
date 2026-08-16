@@ -1,5 +1,7 @@
 import system;
 import system.collections;
+import system.json;
+import system.simd;
 import system.text;
 
 // Microbench suite for ARC / string / collection / allocator hot paths.
@@ -297,6 +299,160 @@ fun bench_regex_find(iters: int): void {
     sink_int(acc);
 }
 
+@json
+class BenchAddress {
+    public city: string;
+    public zip: string;
+
+    public constructor(city: string, zip: string) {
+        this.city = city;
+        this.zip = zip;
+    }
+}
+
+@json
+class BenchUser {
+    public name: string;
+    public age: int;
+    public active: bool;
+    public address: BenchAddress;
+    public tags: string[];
+    public scores: int[];
+
+    public constructor(name: string, age: int, active: bool, address: BenchAddress, tags: string[], scores: int[]) {
+        this.name = name;
+        this.age = age;
+        this.active = active;
+        this.address = address;
+        this.tags = tags;
+        this.scores = scores;
+    }
+}
+
+fun bench_user(): BenchUser {
+    return BenchUser("Ada", 36, true, BenchAddress("London", "NW1"), ["dev", "math"], [10, 20, 30]);
+}
+
+fun bench_json_serialize(iters: int): void {
+    let u = bench_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let text = Json.serialize(u);
+        acc = acc + text.byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    report("json_serialize", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun bench_json_deserialize(iters: int): void {
+    let text = Json.serialize(bench_user());
+    let fallback = bench_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let back = Json.deserialize<BenchUser>(text).unwrap_or(fallback);
+        acc = acc + back.age + back.scores[2];
+        i = i + 1;
+    }
+    sw.stop();
+    report("json_deserialize", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+fun checksum_floats(borrow a: float[]): int {
+    let acc = 0;
+    let i = 0;
+    while (i < a.length) {
+        acc = acc + (int)a[i];
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun checksum_ints(borrow a: int[]): int {
+    let acc = 0;
+    let i = 0;
+    while (i < a.length) {
+        acc = acc + a[i];
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun bench_arr_add(iters: int): void {
+    let n = 256;
+    let a = Buffer.alloc<float>(n);
+    let b = Buffer.alloc<float>(n);
+    let c = Buffer.alloc<float>(n);
+    let ai = Buffer.alloc<int>(n);
+    let bi = Buffer.alloc<int>(n);
+    let ci = Buffer.alloc<int>(n);
+    let k = 0;
+    while (k < n) {
+        a[k] = (float)k;
+        b[k] = (float)(k + 1);
+        ai[k] = k;
+        bi[k] = k + 1;
+        k = k + 1;
+    }
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < iters) {
+        let i = 0;
+        while (i < n) {
+            c[i] = a[i] + b[i];
+            i = i + 1;
+        }
+        let j = 0;
+        while (j < n) {
+            ci[j] = ai[j] + bi[j];
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    sw.stop();
+    report("arr_add", sw.elapsed_nanos(), iters);
+    sink_int(checksum_floats(c) + checksum_ints(ci));
+}
+
+fun bench_vec_add(iters: int): void {
+    let n = 256;
+    let a = Buffer.alloc<float>(n);
+    let b = Buffer.alloc<float>(n);
+    let c = Buffer.alloc<float>(n);
+    let k = 0;
+    while (k < n) {
+        a[k] = (float)k;
+        b[k] = (float)(k + 1);
+        k = k + 1;
+    }
+    let lanes = Vector<float>.count();
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < iters) {
+        let i = 0;
+        while (i + lanes <= n) {
+            let va = Vector<float>.load(a, i);
+            let vb = Vector<float>.load(b, i);
+            (va + vb).store(c, i);
+            i = i + lanes;
+        }
+        while (i < n) {
+            c[i] = a[i] + b[i];
+            i = i + 1;
+        }
+        r = r + 1;
+    }
+    sw.stop();
+    report("vec_add", sw.elapsed_nanos(), iters);
+    sink_int(checksum_floats(c));
+}
+
 fun bench_string_builder(iters: int): void {
     let chunk = "abcdefghijklmnopqrstuvwxyz";
     let sw = Stopwatch();
@@ -328,6 +484,10 @@ fun run_suite(scale: int): void {
     bench_scratch_arena(scale);
     bench_regex_find(scale / 10);
     bench_string_builder(scale / 5);
+    bench_json_serialize(scale / 10);
+    bench_json_deserialize(scale / 10);
+    bench_arr_add(scale / 10);
+    bench_vec_add(scale / 10);
 }
 
 fun main(): void {

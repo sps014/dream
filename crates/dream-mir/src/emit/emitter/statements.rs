@@ -63,10 +63,12 @@ impl Emitter<'_> {
                 self.line("     (call $dream_panic)");
             }
             Statement::Call { callee, args } => {
-                self.emit_call_args(callee, args);
-                self.line(&format!("     (call ${})", self.callee_symbol(callee)));
-                if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
-                    self.line("     (drop)");
+                if !self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>) {
+                    self.emit_call_args(callee, args);
+                    self.line(&format!("     (call ${})", self.callee_symbol(callee)));
+                    if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
+                        self.line("     (drop)");
+                    }
                 }
             }
             Statement::JsCall {
@@ -155,24 +157,40 @@ impl Emitter<'_> {
             // Emits nothing: just remembers the line so a following automatic runtime check can
             // attribute its panic message to it (see `Emitter::current_line`/`Emitter::emit_panic`).
             Statement::SourceLine(line) => self.current_line = *line,
-            Statement::SimdF32x4 {
+            Statement::SimdV128 {
+                lane,
                 op,
                 dest,
                 lhs,
                 rhs,
                 index,
+                splat_rhs,
+                ptr_addr,
             } => {
-                let simd_op = match op {
-                    BinOp::Add => "f32x4.add",
-                    BinOp::Sub => "f32x4.sub",
-                    BinOp::Mul => "f32x4.mul",
-                    _ => "f32x4.add",
-                };
-                self.emit_f32x4_addr(dest, index);
-                self.emit_f32x4_addr(lhs, index);
+                let simd_op = lane
+                    .binop_wat(*op)
+                    .unwrap_or("f32x4.add");
+                if *ptr_addr {
+                    self.emit_operand(dest);
+                } else {
+                    self.emit_v128_array_addr(dest, index, *lane);
+                }
+                if *ptr_addr {
+                    self.emit_operand(lhs);
+                } else {
+                    self.emit_v128_array_addr(lhs, index, *lane);
+                }
                 self.line("     (v128.load)");
-                self.emit_f32x4_addr(rhs, index);
-                self.line("     (v128.load)");
+                if let Some(s) = splat_rhs {
+                    self.emit_operand(s);
+                    self.line(&format!("     ({})", lane.splat_wat()));
+                } else if *ptr_addr {
+                    self.emit_operand(rhs);
+                    self.line("     (v128.load)");
+                } else {
+                    self.emit_v128_array_addr(rhs, index, *lane);
+                    self.line("     (v128.load)");
+                }
                 self.line(&format!("     ({simd_op})"));
                 self.line("     (v128.store)");
             }
@@ -214,6 +232,30 @@ impl Emitter<'_> {
                 self.line(&format!("     (i32.const {})", esize));
                 self.line("     (i32.mul) ;; byte count");
                 self.line("     (memory.copy)");
+            }
+            Statement::ArrayElemsFill {
+                elem_ty,
+                dst,
+                dst_off,
+                count,
+            } => {
+                let (esize, _) = scalar_size(self.interner, *elem_ty);
+                self.emit_operand(dst);
+                self.line("     (local.set $__obj) ;; dst array");
+                self.emit_operand(count);
+                self.line("     (local.set $__len) ;; element count");
+                self.line("     (local.get $__obj)");
+                self.line("     (i32.const 4)");
+                self.line("     (i32.add)");
+                self.emit_operand(dst_off);
+                self.line(&format!("     (i32.const {})", esize));
+                self.line("     (i32.mul)");
+                self.line("     (i32.add) ;; dst payload + offset");
+                self.line("     (i32.const 0)");
+                self.line("     (local.get $__len)");
+                self.line(&format!("     (i32.const {})", esize));
+                self.line("     (i32.mul) ;; byte count");
+                self.line("     (memory.fill)");
             }
             Statement::LockAcquire(o) => {
                 self.emit_lock_addr(o);
@@ -436,14 +478,19 @@ impl Emitter<'_> {
         }
     }
 
-    fn emit_f32x4_addr(&mut self, arr: &Operand, index: &Operand) {
+    pub(super) fn emit_v128_array_addr(&mut self, arr: &Operand, index: &Operand, lane: crate::SimdLane) {
         self.emit_operand(arr);
         self.line("     (i32.const 4)");
         self.line("     (i32.add)");
         self.emit_operand(index);
-        self.line("     (i32.const 2)");
-        self.line("     (i32.shl)");
-        self.line("     (i32.add)");
+        let sh = lane.shift();
+        if sh == 0 {
+            self.line("     (i32.add)");
+        } else {
+            self.line(&format!("     (i32.const {})", sh));
+            self.line("     (i32.shl)");
+            self.line("     (i32.add)");
+        }
     }
 
     /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`. Shared by

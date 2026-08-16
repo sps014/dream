@@ -140,6 +140,8 @@ pub const ATTR_ARRAY_REALLOC: &str = "array_realloc";
 /// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` — bulk `memory.copy` of `count`
 /// unmanaged elements between two `T[]` payloads (emitter expands `T`'s byte size).
 pub const ATTR_ARRAY_ELEMS_COPY: &str = "array_elems_copy";
+/// `Buffer.elems_fill<T>(dst, dst_off, count)` — zero `count` unmanaged elements (`memory.fill`).
+pub const ATTR_ARRAY_ELEMS_FILL: &str = "array_elems_fill";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
 pub const ATTR_FORCE_FREE: &str = "force_free";
@@ -179,6 +181,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_FROM_BYTES,
     ATTR_ARRAY_REALLOC,
     ATTR_ARRAY_ELEMS_COPY,
+    ATTR_ARRAY_ELEMS_FILL,
     ATTR_FORCE_FREE,
     ATTR_WIRE_ENCODE,
     ATTR_WIRE_DECODE,
@@ -243,6 +246,8 @@ pub enum IntrinsicOp {
     ArrayRealloc,
     /// `Buffer.elems_copy<T>(…)` (`@unsafe`) — bulk blit of unmanaged array elements.
     ArrayElemsCopy,
+    /// `Buffer.elems_fill<T>(…)` (`@unsafe`) — zero unmanaged array elements.
+    ArrayElemsFill,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
     /// `Bytes.toWire<T>(v)` — encode a `WebWorker`-safe `T` (a `string`, or an `unmanaged` value)
@@ -283,6 +288,7 @@ impl IntrinsicOp {
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,
             ATTR_ARRAY_ELEMS_COPY => IntrinsicOp::ArrayElemsCopy,
+            ATTR_ARRAY_ELEMS_FILL => IntrinsicOp::ArrayElemsFill,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,

@@ -224,7 +224,9 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         }
         Statement::InterfaceCall { sig, .. } => seed(*sig),
         Statement::IndirectCall { sig, .. } => seed(*sig),
-        Statement::Print { ty, .. } | Statement::ArrayElemsCopy { elem_ty: ty, .. } => seed(*ty),
+        Statement::Print { ty, .. }
+        | Statement::ArrayElemsCopy { elem_ty: ty, .. }
+        | Statement::ArrayElemsFill { elem_ty: ty, .. } => seed(*ty),
         Statement::Retain(_)
         | Statement::Release(_)
         | Statement::Panic(_)
@@ -234,7 +236,7 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         | Statement::ForceFree(_)
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
-        | Statement::SimdF32x4 { .. }
+        | Statement::SimdV128 { .. }
         | Statement::ValueDrop(_)
         | Statement::ValueRetain(_)
         | Statement::ValueKill(_) => {}
@@ -585,20 +587,34 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             collect_global_reads_operand(src_off, out);
             collect_global_reads_operand(count, out);
         }
+        Statement::ArrayElemsFill {
+            dst,
+            dst_off,
+            count,
+            ..
+        } => {
+            collect_global_reads_operand(dst, out);
+            collect_global_reads_operand(dst_off, out);
+            collect_global_reads_operand(count, out);
+        }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => {
             collect_global_reads_operand(o, out)
         }
-        Statement::SimdF32x4 {
+        Statement::SimdV128 {
             dest,
             lhs,
             rhs,
             index,
+            splat_rhs,
             ..
         } => {
             collect_global_reads_operand(dest, out);
             collect_global_reads_operand(lhs, out);
             collect_global_reads_operand(rhs, out);
             collect_global_reads_operand(index, out);
+            if let Some(s) = splat_rhs {
+                collect_global_reads_operand(s, out);
+            }
         }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }

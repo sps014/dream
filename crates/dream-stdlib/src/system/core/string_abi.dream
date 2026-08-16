@@ -19,6 +19,10 @@ extend string {
     @intrinsic("string_from_utf8_prefix")
     static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string;
 
+    // Like `from_utf8_prefix`, but trusts a precomputed Unicode scalar count (skips recount).
+    @intrinsic("string_from_utf8_prefix_n")
+    static extern fun from_utf8_prefix_n(borrow bytes: byte[], len: int, scalars: int): string;
+
     // Scalar-indexed substring via one UTF-8 byte-range copy (`$string_substring_raw`).
     @intrinsic("string_substring_raw")
     static extern fun substring_raw(borrow s: string, start: int, end: int): string;

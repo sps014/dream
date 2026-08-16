@@ -242,7 +242,24 @@ fn rvalue(r: &Rvalue) -> String {
         ),
         Rvalue::HashCode(o) => format!("hash_code({})", operand(o)),
         Rvalue::ToString(o) => format!("to_string({})", operand(o)),
-        Rvalue::Concat(a, b) => format!("concat({}, {})", operand(a), operand(b)),
+        Rvalue::Concat(parts) => {
+            let args = parts
+                .iter()
+                .map(operand)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("concat({args})")
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => format!(
+            "concat_int({}, {}, {})",
+            operand(prefix),
+            operand(value),
+            operand(suffix)
+        ),
         Rvalue::EnumName { value, .. } => format!("enum_name({})", operand(value)),
         Rvalue::Cast(o, from, ty) => format!("{} as ty{} (from ty{})", operand(o), ty.0, from.0),
         Rvalue::Discriminant(o) => format!("discriminant({})", operand(o)),

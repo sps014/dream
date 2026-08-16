@@ -436,8 +436,16 @@ pub enum Rvalue {
     HashCode(Operand),
     /// The object-protocol `x.to_string()` — dispatch on the operand's static type to a formatter.
     ToString(Operand),
-    /// String concatenation `a + b` via the runtime `$concat_strings` (both operands are strings).
-    Concat(Operand, Operand),
+    /// String concatenation of two or more operands. Length 2 → `$concat_strings`; length 3 →
+    /// `$concat_strings3` (flattened from nested `a + b + c` so no intermediate temp).
+    Concat(Vec<Operand>),
+    /// `"…" + int.to_string() + "…"` fused into one alloc (`$concat_str_int_str`). `suffix` may be
+    /// the empty string for the two-piece `"…" + int` shape.
+    ConcatInt {
+        prefix: Operand,
+        value: Operand,
+        suffix: Operand,
+    },
     /// A C-style enum's `to_string()` — the operand's discriminant mapped to its interned
     /// variant-name string. `arms` is `(discriminant, variant name)`; an unmatched value produces
     /// the empty string.

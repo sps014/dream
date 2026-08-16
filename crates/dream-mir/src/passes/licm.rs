@@ -365,10 +365,23 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         | Rvalue::UnionField { base: o, .. } => operand_reads(o, f),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => {
+        | Rvalue::ByteAt(a, b) => {
             operand_reads(a, f);
             operand_reads(b, f);
+        }
+        Rvalue::Concat(parts) => {
+            for p in parts {
+                operand_reads(p, f);
+            }
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            operand_reads(prefix, f);
+            operand_reads(value, f);
+            operand_reads(suffix, f);
         }
         Rvalue::EnumName { value, .. } => operand_reads(value, f),
         Rvalue::ArrayNew { len, .. } => operand_reads(len, f),

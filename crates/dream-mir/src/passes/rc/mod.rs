@@ -105,10 +105,23 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         | Rvalue::UnionField { base: o, .. } => check(o),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => {
+        | Rvalue::ByteAt(a, b) => {
             check(a);
             check(b);
+        }
+        Rvalue::Concat(parts) => {
+            for p in parts {
+                check(p);
+            }
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            check(prefix);
+            check(value);
+            check(suffix);
         }
         Rvalue::EnumName { value, .. } => check(value),
         Rvalue::ArrayNew { len, .. } => check(len),

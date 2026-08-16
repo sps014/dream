@@ -29,9 +29,9 @@ use remap::{arg_type, remap_block, wasm_kind, WasmKind};
 type FnKey = (DefId, Vec<TypeId>);
 
 /// A callee small enough to always inline: at most this many statements across all its blocks.
-const MAX_INLINE_STMTS: usize = 48;
+const MAX_INLINE_STMTS: usize = 64;
 /// ...and at most this many blocks.
-const MAX_INLINE_BLOCKS: usize = 10;
+const MAX_INLINE_BLOCKS: usize = 16;
 /// Stop inlining into a caller once it has grown past this many blocks, to bound code blow-up.
 const CALLER_BLOCK_CAP: usize = 4096;
 /// Safety cap on inlines performed into a single function per `run` (defends against any unforeseen
@@ -166,6 +166,7 @@ fn eligible(
         return false; // direct self-recursion
     }
     let g = &mir.functions[ci];
+    let caller = &mir.functions[fi];
     if g.is_async {
         return false; // async bodies are stubs; real control flow lives in the HIR snapshot
     }
@@ -173,6 +174,12 @@ fn eligible(
         return false; // part of a call cycle: inlining could not terminate
     }
     if g.name == crate::abi::ENTRY_FN || g.name == crate::lower::INIT_FN_NAME {
+        return false;
+    }
+    // Keep `main` a thin driver. Single-use inlining of benches/`run_suite` into it produces one
+    // multi-thousand-block `$__pc` dispatcher (relooper fallback) that Cranelift cannot turn into
+    // real loops — that dominated the old map/insert microbench profiles.
+    if caller.name == crate::abi::ENTRY_FN || caller.name == crate::lower::INIT_FN_NAME {
         return false;
     }
     if g.params.len() != args.len() || g.blocks.is_empty() {
@@ -185,7 +192,6 @@ fn eligible(
     // emit the widening `Cast` when the argument's type is known. If a parameter's WASM type is wider
     // than `i32` and the argument's type is indeterminate (a field/index/global read), skip inlining
     // rather than risk an i32/i64/f32/f64 mismatch in the merged body.
-    let caller = &mir.functions[fi];
     for (i, param) in g.params.iter().enumerate() {
         let pty = g.local_ty(*param);
         if wasm_kind(interner, pty) != WasmKind::I32
@@ -194,12 +200,68 @@ fn eligible(
             return false;
         }
     }
+    if addr_taken.contains(key) {
+        return false;
+    }
+    // Inlining a looping callee (rehash, probe, grow-loops) into a wrapper makes a multi-entry
+    // loop; shape emit then falls back to `$__pc`/`br_table` for the whole wrapper.
+    if cfg_has_cycle(g) {
+        return false;
+    }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let small = stmt_count <= MAX_INLINE_STMTS && g.blocks.len() <= MAX_INLINE_BLOCKS;
-    // Always inline a function with a single direct call site whose address is never taken (it will
-    // become dead and be pruned), even if it is larger than the "small" threshold.
-    let single_use = call_counts.get(key).copied().unwrap_or(0) == 1 && !addr_taken.contains(key);
-    small || single_use
+    if !small {
+        return false;
+    }
+    // Keep small, multi-use wrappers thin (e.g. `Map.set` → `insert_no_grow`, `List.insert` →
+    // `grow`). Inlining a large callee into the wrapper first would push it over the threshold and
+    // prevent the wrapper from inlining into hot loops.
+    let caller_key: FnKey = (caller.def, caller.instance.clone());
+    let caller_sites = call_counts.get(&caller_key).copied().unwrap_or(0);
+    if caller_sites > 1 {
+        let caller_stmts: usize = caller.blocks.iter().map(|b| b.stmts.len()).sum();
+        let caller_small =
+            caller_stmts <= MAX_INLINE_STMTS && caller.blocks.len() <= MAX_INLINE_BLOCKS;
+        if caller_small
+            && (caller_stmts + stmt_count > MAX_INLINE_STMTS
+                || caller.blocks.len() + g.blocks.len() > MAX_INLINE_BLOCKS)
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn cfg_has_cycle(func: &crate::MirFunction) -> bool {
+    let n = func.blocks.len();
+    if n == 0 {
+        return false;
+    }
+    let mut visiting = vec![false; n];
+    let mut seen = vec![false; n];
+    fn rec(
+        func: &crate::MirFunction,
+        b: usize,
+        visiting: &mut [bool],
+        seen: &mut [bool],
+    ) -> bool {
+        if visiting[b] {
+            return true;
+        }
+        if seen[b] {
+            return false;
+        }
+        visiting[b] = true;
+        for s in func.blocks[b].terminator.successors() {
+            if rec(func, s.0 as usize, visiting, seen) {
+                return true;
+            }
+        }
+        visiting[b] = false;
+        seen[b] = true;
+        false
+    }
+    rec(func, func.entry.0 as usize, &mut visiting, &mut seen)
 }
 
 /// Remaps a callee [`LocalDecl`] into the caller using the callee's [`ValueFrame`] classification:

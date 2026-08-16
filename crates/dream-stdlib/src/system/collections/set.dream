@@ -39,29 +39,78 @@ public class Set<T> : Collection<T> {
 
     // Index of an occupied slot holding a value, or -1.
     fun find(borrow value: T): int {
-        let idx = this.home(value);
+        let keys = this.keys;
+        let states = this.states;
+        let cap = this.cap;
+        let idx = value.hash_code() & (cap - 1);
         let result = -1;
-        let searching = true;
-        while (searching == true) {
-            let s = this.states[idx];
+        let done = false;
+        while (done == false) {
+            let s = states[idx];
             if (s == hash_slot_empty()) {
-                searching = false;
+                done = true;
             } else {
                 if (s == hash_slot_occupied()) {
-                    if (this.keys[idx] == value) {
+                    if (keys[idx] == value) {
                         result = idx;
-                        searching = false;
+                        done = true;
                     }
                 }
-                if (searching == true) {
+                if (done == false) {
                     idx = idx + 1;
-                    if (idx == this.cap) {
+                    if (idx == cap) {
                         idx = 0;
                     }
                 }
             }
         }
         return result;
+    }
+
+    // Probe and insert without checking load factor. Used by `add` and `rehash` so those two are
+    // not mutually recursive (a cycle would block the whole-module inliner).
+    fun insert_no_grow(value: T): bool {
+        let keys = this.keys;
+        let states = this.states;
+        let cap = this.cap;
+        let idx = value.hash_code() & (cap - 1);
+        let first_tomb = -1;
+        let added = false;
+        let done = false;
+        while (done == false) {
+            let s = states[idx];
+            if (s == hash_slot_empty()) {
+                let target = idx;
+                if (first_tomb >= 0) {
+                    target = first_tomb;
+                }
+                keys[target] = value;
+                states[target] = hash_slot_occupied();
+                this.count = this.count + 1;
+                if (first_tomb < 0) {
+                    this.used = this.used + 1;
+                }
+                added = true;
+                done = true;
+            } else {
+                if (s == hash_slot_occupied()) {
+                    if (keys[idx] == value) {
+                        done = true;
+                    }
+                } else {
+                    if (first_tomb < 0) {
+                        first_tomb = idx;
+                    }
+                }
+                if (done == false) {
+                    idx = idx + 1;
+                    if (idx == cap) {
+                        idx = 0;
+                    }
+                }
+            }
+        }
+        return added;
     }
 
     // Grows and rehashes the set when it gets too full.
@@ -81,7 +130,7 @@ public class Set<T> : Collection<T> {
         let i = 0;
         while (i < old_cap) {
             if (old_states[i] == hash_slot_occupied()) {
-                this.add(old_keys[i]);
+                this.insert_no_grow(old_keys[i]);
             }
             i = i + 1;
         }
@@ -92,45 +141,7 @@ public class Set<T> : Collection<T> {
         if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
             this.rehash();
         }
-        let idx = this.home(value);
-        let first_tomb = -1;
-        let placed = false;
-        let added = false;
-        while (placed == false) {
-            let s = this.states[idx];
-            if (s == hash_slot_empty()) {
-                let target = idx;
-                if (first_tomb >= 0) {
-                    target = first_tomb;
-                }
-                this.keys[target] = value;
-                this.states[target] = hash_slot_occupied();
-                this.count = this.count + 1;
-                if (first_tomb < 0) {
-                    this.used = this.used + 1;
-                }
-                placed = true;
-                added = true;
-            } else {
-                if (s == hash_slot_tombstone()) {
-                    if (first_tomb < 0) {
-                        first_tomb = idx;
-                    }
-                } else {
-                    if (this.keys[idx] == value) {
-                        placed = true;
-                        added = false;
-                    }
-                }
-                if (placed == false) {
-                    idx = idx + 1;
-                    if (idx == this.cap) {
-                        idx = 0;
-                    }
-                }
-            }
-        }
-        return added;
+        return this.insert_no_grow(value);
     }
 
     // True if the set contains the value.

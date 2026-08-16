@@ -88,6 +88,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
             | Rvalue::CharAt(..)
             | Rvalue::ByteAt(..)
             | Rvalue::Concat(..)
+            | Rvalue::ConcatInt { .. }
             | Rvalue::EnumName { .. }
             | Rvalue::HashCode(_)
             | Rvalue::ToString(_)
@@ -219,10 +220,23 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         | Rvalue::UnionField { base: o, .. } => read_operand(o, read),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => {
+        | Rvalue::ByteAt(a, b) => {
             read_operand(a, read);
             read_operand(b, read);
+        }
+        Rvalue::Concat(parts) => {
+            for p in parts {
+                read_operand(p, read);
+            }
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            read_operand(prefix, read);
+            read_operand(value, read);
+            read_operand(suffix, read);
         }
         Rvalue::EnumName { value, .. } => read_operand(value, read),
         Rvalue::ArrayNew { len, .. } => read_operand(len, read),

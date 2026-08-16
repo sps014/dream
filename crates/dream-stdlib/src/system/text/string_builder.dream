@@ -79,8 +79,16 @@ public class StringBuilder {
     }
 
     // Appends every UTF-8 byte of `text`, growing at most once.
+    // Uses the string's cached scalar length (O(1)) instead of rescanning lead bytes.
     public fun append(borrow text: string): void {
-        this.append_utf8_slice(text, 0, text.byte_size());
+        let byte_len = text.byte_size();
+        if (byte_len <= 0) {
+            return;
+        }
+        this.ensure(byte_len);
+        string.copy_utf8(this.bytes, this.count, text, 0, byte_len);
+        this.count = this.count + byte_len;
+        this.scalars = this.scalars + text.length;
     }
 
     // Appends `byte_len` UTF-8 bytes starting at byte index `start` of `text`.
@@ -118,8 +126,9 @@ public class StringBuilder {
     }
 
     // Materializes the accumulated UTF-8 bytes into a single new string.
+    // Passes the running scalar count so the runtime skips a second UTF-8 recount.
     public fun build(): string {
-        return string.from_utf8_prefix(this.bytes, this.count);
+        return string.from_utf8_prefix_n(this.bytes, this.count, this.scalars);
     }
 
     // Object-protocol override, so `print`/`println`/`+`/interpolation all use `build()`'s output

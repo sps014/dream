@@ -31,3 +31,8 @@ tooling/vscode/bin/
 *.pyc
 sample/sqlite/*.db
 sample/sqlite/target/pack/*
+
+# C# microbench side-by-side harness
+tests/bench/csharp/bin/
+tests/bench/csharp/obj/
+tests/bench/out/

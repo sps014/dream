@@ -151,6 +151,34 @@ internal class RegexVM {
         this.hint_pc = pc;
     }
 
+    // True when unanchored search is `.*?` + greedy ASCII-digit class Plus (compiled `\d+` /
+    // `[0-9]+` with no captures). Enables a linear byte-scan match path.
+    public fun is_ascii_digit_plus(): bool {
+        if ((this.hint_pc < 0) || (this.ngroup != 0)) {
+            return false;
+        }
+        if ((this.hint_pc < 0) || (this.hint_pc >= this.prog.length)) {
+            return false;
+        }
+        let hint = this.prog[this.hint_pc];
+        if ((hint.opcode != RegexOp.CharClass) || (hint.class_kind != 1)) {
+            return false;
+        }
+        if (hint.negate || hint.foldcase) {
+            return false;
+        }
+        let nxt = hint.out;
+        if ((nxt < 0) || (nxt >= this.prog.length)) {
+            return false;
+        }
+        let alt = this.prog[nxt];
+        if (alt.opcode != RegexOp.Alt) {
+            return false;
+        }
+        // Plus: one arm loops back to the digit class (or a Capture/Nop leading into it).
+        return (alt.out == this.hint_pc) || (alt.out1 == this.hint_pc);
+    }
+
     fun eps_reaches_match(start: int): bool {
         let n = this.prog.length;
         let seen = Buffer.alloc<int>(n);

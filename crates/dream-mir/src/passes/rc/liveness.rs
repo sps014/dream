@@ -198,10 +198,23 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
         | Rvalue::UnionField { base: o, .. } => add(o),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => {
+        | Rvalue::ByteAt(a, b) => {
             add(a);
             add(b);
+        }
+        Rvalue::Concat(parts) => {
+            for p in parts {
+                add(p);
+            }
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            add(prefix);
+            add(value);
+            add(suffix);
         }
         Rvalue::EnumName { value, .. } => add(value),
         Rvalue::ArrayNew { len, .. } => add(len),

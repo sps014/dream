@@ -153,6 +153,11 @@ public class List<T> : IndexedCollection<T> {
         this.count = 0;
     }
 
+    // Unmanaged: no RC to release — rewind the count only.
+    public fun clear(): void where T : unmanaged {
+        this.count = 0;
+    }
+
     // Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out
     // of range (index may equal `size()` to append).
     public fun insert(index: int, value: T): bool {
@@ -164,12 +169,27 @@ public class List<T> : IndexedCollection<T> {
         }
         let n = this.count - index;
         if (n > 0) {
-            // Unmanaged `T` bulk-blits via `Span.copy_from`'s where-overload (`memory.copy`);
-            // managed `T` goes through element assignment. Do not add where-overloads on List
-            // methods themselves — that breaks interface tables.
             Span<T>(this.items, index + 1, n).copy_from(Span<T>(this.items, index, n));
         }
         this.items[index] = value;
+        this.count = this.count + 1;
+        return true;
+    }
+
+    // Unmanaged: one `memory.copy` shift (no Span wrappers).
+    public fun insert(index: int, value: T): bool where T : unmanaged {
+        if ((index < 0) || (index > this.count)) {
+            return false;
+        }
+        if (this.count == this.items.length) {
+            this.grow();
+        }
+        let items = this.items;
+        let n = this.count - index;
+        if (n > 0) {
+            Buffer.elems_copy<T>(items, index + 1, items, index, n);
+        }
+        items[index] = value;
         this.count = this.count + 1;
         return true;
     }

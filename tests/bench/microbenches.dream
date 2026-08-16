@@ -4,9 +4,20 @@ import system.text;
 
 // Microbench suite for ARC / string / collection / allocator hot paths.
 // Run: `dream --release run tests/bench/microbenches.dream`
+// Or:  `./scripts/run-microbenches.sh` (optional C# compare when `dotnet` is available)
 // Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
+//
+// Notes vs C# (`tests/bench/csharp`):
+// - Dream executes under Wasm/wasmtime + ARC; C# is native JIT + GC.
+// - `char_scan` uses linear `chars()` (UTF-8 scalars); `byte_scan` is the ASCII-fair byte walk.
+// - `substring(start, end)` is start/end indices; C# uses (start, length).
+
+let measuring: bool = true;
 
 fun report(name: string, nanos: long, iters: int): void {
+    if (measuring == false) {
+        return;
+    }
     let per = nanos / (long)iters;
     System.println(
         "bench " + name
@@ -29,7 +40,6 @@ fun bench_arc_locals(iters: int): void {
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        // Short-lived heap refs: assign/copy stress retain/release without cycles.
         let a = "n" + i.to_string();
         let b = a;
         let c = b;
@@ -76,22 +86,45 @@ fun bench_string_eq(iters: int): void {
     sink_int(hits);
 }
 
+// Linear UTF-8 scalar walk (O(n) per string). Uses a byte cursor — avoids O(n²) `char_at`
+// and avoids allocating a `StringIterator` class each outer iteration.
 fun bench_char_scan(iters: int): void {
     let s = "The quick brown fox jumps over the lazy dog. 0123456789";
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        let n = s.length;
-        let j = 0;
-        while (j < n) {
-            acc = acc + (int)s.char_at(j);
-            j = j + 1;
+        let n = s.byte_size();
+        let bo = 0;
+        while (bo < n) {
+            let c = string.utf8_decode_at(s, bo);
+            acc = acc + (int)c;
+            bo = bo + string.utf8_width_at(s, bo);
         }
         i = i + 1;
     }
     sw.stop();
     report("char_scan", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+// Raw UTF-8 byte walk — fair ASCII counterpart to C# indexer scan.
+fun bench_byte_scan(iters: int): void {
+    let s = "The quick brown fox jumps over the lazy dog. 0123456789";
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let n = s.byte_size();
+        let j = 0;
+        while (j < n) {
+            acc = acc + (int)s.byte_at(j);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("byte_scan", sw.elapsed_nanos(), iters);
     sink_int(acc);
 }
 
@@ -224,15 +257,16 @@ fun bench_list_clear_reuse(iters: int): void {
     sink_int(buf.capacity());
 }
 
+// Index bump (no Span) — avoids retain/release on the backing array each iteration.
 fun bench_scratch_arena(iters: int): void {
     let arena = ScratchArena<int>(1 << 14);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        let s = arena.alloc(32);
-        s[0] = i;
-        acc = acc + s[0];
+        let start = arena.bump(32);
+        arena.set_at(start, i);
+        acc = acc + arena.at(start);
         arena.reset();
         i = i + 1;
     }
@@ -240,16 +274,22 @@ fun bench_scratch_arena(iters: int): void {
     report("scratch_arena", sw.elapsed_nanos(), iters);
     sink_int(acc);
 }
-
+// Pike-VM find-all — pattern is intentionally NOT bare `\d+` (that hits a digit-run
+// fast path and would benchmax the score).
 fun bench_regex_find(iters: int): void {
-    let re = Regex("\\d+", RegexFlags.Global);
+    let re = Regex("[a-z]+\\d+", RegexFlags.Global);
     let hay = "abc123def456ghi789xyz";
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while (i < iters) {
         let m = re.match(hay);
-        acc = acc + m.length;
+
+        let j = 0;
+        while (j < m.length) {
+            acc = acc + m[j].byte_size();
+            j = j + 1;
+        }
         i = i + 1;
     }
     sw.stop();
@@ -272,12 +312,12 @@ fun bench_string_builder(iters: int): void {
     sink_string(built);
 }
 
-fun main(): void {
-    let scale = 20000;
+fun run_suite(scale: int): void {
     bench_arc_locals(scale);
     bench_string_concat(scale);
     bench_string_eq(scale * 5);
     bench_char_scan(scale / 10);
+    bench_byte_scan(scale / 10);
     bench_substring(scale);
     bench_list_push(scale);
     bench_list_insert_mid(scale);
@@ -288,4 +328,13 @@ fun main(): void {
     bench_scratch_arena(scale);
     bench_regex_find(scale / 10);
     bench_string_builder(scale / 5);
+}
+
+fun main(): void {
+    let scale = 20000;
+    // Warmup (discard): mirrors C# JIT warmup so ratios are not cold-vs-hot.
+    measuring = false;
+    run_suite(scale);
+    measuring = true;
+    run_suite(scale);
 }

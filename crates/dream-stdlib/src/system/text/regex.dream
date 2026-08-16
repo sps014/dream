@@ -22,6 +22,9 @@ public class Regex {
     group_name_numbers: int[];
     pike: RegexVM;
     back: RegexBacktrackVM;
+    // True when the pattern is a simple unanchored ASCII digit run (`\d+` / `[0-9]+`).
+    // Speeds that pattern only — microbench `regex_find` must not use bare `\d+`.
+    ascii_digit_plus: bool;
 
     public constructor(pattern: string, flags: RegexFlags = 0) {
         this.pattern = pattern;
@@ -42,6 +45,10 @@ public class Regex {
         this.prog = compiler.compile(ast);
         this.pike = RegexVM(this.prog, this.ngroup, this.multiline, this.table);
         this.back = RegexBacktrackVM(this.prog, this.ngroup, this.multiline, this.table);
+        this.ascii_digit_plus = (this.use_backtrack == false)
+            && (this.ignore_case == false)
+            && (this.ngroup == 0)
+            && this.pike.is_ascii_digit_plus();
     }
 
     // Finds the next match starting at or after `pos`, dispatching to whichever engine this
@@ -194,9 +201,12 @@ public class Regex {
     // the first match's full text followed by each capture group (a group that didn't
     // participate is "").
     public fun match(input: string): string[] {
+        if (this.global && this.ascii_digit_plus) {
+            return this.match_ascii_digit_runs(input);
+        }
         let n = input.length;
         if (this.global) {
-            let results = List<string>();
+            let results = List<string>(8);
             let pos = 0;
             let going = true;
             while (going) {
@@ -228,6 +238,39 @@ public class Regex {
             Some(m) => this.groups_array(input, m),
             None => Buffer.alloc<string>(0),
         };
+    }
+
+    // Linear ASCII digit-run finder for `\d+` / `[0-9]+` (Global). Haystacks may be general
+    // UTF-8; digit runs are ASCII so byte offsets equal scalar offsets inside each run.
+    fun match_ascii_digit_runs(input: string): string[] {
+        let results = List<string>(8);
+        let n = input.byte_size();
+        let i = 0;
+        while (i < n) {
+            let b = input.byte_at(i);
+            if ((b >= 48) && (b <= 57)) {
+                let start = i;
+                i = i + 1;
+                while (i < n) {
+                    let c = input.byte_at(i);
+                    if ((c < 48) || (c > 57)) {
+                        // end run
+                        break;
+                    }
+                    i = i + 1;
+                }
+                // ASCII digit bytes are one scalar each — byte index == scalar index.
+                results.push(input.substring(start, i));
+            } else {
+                // Advance one UTF-8 scalar so multi-byte chars aren't mis-scanned mid-sequence.
+                let w = string.utf8_width_at(input, i);
+                if (w < 1) {
+                    w = 1;
+                }
+                i = i + w;
+            }
+        }
+        return this.to_array(results);
     }
 
     // Richer match info for the first match in `input`: the full match, every capture group's

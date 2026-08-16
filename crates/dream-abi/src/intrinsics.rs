@@ -109,6 +109,8 @@ pub const ATTR_STRING_SET: &str = "string_set";
 pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
 /// `string.from_utf8_prefix(bytes, len)` — build a string from the first `len` bytes of a `byte[]`.
 pub const ATTR_STRING_FROM_UTF8_PREFIX: &str = "string_from_utf8_prefix";
+/// `string.from_utf8_prefix_n(bytes, len, scalars)` — prefix build with a known scalar count.
+pub const ATTR_STRING_FROM_UTF8_PREFIX_N: &str = "string_from_utf8_prefix_n";
 /// `string.substring_raw(s, start, end)` — UTF-8 byte-slice substring (scalar indices).
 /// Key is `string_substring_raw` (not `string_substring`) so it does not collide with the
 /// mangled instance method `string.substring` → `$string_substring`.
@@ -164,6 +166,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_STRING_SET,
     ATTR_STRING_FROM_UTF8,
     ATTR_STRING_FROM_UTF8_PREFIX,
+    ATTR_STRING_FROM_UTF8_PREFIX_N,
     ATTR_STRING_SUBSTRING,
     ATTR_STRING_COPY_UTF8,
     ATTR_STRING_COMPARE,
@@ -214,6 +217,8 @@ pub enum IntrinsicOp {
     StringFromUtf8,
     /// `string.from_utf8_prefix(bytes, len)` — build a string from a UTF-8 byte prefix.
     StringFromUtf8Prefix,
+    /// `string.from_utf8_prefix_n(bytes, len, scalars)` — prefix build with known scalar count.
+    StringFromUtf8PrefixN,
     /// `string.substring_raw(s, start, end)` — UTF-8 byte-slice substring (scalar indices).
     StringSubstring,
     /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk UTF-8 copy into a `byte[]`.
@@ -265,6 +270,7 @@ impl IntrinsicOp {
             ATTR_STRING_SET => IntrinsicOp::StringSet,
             ATTR_STRING_FROM_UTF8 => IntrinsicOp::StringFromUtf8,
             ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
+            ATTR_STRING_FROM_UTF8_PREFIX_N => IntrinsicOp::StringFromUtf8PrefixN,
             ATTR_STRING_SUBSTRING => IntrinsicOp::StringSubstring,
             ATTR_STRING_COPY_UTF8 => IntrinsicOp::StringCopyUtf8,
             ATTR_STRING_COMPARE => IntrinsicOp::StringCompare,

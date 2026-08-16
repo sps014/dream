@@ -550,6 +550,399 @@
     local.get $new_ptr
 )
 
+;; Three-way concat: one malloc + three copies (avoids the temp from nested `$concat_strings`).
+(func $concat_strings3 (param $str1 i32) (param $str2 i32) (param $str3 i32) (result i32)
+    (local $len1 i32)
+    (local $len2 i32)
+    (local $len3 i32)
+    (local $sc1 i32)
+    (local $sc2 i32)
+    (local $sc3 i32)
+    (local $new_ptr i32)
+    (local $off i32)
+    local.get $str1
+    call $strlen
+    local.set $len1
+    local.get $str2
+    call $strlen
+    local.set $len2
+    local.get $str3
+    call $strlen
+    local.set $len3
+    local.get $len1
+    local.get $len2
+    i32.add
+    local.get $len3
+    i32.add
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        call $retain
+        i32.const {STRING_EMPTY}
+        return
+    end
+    ;; Degenerate: if two sides are empty, fall back to pairwise retain/concat.
+    local.get $len1
+    i32.eqz
+    if
+        local.get $str2
+        local.get $str3
+        call $concat_strings
+        return
+    end
+    local.get $len2
+    i32.eqz
+    if
+        local.get $str1
+        local.get $str3
+        call $concat_strings
+        return
+    end
+    local.get $len3
+    i32.eqz
+    if
+        local.get $str1
+        local.get $str2
+        call $concat_strings
+        return
+    end
+    local.get $str1
+    call $str_scalar_len
+    local.set $sc1
+    local.get $str2
+    call $str_scalar_len
+    local.set $sc2
+    local.get $str3
+    call $str_scalar_len
+    local.set $sc3
+    local.get $len1
+    local.get $len2
+    i32.add
+    local.get $len3
+    i32.add
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $new_ptr
+    local.get $new_ptr
+    local.get $len1
+    local.get $len2
+    i32.add
+    local.get $len3
+    i32.add
+    i32.store
+    local.get $new_ptr
+    i32.const 4
+    i32.add
+    local.get $sc1
+    local.get $sc2
+    i32.add
+    local.get $sc3
+    i32.add
+    i32.store
+    local.get $new_ptr
+    i32.const 8
+    i32.add
+    local.get $str1
+    i32.const 8
+    i32.add
+    local.get $len1
+    memory.copy
+    local.get $len1
+    local.set $off
+    local.get $new_ptr
+    i32.const 8
+    i32.add
+    local.get $off
+    i32.add
+    local.get $str2
+    i32.const 8
+    i32.add
+    local.get $len2
+    memory.copy
+    local.get $off
+    local.get $len2
+    i32.add
+    local.set $off
+    local.get $new_ptr
+    i32.const 8
+    i32.add
+    local.get $off
+    i32.add
+    local.get $str3
+    i32.const 8
+    i32.add
+    local.get $len3
+    memory.copy
+    local.get $new_ptr
+)
+
+;; `"pref" + int + "suf"` in one malloc — no intermediate `$int_to_string` string.
+(func $concat_str_int_str (param $pref i32) (param $v i32) (param $suf i32) (result i32)
+    (local $plen i32)
+    (local $slen i32)
+    (local $psc i32)
+    (local $ssc i32)
+    (local $ndigits i32)
+    (local $neg i32)
+    (local $tmp i32)
+    (local $digit i32)
+    (local $total i32)
+    (local $p i32)
+    (local $d i32)
+    (local $pos i32)
+    local.get $pref
+    i32.load
+    local.set $plen
+    local.get $suf
+    i32.load
+    local.set $slen
+    local.get $pref
+    i32.load offset=4
+    local.set $psc
+    local.get $suf
+    i32.load offset=4
+    local.set $ssc
+    ;; Digit count via magnitude compares (no `div` loop). ASCII digits = one scalar each.
+    i32.const 0
+    local.set $neg
+    local.get $v
+    i32.eqz
+    if
+        i32.const 1
+        local.set $ndigits
+    else
+        local.get $v
+        local.set $tmp
+        local.get $v
+        i32.const 0
+        i32.lt_s
+        if
+            i32.const 1
+            local.set $neg
+            i32.const 0
+            local.get $v
+            i32.sub
+            local.set $tmp
+        end
+        ;; INT_MIN has no positive i32 counterpart (`0 - min == min`).
+        local.get $tmp
+        i32.const 0
+        i32.lt_s
+        if
+            i32.const 10
+            local.set $ndigits
+        else
+            local.get $tmp
+            i32.const 10
+            i32.lt_u
+            if
+                i32.const 1
+                local.set $ndigits
+            else
+                local.get $tmp
+                i32.const 100
+                i32.lt_u
+                if
+                    i32.const 2
+                    local.set $ndigits
+                else
+                    local.get $tmp
+                    i32.const 1000
+                    i32.lt_u
+                    if
+                        i32.const 3
+                        local.set $ndigits
+                    else
+                        local.get $tmp
+                        i32.const 10000
+                        i32.lt_u
+                        if
+                            i32.const 4
+                            local.set $ndigits
+                        else
+                            local.get $tmp
+                            i32.const 100000
+                            i32.lt_u
+                            if
+                                i32.const 5
+                                local.set $ndigits
+                            else
+                                local.get $tmp
+                                i32.const 1000000
+                                i32.lt_u
+                                if
+                                    i32.const 6
+                                    local.set $ndigits
+                                else
+                                    local.get $tmp
+                                    i32.const 10000000
+                                    i32.lt_u
+                                    if
+                                        i32.const 7
+                                        local.set $ndigits
+                                    else
+                                        local.get $tmp
+                                        i32.const 100000000
+                                        i32.lt_u
+                                        if
+                                            i32.const 8
+                                            local.set $ndigits
+                                        else
+                                            local.get $tmp
+                                            i32.const 1000000000
+                                            i32.lt_u
+                                            if
+                                                i32.const 9
+                                                local.set $ndigits
+                                            else
+                                                i32.const 10
+                                                local.set $ndigits
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        local.get $neg
+        if
+            local.get $ndigits
+            i32.const 1
+            i32.add
+            local.set $ndigits
+        end
+    end
+    local.get $plen
+    local.get $ndigits
+    i32.add
+    local.get $slen
+    i32.add
+    local.set $total
+    local.get $total
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        call $retain
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $total
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $p
+    local.get $p
+    local.get $total
+    i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $psc
+    local.get $ndigits
+    i32.add
+    local.get $ssc
+    i32.add
+    i32.store
+    local.get $p
+    i32.const 8
+    i32.add
+    local.set $d
+    ;; copy prefix
+    local.get $plen
+    i32.eqz
+    i32.eqz
+    if
+        local.get $d
+        local.get $pref
+        i32.const 8
+        i32.add
+        local.get $plen
+        memory.copy
+    end
+    ;; write digits (and optional '-') into [d+plen ..)
+    local.get $d
+    local.get $plen
+    i32.add
+    local.set $pos
+    local.get $v
+    i32.eqz
+    if
+        local.get $pos
+        i32.const 48
+        i32.store8
+    else
+        local.get $neg
+        if
+            local.get $pos
+            i32.const 45
+            i32.store8
+        end
+        ;; write digits least-significant first at the end of the digit field
+        local.get $d
+        local.get $plen
+        i32.add
+        local.get $ndigits
+        i32.add
+        local.set $pos
+        local.get $neg
+        if
+            i32.const 0
+            local.get $v
+            i32.sub
+            local.set $tmp
+        else
+            local.get $v
+            local.set $tmp
+        end
+        (block $write_done
+            (loop $write
+                local.get $tmp
+                i32.eqz
+                br_if $write_done
+                local.get $pos
+                i32.const 1
+                i32.sub
+                local.set $pos
+                local.get $pos
+                local.get $tmp
+                i32.const 10
+                i32.rem_u
+                i32.const 48
+                i32.add
+                i32.store8
+                local.get $tmp
+                i32.const 10
+                i32.div_u
+                local.set $tmp
+                br $write
+            )
+        )
+    end
+    ;; copy suffix
+    local.get $slen
+    i32.eqz
+    i32.eqz
+    if
+        local.get $d
+        local.get $plen
+        i32.add
+        local.get $ndigits
+        i32.add
+        local.get $suf
+        i32.const 8
+        i32.add
+        local.get $slen
+        memory.copy
+    end
+    local.get $p
+)
+
 (func $debug_get_free_list_head (result i32)
     global.get $free_list_head
 )
@@ -1334,6 +1727,71 @@
     local.get $len
     call $utf8_scalar_count
     local.set $scalars
+    local.get $len
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $p
+    local.get $p
+    local.get $len
+    i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    local.get $scalars
+    i32.store
+    local.get $p
+    i32.const 8
+    i32.add
+    local.get $bytes
+    i32.const 4
+    i32.add
+    local.get $len
+    memory.copy
+    local.get $p
+)
+
+;; Like `$string_from_utf8_prefix`, but trusts `scalars` instead of recounting UTF-8 lead bytes.
+(func $string_from_utf8_prefix_n (param $bytes i32) (param $len i32) (param $scalars i32) (result i32)
+    (local $count i32)
+    (local $p i32)
+    local.get $bytes
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $bytes
+    i32.load
+    local.set $count
+    local.get $len
+    i32.const 0
+    i32.lt_s
+    if
+        i32.const 0
+        local.set $len
+    end
+    local.get $len
+    local.get $count
+    i32.gt_s
+    if
+        local.get $count
+        local.set $len
+    end
+    local.get $len
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $scalars
+    i32.const 0
+    i32.lt_s
+    if
+        i32.const 0
+        local.set $scalars
+    end
     local.get $len
     i32.const 8
     i32.add

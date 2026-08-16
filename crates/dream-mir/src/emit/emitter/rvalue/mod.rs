@@ -548,10 +548,26 @@ impl Emitter<'_> {
             }
             Rvalue::CharAt(s, i) => self.emit_char_at(s, i),
             Rvalue::ByteAt(s, i) => self.emit_byte_at(s, i),
-            Rvalue::Concat(a, b) => {
-                self.emit_operand(a);
-                self.emit_operand(b);
-                self.line("     (call $concat_strings)");
+            Rvalue::Concat(parts) => {
+                let n = parts.len();
+                for p in parts {
+                    self.emit_operand(p);
+                }
+                match n {
+                    2 => self.line("     (call $concat_strings)"),
+                    3 => self.line("     (call $concat_strings3)"),
+                    n => panic!("ICE: Concat expects 2 or 3 parts, got {}", n),
+                }
+            }
+            Rvalue::ConcatInt {
+                prefix,
+                value,
+                suffix,
+            } => {
+                self.emit_operand(prefix);
+                self.emit_operand(value);
+                self.emit_operand(suffix);
+                self.line("     (call $concat_str_int_str)");
             }
             Rvalue::ToString(o) => {
                 self.emit_operand(o);

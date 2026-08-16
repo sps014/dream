@@ -302,7 +302,8 @@ fn allows_early_destroy(stmt: &Statement) -> bool {
                 | Rvalue::Binary(_, _, _)
                 | Rvalue::UnionField { .. }
                 | Rvalue::ToString(_)
-                | Rvalue::Concat(_, _)
+                | Rvalue::Concat(_)
+                | Rvalue::ConcatInt { .. }
                 | Rvalue::StrLen(_)
                 | Rvalue::StrByteSize(_)
                 | Rvalue::CharAt(_, _)

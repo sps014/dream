@@ -169,8 +169,19 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::UnionField { base: o, .. } => subst_operand(o, known),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => subst_operand(a, known) | subst_operand(b, known),
+        | Rvalue::ByteAt(a, b) => subst_operand(a, known) | subst_operand(b, known),
+        Rvalue::Concat(parts) => parts
+            .iter_mut()
+            .fold(false, |acc, p| acc | subst_operand(p, known)),
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            subst_operand(prefix, known)
+                | subst_operand(value, known)
+                | subst_operand(suffix, known)
+        }
         Rvalue::EnumName { value, .. } => subst_operand(value, known),
         Rvalue::ArrayNew { len, .. } => subst_operand(len, known),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {

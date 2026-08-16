@@ -119,10 +119,23 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         | Rvalue::UnionField { base: o, .. } => remap_operand(o, base),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => {
+        | Rvalue::ByteAt(a, b) => {
             remap_operand(a, base);
             remap_operand(b, base);
+        }
+        Rvalue::Concat(parts) => {
+            for p in parts {
+                remap_operand(p, base);
+            }
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            remap_operand(prefix, base);
+            remap_operand(value, base);
+            remap_operand(suffix, base);
         }
         Rvalue::EnumName { value, .. } => remap_operand(value, base),
         Rvalue::ArrayNew { len, .. } => remap_operand(len, base),

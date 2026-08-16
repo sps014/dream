@@ -9,6 +9,7 @@
 //! memory instead of instantiating its own.
 
 use super::stack_size::{dream_async_stack_size, dream_stack_size};
+use std::path::Path;
 use wasmtime::*;
 
 /// A `wasmtime::Config` with the WASM threads proposal + `SharedMemory` creation enabled, plus the
@@ -36,6 +37,12 @@ pub fn threaded_wasm_config() -> Config {
     // task and the whole process deadlocks. Compiling serially per worker avoids the reentrancy
     // hazard entirely; a single small module compiles fast enough that this costs nothing visible.
     config.parallel_compilation(false);
+    // Opt-in Cranelift IR dump (`DREAM_EMIT_CLIF=/path/to/dir`) for WAT hotpath profiling.
+    if let Ok(dir) = std::env::var("DREAM_EMIT_CLIF") {
+        if !dir.is_empty() {
+            config.emit_clif(Path::new(&dir));
+        }
+    }
     config
 }
 

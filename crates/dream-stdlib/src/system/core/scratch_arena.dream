@@ -33,16 +33,34 @@ public class ScratchArena<T : unmanaged> {
 
     // Bump-allocates `n` elements and returns a `Span` over them. Does not zero the span (callers
     // that need zeros should write them); prior contents after `reset` may be stale.
+    // Prefer `bump`/`set_at`/`at` in hot loops: a `Span` holds a strong ref to the slab, so each
+    // `alloc` pays retain/release on `items`.
     public fun alloc(n: int): Span<T> {
+        let start = this.bump(n);
+        return Span<T>(this.items, start, n);
+    }
+
+    // Bump-allocates `n` elements and returns the start index into the slab (no `Span`, no extra RC).
+    public fun bump(n: int): int {
         if (n < 0) {
-            System.panic("ScratchArena.alloc: negative count");
+            System.panic("ScratchArena.bump: negative count");
         }
         if (this.used + n > this.items.length) {
             System.panic("ScratchArena overflow");
         }
         let start = this.used;
         this.used = this.used + n;
-        return Span<T>(this.items, start, n);
+        return start;
+    }
+
+    // Absolute-index write into the slab (same addressing as `bump`'s return value).
+    public fun set_at(index: int, value: T): void {
+        this.items[index] = value;
+    }
+
+    // Absolute-index read from the slab.
+    public fun at(index: int): T {
+        return this.items[index];
     }
 
     // Rewinds the bump cursor; the slab stays allocated.

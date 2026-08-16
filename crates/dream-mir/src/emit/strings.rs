@@ -177,10 +177,24 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::UnionField { base: o, .. } => strings_in_operand(o, out),
         Rvalue::Binary(_, a, b)
         | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b)
-        | Rvalue::Concat(a, b) => {
+        | Rvalue::ByteAt(a, b) => {
             strings_in_operand(a, out);
             strings_in_operand(b, out);
+        }
+        Rvalue::Concat(parts) => {
+            for p in parts {
+                strings_in_operand(p, out);
+            }
+        }
+        Rvalue::ConcatInt {
+            prefix,
+            value,
+            suffix,
+        } => {
+            strings_in_operand(prefix, out);
+            strings_in_operand(suffix, out);
+            // `value` is an int — no string literal scan.
+            let _ = value;
         }
         Rvalue::ArrayNew { len, .. } => strings_in_operand(len, out),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
@@ -367,9 +381,19 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
             | Rvalue::IsType(o, _)
             | Rvalue::Discriminant(o)
             | Rvalue::UnionField { base: o, .. } => in_operand(o, out),
-            Rvalue::Concat(a, b) => {
-                in_operand(a, out);
-                in_operand(b, out);
+            Rvalue::Concat(parts) => {
+                for p in parts {
+                    in_operand(p, out);
+                }
+            }
+            Rvalue::ConcatInt {
+                prefix,
+                value,
+                suffix,
+            } => {
+                in_operand(prefix, out);
+                in_operand(value, out);
+                in_operand(suffix, out);
             }
             Rvalue::ArrayNew { len, .. } => in_operand(len, out),
             Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {

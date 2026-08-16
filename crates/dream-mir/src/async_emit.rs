@@ -73,9 +73,18 @@ pub fn async_runtime_wat() -> String {
         .replace("{KIND_ANY}", &KIND_ANY.to_string())
         .replace("{STATUS_CANCELLED}", &STATUS_CANCELLED.to_string())
         .replace("{tag_array}", &super::abi::TAG_ARRAY.to_string())
-        .replace("{RQ_HEAD_ADDR}", &super::abi::ASYNC_RQ_HEAD_ADDR.to_string())
-        .replace("{RQ_TAIL_ADDR}", &super::abi::ASYNC_RQ_TAIL_ADDR.to_string())
-        .replace("{TIMER_HEAD_ADDR}", &super::abi::ASYNC_TIMER_HEAD_ADDR.to_string())
+        .replace(
+            "{RQ_HEAD_ADDR}",
+            &super::abi::ASYNC_RQ_HEAD_ADDR.to_string(),
+        )
+        .replace(
+            "{RQ_TAIL_ADDR}",
+            &super::abi::ASYNC_RQ_TAIL_ADDR.to_string(),
+        )
+        .replace(
+            "{TIMER_HEAD_ADDR}",
+            &super::abi::ASYNC_TIMER_HEAD_ADDR.to_string(),
+        )
         .replace("{VCLOCK_ADDR}", &super::abi::ASYNC_VCLOCK_ADDR.to_string())
 }
 

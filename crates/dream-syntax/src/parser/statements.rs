@@ -149,8 +149,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             TokenKind::MinusToken
         };
-        let plain_token =
-            SyntaxToken::new(plain_kind, op_pos, Self::operator_text(plain_kind));
+        let plain_token = SyntaxToken::new(plain_kind, op_pos, Self::operator_text(plain_kind));
         let one_token = SyntaxToken::new(TokenKind::NumberToken, op_pos, "1".to_string());
         let one = ExpressionNode::Literal(Type::Integer(one_token));
         let left_operand = self.arena.alloc(target.clone());
@@ -170,8 +169,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let value = self.parse_expression(0)?;
             self.match_token(TokenKind::SemicolonToken);
             self.make_assignment_statement(expr, value, cur)
-        } else if let Some(plain_kind) = Self::compound_assign_operator(self.current_token().kind)
-        {
+        } else if let Some(plain_kind) = Self::compound_assign_operator(self.current_token().kind) {
             let op_tok = self.next_token();
             let rhs = self.parse_expression(0)?;
             self.match_token(TokenKind::SemicolonToken);
@@ -184,10 +182,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::SemicolonToken);
             match expr {
                 ExpressionNode::IncDec {
-                    is_inc,
-                    target,
-                    op,
-                    ..
+                    is_inc, target, op, ..
                 } => self.inc_dec_to_assignment(target.clone(), is_inc, op.position, cur),
                 ExpressionNode::FunctionCall(name, generic_args, params) => Ok(
                     StatementNode::FunctionInvocation(name, generic_args, params),
@@ -230,10 +225,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         // `parse_primary_expression` already folds postfix `++`/`--` into `IncDec`.
         let expr = self.parse_primary_expression()?;
         if let ExpressionNode::IncDec {
-            is_inc,
-            target,
-            op,
-            ..
+            is_inc, target, op, ..
         } = expr
         {
             return self.inc_dec_to_assignment(target.clone(), is_inc, op.position, &cur);
@@ -288,10 +280,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         Some(n) => size = n,
                         None => {
                             self.diagnostics.report_error(
-                                format!(
-                                    "'@workgroup' size '{}' is not a valid integer",
-                                    ntok.text
-                                ),
+                                format!("'@workgroup' size '{}' is not a valid integer", ntok.text),
                                 Some(ntok.position),
                             );
                         }

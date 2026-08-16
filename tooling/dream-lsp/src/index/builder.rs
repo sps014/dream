@@ -62,15 +62,20 @@ impl Builder {
                     && detail_belongs_to(&d.detail, base)
             });
         }
-        self.decls.iter().find(|d| {
-            d.name == name && matches!(d.kind, SymKind::Field | SymKind::Method)
-        })
+        self.decls
+            .iter()
+            .find(|d| d.name == name && matches!(d.kind, SymKind::Field | SymKind::Method))
     }
 
-    fn method_param_names(&self, recv: &ExpressionNode, method: &str, scope: usize) -> Option<Vec<String>> {
-        let key = self.receiver_type_of(recv, scope).map(|ty| {
-            format!("{}.{}", type_base(&ty), method)
-        });
+    fn method_param_names(
+        &self,
+        recv: &ExpressionNode,
+        method: &str,
+        scope: usize,
+    ) -> Option<Vec<String>> {
+        let key = self
+            .receiver_type_of(recv, scope)
+            .map(|ty| format!("{}.{}", type_base(&ty), method));
         if let Some(k) = &key {
             if let Some(params) = self.method_params.get(k) {
                 return Some(params.clone());
@@ -154,7 +159,9 @@ impl Builder {
                             // Methods often only store the signature in `detail`
                             // (`static js.global(…): js`); recover the return type from there.
                             if d.kind == SymKind::Method {
-                                d.detail.rfind(':').map(|i| d.detail[i + 1..].trim().to_string())
+                                d.detail
+                                    .rfind(':')
+                                    .map(|i| d.detail[i + 1..].trim().to_string())
                             } else {
                                 None
                             }
@@ -586,8 +593,10 @@ impl Builder {
                     kind: SymKind::Variable,
                     detail: format!("(compute builtin) {}: GpuId3", name),
                     doc_comment: Some(match name {
-                        "global_id" => "Global invocation id (WGSL `@builtin(global_invocation_id)`)."
-                            .to_string(),
+                        "global_id" => {
+                            "Global invocation id (WGSL `@builtin(global_invocation_id)`)."
+                                .to_string()
+                        }
                         "local_id" => "Local invocation id within the workgroup.".to_string(),
                         "workgroup_id" => "Workgroup id within the dispatch.".to_string(),
                         "num_workgroups" => "Dispatch size in workgroups.".to_string(),
@@ -598,14 +607,20 @@ impl Builder {
                     scope,
                     ty: Some("GpuId3".to_string()),
                     is_main: self.is_main,
-                file_path: self.current_file.clone(),
+                    file_path: self.current_file.clone(),
                 });
             }
         }
         if dream_abi::attributes::has_vertex_attr(&func.attributes) {
             for (name, detail) in [
-                ("vertex_index", "Vertex index (WGSL `@builtin(vertex_index)`)."),
-                ("instance_index", "Instance index (WGSL `@builtin(instance_index)`)."),
+                (
+                    "vertex_index",
+                    "Vertex index (WGSL `@builtin(vertex_index)`).",
+                ),
+                (
+                    "instance_index",
+                    "Instance index (WGSL `@builtin(instance_index)`).",
+                ),
             ] {
                 self.decls.push(Decl {
                     name: name.to_string(),
@@ -617,7 +632,7 @@ impl Builder {
                     scope,
                     ty: Some("int".to_string()),
                     is_main: self.is_main,
-                file_path: self.current_file.clone(),
+                    file_path: self.current_file.clone(),
                 });
             }
         }
@@ -626,9 +641,7 @@ impl Builder {
                 name: "frag_coord".to_string(),
                 kind: SymKind::Variable,
                 detail: "(fragment builtin) frag_coord: GpuVec4".to_string(),
-                doc_comment: Some(
-                    "Fragment position (WGSL `@builtin(position)`).".to_string(),
-                ),
+                doc_comment: Some("Fragment position (WGSL `@builtin(position)`).".to_string()),
                 start: func.name.position.start,
                 end: func.name.position.end,
                 scope,

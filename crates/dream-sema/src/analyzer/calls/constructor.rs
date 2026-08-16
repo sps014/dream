@@ -1,7 +1,7 @@
 use super::super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
@@ -102,10 +102,7 @@ impl<'a> Analyzer<'a> {
                 self.in_methods_of(parent_function, &base_name),
             ) {
                 diagnostics.report_error(
-                    format!(
-                        "constructor of '{}' is not accessible here",
-                        base_name
-                    ),
+                    format!("constructor of '{}' is not accessible here", base_name),
                     Some(name.position),
                 );
             }

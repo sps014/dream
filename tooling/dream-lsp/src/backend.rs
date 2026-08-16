@@ -10,9 +10,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
+use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{jsonrpc, Client, LanguageServer};
-use tower_lsp::jsonrpc::Result;
 
 use crate::analysis;
 use crate::conversions::{completion_kind, map_position, map_range, symbol_kind};
@@ -50,7 +50,9 @@ pub struct Backend {
 
 /// True when an enclosing `dream.toml` declares `type = "lib"` (no Run/Debug CodeLens).
 fn workspace_is_lib_package(file_path: &str) -> bool {
-    let mut dir = std::path::Path::new(file_path).parent().map(|p| p.to_path_buf());
+    let mut dir = std::path::Path::new(file_path)
+        .parent()
+        .map(|p| p.to_path_buf());
     while let Some(d) = dir {
         let manifest = d.join("dream.toml");
         if manifest.is_file() {
@@ -426,14 +428,10 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         if let Some((start, end, file_path)) = idx.definition(offset) {
-            return Ok(Self::location_at(
-                &uri,
-                &text,
-                start,
-                end,
-                file_path.as_deref(),
-            )
-            .map(GotoDefinitionResponse::Scalar));
+            return Ok(
+                Self::location_at(&uri, &text, start, end, file_path.as_deref())
+                    .map(GotoDefinitionResponse::Scalar),
+            );
         }
         Ok(None)
     }
@@ -470,7 +468,11 @@ impl LanguageServer for Backend {
         &self,
         params: DocumentHighlightParams,
     ) -> Result<Option<Vec<DocumentHighlight>>> {
-        let uri = params.text_document_position_params.text_document.uri.clone();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .clone();
         let key = uri.to_string();
         let Some(text) = self.document_text(&key) else {
             return Ok(None);
@@ -754,33 +756,28 @@ impl LanguageServer for Backend {
                     } else {
                         None
                     };
-                    let (insert_text, insert_text_format) =
-                        if kind == index::SymKind::Decorator && in_attr_name {
-                            if let Some(spec) = dream_abi::attributes::find_spec(&label) {
-                                match spec.args {
-                                    dream_abi::attributes::ArgShape::Args { min, .. }
-                                        if min > 0 =>
-                                    {
-                                        (
-                                            Some(format!("{label}($0)")),
-                                            Some(InsertTextFormat::SNIPPET),
-                                        )
-                                    }
-                                    _ => (None, None),
-                                }
-                            } else {
-                                (None, None)
-                            }
-                        } else if kind == index::SymKind::EnumMember {
-                            match index::enum_member_snippet(&label, &detail) {
-                                Some(snippet) => {
-                                    (Some(snippet), Some(InsertTextFormat::SNIPPET))
-                                }
-                                None => (None, None),
+                    let (insert_text, insert_text_format) = if kind == index::SymKind::Decorator
+                        && in_attr_name
+                    {
+                        if let Some(spec) = dream_abi::attributes::find_spec(&label) {
+                            match spec.args {
+                                dream_abi::attributes::ArgShape::Args { min, .. } if min > 0 => (
+                                    Some(format!("{label}($0)")),
+                                    Some(InsertTextFormat::SNIPPET),
+                                ),
+                                _ => (None, None),
                             }
                         } else {
                             (None, None)
-                        };
+                        }
+                    } else if kind == index::SymKind::EnumMember {
+                        match index::enum_member_snippet(&label, &detail) {
+                            Some(snippet) => (Some(snippet), Some(InsertTextFormat::SNIPPET)),
+                            None => (None, None),
+                        }
+                    } else {
+                        (None, None)
+                    };
                     CompletionItem {
                         label,
                         kind: Some(completion_kind(kind)),
@@ -863,10 +860,7 @@ impl LanguageServer for Backend {
         // Also offer based on the word under the selection range when diagnostics are empty.
         if actions.is_empty() {
             let line_index = LineIndex::new(&text);
-            let offset = line_index.offset(
-                params.range.start.line,
-                params.range.start.character,
-            );
+            let offset = line_index.offset(params.range.start.line, params.range.start.character);
             if let Some(name) = word_at(&text, offset) {
                 actions.extend(crate::code_actions::auto_import_actions(
                     &uri,
@@ -985,10 +979,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let file_path = Self::file_path_of(&uri);
-        if file_path
-            .as_deref()
-            .is_some_and(workspace_is_lib_package)
-        {
+        if file_path.as_deref().is_some_and(workspace_is_lib_package) {
             return Ok(Some(Vec::new()));
         }
         let line_index = LineIndex::new(&text);

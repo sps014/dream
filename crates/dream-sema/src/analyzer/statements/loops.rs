@@ -1,9 +1,9 @@
 //! `break`/`continue` placement checks and the `while`/`do-while`/`for`/`for-each` loop forms.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;

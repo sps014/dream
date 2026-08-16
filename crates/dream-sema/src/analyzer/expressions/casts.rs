@@ -2,10 +2,10 @@
 //! assignments, argument passing, and comparisons.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
-use dream_hir::HExpr;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
+use dream_hir::HExpr;
 use dream_syntax::nodes::types::is_numeric_primitive;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;

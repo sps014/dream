@@ -20,7 +20,11 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
   ([`weak.wat`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/runtime/weak.wat)).
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
-  (never under-retain); last-use move in `RcInsertion` via CFG liveness (including loops).
+  (never under-retain); last-use **move** and last-use **destroy** (Release+null after the last
+  statement that uses an owned RC local, including `js`) in `RcInsertion` via CFG liveness.
+  Sink/take params still drop at callee return so inlining cannot copy-prop an early `= null` onto
+  a caller argument that is still live. After inlining, `RcElision` can cancel retain/release pairs
+  that a call barrier would have kept.
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.
 - `ref name: T` parameters for mutable place / value-struct aliasing.
 - Flow-sensitive use-after-move diagnostics after a sink parameter is stored into a field or index.
@@ -41,6 +45,10 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - String SSO, `@stack` classes, value-struct `List`/`Map`/`Set`
 - Atomic RC by default
 - CPU SIMD language surface / Dream-owned tiered JIT
+- `externref` for `js` (handles stay `i32` ids; `externref` cannot live in linear memory)
+- Extra per-type object freelists (size-class `$malloc` already exists)
+- Time-sliced / deferred deallocation queues
+- Weak teardown header side-tables (global list until profiling says otherwise)
 
 ## Heap throughput (shipped levers)
 

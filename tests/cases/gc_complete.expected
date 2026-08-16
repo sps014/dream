@@ -2,6 +2,8 @@ rc.fresh=1
 rc.aliased=2
 rc.in_field=3
 rc.in_array=5
+held
+2
 live_delta=0
 heap_grew=false
 free_stable=false

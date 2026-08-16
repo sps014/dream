@@ -114,10 +114,7 @@ impl TypeCtx {
                 self.interner.array(e)
             }
             Type::Tuple(elems) => {
-                let ids = elems
-                    .iter()
-                    .map(|e| self.lower_with(e, bindings))
-                    .collect();
+                let ids = elems.iter().map(|e| self.lower_with(e, bindings)).collect();
                 self.interner.tuple_ty(ids)
             }
             Type::Function(params, ret) => {
@@ -227,11 +224,11 @@ impl TypeCtx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dream_text::line_text::LineText;
-    use dream_text::text_span::TextSpan;
     use crate::{display_name, TyKind};
     use dream_syntax::token::syntax_token::SyntaxToken;
     use dream_syntax::token::token_kind::TokenKind;
+    use dream_text::line_text::LineText;
+    use dream_text::text_span::TextSpan;
 
     fn ident(text: &str) -> SyntaxToken {
         let lt = LineText::new(String::new());

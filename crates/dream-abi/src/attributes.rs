@@ -1015,13 +1015,19 @@ pub fn field_location_override(attributes: &[AttributeNode]) -> Option<u32> {
 /// Optional `@builtin("name")` on a struct field. `None` when absent or malformed.
 pub fn field_builtin_name(attributes: &[AttributeNode]) -> Option<String> {
     let attr = attributes.iter().find(|a| a.name.text == "builtin")?;
-    attr.args.first().and_then(|t| t.as_string()).map(|s| s.to_string())
+    attr.args
+        .first()
+        .and_then(|t| t.as_string())
+        .map(|s| s.to_string())
 }
 
 /// Optional `@interpolate("mode")` on a varying field. `None` when absent or malformed.
 pub fn field_interpolate_mode(attributes: &[AttributeNode]) -> Option<String> {
     let attr = attributes.iter().find(|a| a.name.text == "interpolate")?;
-    attr.args.first().and_then(|t| t.as_string()).map(|s| s.to_string())
+    attr.args
+        .first()
+        .and_then(|t| t.as_string())
+        .map(|s| s.to_string())
 }
 
 /// Optional `@group(N)` on a shader parameter. `None` when absent or not a valid `u32`.
@@ -1309,10 +1315,7 @@ mod tests {
         assert!(has_c_attr(attrs));
         assert_eq!(
             extern_import_target(attrs, "fallback"),
-            (
-                "c/sqlite3".to_string(),
-                "sqlite3_open".to_string()
-            )
+            ("c/sqlite3".to_string(), "sqlite3_open".to_string())
         );
     }
 

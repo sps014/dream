@@ -156,3 +156,33 @@ fn rc_golden_transparent_loop_bounded() {
         wat
     );
 }
+
+/// DOM-shaped `js` temps: last-use destroy must emit `$js_release` in the rebuild function so
+/// handles unpin before later work (host `_jsHandles` is not the browser DOM).
+#[test]
+fn rc_golden_js_rebuild_emits_js_release() {
+    let code = r#"
+        fun rebuild(): void {
+            let container = js.object();
+            container.innerHTML = "";
+            let row = js.object();
+            container.child = row;
+            System.println(1 + 2);
+        }
+        fun main(): void {
+            rebuild();
+        }
+    "#;
+    let wat = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
+    let rebuild = wat
+        .split("(func $")
+        .find(|s| s.starts_with("rebuild"))
+        .unwrap_or(&wat);
+    let js_rel = count_calls(rebuild, "js_release");
+    assert!(
+        js_rel >= 1,
+        "rebuild should js_release temps at last use (got {}):\n{}",
+        js_rel,
+        rebuild
+    );
+}

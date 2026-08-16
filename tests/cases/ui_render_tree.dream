@@ -1,0 +1,35 @@
+// UI-style parent/child tree: strong `children`, `weak parent`. Replacing/dropping the root
+// reclaims the whole tree (`live_objects` delta 0). Last-use destroy runs `del` before later work.
+import system;
+@allow_cycle
+class Node {
+    public id: int;
+    public children: List<Node>;
+    public weak parent: Option<Node>;
+
+    public constructor(id: int) {
+        this.id = id;
+        this.children = List<Node>();
+        this.parent = Option.None;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+fun attach(borrow p: Node, c: Node) {
+    c.parent = Option.Some(p);
+    p.children.push(c);
+}
+
+fun main() {
+    let base = Debug.live_objects();
+    let root = Node(1);
+    let child = Node(2);
+    attach(root, child);
+    System.println("built");
+    System.println("later");
+    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+}

@@ -1,9 +1,9 @@
 //! The `analyze_expression` dispatch match and the class-indexer read desugar it delegates to.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
@@ -19,7 +19,8 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::Literal(number) => {
-                let ty = Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
+                let ty =
+                    Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
                 self.hir_set_literal(&ty);
                 Ok(ty)
             }
@@ -456,16 +457,14 @@ impl<'a> Analyzer<'a> {
                 )?;
                 Ok(t)
             }
-            ExpressionNode::Call(callee, generic_args, params) => {
-                self.analyze_expr_call(
-                    callee,
-                    generic_args,
-                    params,
-                    parent_function,
-                    symbol_table,
-                    diagnostics,
-                )
-            }
+            ExpressionNode::Call(callee, generic_args, params) => self.analyze_expr_call(
+                callee,
+                generic_args,
+                params,
+                parent_function,
+                symbol_table,
+                diagnostics,
+            ),
             ExpressionNode::IsExpression(left, right_type, _binding) => {
                 // `is` always evaluates to a bool. A concrete static operand folds to a compile-time
                 // result; an `object` or interface-typed operand emits a runtime `$object_tag`
@@ -693,10 +692,7 @@ impl<'a> Analyzer<'a> {
     /// If `t` is `{name}<A>` (a one-generic-argument struct named `name`, e.g. `List<int>`),
     /// returns `A`. Used to recognize an expected `List<T>`/`Set<T>` target type for collection
     /// literal lowering.
-    pub(in crate::analyzer) fn collection_generic_arg(
-        t: &Type,
-        name: &str,
-    ) -> Option<Type> {
+    pub(in crate::analyzer) fn collection_generic_arg(t: &Type, name: &str) -> Option<Type> {
         match t {
             Type::Struct(tok, Some(args)) if tok.text == name && args.len() == 1 => {
                 Some(args[0].clone())

@@ -237,9 +237,7 @@ impl Workspace {
 /// Workspace root for install/update when `start_dir` is inside a `[workspace]` tree.
 pub fn discover_install_root(start_dir: &Path) -> Result<(PathBuf, Vec<(PathBuf, Manifest)>)> {
     if let Some(ws_root) = Manifest::find_workspace_root(start_dir) {
-        let ws_root = ws_root
-            .canonicalize()
-            .unwrap_or(ws_root);
+        let ws_root = ws_root.canonicalize().unwrap_or(ws_root);
         let members = load_member_packages(&ws_root)?;
         Ok((ws_root, members))
     } else {
@@ -293,10 +291,7 @@ fn load_member_packages(ws_root: &Path) -> Result<Vec<(PathBuf, Manifest)>> {
     for dir in load_member_dirs(ws_root)? {
         let manifest = Manifest::load(&dir.join(MANIFEST_FILE_NAME))?;
         let _ = manifest.package().with_context(|| {
-            format!(
-                "workspace member {} must declare [package]",
-                dir.display()
-            )
+            format!("workspace member {} must declare [package]", dir.display())
         })?;
         out.push((dir, manifest));
     }
@@ -345,13 +340,8 @@ fn symlink_member_packages_dirs(ws_root: &Path, packages_dir: &Path) -> Result<(
             }
         }
         let target = relative_path(&member_dir, packages_dir)?;
-        try_symlink(&target, &dest).with_context(|| {
-            format!(
-                "symlinking {} -> {}",
-                dest.display(),
-                target.display()
-            )
-        })?;
+        try_symlink(&target, &dest)
+            .with_context(|| format!("symlinking {} -> {}", dest.display(), target.display()))?;
     }
     Ok(())
 }

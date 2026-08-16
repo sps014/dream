@@ -25,7 +25,7 @@ fn module_wraps_and_resolves_call_symbols() {
                 def: DefId(1),
                 args: vec![],
                 ret: i.int(),
-            take_params: vec![],
+                take_params: vec![],
             },
             args: vec![],
         },
@@ -141,8 +141,8 @@ fn field_access_uses_layout_offsets_and_widths() {
 
 #[test]
 fn new_allocates_and_initializes_fields() {
-    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use crate::Rvalue;
+    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use dream_types::DefId;
     let mut i = TypeInterner::new();
     let def = DefId(5);
@@ -251,8 +251,8 @@ fn strings_get_data_segments_and_addresses() {
 
 #[test]
 fn emit_module_assembles_to_valid_wasm() {
-    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use crate::{Callee, MirGlobal, Rvalue};
+    use dream_hir::{FieldLayout, LayoutTable, TypeLayout};
     use dream_types::DefId;
     let mut i = TypeInterner::new();
     let int = i.int();
@@ -296,7 +296,7 @@ fn emit_module_assembles_to_valid_wasm() {
                 def: DefId(1),
                 args: vec![],
                 ret: int,
-            take_params: vec![],
+                take_params: vec![],
             },
             args: vec![],
         },
@@ -400,7 +400,10 @@ fn shape_emit_while_uses_nested_loop() {
     });
     b.switch_to(body);
     let one = b.new_temp(i.int());
-    b.assign(Place::Local(one), Rvalue::Use(Operand::Const(Const::Int(1))));
+    b.assign(
+        Place::Local(one),
+        Rvalue::Use(Operand::Const(Const::Int(1))),
+    );
     let sum = b.new_temp(i.int());
     b.assign(
         Place::Local(sum),
@@ -410,7 +413,10 @@ fn shape_emit_while_uses_nested_loop() {
             Operand::Copy(Place::Local(one)),
         ),
     );
-    b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(sum))));
+    b.assign(
+        Place::Local(s),
+        Rvalue::Use(Operand::Copy(Place::Local(sum))),
+    );
     b.terminate(Terminator::Goto(cond));
     b.switch_to(after);
     b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
@@ -587,5 +593,3 @@ fn release_build_has_no_debug_hooks() {
     assert!(!wat.contains("dream_debug"), "no debug imports:\n{}", wat);
     assert!(!wat.contains("__dbg_"), "no debug hooks/pool:\n{}", wat);
 }
-
-

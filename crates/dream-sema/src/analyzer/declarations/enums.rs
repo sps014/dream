@@ -3,9 +3,7 @@
 //! method attachment.
 
 use super::*;
-use crate::union_table::{
-    UnionFieldInfo, UnionInfo, UnionVariantInfo, DISCRIMINANT_SIZE,
-};
+use crate::union_table::{UnionFieldInfo, UnionInfo, UnionVariantInfo, DISCRIMINANT_SIZE};
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::EnumVariantNode;
 use dream_types::value_size_align;
@@ -239,8 +237,8 @@ impl<'a> Analyzer<'a> {
         if all_value || stack_inlineable {
             self.type_ctx.interner.mark_value_union(union_tid);
         } else if has_stack {
-            let (field_name, field_type) = self_ref_field
-                .unwrap_or_else(|| ("<variant>".to_string(), union_name.to_string()));
+            let (field_name, field_type) =
+                self_ref_field.unwrap_or_else(|| ("<variant>".to_string(), union_name.to_string()));
             diagnostics.report_error(
                 format!(
                     "'@stack' union '{}' cannot be stored inline: field '{}' has type '{}', which is a self-referential payload that would make this value type infinite-size",

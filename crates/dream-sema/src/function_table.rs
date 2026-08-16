@@ -123,7 +123,8 @@ impl FunctionTable {
         info: FunctionTableInfo,
         type_ctx: &mut dream_types::TypeCtx,
     ) -> Result<String, SymbolError> {
-        if info.declaring_module.is_some() && self.needs_promote_bare(base, &info.declaring_module) {
+        if info.declaring_module.is_some() && self.needs_promote_bare(base, &info.declaring_module)
+        {
             self.promote_bare_to_modules(base, type_ctx)?;
         }
 
@@ -246,8 +247,7 @@ impl FunctionTable {
                 )));
             }
             info.name = ns.to_string();
-            self.overloads
-                .insert(ns.to_string(), vec![ns.to_string()]);
+            self.overloads.insert(ns.to_string(), vec![ns.to_string()]);
             self.functions.insert(ns.to_string(), info);
             return Ok(());
         }

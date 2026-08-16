@@ -289,12 +289,7 @@ impl Emitter<'_> {
 
     /// Spills one named local into its `i64` pool global, widening/reinterpreting to preserve the
     /// exact bits so the host can decode the value back using the variable's declared kind.
-    fn emit_var_spill(
-        &mut self,
-        local: u32,
-        global: u32,
-        kind: crate::emit::debug_map::SpillKind,
-    ) {
+    fn emit_var_spill(&mut self, local: u32, global: u32, kind: crate::emit::debug_map::SpillKind) {
         use crate::emit::debug_map::SpillKind as K;
         let value = match kind {
             K::I64 => format!("(local.get ${})", local),
@@ -399,7 +394,11 @@ impl Emitter<'_> {
             Place::Deref { ptr, elem_ty } => {
                 let p = *ptr;
                 let ety = *elem_ty;
-                self.emit_place_store(ety, move |s| s.line(&format!("     (local.get ${})", p.0)), rvalue);
+                self.emit_place_store(
+                    ety,
+                    move |s| s.line(&format!("     (local.get ${})", p.0)),
+                    rvalue,
+                );
             }
         }
     }
@@ -454,10 +453,7 @@ impl Emitter<'_> {
             self.line("       (local.get $__src)");
             self.line(&format!("       ({})", self.store_instr(ty)));
             self.line("       (local.get $__src)");
-            self.line(&format!(
-                "       (call {})",
-                retain_call(self.interner, ty)
-            ));
+            self.line(&format!("       (call {})", retain_call(self.interner, ty)));
             let release = release_call(self.interner, self.layouts, ty);
             self.line("       (local.get $__rel)");
             self.line(&format!("       (call {})", release));
@@ -691,7 +687,11 @@ impl Emitter<'_> {
     /// function-exit `Release` is a no-op (otherwise the container and the param would both drop).
     pub(super) fn retain_container_value(&mut self, value_ty: TypeId, value: &Operand) {
         if let Operand::Copy(Place::Local(l)) = value {
-            if self.func.locals.get(l.0 as usize).is_some_and(|d| d.is_take)
+            if self
+                .func
+                .locals
+                .get(l.0 as usize)
+                .is_some_and(|d| d.is_take)
                 && self.interner.is_rc_tracked(value_ty)
             {
                 self.line("     (i32.const 0)");

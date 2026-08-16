@@ -348,9 +348,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Parses an optional `where T : Comparable<T> [, U : Foo]` clause after a method signature.
     /// `where` is a contextual keyword (ordinary `IdentifierToken`). Returns an empty vec when absent.
-    pub(crate) fn parse_where_constraints(
-        &mut self,
-    ) -> Vec<crate::nodes::GenericConstraint> {
+    pub(crate) fn parse_where_constraints(&mut self) -> Vec<crate::nodes::GenericConstraint> {
         if self.current_token().kind != TokenKind::IdentifierToken
             || self.current_token().text != "where"
         {

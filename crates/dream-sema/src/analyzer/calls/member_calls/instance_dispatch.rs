@@ -2,8 +2,8 @@
 //! static/builtin cases have been ruled out.
 
 use super::super::super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
@@ -345,13 +345,14 @@ impl<'a> Analyzer<'a> {
 
         // Analyze the explicit arguments once, then resolve the method (overloaded methods select
         // by argument types, with the receiver supplied as the implicit `this` argument).
-        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self.analyze_call_arguments_expecting_ref(
-            params,
-            expected_params.as_deref(),
-            ctx.parent_function,
-            ctx.symbol_table,
-            diagnostics,
-        )?;
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
+            .analyze_call_arguments_expecting_ref(
+                params,
+                expected_params.as_deref(),
+                ctx.parent_function,
+                ctx.symbol_table,
+                diagnostics,
+            )?;
 
         self.current_call_target_name = saved_call_target;
 
@@ -532,13 +533,14 @@ impl<'a> Analyzer<'a> {
         let saved_call_target = self.current_call_target_name.take();
         self.current_call_target_name = Some(call_target);
 
-        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self.analyze_call_arguments_expecting_ref(
-            params,
-            expected_params.as_deref(),
-            ctx.parent_function,
-            ctx.symbol_table,
-            diagnostics,
-        )?;
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
+            .analyze_call_arguments_expecting_ref(
+                params,
+                expected_params.as_deref(),
+                ctx.parent_function,
+                ctx.symbol_table,
+                diagnostics,
+            )?;
 
         self.current_call_target_name = saved_call_target;
 
@@ -664,10 +666,7 @@ impl<'a> Analyzer<'a> {
         );
 
         let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type.clone());
-        let instance = bindings
-            .values()
-            .map(|t| self.type_ctx.lower(t))
-            .collect();
+        let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
         // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
         self.hir_set_generic_method_call(receiver, base, instance, arg_hirs, &ret_type);
         Ok(ret_type)

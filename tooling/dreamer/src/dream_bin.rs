@@ -129,8 +129,8 @@ pub fn locate() -> Result<PathBuf> {
 pub fn locate_dreamer() -> Result<PathBuf> {
     let file = read_toolchain_env_file();
 
-    if let Some(home) = env_or_toolchain("DREAMER_HOME", &file)
-        .or_else(|| env_or_toolchain("DREAM_HOME", &file))
+    if let Some(home) =
+        env_or_toolchain("DREAMER_HOME", &file).or_else(|| env_or_toolchain("DREAM_HOME", &file))
     {
         let home = PathBuf::from(&home);
         if let Some(path) = binary_in_dir(&home, "dreamer") {
@@ -214,7 +214,10 @@ mod tests {
         let name = if cfg!(windows) { "dream.exe" } else { "dream" };
         let path = tmp.path().join(name);
         std::fs::write(&path, b"").unwrap();
-        assert_eq!(binary_in_dir(tmp.path(), "dream").as_deref(), Some(path.as_path()));
+        assert_eq!(
+            binary_in_dir(tmp.path(), "dream").as_deref(),
+            Some(path.as_path())
+        );
     }
 
     #[test]

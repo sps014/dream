@@ -1,8 +1,8 @@
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::function_control_flow::FunctionControlGraph;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{FunctionNode, StatementNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
@@ -47,7 +47,10 @@ impl<'a> Analyzer<'a> {
         })?;
         self.hir_finish_function(diagnostics, errors_before);
         // Unused `let`/`const` bindings (warnings only — do not fail the compile).
-        param_table.as_ref().borrow().report_unused_locals(diagnostics);
+        param_table
+            .as_ref()
+            .borrow()
+            .report_unused_locals(diagnostics);
         // check return
         let mut graph = FunctionControlGraph::new(function);
         if let Err(e) = graph.build() {

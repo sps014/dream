@@ -65,7 +65,11 @@ fn unique_slot_callees(mir: &crate::Mir) -> HashMap<(usize, usize), Callee> {
                 def: f.def,
                 args: f.instance.clone(),
                 ret: f.ret,
-                take_params: f.params.iter().map(|p| f.locals[p.0 as usize].is_take).collect(),
+                take_params: f
+                    .params
+                    .iter()
+                    .map(|p| f.locals[p.0 as usize].is_take)
+                    .collect(),
             },
         );
     }

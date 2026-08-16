@@ -143,9 +143,7 @@ fn in_string_on_line(text: &str, at: usize) -> bool {
 }
 
 /// Builtin attribute-name completion items: `(label, insert_text, detail, doc)`.
-pub fn attribute_name_completions(
-    partial: &str,
-) -> Vec<(String, String, String, Option<String>)> {
+pub fn attribute_name_completions(partial: &str) -> Vec<(String, String, String, Option<String>)> {
     let partial_lower = partial.to_lowercase();
     let mut out = Vec::new();
     for spec in ATTRIBUTES {
@@ -206,12 +204,7 @@ pub fn attribute_arg_completions(
                 let quoted = format!("\"{k}\"");
                 (quoted.clone(), quoted)
             };
-            (
-                label,
-                insert,
-                format!("@{} argument", ctx.name),
-                None,
-            )
+            (label, insert, format!("@{} argument", ctx.name), None)
         })
         .collect()
 }

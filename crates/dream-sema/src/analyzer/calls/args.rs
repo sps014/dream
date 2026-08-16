@@ -1,10 +1,10 @@
 //! Call-argument analysis: typing, named-arg reorder, variadic packing, ref validation.
 
 use super::super::*;
-use dream_diagnostics::DiagnosticBag;
-use dream_hir::{HExpr, HPlace};
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
+use dream_hir::{HExpr, HPlace};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
@@ -83,11 +83,7 @@ impl<'a> Analyzer<'a> {
         for arg in raw_args.iter() {
             match arg {
                 ExpressionNode::NamedArg(name_tok, value) => {
-                    if is_variadic
-                        && param_names
-                            .last()
-                            .is_some_and(|n| n == &name_tok.text)
-                    {
+                    if is_variadic && param_names.last().is_some_and(|n| n == &name_tok.text) {
                         return Err((
                             format!(
                                 "variadic parameter '{}' cannot be passed by name",
@@ -273,8 +269,12 @@ impl<'a> Analyzer<'a> {
                 .skip(user_param_offset)
                 .cloned()
                 .collect();
-            let defaults: Vec<Option<Type>> =
-                info.defaults.iter().skip(user_param_offset).cloned().collect();
+            let defaults: Vec<Option<Type>> = info
+                .defaults
+                .iter()
+                .skip(user_param_offset)
+                .cloned()
+                .collect();
             match Self::try_normalize_named_arguments(
                 &param_names,
                 &defaults,
@@ -289,10 +289,7 @@ impl<'a> Analyzer<'a> {
         if successes.is_empty() {
             let (message, span) = last_err.unwrap_or_else(|| {
                 (
-                    format!(
-                        "no overload of '{}' accepts these named arguments",
-                        base
-                    ),
+                    format!("no overload of '{}' accepts these named arguments", base),
                     Some(call_position),
                 )
             });
@@ -606,5 +603,4 @@ impl<'a> Analyzer<'a> {
             }
         }
     }
-
 }

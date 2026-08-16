@@ -76,21 +76,14 @@ impl<'a> Analyzer<'a> {
     /// not the value inside it. Used when constructing a capturing lambda's environment (see
     /// `expressions::lambda`), which needs to hand the *cell* (so writes from either side stay
     /// visible to the other) to the closure, not a snapshot of its current value.
-    pub(in crate::analyzer) fn hir_read_cell_ref(
-        &mut self,
-        name: &str,
-    ) -> Option<HExpr> {
+    pub(in crate::analyzer) fn hir_read_cell_ref(&mut self, name: &str) -> Option<HExpr> {
         let &(local, ty) = self.hir.locals.get(name)?;
         Some(HExpr::new(ty, HExprKind::Var(Binding::Local(local))))
     }
 
     /// Sets `last` to a read of an already-allocated local (used by the match-expression desugar to
     /// yield the result temporary as the match's value).
-    pub(in crate::analyzer) fn hir_set_local_read(
-        &mut self,
-        local: LocalId,
-        ty: TypeId,
-    ) {
+    pub(in crate::analyzer) fn hir_set_local_read(&mut self, local: LocalId, ty: TypeId) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -243,11 +236,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for a cast `expr as T`; `target_ty` is the cast's result type.
-    pub(in crate::analyzer) fn hir_set_cast(
-        &mut self,
-        inner: Option<HExpr>,
-        target_ty: &Type,
-    ) {
+    pub(in crate::analyzer) fn hir_set_cast(&mut self, inner: Option<HExpr>, target_ty: &Type) {
         if !self.active() {
             self.hir.last = None;
             return;

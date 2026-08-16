@@ -19,10 +19,7 @@ impl<'a> Analyzer<'a> {
             if function.generic_parameters.is_some() {
                 if dream_abi::attributes::has_test_attr(&function.attributes) {
                     diagnostics.report_error(
-                        format!(
-                            "@test function '{}' cannot be generic",
-                            function.name.text
-                        ),
+                        format!("@test function '{}' cannot be generic", function.name.text),
                         Some(function.name.position),
                     );
                 }
@@ -39,10 +36,7 @@ impl<'a> Analyzer<'a> {
                         "@gpu"
                     };
                     diagnostics.report_error(
-                        format!(
-                            "{kind} function '{}' cannot be generic",
-                            function.name.text
-                        ),
+                        format!("{kind} function '{}' cannot be generic", function.name.text),
                         Some(function.name.position),
                     );
                 }
@@ -256,8 +250,9 @@ impl<'a> Analyzer<'a> {
                     None => continue,
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
-                let table = self
-                    .with_generic_bindings(bindings, |s| s.analyze_function(template, diagnostics))?;
+                let table = self.with_generic_bindings(bindings, |s| {
+                    s.analyze_function(template, diagnostics)
+                })?;
                 symbol_table_map.insert(name, table);
                 progressed = true;
             }
@@ -271,11 +266,8 @@ impl<'a> Analyzer<'a> {
                     .with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
                 // Key by the emitted name so overloaded methods each get a distinct entry (the
                 // parameter list includes the implicit `this`).
-                let param_types: Vec<Type> = method
-                    .parameters
-                    .iter()
-                    .map(|p| p.type_.clone())
-                    .collect();
+                let param_types: Vec<Type> =
+                    method.parameters.iter().map(|p| p.type_.clone()).collect();
                 let key = self.function_table.resolve_emitted_name(
                     &method.name.text,
                     &param_types,
@@ -292,11 +284,7 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn validate_test_function(
-        &self,
-        function: &FunctionNode<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
+    fn validate_test_function(&self, function: &FunctionNode<'a>, diagnostics: &mut DiagnosticBag) {
         if function.name.text == "main" {
             diagnostics.report_error(
                 "'main' cannot be marked @test".to_string(),
@@ -305,19 +293,13 @@ impl<'a> Analyzer<'a> {
         }
         if function.is_async {
             diagnostics.report_error(
-                format!(
-                    "@test function '{}' cannot be async",
-                    function.name.text
-                ),
+                format!("@test function '{}' cannot be async", function.name.text),
                 Some(function.name.position),
             );
         }
         if function.is_extern {
             diagnostics.report_error(
-                format!(
-                    "@test function '{}' cannot be extern",
-                    function.name.text
-                ),
+                format!("@test function '{}' cannot be extern", function.name.text),
                 Some(function.name.position),
             );
         }
@@ -337,10 +319,7 @@ impl<'a> Analyzer<'a> {
             .unwrap_or_else(|| "void".to_string());
         if ret != "void" {
             diagnostics.report_error(
-                format!(
-                    "@test function '{}' must return void",
-                    function.name.text
-                ),
+                format!("@test function '{}' must return void", function.name.text),
                 Some(function.name.position),
             );
         }
@@ -396,8 +375,7 @@ impl<'a> Analyzer<'a> {
     /// True when `name` is a class/struct/union the analyzer has registered — cheap gate to skip
     /// primitives/builtins/arrays before running the more expensive `type_satisfies_kind` check.
     fn name_is_known_nominal(&self, name: &str) -> bool {
-        self.struct_table.get_struct(name).is_some()
-            || self.union_table.contains_key(name)
+        self.struct_table.get_struct(name).is_some() || self.union_table.contains_key(name)
     }
 
     fn validate_compute_shader(
@@ -408,28 +386,19 @@ impl<'a> Analyzer<'a> {
     ) {
         if function.is_async {
             diagnostics.report_error(
-                format!(
-                    "@compute kernel '{}' cannot be async",
-                    function.name.text
-                ),
+                format!("@compute kernel '{}' cannot be async", function.name.text),
                 Some(function.name.position),
             );
         }
         if function.is_extern {
             diagnostics.report_error(
-                format!(
-                    "@compute kernel '{}' cannot be extern",
-                    function.name.text
-                ),
+                format!("@compute kernel '{}' cannot be extern", function.name.text),
                 Some(function.name.position),
             );
         }
         if !matches!(info.return_type, None | Some(Type::Void)) {
             diagnostics.report_error(
-                format!(
-                    "@compute kernel '{}' must return void",
-                    function.name.text
-                ),
+                format!("@compute kernel '{}' must return void", function.name.text),
                 Some(function.name.position),
             );
         }
@@ -448,11 +417,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn validate_vertex_shader(
-        &self,
-        function: &FunctionNode<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
+    fn validate_vertex_shader(&self, function: &FunctionNode<'a>, diagnostics: &mut DiagnosticBag) {
         if function.is_async {
             diagnostics.report_error(
                 format!("@vertex shader '{}' cannot be async", function.name.text),
@@ -469,9 +434,9 @@ impl<'a> Analyzer<'a> {
             Some(Type::Struct(tok, None)) => {
                 if let Some(info) = self.struct_table.get_struct(&tok.text) {
                     let ok = info.fields.iter().any(|(fname, f)| {
-                        let is_pos = f.builtin.as_deref() == Some("position") || fname == "position";
-                        is_pos
-                            && matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4")
+                        let is_pos =
+                            f.builtin.as_deref() == Some("position") || fname == "position";
+                        is_pos && matches!(&f.type_, Type::Struct(t, None) if t.text == "GpuVec4")
                     });
                     if !ok {
                         diagnostics.report_error(
@@ -538,10 +503,7 @@ impl<'a> Analyzer<'a> {
         }
         if function.is_extern {
             diagnostics.report_error(
-                format!(
-                    "@fragment shader '{}' cannot be extern",
-                    function.name.text
-                ),
+                format!("@fragment shader '{}' cannot be extern", function.name.text),
                 Some(function.name.position),
             );
         }

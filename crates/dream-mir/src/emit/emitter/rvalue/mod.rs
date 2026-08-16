@@ -218,7 +218,7 @@ impl Emitter<'_> {
                             def: *ctor,
                             args: vec![],
                             ret: self.interner.void(),
-                        take_params: vec![],
+                            take_params: vec![],
                         });
                         self.line(&format!("     (call ${})", sym));
                         self.line("     (local.get $__obj)");

@@ -2,8 +2,8 @@
 //! instantiating one for use as a first-class function value.
 
 use super::*;
-use dream_abi::intrinsics;
 use crate::function_table::FunctionTableInfo;
+use dream_abi::intrinsics;
 
 impl<'a> Analyzer<'a> {
     /// Registers one monomorphized instance of a generic free function under its mangled name

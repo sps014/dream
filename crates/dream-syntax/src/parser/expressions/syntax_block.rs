@@ -13,7 +13,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         let name = self.match_token(TokenKind::IdentifierToken);
         let open = self.match_token(TokenKind::CurlyOpenBracketToken);
         let (parts, close_end) = self.parse_syntax_block_parts()?;
-        let block_span = TextSpan::new((open.position.start, close_end), self.lexer.line_text().as_ref());
+        let block_span = TextSpan::new(
+            (open.position.start, close_end),
+            self.lexer.line_text().as_ref(),
+        );
         let node = SyntaxBlockNode {
             name,
             block_span,
@@ -24,9 +27,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Body of a syntax block until the matching `}` at depth 1. Text is reconstructed from token
     /// slices (with single spaces between non-adjacent tokens) so generators can re-parse markup.
-    fn parse_syntax_block_parts(
-        &mut self,
-    ) -> Result<(Vec<SyntaxBlockPart<'a>>, usize), Error> {
+    fn parse_syntax_block_parts(&mut self) -> Result<(Vec<SyntaxBlockPart<'a>>, usize), Error> {
         let mut parts: Vec<SyntaxBlockPart<'a>> = Vec::new();
         let mut text_buf = String::new();
         let mut last_end: Option<usize> = None;

@@ -17,13 +17,13 @@ mod builder;
 mod model;
 mod queries;
 
-pub use model::*;
-pub use queries::is_member_completion_context;
-pub use queries::is_switch_arm_completion_context;
-pub(crate) use queries::import_path_partial;
 pub use attr_ide::{
     attribute_arg_context, attribute_name_partial, attribute_signature, AttrArgContext,
 };
+pub use model::*;
+pub(crate) use queries::import_path_partial;
+pub use queries::is_member_completion_context;
+pub use queries::is_switch_arm_completion_context;
 
 use builder::Builder;
 
@@ -104,13 +104,16 @@ impl Index {
                 }
             }
 
-            if acc.all_structs.iter().any(|s| {
-                s.attributes.iter().any(|a| a.name.text == "json")
-            }) || acc.all_enums.iter().any(|e| {
-                e.attributes.iter().any(|a| a.name.text == "json")
-            }) {
-                acc.requested_std_packages
-                    .insert("system.json".to_string());
+            if acc
+                .all_structs
+                .iter()
+                .any(|s| s.attributes.iter().any(|a| a.name.text == "json"))
+                || acc
+                    .all_enums
+                    .iter()
+                    .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
+            {
+                acc.requested_std_packages.insert("system.json".to_string());
             }
 
             // GPU stages / `@gpu` helpers need `system.gpu` even without an import.
@@ -122,8 +125,7 @@ impl Index {
                     )
                 })
             }) {
-                acc.requested_std_packages
-                    .insert("system.gpu".to_string());
+                acc.requested_std_packages.insert("system.gpu".to_string());
             }
 
             let _ = dream::driver::prelude::merge_prelude(

@@ -17,11 +17,7 @@ pub fn run(start_dir: &Path, release: bool, package: Option<&str>) -> Result<()>
 ///
 /// After a successful compile that emitted web and/or node runtimes, refreshes
 /// `target/web/` and/or `target/node/` aliases from the active profile.
-pub fn compile_entry(
-    workspace: &Workspace,
-    release: bool,
-    only: Option<RunTarget>,
-) -> Result<()> {
+pub fn compile_entry(workspace: &Workspace, release: bool, only: Option<RunTarget>) -> Result<()> {
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;
     let pkg = workspace.manifest.package()?;
@@ -74,13 +70,7 @@ pub fn compile_entry(
 
     if want_web || want_node {
         let stem = artifact_alias::entry_stem(&compile_root)?;
-        artifact_alias::refresh_host_aliases(
-            &workspace.root,
-            &stem,
-            release,
-            want_web,
-            want_node,
-        )?;
+        artifact_alias::refresh_host_aliases(&workspace.root, &stem, release, want_web, want_node)?;
     }
     Ok(())
 }

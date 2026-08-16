@@ -193,11 +193,7 @@ pub fn emit_module_with_debug(
     // address of their permanent BSS slot (constructed in `$__dream_init`).
     for g in &mir.globals {
         if let Some(&addr) = vg_addrs.get(&g.id.0) {
-            let _ = writeln!(
-                out,
-                "(global $g{} (mut i32) (i32.const {}))",
-                g.id.0, addr
-            );
+            let _ = writeln!(out, "(global $g{} (mut i32) (i32.const {}))", g.id.0, addr);
         } else {
             let zero = zero_literal(wasm_ty_of(interner, g.ty));
             let _ = writeln!(
@@ -311,10 +307,7 @@ pub fn emit_module_with_debug(
                 &func_symbol(f),
                 !f.params.is_empty(),
             ));
-        } else if f.instance.is_empty()
-            && f.name == crate::abi::ENTRY_FN
-            && !f.params.is_empty()
-        {
+        } else if f.instance.is_empty() && f.name == crate::abi::ENTRY_FN && !f.params.is_empty() {
             // `main(args: string[])`: the exported entry takes no args, so wrap the real `main` with a
             // `()` shim that passes an empty `string[]` (a zero-length, TAG_ARRAY block).
             let _ = writeln!(

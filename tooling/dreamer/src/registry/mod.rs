@@ -29,8 +29,7 @@ pub const MAX_TARBALL_BYTES: usize = 10 * 1024 * 1024;
 
 /// Default public registry: sparse index + tarballs hosted in the
 /// [`sps014/dream-registry`](https://github.com/sps014/dream-registry) GitHub repository.
-pub const DEFAULT_REGISTRY: &str =
-    "https://raw.githubusercontent.com/sps014/dream-registry/main";
+pub const DEFAULT_REGISTRY: &str = "https://raw.githubusercontent.com/sps014/dream-registry/main";
 
 /// One row in `catalog.json` for static-registry search (latest published metadata per package).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,11 +44,7 @@ pub struct CatalogEntry {
     pub license: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edition: Option<String>,
-    #[serde(
-        default,
-        rename = "type",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub package_type: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<String>,
@@ -92,7 +87,11 @@ impl CatalogEntry {
 pub fn registry_token(explicit: Option<String>) -> Option<String> {
     explicit
         .filter(|t| !t.is_empty())
-        .or_else(|| std::env::var("DREAM_REGISTRY_TOKEN").ok().filter(|t| !t.is_empty()))
+        .or_else(|| {
+            std::env::var("DREAM_REGISTRY_TOKEN")
+                .ok()
+                .filter(|t| !t.is_empty())
+        })
         .or_else(|| std::env::var("GITHUB_TOKEN").ok().filter(|t| !t.is_empty()))
 }
 

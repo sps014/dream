@@ -17,7 +17,9 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index.hover(&harness.src, harness.offset).expect("Expected hover info");
+    let hover = index
+        .hover(&harness.src, harness.offset)
+        .expect("Expected hover info");
     assert!(hover.contents.contains("fun add"));
 }
 
@@ -119,18 +121,21 @@ fun main(): void {
 fn js_type_and_static_member_completions() {
     // `js` comes from the bootstrap prelude via `extend js { … }` — no import needed.
     let harness = TestHarness::new("fun main(): void {\n    |\n}\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
-        comps.iter().any(|(n, kind, ..)| n == "js" && *kind == dream_lsp::index::SymKind::Type),
-        "expected bare `js` type completion, got {:?}",
         comps
             .iter()
-            .filter(|(n, ..)| n == "js")
-            .collect::<Vec<_>>()
+            .any(|(n, kind, ..)| n == "js" && *kind == dream_lsp::index::SymKind::Type),
+        "expected bare `js` type completion, got {:?}",
+        comps.iter().filter(|(n, ..)| n == "js").collect::<Vec<_>>()
     );
 
     let harness = TestHarness::new("fun main(): void {\n    js.|\n}\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"global")
@@ -144,7 +149,9 @@ fn js_type_and_static_member_completions() {
 
     // `js.global.` is typed as `js` (property form / static return), so instance helpers appear.
     let harness = TestHarness::new("fun main(): void {\n    js.global.|\n}\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.iter().any(|n| n.starts_with("to_")),
@@ -156,9 +163,7 @@ fn js_type_and_static_member_completions() {
 fn js_global_hover_is_not_regex_global() {
     // `Regex` has a field `global: bool`. Hover on `js.global` must resolve the js static, not
     // that unrelated field (regression: receiver `js` was not recognized as a Type).
-    let harness = TestHarness::new(
-        "fun main(): void {\n    let d = js.|global.document;\n}\n",
-    );
+    let harness = TestHarness::new("fun main(): void {\n    let d = js.|global.document;\n}\n");
     let hover = harness
         .index()
         .hover(&harness.src, harness.offset)
@@ -172,10 +177,11 @@ fn js_global_hover_is_not_regex_global() {
 
 #[test]
 fn option_local_member_completions() {
-    let harness = TestHarness::new(
-        "fun main(): void {\n    let o: Option<int> = Option.None;\n    o.|\n}\n",
-    );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let harness =
+        TestHarness::new("fun main(): void {\n    let o: Option<int> = Option.None;\n    o.|\n}\n");
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"is_some") && names.contains(&"map") && names.contains(&"unwrap_or"),
@@ -198,7 +204,9 @@ fun f(r: Result<int, string>): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Ok") && names.contains(&"Err"),
@@ -226,7 +234,9 @@ fun area(s: Shape): float {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Circle") && names.contains(&"Rect") && names.contains(&"Empty"),
@@ -245,7 +255,9 @@ fun f(r: Result<int, string>): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Ok") && !names.contains(&"Err"),
@@ -265,7 +277,9 @@ fun f(c: Color): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Color.Red")
@@ -285,7 +299,9 @@ fun f(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Red") && names.contains(&"Green") && names.contains(&"Blue"),
@@ -309,7 +325,9 @@ fun f(c: Color): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Red") && names.contains(&"Green") && names.contains(&"Blue"),
@@ -333,7 +351,9 @@ fun f(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"value"),
@@ -359,7 +379,9 @@ fun f(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"Red") && names.contains(&"from_int"),
@@ -369,10 +391,7 @@ fun f(): void {
 
 #[test]
 fn enum_member_payload_snippet() {
-    let snippet = dream_lsp::index::enum_member_snippet(
-        "Circle",
-        "Shape.Circle(radius: float)",
-    );
+    let snippet = dream_lsp::index::enum_member_snippet("Circle", "Shape.Circle(radius: float)");
     assert_eq!(snippet.as_deref(), Some("Circle(${1:radius})"));
 
     let unit = dream_lsp::index::enum_member_snippet("Red", "Color.Red = 0");
@@ -389,7 +408,9 @@ fun f(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let circle = comps.iter().find(|(n, ..)| n == "Circle").expect("Circle");
     assert_eq!(
         dream_lsp::index::enum_member_snippet(&circle.0, &circle.2).as_deref(),
@@ -400,7 +421,9 @@ fun f(): void {
 #[test]
 fn soft_specials_and_lock_in_keyword_completions() {
     let harness = TestHarness::new("fun main(): void {\n    |\n}\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(names.contains(&"sizeof"), "missing sizeof, got subset");
     assert!(names.contains(&"nameof"), "missing nameof");
@@ -419,7 +442,9 @@ fun f(r: Result<int, string>): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         !names.contains(&"Ok") && !names.contains(&"Err"),
@@ -441,7 +466,9 @@ fun f(r: Result<bool, GpuError>): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"message") && names.contains(&"code"),
@@ -465,7 +492,9 @@ fun f(o: Option<Point>): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"x") && names.contains(&"y"),
@@ -478,7 +507,9 @@ fn result_inferred_from_gpu_try_init_member_completions() {
     let harness = TestHarness::new(
         "import system.gpu;\nasync fun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"is_ok") && names.contains(&"unwrap_or") && names.contains(&"and_then"),
@@ -684,7 +715,9 @@ fun main(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"begin"),
@@ -707,7 +740,9 @@ fun main(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"dispatch") && names.contains(&"submit"),
@@ -739,8 +774,7 @@ async fun main(): void {
         hover.contents
     );
     assert!(
-        !hover.contents.contains("async fun try_init")
-            && !hover.contents.contains("Gpu.async fun"),
+        !hover.contents.contains("async fun try_init") && !hover.contents.contains("Gpu.async fun"),
         "old `Owner.async fun name` form must be gone: {}",
         hover.contents
     );
@@ -756,7 +790,9 @@ fun k(out: GpuBuffer<float>, n: int): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
         comps.iter().any(|(n, ..)| n == "global_id"),
         "expected global_id among completions in @compute body, got {:?}",
@@ -774,7 +810,9 @@ fun k(out: GpuBuffer<float>, n: int): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"x") && names.contains(&"y") && names.contains(&"z"),
@@ -887,7 +925,9 @@ fun main(): void {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     let is_empty = comps
         .iter()
         .find(|(n, ..)| n == "is_empty")
@@ -966,7 +1006,9 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index.hover(&harness.src, harness.offset).expect("Expected hover info");
+    let hover = index
+        .hover(&harness.src, harness.offset)
+        .expect("Expected hover info");
     assert!(
         hover.contents.contains("int"),
         "Hover should contain field type"
@@ -991,7 +1033,9 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index.hover(&harness.src, harness.offset).expect("Expected hover on field");
+    let hover = index
+        .hover(&harness.src, harness.offset)
+        .expect("Expected hover on field");
     assert!(
         hover.contents.contains("X component"),
         "public field hover should include the doc comment; got {}",
@@ -1784,7 +1828,9 @@ fun main(): void {
 ";
     let offset = src.find("print(1)").unwrap() + 1; // inside the `print` reference
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index.hover(src, offset).expect("expected hover on System.print");
+    let hover = index
+        .hover(src, offset)
+        .expect("expected hover on System.print");
     assert!(
         hover.contents.contains("Prints a value to standard output"),
         "doc comment above an attribute should still appear in hover; got {}",
@@ -1931,19 +1977,12 @@ fun main(): void {
 
 #[test]
 fn definition_carries_file_path_for_imported_symbol() {
-    let dir = std::env::temp_dir().join(format!(
-        "dream_lsp_cross_file_{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("dream_lsp_cross_file_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let lib = dir.join("lib.dream");
     let main = dir.join("main.dream");
-    std::fs::write(
-        &lib,
-        "public fun helper(): int {\n    return 1;\n}\n",
-    )
-    .unwrap();
+    std::fs::write(&lib, "public fun helper(): int {\n    return 1;\n}\n").unwrap();
     let main_src = "import lib;\nfun main(): void {\n    let x: int = hel|per();\n}\n";
     let offset = main_src.find('|').unwrap();
     let main_text = main_src.replace('|', "");
@@ -2153,13 +2192,13 @@ fn import_path_completions_at_import() {
     use dream_lsp::index::SymKind;
 
     let harness = TestHarness::new("import |\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
-        comps
-            .iter()
-            .any(|(n, k, d, _)| n == "system.collections"
-                && *k == SymKind::Module
-                && d == "stdlib package"),
+        comps.iter().any(|(n, k, d, _)| n == "system.collections"
+            && *k == SymKind::Module
+            && d == "stdlib package"),
         "expected system.collections among import completions, got {:?}",
         comps
             .iter()
@@ -2181,7 +2220,9 @@ fn import_path_completions_at_import() {
 #[test]
 fn import_path_completions_system_dot() {
     let harness = TestHarness::new("import system.|\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
         comps.iter().any(|(n, ..)| n == "system.collections"),
         "expected system.collections after `import system.`"
@@ -2195,7 +2236,9 @@ fn import_path_completions_system_dot() {
 #[test]
 fn import_path_skips_already_imported() {
     let harness = TestHarness::new("import system.collections;\nimport |\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
         !comps.iter().any(|(n, ..)| n == "system.collections"),
         "already-imported package should be omitted"
@@ -2205,10 +2248,10 @@ fn import_path_skips_already_imported() {
 #[test]
 fn system_dot_in_body_is_class_members_not_packages() {
     // `System.` in an expression is the class, not the `system.*` package tree.
-    let harness = TestHarness::new(
-        "import system;\nfun main(): void {\n    System.|\n}\n",
-    );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let harness = TestHarness::new("import system;\nfun main(): void {\n    System.|\n}\n");
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
         !comps
             .iter()
@@ -2233,9 +2276,7 @@ fn member_context_skips_unloaded_stdlib_types() {
 
     // Only `system` is imported — List/DateTime would normally be offered as unloaded
     // completions, but never after a member-access `.`.
-    let harness = TestHarness::new(
-        "import system;\nfun main(): void {\n    System.|\n}\n",
-    );
+    let harness = TestHarness::new("import system;\nfun main(): void {\n    System.|\n}\n");
     assert!(
         is_member_completion_context(&harness.src, harness.offset),
         "cursor after System. is member context"
@@ -2247,9 +2288,13 @@ fn member_context_skips_unloaded_stdlib_types() {
     );
     // Backend merges unloaded only when !is_member_completion_context — index alone
     // already excludes them from member_completions.
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
-        !comps.iter().any(|(n, ..)| n == "List" || n == "DateTime" || n == "Gpu"),
+        !comps
+            .iter()
+            .any(|(n, ..)| n == "List" || n == "DateTime" || n == "Gpu"),
         "member completion must not include unloaded package types: {:?}",
         comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
     );
@@ -2260,13 +2305,13 @@ fn attribute_name_completions_after_at() {
     use dream_lsp::index::SymKind;
 
     let harness = TestHarness::new("@|\nclass Foo {}\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
-        comps
-            .iter()
-            .any(|(n, k, _, doc)| n == "json"
-                && *k == SymKind::Decorator
-                && doc.as_ref().is_some_and(|d| d.contains("JSON"))),
+        comps.iter().any(|(n, k, _, doc)| n == "json"
+            && *k == SymKind::Decorator
+            && doc.as_ref().is_some_and(|d| d.contains("JSON"))),
         "expected @json with docs, got {:?}",
         comps
             .iter()
@@ -2282,9 +2327,13 @@ fn attribute_name_completions_after_at() {
 #[test]
 fn attribute_name_completions_partial() {
     let harness = TestHarness::new("@js|\nstatic extern fun f(): void;\n");
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
-        comps.iter().any(|(n, ..)| n == "json" || n == "json_ignore" || n == "js"),
+        comps
+            .iter()
+            .any(|(n, ..)| n == "json" || n == "json_ignore" || n == "js"),
         "expected js* attributes for @js, got {:?}",
         comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
     );
@@ -2297,9 +2346,7 @@ fn attribute_name_completions_partial() {
 #[test]
 fn hover_on_attribute_shows_docs() {
     // Cursor on the `json` attribute name.
-    let harness = TestHarness::new(
-        "@js|on\nclass Foo { public x: int; }\n",
-    );
+    let harness = TestHarness::new("@js|on\nclass Foo { public x: int; }\n");
     let hover = harness
         .index()
         .hover(&harness.src, harness.offset)
@@ -2365,7 +2412,9 @@ fn intrinsic_arg_completions_inside_string() {
 static extern fun print(): void;
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
         comps.iter().any(|(n, ..)| n == "print" || n == "println"),
         "expected intrinsic keys inside @intrinsic(\"\"), got {:?}",
@@ -2383,7 +2432,9 @@ class Vec {
 }
 "#,
     );
-    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
     assert!(
         comps.iter().any(|(n, ..)| n == "+" || n == "=="),
         "expected operator symbols, got {:?}",

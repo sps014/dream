@@ -13,10 +13,7 @@ impl<'a> Analyzer<'a> {
     /// under its alias, resolving `a.b` as a declared module and `c` as an item inside it. Reports
     /// a diagnostic for an unknown module/item, an alias that collides with an existing name, or an
     /// item that is not visible outside its own file (private items can never be aliased in).
-    pub(in crate::analyzer) fn register_import_aliases(
-        &mut self,
-        diagnostics: &mut DiagnosticBag,
-    ) {
+    pub(in crate::analyzer) fn register_import_aliases(&mut self, diagnostics: &mut DiagnosticBag) {
         let aliased = std::mem::take(&mut self.aliased_imports);
         for (module_path, item, alias, importing_file) in aliased {
             diagnostics.file_path = Some(importing_file);

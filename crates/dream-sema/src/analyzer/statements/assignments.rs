@@ -2,9 +2,9 @@
 //! (`obj.m = v`, including the static/instance setter desugar).
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
@@ -187,10 +187,7 @@ impl<'a> Analyzer<'a> {
         if let Type::Tuple(elems) = &obj_type {
             let Some(idx) = member.text.parse::<usize>().ok() else {
                 diagnostics.report_error(
-                    format!(
-                        "tuple has no member '{}'; use .0, .1, …",
-                        member.text
-                    ),
+                    format!("tuple has no member '{}'; use .0, .1, …", member.text),
                     Some(member.position),
                 );
                 self.hir_fail();

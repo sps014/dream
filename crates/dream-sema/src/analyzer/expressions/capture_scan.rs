@@ -32,9 +32,7 @@ use std::collections::HashSet;
 /// body beyond computing its own free names — a lambda nested within it is that lambda's own
 /// separate concern (see the module doc comment's capture-scope note), found and scanned
 /// separately once that lambda's own turn to be analyzed comes up.
-pub(in crate::analyzer) fn scan_function_captures(
-    stmts: &[StatementNode],
-) -> HashSet<String> {
+pub(in crate::analyzer) fn scan_function_captures(stmts: &[StatementNode]) -> HashSet<String> {
     let mut out = HashSet::new();
     walk_stmts_for_lambdas(stmts, &mut out);
     out
@@ -51,9 +49,7 @@ pub(in crate::analyzer) fn scan_function_captures(
 /// like its sibling: a name is collected regardless of whether the call it's passed to turns out
 /// to actually resolve to a `ref` parameter (a later mismatch is a separate diagnostic, not this
 /// pass's concern) — boxing a name that wasn't strictly needed is never unsound, only unnecessary.
-pub(in crate::analyzer) fn scan_ref_argument_targets(
-    stmts: &[StatementNode],
-) -> HashSet<String> {
+pub(in crate::analyzer) fn scan_ref_argument_targets(stmts: &[StatementNode]) -> HashSet<String> {
     let mut out = HashSet::new();
     walk_stmts_for_ref_targets(stmts, &mut out);
     out
@@ -421,11 +417,8 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
 /// switch-arm pattern bindings, nested-lambda params). Nested lambdas contribute their own free
 /// names transitively (filtered against this lambda's scopes).
 pub(in crate::analyzer) fn lambda_free_names(l: &LambdaNode) -> HashSet<String> {
-    let mut scopes: Vec<HashSet<String>> = vec![l
-        .parameters
-        .iter()
-        .map(|p| p.name.text.clone())
-        .collect()];
+    let mut scopes: Vec<HashSet<String>> =
+        vec![l.parameters.iter().map(|p| p.name.text.clone()).collect()];
     let mut referenced: HashSet<String> = HashSet::new();
     match &l.body {
         LambdaBody::Expr(e) => collect_names_expr(e, &mut scopes, &mut referenced),

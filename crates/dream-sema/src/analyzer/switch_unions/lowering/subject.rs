@@ -8,13 +8,11 @@
 //!   exists (unexpanded ranges; see [`Analyzer::pattern_switch_needs_full_chain`]).
 
 use super::super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionInfo;
-use dream_syntax::nodes::{
-    ExpressionNode, FunctionNode, SwitchArm, SwitchArmBody, Type,
-};
+use dream_diagnostics::DiagnosticBag;
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, SwitchArm, SwitchArmBody, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
 

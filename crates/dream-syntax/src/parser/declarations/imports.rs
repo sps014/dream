@@ -1,13 +1,10 @@
 use super::super::Parser;
-use crate::nodes::{
-    ImportNode, ModuleDeclNode,
-};
+use crate::nodes::{ImportNode, ModuleDeclNode};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses an import statement. Two forms, told apart by a trailing `as` clause:
     /// - `import a.b.c;` — maps each dotted segment to a directory separator (`a/b/c`) so file
     ///   resolution can append the `.dream` extension later, exactly as before `as` existed.

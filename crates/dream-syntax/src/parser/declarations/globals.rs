@@ -4,7 +4,6 @@ use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses a top-level variable declaration: an optional `public`/`static` modifier pair,
     /// then `let`/`const`, a name, an optional `: type` annotation, a required initializer, and a
     /// terminating `;`. Returns the assembled [`GlobalVariableNode`].

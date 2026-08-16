@@ -2,9 +2,9 @@
 //! comparisons, and arithmetic.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;

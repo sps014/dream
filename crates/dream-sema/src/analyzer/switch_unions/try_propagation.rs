@@ -7,10 +7,10 @@
 //! [`super::lowering`] uses for a real pattern-matching `switch`.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
-use dream_hir::{Binding, HExpr, HExprKind, LocalId};
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
+use dream_hir::{Binding, HExpr, HExprKind, LocalId};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use std::cell::RefCell;
 use std::rc::Rc;

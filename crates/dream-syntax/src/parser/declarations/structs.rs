@@ -4,7 +4,6 @@ use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses a struct declaration
     pub(crate) fn parse_struct_declaration(
         &mut self,

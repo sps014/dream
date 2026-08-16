@@ -1,0 +1,20 @@
+// Last-use destroy: `del` runs after the last read of an owned local, not at function exit.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+fun main() {
+    let x = Tracked(1);
+    System.println(x.id);
+    System.println(999);
+}

@@ -1,9 +1,7 @@
 //! Renumbering a cloned callee body into the caller's local/block namespaces, plus the coarse
 //! argument-type inference used to decide whether a parameter binding needs a widening `Cast`.
 
-use crate::{
-    BasicBlock, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
-};
+use crate::{BasicBlock, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 
 // --- Argument-type inference for call-boundary numeric widening. ---
@@ -119,7 +117,10 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => remap_operand(o, base),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CharAt(a, b)
+        | Rvalue::ByteAt(a, b)
+        | Rvalue::Concat(a, b) => {
             remap_operand(a, base);
             remap_operand(b, base);
         }

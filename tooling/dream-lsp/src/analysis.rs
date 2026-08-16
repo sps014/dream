@@ -5,12 +5,12 @@
 use bumpalo::Bump;
 use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
-use dream_sema::analyzer::Analyzer;
-use dream_stdlib::std_package_from_slash_path;
 use dream::syntax::lexer::Lexer;
 use dream::syntax::nodes::ProgramNode;
 use dream::syntax::parser::Parser;
 use dream::syntax::syntax_tree::SyntaxTree;
+use dream_sema::analyzer::Analyzer;
+use dream_stdlib::std_package_from_slash_path;
 
 use crate::position::LineIndex;
 
@@ -50,8 +50,10 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
     if let Ok(ast) = &user_ast {
         let program = ast.get_root();
         if let Some(module_decl) = &program.module {
-            acc.file_modules
-                .insert(MAIN_FILE.to_string(), std::rc::Rc::from(module_decl.path.text.as_str()));
+            acc.file_modules.insert(
+                MAIN_FILE.to_string(),
+                std::rc::Rc::from(module_decl.path.text.as_str()),
+            );
         }
         collect_declarations(
             program,
@@ -106,12 +108,10 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
         }
 
         if program_uses_json_attr(&acc) {
-            acc.requested_std_packages
-                .insert("system.json".to_string());
+            acc.requested_std_packages.insert("system.json".to_string());
         }
         if program_uses_gpu_shader_attr(&acc) {
-            acc.requested_std_packages
-                .insert("system.gpu".to_string());
+            acc.requested_std_packages.insert("system.gpu".to_string());
         }
     }
 
@@ -215,14 +215,18 @@ fn diagnostic_code(message: &str) -> Option<&'static str> {
 }
 
 fn program_uses_json_attr(acc: &dream::driver::source_loader::ProgramAccumulator<'_>) -> bool {
-    acc.all_structs.iter().any(|s| {
-        s.attributes.iter().any(|a| a.name.text == "json")
-    }) || acc.all_enums.iter().any(|e| {
-        e.attributes.iter().any(|a| a.name.text == "json")
-    })
+    acc.all_structs
+        .iter()
+        .any(|s| s.attributes.iter().any(|a| a.name.text == "json"))
+        || acc
+            .all_enums
+            .iter()
+            .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
 }
 
-fn program_uses_gpu_shader_attr(acc: &dream::driver::source_loader::ProgramAccumulator<'_>) -> bool {
+fn program_uses_gpu_shader_attr(
+    acc: &dream::driver::source_loader::ProgramAccumulator<'_>,
+) -> bool {
     acc.all_functions.iter().any(|f| {
         f.attributes.iter().any(|a| {
             matches!(

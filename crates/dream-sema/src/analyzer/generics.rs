@@ -302,9 +302,9 @@ impl<'a> Analyzer<'a> {
                 dream_syntax::nodes::ConstraintKind::Struct => {
                     elems.iter().all(|e| self.type_satisfies_kind(e, kind))
                 }
-                dream_syntax::nodes::ConstraintKind::Unmanaged => elems
-                    .iter()
-                    .all(|e| self.type_satisfies_kind(e, dream_syntax::nodes::ConstraintKind::Unmanaged)),
+                dream_syntax::nodes::ConstraintKind::Unmanaged => elems.iter().all(|e| {
+                    self.type_satisfies_kind(e, dream_syntax::nodes::ConstraintKind::Unmanaged)
+                }),
                 dream_syntax::nodes::ConstraintKind::Class => false,
             };
         }

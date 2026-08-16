@@ -38,7 +38,10 @@ fn run_native(workspace: &Workspace, release: bool, extra_args: &[String]) -> Re
     if release {
         cmd.arg("--release");
     }
-    cmd.arg("--crate-type").arg("bin").arg(&entry).args(extra_args);
+    cmd.arg("--crate-type")
+        .arg("bin")
+        .arg(&entry)
+        .args(extra_args);
     let status = cmd
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
@@ -70,10 +73,7 @@ fn run_node(workspace: &Workspace, release: bool, extra_args: &[String]) -> Resu
         .status()
         .map_err(|e| anyhow::anyhow!("running node: {}", e))?;
     if !status.success() {
-        bail!(
-            "node exited with a failure (exit code {:?})",
-            status.code()
-        );
+        bail!("node exited with a failure (exit code {:?})", status.code());
     }
     Ok(())
 }

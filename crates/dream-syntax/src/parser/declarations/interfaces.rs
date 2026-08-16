@@ -1,14 +1,10 @@
 use super::super::Parser;
 use super::functions::FunctionModifiers;
-use crate::nodes::{
-    FunctionNode, StatementNode, Type,
-    Visibility,
-};
+use crate::nodes::{FunctionNode, StatementNode, Type, Visibility};
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses an `interface` declaration:
     /// `[public] interface Name [<T>] [: Parent (+ Parent)*] { method* }`.
     pub(crate) fn parse_interface_declaration(

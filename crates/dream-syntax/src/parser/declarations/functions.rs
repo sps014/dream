@@ -1,8 +1,5 @@
 use super::super::Parser;
-use crate::nodes::{
-    FunctionNode, ParameterNode, StatementNode, Type,
-    Visibility,
-};
+use crate::nodes::{FunctionNode, ParameterNode, StatementNode, Type, Visibility};
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
@@ -17,7 +14,6 @@ pub(crate) struct FunctionModifiers {
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses the flexible function-modifier prefix (`async`/`public`/`internal`/`static`/`extern`,
     /// which may appear in several orders) and reports the `public`+`extern` conflict. Consumes
     /// exactly the modifier tokens, leaving the cursor on the `fun`/constructor/`del` token.
@@ -120,13 +116,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 visibility
             };
             return Ok(FunctionNode::new(
-                attributes,
-                ctor_name,
-                None,
-                None,
-                params,
-                block,
-                ctor_vis,
+                attributes, ctor_name, None, None, params, block, ctor_vis,
             ));
         }
 

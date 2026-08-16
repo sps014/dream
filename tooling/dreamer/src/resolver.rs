@@ -82,7 +82,11 @@ pub fn resolve(
     include_dev: bool,
     preferred: &BTreeMap<String, String>,
 ) -> Result<Vec<ResolvedPackage>> {
-    resolve_many(&[(project_dir.to_path_buf(), manifest.clone())], include_dev, preferred)
+    resolve_many(
+        &[(project_dir.to_path_buf(), manifest.clone())],
+        include_dev,
+        preferred,
+    )
 }
 
 /// Union-resolve dependencies from every `(dir, manifest)` pair (workspace members). Path deps

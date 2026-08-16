@@ -1,9 +1,9 @@
-mod helpers;
-mod types;
-mod enums;
-mod structs;
-mod interfaces;
-mod imports;
 mod attributes;
+mod enums;
 mod functions;
 mod globals;
+mod helpers;
+mod imports;
+mod interfaces;
+mod structs;
+mod types;

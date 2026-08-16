@@ -110,9 +110,7 @@ impl<'a> Analyzer<'a> {
         let mut out = Vec::with_capacity(arms.len());
         for arm in arms {
             match &arm.pattern {
-                PatternNode::Or(alts)
-                    if !alts.iter().any(Self::pattern_needs_chain) =>
-                {
+                PatternNode::Or(alts) if !alts.iter().any(Self::pattern_needs_chain) => {
                     for alt in alts {
                         out.push(SwitchArm {
                             pattern: alt.clone(),
@@ -196,7 +194,8 @@ impl<'a> Analyzer<'a> {
     /// range, or an or-pattern whose alternatives themselves lack an outer key). Nested/literal
     /// sub-patterns and guards are handled by the hybrid outer-Switch + residual path instead.
     pub(super) fn pattern_switch_needs_full_chain(arms: &[SwitchArm]) -> bool {
-        arms.iter().any(|a| Self::pattern_lacks_outer_key(&a.pattern))
+        arms.iter()
+            .any(|a| Self::pattern_lacks_outer_key(&a.pattern))
     }
 
     /// True when `arms` need residual if-chain work inside Switch arms (guards or nested
@@ -239,10 +238,7 @@ impl<'a> Analyzer<'a> {
         value: &dream_hir::HExpr,
         value_type: &Type,
         pattern: &PatternNode,
-    ) -> Option<(
-        Vec<dream_hir::HExpr>,
-        Vec<(String, Type, dream_hir::HExpr)>,
-    )> {
+    ) -> Option<(Vec<dream_hir::HExpr>, Vec<(String, Type, dream_hir::HExpr)>)> {
         use dream_hir::{BinOp, HExpr, HExprKind};
         let base = value_type.get_type();
         match pattern {

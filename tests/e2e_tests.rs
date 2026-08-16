@@ -45,6 +45,7 @@ const DEBUG_ONLY_CASES: &[&str] = &[
     "async_rc_alias",
     "async_rc_return",
     "async_rc_reassign",
+    "ui_render_tree",
 ];
 
 fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
@@ -273,6 +274,8 @@ const SMOKE_CASES: &[&str] = &[
     "interfaces",
     "object_protocol",
     "diagnostics",
+    "last_use_destroy",
+    "ui_render_tree",
 ];
 
 /// Collect every `tests/cases/*.dream` fixture path.
@@ -468,6 +471,97 @@ fn selective_runtime_omits_unused_host_chunks() {
         "crypto chunk should be absent"
     );
     assert!(rt.contains("function load("));
+}
+
+/// `--release` arithmetic must keep a tiny code section (last-use destroy is compiler-only).
+#[test]
+fn release_arithmetic_code_section_stays_small() {
+    let src = Path::new("tests/cases/arithmetic.dream");
+    if !src.exists() {
+        return;
+    }
+    let out = std::env::temp_dir().join("dream_arith_size_check.wat");
+    let out_str = out.to_str().unwrap().to_string();
+    let src_str = src.to_str().unwrap().to_string();
+    Compiler::new(Target::Wasm)
+        .with_release(true)
+        .compile(&src_str, &out_str)
+        .expect("arithmetic --release compile");
+    let wasm_path = out.with_extension("wasm");
+    let wasm = fs::read(&wasm_path).expect("arithmetic.wasm");
+    let code = wasm_code_section_len(&wasm);
+    let _ = fs::remove_file(&out);
+    let _ = fs::remove_file(&wasm_path);
+    let _ = fs::remove_file(out.with_extension("abi.json"));
+    assert!(
+        code > 0 && code <= 2048,
+        "arithmetic --release code section should stay under 2KiB (got {})",
+        code
+    );
+}
+
+/// Sample `--release` code-section slack: last-use destroy is compiler-only (no extra runtime
+/// helpers). Music player is DOM/`js`-heavy; a large jump here means always-live WAT crept back.
+#[test]
+fn release_music_player_code_section_stays_bounded() {
+    let src = Path::new("sample/music_player/music_player.dream");
+    if !src.exists() {
+        return;
+    }
+    let out = std::env::temp_dir().join("dream_music_player_size_check.wat");
+    let out_str = out.to_str().unwrap().to_string();
+    let src_str = src.to_str().unwrap().to_string();
+    Compiler::new(Target::Wasm)
+        .with_release(true)
+        .compile(&src_str, &out_str)
+        .expect("music_player --release compile");
+    let wasm_path = out.with_extension("wasm");
+    let wasm = fs::read(&wasm_path).expect("music_player.wasm");
+    let code = wasm_code_section_len(&wasm);
+    let _ = fs::remove_file(&out);
+    let _ = fs::remove_file(&wasm_path);
+    let _ = fs::remove_file(out.with_extension("abi.json"));
+    assert!(
+        code > 0 && code <= 24 * 1024,
+        "music_player --release code section should stay under 24KiB (got {})",
+        code
+    );
+}
+
+fn wasm_code_section_len(data: &[u8]) -> usize {
+    if data.len() < 8 || &data[0..4] != b"\0asm" {
+        return 0;
+    }
+    let mut i = 8usize;
+    while i < data.len() {
+        let id = data[i];
+        i += 1;
+        let (size, ni) = uleb32(data, i);
+        i = ni;
+        if id == 10 {
+            return size;
+        }
+        i += size;
+        if i > data.len() {
+            break;
+        }
+    }
+    0
+}
+
+fn uleb32(data: &[u8], mut i: usize) -> (usize, usize) {
+    let mut result = 0usize;
+    let mut shift = 0;
+    while i < data.len() {
+        let b = data[i];
+        i += 1;
+        result |= ((b & 0x7f) as usize) << shift;
+        if b & 0x80 == 0 {
+            break;
+        }
+        shift += 7;
+    }
+    (result, i)
 }
 
 /// `@test` discovery + synthesized runner (`dream test` path).

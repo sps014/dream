@@ -321,9 +321,9 @@ pub fn validate_package_name(name: &str) -> Result<()> {
     if name.is_empty() {
         bail!("package name must not be empty");
     }
-    let valid = name.chars().all(|c| {
-        c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'
-    });
+    let valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
     let starts_alpha = name.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
     if !valid || !starts_alpha {
         bail!(
@@ -527,10 +527,7 @@ impl Manifest {
         for t in &pkg.targets {
             let parsed = RunTarget::parse(t)?;
             if seen.contains(&parsed) {
-                bail!(
-                    "package.targets lists '{}' more than once",
-                    parsed.as_str()
-                );
+                bail!("package.targets lists '{}' more than once", parsed.as_str());
             }
             seen.push(parsed);
         }
@@ -825,10 +822,7 @@ mod tests {
 
     #[test]
     fn round_trips_virtual_workspace() {
-        let manifest = Manifest::new_workspace(vec![
-            "packages/shared".into(),
-            "apps/cli".into(),
-        ]);
+        let manifest = Manifest::new_workspace(vec!["packages/shared".into(), "apps/cli".into()]);
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join(MANIFEST_FILE_NAME);
         manifest.save(&path).unwrap();

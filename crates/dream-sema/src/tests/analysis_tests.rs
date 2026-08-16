@@ -150,7 +150,12 @@ fn test_c_style_enum_bitwise_or_and_xor() {
         }
     ";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), false, "{:?}", diagnostics.diagnostics);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
 }
 
 #[test]
@@ -1025,7 +1030,6 @@ fn test_interface_cannot_be_instantiated() {
         .any(|d| d.message.contains("instantiate interface")));
 }
 
-
 #[test]
 fn test_generic_interface_monomorphized_ok() {
     // A generic class implementing a generic interface analyzes cleanly, and a call on the
@@ -1466,7 +1470,6 @@ fn test_js_await_promise() {
     assert_eq!(diagnostics.has_errors(), false);
 }
 
-
 #[test]
 fn test_extend_sealed_class_is_rejected() {
     // A `sealed` class may not be targeted by a user `extend` block.
@@ -1744,9 +1747,10 @@ fn test_analyze_nongeneric_function_value_rejects_type_args() {
         fun main(): void { let f: fun(int): int = id; let n = f<int>(1); }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics.diagnostics.iter().any(|d| d
-        .message
-        .contains("type arguments are not valid")));
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("type arguments are not valid")));
 }
 
 #[test]

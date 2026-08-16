@@ -154,10 +154,13 @@ fun check_ref_counts() {
     System.println("rc.aliased=" + Debug.ref_count(n).to_string());
 
     let h = Holder(Option.Some(n), "held");
+    // Keep `h` live across the probes; last-use destroy would otherwise release it immediately.
     System.println("rc.in_field=" + Debug.ref_count(n).to_string());
 
     let arr = [n, n];
     System.println("rc.in_array=" + Debug.ref_count(n).to_string());
+    System.println(h.label);
+    System.println(arr.length.to_string());
 }
 
 fun main() {

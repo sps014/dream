@@ -155,7 +155,10 @@ pub(crate) fn method_detail(owner: &str, func: &FunctionNode) -> String {
     } else if let Some(dream::syntax::nodes::function::AccessorKind::Get) = func.accessor {
         format!("{static_prefix}get {owner}.{}: {}", func.name.text, ret)
     } else if let Some(dream::syntax::nodes::function::AccessorKind::Set) = func.accessor {
-        format!("{static_prefix}set {owner}.{}({}): void", func.name.text, params)
+        format!(
+            "{static_prefix}set {owner}.{}({}): void",
+            func.name.text, params
+        )
     } else {
         format!(
             "{static_prefix}{async_prefix}{owner}.{}{generics}({}): {}",

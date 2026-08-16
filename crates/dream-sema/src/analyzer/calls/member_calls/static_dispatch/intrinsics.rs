@@ -140,7 +140,12 @@ impl<'a> Analyzer<'a> {
                 method.position,
                 diagnostics,
             );
-            self.check_runtime_intrinsic_call("Buffer.realloc", template, method.position, diagnostics);
+            self.check_runtime_intrinsic_call(
+                "Buffer.realloc",
+                template,
+                method.position,
+                diagnostics,
+            );
             let element = match generic_args.as_ref().and_then(|g| g.first()) {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
@@ -198,7 +203,12 @@ impl<'a> Analyzer<'a> {
                 }
             };
             if !self.is_unresolved_generic_type(&element) {
-                self.require_unmanaged(&element, "Buffer.elems_copy", &method.position, diagnostics);
+                self.require_unmanaged(
+                    &element,
+                    "Buffer.elems_copy",
+                    &method.position,
+                    diagnostics,
+                );
             }
             if params_types.len() != 5 {
                 diagnostics.report_error(
@@ -225,7 +235,12 @@ impl<'a> Analyzer<'a> {
             == Some(intrinsics::IntrinsicOp::ForceFree)
         {
             self.check_unsafe_intrinsic_call("Buffer.free", template, method.position, diagnostics);
-            self.check_runtime_intrinsic_call("Buffer.free", template, method.position, diagnostics);
+            self.check_runtime_intrinsic_call(
+                "Buffer.free",
+                template,
+                method.position,
+                diagnostics,
+            );
             if params_types.len() != 1 {
                 diagnostics.report_error(
                     format!(
@@ -314,7 +329,12 @@ impl<'a> Analyzer<'a> {
             if self.is_unresolved_generic_type(&payload) || payload.get_type() == "string" {
                 self.hir_set_last(value);
             } else {
-                self.require_unmanaged_or_array(&payload, "Bytes.toWire", &method.position, diagnostics);
+                self.require_unmanaged_or_array(
+                    &payload,
+                    "Bytes.toWire",
+                    &method.position,
+                    diagnostics,
+                );
                 self.hir_set_to_bytes(value);
                 let bytes = self.hir_take();
                 self.hir_set_call("Bytes_toWireString", vec![bytes], &named("string"));
@@ -339,7 +359,12 @@ impl<'a> Analyzer<'a> {
             if self.is_unresolved_generic_type(&target) || target.get_type() == "string" {
                 self.hir_set_last(text);
             } else {
-                self.require_unmanaged_or_array(&target, "Bytes.fromWire", &method.position, diagnostics);
+                self.require_unmanaged_or_array(
+                    &target,
+                    "Bytes.fromWire",
+                    &method.position,
+                    diagnostics,
+                );
                 let named = |name: &str| -> Type {
                     let mut t = method.clone();
                     t.text = name.to_string();
@@ -426,11 +451,7 @@ impl<'a> Analyzer<'a> {
                 } else {
                     method_fn(&struct_name, "write_json")
                 };
-                self.hir_set_call(
-                    &write_call,
-                    vec![value, Some(sb_read)],
-                    &Type::Void,
-                );
+                self.hir_set_call(&write_call, vec![value, Some(sb_read)], &Type::Void);
                 let write_hir = self.hir_take();
                 self.hir_expr_stmt(write_hir);
                 let sb_read2 = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
@@ -564,14 +585,16 @@ impl<'a> Analyzer<'a> {
                         self.hir_open_block();
                         if let Some(inner_local) = inner_ok_local {
                             let ty_id = self.type_ctx.lower(&json_value);
-                            let read2 = HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
-                            self.hir_set_call(
-                                &from_json_call,
-                                vec![Some(read2)],
-                                &t_type,
-                            );
+                            let read2 =
+                                HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
+                            self.hir_set_call(&from_json_call, vec![Some(read2)], &t_type);
                             let from_json = self.hir_take();
-                            self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
+                            self.hir_set_union_new(
+                                result_def,
+                                ok_disc,
+                                vec![from_json],
+                                &result_ty,
+                            );
                             let wrapped = self.hir_take();
                             self.hir_assign_local_id(
                                 result_temp.unwrap_or(dream_hir::LocalId(0)),
@@ -589,8 +612,14 @@ impl<'a> Analyzer<'a> {
                         self.hir_open_block();
                         if let Some(inner_local) = inner_err_local {
                             let ty_id = self.type_ctx.lower(&parse_err);
-                            let read2 = HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
-                            self.hir_set_union_new(result_def, err_disc, vec![Some(read2)], &result_ty);
+                            let read2 =
+                                HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
+                            self.hir_set_union_new(
+                                result_def,
+                                err_disc,
+                                vec![Some(read2)],
+                                &result_ty,
+                            );
                             let wrapped = self.hir_take();
                             self.hir_assign_local_id(
                                 result_temp.unwrap_or(dream_hir::LocalId(0)),
@@ -610,11 +639,7 @@ impl<'a> Analyzer<'a> {
                         ok = false;
                     }
                 } else {
-                    self.hir_set_call(
-                        &from_json_call,
-                        vec![Some(read)],
-                        &t_type,
-                    );
+                    self.hir_set_call(&from_json_call, vec![Some(read)], &t_type);
                     let from_json = self.hir_take();
                     self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
                     let wrapped = self.hir_take();
@@ -750,12 +775,15 @@ impl<'a> Analyzer<'a> {
         );
 
         let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
-        let instance = bindings
-            .values()
-            .map(|t| self.type_ctx.lower(t))
-            .collect();
+        let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
         // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
-        self.hir_set_generic_call(base, instance, arg_hirs, &ret_type, store_sig.is_take.clone());
+        self.hir_set_generic_call(
+            base,
+            instance,
+            arg_hirs,
+            &ret_type,
+            store_sig.is_take.clone(),
+        );
         Ok(ret_type)
     }
 }

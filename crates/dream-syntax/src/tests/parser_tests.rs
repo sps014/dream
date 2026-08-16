@@ -293,14 +293,12 @@ fn test_parse_extend_implements() {
 
 #[test]
 fn test_parse_extend_array_target() {
-    let code = "extend T[] : IndexedCollection<T> { public fun size(): int { return this.size(); } }";
+    let code =
+        "extend T[] : IndexedCollection<T> { public fun size(): int { return this.size(); } }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
-    assert!(
-        !diagnostics.has_errors(),
-        "extend T[] should parse cleanly"
-    );
+    assert!(!diagnostics.has_errors(), "extend T[] should parse cleanly");
     assert_eq!(program.extends.len(), 1);
     let ext = &program.extends[0];
     assert_eq!(ext.target.text, "T[]");
@@ -318,7 +316,8 @@ fn test_parse_switch_expression_with_patterns() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0]
+    else {
         panic!("expected a return of a switch expression");
     };
     assert_eq!(arms.len(), 3);
@@ -336,7 +335,8 @@ fn test_parse_switch_arm_guard() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0]
+    else {
         panic!("expected a return of a switch expression");
     };
     assert!(arms[0].guard.is_some(), "first arm should have a guard");
@@ -351,7 +351,8 @@ fn test_parse_switch_range_pattern() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0]
+    else {
         panic!("expected a return of a switch expression");
     };
     use crate::nodes::PatternNode;
@@ -371,7 +372,8 @@ fn test_parse_switch_or_pattern() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0]
+    else {
         panic!("expected a return of a switch expression");
     };
     use crate::nodes::PatternNode;
@@ -428,7 +430,10 @@ fn test_parse_postfix_call_on_call() {
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
     let StatementNode::Return(Some(ExpressionNode::Call(callee, _, args))) = &func.body[0] else {
-        panic!("expected return of Call(make(5), [1]), got {:?}", func.body[0]);
+        panic!(
+            "expected return of Call(make(5), [1]), got {:?}",
+            func.body[0]
+        );
     };
     assert!(matches!(**callee, ExpressionNode::FunctionCall(_, _, _)));
     assert_eq!(args.len(), 1);
@@ -560,7 +565,8 @@ fn test_parse_async_lambda_expr_body() {
 
 #[test]
 fn test_parse_async_lambda_block_body() {
-    let code = "async fun f(): void { let g = async (x: int) => { await Time.sleep(1); return x; }; }";
+    let code =
+        "async fun f(): void { let g = async (x: int) => { await Time.sleep(1); return x; }; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
@@ -654,7 +660,8 @@ fn test_parse_switch_statement_pattern_arms() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::ExpressionStatement(ExpressionNode::Switch(_, _subject, arms)) = &func.body[0]
+    let StatementNode::ExpressionStatement(ExpressionNode::Switch(_, _subject, arms)) =
+        &func.body[0]
     else {
         panic!("expected a statement-position switch expression");
     };

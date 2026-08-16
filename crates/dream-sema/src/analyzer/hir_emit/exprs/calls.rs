@@ -172,7 +172,7 @@ impl<'a> Analyzer<'a> {
             def: new_def,
             instance: vec![],
             ret: box_ty,
-        take_params: vec![],
+            take_params: vec![],
         };
         Some(HExpr::new(
             box_ty,
@@ -187,10 +187,7 @@ impl<'a> Analyzer<'a> {
     /// — used at boundaries with no env-restoring prologue of their own (a host `@js` bridge; see
     /// `js_interop::box_to_js`), where only the funcidx half of the box is meaningful. `None` if the
     /// `Closure` intrinsics are unavailable.
-    pub(in crate::analyzer) fn hir_funcbox_funcidx(
-        &mut self,
-        boxed: HExpr,
-    ) -> Option<HExpr> {
+    pub(in crate::analyzer) fn hir_funcbox_funcidx(&mut self, boxed: HExpr) -> Option<HExpr> {
         let def = self.closure_intrinsic("funcbox_funcidx")?;
         let int_ty = self.type_ctx.interner.int();
         Some(HExpr::new(
@@ -200,7 +197,7 @@ impl<'a> Analyzer<'a> {
                     def,
                     instance: vec![],
                     ret: int_ty,
-                take_params: vec![],
+                    take_params: vec![],
                 },
                 args: vec![boxed],
             },
@@ -234,7 +231,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance: vec![],
                 ret: ret_ty,
-            take_params: vec![],
+                take_params: vec![],
             })),
         );
         self.hir.last = self.build_funcbox(raw, None, func_ty);
@@ -269,7 +266,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance: vec![],
                 ret: ret_ty,
-            take_params: vec![],
+                take_params: vec![],
             })),
         );
         let env_int = HExpr::new(int_ty, HExprKind::Cast(Box::new(env_cell)));
@@ -342,7 +339,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance: vec![],
                 ret: ret_ty,
-            take_params: vec![],
+                take_params: vec![],
             })),
         );
         let env_int = HExpr::new(int_ty, HExprKind::Cast(Box::new(array_read())));
@@ -376,7 +373,7 @@ impl<'a> Analyzer<'a> {
                 def,
                 instance,
                 ret: ret_ty,
-            take_params: vec![],
+                take_params: vec![],
             })),
         );
         self.hir.last = self.build_funcbox(raw, None, func_ty);
@@ -483,7 +480,7 @@ impl<'a> Analyzer<'a> {
                     def: env_def,
                     instance: vec![],
                     ret: int_ty,
-                take_params: vec![],
+                    take_params: vec![],
                 },
                 args: vec![box_expr.clone()],
             },
@@ -503,7 +500,7 @@ impl<'a> Analyzer<'a> {
                     def: funcidx_def,
                     instance: vec![],
                     ret: int_ty,
-                take_params: vec![],
+                    take_params: vec![],
                 },
                 args: vec![box_expr],
             },
@@ -522,7 +519,10 @@ impl<'a> Analyzer<'a> {
             // Drop the scratch retain immediately after the call so the funcbox's lifetime follows
             // the source expression, not the enclosing function.
             let clear = HExpr::new(box_ty, HExprKind::IntLit(0));
-            if matches!(self.type_ctx.interner.kind(ret_ty), dream_types::TyKind::Void) {
+            if matches!(
+                self.type_ctx.interner.kind(ret_ty),
+                dream_types::TyKind::Void
+            ) {
                 self.push_stmt(HStmt::Expr(call));
                 self.push_stmt(HStmt::Assign {
                     place: HPlace::Local(box_local),
@@ -598,11 +598,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for an enum-member reference (`Enum.Member`) resolved to its integer value.
-    pub(in crate::analyzer) fn hir_set_enum_value(
-        &mut self,
-        value: i64,
-        enum_ty: &Type,
-    ) {
+    pub(in crate::analyzer) fn hir_set_enum_value(&mut self, value: i64, enum_ty: &Type) {
         if !self.active() {
             self.hir.last = None;
             return;

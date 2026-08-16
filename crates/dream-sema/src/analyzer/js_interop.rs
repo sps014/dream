@@ -19,10 +19,10 @@
 //! or via the explicit `js.to_int()` etc.
 
 use super::synthetic_token;
-use dream_diagnostics::DiagnosticBag;
-use dream_hir::{Binding, Callee, HExpr, HExprKind};
 use crate::analyzer::Analyzer;
 use crate::errors::SemanticError;
+use dream_diagnostics::DiagnosticBag;
+use dream_hir::{Binding, Callee, HExpr, HExprKind};
 use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
@@ -194,8 +194,7 @@ impl<'a> Analyzer<'a> {
                 // is marshaled as a `js` handle and the result is discarded.
                 if self.func_expr_is_capturing(&e) {
                     if let Some(diagnostics) = diagnostics {
-                        diagnostics
-                            .report_error(Self::JS_CAPTURING_CALLBACK_MSG.to_string(), pos);
+                        diagnostics.report_error(Self::JS_CAPTURING_CALLBACK_MSG.to_string(), pos);
                     }
                     return None;
                 }
@@ -266,7 +265,9 @@ impl<'a> Analyzer<'a> {
             PrimTy::Bool => self.type_ctx.interner.bool(),
             PrimTy::Double | PrimTy::Float => self.type_ctx.interner.double(),
             PrimTy::Long | PrimTy::ULong => self.type_ctx.interner.long(),
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => self.type_ctx.interner.int(),
+            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
+                self.type_ctx.interner.int()
+            }
         }
     }
 
@@ -275,11 +276,9 @@ impl<'a> Analyzer<'a> {
     /// `byte` from `as_int`).
     fn js_widen_as_result(&self, raw: HExpr, p: PrimTy, target: TypeId) -> HExpr {
         match p {
-            PrimTy::Float
-            | PrimTy::UInt
-            | PrimTy::Byte
-            | PrimTy::Char
-            | PrimTy::ULong => HExpr::new(target, HExprKind::Cast(Box::new(raw))),
+            PrimTy::Float | PrimTy::UInt | PrimTy::Byte | PrimTy::Char | PrimTy::ULong => {
+                HExpr::new(target, HExprKind::Cast(Box::new(raw)))
+            }
             _ => {
                 if raw.ty == target {
                     raw
@@ -310,7 +309,9 @@ impl<'a> Analyzer<'a> {
             _ => e,
         };
         match &e.kind {
-            HExprKind::Call { callee, args } if args.len() == 2 && self.is_js_bridge_def(callee.def, "get") => {
+            HExprKind::Call { callee, args }
+                if args.len() == 2 && self.is_js_bridge_def(callee.def, "get") =>
+            {
                 Some((args[0].clone(), args[1].clone()))
             }
             _ => None,
@@ -338,7 +339,14 @@ impl<'a> Analyzer<'a> {
                     (None, None) => format!("invoke_as_{}", suffix),
                     (Some(_), None) => return None,
                 };
-                self.js_call_node(&bridge, *target, via.map(|v| *v), method.map(|m| *m), args, ret)
+                self.js_call_node(
+                    &bridge,
+                    *target,
+                    via.map(|v| *v),
+                    method.map(|m| *m),
+                    args,
+                    ret,
+                )
             }
             _ => None,
         }
@@ -694,7 +702,8 @@ impl<'a> Analyzer<'a> {
         };
         let Some(key) = self.box_to_js(key, pos, Some(diagnostics)) else {
             if !diagnostics.has_errors() {
-                diagnostics.report_error("cannot use this value as a js index key".to_string(), pos);
+                diagnostics
+                    .report_error("cannot use this value as a js index key".to_string(), pos);
             }
             self.hir_none();
             return;
@@ -726,14 +735,8 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 return;
             };
-            let call = self.js_call_node(
-                "index_set_slot",
-                recv,
-                None,
-                None,
-                vec![key, value],
-                void,
-            );
+            let call =
+                self.js_call_node("index_set_slot", recv, None, None, vec![key, value], void);
             self.hir_expr_stmt(call);
             return;
         }

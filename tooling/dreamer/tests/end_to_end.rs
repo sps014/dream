@@ -215,7 +215,11 @@ fn build_compiles_a_project_using_an_installed_dependency() {
 
     commands::build::run(&project_dir, false, None).unwrap();
     assert!(
-        project_dir.join("target").join("debug").join("main.wat").is_file(),
+        project_dir
+            .join("target")
+            .join("debug")
+            .join("main.wat")
+            .is_file(),
         "expected artifacts under target/debug/"
     );
     assert!(!project_dir.join("src").join("main.wat").exists());
@@ -267,13 +271,7 @@ fn init_runtime_web_only_skips_run_mjs() {
 fn init_lib_has_no_entry_and_run_rejects() {
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join("http-utils");
-    commands::init::run(
-        &project_dir,
-        Some("http-utils".to_string()),
-        None,
-        true,
-    )
-    .unwrap();
+    commands::init::run(&project_dir, Some("http-utils".to_string()), None, true).unwrap();
 
     let manifest = Manifest::load(&project_dir.join("dream.toml")).unwrap();
     assert_eq!(manifest.package().unwrap().package_type, PackageType::Lib);
@@ -305,9 +303,7 @@ fn build_refreshes_web_and_node_aliases() {
     commands::build::run(&project_dir, false, None).unwrap();
     assert!(project_dir.join("target/debug/main.wasm").is_file());
     assert!(project_dir.join("target/web/main.wasm").is_file());
-    assert!(project_dir
-        .join("target/web/main.web.runtime.js")
-        .is_file());
+    assert!(project_dir.join("target/web/main.web.runtime.js").is_file());
     assert!(project_dir
         .join("target/node/main.node.runtime.js")
         .is_file());
@@ -389,12 +385,9 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     std::fs::create_dir_all(shared.join("src")).unwrap();
     std::fs::create_dir_all(cli.join("src")).unwrap();
 
-    Manifest::new_workspace(vec![
-        "packages/shared".into(),
-        "apps/cli".into(),
-    ])
-    .save(&root.join("dream.toml"))
-    .unwrap();
+    Manifest::new_workspace(vec!["packages/shared".into(), "apps/cli".into()])
+        .save(&root.join("dream.toml"))
+        .unwrap();
 
     Manifest::new_lib("shared".into(), "0.1.0".into())
         .save(&shared.join("dream.toml"))
@@ -424,14 +417,23 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     // Install from workspace root.
     commands::install::run(&root).unwrap();
     assert!(root.join("dream.lock").is_file());
-    assert!(root.join("dream_packages").join("shared").join("src").join("shared.dream").is_file());
+    assert!(root
+        .join("dream_packages")
+        .join("shared")
+        .join("src")
+        .join("shared.dream")
+        .is_file());
     let member_pkgs = cli.join("dream_packages");
     assert!(
         member_pkgs.is_symlink() || member_pkgs.is_dir(),
         "member should get dream_packages symlink/dir"
     );
     assert!(
-        member_pkgs.join("shared").join("src").join("shared.dream").is_file(),
+        member_pkgs
+            .join("shared")
+            .join("src")
+            .join("shared.dream")
+            .is_file(),
         "symlink should resolve to shared package sources"
     );
 
@@ -453,8 +455,8 @@ fn workspace_install_shares_lock_and_packages_symlink() {
         }),
     );
     path_only.save(&cli.join("dream.toml")).unwrap();
-    let err = commands::publish::run(&cli, Some("file:///tmp/unused".into()), None, None)
-        .unwrap_err();
+    let err =
+        commands::publish::run(&cli, Some("file:///tmp/unused".into()), None, None).unwrap_err();
     assert!(
         err.to_string().contains("path-only"),
         "expected path-only publish error, got: {err:#}"

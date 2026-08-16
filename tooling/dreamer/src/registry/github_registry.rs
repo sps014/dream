@@ -53,14 +53,10 @@ impl GithubRegistry {
     }
 
     fn auth_headers(&self, mut req: ureq::Request) -> Result<ureq::Request> {
-        let token = self
-            .token
-            .as_deref()
-            .filter(|t| !t.is_empty())
-            .context(
-                "publishing to a GitHub registry requires a token \
+        let token = self.token.as_deref().filter(|t| !t.is_empty()).context(
+            "publishing to a GitHub registry requires a token \
                  (set DREAM_REGISTRY_TOKEN or pass --token)",
-            )?;
+        )?;
         req = req
             .set("Authorization", &format!("Bearer {}", token))
             .set("Accept", "application/vnd.github+json")
@@ -158,9 +154,8 @@ impl RegistryClient for GithubRegistry {
                 text.lines()
                     .filter(|l| !l.trim().is_empty())
                     .map(|l| {
-                        serde_json::from_str::<IndexEntry>(l).with_context(|| {
-                            format!("parsing registry index line from {}", path)
-                        })
+                        serde_json::from_str::<IndexEntry>(l)
+                            .with_context(|| format!("parsing registry index line from {}", path))
                     })
                     .collect()
             }
@@ -280,9 +275,10 @@ mod tests {
 
     #[test]
     fn parses_raw_githubusercontent_base() {
-        let (o, r, b) =
-            parse_github_registry_url("https://raw.githubusercontent.com/sps014/dream-registry/main")
-                .unwrap();
+        let (o, r, b) = parse_github_registry_url(
+            "https://raw.githubusercontent.com/sps014/dream-registry/main",
+        )
+        .unwrap();
         assert_eq!(o, "sps014");
         assert_eq!(r, "dream-registry");
         assert_eq!(b, "main");
@@ -290,7 +286,8 @@ mod tests {
 
     #[test]
     fn parses_github_pages_base() {
-        let (o, r, b) = parse_github_registry_url("https://sps014.github.io/dream-registry").unwrap();
+        let (o, r, b) =
+            parse_github_registry_url("https://sps014.github.io/dream-registry").unwrap();
         assert_eq!(o, "sps014");
         assert_eq!(r, "dream-registry");
         assert_eq!(b, "main");

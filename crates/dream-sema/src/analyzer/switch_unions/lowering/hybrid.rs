@@ -8,13 +8,11 @@
 //!   exists (unexpanded ranges; see [`Analyzer::pattern_switch_needs_full_chain`]).
 
 use super::super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionInfo;
-use dream_syntax::nodes::{
-    ExpressionNode, FunctionNode, PatternNode, SwitchArm, Type,
-};
+use dream_diagnostics::DiagnosticBag;
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, PatternNode, SwitchArm, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -87,8 +85,7 @@ impl<'a> Analyzer<'a> {
                         arm.pattern.position(),
                     );
                 }
-                let arm_scope =
-                    Rc::new(RefCell::new(SymbolTable::new(Some(symbol_table.clone()))));
+                let arm_scope = Rc::new(RefCell::new(SymbolTable::new(Some(symbol_table.clone()))));
                 (*symbol_table).borrow_mut().add_child(arm_scope.clone());
                 let info =
                     self.check_pattern(&arm.pattern, &subject_type, &arm_scope, diagnostics)?;
@@ -110,8 +107,7 @@ impl<'a> Analyzer<'a> {
             }
 
             for arm in group {
-                let arm_scope =
-                    Rc::new(RefCell::new(SymbolTable::new(Some(symbol_table.clone()))));
+                let arm_scope = Rc::new(RefCell::new(SymbolTable::new(Some(symbol_table.clone()))));
                 (*symbol_table).borrow_mut().add_child(arm_scope.clone());
                 let _ = self.check_pattern(&arm.pattern, &subject_type, &arm_scope, diagnostics)?;
 
@@ -205,8 +201,7 @@ impl<'a> Analyzer<'a> {
 
             // Flat outer pattern for the Switch arm (first arm's pattern with bindings/wildcards).
             let outer_pat = Self::flatten_outer_pattern(&group[0].pattern);
-            let shape =
-                self.hir_switch_pattern(&outer_pat, &union_info, union_def, &subject_type);
+            let shape = self.hir_switch_pattern(&outer_pat, &union_info, union_def, &subject_type);
             match shape {
                 HirArmShape::Default | HirArmShape::DefaultBind { .. } => hir_default = body_hir,
                 HirArmShape::Const(label) => match self.hir_const_arm(Some(label), body_hir) {
@@ -257,7 +252,10 @@ impl<'a> Analyzer<'a> {
         }
     }
     /// Grouping key for hybrid Switch arms: variant name, const spelling, or `"_"` catch-all.
-    pub(crate) fn outer_switch_key(pattern: &PatternNode, union_info: &Option<UnionInfo>) -> String {
+    pub(crate) fn outer_switch_key(
+        pattern: &PatternNode,
+        union_info: &Option<UnionInfo>,
+    ) -> String {
         match pattern {
             PatternNode::Variant(_, name, _) => format!("v:{}", name.text),
             PatternNode::Literal(lit) => format!("c:{}", lit.display_name()),

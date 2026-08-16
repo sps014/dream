@@ -112,6 +112,30 @@ Neither modifier contributes to its referent's strong reference count, so declar
 
 When the referent is freed, every live `weak` slot watching it becomes `None`, and every `unowned` slot is poisoned so later reads panic.
 
+## UI trees and DOM nodes
+
+A render tree is two graphs that Dream does **not** treat as the same:
+
+1. **Dream classes** — `parent` + `children: List<Node>` is a strong cycle unless `parent` is `weak` / `unowned`. A `List<Node>` field on `Node` is also a structural cycle through the collection; mark the class `@allow_cycle` if you keep strong children. Dropping the root then reclaims the tree (`Debug.live_objects` returns to baseline).
+2. **`js` DOM nodes** — `createElement` / `appendChild` pin the real JS object in the host handle table until Dream ARC `Release`s the `js` value. `innerHTML = ""` or `removeChild` only drops the **browser** ref. A `js` temp that is never read after `appendChild` is released at that last use (not at `}`). If you keep a `List<js>` of every created node across frames, clear it (or drop the list) or the handles stay pinned even after the DOM is empty.
+
+```dream
+@allow_cycle
+class Node {
+    public children: List<Node>;
+    public weak parent: Option<Node>;
+}
+
+fun rebuild() {
+    let root = Node();
+    // last *read* of `root` (not a call that may store a borrow) — ARC can free the tree here
+    System.println(root.id);
+    do_unrelated_work();
+}
+```
+
+Do not keep a second `List<js>` of every `createElement` result unless you `clear` it when you rebuild.
+
 ### `@allow_cycle`: the escape hatch
 
 For the rare case where a cycle is intentional and manually managed, annotate **every** class in the cycle:
@@ -158,7 +182,7 @@ What `@unsafe` does **not** do: it does not insert runtime checks, and it does n
   (`ScratchArena<int>`, `ScratchArena<byte>`, …), not long-lived graphs. Use [`sizeof`](operators.md#sizeof-and-nameof)
   when you need the ABI byte size of an unmanaged element type.
 - `Span.copy_from` on `unmanaged` element types bulk-blits with `memory.copy`; managed elements go through ordinary assignment (retain/release). Under `--release`, the inliner erases small `Span` / value-struct method call boundaries (including into `List.insert` / `push_all`), so those hot paths compile down to the same WAT as hand-written bulk copies.
-- The compiler's ARC passes elide retain/release pairs along Goto chains, transparent diamonds/loops, and postdominated transparent regions; last-use moves transfer ownership without an extra retain. Prefer clear ownership so elision has an easy cancel pattern.
+- The compiler's ARC passes elide retain/release pairs along Goto chains, transparent diamonds/loops, and postdominated transparent regions; last-use moves transfer ownership without an extra retain. Owned locals (including `js` handles) are **released at last use**, not only at `}` / `return`, so a UI rebuild can unpin temps before later work in the same function. Prefer clear ownership so elision has an easy cancel pattern.
 - Unmarked parameters sink into the callee (see [Ownership](ownership.md)); mark readers `borrow`. Stores like `List.push(value)` skip a redundant retain when the arg is moved.
 - Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths; silent SROA may promote non-escaping class instances whose accessed fields are non-references.
 

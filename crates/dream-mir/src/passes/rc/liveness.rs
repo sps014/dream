@@ -21,7 +21,11 @@ pub(crate) fn live_out(func: &MirFunction) -> Vec<HashSet<u32>> {
                 changed = true;
             }
             let mut inn = live_out[bi].clone();
-            transfer_block(&func.blocks[bi].stmts, &func.blocks[bi].terminator, &mut inn);
+            transfer_block(
+                &func.blocks[bi].stmts,
+                &func.blocks[bi].terminator,
+                &mut inn,
+            );
             if inn != live_in[bi] {
                 live_in[bi] = inn;
                 changed = true;
@@ -29,6 +33,14 @@ pub(crate) fn live_out(func: &MirFunction) -> Vec<HashSet<u32>> {
         }
     }
     live_out
+}
+
+/// Locals live at the start of block `bi` (may be read in the block or after it).
+pub(crate) fn live_in_of(func: &MirFunction, live_out: &[HashSet<u32>], bi: usize) -> HashSet<u32> {
+    let block = &func.blocks[bi];
+    let mut inn = live_out[bi].clone();
+    transfer_block(&block.stmts, &block.terminator, &mut inn);
+    inn
 }
 
 /// True if `local` may be read after statement `si` in block `bi` (not counting uses inside that
@@ -130,6 +142,24 @@ fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
     }
 }
 
+/// True if `local` is read by `stmt` (plain operand, field/index base, or RC op).
+pub(crate) fn stmt_reads_local(stmt: &Statement, local: u32) -> bool {
+    let mut live = HashSet::new();
+    transfer_stmt_reads_only(stmt, &mut live);
+    live.contains(&local)
+}
+
+fn transfer_stmt_reads_only(stmt: &Statement, live: &mut HashSet<u32>) {
+    match stmt {
+        Statement::Assign(Place::Local(_), rv) => add_rvalue_reads(rv, live),
+        Statement::Assign(place, rv) => {
+            add_place_base_reads(place, live);
+            add_rvalue_reads(rv, live);
+        }
+        _ => transfer_stmt(stmt, live),
+    }
+}
+
 fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
     match term {
         Terminator::If { cond, .. } => add_operand_reads(cond, live),
@@ -138,6 +168,7 @@ fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
             add_operand_reads(o, live)
         }
         Terminator::TailCall { args, .. } => args.iter().for_each(|a| add_operand_reads(a, live)),
+        Terminator::Await { future, .. } => add_operand_reads(future, live),
         _ => {}
     }
 }
@@ -165,7 +196,10 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => add(o),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CharAt(a, b)
+        | Rvalue::ByteAt(a, b)
+        | Rvalue::Concat(a, b) => {
             add(a);
             add(b);
         }

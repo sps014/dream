@@ -383,7 +383,7 @@ mod tests {
                         def: callee_def,
                         args: vec![],
                         ret: int,
-                    take_params: vec![],
+                        take_params: vec![],
                     },
                     args: vec![Operand::Const(Const::Int(41))],
                 },
@@ -441,7 +441,7 @@ mod tests {
                         def: callee_def,
                         args: vec![],
                         ret: int,
-                    take_params: vec![],
+                        take_params: vec![],
                     },
                     args: vec![],
                 },
@@ -517,7 +517,7 @@ mod tests {
                         def: callee_def,
                         args: vec![],
                         ret: int,
-                    take_params: vec![],
+                        take_params: vec![],
                     },
                     args: vec![Operand::Copy(Place::Local(s))],
                 },
@@ -564,7 +564,7 @@ mod tests {
                     def,
                     args: vec![],
                     ret: int,
-                take_params: vec![],
+                    take_params: vec![],
                 },
                 args: vec![],
             },
@@ -575,5 +575,83 @@ mod tests {
             ..Default::default()
         };
         assert!(!Inliner.run(&mut mir, &ctx.interner));
+    }
+
+    /// A transparent callee inlined into a retain/print/release sequence lets `RcElision` cancel the
+    /// pair that a call barrier would have kept.
+    #[test]
+    fn inlined_callee_lets_elision_cancel_rc_pair() {
+        use crate::passes::rc::{RcElision, RcInsertion};
+        use crate::passes::MirPass;
+
+        let mut ctx = TypeCtx::new();
+        let void = ctx.interner.void();
+        let callee_def = ctx.register(DefKind::Function, "peek", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+
+        let callee = {
+            let mut b = FunctionBuilder::new("peek", void);
+            b.set_def(callee_def, vec![]);
+            b.terminate(Terminator::Return(None));
+            b.finish()
+        };
+        let caller = {
+            let mut b = FunctionBuilder::new("caller", void);
+            b.set_def(caller_def, vec![]);
+            let x = b.new_local(ctx.interner.string(), Some("x".into()));
+            b.assign(
+                Place::Local(x),
+                Rvalue::Use(Operand::Const(Const::Str("hi".into()))),
+            );
+            b.push(Statement::Call {
+                callee: crate::Callee {
+                    def: callee_def,
+                    args: vec![],
+                    ret: void,
+                    take_params: vec![],
+                },
+                args: vec![],
+            });
+            b.push(Statement::Print {
+                arg: Operand::Copy(Place::Local(x)),
+                ty: ctx.interner.string(),
+                newline: true,
+            });
+            b.terminate(Terminator::Return(None));
+            b.finish()
+        };
+
+        let mut mir = crate::Mir {
+            functions: vec![callee, caller],
+            ..Default::default()
+        };
+        for f in &mut mir.functions {
+            RcInsertion.run(f, &ctx.interner);
+        }
+        assert!(Inliner.run(&mut mir, &ctx.interner));
+        let caller_idx = mir
+            .functions
+            .iter()
+            .position(|f| f.name == "caller")
+            .unwrap();
+        assert!(
+            !mir.functions[caller_idx]
+                .blocks
+                .iter()
+                .flat_map(|b| &b.stmts)
+                .any(|s| matches!(s, Statement::Call { .. })),
+            "peek should be inlined"
+        );
+        RcElision.run(&mut mir.functions[caller_idx], &ctx.interner);
+        let retains = mir.functions[caller_idx]
+            .blocks
+            .iter()
+            .flat_map(|b| &b.stmts)
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
+        assert_eq!(
+            retains, 0,
+            "inlined transparent peek should let elision drop retain of x"
+        );
     }
 }

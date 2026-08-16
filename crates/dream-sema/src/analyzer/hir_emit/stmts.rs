@@ -238,11 +238,7 @@ impl<'a> Analyzer<'a> {
     ///
     /// Values are coerced to the slot's declared type (numeric widening, `object`/`js` boxing) so
     /// `x = 1` into a `float` local matches `let x: float = 1`.
-    pub(in crate::analyzer) fn hir_assign_local(
-        &mut self,
-        name: &str,
-        value: Option<HExpr>,
-    ) {
+    pub(in crate::analyzer) fn hir_assign_local(&mut self, name: &str, value: Option<HExpr>) {
         if !self.active() {
             return;
         }

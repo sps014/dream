@@ -19,8 +19,8 @@ use dream_types::{DefId, TypeId};
 mod dead_code;
 mod hir_edges;
 
-pub use dead_code::prune_module;
 pub(crate) use dead_code::module_uses_js_bridges;
+pub use dead_code::prune_module;
 pub(crate) use hir_edges::{hir_body_edges, HirEdges};
 
 /// Identity of a function/instance for the call graph: its def plus the concrete type-args of the

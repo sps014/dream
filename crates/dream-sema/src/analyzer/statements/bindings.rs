@@ -1,9 +1,9 @@
 //! `let` declarations, simple `name = value` assignments, and `return`.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use std::cell::RefCell;
@@ -191,7 +191,12 @@ impl<'a> Analyzer<'a> {
                         for (i, (p, e)) in pats.iter().zip(elems.iter()).enumerate() {
                             let slot_ty = expected_elems.as_ref().map(|es| &es[i]);
                             self.bind_destructure_pattern(
-                                p, e, slot_ty, is_const, ctx, diagnostics,
+                                p,
+                                e,
+                                slot_ty,
+                                is_const,
+                                ctx,
+                                diagnostics,
                             )?;
                         }
                         return Ok(());
@@ -275,7 +280,14 @@ impl<'a> Analyzer<'a> {
         use dream_syntax::nodes::PatternNode;
         match pattern {
             PatternNode::Binding(name) | PatternNode::Wildcard(name) => {
-                self.bind_or_discard_local(name, ty.clone(), value, is_const, symbol_table, diagnostics);
+                self.bind_or_discard_local(
+                    name,
+                    ty.clone(),
+                    value,
+                    is_const,
+                    symbol_table,
+                    diagnostics,
+                );
             }
             PatternNode::Tuple(pats) => {
                 let Type::Tuple(elem_tys) = ty else {

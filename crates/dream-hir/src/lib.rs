@@ -6,11 +6,11 @@
 //! desugaring into a CFG happens in MIR. Monomorphization is an explicit [`MonoInstance`] worklist.
 
 pub mod layout;
-pub mod ops;
 mod module;
 mod nodes;
+pub mod ops;
 
 pub use layout::{scalar_size, FieldLayout, LayoutTable, TypeLayout, UnionLayout, UnionVariant};
-pub use ops::{BinOp, UnOp};
 pub use module::*;
 pub use nodes::*;
+pub use ops::{BinOp, UnOp};

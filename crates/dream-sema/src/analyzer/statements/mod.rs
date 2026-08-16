@@ -9,10 +9,10 @@
 //! helpers live here because they are shared across several of those submodules.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
-use dream_abi::intrinsics;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_abi::intrinsics;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;

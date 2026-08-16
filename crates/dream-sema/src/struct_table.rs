@@ -77,8 +77,8 @@ impl StructTable {
             return Err(format!("Struct '{}' is already defined", name));
         }
 
-        let packed = struct_decl.is_value
-            && dream_abi::attributes::has_packed_attr(&struct_decl.attributes);
+        let packed =
+            struct_decl.is_value && dream_abi::attributes::has_packed_attr(&struct_decl.attributes);
 
         let mut fields = IndexMap::new();
         let mut current_offset = 0;

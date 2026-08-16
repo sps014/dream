@@ -1,13 +1,11 @@
 //! [`RcInsertion`]: make reference ownership explicit in MIR.
 
-use super::liveness::{self, live_after_stmt};
+use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
 use super::{is_borrowed_copy, rvalue_reads_local};
 use crate::passes::MirPass;
-use crate::{
-    Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
-};
+use crate::{Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub struct RcInsertion;
 
@@ -182,6 +180,25 @@ impl MirPass for RcInsertion {
         // excludes them from Rule 3 below).
         func.locals.extend(extra_locals);
 
+        // Last-use destroy: Release+null after the last statement that uses an owned RC local, so
+        // UI temps and `js` handles unpin before later unrelated work. Scope-exit Release at Return
+        // stays (nop on null). Skip terminator-only last uses (`if x`).
+        //
+        // Functions with `Await` keep RC locals until resume / `AsyncComplete`: a capture cell or
+        // funcbox can be CFG-dead after the call that produces the awaited future while the host
+        // worker still holds `funcbox_env` as a raw pointer. Releasing before suspend UAF-hangs
+        // `WebWorkerPool.dispatch_async`. Sync functions (UI rebuild) still destroy at last use.
+        // Sink/take params are excluded: early `= null` on a remapped param would copy-prop into the
+        // caller's still-live argument after inlining.
+        let has_await = func
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::Await { .. }));
+        if !has_await {
+            insert_early_releases(func, interner, &is_owned_ref, &take_params, &mut changed);
+            insert_early_value_drops(func, interner, &mut changed);
+        }
+
         // Rule 3: scope-exit release at every `Return` / `AsyncComplete`. Await must not release —
         // coroutine locals stay live across suspend (ownership moves to the Future frame).
         let owned_locals: Vec<u32> = (0..func.locals.len() as u32)
@@ -243,7 +260,297 @@ impl MirPass for RcInsertion {
     }
 }
 
-/// If `rvalue` is a plain copy of an owned reference local, return that local (candidate for move).
+fn release_and_null(local: u32) -> [Statement; 2] {
+    [
+        Statement::Release(Operand::Copy(Place::Local(Local(local)))),
+        Statement::Assign(
+            Place::Local(Local(local)),
+            Rvalue::Use(Operand::Const(Const::Null)),
+        ),
+    ]
+}
+
+fn rc_op_on_local(stmt: &Statement, local: u32) -> bool {
+    match stmt {
+        Statement::Retain(Operand::Copy(Place::Local(l)))
+        | Statement::Release(Operand::Copy(Place::Local(l))) => l.0 == local,
+        Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null))) => {
+            l.0 == local
+        }
+        _ => false,
+    }
+}
+
+fn assigns_local(stmt: &Statement, local: u32) -> bool {
+    matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local)
+}
+
+/// Last-use destroy is for pinning (`js` / class temps after a read or DOM op), not for
+/// arguments of `Call`/`New`/`UnionNew`: those callees may store a borrow (funcbox env,
+/// weak field payload, union spine) that CFG liveness does not see.
+fn allows_early_destroy(stmt: &Statement) -> bool {
+    match stmt {
+        Statement::Print { .. } | Statement::JsCall { .. } => true,
+        Statement::Assign(_, rv) => matches!(
+            rv,
+            Rvalue::Use(_)
+                | Rvalue::Select { .. }
+                | Rvalue::Unary(_, _)
+                | Rvalue::Binary(_, _, _)
+                | Rvalue::UnionField { .. }
+                | Rvalue::ToString(_)
+                | Rvalue::Concat(_, _)
+                | Rvalue::StrLen(_)
+                | Rvalue::StrByteSize(_)
+                | Rvalue::CharAt(_, _)
+                | Rvalue::ByteAt(_, _)
+                | Rvalue::HashCode(_)
+        ),
+        _ => false,
+    }
+}
+
+/// Last statement index that still belongs to the same source line as `si`.
+///
+/// `println(x.id)` lowers to a field load plus a print; `del` must wait until that line finishes.
+/// A later [`Statement::SourceLine`] ends the line (so later work in the same function can run
+/// after destroy). With no later marker, the rest of the block is the current line — typical for
+/// a helper whose last statement is that print, right before `Return`.
+fn source_line_end(block: &crate::BasicBlock, si: usize) -> usize {
+    let mut end = si;
+    for (j, s) in block.stmts.iter().enumerate().skip(si + 1) {
+        if matches!(s, Statement::SourceLine(_)) {
+            break;
+        }
+        end = j;
+    }
+    end
+}
+
+/// Last-use destroy for owned RC locals (classes, strings, collections, `js`).
+fn insert_early_releases(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    is_owned_ref: &dyn Fn(u32) -> bool,
+    take_params: &HashSet<u32>,
+    changed: &mut bool,
+) {
+    let live_out = liveness::live_out(func);
+    let live_in: Vec<HashSet<u32>> = (0..func.blocks.len())
+        .map(|bi| live_in_of(func, &live_out, bi))
+        .collect();
+    let owned: Vec<u32> = (0..func.locals.len() as u32)
+        .filter(|i| {
+            is_owned_ref(*i)
+                && !take_params.contains(i)
+                && {
+                    let ty = func.locals[*i as usize].ty;
+                    ty != interner.string()
+                        && !matches!(
+                            interner.kind(ty),
+                            dream_types::TyKind::Array(_)
+                                | dream_types::TyKind::Func(_, _)
+                                | dream_types::TyKind::Union(_, _)
+                        )
+                }
+        })
+        .collect();
+    let mut transferred: HashSet<(usize, usize, u32)> = HashSet::new();
+    for (bi, block) in func.blocks.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            if let Statement::Assign(Place::Local(_), rvalue) = stmt {
+                if is_borrowed_copy(rvalue, interner) {
+                    if let Some(src) = move_source(rvalue, is_owned_ref) {
+                        if !live_after_stmt(func, &live_out, bi, si, src.0) {
+                            transferred.insert((bi, si, src.0));
+                        }
+                    }
+                }
+            }
+            for local in take_owned_arg_locals(stmt, is_owned_ref) {
+                if !live_after_stmt(func, &live_out, bi, si, local) {
+                    transferred.insert((bi, si, local));
+                }
+            }
+        }
+    }
+
+    let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
+    for (bi, block) in func.blocks.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            for &local in &owned {
+                if transferred.contains(&(bi, si, local)) || rc_op_on_local(stmt, local) {
+                    continue;
+                }
+                let used = stmt_reads_local(stmt, local);
+                let defined_dead =
+                    assigns_local(stmt, local) && !live_after_stmt(func, &live_out, bi, si, local);
+                if !used && !defined_dead {
+                    continue;
+                }
+                if used && live_after_stmt(func, &live_out, bi, si, local) {
+                    continue;
+                }
+                if defined_dead || (used && !live_after_stmt(func, &live_out, bi, si, local)) {
+                    if !allows_early_destroy(stmt) {
+                        continue;
+                    }
+                    // Delay until the end of the source line so `del` does not run mid-expression
+                    // (`println(x.id)` is a field load plus a print).
+                    die_after.insert((bi, source_line_end(block, si), local));
+                }
+            }
+        }
+    }
+
+    for bi in 0..func.blocks.len() {
+        let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + 4);
+        for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
+            out.push(stmt);
+            for &local in &owned {
+                if die_after.contains(&(bi, si, local)) {
+                    out.extend(release_and_null(local));
+                    *changed = true;
+                }
+            }
+        }
+        if let Terminator::Await { future, .. } = &func.blocks[bi].terminator {
+            let future_local = match future {
+                Operand::Copy(Place::Local(l)) => Some(l.0),
+                _ => None,
+            };
+            for &local in &owned {
+                if Some(local) == future_local {
+                    continue;
+                }
+                if !live_in[bi].contains(&local) || live_out[bi].contains(&local) {
+                    continue;
+                }
+                let already = out.iter().any(|s| {
+                    matches!(
+                        s,
+                        Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
+                            if l.0 == local
+                    )
+                });
+                if already {
+                    continue;
+                }
+                out.extend(release_and_null(local));
+                *changed = true;
+            }
+        }
+        func.blocks[bi].stmts = out;
+    }
+
+    // Futures that die after resume: release at the start of the resume block (still needed at Await).
+    let live_out = liveness::live_out(func);
+    let mut resume_releases: Vec<(usize, u32)> = Vec::new();
+    for block in &func.blocks {
+        if let Terminator::Await { future, resume, .. } = &block.terminator {
+            let Operand::Copy(Place::Local(l)) = future else {
+                continue;
+            };
+            if !is_owned_ref(l.0) {
+                continue;
+            }
+            if live_in_of(func, &live_out, resume.0 as usize).contains(&l.0) {
+                continue;
+            }
+            resume_releases.push((resume.0 as usize, l.0));
+        }
+    }
+    for (ri, local) in resume_releases {
+        let already = func.blocks[ri]
+            .stmts
+            .iter()
+            .any(|s| rc_op_on_local(s, local));
+        if already {
+            continue;
+        }
+        let mut stmts = Vec::with_capacity(func.blocks[ri].stmts.len() + 2);
+        stmts.extend(release_and_null(local));
+        stmts.append(&mut func.blocks[ri].stmts);
+        func.blocks[ri].stmts = stmts;
+        *changed = true;
+    }
+}
+
+fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize) -> bool {
+    let decl = &func.locals[idx];
+    if !interner.is_value_type(decl.ty) || decl.is_ref || decl.manual_drop {
+        return false;
+    }
+    if decl.name.as_deref() == Some("this") {
+        return false;
+    }
+    if idx < func.params.len() {
+        return false;
+    }
+    if decl.name.is_some() {
+        return true;
+    }
+    false
+}
+
+/// Early `ValueDrop` after the last use of an owning value local. Whole-value copy-out (`dest = src`)
+/// keeps copy semantics (frame teardown still drops `src`); last *read* drops immediately.
+fn insert_early_value_drops(func: &mut MirFunction, interner: &TypeInterner, changed: &mut bool) {
+    let live_out = liveness::live_out(func);
+    let owning: Vec<u32> = (0..func.locals.len())
+        .filter(|&i| is_owning_value_local(func, interner, i))
+        .map(|i| i as u32)
+        .collect();
+    if owning.is_empty() {
+        return;
+    }
+    let mut drop_at: Vec<(usize, usize, u32)> = Vec::new();
+    for (bi, block) in func.blocks.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            for &local in &owning {
+                if matches!(stmt, Statement::ValueDrop(l) if l.0 == local) {
+                    continue;
+                }
+                let whole_copy_out = matches!(
+                    stmt,
+                    Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s))))
+                        if s.0 == local && d.0 != local
+                );
+                if whole_copy_out {
+                    continue;
+                }
+                let used = stmt_reads_local(stmt, local) || assigns_local(stmt, local);
+                if !used || live_after_stmt(func, &live_out, bi, si, local) {
+                    continue;
+                }
+                drop_at.push((bi, source_line_end(block, si), local));
+            }
+        }
+    }
+    if drop_at.is_empty() {
+        return;
+    }
+    let mut by_block: HashMap<usize, Vec<(usize, u32)>> = HashMap::new();
+    for (bi, si, local) in drop_at {
+        by_block.entry(bi).or_default().push((si, local));
+        func.locals[local as usize].manual_drop = true;
+    }
+    for (bi, sites) in by_block {
+        let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + sites.len());
+        for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
+            out.push(stmt);
+            for (ssi, local) in &sites {
+                if *ssi == si {
+                    out.push(Statement::ValueDrop(Local(*local)));
+                    *changed = true;
+                }
+            }
+        }
+        func.blocks[bi].stmts = out;
+    }
+}
+
+/// If `rvalue` is a plain copy (or equivalent upcast) of an owned reference local, return that local.
 fn move_source(rvalue: &Rvalue, is_owned_ref: &dyn Fn(u32) -> bool) -> Option<Local> {
     match rvalue {
         Rvalue::Use(Operand::Copy(Place::Local(src))) if is_owned_ref(src.0) => Some(*src),
@@ -261,9 +568,14 @@ fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])> {
         }
         // Constructor payloads are unmarked sinks; without this, callers release after `New` while
         // the ctor already moved the same +1 into fields (UAF / empty JsonValue maps, etc.).
-        Statement::Assign(_, Rvalue::New { ctor: Some(_), args, .. }) => {
-            Some((vec![true; args.len()], args))
-        }
+        Statement::Assign(
+            _,
+            Rvalue::New {
+                ctor: Some(_),
+                args,
+                ..
+            },
+        ) => Some((vec![true; args.len()], args)),
         // Indirect `fun` values carry no `take_params` ABI, but async constructors (and other
         // sink-default callees) still consume the argument. Treat every indirect arg as a sink so
         // the wrapper does not release a pointer the callee stored on a Future frame.

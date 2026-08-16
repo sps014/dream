@@ -74,9 +74,7 @@ fn elide_transparent_diamonds(func: &mut MirFunction) -> bool {
     for bi in 0..n {
         let head = BlockId(bi as u32);
         let Terminator::If {
-            then_blk,
-            else_blk,
-            ..
+            then_blk, else_blk, ..
         } = func.blocks[bi].terminator
         else {
             continue;
@@ -127,11 +125,7 @@ fn elide_around_transparent_loops(func: &mut MirFunction) -> bool {
     let loops = cfg::natural_loops(func);
     let mut changed = false;
     for lp in loops {
-        if !lp
-            .body
-            .iter()
-            .all(|&b| block_stmts_transparent(func, b))
-        {
+        if !lp.body.iter().all(|&b| block_stmts_transparent(func, b)) {
             continue;
         }
         let header = lp.header;
@@ -481,7 +475,7 @@ mod tests {
             def: dream_types::DefId(0),
             args: vec![],
             ret: i.void(),
-        take_params: vec![],
+            take_params: vec![],
         };
         b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
         b.push(Statement::Call {
@@ -608,7 +602,7 @@ mod tests {
             def: dream_types::DefId(0),
             args: vec![],
             ret: i.void(),
-        take_params: vec![],
+            take_params: vec![],
         };
         b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
         b.terminate(Terminator::If {
@@ -781,7 +775,15 @@ mod tests {
                 _ => "other",
             })
             .collect();
-        assert_eq!(kinds, vec!["release", "assign", "retain", "release"]);
+        // Last-use destroy may Release+null `t` after the retain; scope-exit Release remains.
+        assert!(
+            kinds
+                .windows(3)
+                .any(|w| w == ["release", "assign", "retain"]),
+            "expected release/assign/retain of dest, got {:?}",
+            kinds
+        );
+        assert!(kinds.iter().filter(|k| **k == "release").count() >= 2);
     }
 
     #[test]
@@ -804,7 +806,14 @@ mod tests {
                 _ => "other",
             })
             .collect();
-        assert_eq!(kinds, vec!["release", "assign", "retain", "release"]);
+        assert!(
+            kinds
+                .windows(3)
+                .any(|w| w == ["release", "assign", "retain"]),
+            "expected release/assign/retain of dest, got {:?}",
+            kinds
+        );
+        assert!(kinds.iter().filter(|k| **k == "release").count() >= 2);
     }
 
     #[test]
@@ -853,9 +862,10 @@ mod tests {
             .iter()
             .map(|s| match s {
                 Statement::Release(_) => "release",
-                Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(crate::Const::Null))) => {
-                    "null"
-                }
+                Statement::Assign(
+                    Place::Local(_),
+                    Rvalue::Use(Operand::Const(crate::Const::Null)),
+                ) => "null",
                 Statement::Assign(..) => "assign",
                 Statement::Retain(_) => "retain",
                 _ => "other",
@@ -908,5 +918,144 @@ mod tests {
             .filter(|s| matches!(s, Statement::Retain(_)))
             .count();
         assert!(retains >= 2, "literal retain + copy retain expected");
+    }
+
+    #[test]
+    fn strings_not_early_released_after_print() {
+        // Group/concat strings may alias a parent buffer; last-use destroy skips `string`.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let s = b.new_local(i.string(), Some("s".into()));
+        let tmp = b.new_local(i.int(), Some("tmp".into()));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(crate::Const::Str("x".into()))),
+        );
+        b.push(Statement::Print {
+            arg: Operand::Copy(Place::Local(s)),
+            ty: i.string(),
+            newline: true,
+        });
+        b.push(Statement::SourceLine(2));
+        b.assign(
+            Place::Local(tmp),
+            Rvalue::Binary(
+                crate::BinOp::Add,
+                Operand::Const(crate::Const::Int(1)),
+                Operand::Const(crate::Const::Int(2)),
+            ),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &i);
+        let stmts = &func.blocks[0].stmts;
+        let print_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Print { .. }))
+            .unwrap();
+        let add_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(_, Rvalue::Binary(..))))
+            .unwrap();
+        let early_release = stmts.iter().enumerate().any(|(idx, st)| {
+            idx > print_at
+                && idx < add_at
+                && matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s)
+        });
+        assert!(
+            !early_release,
+            "string locals stay until scope exit, got {:?}",
+            stmts
+        );
+    }
+
+    #[test]
+    fn early_release_after_last_js_use() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let h = b.new_local(i.js(), Some("h".into()));
+        let tmp = b.new_local(i.int(), Some("tmp".into()));
+        b.assign(
+            Place::Local(h),
+            Rvalue::Use(Operand::Const(crate::Const::Null)),
+        );
+        b.push(Statement::Print {
+            arg: Operand::Copy(Place::Local(h)),
+            ty: i.js(),
+            newline: true,
+        });
+        b.push(Statement::SourceLine(2));
+        b.assign(
+            Place::Local(tmp),
+            Rvalue::Binary(
+                crate::BinOp::Add,
+                Operand::Const(crate::Const::Int(1)),
+                Operand::Const(crate::Const::Int(2)),
+            ),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &i);
+        let stmts = &func.blocks[0].stmts;
+        let print_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Print { .. }))
+            .unwrap();
+        let add_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(_, Rvalue::Binary(..))))
+            .unwrap();
+        let early = stmts.iter().enumerate().any(|(idx, st)| {
+            idx > print_at
+                && idx < add_at
+                && matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == h)
+        });
+        assert!(
+            early,
+            "expected Release of js handle between print and add, got {:?}",
+            stmts
+        );
+    }
+
+    #[test]
+    fn no_early_release_of_loop_carried_local() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let s = b.new_local(i.string(), Some("s".into()));
+        let c = b.new_param(i.bool(), Some("c".into()));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(crate::Const::Str("x".into()))),
+        );
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.push(Statement::Print {
+            arg: Operand::Copy(Place::Local(s)),
+            ty: i.string(),
+            newline: true,
+        });
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &i);
+        let body_stmts = &func.blocks[body.0 as usize].stmts;
+        let body_early = body_stmts
+            .iter()
+            .any(|st| matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s));
+        assert!(
+            !body_early,
+            "loop-carried s must not be released in the body: {:?}",
+            body_stmts
+        );
     }
 }

@@ -1,9 +1,8 @@
 //! HIR expression, statement, place, binding, and callee nodes.
 
-use dream_types::{DefId, TypeId};
-use crate::ops::{BinOp, UnOp};
 use crate::module::{GlobalId, LocalId};
-
+use crate::ops::{BinOp, UnOp};
+use dream_types::{DefId, TypeId};
 
 /// A resolved reference to a variable or function.
 #[derive(Debug, Clone, PartialEq, Eq)]

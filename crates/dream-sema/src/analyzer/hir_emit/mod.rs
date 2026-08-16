@@ -130,10 +130,7 @@ impl<'a> Analyzer<'a> {
     /// Starts HIR collection for `function`, returning whether it is a candidate. Slice 1 emits only
     /// plain non-generic, non-static free functions (no `this` receiver) that are registered as a
     /// `DefId`; everything else is skipped (collection stays off).
-    pub(in crate::analyzer) fn hir_begin_function(
-        &mut self,
-        function: &FunctionNode<'a>,
-    ) {
+    pub(in crate::analyzer) fn hir_begin_function(&mut self, function: &FunctionNode<'a>) {
         // `extern` functions are declarations with no body: host-interop imports are emitted as
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for

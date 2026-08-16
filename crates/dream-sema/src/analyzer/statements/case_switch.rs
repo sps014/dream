@@ -2,9 +2,9 @@
 //! pattern-matching `switch` in [`super::super::switch_unions`]).
 
 use super::*;
+use crate::errors::SemanticError;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::HExpr;
-use crate::errors::SemanticError;
 use dream_syntax::nodes::{ExpressionNode, StatementNode, Type};
 
 impl<'a> Analyzer<'a> {

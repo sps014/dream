@@ -1,9 +1,9 @@
 //! Identifier resolution (locals, globals, first-class function values) and the name→`Type` parser.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
@@ -29,10 +29,7 @@ impl<'a> Analyzer<'a> {
         let lookup = (*symbol_table).as_ref().borrow().get_symbol(id);
         let r = match lookup {
             Ok(t) => {
-                (*symbol_table)
-                    .as_ref()
-                    .borrow_mut()
-                    .mark_used(&id.text);
+                (*symbol_table).as_ref().borrow_mut().mark_used(&id.text);
                 // A local bound to a polymorphic generic function item instantiates when the
                 // use site publishes a concrete `fun(...)` expected type.
                 if let Type::GenericFunctionItem(ref gname) = t {
@@ -54,29 +51,39 @@ impl<'a> Analyzer<'a> {
             Err(e) => {
                 // A bare identifier that names a top-level function is a first-class function value.
                 if let Ok(sig) = self.function_table.get_function(&id.text) {
-                // A boxed `fun(...)` value is invoked through synchronous `call_indirect`. An
-                // `async fun`'s constructor returns an untagged `Future` frame pointer, so boxing
-                // it as `fun(...): Future<T>` matches the WASM result and lets the caller
-                // `await f(...)` like a direct async call.
-                //
-                // `WebWorker`/`map`/`dispatch` have two body shapes:
-                // - `fun(...): T` — including a string-returning top-level `async fun` boxed as
-                //   `fun(string): string` so the sync wire-wrapper + trampoline identity-`toWire`
-                //   path can drive the Future (string-only).
-                // - `fun(...): Future<T>` — named async funs (any `T`) and `async` lambdas; the
-                //   Future-body constructor awaits then wire-encodes, so any `TOut` works.
-                if sig.is_async {
-                    let returns_string =
-                        matches!(&sig.return_type, Some(t) if t.get_type() == "string");
-                    if self.is_webworker_body_call() && returns_string {
+                    // A boxed `fun(...)` value is invoked through synchronous `call_indirect`. An
+                    // `async fun`'s constructor returns an untagged `Future` frame pointer, so boxing
+                    // it as `fun(...): Future<T>` matches the WASM result and lets the caller
+                    // `await f(...)` like a direct async call.
+                    //
+                    // `WebWorker`/`map`/`dispatch` have two body shapes:
+                    // - `fun(...): T` — including a string-returning top-level `async fun` boxed as
+                    //   `fun(string): string` so the sync wire-wrapper + trampoline identity-`toWire`
+                    //   path can drive the Future (string-only).
+                    // - `fun(...): Future<T>` — named async funs (any `T`) and `async` lambdas; the
+                    //   Future-body constructor awaits then wire-encodes, so any `TOut` works.
+                    if sig.is_async {
+                        let returns_string =
+                            matches!(&sig.return_type, Some(t) if t.get_type() == "string");
+                        if self.is_webworker_body_call() && returns_string {
+                            let params = sig
+                                .parameters
+                                .iter()
+                                .map(|p| Self::type_from_name(p))
+                                .collect();
+                            let ret = sig.return_type.clone().unwrap_or(Type::Void);
+                            let func_ty = Type::Function(params, Box::new(ret.clone()));
+                            self.hir_set_func_value(&id.text, &func_ty, &ret);
+                            return Ok(func_ty);
+                        }
                         let params = sig
                             .parameters
                             .iter()
                             .map(|p| Self::type_from_name(p))
                             .collect();
-                        let ret = sig.return_type.clone().unwrap_or(Type::Void);
-                        let func_ty = Type::Function(params, Box::new(ret.clone()));
-                        self.hir_set_func_value(&id.text, &func_ty, &ret);
+                        let box_ret = Self::async_return_type(true, sig.return_type.clone());
+                        let func_ty = Type::Function(params, Box::new(box_ret.clone()));
+                        self.hir_set_func_value(&id.text, &func_ty, &box_ret);
                         return Ok(func_ty);
                     }
                     let params = sig
@@ -84,21 +91,10 @@ impl<'a> Analyzer<'a> {
                         .iter()
                         .map(|p| Self::type_from_name(p))
                         .collect();
-                    let box_ret =
-                        Self::async_return_type(true, sig.return_type.clone());
-                    let func_ty = Type::Function(params, Box::new(box_ret.clone()));
-                    self.hir_set_func_value(&id.text, &func_ty, &box_ret);
+                    let ret = sig.return_type.clone().unwrap_or(Type::Void);
+                    let func_ty = Type::Function(params, Box::new(ret.clone()));
+                    self.hir_set_func_value(&id.text, &func_ty, &ret);
                     return Ok(func_ty);
-                }
-                let params = sig
-                    .parameters
-                    .iter()
-                    .map(|p| Self::type_from_name(p))
-                    .collect();
-                let ret = sig.return_type.clone().unwrap_or(Type::Void);
-                let func_ty = Type::Function(params, Box::new(ret.clone()));
-                self.hir_set_func_value(&id.text, &func_ty, &ret);
-                return Ok(func_ty);
                 }
                 // A generic function used as a value: with a `fun(...)` context, instantiate now;
                 // otherwise bind a polymorphic item that instantiates at each later use.

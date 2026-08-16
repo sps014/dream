@@ -4,8 +4,8 @@
 //! methods, kept in the `declarations` module alongside the other top-level registration passes.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::function_table::FunctionTableInfo;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::PRIMITIVE_TYPE_NAMES;
 use dream_syntax::nodes::{FunctionNode, ProgramNode, Type};
@@ -273,10 +273,7 @@ impl<'a> Analyzer<'a> {
     ///
     /// Generic array templates (`extend T[] { … }`) are keyed under [`ARRAY_EXTEND_KEY`] (`"[]"`),
     /// not under the spelling `T[]`, so every concrete `Elem[]` shares one template.
-    pub(in crate::analyzer) fn stash_generic_extensions(
-        &mut self,
-        node: &'a ProgramNode<'a>,
-    ) {
+    pub(in crate::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
         use dream_syntax::nodes::types::ARRAY_EXTEND_KEY;
         for ext in node.extends.iter() {
             if ext.generic_parameters.is_some() {

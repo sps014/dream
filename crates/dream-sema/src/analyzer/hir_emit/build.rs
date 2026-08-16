@@ -430,8 +430,7 @@ impl<'a> Analyzer<'a> {
 }
 
 type FieldMap = std::collections::HashMap<dream_types::TypeId, Vec<dream_types::TypeId>>;
-type UnionFieldMap =
-    std::collections::HashMap<dream_types::TypeId, Vec<Vec<dream_types::TypeId>>>;
+type UnionFieldMap = std::collections::HashMap<dream_types::TypeId, Vec<Vec<dream_types::TypeId>>>;
 type LayoutMemo = std::collections::HashMap<dream_types::TypeId, (u32, u32)>;
 
 /// Recursively computes the inline `(size, align)` of a value type `ty` — a value (`struct`) type or

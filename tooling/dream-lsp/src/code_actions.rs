@@ -87,7 +87,11 @@ pub fn imported_packages(text: &str) -> std::collections::HashSet<String> {
 }
 
 /// Workspace edit that inserts `import <package>;` at the top import block.
-pub fn import_edit(uri: &tower_lsp::lsp_types::Url, text: &str, package: &str) -> Option<WorkspaceEdit> {
+pub fn import_edit(
+    uri: &tower_lsp::lsp_types::Url,
+    text: &str,
+    package: &str,
+) -> Option<WorkspaceEdit> {
     if already_imports(text, package) {
         return None;
     }
@@ -199,8 +203,7 @@ fn package_for_symbol(file_path: Option<&str>, name: &str) -> Option<String> {
     if let Some(pkg) = symbol_to_package().get(name).copied() {
         return Some(pkg.to_string());
     }
-    file_path
-        .and_then(|p| project_symbol_to_package(p).get(name).cloned())
+    file_path.and_then(|p| project_symbol_to_package(p).get(name).cloned())
 }
 
 /// Code actions offering to import the package that exports `name`.
@@ -242,11 +245,7 @@ pub fn unloaded_import_completions(
         if !seen.insert(name.clone()) {
             continue;
         }
-        out.push((
-            name,
-            package.to_string(),
-            format!("(import {})", package),
-        ));
+        out.push((name, package.to_string(), format!("(import {})", package)));
     }
 
     if let Some(path) = file_path {
@@ -275,11 +274,7 @@ pub fn unloaded_stdlib_completions(text: &str) -> Vec<(String, &'static str, Str
         if imported.contains(package) {
             continue;
         }
-        out.push((
-            name.clone(),
-            package,
-            format!("(import {})", package),
-        ));
+        out.push((name.clone(), package, format!("(import {})", package)));
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out

@@ -2,9 +2,9 @@
 //! `Collection`/`Iterator` methods.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{FunctionNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use std::cell::RefCell;
@@ -98,10 +98,7 @@ impl<'a> Analyzer<'a> {
 
         let base = Self::resolve_struct_parts(iterable_type)
             .map(|(b, _)| b)
-            .or_else(|| {
-                self.demangle_generic_interface(&iface_name)
-                    .map(|(b, _)| b)
-            })
+            .or_else(|| self.demangle_generic_interface(&iface_name).map(|(b, _)| b))
             .unwrap_or_else(|| iface_name.clone());
 
         let (enumerator_type, it_recv_hir) = if base == "Iterator" {
@@ -291,8 +288,8 @@ impl<'a> Analyzer<'a> {
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
+        use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
 
         // 1. `@iterator`: an eligible 0-arg instance method returning an enumerator object.
         let (_iterator_hook, iterator_info) = match self.resolve_hook_or_diagnose(

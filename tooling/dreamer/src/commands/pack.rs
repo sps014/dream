@@ -41,10 +41,11 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
 
     let c_libs = read_c_libs_from_abi(&wasm_path);
 
-    let dream_root = find_dream_workspace_root()
-        .context("could not locate the Dream workspace (need tooling/dream-runner). \
+    let dream_root = find_dream_workspace_root().context(
+        "could not locate the Dream workspace (need tooling/dream-runner). \
                   Set DREAM_REPO to the Dream checkout root, or run pack from a tree that \
-                  includes the compiler workspace")?;
+                  includes the compiler workspace",
+    )?;
 
     let pack_dir = workspace.root.join("target").join("pack");
     std::fs::create_dir_all(&pack_dir)
@@ -184,7 +185,11 @@ fn read_c_libs_from_abi(wasm_path: &Path) -> Vec<String> {
 fn find_dream_workspace_root() -> Option<PathBuf> {
     if let Ok(repo) = std::env::var("DREAM_REPO") {
         let p = PathBuf::from(repo);
-        if p.join("tooling").join("dream-runner").join("Cargo.toml").is_file() {
+        if p.join("tooling")
+            .join("dream-runner")
+            .join("Cargo.toml")
+            .is_file()
+        {
             return Some(p);
         }
     }
@@ -215,7 +220,10 @@ fn find_dream_workspace_root() -> Option<PathBuf> {
             }
             // Also accept being inside tooling/dreamer/target/...
             if d.join("Cargo.toml").is_file()
-                && d.join("tooling").join("dream-runner").join("Cargo.toml").is_file()
+                && d.join("tooling")
+                    .join("dream-runner")
+                    .join("Cargo.toml")
+                    .is_file()
             {
                 return Some(d);
             }

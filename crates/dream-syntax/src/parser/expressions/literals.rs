@@ -1,9 +1,6 @@
 use super::super::Parser;
 use crate::lexer::Lexer;
-use crate::nodes::{
-    ExpressionNode,
-    Type,
-};
+use crate::nodes::{ExpressionNode, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use crate::token::token_kind::TokenKind::EndOfFileToken;

@@ -61,11 +61,7 @@ fn attrs_from(nodes: &[AttributeNode]) -> Vec<AttrInfo> {
         .iter()
         .map(|a| AttrInfo {
             name: a.name.text.clone(),
-            args: a
-                .args
-                .iter()
-                .map(|t| t.semantic_value())
-                .collect(),
+            args: a.args.iter().map(|t| t.semantic_value()).collect(),
         })
         .collect()
 }
@@ -98,11 +94,7 @@ fn type_display(t: &Type) -> String {
                 return "js".into();
             }
             if let Some(args) = args {
-                let inner = args
-                    .iter()
-                    .map(type_display)
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                let inner = args.iter().map(type_display).collect::<Vec<_>>().join(", ");
                 format!("{}<{}>", tok.text, inner)
             } else {
                 tok.text.clone()

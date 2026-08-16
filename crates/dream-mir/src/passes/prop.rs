@@ -167,9 +167,10 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => subst_operand(o, known),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
-            subst_operand(a, known) | subst_operand(b, known)
-        }
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CharAt(a, b)
+        | Rvalue::ByteAt(a, b)
+        | Rvalue::Concat(a, b) => subst_operand(a, known) | subst_operand(b, known),
         Rvalue::EnumName { value, .. } => subst_operand(value, known),
         Rvalue::ArrayNew { len, .. } => subst_operand(len, known),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
@@ -247,8 +248,8 @@ pub(super) fn update_known(
         // The destination's old value is gone, and any entry that *copied* it is now stale.
         invalidate(*dest, known);
         if let Rvalue::Use(op @ (Operand::Const(_) | Operand::Copy(Place::Local(_)))) = rvalue {
-            let value_typed = is_value(*dest)
-                || matches!(op, Operand::Copy(Place::Local(src)) if is_value(*src));
+            let value_typed =
+                is_value(*dest) || matches!(op, Operand::Copy(Place::Local(src)) if is_value(*src));
             if !value_typed {
                 known.insert(*dest, op.clone());
             }

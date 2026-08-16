@@ -82,13 +82,14 @@ impl<'a> Analyzer<'a> {
         let saved_call_target = self.current_call_target_name.take();
         self.current_call_target_name = Some(call_target);
 
-        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self.analyze_call_arguments_expecting_ref(
-            params,
-            expected_params.as_deref(),
-            parent_function,
-            symbol_table,
-            diagnostics,
-        )?;
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
+            .analyze_call_arguments_expecting_ref(
+                params,
+                expected_params.as_deref(),
+                parent_function,
+                symbol_table,
+                diagnostics,
+            )?;
 
         self.current_call_target_name = saved_call_target;
 

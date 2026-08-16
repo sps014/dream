@@ -16,10 +16,10 @@
 
 use super::capture_scan::lambda_free_names;
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::function_table::FunctionTableInfo;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{
     FunctionNode, LambdaBody, LambdaNode, ParameterNode, StatementNode, Type,
 };
@@ -77,11 +77,7 @@ impl<'a> Analyzer<'a> {
                         })
                         .collect()
                 }
-                _ => lambda
-                    .parameters
-                    .iter()
-                    .map(|p| p.type_.clone())
-                    .collect(),
+                _ => lambda.parameters.iter().map(|p| p.type_.clone()).collect(),
             };
             let template_body_ret = self.infer_lambda_return_type(
                 lambda,
@@ -593,8 +589,10 @@ impl<'a> Analyzer<'a> {
         let info = FunctionTableInfo::from(func_ref);
         let _ = self.function_table.add_function(name.clone(), info);
         self.type_ctx.register(DefKind::Function, &name, vec![]);
-        self.pending_lambdas
-            .insert(name.clone(), (func_ref, self.current_generic_bindings.clone()));
+        self.pending_lambdas.insert(
+            name.clone(),
+            (func_ref, self.current_generic_bindings.clone()),
+        );
 
         let func_ty_params: Vec<Type> = func_ref
             .parameters

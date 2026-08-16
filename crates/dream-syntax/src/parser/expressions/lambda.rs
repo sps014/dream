@@ -1,14 +1,10 @@
 use super::super::Parser;
-use crate::nodes::{
-    ExpressionNode, LambdaBody, LambdaNode, ParameterNode,
-    Type,
-};
+use crate::nodes::{ExpressionNode, LambdaBody, LambdaNode, ParameterNode, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Lookahead for an arrow-lambda literal (`(params) => ...`), starting at peek offset `start`
     /// True when peek offset `start` begins `<…>(…) =>` — a generic arrow-lambda.
     pub(crate) fn is_generic_lambda_start_at(&self, start: usize) -> bool {

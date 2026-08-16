@@ -1,9 +1,9 @@
 //! `sizeof(T)` and `nameof(path)` — compile-time meta forms (not reserved keywords).
 
 use super::*;
+use crate::errors::SemanticError;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::{HExpr, HExprKind};
-use crate::errors::SemanticError;
 use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_types::value_size_align;

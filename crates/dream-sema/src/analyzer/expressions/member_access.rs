@@ -2,11 +2,11 @@
 //! the struct field-index lookup.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
-use dream_hir::HExpr;
 use crate::errors::SemanticError;
 use crate::function_table::FunctionTableInfo;
 use crate::symbol_table::SymbolTable;
+use dream_diagnostics::DiagnosticBag;
+use dream_hir::HExpr;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, ParameterNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
@@ -169,10 +169,7 @@ impl<'a> Analyzer<'a> {
         if let Type::Tuple(elems) = &obj_type {
             let Some(idx) = member.text.parse::<usize>().ok() else {
                 diagnostics.report_error(
-                    format!(
-                        "tuple has no member '{}'; use .0, .1, …",
-                        member.text
-                    ),
+                    format!("tuple has no member '{}'; use .0, .1, …", member.text),
                     Some(member.position),
                 );
                 self.hir_none();
@@ -229,12 +226,7 @@ impl<'a> Analyzer<'a> {
         if let Some(iface_name) = self.interface_receiver_name(&obj_type) {
             if let Some((base, args)) = Self::resolve_struct_parts(&obj_type) {
                 if !args.is_empty() && self.is_generic_interface(&base) {
-                    self.ensure_interface_instantiated(
-                        &base,
-                        &args,
-                        &member.position,
-                        diagnostics,
-                    );
+                    self.ensure_interface_instantiated(&base, &args, &member.position, diagnostics);
                 }
             }
             let getter = getter_member_name(&member.text);
@@ -243,18 +235,10 @@ impl<'a> Analyzer<'a> {
                 .get(&iface_name)
                 .cloned()
                 .unwrap_or_default();
-            if methods
-                .iter()
-                .any(|m| accessor_member_name(m) == getter)
-            {
+            if methods.iter().any(|m| accessor_member_name(m) == getter) {
                 let get_tok = synthetic_token(TokenKind::IdentifierToken, &getter);
                 let call = ExpressionNode::MethodCall(obj, get_tok, None, vec![]);
-                return self.analyze_expression(
-                    &call,
-                    parent_function,
-                    symbol_table,
-                    diagnostics,
-                );
+                return self.analyze_expression(&call, parent_function, symbol_table, diagnostics);
             }
         }
 
@@ -457,8 +441,10 @@ impl<'a> Analyzer<'a> {
         // `expressions::lambda`'s own `__lambda_<n>` names), so this cannot collide.
         let _ = self.function_table.add_function(name.clone(), info);
         self.type_ctx.register(DefKind::Function, &name, vec![]);
-        self.pending_lambdas
-            .insert(name.clone(), (func_ref, self.current_generic_bindings.clone()));
+        self.pending_lambdas.insert(
+            name.clone(),
+            (func_ref, self.current_generic_bindings.clone()),
+        );
         self.closure_captures
             .insert(name.clone(), vec![(recv_name, receiver_ty.clone())]);
 

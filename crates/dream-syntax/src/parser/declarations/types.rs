@@ -5,7 +5,6 @@ use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses a type alias: `type Name = ExistingType;`. The alias is recorded and resolved
     /// (erased) during `parse_type`, so it must be declared before use.
     pub(crate) fn parse_type_alias(&mut self) -> Result<(), Error> {
@@ -39,11 +38,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if is_ref {
                     let span = ty.get_span().unwrap_or_else(|| p.current_token().position);
                     Ok(Type::Struct(
-                        SyntaxToken::new(
-                            TokenKind::IdentifierToken,
-                            span,
-                            "RefBox".to_string(),
-                        ),
+                        SyntaxToken::new(TokenKind::IdentifierToken, span, "RefBox".to_string()),
                         Some(vec![ty]),
                     ))
                 } else {
@@ -62,9 +57,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         // Positional tuple type: `(T, U, …)` with arity ≥ 2.
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             self.match_token(TokenKind::OpenParenthesisToken);
-            let elems = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
-                p.parse_type()
-            })?;
+            let elems =
+                self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_type())?;
             if elems.len() < 2 {
                 let span = elems
                     .first()

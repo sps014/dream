@@ -5,16 +5,16 @@ use super::attr_ide::{
     attribute_arg_completions, attribute_arg_context, attribute_hover, attribute_name_completions,
     attribute_name_partial, attribute_signature,
 };
+use super::detail_belongs_to;
+use super::detail_is_static_method;
 use super::{
     is_ident_byte, keywords, substitute_method_type_args, substitute_type_param_t, type_base, Decl,
     Index, Located, Ref, SymKind, GLOBAL,
 };
-use super::detail_is_static_method;
-use super::detail_belongs_to;
 use crate::code_actions::imported_packages;
+use dream::driver::source_loader::find_dream_packages_dir;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream_abi::attributes::find_spec;
-use dream::driver::source_loader::find_dream_packages_dir;
 use dream_stdlib::{BOOTSTRAP_PACKAGES, STD_PACKAGES};
 
 /// True when `offset` is in a `receiver.` / `receiver.partial` member-access position.
@@ -97,12 +97,7 @@ fn push_module_completion(
     if out.iter().any(|(n, ..)| n == &name) {
         return;
     }
-    out.push((
-        name,
-        SymKind::Module,
-        detail.to_string(),
-        None,
-    ));
+    out.push((name, SymKind::Module, detail.to_string(), None));
 }
 
 /// Package / local-module completions for an unquoted `import` path prefix.
@@ -144,12 +139,7 @@ fn import_path_completions(
                     }
                 } else if let Some(stem) = name.strip_suffix(".dream") {
                     if stem.starts_with(partial) {
-                        push_module_completion(
-                            &mut out,
-                            stem.to_string(),
-                            "module",
-                            &imported,
-                        );
+                        push_module_completion(&mut out, stem.to_string(), "module", &imported);
                     }
                 }
             }
@@ -387,8 +377,7 @@ impl Index {
                 SymKind::Field | SymKind::Method => {
                     let mut recv_ty = None;
                     if let Some(recv) = receiver {
-                        recv_ty =
-                            self.receiver_type_name(recv, reference.scope, reference.start);
+                        recv_ty = self.receiver_type_name(recv, reference.scope, reference.start);
                         receiver_ty_opt = recv_ty.clone();
                     }
                     self.resolve_member(recv_ty.as_deref(), &reference.name)
@@ -409,11 +398,8 @@ impl Index {
                 type_args = args;
             }
         }
-        let detail = Self::apply_type_args_to_detail(
-            &decl.detail,
-            receiver_ty_opt.as_deref(),
-            &type_args,
-        );
+        let detail =
+            Self::apply_type_args_to_detail(&decl.detail, receiver_ty_opt.as_deref(), &type_args);
 
         let mut contents = format!("```dream\n{}\n```", detail);
         if let Some(doc) = &decl.doc_comment {
@@ -599,8 +585,7 @@ impl Index {
                 recv_obj_start -= 1;
             }
             let receiver_obj = &text[recv_obj_start..recv_obj_end];
-            let receiver_ty_opt =
-                self.receiver_type_name(receiver_obj, scope, recv_obj_start);
+            let receiver_ty_opt = self.receiver_type_name(receiver_obj, scope, recv_obj_start);
 
             if let Some(decl) = self.resolve_member(receiver_ty_opt.as_deref(), name) {
                 let mut d = decl.clone();
@@ -958,7 +943,9 @@ impl Index {
         }
         let partial = partial_ident_before(text, offset);
         if !partial.is_empty() {
-            out.retain(|(name, ..)| name.starts_with(&partial) || name.contains(&format!(".{partial}")));
+            out.retain(|(name, ..)| {
+                name.starts_with(&partial) || name.contains(&format!(".{partial}"))
+            });
         }
         out
     }
@@ -972,7 +959,10 @@ impl Index {
     ) -> Option<String> {
         let subject = subject.trim();
         // Prefer the variable/parameter type when the subject is an identifier.
-        if subject.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        if subject
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
             if let Some(ty) = self.variable_type(subject, scope, before) {
                 let base = type_base(&ty).to_string();
                 if self

@@ -2,9 +2,9 @@
 //! and the `is`-with-binding flow typing declared into the taken branch.
 
 use super::*;
+use crate::errors::SemanticError;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::{HExpr, HStmt};
-use crate::errors::SemanticError;
 use dream_syntax::nodes::{ExpressionNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 

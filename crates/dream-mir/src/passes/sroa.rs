@@ -591,13 +591,15 @@ mod tests {
             Sroa.run(&mut func, &i),
             "Retain/Release on the object local must not block promotion"
         );
-        let has_rc = func.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
-            matches!(
-                s,
-                Statement::Retain(_) | Statement::Release(_)
-            )
-        });
-        assert!(!has_rc, "object Retain/Release should be dropped with the New");
+        let has_rc = func
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .any(|s| matches!(s, Statement::Retain(_) | Statement::Release(_)));
+        assert!(
+            !has_rc,
+            "object Retain/Release should be dropped with the New"
+        );
         let has_new = func
             .blocks
             .iter()

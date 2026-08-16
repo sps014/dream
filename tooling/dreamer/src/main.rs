@@ -176,14 +176,10 @@ fn main() -> ExitCode {
             dev,
             package.as_deref(),
         ),
-        Cmd::Remove { name, package } => {
-            commands::remove::run(&cwd, &name, package.as_deref())
-        }
+        Cmd::Remove { name, package } => commands::remove::run(&cwd, &name, package.as_deref()),
         Cmd::Install => commands::install::run(&cwd),
         Cmd::Update { name } => commands::update::run(&cwd, name),
-        Cmd::Build { release, package } => {
-            commands::build::run(&cwd, release, package.as_deref())
-        }
+        Cmd::Build { release, package } => commands::build::run(&cwd, release, package.as_deref()),
         Cmd::Run {
             target,
             release,
@@ -201,9 +197,7 @@ fn main() -> ExitCode {
             token,
             package,
         } => commands::publish::run(&cwd, registry, token, package.as_deref()),
-        Cmd::Pack { targets, package } => {
-            commands::pack::run(&cwd, &targets, package.as_deref())
-        }
+        Cmd::Pack { targets, package } => commands::pack::run(&cwd, &targets, package.as_deref()),
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree { package } => commands::tree::run(&cwd, package.as_deref()),
     };

@@ -176,9 +176,7 @@ impl<'a> Analyzer<'a> {
                     "interface inheritance cycle involving '{}'",
                     stack.join(" -> ") + " -> " + base_name
                 ),
-                self.interface_decls
-                    .get(base_name)
-                    .map(|d| d.name.position),
+                self.interface_decls.get(base_name).map(|d| d.name.position),
             );
             return None;
         }
@@ -324,9 +322,7 @@ impl<'a> Analyzer<'a> {
     /// Builds the interface dispatch metadata carried into codegen: the ordered interfaces (index =
     /// `iface_id`) with each method slot's `call_indirect` signature, and, per implementing class,
     /// the concrete method symbol filling each `(interface, slot)`.
-    pub(in crate::analyzer) fn hir_build_interfaces(
-        &mut self,
-    ) -> dream_hir::InterfaceTable {
+    pub(in crate::analyzer) fn hir_build_interfaces(&mut self) -> dream_hir::InterfaceTable {
         use dream_hir::{InterfaceImpl, InterfaceInfo, InterfaceTable};
 
         let iface_order: Vec<(String, Vec<&'a FunctionNode<'a>>)> = self
@@ -411,11 +407,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when class `class_name` was validated as implementing interface `iface_name`.
-    pub(in crate::analyzer) fn class_implements(
-        &self,
-        class_name: &str,
-        iface_name: &str,
-    ) -> bool {
+    pub(in crate::analyzer) fn class_implements(&self, class_name: &str, iface_name: &str) -> bool {
         self.implements
             .get(class_name)
             .is_some_and(|ifaces| ifaces.iter().any(|i| i == iface_name))
@@ -513,11 +505,7 @@ impl<'a> Analyzer<'a> {
 
     /// Registers inherited interface default bodies (`is_empty`, `all`, `first`, …) onto a
     /// concrete array type after its `implements` entry is recorded.
-    fn attach_array_interface_defaults(
-        &mut self,
-        array_ty: &str,
-        diagnostics: &mut DiagnosticBag,
-    ) {
+    fn attach_array_interface_defaults(&mut self, array_ty: &str, diagnostics: &mut DiagnosticBag) {
         let ifaces = self.implements.get(array_ty).cloned().unwrap_or_default();
         let mut owned: Vec<FunctionNode<'a>> = Vec::new();
         for iface in &ifaces {

@@ -1,5 +1,5 @@
 mod core;
 mod lambda;
-mod patterns;
 mod literals;
+mod patterns;
 mod syntax_block;

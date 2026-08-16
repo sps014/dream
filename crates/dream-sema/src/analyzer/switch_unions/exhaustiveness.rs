@@ -4,10 +4,10 @@
 //! `switch_unions` module alongside union construction, `switch`/`foreach` analysis, and lowering.
 
 use super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionInfo;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{PatternNode, SwitchArm, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -134,48 +134,46 @@ impl<'a> Analyzer<'a> {
                 // (across all arms, including nested sub-patterns) is decided in `check_exhaustiveness`.
                 Ok(PatternInfo { irrefutable: false })
             }
-            PatternNode::Tuple(elems) => {
-                match expected {
-                    Type::Tuple(ts) => {
-                        if ts.len() != elems.len() {
-                            diagnostics.report_error(
-                                format!(
-                                    "tuple pattern has {} elements but subject type has {}",
-                                    elems.len(),
-                                    ts.len()
-                                ),
-                                pattern.position(),
-                            );
-                        }
-                        let mut irrefutable = true;
-                        for (i, sub) in elems.iter().enumerate() {
-                            let slot = ts.get(i).cloned().unwrap_or(Type::Unknown);
-                            let info = self.check_pattern(sub, &slot, scope, diagnostics)?;
-                            irrefutable = irrefutable && info.irrefutable;
-                        }
-                        Ok(PatternInfo { irrefutable })
-                    }
-                    Type::Unknown => {
-                        for sub in elems {
-                            self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
-                        }
-                        Ok(PatternInfo { irrefutable: false })
-                    }
-                    other => {
+            PatternNode::Tuple(elems) => match expected {
+                Type::Tuple(ts) => {
+                    if ts.len() != elems.len() {
                         diagnostics.report_error(
                             format!(
-                                "tuple pattern cannot match a value of type '{}'",
-                                other.display_name()
+                                "tuple pattern has {} elements but subject type has {}",
+                                elems.len(),
+                                ts.len()
                             ),
                             pattern.position(),
                         );
-                        for sub in elems {
-                            self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
-                        }
-                        Ok(PatternInfo { irrefutable: false })
                     }
+                    let mut irrefutable = true;
+                    for (i, sub) in elems.iter().enumerate() {
+                        let slot = ts.get(i).cloned().unwrap_or(Type::Unknown);
+                        let info = self.check_pattern(sub, &slot, scope, diagnostics)?;
+                        irrefutable = irrefutable && info.irrefutable;
+                    }
+                    Ok(PatternInfo { irrefutable })
                 }
-            }
+                Type::Unknown => {
+                    for sub in elems {
+                        self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
+                    }
+                    Ok(PatternInfo { irrefutable: false })
+                }
+                other => {
+                    diagnostics.report_error(
+                        format!(
+                            "tuple pattern cannot match a value of type '{}'",
+                            other.display_name()
+                        ),
+                        pattern.position(),
+                    );
+                    for sub in elems {
+                        self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
+                    }
+                    Ok(PatternInfo { irrefutable: false })
+                }
+            },
             PatternNode::Range(lo, hi) => {
                 for bound in [lo, hi] {
                     if !bound.is_unknown()
@@ -396,7 +394,10 @@ impl<'a> Analyzer<'a> {
     /// `Circle(_)` does not bind, but `Circle(r)` does). Used to reject a binding-introducing
     /// or-pattern alternative, since a name bound by only *some* alternatives would be meaningless
     /// (which alternative matched is not visible to the arm body).
-    pub(super) fn pattern_introduces_binding(p: &PatternNode, union_info: &Option<UnionInfo>) -> bool {
+    pub(super) fn pattern_introduces_binding(
+        p: &PatternNode,
+        union_info: &Option<UnionInfo>,
+    ) -> bool {
         match p {
             PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => false,
             PatternNode::Binding(name) => !matches!(union_info, Some(info)

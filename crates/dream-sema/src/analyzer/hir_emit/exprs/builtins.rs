@@ -9,11 +9,7 @@ impl<'a> Analyzer<'a> {
     /// numerics and `bool` route through the in-wasm `*_to_string` runtime before `$print_string`.
     /// `fun(...)` values print as their static type spelling (funcboxes are untagged and have no
     /// object-protocol `to_string`). Other non-scalars go through `$print_object`.
-    pub(in crate::analyzer) fn hir_set_print(
-        &mut self,
-        arg: Option<HExpr>,
-        newline: bool,
-    ) {
+    pub(in crate::analyzer) fn hir_set_print(&mut self, arg: Option<HExpr>, newline: bool) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -102,11 +98,7 @@ impl<'a> Analyzer<'a> {
 
     /// Records a runtime type test `value is target` (typed `bool`) for an `object`-typed operand:
     /// the backend compares the value's runtime tag against `target`'s. Fails if `value` was dropped.
-    pub(in crate::analyzer) fn hir_set_is_type(
-        &mut self,
-        value: Option<HExpr>,
-        target: &Type,
-    ) {
+    pub(in crate::analyzer) fn hir_set_is_type(&mut self, value: Option<HExpr>, target: &Type) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -262,11 +254,7 @@ impl<'a> Analyzer<'a> {
         self.hir_set_array_new(elem_ty, Some(zero));
     }
 
-    pub(in crate::analyzer) fn hir_set_array_new(
-        &mut self,
-        elem_ty: &Type,
-        len: Option<HExpr>,
-    ) {
+    pub(in crate::analyzer) fn hir_set_array_new(&mut self, elem_ty: &Type, len: Option<HExpr>) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -306,11 +294,7 @@ impl<'a> Analyzer<'a> {
 
     /// Records `Bytes.to<T>(bytes)` — reconstructs a blittable value of `target` from a `byte[]`
     /// buffer. Drops out of coverage if the buffer operand is not representable.
-    pub(in crate::analyzer) fn hir_set_from_bytes(
-        &mut self,
-        target: &Type,
-        bytes: Option<HExpr>,
-    ) {
+    pub(in crate::analyzer) fn hir_set_from_bytes(&mut self, target: &Type, bytes: Option<HExpr>) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -420,11 +404,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records `recv.byte_at(idx)` (typed `int`): a runtime `$byte_at` read.
-    pub(in crate::analyzer) fn hir_set_byte_at(
-        &mut self,
-        recv: Option<HExpr>,
-        idx: Option<HExpr>,
-    ) {
+    pub(in crate::analyzer) fn hir_set_byte_at(&mut self, recv: Option<HExpr>, idx: Option<HExpr>) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -432,10 +412,7 @@ impl<'a> Analyzer<'a> {
         match (recv, idx) {
             (Some(r), Some(i)) => {
                 let int = self.type_ctx.interner.int();
-                self.hir.last = Some(HExpr::new(
-                    int,
-                    HExprKind::ByteAt(Box::new(r), Box::new(i)),
-                ));
+                self.hir.last = Some(HExpr::new(int, HExprKind::ByteAt(Box::new(r), Box::new(i))));
             }
             _ => self.hir.last = None,
         }
@@ -443,11 +420,7 @@ impl<'a> Analyzer<'a> {
 
     /// Records `recv.char_at(idx)` (typed `char`): a runtime `$char_at` read. Drops out of coverage
     /// if either the receiver or the index is not representable.
-    pub(in crate::analyzer) fn hir_set_char_at(
-        &mut self,
-        recv: Option<HExpr>,
-        idx: Option<HExpr>,
-    ) {
+    pub(in crate::analyzer) fn hir_set_char_at(&mut self, recv: Option<HExpr>, idx: Option<HExpr>) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -465,11 +438,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records `await e` used as a value (carrying the awaited future's inner type).
-    pub(in crate::analyzer) fn hir_set_await(
-        &mut self,
-        inner: Option<HExpr>,
-        inner_ty: &Type,
-    ) {
+    pub(in crate::analyzer) fn hir_set_await(&mut self, inner: Option<HExpr>, inner_ty: &Type) {
         if !self.active() {
             self.hir.last = None;
             return;

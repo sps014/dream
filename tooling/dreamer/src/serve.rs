@@ -61,8 +61,7 @@ fn pid_file_path(root: &Path) -> PathBuf {
 
 fn write_pid_file(path: &Path, port: u16) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     }
     let body = format!("{}\n{}\n", std::process::id(), port);
     fs::write(path, body).with_context(|| format!("writing {}", path.display()))?;
@@ -210,8 +209,7 @@ fn handle_request(root: &Path, request: Request) -> Result<()> {
         return Ok(());
     }
 
-    let bytes =
-        fs::read(&file_path).with_context(|| format!("reading {}", file_path.display()))?;
+    let bytes = fs::read(&file_path).with_context(|| format!("reading {}", file_path.display()))?;
     let is_head = request.method() == &Method::Head;
     let mime = content_type(&file_path);
     let header = Header::from_bytes(&b"Content-Type"[..], mime.as_bytes())

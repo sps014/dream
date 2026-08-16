@@ -119,73 +119,75 @@ impl<'a> Analyzer<'a> {
         // (non-generic) constructor call gets the same treatment via its `constructor`'s parameter
         // types, so e.g. an `Option<T>`-typed field's `None`/`Some(...)` argument can infer `T`
         // without an explicit annotation.
-        let expected_params: Option<Vec<Type>> = if self
-            .function_table
-            .is_overloaded(&function_name)
-        {
-            None
-        } else if let Ok(info) = self.function_table.get_function(&function_name) {
-            Some(Self::expected_param_types(&info))
-        } else if generic_args.is_none()
-            && self.struct_table.get_struct(&function_name).is_some()
-            && !self.function_table.is_overloaded(&constructor_fn(&function_name))
-        {
-            self.function_table
-                .get_function(&constructor_fn(&function_name))
-                .ok()
-                .map(|info| {
-                    Self::expected_param_types(&info)
-                        .into_iter()
-                        .skip(1)
-                        .collect()
-                })
-        } else if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty()) {
-            // A generic constructor call (`WebWorker<int, int>(body)`). The struct isn't
-            // instantiated yet at this point (that happens inside `analyze_constructor_call`,
-            // after arguments are analyzed below), so its constructor's parameter types are looked
-            // up straight from the *template* AST and substituted by hand here — deliberately not
-            // via `ensure_struct_instantiated`, which would fully analyze every method's body
-            // (including ones a self-referential generic, like `WebWorker<TIn, TOut>` constructing
-            // itself inside its own `map`, would recurse back into before it's registered).
-            let concrete_generic_args: Vec<Type> = args
-                .iter()
-                .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
-                .collect();
-            self.generic_structs.get(function_name.as_str()).and_then(|template| {
-                let type_params = template.generic_parameters.as_deref().unwrap_or(&[]);
-                if type_params.len() != concrete_generic_args.len() {
-                    return None;
-                }
-                // If the template declares more than one `constructor` overload, prefer the one
-                // whose `fun(...)` parameter matches an async vs sync lambda argument (Future-
-                // returning vs plain). Same-arity sync/`Future` pairs are common (`WebWorker`).
-                let ctors: Vec<_> = template
-                    .methods
-                    .iter()
-                    .filter(|m| m.name.text == dream_syntax::nodes::types::CONSTRUCTOR_NAME)
-                    .collect();
-                let ctor = match ctors.len() {
-                    0 => return None,
-                    1 => ctors[0],
-                    _ => {
-                        let matching: Vec<_> = ctors
+        let expected_params: Option<Vec<Type>> =
+            if self.function_table.is_overloaded(&function_name) {
+                None
+            } else if let Ok(info) = self.function_table.get_function(&function_name) {
+                Some(Self::expected_param_types(&info))
+            } else if generic_args.is_none()
+                && self.struct_table.get_struct(&function_name).is_some()
+                && !self
+                    .function_table
+                    .is_overloaded(&constructor_fn(&function_name))
+            {
+                self.function_table
+                    .get_function(&constructor_fn(&function_name))
+                    .ok()
+                    .map(|info| {
+                        Self::expected_param_types(&info)
                             .into_iter()
-                            .filter(|c| c.parameters.len() == params.len())
+                            .skip(1)
+                            .collect()
+                    })
+            } else if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty()) {
+                // A generic constructor call (`WebWorker<int, int>(body)`). The struct isn't
+                // instantiated yet at this point (that happens inside `analyze_constructor_call`,
+                // after arguments are analyzed below), so its constructor's parameter types are looked
+                // up straight from the *template* AST and substituted by hand here — deliberately not
+                // via `ensure_struct_instantiated`, which would fully analyze every method's body
+                // (including ones a self-referential generic, like `WebWorker<TIn, TOut>` constructing
+                // itself inside its own `map`, would recurse back into before it's registered).
+                let concrete_generic_args: Vec<Type> = args
+                    .iter()
+                    .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
+                    .collect();
+                self.generic_structs
+                    .get(function_name.as_str())
+                    .and_then(|template| {
+                        let type_params = template.generic_parameters.as_deref().unwrap_or(&[]);
+                        if type_params.len() != concrete_generic_args.len() {
+                            return None;
+                        }
+                        // If the template declares more than one `constructor` overload, prefer the one
+                        // whose `fun(...)` parameter matches an async vs sync lambda argument (Future-
+                        // returning vs plain). Same-arity sync/`Future` pairs are common (`WebWorker`).
+                        let ctors: Vec<_> = template
+                            .methods
+                            .iter()
+                            .filter(|m| m.name.text == dream_syntax::nodes::types::CONSTRUCTOR_NAME)
                             .collect();
-                        Self::prefer_fun_overload_for_args(matching, params)?
-                    }
-                };
-                let bindings = generic_bindings(type_params, &concrete_generic_args);
-                Some(
-                    ctor.parameters
-                        .iter()
-                        .map(|p| Self::monomorphize_type(&p.type_, &bindings))
-                        .collect(),
-                )
-            })
-        } else {
-            None
-        };
+                        let ctor = match ctors.len() {
+                            0 => return None,
+                            1 => ctors[0],
+                            _ => {
+                                let matching: Vec<_> = ctors
+                                    .into_iter()
+                                    .filter(|c| c.parameters.len() == params.len())
+                                    .collect();
+                                Self::prefer_fun_overload_for_args(matching, params)?
+                            }
+                        };
+                        let bindings = generic_bindings(type_params, &concrete_generic_args);
+                        Some(
+                            ctor.parameters
+                                .iter()
+                                .map(|p| Self::monomorphize_type(&p.type_, &bindings))
+                                .collect(),
+                        )
+                    })
+            } else {
+                None
+            };
         let mut arg_is_ref: Vec<bool> = Vec::with_capacity(params.len());
         let saved_call_target = self.current_call_target_name.take();
         self.current_call_target_name = Some(function_name.clone());
@@ -248,10 +250,7 @@ impl<'a> Analyzer<'a> {
         if let Some((param_types, ret)) = local_fun {
             // `f()` is a `FunctionCall` node (not an `Identifier` read), so mark the local used
             // here — otherwise only `(f)()` counted as a use via the parenthesized path.
-            (*symbol_table)
-                .as_ref()
-                .borrow_mut()
-                .mark_used(&name.text);
+            (*symbol_table).as_ref().borrow_mut().mark_used(&name.text);
             if generic_args
                 .as_ref()
                 .map(|g| !g.is_empty())
@@ -361,7 +360,8 @@ impl<'a> Analyzer<'a> {
                     // `register_methods_for`); `analyze_constructor_call` already picked which one
                     // this call resolved to, so look that emitted name up directly instead of
                     // re-deriving the (now ambiguous) bare `{concrete_name}_constructor` name.
-                    let ctor_def_name = resolved_ctor_name.unwrap_or_else(|| constructor_fn(&concrete_name));
+                    let ctor_def_name =
+                        resolved_ctor_name.unwrap_or_else(|| constructor_fn(&concrete_name));
                     let ctor = self
                         .type_ctx
                         .defs
@@ -466,7 +466,12 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, name.position, diagnostics);
-        self.check_runtime_call(&function_name, store_sig.runtime_support, name.position, diagnostics);
+        self.check_runtime_call(
+            &function_name,
+            store_sig.runtime_support,
+            name.position,
+            diagnostics,
+        );
         self.check_compute_call(&store_sig, name.position, diagnostics);
 
         self.validate_ref_arguments(
@@ -536,7 +541,13 @@ impl<'a> Analyzer<'a> {
         } else {
             self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
         }
-        self.note_sink_arg_moves(params, &params_types, &store_sig.is_take, false, diagnostics);
+        self.note_sink_arg_moves(
+            params,
+            &params_types,
+            &store_sig.is_take,
+            false,
+            diagnostics,
+        );
         Ok(ret_type)
     }
 
@@ -552,7 +563,11 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        if generic_args.as_ref().map(|g| !g.is_empty()).unwrap_or(false) {
+        if generic_args
+            .as_ref()
+            .map(|g| !g.is_empty())
+            .unwrap_or(false)
+        {
             if let Some(name) = unwrap_callee_ident(callee) {
                 return self.analyze_function_call(
                     name,
@@ -570,7 +585,11 @@ impl<'a> Analyzer<'a> {
         let callee_hir = self.hir_take();
         let span = callee.position();
 
-        if generic_args.as_ref().map(|g| !g.is_empty()).unwrap_or(false) {
+        if generic_args
+            .as_ref()
+            .map(|g| !g.is_empty())
+            .unwrap_or(false)
+        {
             if let Type::GenericFunctionItem(gname) = &callee_ty {
                 let tok = SyntaxToken::new(
                     TokenKind::IdentifierToken,
@@ -671,10 +690,7 @@ impl<'a> Analyzer<'a> {
 
         Err(report(
             diagnostics,
-            format!(
-                "cannot call value of type '{}'",
-                callee_ty.get_type()
-            ),
+            format!("cannot call value of type '{}'", callee_ty.get_type()),
             span,
         ))
     }

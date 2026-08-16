@@ -1,18 +1,16 @@
 use super::super::Parser;
-use crate::nodes::{
-    ExpressionNode, PatternNode, SwitchArm, SwitchArmBody,
-    Type,
-};
+use crate::nodes::{ExpressionNode, PatternNode, SwitchArm, SwitchArmBody, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-
     /// Parses the shared `switch (subject) {` header, returning the subject. Both the
     /// pattern-matching form ([`parse_switch_expr`]) and the C-style `case`/`default` form
     /// ([`parse_switch`](Self::parse_switch)) start here, then branch on the body.
-    pub(crate) fn parse_switch_header(&mut self) -> Result<(SyntaxToken, ExpressionNode<'a>), Error> {
+    pub(crate) fn parse_switch_header(
+        &mut self,
+    ) -> Result<(SyntaxToken, ExpressionNode<'a>), Error> {
         let switch_tok = self.match_token(TokenKind::SwitchToken);
         self.match_token(TokenKind::OpenParenthesisToken);
         let subject = self.parse_expression(0)?;

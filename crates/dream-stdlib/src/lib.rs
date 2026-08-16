@@ -257,10 +257,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     StdPackage {
         name: "system.simd",
         deps: &["system.core"],
-        files: &[(
-            "<std>/system/simd.dream",
-            include_str!("system/simd.dream"),
-        )],
+        files: &[("<std>/system/simd.dream", include_str!("system/simd.dream"))],
     },
     StdPackage {
         name: "system.text",
@@ -410,7 +407,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.gpu",
-        deps: &["system.core", "system.primitives", "system", "system.encoding"],
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system",
+            "system.encoding",
+        ],
         files: &[
             (
                 "<std>/system/gpu/gpu_error.dream",
@@ -628,12 +630,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     StdPackage {
         name: "system.encoding",
         deps: &["system.core", "system.primitives", "system.text"],
-        files: &[
-            (
-                "<std>/system/encoding.dream",
-                include_str!("system/encoding.dream"),
-            ),
-        ],
+        files: &[(
+            "<std>/system/encoding.dream",
+            include_str!("system/encoding.dream"),
+        )],
     },
     StdPackage {
         name: "system.crypto",
@@ -671,7 +671,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.process",
-        deps: &["system.core", "system.primitives", "system.text", "system.encoding"],
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.text",
+            "system.encoding",
+        ],
         files: &[
             (
                 "<std>/system/process/process_error.dream",
@@ -723,7 +728,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system",
-        deps: &["system.core", "system.primitives", "system.text", "system.io"],
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.text",
+            "system.io",
+        ],
         files: &[
             (
                 "<std>/system/arg_error.dream",
@@ -749,10 +759,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 "<std>/system/console_color.dream",
                 include_str!("system/console_color.dream"),
             ),
-            (
-                "<std>/system/time.dream",
-                include_str!("system/time.dream"),
-            ),
+            ("<std>/system/time.dream", include_str!("system/time.dream")),
             (
                 "<std>/system/stopwatch.dream",
                 include_str!("system/stopwatch.dream"),
@@ -941,7 +948,15 @@ pub fn public_top_level_names(src: &str) -> Vec<String> {
             .strip_prefix("async ")
             .unwrap_or(rest)
             .trim_start();
-        for kind in ["class ", "enum ", "interface ", "fun ", "extend ", "struct ", "union "] {
+        for kind in [
+            "class ",
+            "enum ",
+            "interface ",
+            "fun ",
+            "extend ",
+            "struct ",
+            "union ",
+        ] {
             if let Some(after) = rest.strip_prefix(kind) {
                 let name: String = after
                     .chars()

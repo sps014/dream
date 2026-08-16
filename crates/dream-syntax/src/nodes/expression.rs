@@ -237,9 +237,7 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::Call(callee, _, _) => callee.start_position(),
             ExpressionNode::Binary(left, _, _) => left.start_position(),
             ExpressionNode::IncDec {
-                prefix: true,
-                op,
-                ..
+                prefix: true, op, ..
             } => Some(op.position),
             ExpressionNode::IncDec {
                 prefix: false,

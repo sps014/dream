@@ -1,8 +1,5 @@
 use super::super::Parser;
-use crate::nodes::{
-    ExpressionNode,
-    Type,
-};
+use crate::nodes::{ExpressionNode, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use crate::token::token_kind::TokenKind::{EndOfFileToken, IdentifierToken};
@@ -308,10 +305,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if next_kind == TokenKind::OpenParenthesisToken {
                         let type_name = &self.peek_token(1).text;
                         crate::nodes::types::PRIMITIVE_TYPE_NAMES.contains(&type_name.as_str())
-                            || type_name
-                                .chars()
-                                .next()
-                                .is_some_and(|c| c.is_uppercase())
+                            || type_name.chars().next().is_some_and(|c| c.is_uppercase())
                     } else {
                         matches!(
                             next_kind,

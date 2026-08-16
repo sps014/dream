@@ -38,7 +38,10 @@ pub fn run(start_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn install_shell(install_root: &Path, members: &[(std::path::PathBuf, Manifest)]) -> Result<Workspace> {
+fn install_shell(
+    install_root: &Path,
+    members: &[(std::path::PathBuf, Manifest)],
+) -> Result<Workspace> {
     let root_manifest = Manifest::load(&install_root.join(crate::manifest::MANIFEST_FILE_NAME))?;
     if root_manifest.is_workspace_root() {
         // Prefer any member as the Workspace.root for symlink logic; install_root via workspace_root.

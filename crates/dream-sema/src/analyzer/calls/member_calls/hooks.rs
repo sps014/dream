@@ -2,9 +2,9 @@
 //! desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
 
 use super::super::super::*;
-use dream_diagnostics::DiagnosticBag;
 use crate::analyzer::declarations::protocol_hooks::{ProtocolHook, ProtocolRole};
 use crate::function_table::FunctionTableInfo;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::Type;
 
 impl<'a> Analyzer<'a> {

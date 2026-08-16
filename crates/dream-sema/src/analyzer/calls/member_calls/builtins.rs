@@ -2,9 +2,9 @@
 //! every primitive/array) receiver, checked before falling through to normal instance dispatch.
 
 use super::super::super::*;
-use dream_diagnostics::DiagnosticBag;
-use dream_abi::intrinsics;
 use crate::errors::SemanticError;
+use dream_abi::intrinsics;
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;

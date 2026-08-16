@@ -1,8 +1,8 @@
 //! HIR module-level containers: program, functions, globals, interfaces, imports.
 
-use dream_types::{DefId, TypeId};
 use crate::layout::LayoutTable;
 use crate::nodes::{HExpr, HStmt};
+use dream_types::{DefId, TypeId};
 
 /// A local variable slot within a function (parameters and `let`-bindings), unique per function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

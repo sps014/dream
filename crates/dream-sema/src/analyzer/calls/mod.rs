@@ -290,10 +290,7 @@ impl<'a> Analyzer<'a> {
                 "@fragment shader"
             };
             let hint = if callee.is_compute {
-                format!(
-                    "use Compute.run(\"{}\", ...) instead",
-                    callee.name
-                )
+                format!("use Compute.run(\"{}\", ...) instead", callee.name)
             } else {
                 "link it via GpuRenderPipeline.create(...) instead".to_string()
             };
@@ -346,7 +343,10 @@ impl<'a> Analyzer<'a> {
             Ok(info) if info.is_vertex => info,
             Ok(_) => {
                 diagnostics.report_error(
-                    format!("GpuRenderPipeline.create: '{}' is not a @vertex shader", vs_name),
+                    format!(
+                        "GpuRenderPipeline.create: '{}' is not a @vertex shader",
+                        vs_name
+                    ),
                     Some(position),
                 );
                 return;

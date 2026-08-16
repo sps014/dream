@@ -92,10 +92,7 @@ impl SymbolTable {
     pub fn report_unused_locals(&self, diagnostics: &mut dream_diagnostics::DiagnosticBag) {
         for (name, span) in &self.tracked_locals {
             if !self.used_locals.contains(name) {
-                diagnostics.report_warning(
-                    format!("unused variable '{}'", name),
-                    Some(*span),
-                );
+                diagnostics.report_warning(format!("unused variable '{}'", name), Some(*span));
             }
         }
         for child in &self.children {

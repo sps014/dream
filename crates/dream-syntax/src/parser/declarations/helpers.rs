@@ -1,8 +1,5 @@
 use super::super::Parser;
-use crate::nodes::{
-    AttributeNode,
-    Visibility,
-};
+use crate::nodes::{AttributeNode, Visibility};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::syntax_trivia::SyntaxTrivia;
 use crate::token::token_kind::TokenKind;

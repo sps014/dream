@@ -93,7 +93,6 @@ pub fn strip_array(type_name: &str) -> &str {
 /// entry on demand — there is no per-primitive copy of the array Collection impl.
 pub const ARRAY_EXTEND_KEY: &str = "[]";
 
-
 /// The reserved member name of a type's constructor declaration (`constructor(...) { ... }`).
 /// The parser recognizes it, semantics validates it, and codegen mangles it (via the backend
 /// `constructor_fn`). Single source of truth so the spelling never drifts between layers.
@@ -365,10 +364,7 @@ impl Type {
             Type::ULong(token) => token.position.get_point_str(),
             Type::Byte(token) => token.position.get_point_str(),
             Type::Array(inner) => inner.get_line_str(),
-            Type::Tuple(elems) => elems
-                .first()
-                .map(|e| e.get_line_str())
-                .unwrap_or_default(),
+            Type::Tuple(elems) => elems.first().map(|e| e.get_line_str()).unwrap_or_default(),
             Type::Struct(token, _) => token.position.get_point_str(),
             Type::Generic(_) => "".to_string(), // Can be improved
             Type::Function(_, _) => "".to_string(),

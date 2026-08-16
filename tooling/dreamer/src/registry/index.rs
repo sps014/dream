@@ -23,11 +23,7 @@ pub struct IndexEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edition: Option<String>,
     /// `bin` or `lib`, matching `[package].type` in `dream.toml`.
-    #[serde(
-        default,
-        rename = "type",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub package_type: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<String>,

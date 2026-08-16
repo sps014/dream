@@ -60,8 +60,13 @@ impl<'a> ModuleEmitter<'a> {
             let ty = llvm_val_ty(self.interner, g.ty);
             let _ = writeln!(self.buf, "@g{} = global {} {}", g.id.0, ty, zero(ty));
         }
-        if self.opts.debug_info && self.opts.triple.is_wasm() {
-            self.buf.push_str(DEBUG_DECLS);
+        if self.opts.debug_info {
+            if self.opts.triple.is_wasm() {
+                self.buf.push_str(DEBUG_DECLS_WASM);
+                self.buf.push_str(DEBUG_ATTRS);
+            } else {
+                self.buf.push_str(DEBUG_DECLS);
+            }
             let mut slots = 0u32;
             for f in &self.mir.functions {
                 slots = slots.max(dbg_spill_count(f, self.interner));
@@ -92,9 +97,6 @@ impl<'a> ModuleEmitter<'a> {
                 let _ = writeln!(self.buf, "  call {} @{}()", ty, sym);
             }
             self.buf.push_str("  ret void\n}\n");
-        }
-        if self.opts.debug_info && self.opts.triple.is_wasm() {
-            self.buf.push_str(DEBUG_ATTRS);
         }
         let mut out = String::new();
         let split = self.buf.find(RUNTIME_DECLS).unwrap_or(0) + RUNTIME_DECLS.len();

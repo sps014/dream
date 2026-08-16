@@ -126,25 +126,6 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     let _ = fs::remove_file(&bin);
     let _ = fs::remove_file(wat_path.with_extension("ll"));
 }
-/// Representative fixtures for the default `cargo test` gate. The full `tests/cases/` corpus is
-/// `#[ignore]`d (`run_all_e2e_cases` / `run_all_e2e_cases_release`) because ~400 compile+run
-/// cycles dominate workspace test time.
-const SMOKE_CASES: &[&str] = &[
-    "arithmetic",
-    "classes",
-    "enum_basic",
-    "generic_structs",
-    "async_basic",
-    "async_generic_sink_reuse",
-    "collection_literals",
-    "interfaces",
-    "object_protocol",
-    "diagnostics",
-    "last_use_destroy",
-    "struct_last_use_move",
-    "ui_render_tree",
-];
-
 /// Collect every `tests/cases/*.dream` fixture path.
 fn collect_case_paths() -> Vec<PathBuf> {
     let cases_dir = Path::new("tests/cases");
@@ -207,12 +188,6 @@ fn run_corpus(wat_ext: &str, release_for: impl Fn(&str) -> bool + Sync, only: Op
 }
 
 #[test]
-fn run_smoke_e2e_cases() {
-    run_corpus("smoke.wat", |_| false, Some(SMOKE_CASES));
-}
-
-#[test]
-#[ignore = "full golden corpus; cargo test --workspace -- --ignored"]
 fn run_all_e2e_cases() {
     // Default debug backend (`with_release(false)`).
     run_corpus("wat", |_| false, None);
@@ -248,7 +223,7 @@ fn codegen_is_deterministic() {
         return;
     }
     // Two independent compiles of a couple of fixtures is enough to catch HashMap-order
-    // regressions; the ignored full corpus still covers more shapes in CI `--ignored` runs.
+    // regressions; the full debug corpus covers more shapes in the default gate.
     let fixtures = ["classes", "async_basic"];
     for name in fixtures {
         let src = cases_dir.join(format!("{}.dream", name));

@@ -334,7 +334,7 @@ fn main() -> ExitCode {
     info!("Compiling file: {}", file_name);
 
     let emit_abi = true;
-    let target = if want_web || debug_adapter {
+    let target = if want_web {
         Target::Wasm
     } else {
         Target::Native
@@ -350,7 +350,7 @@ fn main() -> ExitCode {
         compiler = compiler.with_optimize(Some(level));
     }
     let mut opts = dream_llvm::CodegenOptions::default();
-    if want_web || debug_adapter {
+    if want_web {
         opts.triple = dream_llvm::Triple::parse("wasm32-unknown-unknown")
             .expect("wasm32-unknown-unknown");
     }
@@ -387,6 +387,13 @@ fn main() -> ExitCode {
         opts.sysroot = Some(s);
     }
     opts.debug_info = debug_info;
+    if debug_adapter {
+        // Shared library so the adapter can `dlopen` the guest and install debug hooks.
+        // LTO would hide `dream_debug_install` / `__dbg_v*` from `dlsym`.
+        opts.link_shared = true;
+        opts.debug_info = true;
+        opts.lto = dream_llvm::Lto::None;
+    }
     compiler = compiler.with_llvm(opts);
     let out_path = match get_path_from_file_path(file_name, release) {
         Some(path) => path,
@@ -414,8 +421,8 @@ fn main() -> ExitCode {
             info!("Compilation successful");
 
             if debug_adapter {
-                // Hand control to the Debug Adapter Protocol server, which loads the just-emitted
-                // `.wat` + `.dbg.json` and drives execution under the debugger over stdio.
+                // Hand control to the Debug Adapter Protocol server, which `dlopen`s the just-emitted
+                // shared library + `.dbg.json` and drives execution under the debugger over stdio.
                 if let Err(e) = dream::execution::debugger::run_debug_adapter(&out_path) {
                     error!("Debug adapter failed: {}", e);
                     return ExitCode::FAILURE;

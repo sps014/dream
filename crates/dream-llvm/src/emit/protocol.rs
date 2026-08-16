@@ -93,7 +93,12 @@ impl<'a> ModuleEmitter<'a> {
             let addr2 = self.tmp();
             let _ = writeln!(self.buf, "  {} = add i32 {}, 4", addr2, addr);
             let v = self.load_width(*elem, &addr2);
-            let _ = writeln!(self.buf, "  call void @dream_release(i32 {})", v);
+            let _ = writeln!(
+                self.buf,
+                "  call void @{}(i32 {})",
+                release_sym(self.interner, *elem),
+                v
+            );
             let n = self.tmp();
             let _ = writeln!(self.buf, "  {} = add i32 {}, 1", n, iv);
             let _ = writeln!(self.buf, "  store i32 {}, i32* {}", n, i);
@@ -118,7 +123,12 @@ impl<'a> ModuleEmitter<'a> {
             let addr = self.tmp();
             let _ = writeln!(self.buf, "  {} = add i32 %p, {}", addr, f.offset);
             let v = self.load_width(f.ty, &addr);
-            let _ = writeln!(self.buf, "  call void @dream_release(i32 {})", v);
+            let _ = writeln!(
+                self.buf,
+                "  call void @{}(i32 {})",
+                release_sym(self.interner, f.ty),
+                v
+            );
         }
         self.buf.push_str("  ret void\n}\n");
     }

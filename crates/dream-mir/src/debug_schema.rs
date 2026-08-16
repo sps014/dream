@@ -1,7 +1,7 @@
 //! The runtime-type schema shared by both sides of the `.dbg.json` debug source map: the writer
-//! ([`dream_mir::emit::debug_map`], built into every configuration of the compiler) and the reader
-//! ([`crate::execution::debugger::sourcemap`], native-only — it drives the wasmtime-based debug
-//! adapter). Both walked-and-decoded the same structural description of a runtime type (struct
+//! (LLVM `debug_map_json`, built into every configuration of the compiler) and the reader
+//! ([`crate::execution::debugger::sourcemap`], native-only — it drives the native debug adapter).
+//! Both walked-and-decoded the same structural description of a runtime type (struct
 //! fields, union variants, array element/stride, scalar encoding) from two independently
 //! hand-maintained copies; this module is the single definition they now share.
 //!

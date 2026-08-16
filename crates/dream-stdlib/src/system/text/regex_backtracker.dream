@@ -33,7 +33,7 @@ internal class RegexBacktrackVM {
         return t;
     }
 
-    fun copy_caps(src: int[]): int[] {
+    fun copy_caps(borrow src: int[]): int[] {
         let n = src.length;
         let dst = Buffer.alloc<int>(n);
         Buffer.elems_copy<int>(dst, 0, src, 0, n);
@@ -124,7 +124,7 @@ internal class RegexBacktrackVM {
 
     // Text previously captured by group `idx` (empty if it never participated — the common
     // "unmatched backreference matches the empty string" convention).
-    fun group_text(idx: int, caps: int[], borrow input: string): string {
+    fun group_text(idx: int, borrow caps: int[], borrow input: string): string {
         let s0 = 2 * idx;
         let e0 = (2 * idx) + 1;
         if ((s0 < 0) || (e0 >= caps.length)) {

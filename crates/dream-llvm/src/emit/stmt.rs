@@ -12,7 +12,7 @@ impl<'a> ModuleEmitter<'a> {
         match stmt {
             Statement::Nop | Statement::SourceLine(_) => {}
             Statement::DebugLine(line) => {
-                if self.opts.debug_info && self.opts.triple.is_wasm() {
+                if self.opts.debug_info {
                     self.emit_debug_line(func, *line);
                 }
             }
@@ -22,7 +22,12 @@ impl<'a> ModuleEmitter<'a> {
                 if matches!(self.interner.kind(ty), TyKind::Js) {
                     let _ = writeln!(self.buf, "  call void @d_js_retain(i32 {})", v);
                 } else {
-                    let _ = writeln!(self.buf, "  call void @dream_retain(i32 {})", v);
+                    let _ = writeln!(
+                        self.buf,
+                        "  call void @{}(i32 {})",
+                        retain_sym(self.interner, ty),
+                        v
+                    );
                 }
             }
             Statement::Release(o) => {
@@ -31,7 +36,12 @@ impl<'a> ModuleEmitter<'a> {
                 if matches!(self.interner.kind(ty), TyKind::Js) {
                     let _ = writeln!(self.buf, "  call void @d_js_release(i32 {})", v);
                 } else {
-                    let _ = writeln!(self.buf, "  call void @dream_release(i32 {})", v);
+                    let _ = writeln!(
+                        self.buf,
+                        "  call void @{}(i32 {})",
+                        release_sym(self.interner, ty),
+                        v
+                    );
                 }
             }
             Statement::Print { arg, ty, newline } => {
@@ -47,7 +57,7 @@ impl<'a> ModuleEmitter<'a> {
                 self.store_place(func, place, &val, retain_on_store(func, rv));
                 if matches!(place, Place::Field { .. } | Place::Index { .. } | Place::Deref { .. })
                 {
-                    if let Some(src) = take_move_src(func, rv) {
+                    if let Some(src) = take_move_src(func, self.interner, rv) {
                         let ty = llvm_val_ty(self.interner, func.local_ty(src));
                         if ty != "void" {
                             let _ = writeln!(
@@ -135,12 +145,12 @@ impl<'a> ModuleEmitter<'a> {
                 let _ = writeln!(self.buf, "  call void @dream_free(i32 {})", v);
             }
             Statement::LockAcquire(o) => {
-                let v = self.operand(func, o);
-                let _ = writeln!(self.buf, "  call void @dream_lock_acquire(i32 {})", v);
+                let addr = self.lock_word_addr(func, o);
+                let _ = writeln!(self.buf, "  call void @dream_lock_acquire(i32 {})", addr);
             }
             Statement::LockRelease(o) => {
-                let v = self.operand(func, o);
-                let _ = writeln!(self.buf, "  call void @dream_lock_release(i32 {})", v);
+                let addr = self.lock_word_addr(func, o);
+                let _ = writeln!(self.buf, "  call void @dream_lock_release(i32 {})", addr);
             }
             Statement::SimdF32x4 {
                 op,
@@ -153,6 +163,19 @@ impl<'a> ModuleEmitter<'a> {
             Statement::ValueRetain(l) => self.emit_value_retain(func, *l),
             Statement::ValueKill(l) => self.emit_value_drop(func, *l, false),
         }
+    }
+
+    /// Lock word sits past the last field (`layout.size`), matching `HEADER_LOCK_WORD_SIZE`.
+    fn lock_word_addr(&mut self, func: &MirFunction, o: &Operand) -> String {
+        let v = self.operand(func, o);
+        let ty = self.op_ty(func, o);
+        let off = self.mir.layouts.get(ty).map(|l| l.size).unwrap_or(0);
+        if off == 0 {
+            return v;
+        }
+        let addr = self.tmp();
+        let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, v, off);
+        addr
     }
 
     pub(crate) fn emit_print(&mut self, func: &MirFunction, arg: &Operand, ty: TypeId, newline: bool) {
@@ -247,7 +270,12 @@ impl<'a> ModuleEmitter<'a> {
             let addr = self.tmp();
             let _ = writeln!(self.buf, "  {} = add i32 {}, {}", addr, base, f.offset);
             let v = self.load_width(f.ty, &addr);
-            let _ = writeln!(self.buf, "  call void @dream_retain(i32 {})", v);
+            let _ = writeln!(
+                self.buf,
+                "  call void @{}(i32 {})",
+                retain_sym(self.interner, f.ty),
+                v
+            );
         }
     }
 
@@ -407,7 +435,14 @@ impl<'a> ModuleEmitter<'a> {
                 );
             }
             Terminator::Await { future, dest, resume } => {
-                let v = self.operand(func, future);
+                let mut v = self.operand(func, future);
+                if !self.opts.triple.is_wasm()
+                    && llvm_val_ty(self.interner, self.op_ty(func, future)) == "i32"
+                {
+                    let j = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = call i32 @dream_task_join_if(i32 {})", j, v);
+                    v = j;
+                }
                 if let Some(d) = dest {
                     let dest_ty = func.local_ty(*d);
                     let ty = llvm_val_ty(self.interner, dest_ty);

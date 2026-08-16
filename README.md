@@ -136,8 +136,8 @@ source ./use-toolchain.sh
 ```
 
 ```bash
-cargo test --workspace                 # fast gate
-cargo test --workspace -- --ignored    # full corpus
+cargo test --workspace                 # unit tests + full debug e2e + native DAP
+cargo test --workspace -- --ignored    # release corpus, wasm-opt, dreamer e2e
 ```
 
 Compiler internals: [docs/internals](https://sps014.github.io/dream/internals/).

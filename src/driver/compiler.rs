@@ -365,6 +365,8 @@ impl Compiler {
         info!("created file: {}", ll_path.display());
         let bin = if opts.triple.is_wasm() {
             std::path::Path::new(out_path).with_extension("wasm")
+        } else if opts.link_shared {
+            std::path::Path::new(out_path).with_extension(dream_llvm::shared_lib_ext())
         } else {
             std::path::Path::new(out_path).with_extension("out")
         };

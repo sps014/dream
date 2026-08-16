@@ -555,7 +555,7 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
                 return undefined;
             }
 
-            // DAP / Debug is always native wasmtime — ignore package.targets / status-bar host.
+            // DAP / Debug is always native (`dream debug-adapter` `dlopen`s the guest).
             return config;
         }
     };

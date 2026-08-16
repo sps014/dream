@@ -38,16 +38,19 @@ pub(crate) fn debug_file_id(mir: &Mir, func: &MirFunction) -> i32 {
     0
 }
 
-pub(crate) fn take_move_src(func: &MirFunction, rv: &Rvalue) -> Option<dream_mir::Local> {
+pub(crate) fn take_move_src(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    rv: &Rvalue,
+) -> Option<dream_mir::Local> {
     match rv {
-        Rvalue::Use(Operand::Copy(Place::Local(l)))
-            if func
-                .locals
-                .get(l.0 as usize)
-                .map(|d| d.is_take)
-                .unwrap_or(false) =>
-        {
-            Some(*l)
+        Rvalue::Use(Operand::Copy(Place::Local(l))) => {
+            let d = func.locals.get(l.0 as usize)?;
+            if d.is_take && interner.is_rc_tracked(d.ty) {
+                Some(*l)
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -132,6 +135,22 @@ pub(crate) fn resolved_symbol(sym: &str) -> String {
     }
 }
 
+pub(crate) fn retain_sym(interner: &TypeInterner, ty: TypeId) -> &'static str {
+    if interner.is_shared_type(ty) {
+        "dream_retain_shared"
+    } else {
+        "dream_retain"
+    }
+}
+
+pub(crate) fn release_sym(interner: &TypeInterner, ty: TypeId) -> &'static str {
+    if interner.is_shared_type(ty) {
+        "dream_release_shared"
+    } else {
+        "dream_release"
+    }
+}
+
 pub(crate) fn llvm_extern_name(key: &str) -> String {
     if let Some(c) = native_c_sym(key) {
         c.to_string()
@@ -207,6 +226,15 @@ pub(crate) fn native_c_sym(key: &str) -> Option<&'static str> {
         "consoleReadLine" => Some("dream_console_read_line"),
         "consoleReadKey" => Some("dream_console_read_key"),
         "delayMs" => Some("dream_delay_ms"),
+        "shared_lock_acquire" => Some("dream_lock_acquire"),
+        "shared_lock_release" => Some("dream_lock_release"),
+        "shared_lock_try_acquire" => Some("dream_lock_try_acquire"),
+        "shared_lock_try_acquire_for" => Some("dream_lock_try_acquire_for"),
+        "shared_semaphore_acquire" => Some("dream_sem_acquire"),
+        "shared_semaphore_release" => Some("dream_sem_release"),
+        "shared_semaphore_try_acquire" => Some("dream_sem_try_acquire"),
+        "shared_semaphore_try_acquire_for" => Some("dream_sem_try_acquire_for"),
+        "dream_cancel" => Some("dream_cancel"),
         "fileOpen" => Some("dream_file_open"),
         "fileHandleRead" => Some("dream_file_handle_read"),
         "fileHandleWrite" => Some("dream_file_handle_write"),
@@ -370,6 +398,8 @@ pub(crate) const RUNTIME_DECLS: &str = r#"
 declare i32 @dream_malloc(i32, i32)
 declare void @dream_retain(i32)
 declare void @dream_release(i32)
+declare void @dream_retain_shared(i32)
+declare void @dream_release_shared(i32)
 declare void @dream_print_int(i32)
 declare void @dream_print_uint(i32)
 declare void @dream_print_long(i64)
@@ -407,6 +437,12 @@ declare i32 @dream_i64_to_string(i64)
 declare i32 @dream_hash_bytes(i32)
 declare void @dream_lock_acquire(i32)
 declare void @dream_lock_release(i32)
+declare i32 @dream_lock_try_acquire(i32)
+declare i32 @dream_lock_try_acquire_for(i32, i32)
+declare void @dream_sem_acquire(i32)
+declare void @dream_sem_release(i32)
+declare i32 @dream_sem_try_acquire(i32)
+declare i32 @dream_sem_try_acquire_for(i32, i32)
 declare void @dream_free(i32)
 declare void @dream_unimplemented(i8*)
 declare i32 @dream_box_i32(i32, i32)
@@ -589,6 +625,12 @@ declare i32 @dream_worker_recv(i32)
 declare void @dream_worker_terminate(i32)
 declare i32 @dream_worker_pool_spawn()
 declare i32 @dream_worker_pool_dispatch(i32, i32, i32, i32)
+declare i32 @dream_task_join_if(i32)
+declare void @dream_cancel(i32)
+declare i32 @dream_task_run0(i32 ()*)
+declare i32 @dream_task_run1(i32 (i32)*, i32)
+declare i32 @dream_task_run2(i32 (i32, i32)*, i32, i32)
+declare i32 @dream_task_run3(i32 (i32, i32, i32)*, i32, i32, i32)
 declare i32 @dream_webview_create(i32, i32, i32)
 declare i32 @dream_webview_load_url(i32, i32)
 declare i32 @dream_webview_load_html(i32, i32)
@@ -607,6 +649,12 @@ declare i64 @dream_c_invoke(i8*, i8*, i32, i32)
 "#;
 
 pub(crate) const DEBUG_DECLS: &str = r#"
+declare void @dream_debug_enter(i32)
+declare void @dream_debug_exit(i32)
+declare void @dream_debug_line(i32, i32)
+"#;
+
+pub(crate) const DEBUG_DECLS_WASM: &str = r#"
 declare void @dream_debug_enter(i32) #0
 declare void @dream_debug_exit(i32) #1
 declare void @dream_debug_line(i32, i32) #2

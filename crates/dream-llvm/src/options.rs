@@ -22,6 +22,8 @@ pub struct CodegenOptions {
     pub lto: Lto,
     pub sanitize: Sanitize,
     pub debug_info: bool,
+    /// Link a shared library (DAP loads it in-process) instead of an executable.
+    pub link_shared: bool,
     /// WASM feature attrs, e.g. `+bulk-memory,+simd128,+tail-call`.
     pub mattr: String,
     pub sysroot: Option<String>,
@@ -37,6 +39,7 @@ impl Default for CodegenOptions {
             lto: Lto::None,
             sanitize: Sanitize::None,
             debug_info: false,
+            link_shared: false,
             mattr: "+bulk-memory,+simd128".to_string(),
             sysroot: None,
             c_calling_conv: true,

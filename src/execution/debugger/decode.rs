@@ -1,14 +1,14 @@
-//! Decodes a paused thread's locals out of the wasm instance's linear memory, using the debug type
+//! Decodes a paused thread's locals out of the guest linear heap, using the debug type
 //! table (see [`sourcemap::TypeDesc`]) to expand strings, structs, unions, and arrays into DAP
 //! `variables` trees. Split out of `mod.rs`.
 
-use crate::execution::host::{read_string_from_memory, shared_bytes};
 use std::collections::HashMap;
 use std::sync::Arc;
-use wasmtime::*;
 
 use super::sourcemap::{self, ScalarKind, SourceMap, TypeDesc};
 use super::state::{Shared, ThreadState, VarValue};
+
+const STRING_UTF8: usize = dream_mir::abi::STRING_UTF8_OFFSET as usize;
 
 /// Maximum recursion depth when eagerly decoding an aggregate into an inline summary. Nested values
 /// beyond this are collapsed to `{…}` but remain expandable on demand from the summary's children.
@@ -17,12 +17,11 @@ const MAX_DECODE_DEPTH: usize = 4;
 const MAX_FIELDS: usize = 128;
 const MAX_ELEMS: usize = 200;
 
-/// Reads and decodes every named local of `thread_id`'s innermost frame from the spill-pool globals,
-/// walking linear memory to expand strings, structs, unions, and arrays. Returns the thread's stop-time
-/// `variablesReference -> children` map, keyed within the thread's range: the thread base holds the
-/// top-frame locals, expandable children get base+1.. . An empty map means nothing to show.
+/// Reads and decodes every named local of `thread_id`'s innermost frame from the spill-pool slots,
+/// walking the guest heap to expand strings, structs, unions, and arrays.
 pub(super) fn snapshot_locals(
-    caller: &mut Caller<'_, ()>,
+    heap: &[u8],
+    slots: &[i64],
     shared: &Arc<Shared>,
     sm: &SourceMap,
     thread_id: u32,
@@ -39,27 +38,17 @@ pub(super) fn snapshot_locals(
         return HashMap::new();
     };
 
-    // Read the raw spilled slots first (needs `&mut caller`), then decode against memory.
     let raws: Vec<(String, u32, u64)> = info
         .vars
         .iter()
         .map(|v| {
-            (
-                v.name.clone(),
-                v.type_id,
-                read_global_i64(caller, v.global).unwrap_or(0) as u64,
-            )
+            let slot = slots.get(v.global as usize).copied().unwrap_or(0) as u64;
+            (v.name.clone(), v.type_id, slot)
         })
         .collect();
 
-    let Some(mem) = caller
-        .get_export("memory")
-        .and_then(Extern::into_shared_memory)
-    else {
-        return HashMap::new();
-    };
     let mut dec = Decoder {
-        mem,
+        heap,
         types: &sm.types,
         refs: HashMap::new(),
         next_ref: base + 1,
@@ -74,25 +63,14 @@ pub(super) fn snapshot_locals(
             variables_reference: vref,
         });
     }
-    // The top-frame locals live under the thread's base reference (returned by `scopes`).
     dec.refs.insert(base, locals);
     dec.refs
-}
-
-/// Reads the raw `i64` bits spilled into the `$__dbg_v{global}` pool global.
-fn read_global_i64(caller: &mut Caller<'_, ()>, global: u32) -> Option<i64> {
-    let name = format!("__dbg_v{}", global);
-    let g = caller.get_export(&name).and_then(Extern::into_global)?;
-    match g.get(&mut *caller) {
-        Val::I64(v) => Some(v),
-        _ => None,
-    }
 }
 
 /// Walks live values in linear memory against the debug type table, producing displayable strings and
 /// a registry of expandable children keyed by `variablesReference`.
 struct Decoder<'a> {
-    mem: SharedMemory,
+    heap: &'a [u8],
     types: &'a [TypeDesc],
     refs: HashMap<i64, Vec<VarValue>>,
     next_ref: i64,
@@ -118,26 +96,28 @@ impl Decoder<'_> {
     }
 
     fn u8_at(&self, addr: u32) -> u8 {
-        let d = shared_bytes(&self.mem);
-        d.get(addr as usize).copied().unwrap_or(0)
+        self.heap.get(addr as usize).copied().unwrap_or(0)
     }
 
     fn u32_at(&self, addr: u32) -> u32 {
-        let d = shared_bytes(&self.mem);
         let a = addr as usize;
-        if a + 4 <= d.len() {
-            u32::from_le_bytes([d[a], d[a + 1], d[a + 2], d[a + 3]])
+        if a + 4 <= self.heap.len() {
+            u32::from_le_bytes([
+                self.heap[a],
+                self.heap[a + 1],
+                self.heap[a + 2],
+                self.heap[a + 3],
+            ])
         } else {
             0
         }
     }
 
     fn u64_at(&self, addr: u32) -> u64 {
-        let d = shared_bytes(&self.mem);
         let a = addr as usize;
-        if a + 8 <= d.len() {
+        if a + 8 <= self.heap.len() {
             let mut b = [0u8; 8];
-            b.copy_from_slice(&d[a..a + 8]);
+            b.copy_from_slice(&self.heap[a..a + 8]);
             u64::from_le_bytes(b)
         } else {
             0
@@ -145,7 +125,15 @@ impl Decoder<'_> {
     }
 
     fn read_string(&self, ptr: u32) -> String {
-        read_string_from_memory(&self.mem, ptr as i32)
+        if ptr == 0 {
+            return String::new();
+        }
+        let len = self.u32_at(ptr) as usize;
+        let start = ptr as usize + STRING_UTF8;
+        if start.saturating_add(len) > self.heap.len() {
+            return String::new();
+        }
+        String::from_utf8_lossy(&self.heap[start..start + len]).into_owned()
     }
 
     /// Loads a scalar's raw bits from memory at `addr`, honoring its storage width.

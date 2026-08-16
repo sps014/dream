@@ -135,7 +135,12 @@ impl<'a> ModuleEmitter<'a> {
                 if retain && !skip_rc && self.interner.is_reference(fty) {
                     let old = self.load_width(fty, &addr);
                     self.retain_if_ref(fty, val);
-                    let _ = writeln!(self.buf, "  call void @dream_release(i32 {})", old);
+                    let _ = writeln!(
+                        self.buf,
+                        "  call void @{}(i32 {})",
+                        release_sym(self.interner, fty),
+                        old
+                    );
                 }
                 self.store_width(fty, &addr, val);
             }
@@ -177,7 +182,12 @@ impl<'a> ModuleEmitter<'a> {
 
     pub(crate) fn retain_if_ref(&mut self, ty: TypeId, val: &str) {
         if self.interner.is_reference(ty) {
-            let _ = writeln!(self.buf, "  call void @dream_retain(i32 {})", val);
+            let _ = writeln!(
+                self.buf,
+                "  call void @{}(i32 {})",
+                retain_sym(self.interner, ty),
+                val
+            );
         }
     }
 

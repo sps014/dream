@@ -55,6 +55,14 @@ pub fn compile_ir(ir: &str, out: &Path, opts: &CodegenOptions) -> Result<PathBuf
         cmd.arg("-g");
         cmd.arg("-gdwarf-4");
     }
+    if opts.link_shared && !opts.triple.is_wasm() {
+        cmd.arg("-fPIC");
+        if cfg!(target_os = "macos") {
+            cmd.arg("-dynamiclib");
+        } else {
+            cmd.arg("-shared");
+        }
+    }
     match opts.lto {
         Lto::None => {}
         Lto::Thin => {
@@ -99,6 +107,9 @@ pub fn compile_ir(ir: &str, out: &Path, opts: &CodegenOptions) -> Result<PathBuf
             if src.ends_with("dream_rt.c") || src.ends_with("dream_host.c") {
                 continue;
             }
+            if opts.link_shared && src.ends_with("entry.c") {
+                continue;
+            }
             cmd.arg(src);
         }
         cmd.arg(&ll);
@@ -133,4 +144,15 @@ pub fn compile_ir(ir: &str, out: &Path, opts: &CodegenOptions) -> Result<PathBuf
         });
     }
     Ok(out.to_path_buf())
+}
+
+/// File extension for `CodegenOptions::link_shared` artifacts.
+pub fn shared_lib_ext() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(windows) {
+        "dll"
+    } else {
+        "so"
+    }
 }

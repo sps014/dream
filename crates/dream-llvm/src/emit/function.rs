@@ -25,17 +25,21 @@ impl<'a> ModuleEmitter<'a> {
         } else {
             let _ = writeln!(self.buf, "\ndefine {} @{}({}) {{", ret, name, arglist);
         }
+        // WASM locals are zero-initialized. LLVM allocas are not, and RcInsertion releases the
+        // previous occupant of a ref local before the first store — garbage would be treated as a
+        // heap pointer (drops, length smash, unbounded VM loops).
         for (i, decl) in func.locals.iter().enumerate() {
             let ty = llvm_val_ty(self.interner, decl.ty);
             if ty != "void" {
                 let _ = writeln!(self.buf, "  %l{} = alloca {}", i, ty);
+                let _ = writeln!(self.buf, "  store {} {}, {}* %l{}", ty, zero(ty), ty, i);
             }
         }
         for (i, p) in func.params.iter().enumerate() {
             let ty = llvm_val_ty(self.interner, func.local_ty(*p));
             let _ = writeln!(self.buf, "  store {} %a{}, {}* %l{}", ty, i, ty, p.0);
         }
-        if self.opts.debug_info && self.opts.triple.is_wasm() {
+        if self.opts.debug_info {
             let _ = writeln!(self.buf, "  call void @dream_debug_enter(i32 {})", fn_id);
         }
         let _ = writeln!(self.buf, "  br label %bb{}", func.entry.0);
@@ -46,7 +50,7 @@ impl<'a> ModuleEmitter<'a> {
     }
 
     pub(crate) fn emit_debug_exit(&mut self) {
-        if self.opts.debug_info && self.opts.triple.is_wasm() {
+        if self.opts.debug_info {
             let _ = writeln!(
                 self.buf,
                 "  call void @dream_debug_exit(i32 {})",

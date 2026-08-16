@@ -1,33 +1,49 @@
-//! Runs the compiled wasm program under the debug hooks: spawning the execution thread, linking the
-//! `dream_debug.*` host hooks and DAP-routed print builtins, and attaching newly spawned `WebWorker`
-//! threads as their own DAP threads. Split out of `mod.rs`.
+//! Runs the compiled native guest under DAP: `dlopen` the debug shared library, install
+//! `dream_debug.*` hooks, and call `dream_user_main` on a helper thread.
 
-use crate::execution::host::{link_c_ffi_imports, read_string_from_memory, WorkerDebug};
-use crate::execution::wasm_runner::link_runtime_host_functions;
 use serde_json::json;
+use std::os::raw::c_char;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
-use wasmtime::*;
 
 use super::decode::snapshot_locals;
 use super::sourcemap::SourceMap;
 use super::state::{FrameState, Inner, Shared, ThreadHot, ThreadState};
 use super::{thread_name, Writer, MAIN_THREAD};
 
-/// Spawns the wasm execution thread: builds the engine/linker (with the debug hooks wired to
-/// `shared`), instantiates the module, and runs `main`. Sends `exited`/`terminated` DAP events when
-/// the program finishes.
+struct GuestFns {
+    heap_base: unsafe extern "C" fn() -> *mut u8,
+    heap_cap: unsafe extern "C" fn() -> i32,
+    user_main: unsafe extern "C" fn(),
+    thread_id: unsafe extern "C" fn() -> i32,
+    dbg: Vec<*mut i64>,
+}
+
+unsafe impl Send for GuestFns {}
+unsafe impl Sync for GuestFns {}
+
+struct Session {
+    shared: Arc<Shared>,
+    source_map: Arc<SourceMap>,
+    writer: Writer,
+    fns: GuestFns,
+}
+
+static SESSION: OnceLock<Mutex<Option<Arc<Session>>>> = OnceLock::new();
+
+fn session_cell() -> &'static Mutex<Option<Arc<Session>>> {
+    SESSION.get_or_init(|| Mutex::new(None))
+}
+
 pub(super) fn spawn_execution(
-    wat_path: String,
+    artifact: String,
     shared: Arc<Shared>,
     source_map: Arc<SourceMap>,
     writer: Writer,
     stop_on_entry: bool,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        // Register the main instance as DAP thread 1 (with a StepIn mode if `stopOnEntry`) before any
-        // hook fires, and announce it to the client.
         {
             let mut inner = shared.inner.lock().unwrap();
             let t = inner
@@ -39,7 +55,6 @@ pub(super) fn spawn_execution(
             }
         }
         if stop_on_entry {
-            // Mirror into the lock-free hot state so the very first line hook escalates and stops.
             shared
                 .hot_for(MAIN_THREAD)
                 .set_mode(super::state::RunMode::StepIn);
@@ -49,7 +64,7 @@ pub(super) fn spawn_execution(
             json!({ "reason": "started", "threadId": MAIN_THREAD }),
         );
 
-        let result = run_program(&wat_path, &shared, &source_map, &writer);
+        let result = run_program(&artifact, &shared, &source_map, &writer);
         shared.inner.lock().unwrap().terminated = true;
         let mut w = writer.lock().unwrap();
         if let Err(e) = &result {
@@ -60,303 +75,283 @@ pub(super) fn spawn_execution(
         }
         let _ = w.event("exited", json!({ "exitCode": 0 }));
         let _ = w.event("terminated", json!({}));
+        *session_cell().lock().unwrap() = None;
     })
 }
 
-/// Builds the instrumented module and runs its entry point under the debug hooks.
+fn guest_path(artifact: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(artifact);
+    let ext = dream_llvm::shared_lib_ext();
+    let lib = p.with_extension(ext);
+    if lib.exists() {
+        lib
+    } else {
+        p.with_extension("out")
+    }
+}
+
 fn run_program(
-    wat_path: &str,
+    artifact: &str,
     shared: &Arc<Shared>,
     source_map: &Arc<SourceMap>,
     writer: &Writer,
-) -> Result<()> {
-    crate::execution::host::enable_ansi_support();
-    crate::execution::host::attach_abi_from_wat_path(wat_path);
-    crate::execution::host::attach_c_abi_from_wat_path(wat_path);
-    let path = std::path::Path::new(wat_path);
-    let wasm_bytes = {
-        let sibling = path.with_extension("wasm");
-        if sibling.exists() {
-            std::fs::read(&sibling)
-                .map_err(|e| Error::msg(format!("failed to read {}: {}", sibling.display(), e)))?
-        } else if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-            std::fs::read(path)
-                .map_err(|e| Error::msg(format!("failed to read {}: {}", path.display(), e)))?
-        } else {
-            let text = std::fs::read_to_string(path)
-                .map_err(|e| Error::msg(format!("failed to read {}: {}", path.display(), e)))?;
-            wat::parse_str(&text)?
-        }
+) -> Result<(), String> {
+    let path = guest_path(artifact);
+    let lib = unsafe { libloading::Library::new(&path) }
+        .map_err(|e| format!("dlopen {}: {e}", path.display()))?;
+
+    type Install = unsafe extern "C" fn(
+        Option<unsafe extern "C" fn(i32)>,
+        Option<unsafe extern "C" fn(i32)>,
+        Option<unsafe extern "C" fn(i32, i32)>,
+    );
+    type InstallWorker = unsafe extern "C" fn(
+        Option<unsafe extern "C" fn(u32)>,
+        Option<unsafe extern "C" fn(u32)>,
+    );
+    type SetPrint = unsafe extern "C" fn(Option<unsafe extern "C" fn(*const c_char, i32)>);
+    type SetThread = unsafe extern "C" fn(i32);
+
+    let install: libloading::Symbol<Install> = unsafe {
+        lib.get(b"dream_debug_install\0")
+            .map_err(|e| format!("dream_debug_install: {e}"))?
     };
-    crate::execution::host::set_worker_module(&wasm_bytes);
+    let install_worker: libloading::Symbol<InstallWorker> = unsafe {
+        lib.get(b"dream_debug_install_worker\0")
+            .map_err(|e| format!("dream_debug_install_worker: {e}"))?
+    };
+    let set_print: libloading::Symbol<SetPrint> = unsafe {
+        lib.get(b"dream_debug_set_print\0")
+            .map_err(|e| format!("dream_debug_set_print: {e}"))?
+    };
+    let set_thread: libloading::Symbol<SetThread> = unsafe {
+        lib.get(b"dream_debug_set_thread\0")
+            .map_err(|e| format!("dream_debug_set_thread: {e}"))?
+    };
+    let rt_init: libloading::Symbol<unsafe extern "C" fn()> = unsafe {
+        lib.get(b"dream_rt_init\0")
+            .map_err(|e| format!("dream_rt_init: {e}"))?
+    };
+    let heap_base: libloading::Symbol<unsafe extern "C" fn() -> *mut u8> =
+        unsafe { lib.get(b"dream_heap_base\0").map_err(|e| format!("{e}"))? };
+    let heap_cap: libloading::Symbol<unsafe extern "C" fn() -> i32> =
+        unsafe { lib.get(b"dream_heap_cap\0").map_err(|e| format!("{e}"))? };
+    let user_main: libloading::Symbol<unsafe extern "C" fn()> = unsafe {
+        lib.get(b"dream_user_main\0")
+            .map_err(|e| format!("dream_user_main: {e}"))?
+    };
+    let thread_id: libloading::Symbol<unsafe extern "C" fn() -> i32> = unsafe {
+        lib.get(b"dream_debug_thread\0")
+            .map_err(|e| format!("dream_debug_thread: {e}"))?
+    };
 
-    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
-    // recursive `Option<T>`-boxed data structures, and for the shared-memory (WASM threads) config.
-    let config = crate::execution::host::threaded_wasm_config();
-    let engine = Engine::new(&config)?;
-    let module = Module::new(&engine, &wasm_bytes)?;
-    let shared_mem = crate::execution::host::shared_memory_for(&engine, &module)?;
-    crate::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
-    let mut store = Store::new(&engine, ());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
-    store.set_epoch_deadline(u64::MAX);
-    let mut linker: Linker<()> = Linker::new(&engine);
-
-    // Program output is routed to DAP `output` events (stdout is reserved for the DAP stream).
-    link_debug_print_functions(&mut linker, writer)?;
-    link_runtime_host_functions(&mut linker)?;
-    link_debug_hooks(&mut linker, shared, source_map, writer, MAIN_THREAD)?;
-    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
-    let search_roots = vec![std::path::Path::new(wat_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("."))];
-    link_c_ffi_imports(&mut linker, &module, &search_roots)?;
-    linker.define_unknown_imports_as_traps(&module)?;
-
-    let instance = linker.instantiate(&mut store, &module)?;
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, dream_mir::abi::ENTRY_FN) {
-        main_func.call(&mut store, ())?;
+    let mut dbg = Vec::new();
+    for i in 0..256u32 {
+        let name = format!("__dbg_v{i}\0");
+        let Ok(sym) = (unsafe { lib.get::<*mut i64>(name.as_bytes()) }) else {
+            break;
+        };
+        dbg.push(*sym);
     }
+    if dbg.is_empty() {
+        return Err("guest has no __dbg_v* spill globals".into());
+    }
+
+    let fns = GuestFns {
+        heap_base: *heap_base,
+        heap_cap: *heap_cap,
+        user_main: *user_main,
+        thread_id: *thread_id,
+        dbg,
+    };
+    let sess = Arc::new(Session {
+        shared: shared.clone(),
+        source_map: source_map.clone(),
+        writer: writer.clone(),
+        fns,
+    });
+    let user_main_fn = sess.fns.user_main;
+    *session_cell().lock().unwrap() = Some(Arc::clone(&sess));
+
+    unsafe {
+        rt_init();
+        set_print(Some(on_print));
+        set_thread(MAIN_THREAD as i32);
+        install(Some(on_enter), Some(on_exit), Some(on_line));
+        install_worker(Some(on_worker_start), Some(on_worker_exit));
+        user_main_fn();
+    }
+    *session_cell().lock().unwrap() = None;
+    drop(lib);
     Ok(())
 }
 
-/// The debugger's attachment to worker threads (installed via [`crate::execution::host::set_worker_debug`]).
-/// Each spawned worker is mapped to `worker_registry_id + 1` and, when it starts, registered as its own
-/// DAP thread with the real debug hooks + DAP-routed output linked into its instance.
-pub(super) struct WorkerAttach {
-    pub(super) shared: Arc<Shared>,
-    pub(super) source_map: Arc<SourceMap>,
-    pub(super) writer: Writer,
+fn with_session<R>(f: impl FnOnce(&Session) -> R) -> Option<R> {
+    let g = session_cell().lock().unwrap();
+    g.as_ref().map(|s| f(s))
 }
 
-impl WorkerDebug for WorkerAttach {
-    fn dap_thread_id(&self, worker_id: u32) -> u32 {
-        worker_id + 1
+extern "C" fn on_print(s: *const c_char, n: i32) {
+    if s.is_null() || n <= 0 {
+        return;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(s as *const u8, n as usize) };
+    let text = String::from_utf8_lossy(bytes).into_owned();
+    with_session(|sess| {
+        let _ = sess.writer.lock().unwrap().event(
+            "output",
+            json!({ "category": "stdout", "output": text }),
+        );
+    });
+}
+
+extern "C" fn on_enter(id: i32) {
+    let Some(tid) = with_session(|s| unsafe { (s.fns.thread_id)() as u32 }) else {
+        return;
+    };
+    let tid = if tid == 0 { MAIN_THREAD } else { tid };
+    with_session(|sess| {
+        let hot = sess.shared.hot_for(tid);
+        hot.depth.fetch_add(1, Ordering::Relaxed);
+        let mut inner = sess.shared.inner.lock().unwrap();
+        let t = inner
+            .threads
+            .entry(tid)
+            .or_insert_with(|| ThreadState::new(thread_name(tid)));
+        if let Some(caller_frame) = t.call_stack.last_mut() {
+            let packed = hot.pos.load(Ordering::Relaxed);
+            caller_frame.file = (packed >> 32) as u32;
+            caller_frame.line = packed as u32;
+        }
+        t.call_stack.push(FrameState {
+            func_id: id as u32,
+            file: 0,
+            line: 0,
+        });
+    });
+}
+
+extern "C" fn on_exit(_id: i32) {
+    let Some(tid) = with_session(|s| unsafe { (s.fns.thread_id)() as u32 }) else {
+        return;
+    };
+    let tid = if tid == 0 { MAIN_THREAD } else { tid };
+    with_session(|sess| {
+        let hot = sess.shared.hot_for(tid);
+        hot.depth.fetch_sub(1, Ordering::Relaxed);
+        let mut inner = sess.shared.inner.lock().unwrap();
+        if let Some(t) = inner.threads.get_mut(&tid) {
+            t.call_stack.pop();
+        }
+    });
+}
+
+extern "C" fn on_line(file_id: i32, line: i32) {
+    let Some(tid) = with_session(|s| unsafe { (s.fns.thread_id)() as u32 }) else {
+        return;
+    };
+    let tid = if tid == 0 { MAIN_THREAD } else { tid };
+    let Some(sess) = session_cell().lock().unwrap().clone() else {
+        return;
+    };
+    let hot = sess.shared.hot_for(tid);
+    hot.pos.store(
+        ThreadHot::pack_pos(file_id as u32, line as u32),
+        Ordering::Relaxed,
+    );
+    let maybe_stop = hot.pause.load(Ordering::Relaxed)
+        || hot.step_wants_stop()
+        || sess.shared.bp_filter.probe(file_id as u32, line as u32);
+    if !maybe_stop {
+        return;
     }
 
-    fn on_start(&self, thread_id: u32) {
+    let stop = {
+        let mut inner = sess.shared.inner.lock().unwrap();
+        let Inner {
+            breakpoints,
+            threads,
+            ..
+        } = &mut *inner;
+        let Some(t) = threads.get_mut(&tid) else {
+            return;
+        };
+        if let Some(frame) = t.call_stack.last_mut() {
+            frame.file = file_id as u32;
+            frame.line = line as u32;
+        }
+        Shared::should_stop(breakpoints, t)
+    };
+    let Some(reason) = stop else {
+        return;
+    };
+    hot.pause.store(false, Ordering::Relaxed);
+
+    let slots: Vec<i64> = sess
+        .fns
+        .dbg
+        .iter()
+        .map(|p| unsafe { p.read() })
+        .collect();
+    let cap = unsafe { (sess.fns.heap_cap)() }.max(0) as usize;
+    let heap = unsafe { std::slice::from_raw_parts((sess.fns.heap_base)(), cap) };
+    let var_refs = snapshot_locals(heap, &slots, &sess.shared, &sess.source_map, tid);
+    {
+        let mut inner = sess.shared.inner.lock().unwrap();
+        if let Some(t) = inner.threads.get_mut(&tid) {
+            t.var_refs = var_refs;
+            t.paused = true;
+            t.resume = false;
+        }
+    }
+    let _ = sess.writer.lock().unwrap().event(
+        "stopped",
+        json!({
+            "reason": reason.as_str(),
+            "threadId": tid,
+            "allThreadsStopped": false,
+        }),
+    );
+    let mut inner = sess.shared.inner.lock().unwrap();
+    loop {
+        match inner.threads.get(&tid) {
+            Some(t) if t.resume => break,
+            None => return,
+            _ => {}
+        }
+        inner = sess.shared.cv.wait(inner).unwrap();
+    }
+    if let Some(t) = inner.threads.get_mut(&tid) {
+        t.paused = false;
+    }
+}
+
+extern "C" fn on_worker_start(thread_id: u32) {
+    with_session(|sess| {
         {
-            let mut inner = self.shared.inner.lock().unwrap();
+            let mut inner = sess.shared.inner.lock().unwrap();
             inner
                 .threads
                 .entry(thread_id)
                 .or_insert_with(|| ThreadState::new(thread_name(thread_id)));
         }
-        let _ = self.writer.lock().unwrap().event(
+        let _ = sess.writer.lock().unwrap().event(
             "thread",
             json!({ "reason": "started", "threadId": thread_id }),
         );
-    }
+    });
+}
 
-    fn on_exit(&self, thread_id: u32) {
+extern "C" fn on_worker_exit(thread_id: u32) {
+    with_session(|sess| {
         {
-            let mut inner = self.shared.inner.lock().unwrap();
+            let mut inner = sess.shared.inner.lock().unwrap();
             inner.threads.remove(&thread_id);
         }
-        // Wake anyone (e.g. the main thread's condvar waiters) and notify the client.
-        self.shared.cv.notify_all();
-        let _ = self.writer.lock().unwrap().event(
+        sess.shared.cv.notify_all();
+        let _ = sess.writer.lock().unwrap().event(
             "thread",
             json!({ "reason": "exited", "threadId": thread_id }),
         );
-    }
-
-    fn install(&self, linker: &mut Linker<()>, thread_id: u32) {
-        let _ = link_debug_print_functions(linker, &self.writer);
-        let _ = link_debug_hooks(
-            linker,
-            &self.shared,
-            &self.source_map,
-            &self.writer,
-            thread_id,
-        );
-    }
-}
-
-/// The `print_*`/`println` builtins wired to DAP `output` events instead of process stdout.
-fn link_debug_print_functions(linker: &mut Linker<()>, writer: &Writer) -> Result<()> {
-    let emit = |writer: &Writer, text: String| {
-        let _ = writer
-            .lock()
-            .unwrap()
-            .event("output", json!({ "category": "stdout", "output": text }));
-    };
-
-    let w = writer.clone();
-    linker.func_wrap("env", "print_int", move |v: i32| emit(&w, v.to_string()))?;
-    let w = writer.clone();
-    linker.func_wrap("env", "print_float", move |v: f32| emit(&w, v.to_string()))?;
-    let w = writer.clone();
-    linker.func_wrap("env", "print_double", move |v: f64| emit(&w, v.to_string()))?;
-    let w = writer.clone();
-    linker.func_wrap("env", "print_char", move |v: i32| {
-        if let Some(c) = char::from_u32(v as u32) {
-            emit(&w, c.to_string());
-        }
-    })?;
-    let w = writer.clone();
-    linker.func_wrap(
-        "env",
-        "print_string",
-        move |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
-            let s = read_caller_string(&mut caller, ptr)?;
-            emit(&w, s);
-            Ok(())
-        },
-    )?;
-    let w = writer.clone();
-    linker.func_wrap(
-        "env",
-        "println",
-        move |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
-            let s = read_caller_string(&mut caller, ptr)?;
-            emit(&w, format!("{}\n", s));
-            Ok(())
-        },
-    )?;
-    Ok(())
-}
-
-/// Wires the compiler-inserted `dream_debug.enter/line/exit` hooks into `linker`, closing over the
-/// shared debug state and the DAP `thread_id` this instance runs as. Line hooks operate only on that
-/// thread's [`ThreadState`], so the main instance and each worker stop/resume independently.
-fn link_debug_hooks(
-    linker: &mut Linker<()>,
-    shared: &Arc<Shared>,
-    source_map: &Arc<SourceMap>,
-    writer: &Writer,
-    thread_id: u32,
-) -> Result<()> {
-    // The lock-free hot state this thread's hooks read on every line without touching the mutex.
-    let hot = shared.hot_for(thread_id);
-
-    let sh = shared.clone();
-    let hot_enter = hot.clone();
-    linker.func_wrap(
-        "dream_debug",
-        "enter",
-        move |_c: Caller<'_, ()>, id: i32| {
-            hot_enter.depth.fetch_add(1, Ordering::Relaxed);
-            let mut inner = sh.inner.lock().unwrap();
-            let t = inner
-                .threads
-                .entry(thread_id)
-                .or_insert_with(|| ThreadState::new(thread_name(thread_id)));
-            // Freeze the caller's current line (from the lock-free position) into its frame before
-            // pushing the callee — so the caller shows its call site even though most of its lines ran
-            // on the mutex-free fast path.
-            if let Some(caller_frame) = t.call_stack.last_mut() {
-                let packed = hot_enter.pos.load(Ordering::Relaxed);
-                caller_frame.file = (packed >> 32) as u32;
-                caller_frame.line = packed as u32;
-            }
-            t.call_stack.push(FrameState {
-                func_id: id as u32,
-                file: 0,
-                line: 0,
-            });
-        },
-    )?;
-
-    let sh = shared.clone();
-    let hot_exit = hot.clone();
-    linker.func_wrap(
-        "dream_debug",
-        "exit",
-        move |_c: Caller<'_, ()>, _id: i32| {
-            hot_exit.depth.fetch_sub(1, Ordering::Relaxed);
-            let mut inner = sh.inner.lock().unwrap();
-            if let Some(t) = inner.threads.get_mut(&thread_id) {
-                t.call_stack.pop();
-            }
-        },
-    )?;
-
-    let sh = shared.clone();
-    let sm = source_map.clone();
-    let wr = writer.clone();
-    let hot_line = hot.clone();
-    linker.func_wrap(
-        "dream_debug",
-        "line",
-        move |mut caller: Caller<'_, ()>, file_id: i32, line: i32| {
-            // Hot path: record the current position lock-free, then bail unless something might want to
-            // stop here (a breakpoint at this line, an active step, or a pending pause). This is what
-            // keeps tight loops running at near-native speed under the debugger.
-            hot_line.pos.store(
-                ThreadHot::pack_pos(file_id as u32, line as u32),
-                Ordering::Relaxed,
-            );
-            let maybe_stop = hot_line.pause.load(Ordering::Relaxed)
-                || hot_line.step_wants_stop()
-                || sh.bp_filter.probe(file_id as u32, line as u32);
-            if !maybe_stop {
-                return;
-            }
-
-            let stop = {
-                let mut inner = sh.inner.lock().unwrap();
-                let Inner {
-                    breakpoints,
-                    threads,
-                    ..
-                } = &mut *inner;
-                let Some(t) = threads.get_mut(&thread_id) else {
-                    return;
-                };
-                if let Some(frame) = t.call_stack.last_mut() {
-                    frame.file = file_id as u32;
-                    frame.line = line as u32;
-                }
-                Shared::should_stop(breakpoints, t)
-            };
-            let Some(reason) = stop else {
-                return;
-            };
-            // A stop is happening: clear the lock-free pause flag now that it has been consumed.
-            hot_line.pause.store(false, Ordering::Relaxed);
-            // Snapshot this thread's current frame (and expandable children) while we still hold the
-            // wasm caller; references are namespaced in the thread's range.
-            let var_refs = snapshot_locals(&mut caller, &sh, &sm, thread_id);
-            {
-                let mut inner = sh.inner.lock().unwrap();
-                if let Some(t) = inner.threads.get_mut(&thread_id) {
-                    t.var_refs = var_refs;
-                    t.paused = true;
-                    t.resume = false;
-                }
-            }
-            let _ = wr.lock().unwrap().event(
-                "stopped",
-                json!({
-                    "reason": reason.as_str(),
-                    "threadId": thread_id,
-                    "allThreadsStopped": false,
-                }),
-            );
-            // Park until the client resumes *this* thread (continue/step/disconnect).
-            let mut inner = sh.inner.lock().unwrap();
-            loop {
-                match inner.threads.get(&thread_id) {
-                    Some(t) if t.resume => break,
-                    None => return,
-                    _ => {}
-                }
-                inner = sh.cv.wait(inner).unwrap();
-            }
-            if let Some(t) = inner.threads.get_mut(&thread_id) {
-                t.paused = false;
-            }
-        },
-    )?;
-    Ok(())
-}
-
-pub(super) fn read_caller_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<String> {
-    let memory = caller
-        .get_export("memory")
-        .and_then(Extern::into_shared_memory)
-        .ok_or_else(|| Error::msg("module must export `memory`"))?;
-    Ok(read_string_from_memory(&memory, ptr))
+    });
 }

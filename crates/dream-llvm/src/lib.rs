@@ -8,7 +8,7 @@ mod emit;
 mod options;
 mod triple;
 
-pub use clang::{compile_ir, ClangError};
+pub use clang::{compile_ir, shared_lib_ext, ClangError};
 pub use debug_map::debug_map_json;
 pub use emit::emit_module_ir;
 pub use options::{CodegenOptions, Lto, Sanitize};

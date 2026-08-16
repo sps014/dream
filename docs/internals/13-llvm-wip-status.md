@@ -28,21 +28,27 @@ Wasmtime hosts lived in the **compiler process** (`src/execution/host/`). Native
 | webview | Rust `host/webview.rs` (wry, in-process) |
 | WebWorker | Rust `host/worker.rs` (OS threads, shared C heap) |
 | `@c` | Rust `host/c_ffi.rs` (libloading + libffi) |
+| Native DAP | `dream debug-adapter` compiles a shared library; adapter `dlopen`s it and installs `dream_debug_*` |
 | `js*` | compile-time error on native |
 
 LLVM `Await` stores the host return value as the result (no Future unwrap). Async hosts return the **payload** (`char[]` / error code / `i64` timestamp), matching that lowering.
 
 ## Still broken / next
 
-1. `@shared` atomics across worker threads (heap mutex covers malloc, not field stores).
-2. Native DAP (clang `-g` only; DAP still wasmtime).
-3. Full ignored e2e corpus as the default gate.
-4. Debug `libdream_rt.a` is large (reqwest + wgpu + wry).
+1. Debug `libdream_rt.a` is large (reqwest + wgpu + wry).
+
+`@shared` locks/semaphores and worker-shared objects run on a **non-moving mmap heap** with 4-byte
+allocation alignment so ARM64 atomics do not SIGBUS. Un-awaited `async` calls run on a helper
+thread (`dream_task_run*`) so `Promise.cancel` can terminate the worker without blocking in
+`spawn`.
+
+Default `cargo test --workspace` runs the full debug e2e corpus and native DAP. Release corpus
+stays behind `--ignored`.
 
 ## Layout
 
 ```
-crates/dream-rt/c/dream_rt.c      linear heap (C, wasm32+native)
+crates/dream-rt/c/dream_rt.c      linear heap (C, wasm32+native) + DAP hooks
 crates/dream-rt/c/dream_host.c    math/files/process meta (C)
 crates/dream-rt/src/host/         wasmtime-parity OS hosts (Rust)
 crates/dream-rt/src/host/gpu/     wgpu (shared with wasmtime linker)
@@ -51,5 +57,6 @@ crates/dream-rt/src/host/webview.rs wry
 crates/dream-rt/src/host/c_ffi.rs  @c libffi
 crates/dream-rt/src/guest.rs      read/write guest strings/byte[]
 crates/dream-llvm/src/clang.rs    native: link native_archive(); wasm: compile C only
+src/execution/debugger/          native DAP (`dlopen` shared lib)
 src/execution/host/gpu/mod.rs     wasmtime linker only
 ```

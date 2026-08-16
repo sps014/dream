@@ -48,6 +48,50 @@ impl<'a> ModuleEmitter<'a> {
             llvm_val_ty(self.interner, ret_id).to_string()
         };
         let name = self.resolve_callee(callee, &ret, &arg_tys);
+        if !self.opts.triple.is_wasm() && ret == "i32" && arg_tys.iter().all(|t| t == "i32") {
+            if let Some(mf) = self
+                .mir
+                .functions
+                .iter()
+                .find(|f| f.def == callee.def && f.instance == callee.args)
+                .or_else(|| self.mir.functions.iter().find(|f| f.def == callee.def))
+            {
+                if mf.is_async && mf.name != "main" && args.len() <= 3 {
+                    let t = self.tmp();
+                    match args.len() {
+                        0 => {
+                            let _ = writeln!(
+                                self.buf,
+                                "  {} = call i32 @dream_task_run0(i32 ()* @{})",
+                                t, name
+                            );
+                        }
+                        1 => {
+                            let _ = writeln!(
+                                self.buf,
+                                "  {} = call i32 @dream_task_run1(i32 (i32)* @{}, {})",
+                                t, name, alist[0]
+                            );
+                        }
+                        2 => {
+                            let _ = writeln!(
+                                self.buf,
+                                "  {} = call i32 @dream_task_run2(i32 (i32, i32)* @{}, {}, {})",
+                                t, name, alist[0], alist[1]
+                            );
+                        }
+                        _ => {
+                            let _ = writeln!(
+                                self.buf,
+                                "  {} = call i32 @dream_task_run3(i32 (i32, i32, i32)* @{}, {}, {}, {})",
+                                t, name, alist[0], alist[1], alist[2]
+                            );
+                        }
+                    }
+                    return t;
+                }
+            }
+        }
         if ret == "void" {
             let _ = writeln!(self.buf, "  call void @{}({})", name, alist.join(", "));
             return "0".into();
@@ -282,12 +326,15 @@ impl<'a> ModuleEmitter<'a> {
         ctor: Option<dream_types::DefId>,
         args: &[Operand],
     ) -> String {
-        let size = self
+        let mut size = self
             .mir
             .layouts
             .get(ty)
             .map(|l| l.size)
             .unwrap_or(0);
+        if self.interner.is_shared_type(ty) {
+            size += dream_mir::abi::HEADER_LOCK_WORD_SIZE;
+        }
         let tag = self.tags.get(&ty).copied().unwrap_or(dream_mir::abi::TAG_STRUCT_BASE);
         let p = self.tmp();
         let _ = writeln!(

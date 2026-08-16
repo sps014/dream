@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 extern "C" {
     fn __dream_worker_invoke(idx: i32, env: i32, msg: i32) -> i32;
+    fn dream_debug_worker_start(id: u32);
+    fn dream_debug_worker_exit(id: u32);
 }
 
 enum Job {
@@ -18,6 +20,7 @@ enum Job {
 struct WorkerHandle {
     to_worker: Sender<Job>,
     from_worker: Arc<Mutex<Receiver<String>>>,
+    reply_tx: Sender<String>,
     fn_idx: i32,
     env: i32,
 }
@@ -38,9 +41,14 @@ fn spawn_worker_thread(fn_idx: i32, env: i32) -> i32 {
     let (job_tx, job_rx) = channel::<Job>();
     let (reply_tx, reply_rx) = channel::<String>();
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+    let reply_for_loop = reply_tx.clone();
     if std::thread::Builder::new()
         .name(format!("dream-worker-{id}"))
-        .spawn(move || worker_loop(id, job_rx, reply_tx))
+        .spawn(move || {
+            unsafe { dream_debug_worker_start(id + 1) };
+            worker_loop(id, job_rx, reply_for_loop);
+            unsafe { dream_debug_worker_exit(id + 1) };
+        })
         .is_err()
     {
         eprintln!("dream worker: failed to spawn thread");
@@ -51,10 +59,12 @@ fn spawn_worker_thread(fn_idx: i32, env: i32) -> i32 {
         WorkerHandle {
             to_worker: job_tx,
             from_worker: Arc::new(Mutex::new(reply_rx)),
+            reply_tx,
             fn_idx,
             env,
         },
     );
+    super::task::on_worker_spawn(id as i32);
     id as i32
 }
 
@@ -113,13 +123,18 @@ pub extern "C" fn dream_worker_recv(id: i32) -> i32 {
     guest::intern(&text)
 }
 
-#[no_mangle]
-pub extern "C" fn dream_worker_terminate(id: i32) {
+pub(crate) fn terminate_worker(id: i32) {
     killed().lock().unwrap().insert(id as u32);
     let g = workers().lock().unwrap();
     if let Some(w) = g.get(&(id as u32)) {
+        let _ = w.reply_tx.send(String::new());
         let _ = w.to_worker.send(Job::Terminate);
     }
+}
+
+#[no_mangle]
+pub extern "C" fn dream_worker_terminate(id: i32) {
+    terminate_worker(id);
 }
 
 #[no_mangle]

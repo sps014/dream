@@ -466,7 +466,7 @@ impl<'a> ModuleEmitter<'a> {
                     let t = self.tmp();
                     let _ = writeln!(self.buf, "  {} = call i32 @{}(i32 {})", t, name, v);
                     t
-                } else {
+                } else if self.mir.layouts.get(ty).is_some() {
                     let t = self.tmp();
                     let _ = writeln!(
                         self.buf,
@@ -475,6 +475,10 @@ impl<'a> ModuleEmitter<'a> {
                         fmt_sym("hash", ty),
                         v
                     );
+                    t
+                } else {
+                    let t = self.tmp();
+                    let _ = writeln!(self.buf, "  {} = call i32 @dream_object_hash(i32 {})", t, v);
                     t
                 }
             }
@@ -516,13 +520,19 @@ impl<'a> ModuleEmitter<'a> {
             TyKind::Struct(..) => {
                 if let Some(name) = self.override_sym(ty, "to_string") {
                     let _ = writeln!(self.buf, "  {} = call i32 @{}(i32 {})", t, name, v);
-                } else {
+                } else if self.mir.layouts.get(ty).is_some() {
                     let _ = writeln!(
                         self.buf,
                         "  {} = call i32 @{}(i32 {})",
                         t,
                         fmt_sym("fmt", ty),
                         v
+                    );
+                } else {
+                    let _ = writeln!(
+                        self.buf,
+                        "  {} = call i32 @dream_object_to_string(i32 {})",
+                        t, v
                     );
                 }
                 t
@@ -600,15 +610,27 @@ impl<'a> ModuleEmitter<'a> {
         r
     }
 
+    fn wire_byte_size(&self, ty: TypeId) -> i32 {
+        if let Some(sz) = self.interner.value_layout(ty) {
+            return sz.0 as i32;
+        }
+        if let Some(layout) = self.mir.layouts.get(ty) {
+            if layout.size > 0 {
+                return layout.size as i32;
+            }
+        }
+        scalar_size(self.interner, ty).0 as i32
+    }
+
     pub(crate) fn emit_to_bytes(&mut self, func: &MirFunction, value: &Operand, ty: TypeId) -> String {
-        let (es, _) = scalar_size(self.interner, ty);
+        let es = self.wire_byte_size(ty);
         let raw = self.operand(func, value);
         let v = self.coerce(
             &raw,
             self.op_ty(func, value),
             llvm_val_ty(self.interner, ty),
         );
-        let payload = 4 + es as i32;
+        let payload = 4 + es;
         let p = self.tmp();
         let _ = writeln!(
             self.buf,
@@ -617,20 +639,29 @@ impl<'a> ModuleEmitter<'a> {
             payload,
             dream_mir::abi::TAG_ARRAY
         );
-        // `byte[]` length is the raw size in bytes (`Bytes.of` is one element per byte).
         let _ = writeln!(self.buf, "  call void @dream_store_i32(i32 {}, i32 {})", p, es);
         let addr = self.tmp();
         let _ = writeln!(self.buf, "  {} = add i32 {}, 4", addr, p);
-        self.store_width(ty, &addr, &v);
+        if self.interner.is_reference(ty) || self.mir.layouts.get(ty).is_some() {
+            let _ = writeln!(
+                self.buf,
+                "  call void @dream_memcpy(i32 {}, i32 {}, i32 {})",
+                addr, v, es
+            );
+        } else {
+            self.store_width(ty, &addr, &v);
+        }
         p
     }
 
     pub(crate) fn emit_from_bytes(&mut self, func: &MirFunction, bytes: &Operand, ty: TypeId) -> String {
-        let (es, _) = scalar_size(self.interner, ty);
+        let es = self.wire_byte_size(ty);
         let b = self.operand(func, bytes);
         let src = self.tmp();
         let _ = writeln!(self.buf, "  {} = add i32 {}, 4", src, b);
-        if matches!(self.interner.kind(ty), TyKind::Prim(p) if *p != PrimTy::String) {
+        if matches!(self.interner.kind(ty), TyKind::Prim(p) if *p != PrimTy::String)
+            && self.mir.layouts.get(ty).is_none()
+        {
             return self.load_width(ty, &src);
         }
         let tag = self.tags.get(&ty).copied().unwrap_or(dream_mir::abi::TAG_INT);

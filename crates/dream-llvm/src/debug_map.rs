@@ -1,7 +1,7 @@
-//! `.dbg.json` writer for the wasmtime DAP adapter.
+//! `.dbg.json` writer for the native DAP adapter.
 
 use dream_mir::{Mir, MirFunction};
-use dream_types::{TyKind, TypeInterner};
+use dream_types::{PrimTy, TyKind, TypeInterner};
 use std::fmt::Write as _;
 
 pub fn debug_map_json(mir: &Mir, interner: &TypeInterner) -> String {
@@ -33,9 +33,16 @@ pub fn debug_map_json(mir: &Mir, interner: &TypeInterner) -> String {
         }
         file_json.push_str(&json_str(f));
     }
+    let mut types = String::new();
+    for (i, (_id, kind)) in interner.iter_kinds().enumerate() {
+        if i > 0 {
+            types.push(',');
+        }
+        types.push_str(&type_json(kind));
+    }
     format!(
-        "{{\"files\":[{}],\"functions\":[{}],\"types\":[{{\"kind\":\"scalar\",\"scalar\":\"int\"}}]}}",
-        file_json, fns
+        "{{\"files\":[{}],\"functions\":[{}],\"types\":[{}]}}",
+        file_json, fns, types
     )
 }
 
@@ -59,14 +66,26 @@ fn fn_vars(func: &MirFunction, interner: &TypeInterner) -> String {
         first = false;
         let _ = write!(
             out,
-            "{{\"name\":{},\"global\":{},\"type\":0}}",
+            "{{\"name\":{},\"global\":{},\"type\":{}}}",
             json_str(name),
-            slot
+            slot,
+            decl.ty.0
         );
         slot += 1;
     }
     out.push(']');
     out
+}
+
+fn type_json(kind: &TyKind) -> String {
+    match kind {
+        TyKind::Prim(PrimTy::String) => "{\"kind\":\"string\"}".to_string(),
+        TyKind::Prim(p) => format!("{{\"kind\":\"scalar\",\"scalar\":\"{}\"}}", p.name()),
+        TyKind::Array(elem) => {
+            format!("{{\"kind\":\"array\",\"elem\":{},\"stride\":4}}", elem.0)
+        }
+        _ => "{\"kind\":\"ref\"}".to_string(),
+    }
 }
 
 fn json_str(s: &str) -> String {

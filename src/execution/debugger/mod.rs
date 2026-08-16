@@ -1,26 +1,15 @@
-//! An interactive source-level debugger for Dream programs running under wasmtime, exposed to editors
+//! An interactive source-level debugger for Dream programs running natively, exposed to editors
 //! through the Debug Adapter Protocol (DAP) over stdio.
 //!
 //! The compiler, when built with `-g`/`--debug-info`, instruments each function with
-//! `dream_debug.enter/line/exit` host hooks and spills every named local into a pool of exported
-//! `i64` globals at each statement boundary (see [`dream_mir::emit::debug_map`]). This module loads
-//! the emitted `.dbg.json` [source map](sourcemap), runs the program on a dedicated thread, and lets
-//! those hooks pause execution at breakpoints / steps. While paused it snapshots the current frame's
-//! locals so the DAP main thread can answer `stackTrace`/`scopes`/`variables`/`evaluate` requests.
-//!
-//! Every wasm execution thread — the main instance (`threadId` 1) and each spawned `WebWorker` — is
-//! surfaced as its own DAP thread with an independent [`state::ThreadState`]; the hooks are tagged
-//! with the thread id they run on, so workers stop/resume and report call stacks and variables
-//! independently. Breakpoints are shared across threads.
-//!
-//! ```text
-//!  client (VS Code) <--DAP/stdio--> main thread <--Shared+Condvar--> {main, worker…} wasm threads
-//! ```
+//! `dream_debug.enter/line/exit` hooks and spills named locals into `__dbg_v*` globals at each
+//! statement boundary. This module loads the emitted `.dbg.json` source map, `dlopen`s the guest
+//! shared library, and lets those hooks pause execution at breakpoints / steps.
 //!
 //! Split by concern:
 //! - [`requests`]: handlers for the read-only DAP requests (`threads`, `setBreakpoints`,
 //!   `stackTrace`, `scopes`, `variables`, `evaluate`).
-//! - [`runner`]: spawns and runs the wasm program under the debug hooks, and attaches worker threads.
+//! - [`runner`]: `dlopen`s the native guest and parks on debug hooks (including WebWorker threads).
 //! - [`decode`]: decodes a paused thread's locals out of linear memory into DAP `variables` trees.
 
 mod decode;
@@ -35,7 +24,7 @@ use requests::{
     handle_evaluate, handle_set_breakpoints, handle_stack_trace, handle_threads, handle_variables,
     scopes_body,
 };
-use runner::{spawn_execution, WorkerAttach};
+use runner::spawn_execution;
 use serde_json::{json, Value};
 use sourcemap::SourceMap;
 use state::{RunMode, Shared};
@@ -46,7 +35,7 @@ use std::thread::JoinHandle;
 
 type Writer = Arc<Mutex<DapWriter<Stdout>>>;
 
-/// The DAP thread id of the main wasm instance. Workers are assigned `worker_registry_id + 1`.
+/// The DAP thread id of the main guest. Workers are assigned `worker_registry_id + 1`.
 const MAIN_THREAD: u32 = 1;
 
 /// A human-readable name for a DAP thread id (`main`, or `worker N`).
@@ -58,26 +47,18 @@ fn thread_name(thread_id: u32) -> String {
     }
 }
 
-/// Entry point for the `dream debug-adapter <file>` subcommand: `wat_path` is the compiled `.wat`
-/// (its `.dbg.json` sibling holds the source map). Speaks DAP over stdin/stdout until the client
+/// Entry point for the `dream debug-adapter <file>` subcommand: `artifact` is the compiler output
+/// stem (sibling `.dbg.json` + shared library). Speaks DAP over stdin/stdout until the client
 /// disconnects.
-pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let map_path = debug_map_path(wat_path);
+pub fn run_debug_adapter(artifact: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let map_path = debug_map_path(artifact);
     let source_map = Arc::new(SourceMap::load(&map_path).map_err(io_err)?);
     let shared = Arc::new(Shared::default());
     let writer: Writer = Arc::new(Mutex::new(DapWriter::new(io::stdout())));
 
-    // Attach the debugger to worker threads: each spawned worker becomes its own DAP thread with the
-    // real debug hooks linked into its instance (see `WorkerAttach`).
-    crate::execution::host::set_worker_debug(Arc::new(WorkerAttach {
-        shared: shared.clone(),
-        source_map: source_map.clone(),
-        writer: writer.clone(),
-    }));
-
     let stdin = io::stdin();
     let mut reader = stdin.lock();
-    let mut wasm_thread: Option<JoinHandle<()>> = None;
+    let mut exec_thread: Option<JoinHandle<()>> = None;
     let mut stop_on_entry = false;
 
     while let Some(msg) = read_message(&mut reader)? {
@@ -112,9 +93,9 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
             "configurationDone" => {
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
                 // Start execution only once (guard against duplicate configurationDone).
-                if wasm_thread.is_none() {
-                    wasm_thread = Some(spawn_execution(
-                        wat_path.to_string(),
+                if exec_thread.is_none() {
+                    exec_thread = Some(spawn_execution(
+                        artifact.to_string(),
                         shared.clone(),
                         source_map.clone(),
                         writer.clone(),
@@ -203,7 +184,7 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
     }
 
     // Best-effort: let the execution thread finish if it is still running.
-    if let Some(handle) = wasm_thread {
+    if let Some(handle) = exec_thread {
         let _ = handle.join();
     }
     Ok(())
@@ -271,7 +252,7 @@ fn resume_all(shared: &Arc<Shared>) {
     shared.cv.notify_all();
 }
 
-/// Derives the `.dbg.json` path sitting next to a compiled `.wat` output.
+/// Derives the `.dbg.json` path sitting next to the compiler output stem.
 fn debug_map_path(wat_path: &str) -> String {
     let path = std::path::Path::new(wat_path);
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("out");

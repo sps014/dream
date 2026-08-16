@@ -10,6 +10,13 @@
 #include <string.h>
 #include <time.h>
 #include <limits.h>
+#include <sys/mman.h>
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#ifndef DREAM_HEAP_RESERVE
+#define DREAM_HEAP_RESERVE (256u * 1024u * 1024u)
+#endif
 #else
 typedef unsigned long size_t;
 #ifndef INT32_MAX
@@ -58,6 +65,15 @@ __attribute__((weak)) int64_t dream_call_guest(int32_t idx, int64_t a0, int64_t 
     return 0;
 }
 
+static void lock_acq(void) {
+    int expected = 0;
+    while (!atomic_compare_exchange_weak(&g_lock, &expected, 1)) {
+        expected = 0;
+    }
+}
+
+static void lock_rel(void) { atomic_store(&g_lock, 0); }
+
 static void grow(uint32_t need) {
 #ifdef DREAM_FREESTANDING
     static uint8_t storage[16u * 1024u * 1024u];
@@ -70,20 +86,21 @@ static void grow(uint32_t need) {
         memset(storage, 0, sizeof(storage));
     }
 #else
-    uint32_t n = g_cap == 0 ? (1u << 20) : g_cap;
-    while (n < need) {
-        n *= 2;
+    /* Never realloc: other threads hold `g_heap + offset` for atomics. */
+    if (g_heap == NULL) {
+        void *p = mmap(NULL, DREAM_HEAP_RESERVE, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (p == MAP_FAILED) {
+            fputs("dream-rt: mmap heap failed\n", stderr);
+            abort();
+        }
+        g_heap = (uint8_t *)p;
+        g_cap = DREAM_HEAP_RESERVE;
     }
-    uint8_t *p = (uint8_t *)realloc(g_heap, n);
-    if (!p) {
-        fputs("dream-rt: out of memory\n", stderr);
+    if (need > g_cap) {
+        fputs("dream-rt: heap exhausted\n", stderr);
         abort();
     }
-    if (n > g_cap) {
-        memset(p + g_cap, 0, n - g_cap);
-    }
-    g_heap = p;
-    g_cap = n;
 #endif
 }
 
@@ -91,8 +108,12 @@ void dream_rt_init(void) {
     if (g_heap) {
         return;
     }
-    grow(1u << 20);
-    g_bump = DREAM_STRING_BASE;
+    lock_acq();
+    if (!g_heap) {
+        grow(1u << 20);
+        g_bump = DREAM_STRING_BASE;
+    }
+    lock_rel();
 }
 
 uint8_t *dream_heap_base(void) {
@@ -105,15 +126,6 @@ int32_t dream_heap_cap(void) {
     return (int32_t)g_cap;
 }
 
-static void lock_acq(void) {
-    int expected = 0;
-    while (!atomic_compare_exchange_weak(&g_lock, &expected, 1)) {
-        expected = 0;
-    }
-}
-
-static void lock_rel(void) { atomic_store(&g_lock, 0); }
-
 int32_t dream_malloc(int32_t size, int32_t tag) {
     dream_rt_init();
     if (size < 0) {
@@ -124,6 +136,7 @@ int32_t dream_malloc(int32_t size, int32_t tag) {
     if (total < 16) {
         total = 16;
     }
+    total = (total + 3u) & ~3u;
     lock_acq();
     uint32_t start = g_bump;
     uint32_t next = start + total;
@@ -131,16 +144,16 @@ int32_t dream_malloc(int32_t size, int32_t tag) {
         grow(next + (1u << 16));
     }
     g_bump = next;
+    if (tag != DREAM_TAG_STRING) {
+        g_live += 1;
+        g_total_alloc += 1;
+    }
     lock_rel();
     memset(g_heap + start, 0, total);
     memcpy(g_heap + start, &total, 4);
     memcpy(g_heap + start + DREAM_HEADER_TAG_OFFSET, &tag, 4);
     int32_t rc = 1;
     memcpy(g_heap + start + DREAM_HEADER_REFCOUNT_OFFSET, &rc, 4);
-    if (tag != DREAM_TAG_STRING) {
-        g_live += 1;
-        g_total_alloc += 1;
-    }
     return (int32_t)(start + DREAM_HEAP_HEADER_SIZE);
 }
 
@@ -160,7 +173,7 @@ void dream_retain(int32_t ptr) {
     if (!rc) {
         return;
     }
-    *rc += 1;
+    atomic_fetch_add((_Atomic int32_t *)rc, 1);
 }
 
 void dream_release(int32_t ptr) {
@@ -168,14 +181,14 @@ void dream_release(int32_t ptr) {
     if (!rc) {
         return;
     }
-    *rc -= 1;
-    if (*rc == 0) {
+    int32_t old = atomic_fetch_sub((_Atomic int32_t *)rc, 1);
+    if (old == 1) {
         *rc = -1;
         int32_t tag = dream_object_tag(ptr);
         if (tag != DREAM_TAG_STRING) {
             g_live -= 1;
         }
-        static int depth;
+        static _Thread_local int depth;
         if (depth < 64) {
             depth += 1;
             dream_drop(ptr);
@@ -184,25 +197,9 @@ void dream_release(int32_t ptr) {
     }
 }
 
-void dream_retain_shared(int32_t ptr) {
-    int32_t *rc = rc_word(ptr);
-    if (!rc) {
-        return;
-    }
-    atomic_fetch_add((_Atomic int32_t *)rc, 1);
-}
+void dream_retain_shared(int32_t ptr) { dream_retain(ptr); }
 
-void dream_release_shared(int32_t ptr) {
-    int32_t *rc = rc_word(ptr);
-    if (!rc) {
-        return;
-    }
-    int32_t old = atomic_fetch_sub((_Atomic int32_t *)rc, 1);
-    if (old == 1) {
-        g_live -= 1;
-        dream_drop(ptr);
-    }
-}
+void dream_release_shared(int32_t ptr) { dream_release(ptr); }
 
 static int in_heap(int32_t addr, int32_t n) {
     return addr >= 0 && g_heap && (uint32_t)addr + (uint32_t)n <= g_cap;
@@ -419,54 +416,151 @@ int32_t dream_array_len(int32_t ptr) {
     return dream_load_i32(ptr);
 }
 
+#ifndef DREAM_FREESTANDING
+static void (*g_print_sink)(const char *, int);
+static void (*g_dbg_enter)(int32_t);
+static void (*g_dbg_exit)(int32_t);
+static void (*g_dbg_line)(int32_t, int32_t);
+static void (*g_dbg_worker_start)(uint32_t);
+static void (*g_dbg_worker_exit)(uint32_t);
+static _Thread_local int32_t g_dbg_tid = 1;
+
+void dream_debug_set_print(void (*fn)(const char *, int)) { g_print_sink = fn; }
+
+void dream_debug_install(void (*enter)(int32_t), void (*exit)(int32_t),
+                         void (*line)(int32_t, int32_t)) {
+    g_dbg_enter = enter;
+    g_dbg_exit = exit;
+    g_dbg_line = line;
+}
+
+void dream_debug_install_worker(void (*start)(uint32_t), void (*exit)(uint32_t)) {
+    g_dbg_worker_start = start;
+    g_dbg_worker_exit = exit;
+}
+
+void dream_debug_set_thread(int32_t id) { g_dbg_tid = id == 0 ? 1 : id; }
+
+int32_t dream_debug_thread(void) { return g_dbg_tid; }
+
+void dream_debug_enter(int32_t id) {
+    if (g_dbg_enter) {
+        g_dbg_enter(id);
+    }
+}
+
+void dream_debug_exit(int32_t id) {
+    if (g_dbg_exit) {
+        g_dbg_exit(id);
+    }
+}
+
+void dream_debug_line(int32_t file, int32_t line) {
+    if (g_dbg_line) {
+        g_dbg_line(file, line);
+    }
+}
+
+void dream_debug_worker_start(uint32_t id) {
+    dream_debug_set_thread((int32_t)id);
+    if (g_dbg_worker_start) {
+        g_dbg_worker_start(id);
+    }
+}
+
+void dream_debug_worker_exit(uint32_t id) {
+    if (g_dbg_worker_exit) {
+        g_dbg_worker_exit(id);
+    }
+    dream_debug_set_thread(1);
+}
+
+static void emit_chars(const char *s, size_t n) {
+    if (g_print_sink) {
+        g_print_sink(s, (int)n);
+        return;
+    }
+    fwrite(s, 1, n, stdout);
+}
+#endif
+
 void dream_print_int(int32_t v) {
 #ifndef DREAM_FREESTANDING
-    printf("%d", v);
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%d", v);
+    if (n > 0) {
+        emit_chars(buf, (size_t)n);
+    }
 #else
     (void)v;
 #endif
 }
 void dream_print_uint(int32_t v) {
 #ifndef DREAM_FREESTANDING
-    printf("%u", (unsigned)v);
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%u", (unsigned)v);
+    if (n > 0) {
+        emit_chars(buf, (size_t)n);
+    }
 #else
     (void)v;
 #endif
 }
 void dream_print_long(int64_t v) {
 #ifndef DREAM_FREESTANDING
-    printf("%lld", (long long)v);
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%lld", (long long)v);
+    if (n > 0) {
+        emit_chars(buf, (size_t)n);
+    }
 #else
     (void)v;
 #endif
 }
 void dream_print_ulong(int64_t v) {
 #ifndef DREAM_FREESTANDING
-    printf("%llu", (unsigned long long)v);
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)v);
+    if (n > 0) {
+        emit_chars(buf, (size_t)n);
+    }
 #else
     (void)v;
 #endif
 }
 void dream_print_float(float v) {
 #ifndef DREAM_FREESTANDING
-    printf("%.10g", (double)v);
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%.10g", (double)v);
+    if (n > 0) {
+        emit_chars(buf, (size_t)n);
+    }
 #else
     (void)v;
 #endif
 }
 void dream_print_double(double v) {
 #ifndef DREAM_FREESTANDING
-    printf("%.10g", v);
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%.10g", v);
+    if (n > 0) {
+        emit_chars(buf, (size_t)n);
+    }
 #else
     (void)v;
 #endif
 }
 void dream_print_char(int32_t c) {
 #ifndef DREAM_FREESTANDING
-    if (c <= 0x7F) {
-        putchar(c);
+    char buf[8];
+    if (c <= 0x7F && c >= 0) {
+        buf[0] = (char)c;
+        emit_chars(buf, 1);
     } else {
-        printf("%c", (char)c);
+        int n = snprintf(buf, sizeof(buf), "%c", (char)c);
+        if (n > 0) {
+            emit_chars(buf, (size_t)n);
+        }
     }
 #else
     (void)c;
@@ -477,7 +571,8 @@ void dream_print_string(int32_t ptr) {
 #ifndef DREAM_FREESTANDING
     int32_t len = dream_str_byte_size(ptr);
     if (len > 0) {
-        fwrite(g_heap + (uint32_t)ptr + DREAM_STRING_UTF8_OFFSET, 1, (size_t)len, stdout);
+        emit_chars((const char *)(g_heap + (uint32_t)ptr + DREAM_STRING_UTF8_OFFSET),
+                   (size_t)len);
     }
 #else
     (void)ptr;
@@ -486,7 +581,7 @@ void dream_print_string(int32_t ptr) {
 
 void dream_print_newline(void) {
 #ifndef DREAM_FREESTANDING
-    putchar('\n');
+    emit_chars("\n", 1);
 #endif
 }
 
@@ -557,17 +652,146 @@ int32_t dream_hash_bytes(int32_t ptr) {
     return (int32_t)h;
 }
 
+#define DREAM_LOCK_DEPTH_BITS 16
+#define DREAM_LOCK_DEPTH_MASK 65535
+
+static atomic_int g_next_tid = 1;
+static _Thread_local int32_t g_tid;
+
+static int32_t dream_thread_id(void) {
+    if (g_tid == 0) {
+        g_tid = atomic_fetch_add(&g_next_tid, 1);
+    }
+    return g_tid;
+}
+
+#ifndef DREAM_FREESTANDING
+static int64_t dream_now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + (int64_t)(ts.tv_nsec / 1000000);
+}
+#endif
+
 void dream_lock_acquire(int32_t addr) {
     _Atomic int32_t *p = (_Atomic int32_t *)(g_heap + (uint32_t)addr);
-    int expected = 0;
-    while (!atomic_compare_exchange_weak(p, &expected, 1)) {
-        expected = 0;
+    int32_t tid = dream_thread_id();
+    for (;;) {
+        int32_t cur = atomic_load(p);
+        if (cur == 0) {
+            int32_t want = (tid << DREAM_LOCK_DEPTH_BITS) | 1;
+            if (atomic_compare_exchange_weak(p, &cur, want)) {
+                return;
+            }
+            continue;
+        }
+        if ((cur >> DREAM_LOCK_DEPTH_BITS) == tid) {
+            atomic_fetch_add(p, 1);
+            return;
+        }
+#ifndef DREAM_FREESTANDING
+        struct timespec ts = {0, 1000000L};
+        nanosleep(&ts, NULL);
+#endif
     }
 }
 
 void dream_lock_release(int32_t addr) {
     _Atomic int32_t *p = (_Atomic int32_t *)(g_heap + (uint32_t)addr);
-    atomic_store(p, 0);
+    int32_t cur = atomic_load(p);
+    if ((cur & DREAM_LOCK_DEPTH_MASK) <= 1) {
+        atomic_store(p, 0);
+    } else {
+        atomic_fetch_sub(p, 1);
+    }
+}
+
+int32_t dream_lock_try_acquire(int32_t addr) {
+    _Atomic int32_t *p = (_Atomic int32_t *)(g_heap + (uint32_t)addr);
+    int32_t tid = dream_thread_id();
+    int32_t cur = atomic_load(p);
+    if (cur == 0) {
+        int32_t want = (tid << DREAM_LOCK_DEPTH_BITS) | 1;
+        return atomic_compare_exchange_strong(p, &cur, want) ? 1 : 0;
+    }
+    if ((cur >> DREAM_LOCK_DEPTH_BITS) == tid) {
+        atomic_fetch_add(p, 1);
+        return 1;
+    }
+    return 0;
+}
+
+int32_t dream_lock_try_acquire_for(int32_t addr, int32_t timeout_ms) {
+    if (timeout_ms <= 0) {
+        return dream_lock_try_acquire(addr);
+    }
+#ifndef DREAM_FREESTANDING
+    int64_t start = dream_now_ms();
+    while (dream_now_ms() - start < (int64_t)timeout_ms) {
+        if (dream_lock_try_acquire(addr)) {
+            return 1;
+        }
+        struct timespec ts = {0, 1000000L};
+        nanosleep(&ts, NULL);
+    }
+    return dream_lock_try_acquire(addr);
+#else
+    (void)timeout_ms;
+    return dream_lock_try_acquire(addr);
+#endif
+}
+
+static int32_t sem_try(int32_t obj) {
+    if (!in_heap(obj, 4) || g_heap == NULL) {
+        return 0;
+    }
+    _Atomic int32_t *p = (_Atomic int32_t *)(g_heap + (uint32_t)obj);
+    int32_t v = atomic_load(p);
+    while (v > 0) {
+        if (atomic_compare_exchange_weak(p, &v, v - 1)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void dream_sem_acquire(int32_t obj) {
+    while (!sem_try(obj)) {
+#ifndef DREAM_FREESTANDING
+        struct timespec ts = {0, 1000000L};
+        nanosleep(&ts, NULL);
+#endif
+    }
+}
+
+void dream_sem_release(int32_t obj) {
+    if (!in_heap(obj, 4) || g_heap == NULL) {
+        return;
+    }
+    _Atomic int32_t *p = (_Atomic int32_t *)(g_heap + (uint32_t)obj);
+    atomic_fetch_add(p, 1);
+}
+
+int32_t dream_sem_try_acquire(int32_t obj) { return sem_try(obj); }
+
+int32_t dream_sem_try_acquire_for(int32_t obj, int32_t timeout_ms) {
+    if (timeout_ms <= 0) {
+        return sem_try(obj);
+    }
+#ifndef DREAM_FREESTANDING
+    int64_t start = dream_now_ms();
+    while (dream_now_ms() - start < (int64_t)timeout_ms) {
+        if (sem_try(obj)) {
+            return 1;
+        }
+        struct timespec ts = {0, 1000000L};
+        nanosleep(&ts, NULL);
+    }
+    return sem_try(obj);
+#else
+    (void)timeout_ms;
+    return sem_try(obj);
+#endif
 }
 
 void dream_unimplemented(const char *name) {

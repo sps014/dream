@@ -11,5 +11,6 @@ mod net;
 mod process;
 mod text;
 mod worker;
+mod task;
 mod webview;
 mod c_ffi;

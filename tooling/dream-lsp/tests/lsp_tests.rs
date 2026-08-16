@@ -1643,6 +1643,51 @@ fun main(): void {
 }
 
 #[test]
+fn webworker_spawn_inlay_infers_class_type_args() {
+    use dream_lsp::index::{Index, InlayKind};
+    let src = "
+fun k(x: string): string { return x; }
+fun main(): void {
+    let w = WebWorker.spawn(\"h\", k);
+}
+";
+    let index = Index::build(None, src);
+    let labels: Vec<&str> = index
+        .inlay_hints
+        .iter()
+        .filter(|h| h.kind == InlayKind::Type)
+        .map(|h| h.label.as_str())
+        .collect();
+    assert!(
+        labels.contains(&": WebWorker<string, string>"),
+        "`let w = WebWorker.spawn(\"h\", k)` should show `: WebWorker<string, string>`; got {:?}",
+        labels
+    );
+}
+
+#[test]
+fn webworker_spawn_lambda_inlay_infers_class_type_args() {
+    use dream_lsp::index::{Index, InlayKind};
+    let src = "
+fun main(): void {
+    let squarer = WebWorker.spawn(6, (n) => n * n);
+}
+";
+    let index = Index::build(None, src);
+    let labels: Vec<&str> = index
+        .inlay_hints
+        .iter()
+        .filter(|h| h.kind == InlayKind::Type)
+        .map(|h| h.label.as_str())
+        .collect();
+    assert!(
+        labels.contains(&": WebWorker<int, int>"),
+        "`let squarer = WebWorker.spawn(6, (n) => n * n)` should show `: WebWorker<int, int>`; got {:?}",
+        labels
+    );
+}
+
+#[test]
 fn await_call_infers_unwrapped_type() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "

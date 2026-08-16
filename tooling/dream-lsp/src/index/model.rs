@@ -258,6 +258,153 @@ pub(crate) fn split_comma_type_list(inner: &str) -> Vec<String> {
     out
 }
 
+/// Parameter types and return type from a method detail such as
+/// `static WebWorker.spawn(input: TIn, body: fun(TIn): TOut): WebWorker<TIn, TOut>`.
+pub(crate) fn parse_method_signature(detail: &str) -> Option<(Vec<String>, String)> {
+    let bytes = detail.as_bytes();
+    let mut angle = 0i32;
+    let mut start = None;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'<' => angle += 1,
+            b'>' => angle -= 1,
+            b'(' if angle == 0 => {
+                start = Some(i);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let start = start?;
+    let mut depth = 0i32;
+    let mut end = None;
+    for (i, &b) in bytes.iter().enumerate().skip(start) {
+        match b {
+            b'(' | b'<' => depth += 1,
+            b')' | b'>' => {
+                depth -= 1;
+                if depth == 0 && b == b')' {
+                    end = Some(i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end?;
+    let inner = detail[start + 1..end].trim();
+    let rest = detail[end + 1..].trim();
+    let ret = rest.strip_prefix(':')?.trim().to_string();
+    let params = if inner.is_empty() {
+        Vec::new()
+    } else {
+        split_comma_type_list(inner)
+            .into_iter()
+            .map(|p| {
+                let ty = p.split_once(':').map(|(_, t)| t.trim()).unwrap_or(p.trim());
+                ty.strip_prefix("borrow ").unwrap_or(ty).trim().to_string()
+            })
+            .collect()
+    };
+    Some((params, ret))
+}
+
+/// Splits `fun(a, b): ret` into `([a, b], ret)`.
+pub(crate) fn split_fun_type_str(s: &str) -> Option<(Vec<String>, String)> {
+    let rest = s.strip_prefix("fun(")?;
+    let mut depth = 1i32;
+    let mut close = None;
+    for (i, ch) in rest.char_indices() {
+        match ch {
+            '(' | '<' => depth += 1,
+            ')' | '>' => {
+                depth -= 1;
+                if depth == 0 && ch == ')' {
+                    close = Some(i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let close = close?;
+    let params_str = rest[..close].trim();
+    let after = rest[close + 1..].trim().strip_prefix(':')?.trim();
+    let params = if params_str.is_empty() {
+        Vec::new()
+    } else {
+        split_comma_type_list(params_str)
+    };
+    Some((params, after.to_string()))
+}
+
+/// True when `ty` mentions `param` as a type-name token (not as a prefix of a longer name).
+pub(crate) fn type_mentions_param(ty: &str, param: &str) -> bool {
+    if ty == param {
+        return true;
+    }
+    let bytes = ty.as_bytes();
+    let needle = param.as_bytes();
+    let mut i = 0;
+    while i + needle.len() <= bytes.len() {
+        if bytes[i..].starts_with(needle) {
+            let before_ok = i == 0 || !is_ident_byte(bytes[i - 1]);
+            let after = i + needle.len();
+            let after_ok = after == bytes.len() || !is_ident_byte(bytes[after]);
+            if before_ok && after_ok {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Binds `param` by unifying a formal type string with an actual type string.
+pub(crate) fn unify_type_param(formal: &str, actual: &str, param: &str) -> Option<String> {
+    let formal = formal.strip_prefix("borrow ").unwrap_or(formal).trim();
+    let actual = actual.trim();
+    if formal == param {
+        return Some(actual.to_string());
+    }
+    if let Some(inner) = formal.strip_suffix("[]") {
+        let act_inner = actual.strip_suffix("[]")?;
+        return unify_type_param(inner.trim(), act_inner.trim(), param);
+    }
+    if let Some((fps, fret)) = split_fun_type_str(formal) {
+        let (aps, aret) = split_fun_type_str(actual)?;
+        if fps.len() != aps.len() {
+            return None;
+        }
+        for (f, a) in fps.iter().zip(aps.iter()) {
+            if let Some(c) = unify_type_param(f, a, param) {
+                return Some(c);
+            }
+        }
+        if let Some(c) = unify_type_param(&fret, &aret, param) {
+            return Some(c);
+        }
+        if type_base(&fret) == "Future" {
+            if let Some(inner) = parse_angle_type_args(&fret).first() {
+                return unify_type_param(inner, &aret, param);
+            }
+        }
+        return None;
+    }
+    let f_args = parse_angle_type_args(formal);
+    if !f_args.is_empty() && type_base(formal) == type_base(actual) {
+        let a_args = parse_angle_type_args(actual);
+        if f_args.len() == a_args.len() {
+            for (f, a) in f_args.iter().zip(a_args.iter()) {
+                if let Some(c) = unify_type_param(f, a, param) {
+                    return Some(c);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Type arguments inside the outermost `<…>` of `ty` (`Result<int, string>` → `["int","string"]`).
 pub(crate) fn parse_angle_type_args(ty: &str) -> Vec<String> {
     let bytes = ty.as_bytes();

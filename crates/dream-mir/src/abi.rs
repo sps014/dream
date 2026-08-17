@@ -3,8 +3,9 @@
 //! Every heap block carries a type tag in its header (`[size][tag][ref_count]`). Reference types
 //! store their tag in the block they already own; primitives are boxed into a small tagged block.
 //! These are the single source of truth for those tags — the `{TAG_*}` placeholders in
-//! `runtime/object.wat` / `runtime/format.wat` are substituted from them at emit time, and the host
-//! interop layer (`execution/host`) mirrors the same values.
+//! `runtime/object.wat` / `runtime/format.wat` are substituted from them at emit time; interned
+//! `true`/`false`/`"-"`/`""` are `$__rt_str_*` globals. The host interop layer (`execution/host`)
+//! mirrors the same tag values.
 
 pub const TAG_INT: i32 = 1;
 pub const TAG_FLOAT: i32 = 2;
@@ -174,3 +175,83 @@ pub const EXPORT_WORKER_INVOKE: &str = "__dream_worker_invoke";
 /// is a still-pending `Future` and await it asynchronously (a real `extern async` host call there
 /// settles later via a Promise callback, never synchronously within the `call_indirect`).
 pub const EXPORT_WORKER_INVOKE_RAW: &str = "__dream_worker_invoke_raw";
+
+#[cfg(test)]
+mod abi_h_lockstep {
+    use super::*;
+
+    fn header_define(src: &str, name: &str) -> i64 {
+        for line in src.lines() {
+            let line = line.trim();
+            let prefix = format!("#define {name} ");
+            if let Some(rest) = line.strip_prefix(&prefix) {
+                let rest = rest.trim();
+                if rest.starts_with('(') {
+                    // SHADOW_STACK_SIZE (16 * WASM_PAGE_SIZE) — skip compound forms.
+                    continue;
+                }
+                return rest.parse().unwrap_or_else(|_| {
+                    panic!("bad #define {}: {}", name, rest)
+                });
+            }
+        }
+        panic!("missing #define {} in dream_abi.h", name);
+    }
+
+    #[test]
+    fn dream_abi_h_matches_abi_rs() {
+        let h = include_str!("runtime/c/include/dream_abi.h");
+        assert_eq!(header_define(h, "TAG_INT"), TAG_INT as i64);
+        assert_eq!(header_define(h, "TAG_FLOAT"), TAG_FLOAT as i64);
+        assert_eq!(header_define(h, "TAG_DOUBLE"), TAG_DOUBLE as i64);
+        assert_eq!(header_define(h, "TAG_BOOL"), TAG_BOOL as i64);
+        assert_eq!(header_define(h, "TAG_STRING"), TAG_STRING as i64);
+        assert_eq!(header_define(h, "TAG_ARRAY"), TAG_ARRAY as i64);
+        assert_eq!(header_define(h, "TAG_CHAR"), TAG_CHAR as i64);
+        assert_eq!(header_define(h, "TAG_LONG"), TAG_LONG as i64);
+        assert_eq!(header_define(h, "TAG_UINT"), TAG_UINT as i64);
+        assert_eq!(header_define(h, "TAG_ULONG"), TAG_ULONG as i64);
+        assert_eq!(header_define(h, "TAG_BYTE"), TAG_BYTE as i64);
+        assert_eq!(header_define(h, "TAG_STRUCT_BASE"), TAG_STRUCT_BASE as i64);
+        assert_eq!(header_define(h, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);
+        assert_eq!(header_define(h, "HEADER_TAG_OFFSET"), HEADER_TAG_OFFSET as i64);
+        assert_eq!(
+            header_define(h, "HEADER_REFCOUNT_OFFSET"),
+            HEADER_REFCOUNT_OFFSET as i64
+        );
+        assert_eq!(header_define(h, "LEN_PREFIX_SIZE"), LEN_PREFIX_SIZE as i64);
+        assert_eq!(header_define(h, "STRING_HEADER_SIZE"), STRING_HEADER_SIZE as i64);
+        assert_eq!(header_define(h, "STRING_UTF8_OFFSET"), STRING_UTF8_OFFSET as i64);
+        assert_eq!(
+            header_define(h, "STRING_SCALAR_LEN_OFFSET"),
+            STRING_SCALAR_LEN_OFFSET as i64
+        );
+        assert_eq!(header_define(h, "WASM_PAGE_SIZE"), WASM_PAGE_SIZE as i64);
+        assert_eq!(header_define(h, "INITIAL_HEAP_PAGES"), INITIAL_HEAP_PAGES as i64);
+        assert_eq!(header_define(h, "MAX_MEMORY_PAGES"), MAX_MEMORY_PAGES as i64);
+        assert_eq!(header_define(h, "STRING_BASE"), STRING_BASE as i64);
+        assert_eq!(header_define(h, "ALLOC_LOCK_ADDR"), ALLOC_LOCK_ADDR as i64);
+        assert_eq!(header_define(h, "HEAP_PTR_ADDR"), HEAP_PTR_ADDR as i64);
+        assert_eq!(
+            header_define(h, "THREAD_ID_COUNTER_ADDR"),
+            THREAD_ID_COUNTER_ADDR as i64
+        );
+        assert_eq!(header_define(h, "ASYNC_RQ_HEAD_ADDR"), ASYNC_RQ_HEAD_ADDR as i64);
+        assert_eq!(header_define(h, "ASYNC_RQ_TAIL_ADDR"), ASYNC_RQ_TAIL_ADDR as i64);
+        assert_eq!(
+            header_define(h, "ASYNC_TIMER_HEAD_ADDR"),
+            ASYNC_TIMER_HEAD_ADDR as i64
+        );
+        assert_eq!(header_define(h, "ASYNC_VCLOCK_ADDR"), ASYNC_VCLOCK_ADDR as i64);
+        assert_eq!(
+            header_define(h, "HEADER_LOCK_WORD_SIZE"),
+            HEADER_LOCK_WORD_SIZE as i64
+        );
+        assert_eq!(header_define(h, "LOCK_DEPTH_BITS"), LOCK_DEPTH_BITS as i64);
+        assert_eq!(
+            SHADOW_STACK_SIZE,
+            16 * WASM_PAGE_SIZE,
+            "keep dream_abi.h SHADOW_STACK_SIZE in sync"
+        );
+    }
+}

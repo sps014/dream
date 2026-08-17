@@ -156,6 +156,12 @@ cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node 
 node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
+# Guest WAT runtime (optional): C under crates/dream-mir/src/runtime/c/ → WAT.
+# macOS/Linux: wasi-sdk 33 + wasm2wat; see crates/dream-mir/src/runtime/README.md
+# Not used by cargo/dream/Windows CI.
+scripts/build-runtime.sh
+scripts/build-runtime.sh --check           # skips if clang has no wasm32
+
 # Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
 cargo test --workspace
 cargo test --workspace -- --ignored

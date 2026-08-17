@@ -117,7 +117,7 @@ flowchart LR
 - **Allocation/construction** (`New`, `UnionNew`, `ArrayLit`) emits an inline `$malloc(size, tag)` — tag from `mir::abi` — then sets the header/refcount, initializes fields/elements, and calls the user constructor (`$Type_constructor`) when one exists. `@shared class` instances allocate **four extra bytes** past their field layout for an embedded reentrant lock word (see `HEADER_LOCK_WORD_SIZE` in `mir::abi.rs`); retain/release for `@shared` types use atomic RMW helpers (`$retain_shared`, `$release_*` with an atomic prologue) instead of the ordinary non-atomic `$retain`/`$release_*` path.
 - **String constants** are interned into `[len][utf8][\0]` data segments, so identical literals share one pointer.
 
-The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are the hand-written `.wat` files in `crates/dream-mir/src/runtime/`, embedded via `include_str!`. Placeholders (`{TAG_*}`/`{minus}`) are substituted, then the text is parsed with `wast` and lowered into the same `ModuleBuilder` by name. Unreachable functions and unused func imports are dropped on the builder before `finish()`.
+The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are the `.wat` files in `crates/dream-mir/src/runtime/` (C authoring sources in `runtime/c/`; see that README). Placeholders (`{TAG_*}`) are substituted; interned `true`/`false`/`"-"`/`""` are `$__rt_str_*` globals. The text is parsed with `wast` and lowered into the same `ModuleBuilder` by name. Unreachable functions and unused func imports are dropped on the builder before `finish()`.
 
 ## Determinism in the backend
 

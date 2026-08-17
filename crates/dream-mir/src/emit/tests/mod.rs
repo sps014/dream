@@ -474,19 +474,21 @@ fn shape_emit_if_diamond_uses_nested_if() {
     );
 }
 
-/// Every `{TAG_*}`/`{minus}` placeholder in the object + format runtime must be substituted; a
-/// stray brace would emit a literal `{` into the module (and fail to assemble). Guards the
-/// substitution table in [`to_string_runtime`].
+/// Every `{TAG_*}` placeholder in the object + format runtime must be substituted; interned
+/// string pointers are `$__rt_str_*` globals, not `{minus}` / `{STRING_EMPTY}` integers.
 #[test]
 fn to_string_runtime_has_no_unsubstituted_placeholders() {
-    let mut strings = IndexMap::new();
-    strings.insert("true".to_string(), 0u32);
-    strings.insert("false".to_string(), 8u32);
-    strings.insert("-".to_string(), 16u32);
-    let runtime = to_string_runtime(&strings);
+    let runtime = to_string_runtime();
     assert!(
         !runtime.contains('{') && !runtime.contains('}'),
         "object/format runtime still contains an unsubstituted placeholder:\n{}",
+        runtime
+    );
+    assert!(
+        runtime.contains("global.get $__rt_str_true")
+            && runtime.contains("global.get $__rt_str_false")
+            && runtime.contains("global.get $__rt_str_minus"),
+        "to_string runtime must load interned strings from emitter globals:\n{}",
         runtime
     );
 }
@@ -496,16 +498,44 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
 /// path stays clean. Single-threaded modules also drop the allocator spinlock.
 #[test]
 fn debug_toggles_allocator_instrumentation() {
-    assert!(runtime_prelude(true, false, 0).contains("global.set $live_objects"));
-    assert!(!runtime_prelude(false, false, 0).contains("global.set $live_objects"));
+    assert!(runtime_prelude(true, false).contains("global.set $live_objects"));
+    assert!(!runtime_prelude(false, false).contains("global.set $live_objects"));
     assert!(
-        runtime_prelude(false, true, 0).contains("call $__alloc_lock_acquire"),
+        runtime_prelude(false, true).contains("call $__alloc_lock_acquire"),
         "threaded modules must keep the allocator spinlock"
     );
     assert!(
-        !runtime_prelude(false, false, 0).contains("call $__alloc_lock_acquire"),
+        !runtime_prelude(false, false).contains("call $__alloc_lock_acquire"),
         "single-threaded modules must elide the allocator spinlock"
     );
+    assert!(
+        runtime_prelude(false, false).contains("global.get $__rt_str_empty"),
+        "string runtime must load interned empty from an emitter global"
+    );
+}
+
+#[test]
+fn runtime_c_sources_exist() {
+    let panic = include_str!("../../runtime/c/panic.c");
+    let closure = include_str!("../../runtime/c/closure.c");
+    let alloc = include_str!("../../runtime/c/allocator.c");
+    let strings = include_str!("../../runtime/c/strings.c");
+    let object = include_str!("../../runtime/c/object.c");
+    let format = include_str!("../../runtime/c/format.c");
+    assert!(panic.contains("dream_panic"));
+    assert!(closure.contains("funcbox_new"));
+    assert!(alloc.contains("__malloc_locked"));
+    assert!(strings.contains("concat_strings"));
+    assert!(object.contains("int_to_string"));
+    assert!(format.contains("double_to_string"));
+}
+
+/// Hybrid policy: fused `--release` still opts through handwritten WAT + wasm-opt. Clang output
+/// must not be spliced until extract gates pass (see runtime/README.md).
+#[test]
+fn handwritten_runtime_wat_is_emit_artifact() {
+    assert!(include_str!("../../runtime/panic.wat").contains("call $print_string"));
+    assert!(include_str!("../../runtime/allocator.wat").contains(";;@ALLOC_LOCK_ACQUIRE@"));
 }
 
 /// Builds a one-function module carrying a named local and a `DebugLine` marker, so both the

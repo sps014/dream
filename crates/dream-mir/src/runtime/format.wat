@@ -132,7 +132,7 @@
     local.set $res
     local.get $neg
     (if (then
-        i32.const {minus}
+        global.get $__rt_str_minus
         local.get $res
         call $concat_strings
         local.set $res

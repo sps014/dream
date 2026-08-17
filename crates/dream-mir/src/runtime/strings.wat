@@ -275,9 +275,9 @@
         local.get $len2
         i32.eqz
         if
-            i32.const {STRING_EMPTY}
+            global.get $__rt_str_empty
             call $retain
-            i32.const {STRING_EMPTY}
+            global.get $__rt_str_empty
             return
         end
         ;; Identity return still transfers an owned ref to the caller.
@@ -376,9 +376,9 @@
     i32.add
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         call $retain
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     ;; Degenerate: if two sides are empty, fall back to pairwise retain/concat.
@@ -605,9 +605,9 @@
     local.get $total
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         call $retain
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $total
@@ -1131,7 +1131,7 @@
     local.get $ptr
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $ptr
@@ -1191,7 +1191,7 @@
     local.get $byte_len
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $byte_len
@@ -1226,7 +1226,7 @@
     local.get $ptr
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $ptr
@@ -1317,7 +1317,7 @@
     local.get $byte_len
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $byte_len
@@ -1380,7 +1380,7 @@
     local.get $bytes
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $bytes
@@ -1455,7 +1455,7 @@
     local.get $bytes
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $bytes
@@ -1489,7 +1489,7 @@
     local.get $bytes
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $bytes
@@ -1512,7 +1512,7 @@
     local.get $len
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $scalars
@@ -1570,14 +1570,14 @@
     local.get $bytes
     i32.eqz
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $len
     i32.const 0
     i32.le_s
     if
-        i32.const {STRING_EMPTY}
+        global.get $__rt_str_empty
         return
     end
     local.get $scalars

@@ -154,6 +154,10 @@ fn emit_module_encoded(
     m.global_i32("__sp", true, heap_base as i32);
     m.global_i32("live_objects", true, 0);
     m.global_i32("total_allocations", true, 0);
+    m.global_i32("__rt_str_empty", false, strings[""] as i32);
+    m.global_i32("__rt_str_true", false, strings["true"] as i32);
+    m.global_i32("__rt_str_false", false, strings["false"] as i32);
+    m.global_i32("__rt_str_minus", false, strings["-"] as i32);
 
     for g in &mir.globals {
         if let Some(&addr) = vg_addrs.get(&g.id.0) {
@@ -172,11 +176,7 @@ fn emit_module_encoded(
         }
     }
 
-    m.ingest_wat(&runtime_prelude(
-        debug,
-        module_needs_threads(mir),
-        strings[""],
-    ));
+    m.ingest_wat(&runtime_prelude(debug, module_needs_threads(mir)));
     m.ingest_wat(RUNTIME_WEAK);
     m.ingest_wat(RUNTIME_CLOSURE);
     m.ingest_wat(&RUNTIME_SYNC.replace(
@@ -186,7 +186,7 @@ fn emit_module_encoded(
     if crate::async_emit::module_has_async(&mir.functions) {
         m.ingest_wat(&crate::async_emit::async_runtime_wat());
     }
-    m.ingest_wat(&to_string_runtime(&strings));
+    m.ingest_wat(&to_string_runtime());
     m.ingest_wat(RUNTIME_PANIC);
 
     let mut proto = String::new();

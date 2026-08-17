@@ -1,0 +1,3 @@
+# clang/wasm-opt intermediates; emit still uses handwritten ../ *.wat until copy-after-gate.
+*
+!.gitignore

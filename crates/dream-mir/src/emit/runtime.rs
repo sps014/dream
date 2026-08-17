@@ -8,7 +8,7 @@ use super::*;
 /// When `needs_threads` is false (no `WebWorker` / worker-pool host imports in the module), the
 /// allocator spinlock around `$malloc`/`$free` is also elided: a single-threaded instance never
 /// races on the free lists, so the atomic acquire/release is pure overhead.
-pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u32) -> String {
+pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
     let (malloc_count, free_count) = if debug {
         (
             "global.get $live_objects\n    i32.const 1\n    i32.add\n    global.set $live_objects\n    \
@@ -34,15 +34,15 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool, empty_string: u3
         )
         .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string());
     out.push('\n');
-    // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
+    // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. Empty
+    // interned string pointers come from `$__rt_str_empty` (defined by the emitter). `$char_at`
     // itself no longer bounds-checks: callers emit a located check inline before calling it (see
     // `Emitter::emit_char_at`), so a string-index panic gets a precise file:line rather than the one
     // bare, unlocated message a truly shared runtime helper would be stuck with.
     out.push_str(
         &RUNTIME_STRINGS
             .replace("{TAG_STRING}", &crate::abi::TAG_STRING.to_string())
-            .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string())
-            .replace("{STRING_EMPTY}", &empty_string.to_string()),
+            .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string()),
     );
     out.push('\n');
     out.push_str(RUNTIME_SIMD);
@@ -67,9 +67,9 @@ pub(super) fn module_needs_threads(mir: &crate::Mir) -> bool {
 }
 
 /// Builds the `*_to_string` runtime (object formatters + generated `$bool_to_string` + the float/
-/// double formatter), resolving the `{TAG_*}`/`{minus}` placeholders and the `bool` string pointers
-/// from the interned string table. Depends on the allocator + string runtime emitted before it.
-pub(super) fn to_string_runtime(strings: &IndexMap<String, u32>) -> String {
+/// double formatter), resolving `{TAG_*}` placeholders. Interned `true`/`false`/`"-"` are
+/// `$__rt_str_*` globals. Depends on the allocator + string runtime emitted before it.
+pub(super) fn to_string_runtime() -> String {
     use crate::abi as tags;
     let object = RUNTIME_OBJECT
         .replace("{TAG_INT}", &tags::TAG_INT.to_string())
@@ -82,15 +82,13 @@ pub(super) fn to_string_runtime(strings: &IndexMap<String, u32>) -> String {
         .replace("{TAG_UINT}", &tags::TAG_UINT.to_string())
         .replace("{TAG_ULONG}", &tags::TAG_ULONG.to_string())
         .replace("{TAG_BYTE}", &tags::TAG_BYTE.to_string());
-    let t = strings["true"];
-    let f = strings["false"];
-    let minus = strings["-"];
-    let bool_to_string = format!(
-        "(func $bool_to_string (param $v i32) (result i32)\n  local.get $v\n  (if (result i32)\n    (then i32.const {t})\n    (else i32.const {f})))\n"
-    );
-    let format = RUNTIME_FORMAT
-        .replace("{minus}", &minus.to_string())
-        .replace("{TAG_STRING}", &tags::TAG_STRING.to_string());
+    let bool_to_string = "\
+(func $bool_to_string (param $v i32) (result i32)
+  local.get $v
+  (if (result i32)
+    (then global.get $__rt_str_true)
+    (else global.get $__rt_str_false)))\n";
+    let format = RUNTIME_FORMAT.replace("{TAG_STRING}", &tags::TAG_STRING.to_string());
     format!("{object}\n{bool_to_string}\n{format}\n")
 }
 

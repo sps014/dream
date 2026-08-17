@@ -63,8 +63,8 @@ const RUNTIME_SIMD: &str = include_str!("../runtime/simd.wat");
 /// (`$int_to_string`/`$long_to_string`/`$byte_to_string`/…). `{TAG_*}` placeholders are substituted.
 const RUNTIME_OBJECT: &str = include_str!("../runtime/object.wat");
 
-/// The decimal `float`/`double` formatter (`$float_to_string`/`$double_to_string`). `{minus}` (the
-/// data pointer of the interned `"-"`) and `{TAG_STRING}` are substituted.
+/// The decimal `float`/`double` formatter (`$float_to_string`/`$double_to_string`). `{TAG_STRING}`
+/// is substituted; the interned `"-"` pointer is `$__rt_str_minus` (defined by the emitter).
 const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 
 /// The shared `$dream_panic(msg)` runtime helper (print message + trap). Self-contained given only

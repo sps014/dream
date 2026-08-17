@@ -252,6 +252,22 @@ fn prefer_inline(name: &str) -> bool {
             | "capacity"
             | "is_empty"
             | "grow"
+            | "load"
+            | "store"
+            | "add"
+            | "count"
+            | "load_raw"
+            | "store_raw"
+            | "bin_add"
+            | "append"
+            | "ensure"
+            | "write_unit"
+            | "matches_char"
+            | "can_skip"
+            | "class_hit"
+            | "copy_caps"
+            | "take_caps"
+            | "store16"
     )
 }
 

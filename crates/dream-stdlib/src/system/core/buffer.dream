@@ -43,6 +43,10 @@ public class Buffer {
         count: int
     ): void;
 
+    // Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.
+    @intrinsic("array_store16")
+    static extern fun store16(borrow arr: byte[], off: int, unit: int): void;
+
     // Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference
     // counting entirely. Any other live reference to the same block (including `arr` itself, if
     // read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot

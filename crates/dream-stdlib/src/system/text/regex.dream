@@ -209,29 +209,33 @@ public class Regex {
         let n = input.length;
         if (this.global) {
             this.match_scratch.clear();
-            let pos = 0;
-            let going = true;
-            while (going) {
-                if (pos > n) {
-                    going = false;
-                } else {
-                    let m_opt = this.find_at(input, pos);
-                    switch (m_opt) {
-                        Some(m) => {
-                            this.match_scratch.push(m.group_text(input, 0));
-                            let s = m.start();
-                            let e = m.end();
-                            if (e > s) {
-                                pos = e;
-                            } else {
-                                pos = s + 1;
-                            }
-                        },
-                        None => {
-                            going = false;
-                        },
+            if (this.use_backtrack) {
+                let pos = 0;
+                let going = true;
+                while (going) {
+                    if (pos > n) {
+                        going = false;
+                    } else {
+                        let m_opt = this.find_at(input, pos);
+                        switch (m_opt) {
+                            Some(m) => {
+                                this.match_scratch.push(m.group_text(input, 0));
+                                let s = m.start();
+                                let e = m.end();
+                                if (e > s) {
+                                    pos = e;
+                                } else {
+                                    pos = s + 1;
+                                }
+                            },
+                            None => {
+                                going = false;
+                            },
+                        }
                     }
                 }
+            } else {
+                this.pike.collect_group0(input, this.match_scratch);
             }
             return this.to_array(this.match_scratch);
         }

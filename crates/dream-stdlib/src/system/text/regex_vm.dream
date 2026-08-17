@@ -14,14 +14,8 @@ internal class RegexThreadq {
     }
 
     public fun clear(): void {
-        if (this.count > 0) {
-            let z = Buffer.alloc<int[]>(1);
-            let i = 0;
-            while (i < this.count) {
-                this.caps[i] = z[0];
-                i = i + 1;
-            }
-        }
+        // Rewind only: the next `push` overwrites slots. Allocating a dummy `int[]` every Step
+        // was the dominant cost on short Global searches.
         this.count = 0;
     }
 
@@ -76,6 +70,15 @@ internal class RegexVM {
     // Unanchored `.*?` any-char pc and first consuming body CharClass, or -1 if skip is unsafe.
     prefix_pc: int;
     hint_pc: int;
+    // Flattened bytecode (parallel SOA). `prog` stays for compile-time analysis and Look/generic classes.
+    opcodes: int[];
+    outs: int[];
+    out1s: int[];
+    kinds: int[];
+    cap_ids: int[];
+    negs: int[];
+    cap_pool: int[][];
+    pool_used: int;
 
     public constructor(borrow prog: RegexInst[], ngroup: int, multiline: bool, borrow table: RegexSubTable) {
         this.prog = RegexVM.share_prog(prog);
@@ -90,7 +93,16 @@ internal class RegexVM {
         this.search_gen = 1;
         this.prefix_pc = 0 - 1;
         this.hint_pc = 0 - 1;
+        this.opcodes = Buffer.alloc<int>(0);
+        this.outs = Buffer.alloc<int>(0);
+        this.out1s = Buffer.alloc<int>(0);
+        this.kinds = Buffer.alloc<int>(0);
+        this.cap_ids = Buffer.alloc<int>(0);
+        this.negs = Buffer.alloc<int>(0);
+        this.cap_pool = Buffer.alloc<int[]>(32);
+        this.pool_used = 0;
         this.analyze_skip_hint();
+        this.flatten_prog();
     }
 
     static fun share_prog(p: RegexInst[]): RegexInst[] {
@@ -99,6 +111,99 @@ internal class RegexVM {
 
     static fun share_table(t: RegexSubTable): RegexSubTable {
         return t;
+    }
+
+    fun flatten_prog(): void {
+        let n = this.prog.length;
+        this.opcodes = Buffer.alloc<int>(n);
+        this.outs = Buffer.alloc<int>(n);
+        this.out1s = Buffer.alloc<int>(n);
+        this.kinds = Buffer.alloc<int>(n);
+        this.cap_ids = Buffer.alloc<int>(n);
+        this.negs = Buffer.alloc<int>(n);
+        let i = 0;
+        while (i < n) {
+            let inst = this.prog[i];
+            this.opcodes[i] = this.op_id(inst.opcode);
+            this.outs[i] = inst.out;
+            this.out1s[i] = inst.out1;
+            this.kinds[i] = inst.class_kind;
+            this.cap_ids[i] = inst.cap;
+            if (inst.negate) {
+                this.negs[i] = 1;
+            } else {
+                this.negs[i] = 0;
+            }
+            i = i + 1;
+        }
+    }
+
+    fun op_id(op: RegexOp): int {
+        if (op == RegexOp.CharClass) {
+            return 0;
+        }
+        if (op == RegexOp.Capture) {
+            return 1;
+        }
+        if (op == RegexOp.EmptyWidth) {
+            return 2;
+        }
+        if (op == RegexOp.Alt) {
+            return 3;
+        }
+        if (op == RegexOp.Match) {
+            return 4;
+        }
+        if (op == RegexOp.Nop) {
+            return 5;
+        }
+        if (op == RegexOp.Look) {
+            return 6;
+        }
+        return 7;
+    }
+
+    fun class_hit(pc: int, c: char): bool {
+        let k = this.kinds[pc];
+        if (k == 4) {
+            return true;
+        }
+        let hit = false;
+        if (k == 1) {
+            hit = (c >= '0') && (c <= '9');
+        } else if (k == 5) {
+            hit = (c >= 'a') && (c <= 'z');
+        } else {
+            return this.prog[pc].matches_char(c);
+        }
+        if (this.negs[pc] != 0) {
+            return hit == false;
+        }
+        return hit;
+    }
+
+    fun take_caps(n: int): int[] {
+        if (this.pool_used < this.cap_pool.length) {
+            let slot = this.cap_pool[this.pool_used];
+            if (slot.length == n) {
+                this.pool_used = this.pool_used + 1;
+                return slot;
+            }
+        }
+        let a = Buffer.alloc<int>(n);
+        if (this.pool_used == this.cap_pool.length) {
+            this.cap_pool = Buffer.realloc<int[]>(this.cap_pool, this.cap_pool.length * 2 + 1);
+        }
+        this.cap_pool[this.pool_used] = a;
+        this.pool_used = this.pool_used + 1;
+        return a;
+    }
+
+    fun snapshot_caps(src: int[]): int[] {
+        let n = src.length;
+        let dst = Buffer.alloc<int>(n);
+        Buffer.elems_copy<int>(dst, 0, src, 0, n);
+        return dst;
     }
 
     // The compiled program is `.*?` (non-greedy star of any-char) then group 0. If the body is
@@ -271,7 +376,7 @@ internal class RegexVM {
 
     fun copy_caps(src: int[]): int[] {
         let n = src.length;
-        let dst = Buffer.alloc<int>(n);
+        let dst = this.take_caps(n);
         Buffer.elems_copy<int>(dst, 0, src, 0, n);
         return dst;
     }
@@ -342,25 +447,28 @@ internal class RegexVM {
                 // Already visited this instruction during this generation.
             } else {
                 on_list[pc] = gen;
-                let inst = this.prog[pc];
-                if (inst.opcode == RegexOp.Nop) {
-                    st.push(inst.out, caps);
-                } else if (inst.opcode == RegexOp.Alt) {
-                    st.push(inst.out1, caps);
-                    st.push(inst.out, caps);
-                } else if (inst.opcode == RegexOp.Capture) {
+                let op = this.opcodes[pc];
+                if (op == 5) {
+                    st.push(this.outs[pc], caps);
+                } else if (op == 3) {
+                    st.push(this.out1s[pc], caps);
+                    st.push(this.outs[pc], caps);
+                } else if (op == 1) {
                     let updated = this.copy_caps(caps);
-                    if ((inst.cap >= 0) && (inst.cap < updated.length)) {
-                        updated[inst.cap] = pos;
+                    let cap = this.cap_ids[pc];
+                    if ((cap >= 0) && (cap < updated.length)) {
+                        updated[cap] = pos;
                     }
-                    st.push(inst.out, updated);
-                } else if (inst.opcode == RegexOp.EmptyWidth) {
+                    st.push(this.outs[pc], updated);
+                } else if (op == 2) {
+                    let inst = this.prog[pc];
                     if (this.empty_ok(inst.empty_kind, pos, input, len)) {
-                        st.push(inst.out, caps);
+                        st.push(this.outs[pc], caps);
                     }
-                } else if (inst.opcode == RegexOp.Look) {
+                } else if (op == 6) {
+                    let inst = this.prog[pc];
                     if (this.look_holds(inst, pos, input, len)) {
-                        st.push(inst.out, caps);
+                        st.push(this.outs[pc], caps);
                     }
                 } else {
                     out.push(pc, caps);
@@ -417,6 +525,7 @@ internal class RegexVM {
             j0 = j0 + 1;
         }
 
+        this.pool_used = 0;
         this.search_gen = this.search_gen + 1;
         let gen = this.search_gen;
         let clist = this.clist;
@@ -433,13 +542,12 @@ internal class RegexVM {
                 going = false;
             } else {
                 if ((pos < len) && this.can_skip(clist)) {
-                    let hint = this.prog[this.hint_pc];
                     let c0 = input.char_at(pos);
-                    if (hint.matches_char(c0) == false) {
+                    if (this.class_hit(this.hint_pc, c0) == false) {
                         let skipping = true;
                         while ((pos < len) && skipping) {
                             let c = input.char_at(pos);
-                            if (hint.matches_char(c)) {
+                            if (this.class_hit(this.hint_pc, c)) {
                                 skipping = false;
                             } else {
                                 pos = pos + 1;
@@ -469,15 +577,15 @@ internal class RegexVM {
                     while ((k < clist.count) && (stop == false)) {
                         let pc = clist.pcs[k];
                         let caps = clist.caps[k];
-                        let inst = this.prog[pc];
-                        if (inst.opcode == RegexOp.CharClass) {
+                        let op = this.opcodes[pc];
+                        if (op == 0) {
                             if (at_end == false) {
-                                if (inst.matches_char(cur)) {
+                                if (this.class_hit(pc, cur)) {
                                     this.add_to_threadq(
                                         nlist,
                                         on_list,
                                         gen,
-                                        inst.out,
+                                        this.outs[pc],
                                         pos + 1,
                                         input,
                                         len,
@@ -485,8 +593,8 @@ internal class RegexVM {
                                     );
                                 }
                             }
-                        } else if (inst.opcode == RegexOp.Match) {
-                            matched = Option.Some(caps);
+                        } else if (op == 4) {
+                            matched = Option.Some(this.snapshot_caps(caps));
                             stop = true;
                         }
                         k = k + 1;
@@ -507,5 +615,34 @@ internal class RegexVM {
             Some(caps) => Option.Some(RegexMatch(caps, this.ngroup)),
             None => Option.None,
         };
+    }
+
+    // One-pass Global: continue from each match end without a fresh Regex wrapper per hit.
+    public fun collect_group0(borrow input: string, dest: List<string>): void {
+        let n = input.length;
+        let pos = 0;
+        let going = true;
+        while (going) {
+            if (pos > n) {
+                going = false;
+            } else {
+                let m_opt = this.find(input, pos);
+                switch (m_opt) {
+                    Some(m) => {
+                        dest.push(m.group_text(input, 0));
+                        let s = m.start();
+                        let e = m.end();
+                        if (e > s) {
+                            pos = e;
+                        } else {
+                            pos = s + 1;
+                        }
+                    },
+                    None => {
+                        going = false;
+                    },
+                }
+            }
+        }
     }
 }

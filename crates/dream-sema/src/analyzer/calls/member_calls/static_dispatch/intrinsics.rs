@@ -564,7 +564,7 @@ impl<'a> Analyzer<'a> {
                 .defs
                 .lookup(DefKind::Function, &constructor_fn("StringBuilder"));
             let int_ty = self.type_ctx.interner.int();
-            let capacity = HExpr::new(int_ty, HExprKind::IntLit(16));
+            let capacity = HExpr::new(int_ty, HExprKind::IntLit(256));
             self.hir_set_new("StringBuilder", ctor, vec![Some(capacity)], &sb_ty);
             let new_sb = self.hir_take();
             if let Some(local) = sb_local {

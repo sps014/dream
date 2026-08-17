@@ -79,6 +79,21 @@ public class List<T> : IndexedCollection<T> {
         return result;
     }
 
+    // Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when
+    // capacity is larger than `count` so the result's `.length` is the live element count.
+    public fun take_array(): T[] {
+        let n = this.count;
+        let out = Buffer.alloc<T>(n);
+        let i = 0;
+        while (i < n) {
+            out[i] = this.items[i];
+            i = i + 1;
+        }
+        this.items = Buffer.alloc<T>(0);
+        this.count = 0;
+        return out;
+    }
+
     // Returns the element at `index`, or `None` if `index` is out of range.
     @get_indexer
     public fun get(index: int): Option<T> {

@@ -1549,3 +1549,68 @@
     local.get $p
 )
 
+;; `i32.store16` into a `byte[]` payload at byte offset `off`.
+(func $array_store16 (param $arr i32) (param $off i32) (param $u i32)
+    local.get $arr
+    i32.eqz
+    br_if 0
+    local.get $arr
+    i32.const 4
+    i32.add
+    local.get $off
+    i32.add
+    local.get $u
+    i32.store16
+)
+
+;; Finish a StringBuilder whose `byte[]` reserves 4 pad bytes at payload start (`[len][pad][utf16]`).
+;; Unique buffers are retagged in place; otherwise this copies from offset 8.
+(func $string_from_builder (param $bytes i32) (param $len i32) (param $scalars i32) (result i32)
+    (local $p i32)
+    local.get $bytes
+    i32.eqz
+    if
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $len
+    i32.const 0
+    i32.le_s
+    if
+        i32.const {STRING_EMPTY}
+        return
+    end
+    local.get $scalars
+    i32.const 0
+    i32.lt_s
+    if
+        local.get $len
+        i32.const 1
+        i32.shr_u
+        local.set $scalars
+    end
+    local.get $len
+    i32.const 8
+    i32.add
+    i32.const {TAG_STRING}
+    call $malloc
+    local.set $p
+    local.get $p
+    local.get $scalars
+    i32.store
+    local.get $p
+    i32.const 4
+    i32.add
+    i32.const 0
+    i32.store
+    local.get $p
+    i32.const 8
+    i32.add
+    local.get $bytes
+    i32.const 8
+    i32.add
+    local.get $len
+    memory.copy
+    local.get $p
+)
+

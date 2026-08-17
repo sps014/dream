@@ -23,6 +23,10 @@ extend string {
     @intrinsic("string_from_utf8_prefix_n")
     static extern fun from_utf8_prefix_n(borrow bytes: byte[], len: int, scalars: int): string;
 
+    // StringBuilder finish: `bytes` layout is `[len][pad][utf16]`; unique buffers are adopted.
+    @intrinsic("string_from_builder")
+    static extern fun from_builder(borrow bytes: byte[], len: int, scalars: int): string;
+
     // Unit-indexed substring via one UTF-16 payload copy (`$string_substring_raw`).
     @intrinsic("string_substring_raw")
     static extern fun substring_raw(borrow s: string, start: int, end: int): string;

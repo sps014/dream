@@ -153,6 +153,26 @@ Same host as `./scripts/run-microbenches.sh`.
 | scratch_arena | 4 | 1 | C# 4.0× |
 | alloc_churn | 17 | 15 | ~parity |
 
+### After (deferred: Pike SOA, typed JSON, vec inline, StringBuilder store16)
+
+Pike `Threadq.clear` rewinds `count` (no per-Step `Buffer.alloc`). Capture arrays come from a
+slot pool; bytecode is parallel `int[]` SOA with `[a-z]`/`\d` inlined in Step. JSON
+`parse_int`/`parse_double` are cursor digit loops (no `JsonValue`); keys match the input slice;
+arrays use `List.take_array`. Serialize starts `StringBuilder` at 256 bytes; `write_unit` is
+`$array_store16`. `Vector.load`/`+`/`store` lower to `v128` (`f32x4.add`, no sret in
+`bench_vec_add`). Builder finish copies from a reserved pad word (`$string_from_builder`).
+
+`--release` WAT: `$RegexVM_find` has no `array_new`; `$JsonParser_parse_int` has no `JsonValue`;
+`$bench_vec_add` has `f32x4.add` and 0 sret. Same host as `./scripts/run-microbenches.sh`.
+
+| Bench | Dream | C# | vs prior Dream / vs C# |
+|-------|------:|---:|------------------------|
+| regex_find | 9419 | 770 | ~10–12k → 9419 (Pike vs Compiled; C# 12×) |
+| json_deserialize | 2023 | 1669 | ~3.5–5.3k → 2023 (C# 1.2×) |
+| json_serialize | 1293 | 925 | ~1.4k → 1293 (C# 1.4×) |
+| vec_add | 259 | 77 | ~260 (WASM 4-wide vs AVX `Vector.Count` often 8; C# 3.4×) |
+| string_builder | 23 | 15 | ~24 → 23 (C# 1.5×) |
+
 Native LLVM path (floor for scan/substring/regex): see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md)
 (branch `llvm` / worktree). Do not revive that backend for this scoreboard.

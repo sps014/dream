@@ -803,11 +803,7 @@ public class JsonGenerator {
 
     static fun emit_parser_array(borrow cb: CodeBuilder, elem: string, out_var: string, borrow json_names: List<string>): void {
         let read = JsonGenerator.parser_scalar(elem, json_names);
-        let zdef = JsonGenerator.ignore_default(elem, "");
-        if (zdef.length == 0) {
-            zdef = read;
-        }
-        cb.line("let __items_" + out_var + " = List<" + elem + ">();");
+        cb.line("let __items_" + out_var + " = List<" + elem + ">(4);");
         cb.line("if (p.try_consume(91)) {");
         cb.indent();
         cb.line("let __agoing_" + out_var + " = true;");
@@ -828,14 +824,7 @@ public class JsonGenerator {
         cb.line("}");
         cb.dedent();
         cb.line("}");
-        cb.line("let " + out_var + " = Buffer.alloc<" + elem + ">(__items_" + out_var + ".length);");
-        cb.line("let __ai_" + out_var + " = 0;");
-        cb.line("while (__ai_" + out_var + " < __items_" + out_var + ".length) {");
-        cb.indent();
-        cb.line(out_var + "[__ai_" + out_var + "] = __items_" + out_var + ".get(__ai_" + out_var + ").unwrap_or(" + zdef + ");");
-        cb.line("__ai_" + out_var + " = __ai_" + out_var + " + 1;");
-        cb.dedent();
-        cb.line("}");
+        cb.line("let " + out_var + " = __items_" + out_var + ".take_array();");
     }
 
     static fun emit_class_parser(borrow t: GenType, borrow json_names: List<string>, self_ty: string): string {
@@ -897,8 +886,6 @@ public class JsonGenerator {
         body.dedent();
         body.line("} else {");
         body.indent();
-        body.line("let __k = p.parse_string();");
-        body.line("p.try_consume(58);");
         fi = 0;
         let first_if = true;
         while (fi < t.fields.length) {
@@ -911,10 +898,10 @@ public class JsonGenerator {
                 continue;
             }
             if (first_if) {
-                body.line("if (__k == \"" + json_key + "\") {");
+                body.line("if (p.match_key(\"" + json_key + "\")) {");
                 first_if = false;
             } else {
-                body.line("} else if (__k == \"" + json_key + "\") {");
+                body.line("} else if (p.match_key(\"" + json_key + "\")) {");
             }
             body.indent();
             if (field.option_inner.length > 0) {
@@ -1012,10 +999,14 @@ public class JsonGenerator {
         if (first_if == false) {
             body.line("} else {");
             body.indent();
+            body.line("p.parse_string();");
+            body.line("p.try_consume(58);");
             body.line("p.skip_value();");
             body.dedent();
             body.line("}");
         } else {
+            body.line("p.parse_string();");
+            body.line("p.try_consume(58);");
             body.line("p.skip_value();");
         }
         body.line("p.try_consume(44);");

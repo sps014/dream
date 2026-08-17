@@ -386,14 +386,173 @@ public class JsonParser {
         return false;
     }
 
+    fun consume_number_tail(): void {
+        if ((this.pos < this.len()) && (this.b() == 46)) {
+            this.pos = this.pos + 1;
+            while (this.pos < this.len()) {
+                let c = this.b();
+                if ((c >= 48) && (c <= 57)) {
+                    this.pos = this.pos + 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        if (this.pos < this.len()) {
+            let ec = this.b();
+            if ((ec == 101) || (ec == 69)) {
+                this.pos = this.pos + 1;
+                if (this.pos < this.len()) {
+                    let s = this.b();
+                    if ((s == 45) || (s == 43)) {
+                        this.pos = this.pos + 1;
+                    }
+                }
+                while (this.pos < this.len()) {
+                    let c = this.b();
+                    if ((c >= 48) && (c <= 57)) {
+                        this.pos = this.pos + 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     public fun parse_int(): int {
         this.skip_ws();
-        return this.parse_number().as_int().unwrap_or(0);
+        let sign = 1;
+        if ((this.pos < this.len()) && (this.b() == 45)) {
+            sign = 0 - 1;
+            this.pos = this.pos + 1;
+        } else if ((this.pos < this.len()) && (this.b() == 43)) {
+            this.pos = this.pos + 1;
+        }
+        let value = 0;
+        while (this.pos < this.len()) {
+            let c = this.b();
+            if ((c >= 48) && (c <= 57)) {
+                value = value * 10 + (c - 48);
+                this.pos = this.pos + 1;
+            } else {
+                break;
+            }
+        }
+        this.consume_number_tail();
+        return sign * value;
     }
 
     public fun parse_double(): double {
         this.skip_ws();
-        return this.parse_number().as_double().unwrap_or(0.0d);
+        let sign = 1.0d;
+        if ((this.pos < this.len()) && (this.b() == 45)) {
+            sign = 0.0d - 1.0d;
+            this.pos = this.pos + 1;
+        } else if ((this.pos < this.len()) && (this.b() == 43)) {
+            this.pos = this.pos + 1;
+        }
+        let value = 0.0d;
+        while (this.pos < this.len()) {
+            let c = this.b();
+            if ((c >= 48) && (c <= 57)) {
+                value = value * 10.0d + (double)(c - 48);
+                this.pos = this.pos + 1;
+            } else {
+                break;
+            }
+        }
+        if ((this.pos < this.len()) && (this.b() == 46)) {
+            this.pos = this.pos + 1;
+            let frac = 0.0d;
+            let frac_digits = 0;
+            while (this.pos < this.len()) {
+                let c = this.b();
+                if ((c >= 48) && (c <= 57)) {
+                    frac = frac * 10.0d + (double)(c - 48);
+                    frac_digits = frac_digits + 1;
+                    this.pos = this.pos + 1;
+                } else {
+                    break;
+                }
+            }
+            if (frac_digits > 0) {
+                value = value + frac / this.pow10(frac_digits);
+            }
+        }
+        if (this.pos < this.len()) {
+            let ec = this.b();
+            if ((ec == 101) || (ec == 69)) {
+                this.pos = this.pos + 1;
+                let esign = 1;
+                if (this.pos < this.len()) {
+                    let s = this.b();
+                    if (s == 45) {
+                        esign = 0 - 1;
+                        this.pos = this.pos + 1;
+                    } else if (s == 43) {
+                        this.pos = this.pos + 1;
+                    }
+                }
+                let exp = 0;
+                while (this.pos < this.len()) {
+                    let c = this.b();
+                    if ((c >= 48) && (c <= 57)) {
+                        exp = exp * 10 + (c - 48);
+                        this.pos = this.pos + 1;
+                    } else {
+                        break;
+                    }
+                }
+                if (esign > 0) {
+                    value = value * this.pow10(exp);
+                } else {
+                    value = value / this.pow10(exp);
+                }
+            }
+        }
+        return sign * value;
+    }
+
+    // True when the next object key is `key` (no escapes). Consumes the key and the following colon.
+    public fun match_key(borrow key: string): bool {
+        this.skip_ws();
+        let saved = this.pos;
+        if ((this.pos >= this.len()) || (this.b() != 34)) {
+            return false;
+        }
+        this.pos = this.pos + 1;
+        let i = 0;
+        let kn = key.length;
+        while (i < kn) {
+            if (this.pos >= this.len()) {
+                this.pos = saved;
+                return false;
+            }
+            let c = this.b();
+            if (c == 92) {
+                this.pos = saved;
+                return false;
+            }
+            if (c != key.char_at(i).to_int()) {
+                this.pos = saved;
+                return false;
+            }
+            this.pos = this.pos + 1;
+            i = i + 1;
+        }
+        if ((this.pos >= this.len()) || (this.b() != 34)) {
+            this.pos = saved;
+            return false;
+        }
+        this.pos = this.pos + 1;
+        this.skip_ws();
+        if ((this.pos < this.len()) && (this.b() == 58)) {
+            this.pos = this.pos + 1;
+            return true;
+        }
+        this.pos = saved;
+        return false;
     }
 
     public fun skip_value(): void {

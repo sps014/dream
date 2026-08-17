@@ -1585,8 +1585,8 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
 
 #[test]
 fn test_hir_emission_len_builtin() {
-    // `arr.length` reads the array's stored length word; `str.length` calls the runtime `$str_scalar_len`
-    // (both are O(1) loads now that strings are length-prefixed heap objects).
+    // `arr.length` reads the array's stored length word; `str.length` is an inlined `i32.load`
+    // of the UTF-16 unit count (both O(1)).
     let code = "
         fun count(xs: int[]): int { return xs.length; }
         fun slen(s: string): int { return s.length; }
@@ -1604,13 +1604,13 @@ fn test_hir_emission_len_builtin() {
         wat
     );
     assert!(
-        wat.contains("(call $str_scalar_len)"),
-        "string len should use $str_scalar_len:\n{}",
+        wat.contains("(i32.load)"),
+        "string len should be an inlined unit_len load:\n{}",
         wat
     );
-    // A full module (with the string runtime) must assemble, proving `$strlen` is provided.
+    // A full module (with the string runtime) must assemble.
     let module = emit_hir_to_module(code);
-    wat::parse_str(&module).expect("module using $str_scalar_len should assemble");
+    wat::parse_str(&module).expect("module with inlined string len should assemble");
 }
 
 #[test]

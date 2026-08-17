@@ -104,9 +104,7 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => check(o),
-        Rvalue::Binary(_, a, b)
-        | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
             check(a);
             check(b);
         }

@@ -306,8 +306,8 @@ fn allows_early_destroy(stmt: &Statement) -> bool {
                 | Rvalue::ConcatInt { .. }
                 | Rvalue::StrLen(_)
                 | Rvalue::StrByteSize(_)
-                | Rvalue::CharAt(_, _)
-                | Rvalue::ByteAt(_, _)
+                | Rvalue::CharAt(_, _, _)
+                | Rvalue::ByteAt(_, _, _)
                 | Rvalue::HashCode(_)
         ),
         _ => false,
@@ -345,18 +345,16 @@ fn insert_early_releases(
         .collect();
     let owned: Vec<u32> = (0..func.locals.len() as u32)
         .filter(|i| {
-            is_owned_ref(*i)
-                && !take_params.contains(i)
-                && {
-                    let ty = func.locals[*i as usize].ty;
-                    ty != interner.string()
-                        && !matches!(
-                            interner.kind(ty),
-                            dream_types::TyKind::Array(_)
-                                | dream_types::TyKind::Func(_, _)
-                                | dream_types::TyKind::Union(_, _)
-                        )
-                }
+            is_owned_ref(*i) && !take_params.contains(i) && {
+                let ty = func.locals[*i as usize].ty;
+                ty != interner.string()
+                    && !matches!(
+                        interner.kind(ty),
+                        dream_types::TyKind::Array(_)
+                            | dream_types::TyKind::Func(_, _)
+                            | dream_types::TyKind::Union(_, _)
+                    )
+            }
         })
         .collect();
     let mut transferred: HashSet<(usize, usize, u32)> = HashSet::new();
@@ -520,7 +518,8 @@ fn insert_value_struct_moves(func: &mut MirFunction, interner: &TypeInterner, ch
                     }
                 }
             }
-            let mut counts: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+            let mut counts: std::collections::BTreeMap<u32, u32> =
+                std::collections::BTreeMap::new();
             for local in value_arg_locals(func, stmt, interner, &is_value_src) {
                 *counts.entry(local).or_insert(0) += 1;
             }
@@ -608,7 +607,8 @@ fn value_arg_locals(
         }
         if let Operand::Copy(Place::Local(l)) = arg {
             let root = value_copy_root(func, l.0);
-            if is_value_src(root as usize) && interner.is_value_type(func.locals[root as usize].ty) {
+            if is_value_src(root as usize) && interner.is_value_type(func.locals[root as usize].ty)
+            {
                 out.push(root);
             }
         }

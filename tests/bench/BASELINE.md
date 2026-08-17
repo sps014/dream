@@ -129,6 +129,30 @@ Heap `string` is UTF-16 LE code units (C#/JS `char` indexing). `.length` / `char
 | json_serialize | 1650 | 922 | ~1227 |
 | json_deserialize | 5328 | 1726 | ~5327 |
 
+### After (scan ABC + inlined loads, forwarding RC, map epoch clear)
+
+`--release` WAT: `char_at`/`byte_at` are `i32.load16_u` / `i32.load8_u` with ABC dropping
+the per-index `ge_u` on `while (i < s.length)` / `byte_size` loops (including interned
+literals). Same-type forwarding copies (`let b = a`) are RC cursors. Unmanaged `Map`/`Set.clear`
+bumps an occupancy epoch instead of `memory.fill`. `map_get_set` uses `get_or` (C# `TryGetValue`).
+Same host as `./scripts/run-microbenches.sh`.
+
+| Bench | Dream | C# | vs C# |
+|-------|------:|---:|-------|
+| char_scan | 115 | 24 | C# 4.8× |
+| byte_scan | 216 | 27 | C# 8.0× (2× UTF-16 LE trips vs C# code units) |
+| substring | 19 | 5 | C# 3.8× |
+| string_concat | 30 | 9 | C# 3.3× |
+| string_eq | 6 | 3 | C# 2.0× |
+| arc_locals | 25 | 8 | C# 3.1× |
+| list_push | 4 | 1 | C# 4.0× |
+| list_insert_mid | 28 | 14 | C# 2.0× |
+| list_clear_reuse | 5 | 1 | C# 5.0× |
+| map_get_set | 46 | 8 | C# 5.8× (probe still a call; packed layout not landed) |
+| map_clear_reuse | 25 | 2 | C# 12.5× (dominated by `set`, not clear) |
+| scratch_arena | 4 | 1 | C# 4.0× |
+| alloc_churn | 17 | 15 | ~parity |
+
 Native LLVM path (floor for scan/substring/regex): see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md)
 (branch `llvm` / worktree). Do not revive that backend for this scoreboard.

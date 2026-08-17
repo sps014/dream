@@ -284,8 +284,8 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         | Rvalue::Unary(_, _)
         | Rvalue::StrLen(_)
         | Rvalue::StrByteSize(_)
-        | Rvalue::CharAt(_, _)
-        | Rvalue::ByteAt(_, _)
+        | Rvalue::CharAt(_, _, _)
+        | Rvalue::ByteAt(_, _, _)
         | Rvalue::HashCode(_)
         | Rvalue::ToString(_)
         | Rvalue::Concat(_)
@@ -650,9 +650,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             collect_global_reads_operand(array, out);
             collect_global_reads_operand(new_len, out);
         }
-        Rvalue::Binary(_, a, b)
-        | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
             collect_global_reads_operand(a, out);
             collect_global_reads_operand(b, out);
         }

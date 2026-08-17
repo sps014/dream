@@ -4,12 +4,13 @@ use crate::{Callee, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::HashSet;
 
-/// Mark locals that only hold a non-escaping field/index (or union-field) load as cursors so
-/// [`super::RcInsertion`] skips retain/release on them.
+/// Mark locals that only hold a non-escaping field/index (or union-field) load, or a forwarding
+/// copy of another RC local, as cursors so [`super::RcInsertion`] skips retain/release on them.
 pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
     let n = func.locals.len();
     let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
     let mut candidates: HashSet<u32> = HashSet::new();
+    let mut forwarding: HashSet<u32> = HashSet::new();
     let mut escaped: HashSet<u32> = HashSet::new();
     let mut def_count: Vec<u32> = vec![0; n];
 
@@ -20,23 +21,41 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
                 if d < n {
                     def_count[d] += 1;
                 }
-                if !params.contains(&dest.0)
-                    && interner.is_rc_tracked(func.locals[dest.0 as usize].ty)
-                    && is_cursor_source(rvalue)
-                {
+                let rc = !params.contains(&dest.0)
+                    && interner.is_rc_tracked(func.locals[dest.0 as usize].ty);
+                if rc && is_cursor_source(rvalue) {
                     candidates.insert(dest.0);
-                } else if !is_cursor_source(rvalue) {
-                    // A non-cursor definition means this local is not a pure load alias.
+                } else if rc && is_forwarding_copy(rvalue) {
+                    if let Rvalue::Use(Operand::Copy(Place::Local(src))) = rvalue {
+                        if func.locals[src.0 as usize].ty == func.locals[dest.0 as usize].ty {
+                            forwarding.insert(dest.0);
+                        } else {
+                            escaped.insert(dest.0);
+                            forwarding.remove(&dest.0);
+                        }
+                    }
+                } else if !is_cursor_source(rvalue) && !is_forwarding_copy(rvalue) {
                     escaped.insert(dest.0);
-                }
-                // Local←local copy promotes the source out of cursor-land.
-                if let Rvalue::Use(Operand::Copy(Place::Local(src))) = rvalue {
-                    escaped.insert(src.0);
+                    forwarding.remove(&dest.0);
                 }
             }
             mark_stmt_escapes(stmt, &mut escaped);
         }
         mark_term_escapes(&block.terminator, &mut escaped);
+    }
+
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if let Statement::Assign(
+                Place::Local(dest),
+                Rvalue::Use(Operand::Copy(Place::Local(src))),
+            ) = stmt
+            {
+                if !forwarding.contains(&dest.0) {
+                    escaped.insert(src.0);
+                }
+            }
+        }
     }
 
     for (i, &defs) in def_count.iter().enumerate() {
@@ -46,11 +65,15 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
         }
     }
 
-    for id in candidates {
+    for id in candidates.union(&forwarding).copied() {
         if !escaped.contains(&id) {
             func.locals[id as usize].is_cursor = true;
         }
     }
+}
+
+fn is_forwarding_copy(rvalue: &Rvalue) -> bool {
+    matches!(rvalue, Rvalue::Use(Operand::Copy(Place::Local(_))))
 }
 
 fn is_cursor_source(rvalue: &Rvalue) -> bool {

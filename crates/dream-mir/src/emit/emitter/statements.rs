@@ -226,9 +226,7 @@ impl Emitter<'_> {
                 splat_rhs,
                 ptr_addr,
             } => {
-                let simd_op = lane
-                    .binop_wat(*op)
-                    .unwrap_or("f32x4.add");
+                let simd_op = lane.binop_wat(*op).unwrap_or("f32x4.add");
                 if *ptr_addr {
                     self.emit_operand(dest);
                 } else {
@@ -455,7 +453,9 @@ impl Emitter<'_> {
                                 self.emit_v128_sret_into_local(l.0, callee, args);
                             }
                         }
-                        Rvalue::Use(Operand::Copy(Place::Local(src))) if self.is_v128_local(*src) => {
+                        Rvalue::Use(Operand::Copy(Place::Local(src)))
+                            if self.is_v128_local(*src) =>
+                        {
                             self.line(&format!("     (local.get ${})", src.0));
                             self.line(&format!("     (local.set ${})", l.0));
                         }
@@ -467,9 +467,11 @@ impl Emitter<'_> {
                             if let Some(v) = args.first() {
                                 self.emit_operand(v);
                                 let lane = match self.interner.kind(ty) {
-                                    dream_types::TyKind::Struct(_, ts) => ts
-                                        .first()
-                                        .and_then(|e| crate::SimdLane::from_elem(self.interner, *e)),
+                                    dream_types::TyKind::Struct(_, ts) => {
+                                        ts.first().and_then(|e| {
+                                            crate::SimdLane::from_elem(self.interner, *e)
+                                        })
+                                    }
                                     _ => None,
                                 }
                                 .unwrap_or(crate::SimdLane::I32);
@@ -488,10 +490,8 @@ impl Emitter<'_> {
                     let l0 = l.0;
                     match self.frame.kind(*l) {
                         Some(ValueLocalKind::Owning) => {
-                            let copy_retain = !matches!(
-                                rvalue,
-                                Rvalue::Use(Operand::Copy(Place::Local(_)))
-                            );
+                            let copy_retain =
+                                !matches!(rvalue, Rvalue::Use(Operand::Copy(Place::Local(_))));
                             self.emit_value_store(
                                 |s| s.line(&format!("     (local.get ${})", l0)),
                                 ty,
@@ -597,7 +597,12 @@ impl Emitter<'_> {
         }
     }
 
-    pub(super) fn emit_v128_array_addr(&mut self, arr: &Operand, index: &Operand, lane: crate::SimdLane) {
+    pub(super) fn emit_v128_array_addr(
+        &mut self,
+        arr: &Operand,
+        index: &Operand,
+        lane: crate::SimdLane,
+    ) {
         self.emit_operand(arr);
         self.line("     (i32.const 4)");
         self.line("     (i32.add)");

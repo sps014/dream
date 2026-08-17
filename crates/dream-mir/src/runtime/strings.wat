@@ -256,10 +256,18 @@
     (local $sc2 i32)
     (local $new_ptr i32)
     local.get $str1
-    call $strlen
+    i32.load
+    local.set $sc1
+    local.get $sc1
+    i32.const 1
+    i32.shl
     local.set $len1
     local.get $str2
-    call $strlen
+    i32.load
+    local.set $sc2
+    local.get $sc2
+    i32.const 1
+    i32.shl
     local.set $len2
     local.get $len1
     i32.eqz
@@ -281,17 +289,11 @@
     local.get $len2
     i32.eqz
     if
-        local.get $str1
-        call $retain
-        local.get $str1
-        return
-    end
     local.get $str1
-    call $str_scalar_len
-    local.set $sc1
-    local.get $str2
-    call $str_scalar_len
-    local.set $sc2
+    call $retain
+    local.get $str1
+    return
+    end
   ;; size = 8 (unit_len + pad) + utf16 payload bytes
     local.get $len1
     local.get $len2
@@ -347,13 +349,25 @@
     (local $new_ptr i32)
     (local $off i32)
     local.get $str1
-    call $strlen
+    i32.load
+    local.set $sc1
+    local.get $sc1
+    i32.const 1
+    i32.shl
     local.set $len1
     local.get $str2
-    call $strlen
+    i32.load
+    local.set $sc2
+    local.get $sc2
+    i32.const 1
+    i32.shl
     local.set $len2
     local.get $str3
-    call $strlen
+    i32.load
+    local.set $sc3
+    local.get $sc3
+    i32.const 1
+    i32.shl
     local.set $len3
     local.get $len1
     local.get $len2
@@ -392,15 +406,6 @@
         call $concat_strings
         return
     end
-    local.get $str1
-    call $str_scalar_len
-    local.set $sc1
-    local.get $str2
-    call $str_scalar_len
-    local.set $sc2
-    local.get $str3
-    call $str_scalar_len
-    local.set $sc3
     local.get $len1
     local.get $len2
     i32.add
@@ -1130,7 +1135,7 @@
         return
     end
     local.get $ptr
-    call $str_scalar_len
+    i32.load
     local.set $sc
     local.get $start
     local.set $s

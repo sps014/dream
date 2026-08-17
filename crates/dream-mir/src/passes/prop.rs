@@ -135,9 +135,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             count,
             ..
         } => {
-            subst_operand(dst, known)
-                | subst_operand(dst_off, known)
-                | subst_operand(count, known)
+            subst_operand(dst, known) | subst_operand(dst_off, known) | subst_operand(count, known)
         }
         Statement::LockAcquire(o) | Statement::LockRelease(o) => subst_operand(o, known),
         Statement::SimdV128 {
@@ -182,9 +180,9 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => subst_operand(o, known),
-        Rvalue::Binary(_, a, b)
-        | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b) => subst_operand(a, known) | subst_operand(b, known),
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
+            subst_operand(a, known) | subst_operand(b, known)
+        }
         Rvalue::Concat(parts) => parts
             .iter_mut()
             .fold(false, |acc, p| acc | subst_operand(p, known)),
@@ -283,9 +281,8 @@ pub(super) fn update_known(
     } else if let Statement::Assign(_, _) = stmt {
         // Stores through field/index/global may alias; be conservative and keep only consts.
         known.retain(|_, v| matches!(v, Operand::Const(_)));
-    } else if let Statement::ValueDrop(l)
-        | Statement::ValueRetain(l)
-        | Statement::ValueKill(l) = stmt
+    } else if let Statement::ValueDrop(l) | Statement::ValueRetain(l) | Statement::ValueKill(l) =
+        stmt
     {
         invalidate(*l, known);
     }

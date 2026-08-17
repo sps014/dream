@@ -237,8 +237,14 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::ArrayLen(o) => format!("len({})", operand(o)),
         Rvalue::StrLen(o) => format!("str_scalar_len({})", operand(o)),
         Rvalue::StrByteSize(o) => format!("str_byte_size({})", operand(o)),
-        Rvalue::CharAt(s, i) => format!("char_at({}, {})", operand(s), operand(i)),
-        Rvalue::ByteAt(s, i) => format!("byte_at({}, {})", operand(s), operand(i)),
+        Rvalue::CharAt(s, i, unchecked) => {
+            let op = if *unchecked { "char_at_u" } else { "char_at" };
+            format!("{}({}, {})", op, operand(s), operand(i))
+        }
+        Rvalue::ByteAt(s, i, unchecked) => {
+            let op = if *unchecked { "byte_at_u" } else { "byte_at" };
+            format!("{}({}, {})", op, operand(s), operand(i))
+        }
         Rvalue::ArrayNew { elem_ty, len } => {
             format!("array_new::<ty{}>({})", elem_ty.0, operand(len))
         }
@@ -257,11 +263,7 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::HashCode(o) => format!("hash_code({})", operand(o)),
         Rvalue::ToString(o) => format!("to_string({})", operand(o)),
         Rvalue::Concat(parts) => {
-            let args = parts
-                .iter()
-                .map(operand)
-                .collect::<Vec<_>>()
-                .join(", ");
+            let args = parts.iter().map(operand).collect::<Vec<_>>().join(", ");
             format!("concat({args})")
         }
         Rvalue::ConcatInt {

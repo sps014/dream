@@ -295,10 +295,7 @@ impl Emitter<'_> {
             }
             let wasm = self.wasm_local_ty(decl.ty);
             if let (true, Some(name)) = (self.debug, decl.name.as_ref()) {
-                self.line(&format!(
-                    "  (local ${} (@name \"{}\") {})",
-                    i, name, wasm
-                ));
+                self.line(&format!("  (local ${} (@name \"{}\") {})", i, name, wasm));
             } else {
                 self.line(&format!("  (local ${} {})", i, wasm));
             }
@@ -451,35 +448,53 @@ impl Emitter<'_> {
         self.line("     (i32.add)");
     }
 
-    /// Emits a checked `s[i]` (`char At(int)`): a located code-unit-index bounds check ahead of the raw
-    /// `$char_at` read.
-    fn emit_char_at(&mut self, s: &Operand, i: &Operand) {
-        let s_for_check = s.clone();
-        self.emit_operand(i);
-        self.emit_operand(&s_for_check);
-        self.line("     (call $str_scalar_len)");
-        self.line("     (i32.ge_u)");
-        self.line("     (if (then");
-        self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
-        self.line("     ))");
+    /// Emits `s[i]` as an inlined UTF-16 unit load. When `unchecked` is false, a located
+    /// `index >= unit_len` check runs first (precise file:line panic).
+    fn emit_char_at(&mut self, s: &Operand, i: &Operand, unchecked: bool) {
+        if !unchecked {
+            self.emit_operand(i);
+            self.emit_operand(s);
+            self.line("     (i32.load) ;; unit_len");
+            self.line("     (i32.ge_u)");
+            self.line("     (if (then");
+            self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
+            self.line("     ))");
+        }
         self.emit_operand(s);
+        self.line(&format!(
+            "     (i32.const {})",
+            crate::abi::STRING_UTF8_OFFSET
+        ));
+        self.line("     (i32.add)");
         self.emit_operand(i);
-        self.line("     (call $char_at)");
+        self.line("     (i32.const 1)");
+        self.line("     (i32.shl)");
+        self.line("     (i32.add)");
+        self.line("     (i32.load16_u)");
     }
 
-    /// Emits a checked `s.byte_at(i)`: bounds check against the UTF-16 payload byte length, then `$byte_at`.
-    fn emit_byte_at(&mut self, s: &Operand, i: &Operand) {
-        let s_for_check = s.clone();
-        self.emit_operand(i);
-        self.emit_operand(&s_for_check);
-        self.line("     (call $str_byte_size)");
-        self.line("     (i32.ge_u)");
-        self.line("     (if (then");
-        self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
-        self.line("     ))");
+    /// Emits `s.byte_at(i)` as an inlined payload byte load, with an optional byte-length check.
+    fn emit_byte_at(&mut self, s: &Operand, i: &Operand, unchecked: bool) {
+        if !unchecked {
+            self.emit_operand(i);
+            self.emit_operand(s);
+            self.line("     (i32.load)");
+            self.line("     (i32.const 1)");
+            self.line("     (i32.shl) ;; byte_size");
+            self.line("     (i32.ge_u)");
+            self.line("     (if (then");
+            self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
+            self.line("     ))");
+        }
         self.emit_operand(s);
+        self.line(&format!(
+            "     (i32.const {})",
+            crate::abi::STRING_UTF8_OFFSET
+        ));
+        self.line("     (i32.add)");
         self.emit_operand(i);
-        self.line("     (call $byte_at)");
+        self.line("     (i32.add)");
+        self.line("     (i32.load8_u)");
     }
 
     /// The struct field's `(byte offset, type)` from the layout table, or `None` when `base` is not a
@@ -652,12 +667,7 @@ impl Emitter<'_> {
         }
     }
 
-    fn emit_v128_sret_into_local(
-        &mut self,
-        dest: u32,
-        callee: &crate::Callee,
-        args: &[Operand],
-    ) {
+    fn emit_v128_sret_into_local(&mut self, dest: u32, callee: &crate::Callee, args: &[Operand]) {
         self.emit_v128_spill_addr();
         self.emit_call_args(callee, args);
         self.line(&format!("     (call ${})", self.callee_symbol(callee)));

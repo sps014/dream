@@ -210,9 +210,7 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => add(o),
-        Rvalue::Binary(_, a, b)
-        | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
             add(a);
             add(b);
         }

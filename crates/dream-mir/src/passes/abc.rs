@@ -1,5 +1,6 @@
-//! Array bounds-check elimination. Marks [`Place::Index`] `unchecked` when a dominating
-//! `idx < len` branch plus a non-negative `idx` prove the WASM `ge_u` check cannot fire.
+//! Array and string bounds-check elimination. Marks [`Place::Index`] / [`Rvalue::CharAt`] /
+//! [`Rvalue::ByteAt`] `unchecked` when a dominating `idx < len` branch plus a non-negative `idx`
+//! prove the WASM `ge_u` check cannot fire.
 
 use super::cfg::DomTree;
 use super::MirPass;
@@ -9,6 +10,12 @@ use std::collections::HashSet;
 
 pub struct Abc;
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum StrBase {
+    Local(u32),
+    Lit(String),
+}
+
 impl MirPass for Abc {
     fn name(&self) -> &'static str {
         "abc"
@@ -16,29 +23,38 @@ impl MirPass for Abc {
 
     fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
         let nonneg = nonnegative_locals(func);
-        let facts = range_facts(func, &nonneg);
-        if facts.is_empty() {
+        let (arr_facts, char_facts, byte_facts) = range_facts(func, &nonneg);
+        if arr_facts.iter().all(|s| s.is_empty())
+            && char_facts.iter().all(|s| s.is_empty())
+            && byte_facts.iter().all(|s| s.is_empty())
+        {
             return false;
         }
         let mut changed = false;
-        for block in &mut func.blocks {
+        for (bi, block) in func.blocks.iter_mut().enumerate() {
             for stmt in &mut block.stmts {
-                changed |= mark_stmt(stmt, &facts);
+                changed |= mark_stmt(stmt, &arr_facts, &char_facts, &byte_facts, bi);
             }
-            changed |= mark_terminator(&mut block.terminator, &facts);
+            changed |= mark_terminator(&mut block.terminator, &arr_facts);
         }
         changed
     }
 }
 
-/// `(idx, arr)` pairs that are in-range in a given block (block index → set).
-type Facts = Vec<HashSet<(u32, u32)>>;
+/// `(idx, array-local)` pairs that are in-range in a given block.
+type ArrFacts = Vec<HashSet<(u32, u32)>>;
+/// `(idx, string)` pairs (`Local` or interned literal) in range in a given block.
+type StrFacts = Vec<HashSet<(u32, StrBase)>>;
 
-fn range_facts(func: &MirFunction, nonneg: &HashSet<u32>) -> Facts {
+fn range_facts(func: &MirFunction, nonneg: &HashSet<u32>) -> (ArrFacts, StrFacts, StrFacts) {
     let n = func.blocks.len();
-    let mut facts: Facts = vec![HashSet::new(); n];
+    let mut arr_facts: ArrFacts = vec![HashSet::new(); n];
+    let mut char_facts: StrFacts = vec![HashSet::new(); n];
+    let mut byte_facts: StrFacts = vec![HashSet::new(); n];
     let dom = DomTree::new(func);
     let len_of = array_len_locals(func);
+    let unit_of = string_len_locals(func, false);
+    let bytes_of = string_len_locals(func, true);
 
     for (bi, block) in func.blocks.iter().enumerate() {
         let Terminator::If {
@@ -56,7 +72,9 @@ fn range_facts(func: &MirFunction, nonneg: &HashSet<u32>) -> Facts {
             continue;
         }
         let arrs = arrays_bounded_by(func, &len_of, &bound);
-        if arrs.is_empty() {
+        let unit_strs = strings_bounded_by(&unit_of, &bound);
+        let byte_strs = strings_bounded_by(&bytes_of, &bound);
+        if arrs.is_empty() && unit_strs.is_empty() && byte_strs.is_empty() {
             continue;
         }
         let header = crate::BlockId(bi as u32);
@@ -67,27 +85,66 @@ fn range_facts(func: &MirFunction, nonneg: &HashSet<u32>) -> Facts {
             {
                 for &arr in &arrs {
                     if !redefines_between(func, &dom, header, t, &[Local(arr)]) {
-                        facts[ti].insert((idx.0, arr));
+                        arr_facts[ti].insert((idx.0, arr));
                     }
+                }
+                for s in &unit_strs {
+                    if str_base_redefined(func, &dom, header, t, s) {
+                        continue;
+                    }
+                    char_facts[ti].insert((idx.0, s.clone()));
+                }
+                for s in &byte_strs {
+                    if str_base_redefined(func, &dom, header, t, s) {
+                        continue;
+                    }
+                    byte_facts[ti].insert((idx.0, s.clone()));
                 }
             }
         }
     }
-    facts
+    (arr_facts, char_facts, byte_facts)
 }
 
-fn mark_stmt(stmt: &mut Statement, facts: &Facts) -> bool {
+fn str_base_redefined(
+    func: &MirFunction,
+    dom: &DomTree,
+    from: crate::BlockId,
+    to: crate::BlockId,
+    base: &StrBase,
+) -> bool {
+    match base {
+        StrBase::Local(l) => redefines_between(func, dom, from, to, &[Local(*l)]),
+        StrBase::Lit(_) => false,
+    }
+}
+
+fn str_base(op: &Operand) -> Option<StrBase> {
+    match op {
+        Operand::Copy(Place::Local(l)) => Some(StrBase::Local(l.0)),
+        Operand::Const(Const::Str(s)) => Some(StrBase::Lit(s.clone())),
+        _ => None,
+    }
+}
+
+fn mark_stmt(
+    stmt: &mut Statement,
+    arr_facts: &ArrFacts,
+    char_facts: &StrFacts,
+    byte_facts: &StrFacts,
+    bi: usize,
+) -> bool {
     let mut changed = false;
     match stmt {
         Statement::Assign(place, rv) => {
-            changed |= mark_place(place, facts, 0);
-            changed |= mark_rvalue(rv, facts);
+            changed |= mark_place(place, arr_facts, bi);
+            changed |= mark_rvalue(rv, arr_facts, char_facts, byte_facts, bi);
         }
         Statement::Call { args, .. }
         | Statement::IndirectCall { args, .. }
         | Statement::InterfaceCall { args, .. } => {
             for a in args {
-                changed |= mark_operand(a, facts);
+                changed |= mark_operand(a, arr_facts, bi);
             }
         }
         _ => {}
@@ -95,16 +152,18 @@ fn mark_stmt(stmt: &mut Statement, facts: &Facts) -> bool {
     changed
 }
 
-fn mark_terminator(t: &mut Terminator, facts: &Facts) -> bool {
+fn mark_terminator(t: &mut Terminator, facts: &ArrFacts) -> bool {
     match t {
-        Terminator::If { cond, .. } => mark_operand(cond, facts),
-        Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => mark_operand(o, facts),
-        Terminator::Switch { value, .. } => mark_operand(value, facts),
-        Terminator::Await { future, .. } => mark_operand(future, facts),
+        Terminator::If { cond, .. } => mark_operand(cond, facts, 0),
+        Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
+            mark_operand(o, facts, 0)
+        }
+        Terminator::Switch { value, .. } => mark_operand(value, facts, 0),
+        Terminator::Await { future, .. } => mark_operand(future, facts, 0),
         Terminator::TailCall { args, .. } => {
             let mut c = false;
             for a in args {
-                c |= mark_operand(a, facts);
+                c |= mark_operand(a, facts, 0);
             }
             c
         }
@@ -112,45 +171,89 @@ fn mark_terminator(t: &mut Terminator, facts: &Facts) -> bool {
     }
 }
 
-fn mark_rvalue(rv: &mut Rvalue, facts: &Facts) -> bool {
+fn in_arr_facts(facts: &ArrFacts, bi: usize, idx: u32, base: u32) -> bool {
+    facts
+        .get(bi)
+        .map(|s| s.contains(&(idx, base)))
+        .unwrap_or(false)
+        || facts.iter().any(|s| s.contains(&(idx, base)))
+}
+
+fn in_str_facts(facts: &StrFacts, bi: usize, idx: u32, base: &StrBase) -> bool {
+    let key = (idx, base.clone());
+    facts.get(bi).map(|s| s.contains(&key)).unwrap_or(false)
+        || facts.iter().any(|s| s.contains(&key))
+}
+
+fn mark_rvalue(
+    rv: &mut Rvalue,
+    arr_facts: &ArrFacts,
+    char_facts: &StrFacts,
+    byte_facts: &StrFacts,
+    bi: usize,
+) -> bool {
     match rv {
-        Rvalue::Use(o) | Rvalue::Unary(_, o) | Rvalue::ArrayLen(o) => mark_operand(o, facts),
-        Rvalue::Binary(_, a, b) => mark_operand(a, facts) | mark_operand(b, facts),
+        Rvalue::Use(o) | Rvalue::Unary(_, o) | Rvalue::ArrayLen(o) => {
+            mark_operand(o, arr_facts, bi)
+        }
+        Rvalue::Binary(_, a, b) => mark_operand(a, arr_facts, bi) | mark_operand(b, arr_facts, bi),
         Rvalue::Select {
             cond,
             then_val,
             else_val,
         } => {
-            mark_operand(cond, facts)
-                | mark_operand(then_val, facts)
-                | mark_operand(else_val, facts)
+            mark_operand(cond, arr_facts, bi)
+                | mark_operand(then_val, arr_facts, bi)
+                | mark_operand(else_val, arr_facts, bi)
         }
         Rvalue::Call { args, .. } | Rvalue::New { args, .. } => {
             let mut c = false;
             for a in args {
-                c |= mark_operand(a, facts);
+                c |= mark_operand(a, arr_facts, bi);
             }
             c
         }
         Rvalue::InterfaceCall { receiver, args, .. } => {
-            let mut c = mark_operand(receiver, facts);
+            let mut c = mark_operand(receiver, arr_facts, bi);
             for a in args {
-                c |= mark_operand(a, facts);
+                c |= mark_operand(a, arr_facts, bi);
             }
             c
+        }
+        Rvalue::CharAt(s, i, unchecked) if !*unchecked => {
+            if let Operand::Copy(Place::Local(idx)) = i {
+                if let Some(base) = str_base(s) {
+                    if in_str_facts(char_facts, bi, idx.0, &base) {
+                        *unchecked = true;
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        Rvalue::ByteAt(s, i, unchecked) if !*unchecked => {
+            if let Operand::Copy(Place::Local(idx)) = i {
+                if let Some(base) = str_base(s) {
+                    if in_str_facts(byte_facts, bi, idx.0, &base) {
+                        *unchecked = true;
+                        return true;
+                    }
+                }
+            }
+            false
         }
         _ => false,
     }
 }
 
-fn mark_operand(op: &mut Operand, facts: &Facts) -> bool {
+fn mark_operand(op: &mut Operand, facts: &ArrFacts, block_hint: usize) -> bool {
     match op {
-        Operand::Copy(p) => mark_place(p, facts, 0),
+        Operand::Copy(p) => mark_place(p, facts, block_hint),
         Operand::Const(_) => false,
     }
 }
 
-fn mark_place(place: &mut Place, facts: &Facts, block_hint: usize) -> bool {
+fn mark_place(place: &mut Place, facts: &ArrFacts, block_hint: usize) -> bool {
     match place {
         Place::Index {
             base,
@@ -158,19 +261,14 @@ fn mark_place(place: &mut Place, facts: &Facts, block_hint: usize) -> bool {
             unchecked,
         } if !*unchecked => {
             if let Operand::Copy(Place::Local(idx)) = index.as_ref() {
-                if facts
-                    .get(block_hint)
-                    .map(|s| s.contains(&(idx.0, base.0)))
-                    .unwrap_or(false)
-                    || facts.iter().any(|s| s.contains(&(idx.0, base.0)))
-                {
+                if in_arr_facts(facts, block_hint, idx.0, base.0) {
                     *unchecked = true;
                     return true;
                 }
             }
             false
         }
-        Place::Index { index, .. } => mark_operand(index, facts),
+        Place::Index { index, .. } => mark_operand(index, facts, block_hint),
         _ => false,
     }
 }
@@ -270,6 +368,41 @@ fn array_len_locals(func: &MirFunction) -> std::collections::HashMap<u32, Vec<u3
         }
     }
     m
+}
+
+fn string_len_locals(
+    func: &MirFunction,
+    byte_size: bool,
+) -> std::collections::HashMap<u32, Vec<StrBase>> {
+    let mut m: std::collections::HashMap<u32, Vec<StrBase>> = std::collections::HashMap::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            match stmt {
+                Statement::Assign(Place::Local(d), Rvalue::StrLen(op)) if !byte_size => {
+                    if let Some(b) = str_base(op) {
+                        m.entry(d.0).or_default().push(b);
+                    }
+                }
+                Statement::Assign(Place::Local(d), Rvalue::StrByteSize(op)) if byte_size => {
+                    if let Some(b) = str_base(op) {
+                        m.entry(d.0).or_default().push(b);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    m
+}
+
+fn strings_bounded_by(
+    len_of: &std::collections::HashMap<u32, Vec<StrBase>>,
+    bound: &Operand,
+) -> Vec<StrBase> {
+    match bound {
+        Operand::Copy(Place::Local(n)) => len_of.get(&n.0).cloned().unwrap_or_default(),
+        _ => Vec::new(),
+    }
 }
 
 fn nonnegative_locals(func: &MirFunction) -> HashSet<u32> {
@@ -472,6 +605,128 @@ mod tests {
                 assert!(*unchecked);
             }
             other => panic!("expected unchecked index, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn char_at_scan_shape_is_unchecked() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.int());
+        let s = b.new_param(i.string(), Some("s".into()));
+        let idx = b.new_temp(i.int());
+        let len = b.new_temp(i.int());
+        let cmp = b.new_temp(i.bool());
+        let ch = b.new_temp(i.char());
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
+        b.assign(
+            Place::Local(len),
+            Rvalue::StrLen(Operand::Copy(Place::Local(s))),
+        );
+        let cond = b.new_block();
+        let body = b.new_block();
+        let after = b.new_block();
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(cond);
+        b.assign(
+            Place::Local(cmp),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Copy(Place::Local(idx)),
+                Operand::Copy(Place::Local(len)),
+            ),
+        );
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(cmp)),
+            then_blk: body,
+            else_blk: after,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(ch),
+            Rvalue::CharAt(
+                Operand::Copy(Place::Local(s)),
+                Operand::Copy(Place::Local(idx)),
+                false,
+            ),
+        );
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(idx)),
+                Operand::Const(Const::Int(1)),
+            ),
+        );
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(after);
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(ch)))));
+        let mut func = b.finish();
+        assert!(Abc.run(&mut func, &i));
+        match &func.blocks[body.0 as usize].stmts[0] {
+            Statement::Assign(_, Rvalue::CharAt(_, _, true)) => {}
+            other => panic!("expected unchecked char_at, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn interned_string_scan_is_unchecked() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.int());
+        let idx = b.new_temp(i.int());
+        let len = b.new_temp(i.int());
+        let cmp = b.new_temp(i.bool());
+        let ch = b.new_temp(i.char());
+        let lit = Operand::Const(Const::Str("abc".into()));
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
+        b.assign(Place::Local(len), Rvalue::StrLen(lit.clone()));
+        let cond = b.new_block();
+        let body = b.new_block();
+        let after = b.new_block();
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(cond);
+        b.assign(
+            Place::Local(cmp),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Copy(Place::Local(idx)),
+                Operand::Copy(Place::Local(len)),
+            ),
+        );
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(cmp)),
+            then_blk: body,
+            else_blk: after,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(ch),
+            Rvalue::CharAt(lit, Operand::Copy(Place::Local(idx)), false),
+        );
+        b.assign(
+            Place::Local(idx),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(idx)),
+                Operand::Const(Const::Int(1)),
+            ),
+        );
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(after);
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(ch)))));
+        let mut func = b.finish();
+        assert!(Abc.run(&mut func, &i));
+        match &func.blocks[body.0 as usize].stmts[0] {
+            Statement::Assign(_, Rvalue::CharAt(_, _, true)) => {}
+            other => panic!(
+                "expected unchecked char_at on interned string, got {:?}",
+                other
+            ),
         }
     }
 }

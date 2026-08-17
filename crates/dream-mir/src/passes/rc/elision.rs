@@ -758,62 +758,43 @@ mod tests {
     #[test]
     fn inserts_retain_on_borrowed_copy() {
         let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.void());
+        let mut b = FunctionBuilder::new("f", i.string());
         let s = b.new_param(i.string(), Some("s".into()));
         let t = b.new_local(i.string(), Some("t".into()));
         b.assign(Place::Local(t), Rvalue::Use(Operand::Copy(Place::Local(s))));
-        b.terminate(Terminator::Return(None));
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &i));
-        let kinds: Vec<&str> = func.blocks[0]
+        let retains = func.blocks[0]
             .stmts
             .iter()
-            .map(|s| match s {
-                Statement::Release(_) => "release",
-                Statement::Assign(..) => "assign",
-                Statement::Retain(_) => "retain",
-                _ => "other",
-            })
-            .collect();
-        // Last-use destroy may Release+null `t` after the retain; scope-exit Release remains.
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
         assert!(
-            kinds
-                .windows(3)
-                .any(|w| w == ["release", "assign", "retain"]),
-            "expected release/assign/retain of dest, got {:?}",
-            kinds
+            retains >= 1,
+            "returning a copy of a borrowed param must retain"
         );
-        assert!(kinds.iter().filter(|k| **k == "release").count() >= 2);
     }
 
     #[test]
     fn inserts_retain_on_borrowed_js_copy() {
         let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.void());
+        let mut b = FunctionBuilder::new("f", i.js());
         let s = b.new_param(i.js(), Some("s".into()));
         let t = b.new_local(i.js(), Some("t".into()));
         b.assign(Place::Local(t), Rvalue::Use(Operand::Copy(Place::Local(s))));
-        b.terminate(Terminator::Return(None));
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &i));
-        let kinds: Vec<&str> = func.blocks[0]
+        let retains = func.blocks[0]
             .stmts
             .iter()
-            .map(|s| match s {
-                Statement::Release(_) => "release",
-                Statement::Assign(..) => "assign",
-                Statement::Retain(_) => "retain",
-                _ => "other",
-            })
-            .collect();
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
         assert!(
-            kinds
-                .windows(3)
-                .any(|w| w == ["release", "assign", "retain"]),
-            "expected release/assign/retain of dest, got {:?}",
-            kinds
+            retains >= 1,
+            "returning a copy of a borrowed js param must retain"
         );
-        assert!(kinds.iter().filter(|k| **k == "release").count() >= 2);
     }
 
     #[test]
@@ -911,13 +892,13 @@ mod tests {
             })
             .count();
         assert_eq!(nulls, 0, "source still live — no move");
-        // t = s must retain (borrowed copy while s stays live).
+        // `t` is an unused forwarding alias of `s`; it is a cursor and must not retain.
         let retains = func.blocks[0]
             .stmts
             .iter()
             .filter(|s| matches!(s, Statement::Retain(_)))
             .count();
-        assert!(retains >= 2, "literal retain + copy retain expected");
+        assert_eq!(retains, 1, "only the string-literal retain: {:?}", retains);
     }
 
     #[test]

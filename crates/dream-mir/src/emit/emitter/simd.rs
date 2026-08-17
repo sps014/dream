@@ -9,7 +9,10 @@ use crate::SimdLane;
 use dream_types::TyKind;
 
 impl Emitter<'_> {
-    fn simd_lane_of(callee: &crate::Callee, interner: &dream_types::TypeInterner) -> Option<SimdLane> {
+    fn simd_lane_of(
+        callee: &crate::Callee,
+        interner: &dream_types::TypeInterner,
+    ) -> Option<SimdLane> {
         let mut consider = Vec::new();
         consider.extend(callee.args.iter().copied());
         consider.push(callee.ret);
@@ -141,7 +144,9 @@ impl Emitter<'_> {
             args.iter().find_map(|a| {
                 let ty = self.operand_ty(a);
                 SimdLane::from_elem(self.interner, ty).or_else(|| match self.interner.kind(ty) {
-                    TyKind::Struct(_, ts) => ts.first().and_then(|e| SimdLane::from_elem(self.interner, *e)),
+                    TyKind::Struct(_, ts) => ts
+                        .first()
+                        .and_then(|e| SimdLane::from_elem(self.interner, *e)),
                     TyKind::Array(e) => SimdLane::from_elem(self.interner, *e),
                     _ => None,
                 })

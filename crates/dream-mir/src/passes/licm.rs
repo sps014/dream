@@ -377,9 +377,7 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => operand_reads(o, f),
-        Rvalue::Binary(_, a, b)
-        | Rvalue::CharAt(a, b)
-        | Rvalue::ByteAt(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
             operand_reads(a, f);
             operand_reads(b, f);
         }

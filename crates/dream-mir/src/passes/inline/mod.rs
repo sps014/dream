@@ -209,7 +209,12 @@ fn eligible(
         return false;
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
-    let small = stmt_count <= MAX_INLINE_STMTS && g.blocks.len() <= MAX_INLINE_BLOCKS;
+    let (max_stmts, max_blocks) = if prefer_inline(&g.name) {
+        (128, 24)
+    } else {
+        (MAX_INLINE_STMTS, MAX_INLINE_BLOCKS)
+    };
+    let small = stmt_count <= max_stmts && g.blocks.len() <= max_blocks;
     if !small {
         return false;
     }
@@ -223,6 +228,7 @@ fn eligible(
         let caller_small =
             caller_stmts <= MAX_INLINE_STMTS && caller.blocks.len() <= MAX_INLINE_BLOCKS;
         if caller_small
+            && !prefer_inline(&g.name)
             && (caller_stmts + stmt_count > MAX_INLINE_STMTS
                 || caller.blocks.len() + g.blocks.len() > MAX_INLINE_BLOCKS)
         {
@@ -232,6 +238,23 @@ fn eligible(
     true
 }
 
+fn prefer_inline(name: &str) -> bool {
+    matches!(
+        name,
+        "push"
+            | "bump"
+            | "set_at"
+            | "at"
+            | "reset"
+            | "clear"
+            | "get_or"
+            | "length"
+            | "capacity"
+            | "is_empty"
+            | "grow"
+    )
+}
+
 fn cfg_has_cycle(func: &crate::MirFunction) -> bool {
     let n = func.blocks.len();
     if n == 0 {
@@ -239,12 +262,7 @@ fn cfg_has_cycle(func: &crate::MirFunction) -> bool {
     }
     let mut visiting = vec![false; n];
     let mut seen = vec![false; n];
-    fn rec(
-        func: &crate::MirFunction,
-        b: usize,
-        visiting: &mut [bool],
-        seen: &mut [bool],
-    ) -> bool {
+    fn rec(func: &crate::MirFunction, b: usize, visiting: &mut [bool], seen: &mut [bool]) -> bool {
         if visiting[b] {
             return true;
         }
@@ -303,11 +321,8 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // reclassified as owning in the caller. Locals already marked `manual_drop` (from a prior
     // inline into this callee) keep their existing `ValueDrop` in the remapped body; do not drop
     // them again at this site's continuation.
-    let callee_frame = crate::emit::ValueFrame::compute(
-        &mir.functions[site.callee],
-        interner,
-        &mir.layouts,
-    );
+    let callee_frame =
+        crate::emit::ValueFrame::compute(&mir.functions[site.callee], interner, &mir.layouts);
     let local_base = mir.functions[fi].locals.len() as u32;
     let drop_locals: Vec<Local> = g_locals
         .iter()

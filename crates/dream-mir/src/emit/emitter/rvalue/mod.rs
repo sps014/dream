@@ -548,8 +548,8 @@ impl Emitter<'_> {
                 self.line("     ))");
                 self.line("     (local.get $__obj)");
             }
-            Rvalue::CharAt(s, i) => self.emit_char_at(s, i),
-            Rvalue::ByteAt(s, i) => self.emit_byte_at(s, i),
+            Rvalue::CharAt(s, i, unchecked) => self.emit_char_at(s, i, *unchecked),
+            Rvalue::ByteAt(s, i, unchecked) => self.emit_byte_at(s, i, *unchecked),
             Rvalue::Concat(parts) => {
                 let n = parts.len();
                 for p in parts {
@@ -633,11 +633,13 @@ impl Emitter<'_> {
             }
             Rvalue::StrLen(o) => {
                 self.emit_operand(o);
-                self.line("     (call $str_scalar_len)");
+                self.line("     (i32.load) ;; unit_len");
             }
             Rvalue::StrByteSize(o) => {
                 self.emit_operand(o);
-                self.line("     (call $str_byte_size)");
+                self.line("     (i32.load)");
+                self.line("     (i32.const 1)");
+                self.line("     (i32.shl) ;; unit_len * 2");
             }
             Rvalue::Cast(o, from, to) => self.emit_cast(o, *from, *to),
             Rvalue::IsType(o, target) => {

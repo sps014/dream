@@ -189,7 +189,7 @@ fun bench_map_get_set(iters: int): void {
     let acc = 0;
     i = 0;
     while (i < iters) {
-        acc = acc + map.get(i).unwrap_or(0);
+        acc = acc + map.get_or(i, 0);
         i = i + 1;
     }
     sw.stop();

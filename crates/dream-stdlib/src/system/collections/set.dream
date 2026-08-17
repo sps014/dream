@@ -7,6 +7,7 @@ public class Set<T> : Collection<T> {
     count: int;
     used: int;
     cap: int;
+    epoch: int;
 
     // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
     public constructor(capacity: int = 8) {
@@ -19,6 +20,16 @@ public class Set<T> : Collection<T> {
         this.states = Buffer.alloc<int>(c);
         this.count = 0;
         this.used = 0;
+        this.epoch = hash_epoch_initial();
+    }
+
+    fun bump_epoch(): void {
+        let e = this.epoch + 1;
+        if (e <= 0) {
+            Buffer.elems_fill<int>(this.states, 0, this.cap);
+            e = hash_epoch_initial();
+        }
+        this.epoch = e;
     }
 
     // Number of elements currently stored.
@@ -42,15 +53,17 @@ public class Set<T> : Collection<T> {
         let keys = this.keys;
         let states = this.states;
         let cap = this.cap;
+        let epoch = this.epoch;
+        let tomb = 0 - epoch;
         let idx = value.hash_code() & (cap - 1);
         let result = -1;
         let done = false;
         while (done == false) {
             let s = states[idx];
-            if (s == hash_slot_empty()) {
+            if ((s != epoch) && (s != tomb)) {
                 done = true;
             } else {
-                if (s == hash_slot_occupied()) {
+                if (s == epoch) {
                     if (keys[idx] == value) {
                         result = idx;
                         done = true;
@@ -73,19 +86,21 @@ public class Set<T> : Collection<T> {
         let keys = this.keys;
         let states = this.states;
         let cap = this.cap;
+        let epoch = this.epoch;
+        let tomb = 0 - epoch;
         let idx = value.hash_code() & (cap - 1);
         let first_tomb = -1;
         let added = false;
         let done = false;
         while (done == false) {
             let s = states[idx];
-            if (s == hash_slot_empty()) {
+            if ((s != epoch) && (s != tomb)) {
                 let target = idx;
                 if (first_tomb >= 0) {
                     target = first_tomb;
                 }
                 keys[target] = value;
-                states[target] = hash_slot_occupied();
+                states[target] = epoch;
                 this.count = this.count + 1;
                 if (first_tomb < 0) {
                     this.used = this.used + 1;
@@ -93,12 +108,12 @@ public class Set<T> : Collection<T> {
                 added = true;
                 done = true;
             } else {
-                if (s == hash_slot_occupied()) {
+                if (s == epoch) {
                     if (keys[idx] == value) {
                         done = true;
                     }
                 } else {
-                    if (first_tomb < 0) {
+                    if ((s == tomb) && (first_tomb < 0)) {
                         first_tomb = idx;
                     }
                 }
@@ -129,7 +144,7 @@ public class Set<T> : Collection<T> {
         this.used = 0;
         let i = 0;
         while (i < old_cap) {
-            if (old_states[i] == hash_slot_occupied()) {
+            if (old_states[i] == this.epoch) {
                 this.insert_no_grow(old_keys[i]);
             }
             i = i + 1;
@@ -172,7 +187,7 @@ public class Set<T> : Collection<T> {
     public fun remove(borrow value: T): bool {
         let i = this.find(value);
         if (i >= 0) {
-            this.states[i] = hash_slot_tombstone();
+            this.states[i] = 0 - this.epoch;
             this.count = this.count - 1;
             return true;
         }
@@ -188,17 +203,24 @@ public class Set<T> : Collection<T> {
     // entries release; probe `states` are reset in place (no capacity realloc).
     public fun clear(): void {
         let c = this.cap;
+        let e = this.epoch;
         let z = Buffer.alloc<T>(1);
         let i = 0;
         while (i < c) {
-            if (this.states[i] == hash_slot_occupied()) {
+            if (this.states[i] == e) {
                 this.keys[i] = z[0];
             }
-            this.states[i] = hash_slot_empty();
             i = i + 1;
         }
         this.count = 0;
         this.used = 0;
+        this.bump_epoch();
+    }
+
+    public fun clear(): void where T : unmanaged {
+        this.count = 0;
+        this.used = 0;
+        this.bump_epoch();
     }
 
     // Gets all elements as an array.
@@ -207,7 +229,7 @@ public class Set<T> : Collection<T> {
         let i = 0;
         let j = 0;
         while (i < this.cap) {
-            if (this.states[i] == hash_slot_occupied()) {
+            if (this.states[i] == this.epoch) {
                 result[j] = this.keys[i];
                 j = j + 1;
             }
@@ -224,7 +246,7 @@ public class Set<T> : Collection<T> {
 
     // Slot helpers for `SetIterator` (same-module).
     internal fun slot_occupied(i: int): bool {
-        return this.states[i] == hash_slot_occupied();
+        return this.states[i] == this.epoch;
     }
 
     internal fun slot_key(i: int): T {

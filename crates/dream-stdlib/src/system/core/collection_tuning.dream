@@ -27,6 +27,8 @@ public fun hash_slot_tombstone(): int { return 2; }
 // Smallest hash-table backing-array capacity (already a power of 2). `Map`/`Set.clear` keep the
 // current capacity and reuse buffers rather than shrinking back to this floor.
 public fun hash_min_capacity(): int { return 8; }
+// First occupancy stamp stored in `Map`/`Set` probe slots (`0` remains empty).
+public fun hash_epoch_initial(): int { return 1; }
 // `Set`/`Map` grow when `(used + 1) * hash_load_factor_denom() >= capacity * hash_load_factor_num()`,
 // i.e. before the table would exceed 3/4 full, keeping the average probe length short.
 public fun hash_load_factor_num(): int { return 3; }

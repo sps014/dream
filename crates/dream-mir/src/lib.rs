@@ -438,10 +438,11 @@ pub enum Rvalue {
     StrLen(Operand),
     /// `string.byte_size()` via a runtime `$str_byte_size` call (`unit_len * 2`).
     StrByteSize(Operand),
-    /// `string.char_at(i)` via the runtime `$char_at` helper: `.0` is the string, `.1` the code-unit index.
-    CharAt(Operand, Operand),
-    /// `string.byte_at(i)` via the runtime `$byte_at` helper: `.0` is the string, `.1` the byte index.
-    ByteAt(Operand, Operand),
+    /// `string.char_at(i)`: string, code-unit index, and whether ABC proved the index in range
+    /// (skip the emit-site `ge_u` check). The load is always inlined as `i32.load16_u`.
+    CharAt(Operand, Operand, bool),
+    /// `string.byte_at(i)`: string, payload-byte index, and ABC `unchecked` (same as [`Self::CharAt`]).
+    ByteAt(Operand, Operand, bool),
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
     ArrayNew {
         elem_ty: TypeId,

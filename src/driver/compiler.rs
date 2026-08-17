@@ -52,6 +52,9 @@ pub struct Compiler {
     emit_abi: bool,
     /// Library vs binary; libs reject a primary-file `main`.
     crate_type: dream_sema::analyzer::CrateType,
+    /// Native `--release` only: after the `.wasm` is finalized, Cranelift-AOT a sibling `.cwasm`
+    /// for Wasmtime (`dream run` / `dreamer pack`). Off in tests so the e2e corpus does not AOT.
+    emit_cwasm: bool,
 }
 
 impl Compiler {
@@ -66,6 +69,7 @@ impl Compiler {
             compile_targets: CompileTargets::native_only(),
             emit_abi: true,
             crate_type: dream_sema::analyzer::CrateType::Bin,
+            emit_cwasm: false,
         }
     }
 
@@ -154,6 +158,13 @@ impl Compiler {
     /// Builder: `lib` rejects a top-level `main` in the primary file; `bin` is the default.
     pub fn with_crate_type(mut self, crate_type: dream_sema::analyzer::CrateType) -> Self {
         self.crate_type = crate_type;
+        self
+    }
+
+    /// Builder: emit a host-ISA Wasmtime `.cwasm` next to the `.wasm` after wasm-opt + ABI embed.
+    /// The CLI sets this for native `--release`; tests leave it off.
+    pub fn with_emit_cwasm(mut self, on: bool) -> Self {
+        self.emit_cwasm = on;
         self
     }
 
@@ -393,6 +404,30 @@ impl Compiler {
 
         if self.emit_abi {
             crate::driver::abi::embed_abi_in_wasm(out_path)?;
+        }
+
+        if self.emit_cwasm && self.compile_targets.native {
+            #[cfg(feature = "native")]
+            {
+                let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
+                crate::execution::cwasm::write_host_cwasm(&wasm_path)
+                    .map_err(|e| std::io::Error::other(format!("Cranelift AOT (.cwasm): {e}")))?;
+                info!(
+                    "created file: {}",
+                    wasm_path.with_extension("cwasm").display()
+                );
+            }
+            #[cfg(not(feature = "native"))]
+            {
+                return Err(CompileError::Io(std::io::Error::other(
+                    "Cranelift AOT (.cwasm) requires the native compiler feature",
+                )));
+            }
+        } else {
+            // A leftover `--release` `.cwasm` next to a debug `.wat` would be loaded in preference
+            // to the new module and run the wrong code.
+            let cwasm_path = std::path::Path::new(out_path).with_extension("cwasm");
+            let _ = fs::remove_file(&cwasm_path);
         }
 
         Ok(())

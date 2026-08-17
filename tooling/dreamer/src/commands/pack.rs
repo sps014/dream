@@ -1,6 +1,6 @@
-//! `dreamer pack`: release-compile a bin package and embed the `.wasm` in `dream-runner`.
+//! `dreamer pack`: release-compile a bin package and embed the `.cwasm` in `dream-runner`.
 
-use crate::manifest::PackageType;
+use crate::manifest::{PackageType, RunTarget};
 use crate::workspace::Workspace;
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
     }
 
     let triples = resolve_pack_targets(target_args)?;
-    super::build::compile_entry(&workspace, true, None)?;
+    super::build::compile_entry(&workspace, true, Some(RunTarget::Native))?;
 
     let wasm_path = artifact_wasm_path(&workspace)?;
     if !wasm_path.is_file() {
@@ -51,8 +51,32 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
     std::fs::create_dir_all(&pack_dir)
         .with_context(|| format!("creating {}", pack_dir.display()))?;
 
+    let dream_bin = crate::dream_bin::locate()?;
+    let host_triple = host_rustc_triple()?;
+    let wasm_stem = wasm_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| anyhow::anyhow!("wasm path has no file stem"))?;
+
     let pkg_name = pkg.name.clone();
     for (dream_triple, rust_triple) in &triples {
+        let cwasm_path = if rust_triple.as_str() == host_triple {
+            let host_cwasm = wasm_path.with_extension("cwasm");
+            if !host_cwasm.is_file() {
+                run_dream_aot(&dream_bin, &wasm_path, &host_cwasm, None)?;
+            }
+            host_cwasm
+        } else {
+            let cross = pack_dir.join(format!("{wasm_stem}.{dream_triple}.cwasm"));
+            run_dream_aot(&dream_bin, &wasm_path, &cross, Some(rust_triple))?;
+            cross
+        };
+        if !cwasm_path.is_file() {
+            bail!(
+                "expected Cranelift AOT artifact at {} after `dream aot`",
+                cwasm_path.display()
+            );
+        }
         let out_name = if dream_triple.starts_with("windows-") {
             format!("{pkg_name}-{dream_triple}.exe")
         } else {
@@ -63,7 +87,7 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
         let abi_path = wasm_path.with_extension("abi.json");
         build_runner(
             &dream_root,
-            &wasm_path,
+            &cwasm_path,
             abi_path.as_path(),
             icon_path.as_deref(),
             rust_triple,
@@ -148,6 +172,31 @@ fn host_pack_triple() -> Result<String> {
         other => bail!("unsupported host arch for pack: {other}"),
     };
     Ok(format!("{dream_os}-{dream_arch}"))
+}
+
+fn run_dream_aot(
+    dream_bin: &Path,
+    wasm_path: &Path,
+    cwasm_path: &Path,
+    target: Option<&str>,
+) -> Result<()> {
+    let mut cmd = Command::new(dream_bin);
+    cmd.arg("aot").arg(wasm_path).arg(cwasm_path);
+    if let Some(triple) = target {
+        cmd.arg("--target").arg(triple);
+    }
+    let status = cmd
+        .status()
+        .map_err(|e| anyhow::anyhow!("running {} aot: {e}", dream_bin.display()))?;
+    if !status.success() {
+        bail!(
+            "dream aot failed for {} (exit {:?}). Cranelift must be able to compile for that \
+             target; missing backends are not silently replaced with host .cwasm",
+            target.unwrap_or("host"),
+            status.code()
+        );
+    }
+    Ok(())
 }
 
 fn artifact_wasm_path(workspace: &Workspace) -> Result<PathBuf> {
@@ -235,7 +284,7 @@ fn find_dream_workspace_root() -> Option<PathBuf> {
 
 fn build_runner(
     dream_root: &Path,
-    wasm_path: &Path,
+    cwasm_path: &Path,
     abi_path: &Path,
     icon_path: Option<&Path>,
     rust_triple: &str,
@@ -245,7 +294,7 @@ fn build_runner(
     let host_triple = host_rustc_triple()?;
     let mut cmd = Command::new("cargo");
     cmd.current_dir(dream_root)
-        .env("DREAM_EMBEDDED_WASM", wasm_path)
+        .env("DREAM_EMBEDDED_WASM", cwasm_path)
         .args([
             "build",
             "-p",

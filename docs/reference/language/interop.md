@@ -11,6 +11,10 @@ Dream compiles to WebAssembly, so it runs anywhere WASM does — including the b
 
 This page covers `extern` functions.
 
+Native `--release` also writes a sibling `.cwasm` (Wasmtime Cranelift AOT of the `.wasm`). The
+wasmtime host (`dream run`, `dreamer pack`) deserializes that blob at startup; browser and Node
+always load `.wasm`.
+
 ## Declaring an extern function
 
 An `extern fun` has a signature but no body. The compiler lowers it to a WebAssembly *import* and records it in the auto-generated `*.abi.json`. Call it like any other function:

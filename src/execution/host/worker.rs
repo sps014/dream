@@ -103,38 +103,22 @@ fn killed_workers() -> &'static Mutex<HashSet<u32>> {
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
 thread_local! {
-    /// The module bytes a worker should instantiate, set per host thread. A thread-local (not a
-    /// global) so parallel test suites compiling different variants of the same program never race
-    /// on module identity. `set_worker_module` is called on the main/host thread before running,
-    /// and re-established on each worker thread so nested spawns work.
-    static WASM_BYTES: std::cell::RefCell<Option<Arc<Vec<u8>>>> = const { std::cell::RefCell::new(None) };
-    /// The `(Engine, SharedMemory)` pair every worker spawned from this host thread must reuse, set
-    /// alongside `WASM_BYTES` by `set_worker_runtime`. Unlike the module bytes (immutable content,
-    /// safe to independently re-derive per thread), the memory must be the literal same shared
-    /// object across every instance for sharing to mean anything, so it is threaded explicitly
-    /// through `workerSpawn` -> `worker_thread` rather than each thread creating its own.
-    static SHARED_RUNTIME: std::cell::RefCell<Option<(Engine, SharedMemory)>> = const { std::cell::RefCell::new(None) };
+    /// The `(Engine, SharedMemory, Module)` every worker spawned from this host thread must reuse.
+    /// A thread-local so parallel test suites never race on module identity. The compiled `Module`
+    /// is cloned per worker (no Cranelift) so nested `WebWorker` spawns stay cheap. Linear memory
+    /// must be the literal same `SharedMemory` across instances.
+    static SHARED_RUNTIME: std::cell::RefCell<Option<(Engine, SharedMemory, Module)>> =
+        const { std::cell::RefCell::new(None) };
 }
 
-/// Records the module bytes the current host thread's workers should instantiate. Call once before
-/// running a module that may spawn workers (`execute_wasm` and the E2E harness both do).
-pub fn set_worker_module(bytes: &[u8]) {
-    let arc = Arc::new(bytes.to_vec());
-    WASM_BYTES.with(|c| *c.borrow_mut() = Some(arc));
+/// Records the `Engine` + `SharedMemory` + compiled `Module` every worker spawned from this host
+/// thread must import, so linear memory is genuinely shared and workers skip a second Cranelift
+/// compile. Call once before running a module that may spawn workers.
+pub fn set_worker_runtime(engine: Engine, memory: SharedMemory, module: Module) {
+    SHARED_RUNTIME.with(|c| *c.borrow_mut() = Some((engine, memory, module)));
 }
 
-/// Records the `Engine` + `SharedMemory` every worker spawned from this host thread must import, so
-/// linear memory is genuinely shared with the owner instance rather than a private copy per worker.
-/// Call once, alongside `set_worker_module`, before running a module that may spawn workers.
-pub fn set_worker_runtime(engine: Engine, memory: SharedMemory) {
-    SHARED_RUNTIME.with(|c| *c.borrow_mut() = Some((engine, memory)));
-}
-
-fn module_bytes() -> Option<Arc<Vec<u8>>> {
-    WASM_BYTES.with(|c| c.borrow().clone())
-}
-
-fn worker_runtime() -> Option<(Engine, SharedMemory)> {
+fn worker_runtime() -> Option<(Engine, SharedMemory, Module)> {
     SHARED_RUNTIME.with(|c| c.borrow().clone())
 }
 
@@ -179,10 +163,7 @@ fn store_write_string(
     let units: Vec<u16> = s.encode_utf16().collect();
     let nbytes = units.len() * 2;
     let ptr = malloc
-        .call(
-            &mut *store,
-            (STRING_HEADER + nbytes as i32, TAG_STRING),
-        )
+        .call(&mut *store, (STRING_HEADER + nbytes as i32, TAG_STRING))
         .ok()?;
     let base = ptr as usize;
     let data = super::memory::shared_bytes_mut(memory);
@@ -206,17 +187,17 @@ fn store_write_string(
 /// `Terminate`, epoch-interrupt kill, channel close, or any instantiation failure.
 fn worker_thread(
     worker_id: u32,
-    bytes: Arc<Vec<u8>>,
     engine: Engine,
     shared_mem: SharedMemory,
+    module: Module,
     job_rx: Receiver<Job>,
     reply_tx: Sender<String>,
     dap_tid: Option<u32>,
 ) {
-    // Re-establish the module bytes + shared runtime on this thread so a worker can itself spawn
-    // sub-workers (which must import the exact same `SharedMemory`, not a fresh one).
-    WASM_BYTES.with(|c| *c.borrow_mut() = Some(bytes.clone()));
-    SHARED_RUNTIME.with(|c| *c.borrow_mut() = Some((engine.clone(), shared_mem.clone())));
+    // Re-establish the shared runtime on this thread so a worker can itself spawn sub-workers
+    // (which must import the exact same `SharedMemory` and clone the same compiled `Module`).
+    SHARED_RUNTIME
+        .with(|c| *c.borrow_mut() = Some((engine.clone(), shared_mem.clone(), module.clone())));
 
     // Announce thread exit to the debugger on every return path from this point on.
     struct ExitGuard(Option<u32>, u32);
@@ -230,9 +211,6 @@ fn worker_thread(
     }
     let _exit_guard = ExitGuard(dap_tid, worker_id);
 
-    let Ok(module) = Module::new(&engine, &bytes[..]) else {
-        return;
-    };
     let mut store = Store::new(&engine, ());
     // Interrupt when the owner bumps the engine epoch *and* this worker was terminated. Other
     // workers' kills also bump the epoch; those continue via `UpdateDeadline::Continue`.
@@ -347,8 +325,7 @@ fn link_noop_debug_hooks(linker: &mut Linker<()>) {
 /// pool dispatch always supplies its own `(fn_idx, env)` explicitly per call via
 /// `workerPoolDispatch` rather than `workerPost`/`workerRecv`).
 fn spawn_worker_thread(fn_idx: i32, env: i32) -> Result<i32> {
-    let bytes = module_bytes().ok_or_else(|| Error::msg("worker module bytes not initialized"))?;
-    let (engine, shared_mem) =
+    let (engine, shared_mem, module) =
         worker_runtime().ok_or_else(|| Error::msg("worker shared runtime not initialized"))?;
     let (job_tx, job_rx) = channel::<Job>();
     let (reply_tx, reply_rx) = channel::<String>();
@@ -361,7 +338,7 @@ fn spawn_worker_thread(fn_idx: i32, env: i32) -> Result<i32> {
         d.on_start(tid);
     }
     std::thread::spawn(move || {
-        worker_thread(id, bytes, engine, shared_mem, job_rx, reply_tx, dap_tid)
+        worker_thread(id, engine, shared_mem, module, job_rx, reply_tx, dap_tid)
     });
     workers().lock().unwrap().insert(
         id,
@@ -477,7 +454,7 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
         |_caller: Caller<'_, ()>, id: i32| {
             let id = id as u32;
             killed_workers().lock().unwrap().insert(id);
-            if let Some((engine, _)) = worker_runtime() {
+            if let Some((engine, _, _)) = worker_runtime() {
                 engine.increment_epoch();
             }
             if let Some(handle) = workers().lock().unwrap().remove(&id) {

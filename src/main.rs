@@ -14,6 +14,9 @@ use tracing_subscriber::FmtSubscriber;
 /// prints usage and exits successfully.
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("aot") {
+        return aot_command(&args);
+    }
     let program = args
         .first()
         .map(String::as_str)
@@ -298,7 +301,8 @@ fn main() -> ExitCode {
         .with_runtimes(runtimes)
         .with_compile_targets(compile_targets)
         .with_emit_abi(emit_abi)
-        .with_crate_type(crate_type);
+        .with_crate_type(crate_type)
+        .with_emit_cwasm(release && compile_targets.native);
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
@@ -356,12 +360,12 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter|aot] <file|dir>",
         program
     );
     error!("  -v, --verbose         Print progress information");
     error!(
-        "  --release             Trimmed build + wasm-opt (-O3; -Os with --web); override with -O"
+        "  --release             Trimmed build + wasm-opt (-O3; -Os with --web); native also emits .cwasm"
     );
     error!(
         "  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)"
@@ -385,6 +389,7 @@ fn print_usage(program: &str) {
     error!("  run                   Execute the compiled module after a successful build");
     error!("  test                  Discover and run @test functions in a file or directory");
     error!("  debug-adapter         Run the Debug Adapter Protocol server over stdio (implies -g)");
+    error!("  aot <in.wasm> [out.cwasm] [--target TRIPLE]  Cranelift-precompile wasm for Wasmtime");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
     error!(r"Example: {} test tests/", program);
     error!(r"Example: {} --filter adds test tests/math.dream", program);
@@ -434,4 +439,59 @@ fn get_path_from_file_path(file_path: &str, release: bool) -> Option<String> {
     };
     let result = out_dir.join(format!("{}.wat", file_stem));
     Some(result.to_str()?.to_string())
+}
+
+/// `dream aot <in.wasm> [out.cwasm] [--target <rustc-triple>]` — Cranelift-precompile for Wasmtime.
+fn aot_command(args: &[String]) -> ExitCode {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::WARN)
+        .without_time()
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .finish();
+    let _ = tracing::subscriber::set_global_default(subscriber);
+
+    let mut target: Option<String> = None;
+    let mut positionals: Vec<&str> = Vec::new();
+    let mut i = 2;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "--target" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("aot --target requires a rustc/Wasmtime triple");
+                return ExitCode::FAILURE;
+            };
+            target = Some(val.clone());
+        } else if let Some(val) = arg.strip_prefix("--target=") {
+            target = Some(val.to_string());
+        } else if arg == "-h" || arg == "--help" {
+            error!("Usage: dream aot <in.wasm> [out.cwasm] [--target TRIPLE]");
+            return ExitCode::SUCCESS;
+        } else if arg.starts_with('-') {
+            error!("unknown aot flag '{}'", arg);
+            return ExitCode::FAILURE;
+        } else {
+            positionals.push(arg.as_str());
+        }
+        i += 1;
+    }
+
+    let Some(wasm_path) = positionals.first() else {
+        error!("Usage: dream aot <in.wasm> [out.cwasm] [--target TRIPLE]");
+        return ExitCode::FAILURE;
+    };
+    let wasm_path = PathBuf::from(wasm_path);
+    let cwasm_path = match positionals.get(1) {
+        Some(p) => PathBuf::from(*p),
+        None => wasm_path.with_extension("cwasm"),
+    };
+
+    match dream::execution::cwasm::write_cwasm_file(&wasm_path, &cwasm_path, target.as_deref()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            error!("{}", e);
+            ExitCode::FAILURE
+        }
+    }
 }

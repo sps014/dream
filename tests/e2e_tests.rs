@@ -3,7 +3,7 @@ use dream::execution::host::{
     attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
     link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
     link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, read_string_from_memory, set_worker_module,
+    link_worker_functions, read_string_from_memory,
 };
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -98,8 +98,6 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
 
     // Make the module bytes available to `WebWorker` spawns on this thread (a thread-local, so the
     // parallel debug/release suites never race on module identity).
-    set_worker_module(&wasm_bytes);
-
     // 3. Setup Wasmtime
     // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
@@ -110,7 +108,7 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     let module = Module::new(&engine, &wasm_bytes).expect("Failed to create module");
     let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
         .expect("module should import env.memory");
-    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
+    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
 
     let mut store = Store::new(&engine, ());
     store.set_epoch_deadline(u64::MAX);

@@ -48,13 +48,11 @@ pub use memory::{
 };
 pub use net::link_net_functions;
 pub use process::link_process_functions;
-pub use shared_memory::{shared_memory_for, threaded_wasm_config};
+pub use shared_memory::{aot_wasm_config, shared_memory_for, threaded_wasm_config};
 pub use stack_size::{dream_async_stack_size, dream_stack_size, parse_size_bytes};
 pub use text::link_text_functions;
 pub use webview::link_webview_functions;
-pub use worker::{
-    link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
-};
+pub use worker::{link_worker_functions, set_worker_debug, set_worker_runtime, WorkerDebug};
 
 #[cfg(test)]
 mod contract_tests {

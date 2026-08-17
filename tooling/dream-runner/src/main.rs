@@ -1,4 +1,6 @@
 //! Native single-file launcher for a Dream module embedded at build time.
+//!
+//! Pack embeds a Wasmtime `.cwasm` (Cranelift AOT) as `embedded.wasm` so startup skips JIT.
 
 fn main() {
     let icon: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/embedded_icon.png"));

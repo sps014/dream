@@ -1,6 +1,6 @@
 //! Copies pack-time embeds into `OUT_DIR` for `include_bytes!`.
 //!
-//! - `DREAM_EMBEDDED_WASM` → `embedded.wasm` (required for a real pack)
+//! - `DREAM_EMBEDDED_WASM` → `embedded.wasm` (precompiled `.cwasm` bytes, or placeholder wasm)
 //! - `DREAM_EMBEDDED_ABI` → `embedded.abi.json` (`@c` / GPU metadata for the packed host)
 //! - `DREAM_EMBEDDED_ICON` → `embedded_icon.png` (optional app window icon)
 //! - `DREAM_C_LIBS` → `cargo:rustc-link-lib=…` for `@c` libraries (comma-separated)

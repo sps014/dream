@@ -77,7 +77,6 @@ fn run_program(
     let wat_content = std::fs::read_to_string(wat_path)
         .map_err(|e| Error::msg(format!("failed to read {}: {}", wat_path, e)))?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
-    crate::execution::host::set_worker_module(&wasm_bytes);
 
     // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
     // recursive `Option<T>`-boxed data structures, and for the shared-memory (WASM threads) config.
@@ -85,7 +84,7 @@ fn run_program(
     let engine = Engine::new(&config)?;
     let module = Module::new(&engine, &wasm_bytes)?;
     let shared_mem = crate::execution::host::shared_memory_for(&engine, &module)?;
-    crate::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
+    crate::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
     let mut store = Store::new(&engine, ());
     // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
     store.set_epoch_deadline(u64::MAX);

@@ -12,13 +12,13 @@ use super::stack_size::{dream_async_stack_size, dream_stack_size};
 use std::path::Path;
 use wasmtime::*;
 
-/// A `wasmtime::Config` with the WASM threads proposal + `SharedMemory` creation enabled, plus the
-/// stack-size tuning every execution entry point already needs (a recursive ARC release chains one
-/// wasm frame per node, undersizing the default 512 KiB stack for ordinary-sized data structures).
+/// Engine config shared by JIT load and Cranelift AOT (`.cwasm`). Fingerprint must match between
+/// [`crate::execution::cwasm::precompile_wasm`] and `Module::deserialize` — do not add flags here
+/// that the AOT path omits.
 ///
 /// Stack bytes come from [`dream_stack_size`] (`DREAM_STACK_SIZE` env, else Cargo.toml
 /// `[package.metadata.dream] stack-size`, else 16 MiB).
-pub fn threaded_wasm_config() -> Config {
+pub fn aot_wasm_config() -> Config {
     let mut config = Config::new();
     config.max_wasm_stack(dream_stack_size());
     config.async_stack_size(dream_async_stack_size());
@@ -36,16 +36,19 @@ pub fn threaded_wasm_config() -> Config {
     // `host::worker`). Owner stores must call `set_epoch_deadline(u64::MAX)` so they are not
     // interrupted when a worker is killed.
     config.epoch_interruption(true);
-    // `WebWorker::spawn_worker_thread` compiles a fresh `Module` for every worker from a plain
-    // `std::thread`, not a rayon worker. Wasmtime's default parallel compilation submits its
-    // codegen work to rayon's *global* thread pool — the same pool a caller may already be using
-    // for its own outer parallelism (e.g. this test suite's `tests/e2e_tests.rs` corpus runner).
-    // If every thread in that global pool is already blocked waiting on a `rayon::join` from the
-    // outer parallelism, the worker thread's `Module::new` call has nowhere to run its compilation
-    // task and the whole process deadlocks. Compiling serially per worker avoids the reentrancy
-    // hazard entirely; a single small module compiles fast enough that this costs nothing visible.
+    // Wasmtime's default parallel compilation submits codegen to rayon's *global* thread pool —
+    // the same pool a caller may already be using for outer parallelism (e.g. `tests/e2e_tests.rs`).
+    // If every pool thread is blocked in `rayon::join`, a nested `Module::new` deadlocks. Serial
+    // compilation avoids that; workers now clone a compiled `Module` so this is cheap either way.
     config.parallel_compilation(false);
-    // Opt-in Cranelift IR dump (`DREAM_EMIT_CLIF=/path/to/dir`) for WAT hotpath profiling.
+    config
+}
+
+/// [`aot_wasm_config`] plus optional Cranelift IR dump (`DREAM_EMIT_CLIF=/path/to/dir`).
+///
+/// Do not use this Engine to deserialize `.cwasm`: `emit_clif` changes the config fingerprint.
+pub fn threaded_wasm_config() -> Config {
+    let mut config = aot_wasm_config();
     if let Ok(dir) = std::env::var("DREAM_EMIT_CLIF") {
         if !dir.is_empty() {
             config.emit_clif(Path::new(&dir));

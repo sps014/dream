@@ -1,10 +1,11 @@
+use super::cwasm::{deserialize_module_file, module_from_bytes};
 use super::host::{
-    attach_c_abi_from_json, attach_c_abi_from_wat_path, enable_ansi_support, link_c_ffi_imports,
-    link_console_functions, link_crypto_functions, link_datetime_functions, link_ffi_helpers,
-    link_file_functions, link_gpu_functions, link_http_functions, link_math_functions,
-    link_net_functions, link_process_functions, link_text_functions, link_webview_functions,
-    link_worker_functions, read_string_from_memory, set_worker_module, set_worker_runtime,
-    shared_memory_for, threaded_wasm_config,
+    aot_wasm_config, attach_c_abi_from_json, attach_c_abi_from_wat_path, enable_ansi_support,
+    link_c_ffi_imports, link_console_functions, link_crypto_functions, link_datetime_functions,
+    link_ffi_helpers, link_file_functions, link_gpu_functions, link_http_functions,
+    link_math_functions, link_net_functions, link_process_functions, link_text_functions,
+    link_webview_functions, link_worker_functions, read_string_from_memory, set_worker_runtime,
+    shared_memory_for,
 };
 use std::cell::RefCell;
 use std::fs;
@@ -56,13 +57,14 @@ pub fn execute_wasm_bytes_with_abi(
 fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
     super::host::attach_abi_from_wat_path(wat_path);
     attach_c_abi_from_wat_path(wat_path);
-    let wat_content = fs::read_to_string(wat_path)?;
-    let wasm_bytes = wat::parse_str(&wat_content)?;
     let search_roots = vec![std::path::Path::new(wat_path)
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."))];
-    run_wasm_bytes(&wasm_bytes, capturing, &search_roots)
+    let config = aot_wasm_config();
+    let engine = Engine::new(&config)?;
+    let module = load_module_beside_wat(&engine, wat_path)?;
+    run_loaded_module(engine, module, capturing, &search_roots)
 }
 
 fn run_wasm_bytes(
@@ -70,27 +72,60 @@ fn run_wasm_bytes(
     capturing: bool,
     search_roots: &[PathBuf],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    enable_ansi_support();
+    let config = aot_wasm_config();
+    let engine = Engine::new(&config)?;
+    let module = module_from_bytes(&engine, wasm_bytes)?;
+    run_loaded_module(engine, module, capturing, search_roots)
+}
 
-    // Make the module bytes available to `WebWorker` spawns on this thread (workers instantiate a
-    // fresh copy of the same module).
-    set_worker_module(wasm_bytes);
+/// Prefer a sibling `.cwasm` (Cranelift AOT), then `.wasm` (picks up wasm-opt), then parse `.wat`.
+fn load_module_beside_wat(
+    engine: &Engine,
+    wat_path: &str,
+) -> Result<Module, Box<dyn std::error::Error>> {
+    let base = std::path::Path::new(wat_path);
+    let cwasm_path = base.with_extension("cwasm");
+    if cwasm_path.is_file() {
+        match Engine::detect_precompiled_file(&cwasm_path)? {
+            Some(wasmtime::Precompiled::Module) => {
+                return Ok(deserialize_module_file(engine, &cwasm_path)?);
+            }
+            Some(wasmtime::Precompiled::Component) => {
+                return Err("sibling .cwasm is a Wasmtime component, not a core module".into());
+            }
+            None => {}
+        }
+    }
+    let wasm_path = base.with_extension("wasm");
+    if wasm_path.is_file() {
+        let bytes = fs::read(&wasm_path)?;
+        return Ok(Module::new(engine, &bytes)?);
+    }
+    let wat_content = fs::read_to_string(wat_path)?;
+    let wasm_bytes = wat::parse_str(&wat_content)?;
+    Ok(Module::new(engine, &wasm_bytes)?)
+}
+
+fn run_loaded_module(
+    engine: Engine,
+    module: Module,
+    capturing: bool,
+    search_roots: &[PathBuf],
+) -> Result<(), Box<dyn std::error::Error>> {
+    enable_ansi_support();
 
     // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
     // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up via
     // `DREAM_STACK_SIZE` / `[package.metadata.dream] stack-size` (see `host::stack_size`).
-    // `threaded_wasm_config` also enables the WASM threads proposal and `SharedMemory` creation,
+    // `aot_wasm_config` also enables the WASM threads proposal and `SharedMemory` creation,
     // needed since the module imports its linear memory as `shared`.
-    let config = threaded_wasm_config();
-    let engine = Engine::new(&config)?;
-    let module = Module::new(&engine, wasm_bytes)?;
 
     // One `SharedMemory` for this whole run, imported by the owner instance below and by every
-    // `WebWorker` instance spawned afterward (`set_worker_runtime` hands the same engine + memory to
-    // `workerSpawn`) — linear memory is genuinely shared, not copied per instance.
+    // `WebWorker` instance spawned afterward (`set_worker_runtime` hands the same engine + memory +
+    // compiled module to `workerSpawn`) — linear memory is genuinely shared, not copied per instance.
     let shared_mem = shared_memory_for(&engine, &module)?;
-    set_worker_runtime(engine.clone(), shared_mem.clone());
+    set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
 
     let mut store = Store::new(&engine, ());
     // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).

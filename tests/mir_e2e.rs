@@ -13,7 +13,7 @@ use dream::execution::host::{
     attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
     link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
     link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, read_string_from_memory, set_worker_module,
+    link_worker_functions, read_string_from_memory,
 };
 use dream_abi::attributes::CompileTargets;
 use rayon::prelude::*;
@@ -79,7 +79,6 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
 
     let wasm = wat::parse_str(&wat).map_err(|e| format!("assemble: {e}"))?;
     // Make the module bytes available to `WebWorker` spawns on this thread.
-    set_worker_module(&wasm);
     // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
     // recursive `Option<T>`-boxed data structures.
     let config = dream::execution::host::threaded_wasm_config();
@@ -87,7 +86,7 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
     let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
         .map_err(|e| format!("shared memory: {e:#}"))?;
-    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
+    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
     let mut store = Store::new(&engine, ());
     // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
     store.set_epoch_deadline(u64::MAX);

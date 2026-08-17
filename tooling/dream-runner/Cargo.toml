@@ -2,7 +2,7 @@
 name = "dream-runner"
 version = "0.1.0"
 edition = "2021"
-description = "Thin native host that embeds a Dream .wasm module for dreamer pack"
+description = "Thin native host that embeds a Dream Cranelift .cwasm module for dreamer pack"
 publish = false
 
 [[bin]]

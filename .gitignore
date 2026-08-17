@@ -9,6 +9,7 @@ site/
 # re-included below.
 *.wat
 *.wasm
+*.cwasm
 *.abi.json
 *.runtime.js
 

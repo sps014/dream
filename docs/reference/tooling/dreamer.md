@@ -226,16 +226,18 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer build [--release] [-p <name>]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
 | `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package and embed its `.wasm` (and `[package].icon` PNG if set) in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package, Cranelift-AOT the `.wasm` to `.cwasm`, and embed that in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
 
 ### Native `dreamer pack`
 
-Produces a single native executable per selected platform by embedding the release `.wasm` (and
-`[package].icon` PNG when set) in the workspace `dream-runner` crate (wasmtime + the same host ABI as
-`dream run`). No project `assets/` folder is required next to the packed binary.
+Produces a single native executable per selected platform by Cranelift-AOT compiling the release
+`.wasm` to a Wasmtime `.cwasm` (host ISA, or `Config::target` for a cross triple) and embedding that
+blob (plus `[package].icon` PNG when set) in the workspace `dream-runner` crate (wasmtime + the same
+host ABI as `dream run`). Startup deserializes the precompiled module instead of JIT-compiling.
+Browser/Node still load `.wasm`. No project `assets/` folder is required next to the packed binary.
 
 ```bash
 dreamer pack                         # host → target/pack/<name>-<os>-<arch>

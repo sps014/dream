@@ -77,6 +77,8 @@ pub(super) struct HirEmit {
     /// Source file of the function currently being emitted (from `FunctionNode::file_path`), carried
     /// onto the finished [`HFunction`] for debug-info line attribution.
     file: Option<String>,
+    /// Raised inliner size budget, from `@inline` on the source declaration.
+    prefer_inline: bool,
     /// True when debug-info instrumentation is requested: statement analysis then interleaves
     /// [`HStmt::DebugLine`] markers so the backend can emit source-line hooks.
     debug_info: bool,
@@ -223,6 +225,7 @@ impl<'a> Analyzer<'a> {
         self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
         self.hir.file = function.file_path.as_ref().map(|f| f.to_string());
+        self.hir.prefer_inline = dream_abi::attributes::has_inline_attr(&function.attributes);
         self.hir.last_line = None;
         self.hir.ret = Some(
             function
@@ -505,6 +508,7 @@ impl<'a> Analyzer<'a> {
                     body,
                     is_async: self.hir.is_async,
                     file: self.hir.file.take(),
+                    prefer_inline: self.hir.prefer_inline,
                 });
             }
         } else if self.hir.collecting {

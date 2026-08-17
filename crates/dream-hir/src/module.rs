@@ -131,6 +131,8 @@ pub struct HFunction {
     /// backend/source-map can attribute each `DebugLine` to the right file. `None` for synthesized
     /// functions (module init, tests) that have no originating source file.
     pub file: Option<String>,
+    /// Raised inliner size budget, from `@inline` on the source declaration.
+    pub prefer_inline: bool,
 }
 
 #[derive(Debug, Clone)]

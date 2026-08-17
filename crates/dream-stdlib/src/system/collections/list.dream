@@ -25,21 +25,25 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Number of elements currently stored.
+    @inline
     public get length(): int {
         return this.count;
     }
 
     // True when the list has no elements.
+    @inline
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
     // Current capacity of the backing buffer.
+    @inline
     public fun capacity(): int {
         return this.items.length;
     }
 
     // Doubles the backing buffer, resizing in place via `Buffer.realloc` when possible.
+    @inline
     fun grow(): void {
         let old_cap = this.items.length;
         let new_cap = old_cap * 2;
@@ -50,6 +54,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Appends a value to the end, growing if necessary.
+    @inline
     public fun push(value: T): void {
         if (this.count == this.items.length) {
             this.grow();
@@ -156,6 +161,7 @@ public class List<T> : IndexedCollection<T> {
     // Empties the list while keeping the backing buffer. Live slots are overwritten with a zero
     // value so reference fields inside value-struct elements (and class elements) release
     // immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).
+    @inline
     public fun clear(): void {
         if (this.count > 0) {
             let z = Buffer.alloc<T>(1);
@@ -169,6 +175,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Unmanaged: no RC to release — rewind the count only.
+    @inline
     public fun clear(): void where T : unmanaged {
         this.count = 0;
     }

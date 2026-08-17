@@ -13,18 +13,21 @@ internal class RegexThreadq {
         this.count = 0;
     }
 
+    @inline
     public fun clear(): void {
         // Rewind only: the next `push` overwrites slots. Allocating a dummy `int[]` every Step
         // was the dominant cost on short Global searches.
         this.count = 0;
     }
 
+    @inline
     fun grow(): void {
         let n = this.pcs.length * 2;
         this.pcs = Buffer.realloc<int>(this.pcs, n);
         this.caps = Buffer.realloc<int[]>(this.caps, n);
     }
 
+    @inline
     public fun push(pc: int, borrow caps: int[]): void {
         if (this.count == this.pcs.length) {
             this.grow();
@@ -163,6 +166,7 @@ internal class RegexVM {
         return 7;
     }
 
+    @inline
     fun class_hit(pc: int, c: char): bool {
         let k = this.kinds[pc];
         if (k == 4) {
@@ -182,6 +186,7 @@ internal class RegexVM {
         return hit;
     }
 
+    @inline
     fun take_caps(n: int): int[] {
         if (this.pool_used < this.cap_pool.length) {
             let slot = this.cap_pool[this.pool_used];
@@ -374,6 +379,7 @@ internal class RegexVM {
         return holds;
     }
 
+    @inline
     fun copy_caps(src: int[]): int[] {
         let n = src.length;
         let dst = this.take_caps(n);
@@ -477,6 +483,7 @@ internal class RegexVM {
         }
     }
 
+    @inline
     fun can_skip(q: RegexThreadq): bool {
         if (this.hint_pc < 0) {
             return false;

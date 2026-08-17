@@ -684,7 +684,9 @@ impl<'a> Analyzer<'a> {
                 | Some((recv, "spawn_mapped"))
                 | Some((recv, "spawn_mapped_async"))
                 | Some((recv, "map"))
-                | Some((recv, "map_async")) => recv == "WebWorker" || recv.starts_with("WebWorker_"),
+                | Some((recv, "map_async")) => {
+                    recv == "WebWorker" || recv.starts_with("WebWorker_")
+                }
                 Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => {
                     recv == "WebWorkerPool"
                 }

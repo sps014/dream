@@ -9,6 +9,7 @@ extend string : Comparable<string> {
     }
 
     // True when the string has no characters.
+    @inline
     public fun is_empty(): bool {
         return this.length == 0;
     }
@@ -22,6 +23,7 @@ extend string : Comparable<string> {
     // Overwrites the character at the specified index (panics if out of range).
     // Named `set_at` (not `set`) so it does not collide with static `string.set`.
     @set_indexer
+    @inline
     public fun set_at(index: int, value: char): void {
         // Force the same bounds panic as `char_at` / `s[i]` before the low-level write
         // (which would otherwise append when `index == length`).

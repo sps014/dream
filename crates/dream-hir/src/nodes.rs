@@ -413,6 +413,7 @@ mod tests {
             body,
             is_async: false,
             file: None,
+            prefer_inline: false,
         };
 
         let hir = Hir {

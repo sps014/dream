@@ -68,7 +68,9 @@ impl<'a> Analyzer<'a> {
         self.current_call_target_name = Some(call_target);
 
         let expected_params: Option<Vec<Type>> = {
-            let has_lambda = params.iter().any(|p| matches!(p, ExpressionNode::Lambda(_)));
+            let has_lambda = params
+                .iter()
+                .any(|p| matches!(p, ExpressionNode::Lambda(_)));
             if has_lambda && generic_args.as_ref().is_none_or(|g| g.is_empty()) {
                 let (paused_collecting, paused_ok) = self.hir_pause_collection();
                 let mut probe = vec![String::new(); params.len()];
@@ -90,11 +92,16 @@ impl<'a> Analyzer<'a> {
                 let gen_params = template.generic_parameters.as_deref().unwrap_or(&[]);
                 let mut bindings = GenericBindings::new();
                 for param in gen_params {
-                    let concrete = template.parameters.iter().enumerate().find_map(|(i, formal)| {
-                        probe.get(i).filter(|s| !s.is_empty()).and_then(|arg| {
-                            Self::match_generic_type(&formal.type_, arg, &param.text)
-                        })
-                    });
+                    let concrete =
+                        template
+                            .parameters
+                            .iter()
+                            .enumerate()
+                            .find_map(|(i, formal)| {
+                                probe.get(i).filter(|s| !s.is_empty()).and_then(|arg| {
+                                    Self::match_generic_type(&formal.type_, arg, &param.text)
+                                })
+                            });
                     if let Some(c) = concrete {
                         bindings.insert(param.text.clone(), Self::concrete_type_from_str(&c));
                     }

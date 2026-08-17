@@ -27,6 +27,7 @@ public class ScratchArena<T : unmanaged> {
     }
 
     // Total element capacity of the slab.
+    @inline
     public fun capacity(): int {
         return this.items.length;
     }
@@ -41,6 +42,7 @@ public class ScratchArena<T : unmanaged> {
     }
 
     // Bump-allocates `n` elements and returns the start index into the slab (no `Span`, no extra RC).
+    @inline
     public fun bump(n: int): int {
         if (n < 0) {
             System.panic("ScratchArena.bump: negative count");
@@ -54,16 +56,19 @@ public class ScratchArena<T : unmanaged> {
     }
 
     // Absolute-index write into the slab (same addressing as `bump`'s return value).
+    @inline
     public fun set_at(index: int, value: T): void {
         this.items[index] = value;
     }
 
     // Absolute-index read from the slab.
+    @inline
     public fun at(index: int): T {
         return this.items[index];
     }
 
     // Rewinds the bump cursor; the slab stays allocated.
+    @inline
     public fun reset(): void {
         this.used = 0;
     }

@@ -58,8 +58,9 @@ pub(super) fn array_to_string_sym(elem: TypeId) -> String {
 pub(super) fn async_intrinsic_kind(sym: &str) -> Option<&'static str> {
     use dream_abi::intrinsics;
     // Intrinsics are keyed by their `@intrinsic("…")` attribute string in the symbol table (e.g.
-    // `promise_all`), so match those here as well as the internal `__promise_*` names.
-    if sym.ends_with("_sleep") || sym == intrinsics::SLEEP {
+    // `promise_all`). `Time.sleep` is registered as `Time_sleep` (`method_fn`); do not match every
+    // `*_sleep` symbol (user `Foo_sleep` is not the scheduler intrinsic).
+    if sym == intrinsics::SLEEP || sym == "Time_sleep" {
         Some(intrinsics::SLEEP)
     } else if sym == intrinsics::PROMISE_ALL || sym == intrinsics::ATTR_PROMISE_ALL {
         Some(intrinsics::PROMISE_ALL)

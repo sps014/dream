@@ -9,6 +9,7 @@ public struct Vector<T : unmanaged> {
     w3: int;
 
     // Number of `T` lanes that fit in 16 bytes (`16 / sizeof(T)`).
+    @inline
     public static fun count(): int {
         return Vector<T>.lane_count();
     }
@@ -34,6 +35,7 @@ public struct Vector<T : unmanaged> {
     static extern fun splat_raw(value: T): Vector<T>;
 
     // Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.
+    @inline
     public static fun load(borrow src: T[], offset: int): Vector<T> {
         return Vector<T>.load_raw(src, offset);
     }
@@ -42,6 +44,7 @@ public struct Vector<T : unmanaged> {
     static extern fun load_raw(borrow src: T[], offset: int): Vector<T>;
 
     // Writes this vector's lanes into `dest` starting at `offset`.
+    @inline
     public fun store(dest: T[], offset: int): void {
         Vector<T>.store_raw(this, dest, offset);
     }
@@ -68,6 +71,7 @@ public struct Vector<T : unmanaged> {
 
     // Lane-wise addition.
     @operator("+")
+    @inline
     fun add(other: Vector<T>): Vector<T> {
         return Vector<T>.bin_add(this, other);
     }

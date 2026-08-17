@@ -26,11 +26,13 @@ public class StringBuilder {
     }
 
     // True when nothing has been appended yet.
+    @inline
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
     // Grows the backing buffer to at least `min_capacity` bytes via in-place realloc when possible.
+    @inline
     fun grow(min_capacity: int): void {
         let new_cap = this.bytes.length * 2;
         if (new_cap < min_capacity + 4) {
@@ -39,6 +41,7 @@ public class StringBuilder {
         this.bytes = Buffer.realloc<byte>(this.bytes, new_cap);
     }
 
+    @inline
     fun ensure(extra: int): void {
         let need = this.count + extra + 4;
         if (need > this.bytes.length) {
@@ -46,6 +49,7 @@ public class StringBuilder {
         }
     }
 
+    @inline
     fun write_unit(u: int): void {
         this.ensure(2);
         Buffer.store16(this.bytes, this.count + 4, u);
@@ -69,6 +73,7 @@ public class StringBuilder {
     }
 
     // Appends every UTF-16 unit of `text`, growing at most once.
+    @inline
     public fun append(borrow text: string): void {
         let byte_len = text.byte_size();
         if (byte_len <= 0) {
@@ -138,6 +143,7 @@ public class StringBuilder {
     }
 
     // Removes every appended character, keeping the backing buffer for reuse.
+    @inline
     public fun clear(): void {
         this.count = 0;
         this.scalars = 0;

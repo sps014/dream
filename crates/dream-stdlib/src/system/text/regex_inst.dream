@@ -121,6 +121,7 @@ internal class RegexInst {
 
     // Effective character-class membership (negate already applied). Kind 4 is the synthetic
     // unanchored `.*?` any-char prefix and always matches.
+    @inline
     public fun matches_char(c: char): bool {
         let k = this.class_kind;
         if (k == 4) {

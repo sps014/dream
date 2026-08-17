@@ -218,6 +218,17 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Marks an instance method as overriding an object-protocol hook (`to_string` / `hash_code`).",
     },
     AttributeSpec {
+        name: "inline",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+        ],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Raises the inliner's size budget for this function/method. A compiler hint, not a guarantee.",
+    },
+    AttributeSpec {
         name: "js",
         targets: &[AttributeTarget::ExternFunction],
         args: ArgShape::Args {
@@ -988,6 +999,11 @@ pub fn has_gpu_helper_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "gpu")
 }
 
+/// True when the declaration carries `@inline` (raised inliner size budget).
+pub fn has_inline_attr(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, "inline")
+}
+
 /// True when the declaration is any GPU shader stage (`@compute` / `@vertex` / `@fragment`).
 pub fn is_gpu_shader_attr(attributes: &[AttributeNode]) -> bool {
     has_compute_attr(attributes) || has_vertex_attr(attributes) || has_fragment_attr(attributes)
@@ -1080,10 +1096,9 @@ fn file_path_string(file_path: &Option<Rc<str>>) -> Option<String> {
 }
 
 /// The target kind for a function/method declaration, derived from its own modifiers. `None` for
-/// constructors/destructors and property accessors, which cannot carry attributes today (no known
-/// attribute applies to them) and are skipped by the walk below.
+/// constructors/destructors, which cannot carry attributes today.
 fn function_target(f: &FunctionNode<'_>) -> Option<AttributeTarget> {
-    if is_special_member_name(&f.name.text) || f.accessor.is_some() {
+    if is_special_member_name(&f.name.text) {
         return None;
     }
     Some(if f.is_extern {
@@ -1289,6 +1304,33 @@ mod tests {
         validate_attributes(
             &[attr("override", &[]), attr("override", &[])],
             AttributeTarget::Method,
+            &mut diagnostics,
+        );
+        assert!(diagnostics.has_errors());
+    }
+
+    #[test]
+    fn inline_is_accepted_on_methods_and_rejected_on_externs() {
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_attributes(
+            &[attr("inline", &[])],
+            AttributeTarget::Method,
+            &mut diagnostics,
+        );
+        validate_attributes(
+            &[attr("inline", &[])],
+            AttributeTarget::StaticMethod,
+            &mut diagnostics,
+        );
+        validate_attributes(
+            &[attr("inline", &[])],
+            AttributeTarget::Function,
+            &mut diagnostics,
+        );
+        assert!(!diagnostics.has_errors());
+        validate_attributes(
+            &[attr("inline", &[])],
+            AttributeTarget::ExternFunction,
             &mut diagnostics,
         );
         assert!(diagnostics.has_errors());

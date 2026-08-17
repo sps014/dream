@@ -71,6 +71,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             body: init_body,
             is_async: false,
             file: None,
+            prefer_inline: false,
         };
         functions.push(lower_function(&init_fn, interner));
     }
@@ -113,6 +114,7 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     b.set_async(is_async);
     b.set_def(func.def, func.instance.clone());
     b.set_file(func.file.clone());
+    b.set_prefer_inline(func.prefer_inline);
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
         let l = if p.is_ref {
@@ -516,6 +518,7 @@ mod tests {
             locals: vec![],
             is_async: false,
             file: None,
+            prefer_inline: false,
             body: vec![
                 HStmt::If {
                     cond: HExpr::new(boolean, HExprKind::Var(Binding::Local(LocalId(0)))),

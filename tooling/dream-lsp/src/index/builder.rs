@@ -13,10 +13,10 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, detail_belongs_to, fn_value_type, method_detail, param_names,
-    parse_angle_type_args, parse_method_signature, signature, split_fun_type_str,
+    base_struct, detail_belongs_to, fn_value_type, method_detail, method_generic_param_names,
+    param_names, parse_angle_type_args, parse_method_signature, signature, split_fun_type_str,
     substitute_named_type_params, type_base, type_mentions_param, unify_type_param, Decl, Index,
-    InlayHintOut, InlayKind, Ref, SymKind, GLOBAL, method_generic_param_names,
+    InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
 };
 
 pub(crate) struct Builder {

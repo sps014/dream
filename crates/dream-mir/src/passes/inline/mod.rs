@@ -209,7 +209,7 @@ fn eligible(
         return false;
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
-    let (max_stmts, max_blocks) = if prefer_inline(&g.name) {
+    let (max_stmts, max_blocks) = if g.prefer_inline {
         (128, 24)
     } else {
         (MAX_INLINE_STMTS, MAX_INLINE_BLOCKS)
@@ -228,7 +228,7 @@ fn eligible(
         let caller_small =
             caller_stmts <= MAX_INLINE_STMTS && caller.blocks.len() <= MAX_INLINE_BLOCKS;
         if caller_small
-            && !prefer_inline(&g.name)
+            && !g.prefer_inline
             && (caller_stmts + stmt_count > MAX_INLINE_STMTS
                 || caller.blocks.len() + g.blocks.len() > MAX_INLINE_BLOCKS)
         {
@@ -236,39 +236,6 @@ fn eligible(
         }
     }
     true
-}
-
-fn prefer_inline(name: &str) -> bool {
-    matches!(
-        name,
-        "push"
-            | "bump"
-            | "set_at"
-            | "at"
-            | "reset"
-            | "clear"
-            | "get_or"
-            | "length"
-            | "capacity"
-            | "is_empty"
-            | "grow"
-            | "load"
-            | "store"
-            | "add"
-            | "count"
-            | "load_raw"
-            | "store_raw"
-            | "bin_add"
-            | "append"
-            | "ensure"
-            | "write_unit"
-            | "matches_char"
-            | "can_skip"
-            | "class_hit"
-            | "copy_caps"
-            | "take_caps"
-            | "store16"
-    )
 }
 
 fn cfg_has_cycle(func: &crate::MirFunction) -> bool {
@@ -442,7 +409,7 @@ mod tests {
     use super::*;
     use crate::build::FunctionBuilder;
     use crate::{Const, MirFunction};
-    use dream_types::{DefKind, TypeCtx};
+    use dream_types::{DefKind, TypeCtx, TypeId};
 
     /// Builds `fun callee(a: int): int { return a + 1; }` and `fun caller(): int { return callee(41); }`
     /// and checks the call is replaced by the inlined body (no residual `Call`).
@@ -502,6 +469,105 @@ mod tests {
             )
         });
         assert!(!has_call, "call to callee should have been inlined away");
+    }
+
+    fn fat_int_callee(
+        name: &str,
+        def: dream_types::DefId,
+        int: TypeId,
+        prefer_inline: bool,
+    ) -> MirFunction {
+        let mut b = FunctionBuilder::new(name, int);
+        b.set_def(def, vec![]);
+        b.set_prefer_inline(prefer_inline);
+        let a = b.new_param(int, Some("a".into()));
+        let t = b.new_temp(int);
+        for _ in 0..70 {
+            b.assign(
+                Place::Local(t),
+                Rvalue::Binary(
+                    crate::BinOp::Add,
+                    Operand::Copy(Place::Local(a)),
+                    Operand::Const(Const::Int(1)),
+                ),
+            );
+        }
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
+        b.finish()
+    }
+
+    fn caller_of(
+        callee_def: dream_types::DefId,
+        caller_def: dream_types::DefId,
+        int: TypeId,
+    ) -> MirFunction {
+        let mut b = FunctionBuilder::new("caller", int);
+        b.set_def(caller_def, vec![]);
+        let r = b.new_temp(int);
+        b.assign(
+            Place::Local(r),
+            Rvalue::Call {
+                callee: crate::Callee {
+                    def: callee_def,
+                    args: vec![],
+                    ret: int,
+                    take_params: vec![],
+                },
+                args: vec![Operand::Const(Const::Int(41))],
+            },
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(r)))));
+        b.finish()
+    }
+
+    fn caller_still_calls(mir: &crate::Mir) -> bool {
+        let caller = mir.functions.iter().find(|f| f.name == "caller").unwrap();
+        caller.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
+            matches!(
+                s,
+                Statement::Call { .. } | Statement::Assign(_, Rvalue::Call { .. })
+            )
+        })
+    }
+
+    #[test]
+    fn prefer_inline_raises_size_budget() {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let callee_def = ctx.register(DefKind::Function, "fat", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+        let mut mir = crate::Mir {
+            functions: vec![
+                fat_int_callee("fat", callee_def, int, true),
+                caller_of(callee_def, caller_def, int),
+            ],
+            ..Default::default()
+        };
+        assert!(Inliner.run(&mut mir, &ctx.interner));
+        assert!(
+            !caller_still_calls(&mir),
+            "flagged fat callee should inline"
+        );
+    }
+
+    #[test]
+    fn unflagged_fat_callee_is_not_inlined() {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let callee_def = ctx.register(DefKind::Function, "fat", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+        let mut mir = crate::Mir {
+            functions: vec![
+                fat_int_callee("fat", callee_def, int, false),
+                caller_of(callee_def, caller_def, int),
+            ],
+            ..Default::default()
+        };
+        assert!(!Inliner.run(&mut mir, &ctx.interner));
+        assert!(
+            caller_still_calls(&mir),
+            "unflagged fat callee should stay a call"
+        );
     }
 
     /// Value-struct callee with an owning local: inlining inserts `ValueDrop` and marks the

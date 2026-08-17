@@ -47,6 +47,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Current capacity of the backing buffer.
+    @inline
     public fun capacity(): int {
         return this.cap;
     }
@@ -208,6 +209,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Gets the value for a key, or a fallback.
+    @inline
     public fun get_or(borrow key: K, fallback: V): V {
         let i = this.find(key);
         if (i >= 0) {
@@ -229,12 +231,14 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // True if the map is empty.
+    @inline
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
     // Removes all entries, keeping the current capacity. Occupied key/value slots are zeroed so
     // managed entries release; then the epoch stamp advances so probes skip stale slots.
+    @inline
     public fun clear(): void {
         let c = this.cap;
         let e = this.epoch;
@@ -254,6 +258,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Unmanaged keys/values: bump the occupancy stamp (no table fill).
+    @inline
     public fun clear(): void where K : unmanaged, V : unmanaged {
         this.count = 0;
         this.used = 0;

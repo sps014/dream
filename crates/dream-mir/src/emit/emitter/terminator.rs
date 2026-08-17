@@ -39,9 +39,16 @@ impl Emitter<'_> {
             Terminator::Return(Some(o)) => {
                 self.emit_debug_exit();
                 if self.returns_value_struct() {
-                    // sret ABI: blit into `$__sret`. A returned local transfers nested refs
-                    // (no retain; RcInsertion marks it `manual_drop` so teardown skips it).
-                    // A place copy still retains (the container keeps its slot).
+                    if let Operand::Copy(Place::Local(l)) = o {
+                        if self.is_v128_local(*l) {
+                            self.line("     (local.get $__sret)");
+                            self.line(&format!("     (local.get ${})", l.0));
+                            self.line("     (v128.store)");
+                            self.emit_frame_teardown();
+                            self.line("     (return)");
+                            return;
+                        }
+                    }
                     let o = o.clone();
                     let ty = self.func.ret;
                     let retain = !matches!(o, Operand::Copy(Place::Local(_)));
@@ -74,13 +81,23 @@ impl Emitter<'_> {
                     }
                     self.emit_frame_teardown();
                     self.line("     (return)");
-                } else if self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>) {
-                    self.emit_frame_teardown();
-                    self.line("     (return)");
                 } else {
-                    self.emit_call_args(callee, args);
-                    self.emit_frame_teardown();
-                    self.line(&format!("     (return_call ${})", sym));
+                    let simd_tail = self.returns_value_struct()
+                        && self.try_emit_simd_call(
+                            callee,
+                            args,
+                            Some(&|s: &mut Self| s.line("     (local.get $__sret)")),
+                            None,
+                        )
+                        || self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>, None);
+                    if simd_tail {
+                        self.emit_frame_teardown();
+                        self.line("     (return)");
+                    } else {
+                        self.emit_call_args(callee, args);
+                        self.emit_frame_teardown();
+                        self.line(&format!("     (return_call ${})", sym));
+                    }
                 }
             }
             Terminator::Unreachable => self.line("     (unreachable)"),

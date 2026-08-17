@@ -37,4 +37,6 @@ fun add(a: float[], b: float[], c: float[]): void {
 | `min` / `max` | lane-wise min/max |
 | `sum` | horizontal sum |
 
+Owning `Vector<T>` locals are WASM `v128` values (not four heap words or a 16-byte sret shadow slot). `load` / lane arithmetic / `store` are `v128.load`, `f32x4.add` (or the matching lane op), and `v128.store`. Cross-function `Vector` parameters and returns still use the value-struct sret pointer and are copied into a `v128` local at the callee prologue.
+
 Autovec does **not** require `Vector`. Users write ordinary indexed loops; the compiler emits `f32x4.add` / `i32x4.add` (and the other lane ops) when the loop is sound.

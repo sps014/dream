@@ -1,5 +1,8 @@
 //! Inline WASM SIMD for `Vector<T>` `@intrinsic("simd_*")` calls. The callee's instance `T`
 //! selects the `v128` lane type; no `$simd_*` runtime helper is invoked.
+//!
+//! Owning `Vector<T>` locals are WASM `v128` registers. Params/returns still use the sret pointer
+//! ABI; [`Self::emit_v128_operand`] loads from memory when the operand is not a `v128` local.
 
 use super::*;
 use crate::SimdLane;
@@ -33,14 +36,68 @@ impl Emitter<'_> {
         None
     }
 
+    fn simd_intrinsic_key(sym: &str) -> String {
+        if sym.starts_with("simd_") {
+            return sym.to_string();
+        }
+        let key = if sym.ends_with("load_raw") || sym.ends_with("_load") {
+            "simd_v128_load"
+        } else if sym.ends_with("store_raw") || sym.ends_with("_store") {
+            "simd_v128_store"
+        } else if sym.ends_with("splat_raw") || sym.ends_with("_splat") {
+            "simd_v128_splat"
+        } else if sym.ends_with("bin_add") || sym.ends_with("_add") {
+            "simd_v128_add"
+        } else if sym.ends_with("bin_sub") || sym.ends_with("_sub") {
+            "simd_v128_sub"
+        } else if sym.ends_with("bin_mul") || sym.ends_with("_mul") {
+            "simd_v128_mul"
+        } else if sym.ends_with("bin_min") || sym.ends_with("_min") {
+            "simd_v128_min"
+        } else if sym.ends_with("bin_max") || sym.ends_with("_max") {
+            "simd_v128_max"
+        } else if sym.ends_with("reduce_sum") || sym.ends_with("_sum") {
+            "simd_v128_sum"
+        } else if sym.ends_with("lane_count") || sym.ends_with("_count") {
+            "simd_lane_count"
+        } else {
+            return sym.to_string();
+        };
+        key.to_string()
+    }
+
+    /// Pushes a `v128` value: `local.get` for a register `Vector`, otherwise `v128.load` from an
+    /// sret/shadow-frame pointer.
+    pub(super) fn emit_v128_operand(&mut self, op: &Operand) {
+        if let Operand::Copy(Place::Local(l)) = op {
+            if self.is_v128_local(*l) {
+                self.line(&format!("     (local.get ${})", l.0));
+                return;
+            }
+        }
+        self.emit_operand(op);
+        self.line("     (v128.load)");
+    }
+
+    fn finish_v128<F: Fn(&mut Self)>(&mut self, dest_v128: Option<u32>, sret: Option<F>) {
+        if let Some(d) = dest_v128 {
+            self.line(&format!("     (local.set ${d})"));
+        } else if sret.is_some() {
+            self.line("     (v128.store)");
+        }
+    }
+
     /// Emits a `Vector<T>` SIMD intrinsic in place of `call $simd_*`. Returns true when handled.
+    /// `dest_v128` is the owning `Vector` local to `local.set`; `sret` pushes a memory destination
+    /// address for a following `v128.store`.
     pub(super) fn try_emit_simd_call<F: Fn(&mut Self)>(
         &mut self,
         callee: &crate::Callee,
         args: &[Operand],
         sret: Option<F>,
+        dest_v128: Option<u32>,
     ) -> bool {
-        let key = self.callee_symbol(callee);
+        let key = Self::simd_intrinsic_key(&self.callee_symbol(callee));
         if key == "simd_lane_count" {
             let lane = Self::simd_lane_of(callee, self.interner).unwrap_or(SimdLane::I32);
             self.line(&format!("     (i32.const {})", lane.count()));
@@ -60,37 +117,46 @@ impl Emitter<'_> {
         };
         match key.as_str() {
             "simd_v128_splat" => {
-                let Some(push) = sret else { return false };
-                push(self);
+                if let Some(push) = sret.as_ref() {
+                    push(self);
+                } else if dest_v128.is_none() {
+                    return false;
+                }
                 if let Some(v) = args.first() {
                     self.emit_operand(v);
                 }
                 self.line(&format!("     ({})", lane.splat_wat()));
-                self.line("     (v128.store)");
+                self.finish_v128(dest_v128, sret);
                 true
             }
             "simd_v128_load" => {
-                let Some(push) = sret else { return false };
-                push(self);
+                if let Some(push) = sret.as_ref() {
+                    push(self);
+                } else if dest_v128.is_none() {
+                    return false;
+                }
                 if args.len() >= 2 {
                     self.emit_v128_array_addr(&args[0], &args[1], lane);
                 }
                 self.line("     (v128.load)");
-                self.line("     (v128.store)");
+                self.finish_v128(dest_v128, sret);
                 true
             }
             "simd_v128_store" => {
                 if args.len() >= 3 {
                     self.emit_v128_array_addr(&args[1], &args[2], lane);
-                    self.emit_operand(&args[0]);
-                    self.line("     (v128.load)");
+                    self.emit_v128_operand(&args[0]);
                     self.line("     (v128.store)");
                 }
                 true
             }
             "simd_v128_add" | "simd_v128_sub" | "simd_v128_mul" | "simd_v128_min"
             | "simd_v128_max" => {
-                let Some(push) = sret else { return false };
+                if let Some(push) = sret.as_ref() {
+                    push(self);
+                } else if dest_v128.is_none() {
+                    return false;
+                }
                 let op = match key.as_str() {
                     "simd_v128_add" => lane.binop_wat(BinOp::Add).unwrap_or("i32x4.add"),
                     "simd_v128_sub" => lane.binop_wat(BinOp::Sub).unwrap_or("i32x4.sub"),
@@ -98,21 +164,17 @@ impl Emitter<'_> {
                     "simd_v128_min" => lane.min_wat(),
                     _ => lane.max_wat(),
                 };
-                push(self);
                 if args.len() >= 2 {
-                    self.emit_operand(&args[0]);
-                    self.line("     (v128.load)");
-                    self.emit_operand(&args[1]);
-                    self.line("     (v128.load)");
+                    self.emit_v128_operand(&args[0]);
+                    self.emit_v128_operand(&args[1]);
                 }
                 self.line(&format!("     ({op})"));
-                self.line("     (v128.store)");
+                self.finish_v128(dest_v128, sret);
                 true
             }
             "simd_v128_sum" => {
                 if let Some(v) = args.first() {
-                    self.emit_operand(v);
-                    self.line("     (v128.load)");
+                    self.emit_v128_operand(v);
                     self.emit_v128_sum(lane);
                 }
                 true

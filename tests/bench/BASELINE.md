@@ -16,7 +16,7 @@ ratios are not an ARC-only scoreboard.
 | `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, `Compiled` |
 | `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` (no source-gen) |
 | `arr_add` | Scalar `c[i]=a[i]+b[i]` (`float[]`+`int[]`, n=256); Dream autovecs to `v128` | same scalar `for` (RyuJIT autovec) |
-| `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM sret copies of `v128`) | `System.Numerics.Vector<float>` |
+| `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM `v128` locals) | `System.Numerics.Vector<float>` |
 
 ## Campaign snapshots (Dream ns/op)
 
@@ -91,6 +91,25 @@ like RyuJIT).
 | string_builder | 22 | 12 |
 | map_clear_reuse | 24 | 2 |
 | string_concat | 41 | 12 |
+
+### After (`Vector` `v128` locals, typed JSON parse, Pike skip)
+
+Same host as `./scripts/run-microbenches.sh`. Owning `Vector<T>` is a WASM `v128` local
+(`v128.load` / lane op / `v128.store`; inlined `this` included). `json_deserialize<T>`
+fills `T` from `JsonParser` (`from_json_parser_text`); `Json.parse` / `from_json` stay for
+the dynamic tree. `regex_find` is still Pike `[a-z]+\d+` (ASCII byte skip when the hint is
+kind 5/7). `"hello" + i.to_string() + "world"` is `$concat_str_int_str`.
+
+| Bench | Dream | C# |
+|-------|------:|---:|
+| json_serialize | 1227 | 986 |
+| json_deserialize | 5327 | 1726 |
+| arr_add | 479 | 339 |
+| vec_add | 362 | 83 |
+| regex_find | 12877 | 776 |
+| string_builder | 24 | 7 |
+| map_clear_reuse | 24 | 2 |
+| string_concat | 40 | 9 |
 
 Native LLVM path (floor for scan/substring/regex): see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md)

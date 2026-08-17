@@ -776,6 +776,281 @@ public class JsonGenerator {
         return false;
     }
 
+    static fun parser_scalar(elem_type: string, borrow json_names: List<string>): string {
+        if (elem_type == "int" || elem_type == "uint" || elem_type == "byte") {
+            return "p.parse_int()";
+        }
+        if (elem_type == "long" || elem_type == "ulong") {
+            return "(long)p.parse_double()";
+        }
+        if (elem_type == "double") {
+            return "p.parse_double()";
+        }
+        if (elem_type == "float") {
+            return "(float)p.parse_double()";
+        }
+        if (elem_type == "bool") {
+            return "p.parse_bool()";
+        }
+        if (elem_type == "string") {
+            return "p.parse_string()";
+        }
+        if (JsonGenerator.name_in(json_names, elem_type)) {
+            return elem_type + ".from_json_parser(p)";
+        }
+        return elem_type + ".from_json(p.parse_value())";
+    }
+
+    static fun emit_parser_array(borrow cb: CodeBuilder, elem: string, out_var: string, borrow json_names: List<string>): void {
+        let read = JsonGenerator.parser_scalar(elem, json_names);
+        let zdef = JsonGenerator.ignore_default(elem, "");
+        if (zdef.length == 0) {
+            zdef = read;
+        }
+        cb.line("let __items_" + out_var + " = List<" + elem + ">();");
+        cb.line("if (p.try_consume(91)) {");
+        cb.indent();
+        cb.line("let __agoing_" + out_var + " = true;");
+        cb.line("while (__agoing_" + out_var + ") {");
+        cb.indent();
+        cb.line("p.skip_ws();");
+        cb.line("if (p.try_consume(93)) {");
+        cb.indent();
+        cb.line("__agoing_" + out_var + " = false;");
+        cb.dedent();
+        cb.line("} else {");
+        cb.indent();
+        cb.line("__items_" + out_var + ".push(" + read + ");");
+        cb.line("p.try_consume(44);");
+        cb.dedent();
+        cb.line("}");
+        cb.dedent();
+        cb.line("}");
+        cb.dedent();
+        cb.line("}");
+        cb.line("let " + out_var + " = Buffer.alloc<" + elem + ">(__items_" + out_var + ".length);");
+        cb.line("let __ai_" + out_var + " = 0;");
+        cb.line("while (__ai_" + out_var + " < __items_" + out_var + ".length) {");
+        cb.indent();
+        cb.line(out_var + "[__ai_" + out_var + "] = __items_" + out_var + ".get(__ai_" + out_var + ").unwrap_or(" + zdef + ");");
+        cb.line("__ai_" + out_var + " = __ai_" + out_var + " + 1;");
+        cb.dedent();
+        cb.line("}");
+    }
+
+    static fun emit_class_parser(borrow t: GenType, borrow json_names: List<string>, self_ty: string): string {
+        let body = CodeBuilder();
+        let args = StringBuilder();
+        let first = true;
+        let fi = 0;
+        while (fi < t.fields.length) {
+            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+            let fname = field.name;
+            let ftype = field.type_name;
+            if (JsonGenerator.is_tuple_type(ftype)) {
+                JsonGenerator.tuple_from_stmts(
+                    body,
+                    ftype,
+                    "JsonValue.none()",
+                    "__p_" + fname,
+                    "__tdummy_" + fname,
+                    json_names
+                );
+            } else {
+                let def = JsonGenerator.ignore_default(ftype, field.option_inner);
+                if (def.length == 0) {
+                    if (field.is_type_param) {
+                        def = "Json.from_value<" + ftype + ">(JsonValue.none())";
+                    } else if (ftype.ends_with("[]")) {
+                        let elem = ftype.substring(0, ftype.length - 2);
+                        def = "Buffer.alloc<" + elem + ">(0)";
+                    } else if (JsonGenerator.name_in(json_names, ftype)) {
+                        def = ftype + ".from_json(JsonValue.none())";
+                    } else if (field.map_value_inner.length > 0) {
+                        def = field.map_ctor + "<string, " + field.map_value_inner + ">()";
+                    } else if (field.seq_kind == "list") {
+                        def = "List<" + field.seq_elem_inner + ">()";
+                    } else if (field.seq_kind == "set") {
+                        def = "Set<" + field.seq_elem_inner + ">()";
+                    } else {
+                        def = ftype + ".from_json(JsonValue.none())";
+                    }
+                }
+                body.line("let __p_" + fname + ": " + ftype + " = " + def + ";");
+            }
+            first = JsonGenerator.comma_append(args, first, "__p_" + fname);
+            fi = fi + 1;
+        }
+        body.line("p.skip_ws();");
+        body.line("if (p.try_consume(123) == false) {");
+        body.indent();
+        body.line("return " + self_ty + "(" + args.build() + ");");
+        body.dedent();
+        body.line("}");
+        body.line("let __going = true;");
+        body.line("while (__going) {");
+        body.indent();
+        body.line("p.skip_ws();");
+        body.line("if (p.try_consume(125)) {");
+        body.indent();
+        body.line("__going = false;");
+        body.dedent();
+        body.line("} else {");
+        body.indent();
+        body.line("let __k = p.parse_string();");
+        body.line("p.try_consume(58);");
+        fi = 0;
+        let first_if = true;
+        while (fi < t.fields.length) {
+            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+            let fname = field.name;
+            let ftype = field.type_name;
+            let json_key = field.json_key();
+            if (field.json_ignore) {
+                fi = fi + 1;
+                continue;
+            }
+            if (first_if) {
+                body.line("if (__k == \"" + json_key + "\") {");
+                first_if = false;
+            } else {
+                body.line("} else if (__k == \"" + json_key + "\") {");
+            }
+            body.indent();
+            if (field.option_inner.length > 0) {
+                let inner = field.option_inner;
+                body.line("if (p.try_null()) {");
+                body.indent();
+                body.line("let __none_" + fname + ": Option<" + inner + "> = Option.None;");
+                body.line("__p_" + fname + " = __none_" + fname + ";");
+                body.dedent();
+                body.line("} else {");
+                body.indent();
+                if (inner.ends_with("[]")) {
+                    let elem = inner.substring(0, inner.length - 2);
+                    JsonGenerator.emit_parser_array(body, elem, "__inner_" + fname, json_names);
+                    body.line("__p_" + fname + " = Option.Some(__inner_" + fname + ");");
+                } else {
+                    body.line("__p_" + fname + " = Option.Some(" + JsonGenerator.parser_scalar(inner, json_names) + ");");
+                }
+                body.dedent();
+                body.line("}");
+            } else if (ftype.ends_with("[]")) {
+                let elem = ftype.substring(0, ftype.length - 2);
+                JsonGenerator.emit_parser_array(body, elem, "__arr_" + fname, json_names);
+                body.line("__p_" + fname + " = __arr_" + fname + ";");
+            } else if (field.map_value_inner.length > 0) {
+                let value_type = field.map_value_inner;
+                let map_ctor = field.map_ctor;
+                JsonGenerator.map_from_stmts(
+                    body,
+                    value_type,
+                    map_ctor,
+                    "p.parse_value()",
+                    "__map_" + fname,
+                    "__msrc_" + fname,
+                    "__mkeys_" + fname,
+                    "__mi_" + fname,
+                    "__mk_" + fname,
+                    json_names
+                );
+                body.line("__p_" + fname + " = __map_" + fname + ";");
+            } else if (field.seq_kind == "set") {
+                let elem = field.seq_elem_inner;
+                JsonGenerator.set_from_stmts(
+                    body,
+                    elem,
+                    "p.parse_value()",
+                    "__set_" + fname,
+                    "__si_" + fname,
+                    "__ssrc_" + fname,
+                    json_names
+                );
+                body.line("__p_" + fname + " = __set_" + fname + ";");
+            } else if (JsonGenerator.is_tuple_type(ftype)) {
+                JsonGenerator.tuple_from_stmts(
+                    body,
+                    ftype,
+                    "p.parse_value()",
+                    "__tup_" + fname,
+                    "__tsrc_" + fname,
+                    json_names
+                );
+                body.line("__p_" + fname + " = __tup_" + fname + ";");
+            } else if (field.is_type_param) {
+                body.line("__p_" + fname + " = Json.from_value<" + ftype + ">(p.parse_value());");
+            } else if (field.seq_kind == "list") {
+                let elem = field.seq_elem_inner;
+                let read = JsonGenerator.parser_scalar(elem, json_names);
+                body.line("__p_" + fname + " = List<" + elem + ">();");
+                body.line("if (p.try_consume(91)) {");
+                body.indent();
+                body.line("let __lgoing_" + fname + " = true;");
+                body.line("while (__lgoing_" + fname + ") {");
+                body.indent();
+                body.line("p.skip_ws();");
+                body.line("if (p.try_consume(93)) {");
+                body.indent();
+                body.line("__lgoing_" + fname + " = false;");
+                body.dedent();
+                body.line("} else {");
+                body.indent();
+                body.line("__p_" + fname + ".push(" + read + ");");
+                body.line("p.try_consume(44);");
+                body.dedent();
+                body.line("}");
+                body.dedent();
+                body.line("}");
+                body.dedent();
+                body.line("}");
+            } else {
+                body.line("__p_" + fname + " = " + JsonGenerator.parser_scalar(ftype, json_names) + ";");
+            }
+            body.dedent();
+            fi = fi + 1;
+        }
+        if (first_if == false) {
+            body.line("} else {");
+            body.indent();
+            body.line("p.skip_value();");
+            body.dedent();
+            body.line("}");
+        } else {
+            body.line("p.skip_value();");
+        }
+        body.line("p.try_consume(44);");
+        body.dedent();
+        body.line("}");
+        body.dedent();
+        body.line("}");
+        body.line("return " + self_ty + "(" + args.build() + ");");
+
+        let out = CodeBuilder();
+        out.line("public static fun from_json_parser(borrow p: JsonParser): " + self_ty + " {");
+        out.indent();
+        JsonGenerator.append_block(out, body.to_string());
+        out.dedent();
+        out.line("}");
+        out.line("public static fun from_json_parser_text(borrow text: string): Result<" + self_ty + ", ParseError> {");
+        out.indent();
+        out.line("if (text.is_empty()) {");
+        out.indent();
+        out.line("return Result.Err(ParseError.invalid(\"empty JSON input\"));");
+        out.dedent();
+        out.line("}");
+        out.line("let p = JsonParser(text, 0);");
+        out.line("let v = " + self_ty + ".from_json_parser(p);");
+        out.line("if (p.at_end() == false) {");
+        out.indent();
+        out.line("return Result.Err(ParseError.invalid(\"trailing characters after JSON value\"));");
+        out.dedent();
+        out.line("}");
+        out.line("return Result.Ok(v);");
+        out.dedent();
+        out.line("}");
+        return out.to_string();
+    }
+
     static fun expand_class(borrow t: GenType, borrow json_names: List<string>, borrow jsonable: List<string>): GenResult {
         let to_cb = CodeBuilder();
         let write_cb = CodeBuilder();
@@ -1261,6 +1536,7 @@ public class JsonGenerator {
         JsonGenerator.append_block(cb, from_cb.to_string());
         cb.dedent();
         cb.line("}");
+        JsonGenerator.append_block(cb, JsonGenerator.emit_class_parser(t, json_names, self_ty));
         cb.dedent();
         cb.line("}");
         return GenResult.success(cb.to_string());

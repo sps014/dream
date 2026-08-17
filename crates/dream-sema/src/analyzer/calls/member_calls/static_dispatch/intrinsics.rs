@@ -536,9 +536,11 @@ impl<'a> Analyzer<'a> {
         }
 
         // `Json.serialize<T>(v)` / `Json.deserialize<T>(text)`: the `@json` derive emits
-        // `<T>.write_json(sb)` / `<T>.from_json()` (see `driver::generate` / Dream `JsonGenerator`),
-        // and `Json.parse` is an ordinary static method. Expand the intrinsic into that composition
-        // so the whole thing lowers through MIR as ordinary calls.
+        // `<T>.write_json(sb)` / `<T>.from_json()` / `<T>.from_json_parser_text()` (see
+        // `driver::generate` / Dream `JsonGenerator`). Expand the intrinsic into that composition
+        // so the whole thing lowers through MIR as ordinary calls. Classes/structs deserialize
+        // through the typed parser (no `JsonValue` tree); unions and collection `T` keep parse +
+        // `from_json`.
         let json_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);
         if json_op == Some(intrinsics::IntrinsicOp::JsonSerialize) {
             use dream_hir::{Binding, HExpr, HExprKind};
@@ -613,6 +615,8 @@ impl<'a> Analyzer<'a> {
             let from_json_call = json_collection_de_fn(&struct_name)
                 .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
             let text = arg_hirs.into_iter().next().flatten();
+            let is_union = self.union_table.contains_key(t_type.get_type().as_str());
+            let typed_parser = json_collection_de_fn(&struct_name).is_none() && !is_union;
 
             let parse_err = named("ParseError");
             let json_value = named("JsonValue");
@@ -638,6 +642,15 @@ impl<'a> Analyzer<'a> {
                 &span,
                 diagnostics,
             );
+
+            if typed_parser {
+                self.hir_set_call(
+                    &method_fn(&struct_name, "from_json_parser_text"),
+                    vec![text],
+                    &result_ty,
+                );
+                return Ok(result_ty);
+            }
 
             self.hir_set_call("Json_parse", vec![text], &parse_result_ty);
             let parse_hir = self.hir_take();
@@ -687,7 +700,6 @@ impl<'a> Analyzer<'a> {
             // lenient there so nested/array/tuple/type-param composition never has to thread a
             // `Result` through a constructor-argument expression). Only the top-level
             // `Json.deserialize<T>` entry point gets this strict check.
-            let is_union = self.union_table.contains_key(t_type.get_type().as_str());
 
             // Ok(v) => Result.Ok(T.from_json(v)), or for unions, first validate the variant tag.
             self.hir_open_block();

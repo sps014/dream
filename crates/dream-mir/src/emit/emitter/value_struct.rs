@@ -313,7 +313,7 @@ impl Emitter<'_> {
                 ..
             } => self.construct_value_union(&dst, *uty, *variant, args),
             Rvalue::Call { callee, args } => {
-                if !self.try_emit_simd_call(callee, args, Some(&dst)) {
+                if !self.try_emit_simd_call(callee, args, Some(&dst), None) {
                     self.emit_value_sret_call(&dst, callee, args);
                 }
             }
@@ -329,6 +329,14 @@ impl Emitter<'_> {
                 ..
             } => self.emit_interface_sret_call(&dst, receiver, *iface_id, *method_slot, *sig, args),
             Rvalue::Use(Operand::Copy(src)) => {
+                if let Place::Local(l) = src {
+                    if self.is_v128_local(*l) {
+                        dst(self);
+                        self.line(&format!("     (local.get ${})", l.0));
+                        self.line("     (v128.store)");
+                        return;
+                    }
+                }
                 let src = src.clone();
                 self.emit_value_copy(&dst, |s| s.emit_place_addr(&src), ty, copy_retain);
             }

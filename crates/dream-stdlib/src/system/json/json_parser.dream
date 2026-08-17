@@ -2,7 +2,7 @@ module system.json;
 
 // Byte-cursor recursive-descent JSON parser over the input string's UTF-8 bytes
 // (`byte_at` / `byte_size`) — no intermediate `byte[]` copy.
-internal class JsonParser {
+public class JsonParser {
     text: string;
     pos: int;
 
@@ -345,5 +345,134 @@ internal class JsonParser {
             return this.keyword(4, JsonValue.none());
         }
         return this.parse_number();
+    }
+
+    public fun try_consume(code: int): bool {
+        this.skip_ws();
+        if ((this.pos < this.len()) && (this.b() == code)) {
+            this.pos = this.pos + 1;
+            return true;
+        }
+        return false;
+    }
+
+    public fun try_null(): bool {
+        this.skip_ws();
+        if ((this.pos < this.len()) && (this.b() == 110)) {
+            this.pos = this.pos + 4;
+            return true;
+        }
+        return false;
+    }
+
+    public fun parse_bool(): bool {
+        this.skip_ws();
+        if (this.pos >= this.len()) {
+            return false;
+        }
+        let c = this.b();
+        if (c == 116) {
+            this.pos = this.pos + 4;
+            return true;
+        }
+        if (c == 102) {
+            this.pos = this.pos + 5;
+            return false;
+        }
+        if (c == 110) {
+            this.pos = this.pos + 4;
+            return false;
+        }
+        return false;
+    }
+
+    public fun parse_int(): int {
+        this.skip_ws();
+        return this.parse_number().as_int().unwrap_or(0);
+    }
+
+    public fun parse_double(): double {
+        this.skip_ws();
+        return this.parse_number().as_double().unwrap_or(0.0d);
+    }
+
+    public fun skip_value(): void {
+        this.skip_ws();
+        if (this.pos >= this.len()) {
+            return;
+        }
+        let c = this.b();
+        if (c == 123) {
+            this.pos = this.pos + 1;
+            this.skip_ws();
+            if ((this.pos < this.len()) && (this.b() == 125)) {
+                this.pos = this.pos + 1;
+                return;
+            }
+            let going = true;
+            while (going) {
+                this.skip_ws();
+                if (this.pos >= this.len()) {
+                    going = false;
+                } else if (this.b() == 125) {
+                    this.pos = this.pos + 1;
+                    going = false;
+                } else {
+                    this.parse_string();
+                    this.skip_ws();
+                    if ((this.pos < this.len()) && (this.b() == 58)) {
+                        this.pos = this.pos + 1;
+                    }
+                    this.skip_value();
+                    this.skip_ws();
+                    if ((this.pos < this.len()) && (this.b() == 44)) {
+                        this.pos = this.pos + 1;
+                    }
+                }
+            }
+            return;
+        }
+        if (c == 91) {
+            this.pos = this.pos + 1;
+            this.skip_ws();
+            if ((this.pos < this.len()) && (this.b() == 93)) {
+                this.pos = this.pos + 1;
+                return;
+            }
+            let going = true;
+            while (going) {
+                this.skip_ws();
+                if (this.pos >= this.len()) {
+                    going = false;
+                } else if (this.b() == 93) {
+                    this.pos = this.pos + 1;
+                    going = false;
+                } else {
+                    this.skip_value();
+                    this.skip_ws();
+                    if ((this.pos < this.len()) && (this.b() == 44)) {
+                        this.pos = this.pos + 1;
+                    }
+                }
+            }
+            return;
+        }
+        if (c == 34) {
+            this.parse_string();
+            return;
+        }
+        if (c == 116) {
+            this.pos = this.pos + 4;
+            return;
+        }
+        if (c == 102) {
+            this.pos = this.pos + 5;
+            return;
+        }
+        if (c == 110) {
+            this.pos = this.pos + 4;
+            return;
+        }
+        this.parse_number();
     }
 }

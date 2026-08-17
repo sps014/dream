@@ -13,7 +13,7 @@
 
 use super::*;
 use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
-use crate::emit::valuetype::{ValueFrame, ValueLocalKind};
+use crate::emit::valuetype::{is_simd_vector, ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
 mod async_ops;
@@ -202,7 +202,7 @@ impl<'a> Emitter<'a> {
         locate_panics: bool,
         debug_fn: Option<&'a crate::emit::debug_map::DebugFunction>,
     ) -> Self {
-        let frame = ValueFrame::compute(func, interner);
+        let frame = ValueFrame::compute(func, interner, layouts);
         Emitter {
             func,
             interner,
@@ -293,15 +293,14 @@ impl Emitter<'_> {
             if i < param_count {
                 continue;
             }
+            let wasm = self.wasm_local_ty(decl.ty);
             if let (true, Some(name)) = (self.debug, decl.name.as_ref()) {
                 self.line(&format!(
                     "  (local ${} (@name \"{}\") {})",
-                    i,
-                    name,
-                    self.wasm_ty(decl.ty)
+                    i, name, wasm
                 ));
             } else {
-                self.line(&format!("  (local ${} {})", i, self.wasm_ty(decl.ty)));
+                self.line(&format!("  (local ${} {})", i, wasm));
             }
         }
         // Always reserve `$__pc`: shape emit may fall back to PC dispatch mid-body decision, and the
@@ -523,6 +522,17 @@ impl Emitter<'_> {
             Operand::Copy(Place::Local(l)) => self.line(&format!("     (local.get ${})", l.0)),
             Operand::Copy(Place::Global(g)) => self.line(&format!("     (global.get $g{})", g.0)),
             Operand::Copy(Place::Field { base, field }) => {
+                if self.is_v128_local(*base) {
+                    let lane = self
+                        .layouts
+                        .get(self.func.local_ty(*base))
+                        .and_then(|l| l.fields.get(*field))
+                        .map(|f| f.offset / 4)
+                        .unwrap_or(0);
+                    self.line(&format!("     (local.get ${})", base.0));
+                    self.line(&format!("     (i32x4.extract_lane {lane})"));
+                    return;
+                }
                 if let Some(f) = self.field_layout_full(*base, *field) {
                     let (off, fty, is_unowned) = (f.offset, f.ty, f.is_unowned);
                     self.field_addr(*base, off);
@@ -608,6 +618,46 @@ impl Emitter<'_> {
 
     fn wasm_ty(&self, ty: TypeId) -> String {
         wasm_ty_of(self.interner, ty).to_string()
+    }
+
+    fn wasm_local_ty(&self, ty: TypeId) -> &'static str {
+        if is_simd_vector(self.layouts, ty) {
+            "v128"
+        } else {
+            wasm_ty_of(self.interner, ty)
+        }
+    }
+
+    fn is_v128_local(&self, l: crate::Local) -> bool {
+        let i = l.0 as usize;
+        if i < self.func.params.len() {
+            return false;
+        }
+        let decl = &self.func.locals[i];
+        is_simd_vector(self.layouts, decl.ty)
+    }
+
+    fn emit_v128_spill_addr(&mut self) {
+        let off = self.frame.v128_spill.unwrap_or(0);
+        self.line("     (global.get $__sp)");
+        if off > 0 {
+            self.line(&format!("     (i32.const {off})"));
+            self.line("     (i32.add)");
+        }
+    }
+
+    fn emit_v128_sret_into_local(
+        &mut self,
+        dest: u32,
+        callee: &crate::Callee,
+        args: &[Operand],
+    ) {
+        self.emit_v128_spill_addr();
+        self.emit_call_args(callee, args);
+        self.line(&format!("     (call ${})", self.callee_symbol(callee)));
+        self.emit_v128_spill_addr();
+        self.line("     (v128.load)");
+        self.line(&format!("     (local.set ${dest})"));
     }
 
     fn binop_instr(&self, op: BinOp, ty: TypeId) -> String {

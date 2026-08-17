@@ -12,6 +12,7 @@
 
 use super::*;
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement};
+use dream_hir::LayoutTable;
 use std::collections::{HashMap, HashSet};
 
 /// Ownership classification of a value(`struct`)-typed local, driving shadow-frame codegen.
@@ -37,11 +38,17 @@ pub(crate) struct ValueFrame {
     kinds: HashMap<Local, ValueLocalKind>,
     /// Total frame size in bytes (0 when the function has no owning value locals).
     pub size: u32,
+    /// 16-byte scratch used to land sret `Vector<T>` results before loading into a `v128` local.
+    pub v128_spill: Option<u32>,
 }
 
 impl ValueFrame {
     /// Classifies every value-struct local and lays out a shadow-frame slot for each owning one.
-    pub fn compute(func: &MirFunction, interner: &TypeInterner) -> ValueFrame {
+    pub fn compute(
+        func: &MirFunction,
+        interner: &TypeInterner,
+        layouts: &LayoutTable,
+    ) -> ValueFrame {
         let param_count = func.params.len();
 
         // Collect the defining rvalues of each local so an alias temp (a synthetic local whose only
@@ -58,8 +65,14 @@ impl ValueFrame {
         let mut kinds = HashMap::new();
         let mut slots = HashMap::new();
         let mut size = 0u32;
+        let mut has_v128 = false;
         for (i, decl) in func.locals.iter().enumerate() {
             if !interner.is_value_type(decl.ty) {
+                continue;
+            }
+            // `Vector<T>` locals (including inlined method `this`) are WASM `v128` registers.
+            if is_simd_vector(layouts, decl.ty) && i >= param_count {
+                has_v128 = true;
                 continue;
             }
             let local = Local(i as u32);
@@ -106,7 +119,22 @@ impl ValueFrame {
         if !size.is_multiple_of(8) {
             size += 8 - size % 8;
         }
-        ValueFrame { slots, kinds, size }
+        let v128_spill = if has_v128 {
+            if !size.is_multiple_of(16) {
+                size += 16 - size % 16;
+            }
+            let off = size;
+            size += 16;
+            Some(off)
+        } else {
+            None
+        };
+        ValueFrame {
+            slots,
+            kinds,
+            size,
+            v128_spill,
+        }
     }
 
     pub fn kind(&self, l: Local) -> Option<ValueLocalKind> {
@@ -129,6 +157,19 @@ impl ValueFrame {
             .filter(|(l, _)| !func.locals[l.0 as usize].manual_drop)
             .collect()
     }
+}
+
+/// True when `ty` is the unmanaged 16-byte `Vector<T>` payload (`w0..w3`).
+pub(crate) fn is_simd_vector(layouts: &LayoutTable, ty: TypeId) -> bool {
+    let Some(l) = layouts.get(ty) else {
+        return false;
+    };
+    l.size == 16
+        && l.fields.len() == 4
+        && l.fields[0].name == "w0"
+        && l.fields[1].name == "w1"
+        && l.fields[2].name == "w2"
+        && l.fields[3].name == "w3"
 }
 
 /// True when `rv` copies a value place (`Use(Copy(local|field|index))`) — the shape of an alias temp

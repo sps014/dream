@@ -63,7 +63,7 @@ impl Emitter<'_> {
                 self.line("     (call $dream_panic)");
             }
             Statement::Call { callee, args } => {
-                if !self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>) {
+                if !self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>, None) {
                     self.emit_call_args(callee, args);
                     self.line(&format!("     (call ${})", self.callee_symbol(callee)));
                     if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
@@ -266,6 +266,9 @@ impl Emitter<'_> {
                 self.line("     (call $__lock_release)");
             }
             Statement::ValueDrop(local) => {
+                if self.is_v128_local(*local) {
+                    return;
+                }
                 let ty = self.func.local_ty(*local);
                 debug_assert!(
                     self.interner.is_value_type(ty),
@@ -302,6 +305,9 @@ impl Emitter<'_> {
                 }
             }
             Statement::ValueKill(local) => {
+                if self.is_v128_local(*local) {
+                    return;
+                }
                 let ty = self.func.local_ty(*local);
                 debug_assert!(
                     self.interner.is_value_type(ty),
@@ -378,6 +384,47 @@ impl Emitter<'_> {
         match place {
             Place::Local(l) => {
                 let ty = self.func.local_ty(*l);
+                if self.is_v128_local(*l) {
+                    match rvalue {
+                        Rvalue::Call { callee, args } => {
+                            if !self.try_emit_simd_call(
+                                callee,
+                                args,
+                                None::<fn(&mut Self)>,
+                                Some(l.0),
+                            ) {
+                                self.emit_v128_sret_into_local(l.0, callee, args);
+                            }
+                        }
+                        Rvalue::Use(Operand::Copy(Place::Local(src))) if self.is_v128_local(*src) => {
+                            self.line(&format!("     (local.get ${})", src.0));
+                            self.line(&format!("     (local.set ${})", l.0));
+                        }
+                        Rvalue::Use(o) => {
+                            self.emit_v128_operand(o);
+                            self.line(&format!("     (local.set ${})", l.0));
+                        }
+                        Rvalue::New { args, .. } => {
+                            if let Some(v) = args.first() {
+                                self.emit_operand(v);
+                                let lane = match self.interner.kind(ty) {
+                                    dream_types::TyKind::Struct(_, ts) => ts
+                                        .first()
+                                        .and_then(|e| crate::SimdLane::from_elem(self.interner, *e)),
+                                    _ => None,
+                                }
+                                .unwrap_or(crate::SimdLane::I32);
+                                self.line(&format!("     ({})", lane.splat_wat()));
+                                self.line(&format!("     (local.set ${})", l.0));
+                            }
+                        }
+                        other => crate::internal_error!(
+                            "unsupported rvalue for Vector v128 local: {:?}",
+                            other
+                        ),
+                    }
+                    return;
+                }
                 if self.interner.is_value_type(ty) {
                     let l0 = l.0;
                     match self.frame.kind(*l) {
@@ -425,6 +472,19 @@ impl Emitter<'_> {
                 self.line(&format!("     (global.set $g{})", g.0));
             }
             Place::Field { base, field } => {
+                if self.is_v128_local(*base) {
+                    let lane = self
+                        .layouts
+                        .get(self.func.local_ty(*base))
+                        .and_then(|l| l.fields.get(*field))
+                        .map(|f| f.offset / 4)
+                        .unwrap_or(0);
+                    self.line(&format!("     (local.get ${})", base.0));
+                    self.emit_rvalue(rvalue);
+                    self.line(&format!("     (i32x4.replace_lane {lane})"));
+                    self.line(&format!("     (local.set ${})", base.0));
+                    return;
+                }
                 if let Some(f) = self.field_layout_full(*base, *field) {
                     let (off, fty, is_weak, is_unowned) = (f.offset, f.ty, f.is_weak, f.is_unowned);
                     let b = *base;

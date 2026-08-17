@@ -4,47 +4,68 @@
 //! (`protocol`, `js_marshal`, `module`, async lowering) route through these free functions so the
 //! primitive-width rules are defined exactly once.
 
+use super::builder::{LoadKind, StoreKind};
 use super::*;
+use wasm_encoder::ValType;
 
 /// The WASM value type for a Dream type (`i32`/`i64`/`f32`/`f64`).
 /// Every reference/`object`/`void` type is an `i32` pointer/word.
 pub(crate) fn wasm_ty_of(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    match interner.kind(ty) {
-        TyKind::Prim(PrimTy::Double) => "f64",
-        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64",
-        TyKind::Prim(PrimTy::Float) => "f32",
+    match wasm_val_ty(interner, ty) {
+        ValType::F64 => "f64",
+        ValType::I64 => "i64",
+        ValType::F32 => "f32",
         _ => "i32",
     }
 }
 
-/// The zero constant of a WASM value type, used to default-initialize a slot of that type.
-pub(super) fn zero_literal(wasm_ty: &str) -> &'static str {
-    match wasm_ty {
-        "f64" => "(f64.const 0)",
-        "f32" => "(f32.const 0)",
-        "i64" => "(i64.const 0)",
-        _ => "(i32.const 0)",
+pub(crate) fn wasm_val_ty(interner: &TypeInterner, ty: TypeId) -> ValType {
+    match interner.kind(ty) {
+        TyKind::Prim(PrimTy::Double) => ValType::F64,
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => ValType::I64,
+        TyKind::Prim(PrimTy::Float) => ValType::F32,
+        _ => ValType::I32,
     }
 }
 
 /// The load instruction for a value of `ty` (width-aware; sub-word scalars zero-extend).
-pub(super) fn load_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
+pub(super) fn load_kind_for(interner: &TypeInterner, ty: TypeId) -> LoadKind {
     match interner.kind(ty) {
-        TyKind::Prim(PrimTy::Float) => "f32.load",
-        TyKind::Prim(PrimTy::Double) => "f64.load",
-        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.load",
-        TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => "i32.load8_u",
+        TyKind::Prim(PrimTy::Float) => LoadKind::F32,
+        TyKind::Prim(PrimTy::Double) => LoadKind::F64,
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => LoadKind::I64,
+        TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => LoadKind::I32_8U,
+        _ => LoadKind::I32,
+    }
+}
+
+pub(super) fn load_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
+    match load_kind_for(interner, ty) {
+        LoadKind::F32 => "f32.load",
+        LoadKind::F64 => "f64.load",
+        LoadKind::I64 => "i64.load",
+        LoadKind::I32_8U => "i32.load8_u",
         _ => "i32.load",
     }
 }
 
 /// The store instruction matching [`load_instr_for`] (width-aware; sub-word scalars truncate).
-pub(super) fn store_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
+pub(super) fn store_kind_for(interner: &TypeInterner, ty: TypeId) -> StoreKind {
     match interner.kind(ty) {
-        TyKind::Prim(PrimTy::Float) => "f32.store",
-        TyKind::Prim(PrimTy::Double) => "f64.store",
-        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.store",
-        TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => "i32.store8",
+        TyKind::Prim(PrimTy::Float) => StoreKind::F32,
+        TyKind::Prim(PrimTy::Double) => StoreKind::F64,
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => StoreKind::I64,
+        TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => StoreKind::I32_8,
+        _ => StoreKind::I32,
+    }
+}
+
+pub(super) fn store_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
+    match store_kind_for(interner, ty) {
+        StoreKind::F32 => "f32.store",
+        StoreKind::F64 => "f64.store",
+        StoreKind::I64 => "i64.store",
+        StoreKind::I32_8 => "i32.store8",
         _ => "i32.store",
     }
 }

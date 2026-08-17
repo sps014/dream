@@ -34,6 +34,15 @@ pub(super) fn symbol_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>), St
     table
 }
 
+pub(super) fn intrinsic_ops(
+    mir: &crate::Mir,
+) -> HashMap<DefId, dream_abi::intrinsics::IntrinsicOp> {
+    mir.intrinsics
+        .iter()
+        .filter_map(|(d, k)| dream_abi::intrinsics::IntrinsicOp::from_key(k).map(|op| (*d, op)))
+        .collect()
+}
+
 /// Maps each function's `(DefId, instance args)` to its declared parameter types, so call sites can
 /// apply implicit numeric widening (e.g. an `int`/`float` argument passed to a `double` parameter)
 /// to match the callee's WASM signature, and — for a `fun(...)`-typed parameter — unbox a boxed
@@ -196,41 +205,8 @@ pub(super) fn func_sig_is_sret(interner: &TypeInterner, ty: TypeId) -> bool {
     }
 }
 
-/// Emits a `(type …)` declaration for every distinct function signature in the program (one per WASM
-/// shape), so `call_indirect` can name its expected type. Over-approximates from all interned function
-/// types — spare declarations are harmless.
-pub(super) fn emit_func_signatures(out: &mut String, interner: &TypeInterner) {
-    let mut seen: IndexMap<String, (Vec<&'static str>, Option<&'static str>)> = IndexMap::new();
-    for (id, kind) in interner.iter_kinds() {
-        if matches!(kind, TyKind::Func(..)) {
-            if let Some((name, ptys, rty)) = func_sig(interner, id) {
-                seen.entry(name).or_insert((ptys, rty));
-            }
-        }
-    }
-    for (name, (ptys, rty)) in &seen {
-        let params: String = ptys.iter().map(|t| format!(" (param {})", t)).collect();
-        let result = rty.map(|t| format!(" (result {})", t)).unwrap_or_default();
-        let _ = writeln!(out, "(type {} (func{}{}))", name, params, result);
-    }
-}
-
 pub(crate) fn poll_symbol(func: &MirFunction) -> String {
     format!("poll_{}", func_symbol(func))
-}
-
-/// Emits the function table and its element section (address-taken functions first, then async
-/// poll functions), plus the `__indirect_function_table` export.
-///
-/// Index `0` is left empty (null funcref) so host-side `0` stays a null callback sentinel; real
-/// entries are installed starting at `(elem (i32.const 1) …)`.
-pub(super) fn emit_func_table(out: &mut String, table: &IndirectTable) {
-    let n = table.elem.len();
-    let _ = writeln!(out, "(table $__ft {} funcref)", n + 1);
-    if n > 0 {
-        let _ = writeln!(out, "(elem (i32.const 1) {})", table.elem.join(" "));
-    }
-    out.push_str("(export \"__indirect_function_table\" (table $__ft))\n");
 }
 
 /// Assigns each struct and (discriminated) union a distinct runtime tag, starting at

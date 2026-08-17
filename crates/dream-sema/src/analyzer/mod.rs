@@ -356,6 +356,10 @@ pub struct Analyzer<'a> {
     /// binding for each of a generic class's `extern`/`@intrinsic` methods, mangled per instance)
     /// consult this list instead of `node.structs` to find every instantiation that needs one.
     generic_struct_instances: Vec<(String, Vec<Type>)>,
+    /// `@intrinsic` methods recorded at registration (`{Type}_{method}` DefId + key), including
+    /// each generic monomorphization. [`hir_build_intrinsics`] merges this with free-function
+    /// scan so codegen can dispatch by DefId.
+    intrinsic_defs: Vec<(dream_types::DefId, String)>,
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
     /// Registered enums: name -> (member -> value). Enum values are plain `i32`s at runtime.
     enum_table: EnumTable,
@@ -510,6 +514,7 @@ impl<'a> Analyzer<'a> {
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
             generic_struct_instances: Vec::new(),
+            intrinsic_defs: Vec::new(),
             struct_methods: Vec::new(),
             enum_table: IndexMap::new(),
             union_table: IndexMap::new(),

@@ -25,18 +25,30 @@ impl Emitter<'_> {
             .contains(&(callee.def, callee.args.clone()));
         for (i, a) in args.iter().enumerate() {
             self.emit_place_value_arg_retain(a);
-            self.emit_operand(a);
+            self.emit_call_arg(a);
             if let Some(pty) = params.as_ref().and_then(|p| p.get(i)) {
                 if matches!(self.interner.kind(*pty), TyKind::Func(..)) {
                     if is_host_import {
                         // Boxed `fun(...)` value → raw funcref-table index the host's `callback()` expects.
-                        self.line("     (i32.load)");
+                        self.f.load(LoadKind::I32, 0);
                     }
                 } else {
                     self.emit_numeric_conv(self.operand_ty(a), *pty);
                 }
             }
         }
+    }
+
+    /// Pushes a call argument: a `Vector<T>` `v128` local is spilled so the callee sees an `i32`
+    /// pointer, matching the value-struct ABI used by wrapper methods that were not SIMD-lowered.
+    pub(in crate::emit::emitter) fn emit_call_arg(&mut self, a: &Operand) {
+        if let Operand::Copy(Place::Local(l)) = a {
+            if self.is_v128_local(*l) {
+                self.emit_v128_as_ptr(*l);
+                return;
+            }
+        }
+        self.emit_operand(a);
     }
 
     /// Emits an indirect call through a raw function-table index `target` (already unboxed by the
@@ -54,13 +66,13 @@ impl Emitter<'_> {
     ) -> Option<&'static str> {
         for a in args {
             self.emit_place_value_arg_retain(a);
-            self.emit_operand(a);
+            self.emit_call_arg(a);
         }
         self.emit_operand(target);
         let (sig_name, ret) = func_sig(self.interner, sig)
             .map(|(name, _, ret)| (name, ret))
             .unwrap_or_else(|| ("$sig___v".to_string(), None));
-        self.line(&format!("     (call_indirect $__ft (type {}))", sig_name));
+        self.f.call_indirect(&sig_name, "__ft");
         ret
     }
 
@@ -78,10 +90,7 @@ impl Emitter<'_> {
         args: &[Operand],
     ) {
         self.emit_interface_receiver_args(receiver, sig, args);
-        self.line(&format!(
-            "     (call ${})",
-            iface_dispatch_symbol(iface_id, method_slot)
-        ));
+        self.f.call(&iface_dispatch_symbol(iface_id, method_slot));
     }
 
     /// Emits a dynamic interface call to a *value*(`struct`/union)-returning method using the sret
@@ -100,10 +109,7 @@ impl Emitter<'_> {
     ) {
         dst(self);
         self.emit_interface_receiver_args(receiver, sig, args);
-        self.line(&format!(
-            "     (call ${})",
-            iface_dispatch_symbol(iface_id, method_slot)
-        ));
+        self.f.call(&iface_dispatch_symbol(iface_id, method_slot));
     }
 
     /// Pushes an interface call's receiver (argument 0) followed by the real arguments, each widened
@@ -114,10 +120,10 @@ impl Emitter<'_> {
             TyKind::Func(params, _) => params.clone(),
             _ => Vec::new(),
         };
-        self.emit_operand(receiver);
+        self.emit_call_arg(receiver);
         for (i, a) in args.iter().enumerate() {
             self.emit_place_value_arg_retain(a);
-            self.emit_operand(a);
+            self.emit_call_arg(a);
             // param_tys[0] is the receiver (`this`); real args start at index 1.
             if let Some(pty) = param_tys.get(i + 1) {
                 self.emit_numeric_conv(self.operand_ty(a), *pty);
@@ -140,12 +146,12 @@ impl Emitter<'_> {
         dst(self);
         for a in args {
             self.emit_place_value_arg_retain(a);
-            self.emit_operand(a);
+            self.emit_call_arg(a);
         }
         self.emit_operand(target);
         let sig_name = func_sig(self.interner, sig)
             .map(|(name, _, _)| name)
             .unwrap_or_else(|| "$sig___v".to_string());
-        self.line(&format!("     (call_indirect $__ft (type {}))", sig_name));
+        self.f.call_indirect(&sig_name, "__ft");
     }
 }

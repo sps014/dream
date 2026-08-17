@@ -14,7 +14,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 ## What Dream is
 
-A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
+A statically typed language that compiles to WebAssembly (`.wasm` + pretty-printed `.wat` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
 
 Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in `wasmtime`.
 
@@ -63,7 +63,8 @@ Dream/
 ```
 .dream source → Lexer (logos) → Parser (recursive descent, arena AST) → Semantic Analyzer
   → Typed HIR (types::TypeCtx feeds it) → MIR lowering (CFG) → Pass manager (opt passes)
-  → Relooper (structured control flow recovery) → WAT emission → .wat → wat crate assembles → .wasm + .abi.json
+  → Relooper (structured control flow recovery) → binary WASM emit (wasm-encoder) → .wasm
+  → wasmprinter `.wat` + `.abi.json` sidecar
 ```
 
 Each arrow is a **total** lowering: the producer records everything the consumer needs, so the consumer never looks backward. Types are interned once (`TypeId`), so equality is `==`, never string comparison/mangling (the old `"Box_int"`-style stringly-typed system is gone — do not reintroduce string-keyed types).
@@ -104,7 +105,7 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 - **Lexer** (`crates/dream-syntax/src/lexer.rs`): tokens only. No syntactic rules, no diagnostics assumptions.
 - **Parser** (`crates/dream-syntax/src/parser/`): builds AST from tokens. No type-checking, no scope enforcement. **Recover-and-continue**: `match_token` synthesizes a placeholder + reports an error instead of bailing; `parse_program`/`parse_block` recover at declaration/statement boundaries. `parse()` *always* returns a `ProgramNode` no matter how malformed the input. Every token-consuming loop needs its `ensure_progress` guard so recovery can't spin forever. Fuzz/property tests in `crates/dream-syntax/src/tests/parser_tests.rs` (`fuzz_*`) lock in "never panics, always returns a ProgramNode" — keep green.
 - **Analyzer** (`crates/dream-sema/`): validates types/scopes/async constraints, emits HIR. Never mutates AST structure, never generates target code (WAT/WASM).
-- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → WAT. Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
+- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → WASM bytes (pretty-printed WAT via wasmprinter). Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
 
 ## Backend non-goals
 

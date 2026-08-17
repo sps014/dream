@@ -11,24 +11,22 @@ impl Emitter<'_> {
     fn emit_box_value_struct(&mut self, o: &Operand, ty: TypeId) {
         let size = self.value_size(ty);
         let tag = self.type_tag(ty, dream_types::DefId(0));
-        self.line(&format!("     (i32.const {})", size));
-        self.line(&format!("     (i32.const {}) ;; tag", tag));
-        self.line("     (call $malloc)");
-        self.line("     (local.set $__obj)");
+        self.f.i32_const((size) as i32);
+        self.f.i32_const(tag);
+        self.f.call("malloc");
+        self.f.local_set("__obj");
         // memory.copy(dst = $__obj, src = inline address of the value, size)
-        self.line("     (local.get $__obj)");
+        self.f.local_get("__obj");
         self.emit_operand(o);
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (memory.copy)");
+        self.f.i32_const((size) as i32);
+        self.f.memory_copy();
         if self.value_has_glue(ty) {
             if let Some(name) = self.value_name(ty) {
-                self.line(&format!(
-                    "     (local.get $__obj) (call {})",
-                    vs_retain_sym(&name)
-                ));
+                self.f.local_get("__obj");
+                self.f.call(&vs_retain_sym(&name));
             }
         }
-        self.line("     (local.get $__obj)");
+        self.f.local_get("__obj");
     }
 
     pub(super) fn emit_cast(&mut self, o: &Operand, from: TypeId, to: TypeId) {
@@ -44,7 +42,7 @@ impl Emitter<'_> {
                 );
             }
             self.emit_operand(o);
-            self.line(&format!("     (call {})", sym));
+            self.f.call(&sym);
             return;
         }
         // Boxing a value struct into a reference target (`object` or an interface): allocate a
@@ -67,7 +65,7 @@ impl Emitter<'_> {
         if to_is_object {
             self.emit_operand(o);
             if let Some(boxfn) = from_prim.and_then(box_fn_for) {
-                self.line(&format!("     (call {})", boxfn));
+                self.f.call(boxfn);
             }
             return;
         }
@@ -79,15 +77,15 @@ impl Emitter<'_> {
             if let Some(unboxfn) = to_prim.and_then(unbox_fn_for) {
                 if let Some(expected_tag) = runtime_tag_for(self.interner, self.tags, to) {
                     self.emit_operand(o);
-                    self.line("     (call $object_tag)");
-                    self.line(&format!("     (i32.const {})", expected_tag));
-                    self.line("     (i32.ne)");
-                    self.line("     (if (then");
+                    self.f.call("object_tag");
+                    self.f.i32_const(expected_tag);
+                    self.f.i32_ne();
+                    self.f.if_();
                     self.emit_panic(super::super::super::panic_msgs::INVALID_CAST);
-                    self.line("     ))");
+                    self.f.end();
                 }
                 self.emit_operand(o);
-                self.line(&format!("     (call {})", unboxfn));
+                self.f.call(unboxfn);
             } else {
                 self.emit_operand(o);
             }
@@ -98,8 +96,8 @@ impl Emitter<'_> {
         // Narrowing to `byte` (which shares the `i32` WASM type with `int`/`uint`, so `numeric_conv`
         // is a no-op) must wrap into the [0, 255] range explicitly (C-style truncation).
         if matches!(to_prim, Some(PrimTy::Byte)) {
-            self.line("     (i32.const 255)");
-            self.line("     (i32.and)");
+            self.f.i32_const(255);
+            self.f.i32_and();
         }
     }
 
@@ -127,88 +125,87 @@ impl Emitter<'_> {
     /// stack) into type `to`, if their WASM value types differ (a no-op otherwise). Shared by explicit
     /// `Cast` and the implicit widening applied to call arguments.
     pub(super) fn emit_numeric_conv(&mut self, from: TypeId, to: TypeId) {
-        let (fw, tw) = (self.wasm_ty(from), self.wasm_ty(to));
-        if fw != tw {
-            // Numeric conversions between the four WASM value types. Integer/float conversions carry
-            // the signedness of the *integer* side (the target for float→int, the source otherwise);
-            // saturating float→int truncation matches C-style cast semantics (no trap on overflow/NaN).
-            let (fw, tw) = (fw.as_str(), tw.as_str());
-            let int_signed = |ty: TypeId| {
-                !matches!(
-                    self.interner.kind(ty),
-                    TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
-                )
-            };
-            let instr = match (fw, tw) {
-                ("i32", "i64") => {
-                    if int_signed(from) {
-                        "i64.extend_i32_s"
-                    } else {
-                        "i64.extend_i32_u"
-                    }
+        let (fw, tw) = (
+            wasm_val_ty(self.interner, from),
+            wasm_val_ty(self.interner, to),
+        );
+        if fw == tw {
+            return;
+        }
+        let int_signed = |ty: TypeId| {
+            !matches!(
+                self.interner.kind(ty),
+                TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
+            )
+        };
+        match (fw, tw) {
+            (ValType::I32, ValType::I64) => {
+                if int_signed(from) {
+                    self.f.i64_extend_i32_s();
+                } else {
+                    self.f.i64_extend_i32_u();
                 }
-                ("i64", "i32") => "i32.wrap_i64",
-                ("i32", "f32") => {
-                    if int_signed(from) {
-                        "f32.convert_i32_s"
-                    } else {
-                        "f32.convert_i32_u"
-                    }
+            }
+            (ValType::I64, ValType::I32) => self.f.i32_wrap_i64(),
+            (ValType::I32, ValType::F32) => {
+                if int_signed(from) {
+                    self.f.f32_convert_i32_s();
+                } else {
+                    self.f.f32_convert_i32_u();
                 }
-                ("i32", "f64") => {
-                    if int_signed(from) {
-                        "f64.convert_i32_s"
-                    } else {
-                        "f64.convert_i32_u"
-                    }
+            }
+            (ValType::I32, ValType::F64) => {
+                if int_signed(from) {
+                    self.f.f64_convert_i32_s();
+                } else {
+                    self.f.f64_convert_i32_u();
                 }
-                ("i64", "f32") => {
-                    if int_signed(from) {
-                        "f32.convert_i64_s"
-                    } else {
-                        "f32.convert_i64_u"
-                    }
+            }
+            (ValType::I64, ValType::F32) => {
+                if int_signed(from) {
+                    self.f.f32_convert_i64_s();
+                } else {
+                    self.f.f32_convert_i64_u();
                 }
-                ("i64", "f64") => {
-                    if int_signed(from) {
-                        "f64.convert_i64_s"
-                    } else {
-                        "f64.convert_i64_u"
-                    }
+            }
+            (ValType::I64, ValType::F64) => {
+                if int_signed(from) {
+                    self.f.f64_convert_i64_s();
+                } else {
+                    self.f.f64_convert_i64_u();
                 }
-                ("f32", "f64") => "f64.promote_f32",
-                ("f64", "f32") => "f32.demote_f64",
-                ("f32", "i32") => {
-                    if int_signed(to) {
-                        "i32.trunc_sat_f32_s"
-                    } else {
-                        "i32.trunc_sat_f32_u"
-                    }
+            }
+            (ValType::F32, ValType::F64) => self.f.f64_promote_f32(),
+            (ValType::F64, ValType::F32) => self.f.f32_demote_f64(),
+            (ValType::F32, ValType::I32) => {
+                if int_signed(to) {
+                    self.f.i32_trunc_sat_f32_s();
+                } else {
+                    self.f.i32_trunc_sat_f32_u();
                 }
-                ("f64", "i32") => {
-                    if int_signed(to) {
-                        "i32.trunc_sat_f64_s"
-                    } else {
-                        "i32.trunc_sat_f64_u"
-                    }
+            }
+            (ValType::F64, ValType::I32) => {
+                if int_signed(to) {
+                    self.f.i32_trunc_sat_f64_s();
+                } else {
+                    self.f.i32_trunc_sat_f64_u();
                 }
-                ("f32", "i64") => {
-                    if int_signed(to) {
-                        "i64.trunc_sat_f32_s"
-                    } else {
-                        "i64.trunc_sat_f32_u"
-                    }
+            }
+            (ValType::F32, ValType::I64) => {
+                if int_signed(to) {
+                    self.f.i64_trunc_sat_f32_s();
+                } else {
+                    self.f.i64_trunc_sat_f32_u();
                 }
-                ("f64", "i64") => {
-                    if int_signed(to) {
-                        "i64.trunc_sat_f64_s"
-                    } else {
-                        "i64.trunc_sat_f64_u"
-                    }
+            }
+            (ValType::F64, ValType::I64) => {
+                if int_signed(to) {
+                    self.f.i64_trunc_sat_f64_s();
+                } else {
+                    self.f.i64_trunc_sat_f64_u();
                 }
-                _ => "nop",
-            };
-            self.line(&format!("     ({})", instr));
+            }
+            _ => self.f.nop(),
         }
     }
 }

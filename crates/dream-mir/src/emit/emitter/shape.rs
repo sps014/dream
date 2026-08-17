@@ -27,19 +27,19 @@ impl Emitter<'_> {
             self.emit_pc_dispatch();
             return;
         }
-        let checkpoint = self.out.len();
+        let checkpoint = self.f.checkpoint();
         let line_checkpoint = self.current_line;
         self.shape_scopes.clear();
         self.shape_label_id = 0;
         if self.emit_shape(&shape, None).is_err() {
-            self.out.truncate(checkpoint);
+            self.f.rewind(checkpoint);
             self.current_line = line_checkpoint;
             self.shape_scopes.clear();
             self.emit_pc_dispatch();
             return;
         }
         if self.wasm_returns_value() {
-            self.line("  (unreachable)");
+            self.f.unreachable();
         }
     }
 
@@ -47,35 +47,29 @@ impl Emitter<'_> {
     /// emit cannot label every edge.
     pub(super) fn emit_pc_dispatch(&mut self) {
         let n = self.func.blocks.len();
-        self.line(&format!(
-            "  ;; entry = bb{} (pc dispatch fallback)",
-            self.func.entry.0
-        ));
-        self.line(&format!("  (i32.const {})", self.func.entry.0));
-        self.line("  (local.set $__pc)");
-        self.line("  (block $host_exit");
-        self.line("   (loop $__loop");
+        self.f.i32_const(self.func.entry.0 as i32);
+        self.f.local_set("__pc");
+        self.f.block("host_exit");
+        self.f.loop_("__loop");
         for i in (0..n).rev() {
-            self.line(&format!("    (block $bb{}", i));
+            self.f.block(&format!("bb{i}"));
         }
-        let labels: String = (0..n).map(|i| format!("$bb{} ", i)).collect();
-        let default = format!("$bb{}", n.saturating_sub(1));
-        self.line(&format!(
-            "     (br_table {}{} (local.get $__pc))",
-            labels, default
-        ));
+        let labels: Vec<Label> = (0..n).map(|i| Label::Name(format!("bb{i}"))).collect();
+        let default = Label::Name(format!("bb{}", n.saturating_sub(1)));
+        self.f.local_get("__pc");
+        self.f.br_table(labels, default);
         for i in 0..n {
-            self.line(&format!("    ) ;; bb{} body", i));
+            self.f.end();
             let block = self.func.block(crate::BlockId(i as u32));
             for stmt in &block.stmts {
                 self.emit_stmt(stmt);
             }
             self.emit_terminator(&block.terminator);
         }
-        self.line("   )");
-        self.line("  )");
+        self.f.end();
+        self.f.end();
         if self.wasm_returns_value() {
-            self.line("  (unreachable)");
+            self.f.unreachable();
         }
     }
 
@@ -157,19 +151,19 @@ impl Emitter<'_> {
                 let then_shape = find_arm(handled, then_blk);
                 let else_shape = find_arm(handled, else_blk);
                 self.emit_operand(&cond);
-                self.line("     (if (then");
+                self.f.if_();
                 if let Some(s) = then_shape {
                     self.emit_shape(s, join_ft)?;
                 } else {
                     self.shape_branch_to(then_blk, join_ft)?;
                 }
-                self.line("     ) (else");
+                self.f.else_();
                 if let Some(s) = else_shape {
                     self.emit_shape(s, join_ft)?;
                 } else {
                     self.shape_branch_to(else_blk, join_ft)?;
                 }
-                self.line("     ))");
+                self.f.end();
                 if let Some(j) = join.as_deref() {
                     self.emit_shape(j, fallthrough)?;
                 }
@@ -177,27 +171,27 @@ impl Emitter<'_> {
             Some(other) => {
                 let entry = shape_entry(other);
                 self.emit_operand(&cond);
-                self.line("     (if (then");
+                self.f.if_();
                 if entry == Some(then_blk) {
                     self.emit_shape(other, fallthrough)?;
                 } else {
                     self.shape_branch_to(then_blk, fallthrough)?;
                 }
-                self.line("     ) (else");
+                self.f.else_();
                 if entry == Some(else_blk) {
                     self.emit_shape(other, fallthrough)?;
                 } else {
                     self.shape_branch_to(else_blk, fallthrough)?;
                 }
-                self.line("     ))");
+                self.f.end();
             }
             None => {
                 self.emit_operand(&cond);
-                self.line("     (if (then");
+                self.f.if_();
                 self.shape_branch_to(then_blk, fallthrough)?;
-                self.line("     ) (else");
+                self.f.else_();
                 self.shape_branch_to(else_blk, fallthrough)?;
-                self.line("     ))");
+                self.f.end();
             }
         }
         Ok(())
@@ -219,26 +213,26 @@ impl Emitter<'_> {
                 let join_ft = join.as_deref().and_then(shape_entry).or(fallthrough);
                 let id = self.fresh_shape_label();
                 let skip_lbl = format!("__sw{}", id);
-                self.line(&format!("     (block ${}", skip_lbl));
+                self.f.block(&skip_lbl);
                 for (k, b) in targets {
                     self.emit_operand(&value);
-                    self.line(&format!("     (i32.const {})", k));
-                    self.line("     (i32.eq)");
-                    self.line("     (if (then");
+                    self.f.i32_const(*k as i32);
+                    self.f.i32_eq();
+                    self.f.if_();
                     if let Some(s) = find_arm(handled, *b) {
                         self.emit_shape(s, join_ft)?;
                     } else {
                         self.shape_branch_to(*b, join_ft)?;
                     }
-                    self.line(&format!("     (br ${})", skip_lbl));
-                    self.line("     ))");
+                    self.f.br(&skip_lbl);
+                    self.f.end();
                 }
                 if let Some(s) = find_arm(handled, default) {
                     self.emit_shape(s, join_ft)?;
                 } else {
                     self.shape_branch_to(default, join_ft)?;
                 }
-                self.line("     )");
+                self.f.end();
                 if let Some(j) = join.as_deref() {
                     self.emit_shape(j, fallthrough)?;
                 }
@@ -247,12 +241,12 @@ impl Emitter<'_> {
                 let join_ft = fallthrough;
                 let id = self.fresh_shape_label();
                 let skip_lbl = format!("__sw{}", id);
-                self.line(&format!("     (block ${}", skip_lbl));
+                self.f.block(&skip_lbl);
                 for (k, b) in targets {
                     self.emit_operand(&value);
-                    self.line(&format!("     (i32.const {})", k));
-                    self.line("     (i32.eq)");
-                    self.line("     (if (then");
+                    self.f.i32_const(*k as i32);
+                    self.f.i32_eq();
+                    self.f.if_();
                     if other.and_then(shape_entry) == Some(*b) {
                         if let Some(s) = other {
                             self.emit_shape(s, join_ft)?;
@@ -260,8 +254,8 @@ impl Emitter<'_> {
                     } else {
                         self.shape_branch_to(*b, join_ft)?;
                     }
-                    self.line(&format!("     (br ${})", skip_lbl));
-                    self.line("     ))");
+                    self.f.br(&skip_lbl);
+                    self.f.end();
                 }
                 if other.and_then(shape_entry) == Some(default) {
                     if let Some(s) = other {
@@ -270,7 +264,7 @@ impl Emitter<'_> {
                 } else {
                     self.shape_branch_to(default, join_ft)?;
                 }
-                self.line("     )");
+                self.f.end();
             }
         }
         Ok(())
@@ -310,18 +304,18 @@ impl Emitter<'_> {
 
         self.shape_scopes.push(ShapeScope { continues, breaks });
         for lbl in break_lbls.iter().rev() {
-            self.line(&format!("     (block ${}", lbl));
+            self.f.block(lbl);
         }
-        self.line(&format!("      (loop ${}", cont_lbl));
+        self.f.loop_(&cont_lbl);
         self.emit_shape(inner, None)?;
-        self.line(&format!("      (br ${})", cont_lbl));
-        self.line("      )");
+        self.f.br(&cont_lbl);
+        self.f.end();
 
         if exits.is_empty() {
-            self.line("     )");
+            self.f.end();
         } else {
             for (_entry, arm) in &exits {
-                self.line("     )");
+                self.f.end();
                 self.emit_shape(arm, fallthrough)?;
             }
         }
@@ -347,14 +341,14 @@ impl Emitter<'_> {
             continues: BTreeMap::new(),
             breaks,
         });
-        self.line(&format!("     (block ${}", join_lbl));
+        self.f.block(&join_lbl);
         for (i, arm) in handled.iter().enumerate() {
             self.emit_shape(arm, join_ft)?;
             if i + 1 < handled.len() {
-                self.line(&format!("     (br ${})", join_lbl));
+                self.f.br(&join_lbl);
             }
         }
-        self.line("     )");
+        self.f.end();
         self.shape_scopes.pop();
 
         if let Some(n) = next {
@@ -371,11 +365,11 @@ impl Emitter<'_> {
         }
         for scope in self.shape_scopes.iter().rev() {
             if let Some(lbl) = scope.continues.get(&target) {
-                self.line(&format!("     (br ${})", lbl));
+                self.f.br(lbl);
                 return Ok(());
             }
             if let Some(lbl) = scope.breaks.get(&target) {
-                self.line(&format!("     (br ${})", lbl));
+                self.f.br(lbl);
                 return Ok(());
             }
         }

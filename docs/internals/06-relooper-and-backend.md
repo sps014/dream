@@ -1,6 +1,6 @@
 # 06 — Relooper & WAT Backend (`src/mir/relooper.rs`, `src/mir/emit/`)
 
-The backend turns optimized MIR into WebAssembly text (WAT). The hard part is control flow: MIR is a reducible CFG, but WASM has **no `goto`** — only structured `block`/`loop`/`if` and relative branches (`br`/`br_if`/`br_table`). The relooper bridges that gap.
+The backend turns optimized MIR into WebAssembly **binary** (then pretty-prints `.wat` with `wasmprinter`). The hard part is control flow: MIR is a reducible CFG, but WASM has **no `goto`** — only structured `block`/`loop`/`if` and relative branches (`br`/`br_if`/`br_table`). The relooper bridges that gap.
 
 ## The two-layer backend
 
@@ -8,14 +8,14 @@ The backend turns optimized MIR into WebAssembly text (WAT). The hard part is co
 flowchart TD
     mir[Optimized MIR function] --> rl[relooper::reloop]
     rl --> shape["Shape tree\n(Simple / Loop / Multiple)"]
-    shape --> emit[emit::emit_function]
+    shape --> emit[emit::FuncBuilder]
     mir --> emit
-    emit --> wat["WAT (func ...)"]
-    emit -. reuses .-> rt["runtime / object / memory / string layers"]
+    emit --> wasm[".wasm via wasm-encoder"]
+    emit -. parses .-> rt["runtime/*.wat (wast merge by name)"]
 ```
 
 - `relooper::reloop(func) -> Option<Shape>` recovers structured shapes.
-- `emit::emit_program / emit_function` walks the function and writes WAT, consulting the type interner for WASM value types and reusing the runtime layers for heap layout and strings.
+- `emit::emit_program / emit_function` walks the function into builder ops, consulting the type interner for WASM value types. Runtime helpers stay as handwritten WAT and are parsed into the same module.
 
 ## The relooper
 
@@ -117,8 +117,8 @@ flowchart LR
 - **Allocation/construction** (`New`, `UnionNew`, `ArrayLit`) emits an inline `$malloc(size, tag)` — tag from `mir::abi` — then sets the header/refcount, initializes fields/elements, and calls the user constructor (`$Type_constructor`) when one exists. `@shared class` instances allocate **four extra bytes** past their field layout for an embedded reentrant lock word (see `HEADER_LOCK_WORD_SIZE` in `mir::abi.rs`); retain/release for `@shared` types use atomic RMW helpers (`$retain_shared`, `$release_*` with an atomic prologue) instead of the ordinary non-atomic `$retain`/`$release_*` path.
 - **String constants** are interned into `[len][utf8][\0]` data segments, so identical literals share one pointer.
 
-The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are the hand-written `.wat` files in `src/mir/runtime/`, embedded via `include_str!` and stitched into every module with their `{TAG_*}`/`{minus}` placeholders resolved from `mir::abi`.
+The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are the hand-written `.wat` files in `crates/dream-mir/src/runtime/`, embedded via `include_str!`. Placeholders (`{TAG_*}`/`{minus}`) are substituted, then the text is parsed with `wast` and lowered into the same `ModuleBuilder` by name. Unreachable functions and unused func imports are dropped on the builder before `finish()`.
 
 ## Determinism in the backend
 
-The emitter must be a pure function of the MIR. Iterate `Vec`s in order; never iterate a `std::HashMap`. Any lookup tables you introduce (string pool, function index map) must be `IndexMap`/`BTreeMap` so two runs emit identical WAT. The `codegen_is_deterministic` e2e test enforces this.
+The emitter must be a pure function of the MIR. Iterate `Vec`s in order; never iterate a `std::HashMap`. Any lookup tables you introduce (string pool, function index map) must be `IndexMap`/`BTreeMap` so two runs emit identical `.wasm` (and therefore identical printer WAT). The `codegen_is_deterministic` e2e test enforces this.

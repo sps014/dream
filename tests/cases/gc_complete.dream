@@ -157,7 +157,9 @@ fun check_ref_counts() {
     // Keep `h` live across the probes; last-use destroy would otherwise release it immediately.
     System.println("rc.in_field=" + Debug.ref_count(n).to_string());
 
-    let arr = [n, n];
+    // `alias` must appear in a storing context so it is not an RC cursor (unused forwarding
+    // copies skip retain). The array still holds two refs to the same node.
+    let arr = [n, alias];
     System.println("rc.in_array=" + Debug.ref_count(n).to_string());
     System.println(h.label);
     System.println(arr.length.to_string());

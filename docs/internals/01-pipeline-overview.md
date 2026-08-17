@@ -19,10 +19,11 @@ flowchart TD
     hir --> mir["mir::lower\nHIR → CFG MIR"]
     mir --> rc["RcInsertion pass\n(make ownership explicit)"]
     rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
-    opt --> emit["mir::emit\nMIR → WAT (via relooper)"]
+    opt --> emit["mir::emit\nMIR → WASM bytes (wasm-encoder)"]
 
-    emit --> wat["WAT text (.wat)"]
-    wat --> abi["driver::abi::emit_wasm_and_abi\nwat→wasm [+ .abi.json for JS]"]
+    emit --> wasm[".wasm"]
+    wasm --> wat["pretty-print .wat (wasmprinter)"]
+    wasm --> abi["driver::abi sidecar\n.abi.json / .wgsl"]
 ```
 
 Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.
@@ -77,13 +78,13 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 ### 7. Backend — `src/mir/relooper.rs` + `src/mir/emit/`
 
 - **In:** optimized MIR.
-- **Out:** WAT text.
-- **How:** the relooper recovers structured shapes from the CFG; `emit` walks the function and emits WAT, reusing the runtime/memory/object/string layers. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
+- **Out:** WASM bytes (and pretty-printed WAT).
+- **How:** the relooper recovers structured shapes from the CFG; `emit` walks the function into a `wasm-encoder` builder. Hand-written `runtime/*.wat` is parsed with `wast` and merged by name. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
 
-### 8. Assembly emission — `src/driver/abi.rs`
+### 8. Artifact emission — `src/driver/compiler.rs` / `src/driver/abi.rs`
 
-- **In:** WAT text plus the AST root (for ABI metadata).
-- **Out:** `.wat`, `.wasm`, and an `.abi.json` describing extern imports/exports for the JS runtime.
+- **In:** encoded `.wasm` bytes plus the AST root (for ABI metadata).
+- **Out:** `.wasm` first, then `.wat` via `wasmprinter`, and an `.abi.json` describing extern imports/exports for the JS runtime.
 
 ## Where errors come from
 

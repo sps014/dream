@@ -5,6 +5,24 @@
 use super::*;
 use crate::async_emit::AsyncSlots;
 
+fn slot_mem_load(wt: &str) -> LoadKind {
+    match wt {
+        "f64" => LoadKind::F64,
+        "f32" => LoadKind::F32,
+        "i64" => LoadKind::I64,
+        _ => LoadKind::I32,
+    }
+}
+
+fn slot_mem_store(wt: &str) -> StoreKind {
+    match wt {
+        "f64" => StoreKind::F64,
+        "f32" => StoreKind::F32,
+        "i64" => StoreKind::I64,
+        _ => StoreKind::I32,
+    }
+}
+
 impl Emitter<'_> {
     /// Completes the current coroutine: drops frame-resident value(`struct`) locals, then
     /// `$dream_complete($self, value)` and returns `0` (the poll result).
@@ -25,53 +43,53 @@ impl Emitter<'_> {
                 if self.interner.is_value_type(decl.ty) && self.value_has_glue(decl.ty) {
                     // Value params/locals live at a fixed frame address held in the local; drop glue
                     // releases embedded refs retained when the frame took ownership.
-                    self.emit_value_drop(|s| s.line(&format!("     (local.get ${i})")), decl.ty);
+                    self.emit_value_drop(|s| s.f.local_get(&i.to_string()), decl.ty);
                 }
             }
         }
         // Debug-info: the coroutine is finishing, so pop its shadow call-stack frame. This is the only
         // exit path (awaits return without popping), so the frame count stays balanced.
         self.emit_debug_exit();
-        self.line("     (local.get $self)");
+        self.f.local_get("self");
         match value {
             Some(v) => {
                 let wt = self.wasm_ty(self.operand_ty(v));
                 match wt.as_str() {
                     "i64" => {
-                        self.line("     (local.get $self)");
+                        self.f.local_get("self");
                         self.emit_operand(v);
-                        self.line(&format!("     (i64.store offset={})", F_WIDE));
-                        self.line("     (local.get $self)");
-                        self.line("     (i32.const 0)");
+                        self.f.store(StoreKind::I64, (F_WIDE) as u32);
+                        self.f.local_get("self");
+                        self.f.i32_const(0);
                     }
                     "f32" => {
-                        self.line("     (local.get $self)");
+                        self.f.local_get("self");
                         self.emit_operand(v);
-                        self.line(&format!("     (f32.store offset={})", F_WIDE));
-                        self.line("     (local.get $self)");
-                        self.line("     (i32.const 0)");
+                        self.f.store(StoreKind::F32, (F_WIDE) as u32);
+                        self.f.local_get("self");
+                        self.f.i32_const(0);
                     }
                     "f64" => {
-                        self.line("     (local.get $self)");
+                        self.f.local_get("self");
                         self.emit_operand(v);
-                        self.line(&format!("     (f64.store offset={})", F_WIDE));
-                        self.line("     (local.get $self)");
-                        self.line("     (i32.const 0)");
+                        self.f.store(StoreKind::F64, (F_WIDE) as u32);
+                        self.f.local_get("self");
+                        self.f.i32_const(0);
                     }
                     _ => {
-                        self.line("     (local.get $self)");
+                        self.f.local_get("self");
                         self.emit_operand(v);
                     }
                 }
             }
             None => {
-                self.line("     (local.get $self)");
-                self.line("     (i32.const 0)");
+                self.f.local_get("self");
+                self.f.i32_const(0);
             }
         }
-        self.line("     (call $dream_complete)");
-        self.line("     (i32.const 0)");
-        self.line("     (return)");
+        self.f.call("dream_complete");
+        self.f.i32_const(0);
+        self.f.return_();
     }
 
     /// Emits the coroutine poll function: a state-machine dispatch over the whole lowered async body.
@@ -80,40 +98,20 @@ impl Emitter<'_> {
     /// the task and returns (recording its `resume` block as the next state), and completions run
     /// `$dream_complete`. A block that is some await's `resume` target first binds the settled result.
     pub(super) fn emit_async_state_machine(&mut self, slots: &AsyncSlots, poll_sym: &str) {
-        if self.debug {
-            self.line(&format!(
-                "(func ${} (@name \"{}__poll\") (param $self i32) (result i32)",
-                poll_sym, self.func.name
-            ));
-        } else {
-            self.line(&format!(
-                "(func ${} (param $self i32) (result i32)",
-                poll_sym
-            ));
-        }
+        self.f.set_name(poll_sym);
+        self.f.param("self", ValType::I32);
+        self.f.result(ValType::I32);
         for (i, decl) in self.func.locals.iter().enumerate() {
-            if let (true, Some(name)) = (self.debug, decl.name.as_ref()) {
-                self.line(&format!(
-                    " (local ${} (@name \"{}\") {})",
-                    i,
-                    name,
-                    self.wasm_ty(decl.ty)
-                ));
-            } else {
-                self.line(&format!(" (local ${} {})", i, self.wasm_ty(decl.ty)));
-            }
+            self.f
+                .local(&i.to_string(), wasm_val_ty(self.interner, decl.ty));
         }
-        // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` back array &
-        // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call, `$__src` the
-        // source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes` dynamic-length raw copy);
-        // `$__pc` drives the block dispatch, `$__scratch` holds the awaited future at a suspend.
-        self.line(" (local $__obj i32)");
-        self.line(" (local $__scratch i32)");
-        self.line(" (local $__len i32)");
-        self.line(" (local $__rel i32)");
-        self.line(" (local $__pc i32)");
-        self.line(" (local $__jsp i32)");
-        self.line(" (local $__src i32)");
+        self.f.local("__obj", ValType::I32);
+        self.f.local("__scratch", ValType::I32);
+        self.f.local("__len", ValType::I32);
+        self.f.local("__rel", ValType::I32);
+        self.f.local("__pc", ValType::I32);
+        self.f.local("__jsp", ValType::I32);
+        self.f.local("__src", ValType::I32);
 
         // Restore every frame-resident local; reference slots are zeroed after the move so ownership
         // lives in the WASM local (and is not double-freed from the frame) until the next suspend. A
@@ -123,19 +121,19 @@ impl Emitter<'_> {
         for (idx, _, wt) in &slots.entries {
             let off = slots.offsets[idx];
             if slots.value_locals.contains_key(idx) {
-                self.line(" local.get $self");
-                self.line(&format!(" i32.const {}", off));
-                self.line(" i32.add");
-                self.line(&format!(" local.set ${}", idx));
+                self.f.local_get("self");
+                self.f.i32_const(off);
+                self.f.i32_add();
+                self.f.local_set(&idx.to_string());
                 continue;
             }
-            self.line(" local.get $self");
-            self.line(&format!(" {} offset={}", slot_load(wt), off));
-            self.line(&format!(" local.set ${}", idx));
+            self.f.local_get("self");
+            self.f.load(slot_mem_load(wt), off as u32);
+            self.f.local_set(&idx.to_string());
             if slots.ref_locals.contains(idx) {
-                self.line(" local.get $self");
-                self.line(" i32.const 0");
-                self.line(&format!(" i32.store offset={}", off));
+                self.f.local_get("self");
+                self.f.i32_const(0);
+                self.f.store(StoreKind::I32, (off) as u32);
             }
         }
 
@@ -148,32 +146,32 @@ impl Emitter<'_> {
         }
 
         let n = self.func.blocks.len();
-        self.line(" local.get $self");
-        self.line(&format!(" i32.load offset={}", F_STATE));
-        self.line(" local.set $__pc");
+        self.f.local_get("self");
+        self.f.load(LoadKind::I32, (F_STATE) as u32);
+        self.f.local_set("__pc");
         // Debug-info: announce entry once, on the *initial* poll (state/pc still 0). Resume polls
         // (pc != 0, after an `await`) must not re-push the frame, and suspends must not pop it - the
         // frame is popped only on completion (see `emit_poll_complete`), keeping the shadow call
         // stack balanced across awaits.
         if let Some(dbg) = self.debug_fn {
-            self.line(&format!(
-                " (if (i32.eqz (local.get $__pc)) (then (call $__dbg_enter (i32.const {}))))",
-                dbg.id
-            ));
+            self.f.local_get("__pc");
+            self.f.i32_eqz();
+            self.f.if_();
+            self.f.i32_const(dbg.id as i32);
+            self.f.call("__dbg_enter");
+            self.f.end();
         }
-        self.line(" (block $host_exit");
-        self.line("  (loop $__loop");
+        self.f.block("host_exit");
+        self.f.loop_("__loop");
         for i in (0..n).rev() {
-            self.line(&format!("   (block $bb{}", i));
+            self.f.block(&format!("bb{i}"));
         }
-        let labels: String = (0..n).map(|i| format!("$bb{} ", i)).collect();
-        let default = format!("$bb{}", n.saturating_sub(1));
-        self.line(&format!(
-            "    (br_table {}{} (local.get $__pc))",
-            labels, default
-        ));
+        let labels: Vec<Label> = (0..n).map(|i| Label::Name(format!("bb{i}"))).collect();
+        let default = Label::Name(format!("bb{}", n.saturating_sub(1)));
+        self.f.local_get("__pc");
+        self.f.br_table(labels, default);
         for i in 0..n {
-            self.line(&format!("   ) ;; bb{} body", i));
+            self.f.end();
             if let Some(dest) = resume_binds.get(&(i as u32)) {
                 // Resume point: bind the settled result (`awaiting.result`) before continuing. A
                 // wide-scalar (`long`/`float`/`double`) result was boxed by the awaited coroutine's
@@ -182,42 +180,42 @@ impl Emitter<'_> {
                 // The child Future stays owned by the await operand local (saved/restored across
                 // suspend); poll RcInsertion releases it at AsyncComplete — do not free it here.
                 let dest_wt = dest.map(|d| self.wasm_ty(self.func.local_ty(d)));
-                self.line("     (local.get $self)");
-                self.line(&format!("     (i32.load offset={})", F_AWAITING));
-                self.line(&format!("     (i32.load offset={})", F_RESULT));
+                self.f.local_get("self");
+                self.f.load(LoadKind::I32, (F_AWAITING) as u32);
+                self.f.load(LoadKind::I32, (F_RESULT) as u32);
                 match dest_wt.as_deref() {
                     Some("i64") => {
-                        self.line("     (drop)");
-                        self.line("     (local.get $self)");
-                        self.line(&format!("     (i32.load offset={})", F_AWAITING));
-                        self.line(&format!("     (i64.load offset={})", F_WIDE));
+                        self.f.drop_();
+                        self.f.local_get("self");
+                        self.f.load(LoadKind::I32, (F_AWAITING) as u32);
+                        self.f.load(LoadKind::I64, (F_WIDE) as u32);
                         if let Some(d) = dest {
-                            self.line(&format!("     (local.set ${})", d.0));
+                            self.f.local_set(&(d.0).to_string());
                         }
                     }
                     Some("f32") => {
-                        self.line("     (drop)");
-                        self.line("     (local.get $self)");
-                        self.line(&format!("     (i32.load offset={})", F_AWAITING));
-                        self.line(&format!("     (f32.load offset={})", F_WIDE));
+                        self.f.drop_();
+                        self.f.local_get("self");
+                        self.f.load(LoadKind::I32, (F_AWAITING) as u32);
+                        self.f.load(LoadKind::F32, (F_WIDE) as u32);
                         if let Some(d) = dest {
-                            self.line(&format!("     (local.set ${})", d.0));
+                            self.f.local_set(&(d.0).to_string());
                         }
                     }
                     Some("f64") => {
-                        self.line("     (drop)");
-                        self.line("     (local.get $self)");
-                        self.line(&format!("     (i32.load offset={})", F_AWAITING));
-                        self.line(&format!("     (f64.load offset={})", F_WIDE));
+                        self.f.drop_();
+                        self.f.local_get("self");
+                        self.f.load(LoadKind::I32, (F_AWAITING) as u32);
+                        self.f.load(LoadKind::F64, (F_WIDE) as u32);
                         if let Some(d) = dest {
-                            self.line(&format!("     (local.set ${})", d.0));
+                            self.f.local_set(&(d.0).to_string());
                         }
-                        self.line("     (local.get $__obj)");
-                        self.line("     (call $release_generic)");
+                        self.f.local_get("__obj");
+                        self.f.call("release_generic");
                     }
                     _ => match dest {
-                        Some(d) => self.line(&format!("     (local.set ${})", d.0)),
-                        None => self.line("     (drop)"),
+                        Some(d) => self.f.local_set(&(d.0).to_string()),
+                        None => self.f.drop_(),
                     },
                 }
             }
@@ -227,12 +225,11 @@ impl Emitter<'_> {
             }
             self.emit_async_cfg_terminator(&block.terminator, slots);
         }
-        self.line("  )"); // loop
-        self.line(" )"); // $host_exit
-                         // Every reachable path suspends (returns) or completes (returns); the tail is unreachable but
-                         // keeps the `(result i32)` signature well-typed.
-        self.line(" (unreachable)");
-        self.line(")");
+        self.f.end(); // loop
+        self.f.end(); // $host_exit
+                      // Every reachable path suspends (returns) or completes (returns); the tail is unreachable but
+                      // keeps the `(result i32)` signature well-typed.
+        self.f.unreachable();
     }
 
     /// Terminator emission inside the coroutine poll dispatch: CFG edges re-dispatch through `$__pc`,
@@ -246,13 +243,13 @@ impl Emitter<'_> {
                 // Evaluate the awaited future, park the task on it, save live locals, and return so the
                 // scheduler can drive it; the poll re-enters at `resume` when the future settles.
                 self.emit_operand(future);
-                self.line("     (local.set $__scratch)");
-                self.line("     (local.get $self)");
-                self.line("     (local.get $__scratch)");
-                self.line(&format!("     (i32.store offset={})", F_AWAITING));
-                self.line("     (local.get $self)");
-                self.line(&format!("     (i32.const {})", resume.0));
-                self.line(&format!("     (i32.store offset={})", F_STATE));
+                self.f.local_set("__scratch");
+                self.f.local_get("self");
+                self.f.local_get("__scratch");
+                self.f.store(StoreKind::I32, (F_AWAITING) as u32);
+                self.f.local_get("self");
+                self.f.i32_const((resume.0) as i32);
+                self.f.store(StoreKind::I32, (F_STATE) as u32);
                 for (idx, _, wt) in &slots.entries {
                     // A value(`struct`) local's bytes already live at their fixed frame offset (the
                     // local is just `self + offset`, recomputed on restore) — nothing to save.
@@ -260,15 +257,15 @@ impl Emitter<'_> {
                         continue;
                     }
                     let off = slots.offsets[idx];
-                    self.line("     (local.get $self)");
-                    self.line(&format!("     (local.get ${})", idx));
-                    self.line(&format!("     ({} offset={})", slot_store(wt), off));
+                    self.f.local_get("self");
+                    self.f.local_get(&(idx).to_string());
+                    self.f.store(slot_mem_store(wt), off as u32);
                 }
-                self.line("     (local.get $self)");
-                self.line("     (local.get $__scratch)");
-                self.line("     (call $dream_await)");
-                self.line("     (i32.const 0)");
-                self.line("     (return)");
+                self.f.local_get("self");
+                self.f.local_get("__scratch");
+                self.f.call("dream_await");
+                self.f.i32_const(0);
+                self.f.return_();
             }
             Terminator::AsyncComplete(v) => {
                 let v = v.clone();
@@ -280,8 +277,8 @@ impl Emitter<'_> {
                 self.emit_poll_complete(v.as_ref());
             }
             // TCO never runs on async bodies, so a tail call cannot appear in a poll function.
-            Terminator::TailCall { .. } => self.line("     (unreachable) ;; tail call in async fn"),
-            Terminator::Unreachable => self.line("     (unreachable)"),
+            Terminator::TailCall { .. } => self.f.unreachable(),
+            Terminator::Unreachable => self.f.unreachable(),
         }
     }
 
@@ -292,23 +289,23 @@ impl Emitter<'_> {
             intrinsics::SLEEP => {
                 use crate::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
                 self.emit_operand(&args[0]);
-                self.line("     (local.set $__scratch)");
-                self.line(&format!("     (i32.const {F_SLOTS}) ;; F_SLOTS"));
-                self.line(&format!("     (i32.const {HOST_POLL_INDEX})"));
-                self.line(&format!("     (i32.const {KIND_HOST}) ;; KIND_HOST"));
-                self.line("     (call $dream_new_future)");
-                self.line("     (local.tee $__obj)");
-                self.line("     (local.get $__scratch)");
-                self.line("     (call $dream_set_timer)");
-                self.line("     (local.get $__obj)");
+                self.f.local_set("__scratch");
+                self.f.i32_const(F_SLOTS);
+                self.f.i32_const(HOST_POLL_INDEX);
+                self.f.i32_const(KIND_HOST);
+                self.f.call("dream_new_future");
+                self.f.local_tee("__obj");
+                self.f.local_get("__scratch");
+                self.f.call("dream_set_timer");
+                self.f.local_get("__obj");
             }
             intrinsics::PROMISE_ALL => {
                 self.emit_operand(&args[0]);
-                self.line("     (call $dream_all)");
+                self.f.call("dream_all");
             }
             intrinsics::PROMISE_ANY | intrinsics::PROMISE_RACE => {
                 self.emit_operand(&args[0]);
-                self.line("     (call $dream_any)");
+                self.f.call("dream_any");
             }
             _ => {}
         }

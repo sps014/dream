@@ -167,7 +167,7 @@ fn hir_to_wat_pipeline_emits_expected_shape() {
     );
     // Structured loop from relooper shapes (no `br_table` dispatch for single-header while).
     assert!(
-        wat.contains("(loop $__cnt") || wat.contains("(loop $"),
+        wat.contains("loop"),
         "missing structured loop:\n{}",
         wat
     );

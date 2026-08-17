@@ -40,6 +40,9 @@ pub(crate) struct ValueFrame {
     pub size: u32,
     /// 16-byte scratch used to land sret `Vector<T>` results before loading into a `v128` local.
     pub v128_spill: Option<u32>,
+    /// Per-local 16-byte slots so a `v128` register can be spilled when a call expects the
+    /// value-struct pointer ABI (`i32` address).
+    v128_slots: HashMap<Local, u32>,
 }
 
 impl ValueFrame {
@@ -64,6 +67,7 @@ impl ValueFrame {
 
         let mut kinds = HashMap::new();
         let mut slots = HashMap::new();
+        let mut v128_slots = HashMap::new();
         let mut size = 0u32;
         let mut has_v128 = false;
         for (i, decl) in func.locals.iter().enumerate() {
@@ -71,8 +75,15 @@ impl ValueFrame {
                 continue;
             }
             // `Vector<T>` locals (including inlined method `this`) are WASM `v128` registers.
+            // They still need a shadow slot so a non-SIMD callee can be passed an `i32` pointer.
             if is_simd_vector(layouts, decl.ty) && i >= param_count {
                 has_v128 = true;
+                let local = Local(i as u32);
+                if !size.is_multiple_of(16) {
+                    size += 16 - size % 16;
+                }
+                v128_slots.insert(local, size);
+                size += 16;
                 continue;
             }
             let local = Local(i as u32);
@@ -134,11 +145,16 @@ impl ValueFrame {
             kinds,
             size,
             v128_spill,
+            v128_slots,
         }
     }
 
     pub fn kind(&self, l: Local) -> Option<ValueLocalKind> {
         self.kinds.get(&l).copied()
+    }
+
+    pub fn v128_slot(&self, l: Local) -> Option<u32> {
+        self.v128_slots.get(&l).copied()
     }
 
     /// Every value local that owns a frame slot (params and owning locals), with its frame offset,

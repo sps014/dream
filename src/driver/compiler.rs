@@ -337,8 +337,8 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let (text, debug_map) = match target {
-                Target::Wasm => dream_mir::emit::emit_module_with_debug(
+            let (bytes, debug_map) = match target {
+                Target::Wasm => dream_mir::emit::emit_module_bytes(
                     &mir,
                     interner,
                     debug,
@@ -348,18 +348,22 @@ impl Compiler {
                         || matches!(self.crate_type, dream_sema::analyzer::CrateType::Lib),
                 ),
             };
-            (text, debug_map, live_imports)
+            (bytes, debug_map, live_imports)
         }));
         std::panic::set_hook(previous_hook);
         drop(hook_guard);
 
-        let (text, debug_map, live_imports) = codegen_result.map_err(|panic_payload| {
+        let (bytes, debug_map, live_imports) = codegen_result.map_err(|panic_payload| {
             let message = panic_message(&panic_payload);
             render_internal_error(&message);
             CompileError::Internal(message)
         })?;
 
         info!("finished code generation");
+        let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
+        fs::write(&wasm_path, &bytes)?;
+        info!("created file: {}", wasm_path.display());
+        let text = dream_mir::emit::print_wasm(&bytes);
         fs::write(out_path, &text)?;
         info!("created file: {}", out_path);
 
@@ -371,12 +375,9 @@ impl Compiler {
             info!("created debug map: {}", map_path);
         }
 
-        // Also emit a binary `.wasm` (what browsers/Node load) and, when requested, an `.abi.json`
-        // sidecar describing live extern imports and exports so the JS runtime can auto-marshal
-        // values. GPU shaders become a sibling `.wgsl` (+ `"gpu"` ABI section when ABI is on).
+        // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
         emit_wasm_and_abi(
             out_path,
-            &text,
             ast.get_root(),
             &gpu,
             &live_imports,

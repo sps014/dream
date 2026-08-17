@@ -151,6 +151,17 @@ pub const ATTR_FORCE_FREE: &str = "force_free";
 pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
 /// `Bytes.fromWire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
 pub const ATTR_WIRE_DECODE: &str = "wire_decode";
+/// `Vector<T>.lane_count()` — number of `T` lanes in a `v128`.
+pub const ATTR_SIMD_LANE_COUNT: &str = "simd_lane_count";
+pub const ATTR_SIMD_V128_SPLAT: &str = "simd_v128_splat";
+pub const ATTR_SIMD_V128_LOAD: &str = "simd_v128_load";
+pub const ATTR_SIMD_V128_STORE: &str = "simd_v128_store";
+pub const ATTR_SIMD_V128_ADD: &str = "simd_v128_add";
+pub const ATTR_SIMD_V128_SUB: &str = "simd_v128_sub";
+pub const ATTR_SIMD_V128_MUL: &str = "simd_v128_mul";
+pub const ATTR_SIMD_V128_MIN: &str = "simd_v128_min";
+pub const ATTR_SIMD_V128_MAX: &str = "simd_v128_max";
+pub const ATTR_SIMD_V128_SUM: &str = "simd_v128_sum";
 
 /// Every `@intrinsic("…")` key the compiler recognizes, in stable order for IDE completion.
 pub const ATTR_KEYS: &[&str] = &[
@@ -185,6 +196,16 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_FORCE_FREE,
     ATTR_WIRE_ENCODE,
     ATTR_WIRE_DECODE,
+    ATTR_SIMD_LANE_COUNT,
+    ATTR_SIMD_V128_SPLAT,
+    ATTR_SIMD_V128_LOAD,
+    ATTR_SIMD_V128_STORE,
+    ATTR_SIMD_V128_ADD,
+    ATTR_SIMD_V128_SUB,
+    ATTR_SIMD_V128_MUL,
+    ATTR_SIMD_V128_MIN,
+    ATTR_SIMD_V128_MAX,
+    ATTR_SIMD_V128_SUM,
 ];
 
 /// The operation a `@intrinsic("…")`-tagged static method lowers to. Derived once from the
@@ -255,6 +276,16 @@ pub enum IntrinsicOp {
     WireEncode,
     /// `Bytes.fromWire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].
     WireDecode,
+    SimdLaneCount,
+    SimdV128Splat,
+    SimdV128Load,
+    SimdV128Store,
+    SimdV128Add,
+    SimdV128Sub,
+    SimdV128Mul,
+    SimdV128Min,
+    SimdV128Max,
+    SimdV128Sum,
 }
 
 impl IntrinsicOp {
@@ -292,6 +323,16 @@ impl IntrinsicOp {
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,
+            ATTR_SIMD_LANE_COUNT => IntrinsicOp::SimdLaneCount,
+            ATTR_SIMD_V128_SPLAT => IntrinsicOp::SimdV128Splat,
+            ATTR_SIMD_V128_LOAD => IntrinsicOp::SimdV128Load,
+            ATTR_SIMD_V128_STORE => IntrinsicOp::SimdV128Store,
+            ATTR_SIMD_V128_ADD => IntrinsicOp::SimdV128Add,
+            ATTR_SIMD_V128_SUB => IntrinsicOp::SimdV128Sub,
+            ATTR_SIMD_V128_MUL => IntrinsicOp::SimdV128Mul,
+            ATTR_SIMD_V128_MIN => IntrinsicOp::SimdV128Min,
+            ATTR_SIMD_V128_MAX => IntrinsicOp::SimdV128Max,
+            ATTR_SIMD_V128_SUM => IntrinsicOp::SimdV128Sum,
             _ => return None,
         })
     }
@@ -314,5 +355,22 @@ impl IntrinsicOp {
             IntrinsicOp::PromiseRace => PROMISE_RACE,
             _ => return None,
         })
+    }
+
+    /// True for `Vector<T>` SIMD ops that the backend lowers inline (no `$simd_*` helper call).
+    pub fn is_simd(self) -> bool {
+        matches!(
+            self,
+            IntrinsicOp::SimdLaneCount
+                | IntrinsicOp::SimdV128Splat
+                | IntrinsicOp::SimdV128Load
+                | IntrinsicOp::SimdV128Store
+                | IntrinsicOp::SimdV128Add
+                | IntrinsicOp::SimdV128Sub
+                | IntrinsicOp::SimdV128Mul
+                | IntrinsicOp::SimdV128Min
+                | IntrinsicOp::SimdV128Max
+                | IntrinsicOp::SimdV128Sum
+        )
     }
 }

@@ -4,7 +4,7 @@
 //! the first poll, returns the frame pointer) and a **poll** function (resumable state machine between
 //! `await` points). The cooperative scheduler runtime lives in `mir/runtime/async.wat`.
 
-use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of};
+use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of, FuncBuilder};
 use super::lower::lower_async_poll_body;
 use super::passes::MirPass;
 use super::MirFunction;
@@ -153,21 +153,9 @@ pub(crate) fn slot_store(wt: &str) -> &'static str {
     }
 }
 
-pub(crate) fn slot_load(wt: &str) -> &'static str {
-    match wt {
-        "f64" => "f64.load",
-        "f32" => "f32.load",
-        "i64" => "i64.load",
-        _ => "i32.load",
-    }
-}
-
-/// Emits the constructor + poll WAT for one async function. The whole body is lowered to a coroutine
-/// CFG ([`lower_async_poll_body`]) in which `await` is a [`super::Terminator::Await`] suspend point;
-/// the poll is then a single state-machine dispatch (see [`emit_async_poll`]) that resumes at the
-/// `resume` block recorded in the future's `state`, so awaits work in any control-flow position.
+/// Emits the constructor WAT and poll [`FuncBuilder`] for one async function.
 #[allow(clippy::too_many_arguments)]
-pub fn emit_async_function(
+pub(crate) fn emit_async_function_parts(
     func: &MirFunction,
     interner: &TypeInterner,
     symbols: &HashMap<(dream_types::DefId, Vec<TypeId>), String>,
@@ -181,7 +169,8 @@ pub fn emit_async_function(
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
-) -> String {
+    intrinsics: &HashMap<dream_types::DefId, dream_abi::intrinsics::IntrinsicOp>,
+) -> (String, FuncBuilder) {
     let hir = func.hir_fn.as_ref().unwrap_or_else(|| {
         crate::internal_error!(
             "async function '{}' reached codegen without its HIR snapshot",
@@ -273,10 +262,8 @@ pub fn emit_async_function(
     }
     out.push_str(" local.get $self\n call $dream_enqueue\n local.get $self\n)\n\n");
 
-    // Poll: coroutine state machine over `body`'s CFG. Value-struct drop glue covers only the
-    // persistent user locals (params + declared `let`s); RC is MIR-managed via RcInsertion above.
     let user_local_count = hir.params.len() + hir.locals.len();
-    out.push_str(&emit_async_poll(
+    let poll = emit_async_poll(
         &body,
         interner,
         symbols,
@@ -292,8 +279,9 @@ pub fn emit_async_function(
         debug,
         locate_panics,
         debug_fn,
-    ));
-    out
+        intrinsics,
+    );
+    (out, poll)
 }
 
 pub fn emit_async_main_wrapper(entry_sym: &str, has_args_param: bool) -> String {

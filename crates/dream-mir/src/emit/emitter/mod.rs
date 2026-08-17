@@ -11,9 +11,14 @@
 //! - [`async_ops`]: async-coroutine poll emission (split out previously).
 //! - [`rvalue`]: `Rvalue` (expression) emission (split out previously).
 
+use super::builder::{
+    BlockTy, ExtractLane, FuncBuilder, Label, LoadKind, ModuleBuilder, Nullary, ReplaceLane,
+    StoreKind, ValType,
+};
 use super::*;
-use crate::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
+use crate::async_emit::{AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
 use crate::emit::valuetype::{is_simd_vector, ValueFrame, ValueLocalKind};
+use dream_abi::intrinsics::IntrinsicOp;
 use std::collections::HashSet;
 
 mod async_ops;
@@ -28,7 +33,7 @@ mod value_struct;
 /// this is for layout-free unit tests; the pipeline uses [`emit_program`]/[`emit_module`]).
 pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
     let empty_globals = HashMap::new();
-    emit_function_with(
+    finish_func_wat(emit_function_with(
         func,
         interner,
         &HashMap::new(),
@@ -43,7 +48,8 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         false,
         true,
         None,
-    )
+        &HashMap::new(),
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -62,7 +68,8 @@ pub(super) fn emit_function_with(
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
-) -> String {
+    intrinsics: &HashMap<DefId, IntrinsicOp>,
+) -> FuncBuilder {
     let mut e = Emitter::new(
         func,
         interner,
@@ -80,9 +87,10 @@ pub(super) fn emit_function_with(
         debug,
         locate_panics,
         debug_fn,
+        intrinsics,
     );
     e.emit();
-    e.out
+    e.f
 }
 
 /// Emits the poll function of an async coroutine: a single state-machine dispatch over the full
@@ -105,7 +113,8 @@ pub(crate) fn emit_async_poll(
     debug: bool,
     locate_panics: bool,
     debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
-) -> String {
+    intrinsics: &HashMap<DefId, IntrinsicOp>,
+) -> FuncBuilder {
     // Async bodies do not apply call-argument widening or value-struct shadow frames (frame storage
     // lives in the Future); empty maps disable those paths without extra plumbing.
     let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
@@ -128,15 +137,18 @@ pub(crate) fn emit_async_poll(
         debug,
         locate_panics,
         debug_fn,
+        intrinsics,
     );
     e.emit_async_state_machine(slots, poll_sym);
-    e.out
+    e.f
 }
 
 struct Emitter<'a> {
     func: &'a MirFunction,
     interner: &'a TypeInterner,
     symbols: &'a HashMap<(DefId, Vec<TypeId>), String>,
+    /// `@intrinsic` ops keyed by callee `DefId` (including monomorphized Vector methods).
+    intrinsics: &'a HashMap<DefId, IntrinsicOp>,
     /// Callee `(def, instance)` → parameter types, for implicit widening of call arguments.
     sigs: &'a HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
     layouts: &'a LayoutTable,
@@ -151,7 +163,7 @@ struct Emitter<'a> {
     global_tys: &'a HashMap<u32, TypeId>,
     /// Shadow-frame layout + ownership classification of this function's value-struct locals.
     frame: ValueFrame,
-    out: String,
+    f: FuncBuilder,
     /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
     async_parent: Option<&'a MirFunction>,
     /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
@@ -159,8 +171,8 @@ struct Emitter<'a> {
     /// released by MIR `Release` stmts from poll `RcInsertion`. Synthetic temps that follow are
     /// transient (their RC is still MIR-managed when owned).
     async_user_locals: usize,
-    /// Generate `@name` annotations
-    debug: bool,
+    /// Generate `@name` annotations (binary emit uses the name section instead).
+    _debug: bool,
     /// When true, [`Self::emit_panic`] builds file:line messages matching the string table; when
     /// false (release), it uses the shared base message only.
     locate_panics: bool,
@@ -201,12 +213,14 @@ impl<'a> Emitter<'a> {
         debug: bool,
         locate_panics: bool,
         debug_fn: Option<&'a crate::emit::debug_map::DebugFunction>,
+        intrinsics: &'a HashMap<DefId, IntrinsicOp>,
     ) -> Self {
         let frame = ValueFrame::compute(func, interner, layouts);
         Emitter {
             func,
             interner,
             symbols,
+            intrinsics,
             sigs,
             layouts,
             strings,
@@ -216,10 +230,10 @@ impl<'a> Emitter<'a> {
             value_glue,
             global_tys,
             frame,
-            out: String::new(),
+            f: FuncBuilder::new(func_symbol(func)),
             async_parent,
             async_user_locals,
-            debug,
+            _debug: debug,
             locate_panics,
             debug_fn,
             current_line: 0,
@@ -230,10 +244,6 @@ impl<'a> Emitter<'a> {
 }
 
 impl Emitter<'_> {
-    fn line(&mut self, s: &str) {
-        let _ = writeln!(self.out, "{}", s);
-    }
-
     /// The symbol for a call target: the resolved function symbol for `(def, instance args)` when
     /// known, else a `def{N}` fallback (runtime intrinsics and not-yet-emitted targets).
     fn callee_symbol(&self, callee: &crate::Callee) -> String {
@@ -245,105 +255,55 @@ impl Emitter<'_> {
     }
 
     fn emit(&mut self) {
-        let mut params: String = self
-            .func
-            .params
-            .iter()
-            .map(|p| {
-                let p_ty = self.wasm_ty(self.func.local_ty(*p));
-                let name = &self.func.locals[p.0 as usize].name;
-                if self.debug && name.is_some() {
-                    format!(
-                        " (param ${} (@name \"{}\") {})",
-                        p.0,
-                        name.as_ref().unwrap(),
-                        p_ty
-                    )
-                } else {
-                    format!(" (param ${} {})", p.0, p_ty)
-                }
-            })
-            .collect();
-        // A value(`struct`)-returning function uses the sret ABI: a hidden leading `$__sret` pointer
-        // names the caller-provided destination the result is copied into, and the function itself
-        // returns no WASM value.
-        let result = if self.returns_value_struct() {
-            params = format!(" (param $__sret i32){}", params);
-            String::new()
-        } else {
-            match self.interner.kind(self.func.ret) {
-                TyKind::Void => String::new(),
-                _ => format!(" (result {})", self.wasm_ty(self.func.ret)),
-            }
-        };
-        let sym = func_symbol(self.func);
-        if self.debug {
-            self.line(&format!(
-                "(func ${} (@name \"{}\"){}{}",
-                sym, self.func.name, params, result
-            ));
-        } else {
-            self.line(&format!("(func ${}{}{}", sym, params, result));
+        if self.returns_value_struct() {
+            self.f.param("__sret", ValType::I32);
+        }
+        for p in &self.func.params {
+            let ty = if self.is_v128_local(*p) {
+                ValType::V128
+            } else {
+                wasm_val_ty(self.interner, self.func.local_ty(*p))
+            };
+            self.f.param(&p.0.to_string(), ty);
+        }
+        if self.returns_value_struct() {
+            // sret is the leading param; no WASM result.
+        } else if !matches!(self.interner.kind(self.func.ret), TyKind::Void) {
+            self.f.result(wasm_val_ty(self.interner, self.func.ret));
         }
 
-        // Non-parameter locals. `$__pc` is only needed when shape emit falls back to PC dispatch
-        // (multi-entry loop bodies); declare it whenever the relooper shape needs that path.
         let param_count = self.func.params.len();
         for (i, decl) in self.func.locals.iter().enumerate() {
             if i < param_count {
                 continue;
             }
-            let wasm = self.wasm_local_ty(decl.ty);
-            if let (true, Some(name)) = (self.debug, decl.name.as_ref()) {
-                self.line(&format!("  (local ${} (@name \"{}\") {})", i, name, wasm));
+            let ty = if is_simd_vector(self.layouts, decl.ty) {
+                ValType::V128
             } else {
-                self.line(&format!("  (local ${} {})", i, wasm));
-            }
+                wasm_val_ty(self.interner, decl.ty)
+            };
+            self.f.local(&i.to_string(), ty);
         }
-        // Always reserve `$__pc`: shape emit may fall back to PC dispatch mid-body decision, and the
-        // local is cheap. Async poll declares its own copy in `emit_async_state_machine`.
-        self.line("  (local $__pc i32)");
+        self.f.local("__pc", ValType::I32);
         if self.frame.size > 0 {
-            // Saved shadow-stack pointer, restored before every return.
-            self.line("  (local $__saved_sp i32)");
+            self.f.local("__saved_sp", ValType::I32);
         }
-        // Scratch pointer holding the object under construction across field initialization
-        // (`New`/`ArrayLit`). Safe as a single slot: lowering materializes all args into operands,
-        // so allocations never nest within a single rvalue.
-        self.line("  (local $__obj i32)");
-        // Scratch length for `Buffer.alloc<T>(len)`: the count is needed for both the allocation size
-        // and the zero-fill, so it is materialized once here.
-        self.line("  (local $__len i32)");
-        // Scratch holding the old element count across a `Buffer.realloc<T>` (needed both to size the
-        // `$realloc` call and to zero-fill only the newly grown tail, if any).
-        self.line("  (local $__old_len i32)");
-        // Scratch holding the previous occupant of a reference field/element across a reassignment, so
-        // it can be released *after* the new value is stored (deferred release keeps a self-referential
-        // `obj.f = g(obj.f)` sound).
-        self.line("  (local $__rel i32)");
-        // Scratch holding the saved `$__sp` across a dynamic `js` call's argument-slot buffer (see
-        // `emit_js_call`): the buffer is bump-allocated below `$__sp` and released right after the
-        // single host crossing, so this need only survive one rvalue.
-        self.line("  (local $__jsp i32)");
-        // Scratch pointers used only by `weak`/`unowned` field stores (see `emit_weak_field_store`/
-        // `emit_unowned_field_store` in `statements.rs`): `$__wsrc` holds the freshly evaluated RHS
-        // `Option<T>` value (for `weak`) or plain reference value (for `unowned`) while the old
-        // occupant is torn down; `$__wbox` holds the freshly allocated private weak-box pointer.
-        self.line("  (local $__wsrc i32)");
-        self.line("  (local $__wbox i32)");
-        // Scratch holding the source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes`
-        // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
-        // once the destination allocation starts overwriting `$__obj`.
-        self.line("  (local $__src i32)");
-        self.line("  (local $__v128 v128)");
+        self.f.local("__obj", ValType::I32);
+        self.f.local("__len", ValType::I32);
+        self.f.local("__old_len", ValType::I32);
+        self.f.local("__rel", ValType::I32);
+        self.f.local("__jsp", ValType::I32);
+        self.f.local("__wsrc", ValType::I32);
+        self.f.local("__wbox", ValType::I32);
+        self.f.local("__src", ValType::I32);
+        self.f.local("__v128", ValType::V128);
 
         self.emit_value_frame_prologue();
-        // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
         if let Some(dbg) = self.debug_fn {
-            self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
+            self.f.i32_const(dbg.id as i32);
+            self.f.call("__dbg_enter");
         }
         self.emit_shaped_body();
-        self.line(")");
     }
 
     /// Emits the `dream_debug.exit` hook (pops the debugger's call-stack frame) right before a return,
@@ -351,7 +311,8 @@ impl Emitter<'_> {
     /// balanced regardless of which path exits the function.
     fn emit_debug_exit(&mut self) {
         if let Some(dbg) = self.debug_fn {
-            self.line(&format!("     (call $__dbg_exit (i32.const {}))", dbg.id));
+            self.f.i32_const((dbg.id) as i32);
+            self.f.call("__dbg_exit");
         }
     }
 
@@ -389,8 +350,8 @@ impl Emitter<'_> {
         } else {
             base.to_string()
         };
-        self.line(&format!("     (i32.const {})", self.string_addr(&msg)));
-        self.line("     (call $dream_panic)");
+        self.f.i32_const((self.string_addr(&msg)) as i32);
+        self.f.call("dream_panic");
     }
 
     /// Traps if the just-loaded `unowned` field value (top of stack) is the poison sentinel `0`
@@ -398,21 +359,21 @@ impl Emitter<'_> {
     /// otherwise leaves the value back on the stack unchanged. Runtime semantics for `unowned`: see
     /// `docs/language/memory.md`.
     fn emit_unowned_read_check(&mut self) {
-        self.line("     (local.set $__wsrc)");
-        self.line("     (local.get $__wsrc)");
-        self.line("     (i32.eqz)");
-        self.line("     (if (then");
+        self.f.local_set("__wsrc");
+        self.f.local_get("__wsrc");
+        self.f.i32_eqz();
+        self.f.if_();
         self.emit_panic(super::panic_msgs::UNOWNED_NULL_DEREF);
-        self.line("     ))");
-        self.line("     (local.get $__wsrc)");
+        self.f.end();
+        self.f.local_get("__wsrc");
     }
 
     /// Pushes the address of `base.field` (`base + offset`) onto the stack.
     fn field_addr(&mut self, base: crate::Local, offset: u32) {
-        self.line(&format!("     (local.get ${})", base.0));
+        self.f.local_get(&(base.0).to_string());
         if offset > 0 {
-            self.line(&format!("     (i32.const {})", offset));
-            self.line("     (i32.add)");
+            self.f.i32_const((offset) as i32);
+            self.f.i32_add();
         }
     }
 
@@ -424,11 +385,11 @@ impl Emitter<'_> {
     fn emit_bounds_check(&mut self, len_addr: impl FnOnce(&mut Self), index: &Operand) {
         self.emit_operand(index);
         len_addr(self);
-        self.line("     (i32.load)");
-        self.line("     (i32.ge_u)");
-        self.line("     (if (then");
+        self.f.load(LoadKind::I32, 0);
+        self.f.i32_ge_u();
+        self.f.if_();
         self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
-        self.line("     ))");
+        self.f.end();
     }
 
     /// Pushes the address of `base[index]` (`base + 4 + index * elem_size`) onto the stack. The
@@ -437,15 +398,15 @@ impl Emitter<'_> {
     fn elem_addr(&mut self, base: crate::Local, elem_ty: TypeId, index: &Operand, unchecked: bool) {
         let (size, _) = scalar_size(self.interner, elem_ty);
         if !unchecked {
-            self.emit_bounds_check(|s| s.line(&format!("     (local.get ${})", base.0)), index);
+            self.emit_bounds_check(|s| s.f.local_get(&(base.0).to_string()), index);
         }
-        self.line(&format!("     (local.get ${})", base.0));
-        self.line("     (i32.const 4)");
-        self.line("     (i32.add)");
+        self.f.local_get(&(base.0).to_string());
+        self.f.i32_const(4);
+        self.f.i32_add();
         self.emit_operand(index);
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (i32.mul)");
-        self.line("     (i32.add)");
+        self.f.i32_const((size) as i32);
+        self.f.i32_mul();
+        self.f.i32_add();
     }
 
     /// Emits `s[i]` as an inlined UTF-16 unit load. When `unchecked` is false, a located
@@ -454,23 +415,20 @@ impl Emitter<'_> {
         if !unchecked {
             self.emit_operand(i);
             self.emit_operand(s);
-            self.line("     (i32.load) ;; unit_len");
-            self.line("     (i32.ge_u)");
-            self.line("     (if (then");
+            self.f.load(LoadKind::I32, 0);
+            self.f.i32_ge_u();
+            self.f.if_();
             self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
-            self.line("     ))");
+            self.f.end();
         }
         self.emit_operand(s);
-        self.line(&format!(
-            "     (i32.const {})",
-            crate::abi::STRING_UTF8_OFFSET
-        ));
-        self.line("     (i32.add)");
+        self.f.i32_const(crate::abi::STRING_UTF8_OFFSET as i32);
+        self.f.i32_add();
         self.emit_operand(i);
-        self.line("     (i32.const 1)");
-        self.line("     (i32.shl)");
-        self.line("     (i32.add)");
-        self.line("     (i32.load16_u)");
+        self.f.i32_const(1);
+        self.f.i32_shl();
+        self.f.i32_add();
+        self.f.load(LoadKind::I32_16U, 0);
     }
 
     /// Emits `s.byte_at(i)` as an inlined payload byte load, with an optional byte-length check.
@@ -478,23 +436,20 @@ impl Emitter<'_> {
         if !unchecked {
             self.emit_operand(i);
             self.emit_operand(s);
-            self.line("     (i32.load)");
-            self.line("     (i32.const 1)");
-            self.line("     (i32.shl) ;; byte_size");
-            self.line("     (i32.ge_u)");
-            self.line("     (if (then");
+            self.f.load(LoadKind::I32, 0);
+            self.f.i32_const(1);
+            self.f.i32_shl();
+            self.f.i32_ge_u();
+            self.f.if_();
             self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
-            self.line("     ))");
+            self.f.end();
         }
         self.emit_operand(s);
-        self.line(&format!(
-            "     (i32.const {})",
-            crate::abi::STRING_UTF8_OFFSET
-        ));
-        self.line("     (i32.add)");
+        self.f.i32_const(crate::abi::STRING_UTF8_OFFSET as i32);
+        self.f.i32_add();
         self.emit_operand(i);
-        self.line("     (i32.add)");
-        self.line("     (i32.load8_u)");
+        self.f.i32_add();
+        self.f.load(LoadKind::I32_8U, 0);
     }
 
     /// The struct field's `(byte offset, type)` from the layout table, or `None` when `base` is not a
@@ -527,21 +482,19 @@ impl Emitter<'_> {
         }
     }
 
-    /// The load instruction for a value of `ty` (width- and float-aware; sub-word loads are unsigned).
-    fn load_instr(&self, ty: TypeId) -> &'static str {
-        load_instr_for(self.interner, ty)
+    fn load_kind(&self, ty: TypeId) -> LoadKind {
+        load_kind_for(self.interner, ty)
     }
 
-    /// The store instruction matching [`Self::load_instr`].
-    fn store_instr(&self, ty: TypeId) -> &'static str {
-        store_instr_for(self.interner, ty)
+    fn store_kind(&self, ty: TypeId) -> StoreKind {
+        store_kind_for(self.interner, ty)
     }
 
     fn emit_operand(&mut self, op: &Operand) {
         match op {
             Operand::Const(c) => self.emit_const(c),
-            Operand::Copy(Place::Local(l)) => self.line(&format!("     (local.get ${})", l.0)),
-            Operand::Copy(Place::Global(g)) => self.line(&format!("     (global.get $g{})", g.0)),
+            Operand::Copy(Place::Local(l)) => self.f.local_get(&(l.0).to_string()),
+            Operand::Copy(Place::Global(g)) => self.f.global_get(&format!("g{}", g.0)),
             Operand::Copy(Place::Field { base, field }) => {
                 if self.is_v128_local(*base) {
                     let lane = self
@@ -550,8 +503,8 @@ impl Emitter<'_> {
                         .and_then(|l| l.fields.get(*field))
                         .map(|f| f.offset / 4)
                         .unwrap_or(0);
-                    self.line(&format!("     (local.get ${})", base.0));
-                    self.line(&format!("     (i32x4.extract_lane {lane})"));
+                    self.f.local_get(&(base.0).to_string());
+                    self.f.extract_lane(ExtractLane::I32x4, lane as u8);
                     return;
                 }
                 if let Some(f) = self.field_layout_full(*base, *field) {
@@ -560,7 +513,7 @@ impl Emitter<'_> {
                     // A value-struct field is addressed inline, not loaded: reading it yields the
                     // address of its inline storage (the consumer copies where a value is needed).
                     if !self.interner.is_value_type(fty) {
-                        self.line(&format!("     ({})", self.load_instr(fty)));
+                        self.f.load(self.load_kind(fty), 0);
                     }
                     if is_unowned {
                         self.emit_unowned_read_check();
@@ -581,16 +534,16 @@ impl Emitter<'_> {
                 if let Some(ety) = self.array_elem_ty(*base) {
                     self.elem_addr(*base, ety, index, *unchecked);
                     if !self.interner.is_value_type(ety) {
-                        self.line(&format!("     ({})", self.load_instr(ety)));
+                        self.f.load(self.load_kind(ety), 0);
                     }
                 } else {
                     crate::internal_error!("missing array element type for read (base {:?})", base);
                 }
             }
             Operand::Copy(Place::Deref { ptr, elem_ty }) => {
-                self.line(&format!("     (local.get ${})", ptr.0));
+                self.f.local_get(&(ptr.0).to_string());
                 if !self.interner.is_value_type(*elem_ty) {
-                    self.line(&format!("     ({})", self.load_instr(*elem_ty)));
+                    self.f.load(self.load_kind(*elem_ty), 0);
                 }
             }
         }
@@ -598,15 +551,15 @@ impl Emitter<'_> {
 
     fn emit_const(&mut self, c: &Const) {
         match c {
-            Const::Int(v) => self.line(&format!("     (i32.const {})", v)),
-            Const::Long(v) => self.line(&format!("     (i64.const {})", v)),
-            Const::Float(v) => self.line(&format!("     (f64.const {})", v)),
-            Const::F32(v) => self.line(&format!("     (f32.const {})", v)),
-            Const::Bool(v) => self.line(&format!("     (i32.const {})", *v as i32)),
-            Const::Char(v) => self.line(&format!("     (i32.const {})", *v as u32)),
-            Const::Null => self.line("     (i32.const 0)"),
+            Const::Int(v) => self.f.i32_const(*v as i32),
+            Const::Long(v) => self.f.i64_const(*v),
+            Const::Float(v) => self.f.f64_const(*v),
+            Const::F32(v) => self.f.f32_const(*v),
+            Const::Bool(v) => self.f.i32_const(*v as i32),
+            Const::Char(v) => self.f.i32_const(*v as i32),
+            Const::Null => self.f.i32_const(0),
             Const::Str(s) => match self.strings.get(s) {
-                Some(addr) => self.line(&format!("     (i32.const {})", addr)),
+                Some(addr) => self.f.i32_const(*addr as i32),
                 None => crate::internal_error!("missing interned string: {}", s),
             },
         }
@@ -641,14 +594,6 @@ impl Emitter<'_> {
         wasm_ty_of(self.interner, ty).to_string()
     }
 
-    fn wasm_local_ty(&self, ty: TypeId) -> &'static str {
-        if is_simd_vector(self.layouts, ty) {
-            "v128"
-        } else {
-            wasm_ty_of(self.interner, ty)
-        }
-    }
-
     fn is_v128_local(&self, l: crate::Local) -> bool {
         let i = l.0 as usize;
         if i < self.func.params.len() {
@@ -659,53 +604,136 @@ impl Emitter<'_> {
     }
 
     fn emit_v128_spill_addr(&mut self) {
-        let off = self.frame.v128_spill.unwrap_or(0);
-        self.line("     (global.get $__sp)");
+        self.emit_frame_off(self.frame.v128_spill.unwrap_or(0));
+    }
+
+    fn emit_frame_off(&mut self, off: u32) {
+        self.f.global_get("__sp");
         if off > 0 {
-            self.line(&format!("     (i32.const {off})"));
-            self.line("     (i32.add)");
+            self.f.i32_const(off as i32);
+            self.f.i32_add();
         }
     }
 
-    fn emit_v128_sret_into_local(&mut self, dest: u32, callee: &crate::Callee, args: &[Operand]) {
-        self.emit_v128_spill_addr();
-        self.emit_call_args(callee, args);
-        self.line(&format!("     (call ${})", self.callee_symbol(callee)));
-        self.emit_v128_spill_addr();
-        self.line("     (v128.load)");
-        self.line(&format!("     (local.set ${dest})"));
+    fn emit_v128_slot_addr(&mut self, l: crate::Local) {
+        if let Some(off) = self.frame.v128_slot(l) {
+            self.emit_frame_off(off);
+        } else {
+            self.emit_v128_spill_addr();
+        }
     }
 
-    fn binop_instr(&self, op: BinOp, ty: TypeId) -> String {
-        let w = self.wasm_ty(ty);
+    /// Spills a `v128` local to its shadow slot and leaves the slot address on the stack (value-struct
+    /// pointer ABI for callees that were not SIMD-lowered).
+    pub(super) fn emit_v128_as_ptr(&mut self, l: crate::Local) {
+        self.emit_v128_slot_addr(l);
+        self.f.local_get(&(l.0).to_string());
+        self.f.store(StoreKind::V128, 0);
+        self.emit_v128_slot_addr(l);
+    }
+
+    fn emit_v128_sret_into_local(&mut self, dest: u32, callee: &crate::Callee, args: &[Operand]) {
+        let dest_l = crate::Local(dest);
+        self.emit_v128_slot_addr(dest_l);
+        self.emit_call_args(callee, args);
+        self.f.call(&self.callee_symbol(callee));
+        self.emit_v128_slot_addr(dest_l);
+        self.f.load(LoadKind::V128, 0);
+        self.f.local_set(&dest.to_string());
+    }
+
+    fn binop_instr(&self, op: BinOp, ty: TypeId) -> Nullary {
         let signed = !matches!(
             self.interner.kind(ty),
             TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
         );
-        let s = if signed { "_s" } else { "_u" };
-        let is_float = w == "f32" || w == "f64";
-        match op {
-            BinOp::Add => format!("{}.add", w),
-            BinOp::Sub => format!("{}.sub", w),
-            BinOp::Mul => format!("{}.mul", w),
-            BinOp::Div if is_float => format!("{}.div", w),
-            BinOp::Div => format!("{}.div{}", w, s),
-            BinOp::Rem => format!("{}.rem{}", w, s),
-            BinOp::Eq => format!("{}.eq", w),
-            BinOp::Ne => format!("{}.ne", w),
-            BinOp::Lt if is_float => format!("{}.lt", w),
-            BinOp::Lt => format!("{}.lt{}", w, s),
-            BinOp::Le if is_float => format!("{}.le", w),
-            BinOp::Le => format!("{}.le{}", w, s),
-            BinOp::Gt if is_float => format!("{}.gt", w),
-            BinOp::Gt => format!("{}.gt{}", w, s),
-            BinOp::Ge if is_float => format!("{}.ge", w),
-            BinOp::Ge => format!("{}.ge{}", w, s),
-            BinOp::And | BinOp::BitAnd => format!("{}.and", w),
-            BinOp::Or | BinOp::BitOr => format!("{}.or", w),
-            BinOp::BitXor => format!("{}.xor", w),
-            BinOp::Shl => format!("{}.shl", w),
-            BinOp::Shr => format!("{}.shr{}", w, s),
+        match (wasm_val_ty(self.interner, ty), op, signed) {
+            (ValType::I32, BinOp::Add, _) => Nullary::I32Add,
+            (ValType::I32, BinOp::Sub, _) => Nullary::I32Sub,
+            (ValType::I32, BinOp::Mul, _) => Nullary::I32Mul,
+            (ValType::I32, BinOp::Div, true) => Nullary::I32DivS,
+            (ValType::I32, BinOp::Div, false) => Nullary::I32DivU,
+            (ValType::I32, BinOp::Rem, true) => Nullary::I32RemS,
+            (ValType::I32, BinOp::Rem, false) => Nullary::I32RemU,
+            (ValType::I32, BinOp::Eq, _) => Nullary::I32Eq,
+            (ValType::I32, BinOp::Ne, _) => Nullary::I32Ne,
+            (ValType::I32, BinOp::Lt, true) => Nullary::I32LtS,
+            (ValType::I32, BinOp::Lt, false) => Nullary::I32LtU,
+            (ValType::I32, BinOp::Le, true) => Nullary::I32LeS,
+            (ValType::I32, BinOp::Le, false) => Nullary::I32LeU,
+            (ValType::I32, BinOp::Gt, true) => Nullary::I32GtS,
+            (ValType::I32, BinOp::Gt, false) => Nullary::I32GtU,
+            (ValType::I32, BinOp::Ge, true) => Nullary::I32GeS,
+            (ValType::I32, BinOp::Ge, false) => Nullary::I32GeU,
+            (ValType::I32, BinOp::And | BinOp::BitAnd, _) => Nullary::I32And,
+            (ValType::I32, BinOp::Or | BinOp::BitOr, _) => Nullary::I32Or,
+            (ValType::I32, BinOp::BitXor, _) => Nullary::I32Xor,
+            (ValType::I32, BinOp::Shl, _) => Nullary::I32Shl,
+            (ValType::I32, BinOp::Shr, true) => Nullary::I32ShrS,
+            (ValType::I32, BinOp::Shr, false) => Nullary::I32ShrU,
+            (ValType::I64, BinOp::Add, _) => Nullary::I64Add,
+            (ValType::I64, BinOp::Sub, _) => Nullary::I64Sub,
+            (ValType::I64, BinOp::Mul, _) => Nullary::I64Mul,
+            (ValType::I64, BinOp::Div, true) => Nullary::I64DivS,
+            (ValType::I64, BinOp::Div, false) => Nullary::I64DivU,
+            (ValType::I64, BinOp::Rem, true) => Nullary::I64RemS,
+            (ValType::I64, BinOp::Rem, false) => Nullary::I64RemU,
+            (ValType::I64, BinOp::Eq, _) => Nullary::I64Eq,
+            (ValType::I64, BinOp::Ne, _) => Nullary::I64Ne,
+            (ValType::I64, BinOp::Lt, true) => Nullary::I64LtS,
+            (ValType::I64, BinOp::Lt, false) => Nullary::I64LtU,
+            (ValType::I64, BinOp::Le, true) => Nullary::I64LeS,
+            (ValType::I64, BinOp::Le, false) => Nullary::I64LeU,
+            (ValType::I64, BinOp::Gt, true) => Nullary::I64GtS,
+            (ValType::I64, BinOp::Gt, false) => Nullary::I64GtU,
+            (ValType::I64, BinOp::Ge, true) => Nullary::I64GeS,
+            (ValType::I64, BinOp::Ge, false) => Nullary::I64GeU,
+            (ValType::I64, BinOp::And | BinOp::BitAnd, _) => Nullary::I64And,
+            (ValType::I64, BinOp::Or | BinOp::BitOr, _) => Nullary::I64Or,
+            (ValType::I64, BinOp::BitXor, _) => Nullary::I64Xor,
+            (ValType::I64, BinOp::Shl, _) => Nullary::I64Shl,
+            (ValType::I64, BinOp::Shr, true) => Nullary::I64ShrS,
+            (ValType::I64, BinOp::Shr, false) => Nullary::I64ShrU,
+            (ValType::F32, BinOp::Add, _) => Nullary::F32Add,
+            (ValType::F32, BinOp::Sub, _) => Nullary::F32Sub,
+            (ValType::F32, BinOp::Mul, _) => Nullary::F32Mul,
+            (ValType::F32, BinOp::Div, _) => Nullary::F32Div,
+            (ValType::F32, BinOp::Eq, _) => Nullary::F32Eq,
+            (ValType::F32, BinOp::Ne, _) => Nullary::F32Ne,
+            (ValType::F32, BinOp::Lt, _) => Nullary::F32Lt,
+            (ValType::F32, BinOp::Le, _) => Nullary::F32Le,
+            (ValType::F32, BinOp::Gt, _) => Nullary::F32Gt,
+            (ValType::F32, BinOp::Ge, _) => Nullary::F32Ge,
+            (ValType::F64, BinOp::Add, _) => Nullary::F64Add,
+            (ValType::F64, BinOp::Sub, _) => Nullary::F64Sub,
+            (ValType::F64, BinOp::Mul, _) => Nullary::F64Mul,
+            (ValType::F64, BinOp::Div, _) => Nullary::F64Div,
+            (ValType::F64, BinOp::Eq, _) => Nullary::F64Eq,
+            (ValType::F64, BinOp::Ne, _) => Nullary::F64Ne,
+            (ValType::F64, BinOp::Lt, _) => Nullary::F64Lt,
+            (ValType::F64, BinOp::Le, _) => Nullary::F64Le,
+            (ValType::F64, BinOp::Gt, _) => Nullary::F64Gt,
+            (ValType::F64, BinOp::Ge, _) => Nullary::F64Ge,
+            _ => crate::internal_error!("no WASM binop for {op:?} on {ty:?}"),
         }
     }
+}
+
+fn finish_func_wat(f: FuncBuilder) -> String {
+    let mut m = ModuleBuilder::new();
+    for g in f.global_names() {
+        m.global_i32(&g, true, 0);
+    }
+    for ty in f.type_names_used() {
+        m.intern_type(Some(&ty), vec![ValType::I32], vec![ValType::I32]);
+    }
+    m.table("__ft", 1, 1);
+    let name = f.name().to_string();
+    for c in f.callees() {
+        if c != name {
+            m.import_func("env", &c, &c, vec![ValType::I32], vec![ValType::I32]);
+        }
+    }
+    m.push_func(f);
+    m.finish_wat()
 }

@@ -138,6 +138,7 @@ pub(crate) mod panic_msgs {
     }
 }
 
+mod builder;
 pub mod debug_map;
 mod emitter;
 mod js_marshal;
@@ -150,7 +151,6 @@ mod tables;
 mod types;
 mod valuetype;
 mod wasm_types;
-mod wat_dce;
 
 // Flat internal re-exports so each submodule can `use super::*` and call sibling helpers
 // exactly as it did when this was one file. Kept private (not part of the crate API).
@@ -164,15 +164,16 @@ use tables::*;
 use types::*;
 use valuetype::*;
 use wasm_types::*;
-use wat_dce::*;
 
 pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym, ValueFrame, ValueLocalKind};
 
 // The external API of the backend, at the historical `crate::emit::…` paths.
+pub(crate) use builder::FuncBuilder;
+pub use builder::print_wasm;
 pub use debug_map::DebugModule;
 pub(crate) use emitter::emit_async_poll;
 pub use emitter::emit_function;
-pub use module::{emit_module, emit_module_with_debug, emit_program};
+pub use module::{emit_module, emit_module_bytes, emit_module_with_debug, emit_program};
 pub(crate) use tables::{func_symbol, poll_symbol};
 pub(crate) use wasm_types::wasm_ty_of;
 

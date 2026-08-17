@@ -102,7 +102,7 @@ impl Emitter<'_> {
             Statement::Retain(o) => {
                 let ty = self.operand_ty(o);
                 self.emit_operand(o);
-                self.line(&format!("     (call {})", retain_call(self.interner, ty)));
+                self.f.call(retain_call(self.interner, ty));
             }
             Statement::Release(o) => {
                 // Deep release by the operand's declared type: structs/unions/reference arrays run
@@ -115,18 +115,18 @@ impl Emitter<'_> {
                     "$release_generic".to_string()
                 };
                 self.emit_operand(o);
-                self.line(&format!("     (call {})", call));
+                self.f.call(&call);
             }
             Statement::Panic(msg) => {
                 self.emit_operand(msg);
-                self.line("     (call $dream_panic)");
+                self.f.call("dream_panic");
             }
             Statement::Call { callee, args } => {
                 if !self.try_emit_simd_call(callee, args, None::<fn(&mut Self)>, None) {
                     self.emit_call_args(callee, args);
-                    self.line(&format!("     (call ${})", self.callee_symbol(callee)));
+                    self.f.call(&self.callee_symbol(callee));
                     if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
-                        self.line("     (drop)");
+                        self.f.drop_();
                     }
                 }
             }
@@ -139,7 +139,7 @@ impl Emitter<'_> {
             } => {
                 self.emit_js_call(callee, target, via.as_ref(), method.as_ref(), args);
                 if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
-                    self.line("     (drop)");
+                    self.f.drop_();
                 }
             }
             Statement::InterfaceCall {
@@ -158,12 +158,12 @@ impl Emitter<'_> {
                     .map(|r| !matches!(self.interner.kind(r), TyKind::Void))
                     .unwrap_or(false);
                 if drops {
-                    self.line("     (drop)");
+                    self.f.drop_();
                 }
             }
             Statement::IndirectCall { target, sig, args } => {
                 if self.emit_indirect_call(target, *sig, args).is_some() {
-                    self.line("     (drop)");
+                    self.f.drop_();
                 }
             }
             Statement::Print { arg, ty, newline } => {
@@ -172,43 +172,43 @@ impl Emitter<'_> {
                 // string. `println` appends a trailing newline (`\n` = 10) via `$print_char`.
                 self.emit_operand(arg);
                 match self.interner.kind(*ty) {
-                    TyKind::Prim(PrimTy::Int) => self.line("     (call $print_int)"),
-                    TyKind::Prim(PrimTy::Char) => self.line("     (call $print_char)"),
-                    TyKind::Prim(PrimTy::String) => self.line("     (call $print_string)"),
+                    TyKind::Prim(PrimTy::Int) => self.f.call("print_int"),
+                    TyKind::Prim(PrimTy::Char) => self.f.call("print_char"),
+                    TyKind::Prim(PrimTy::String) => self.f.call("print_string"),
                     // Int/Char/String are handled above; every other primitive renders through its
                     // shared `$*_to_string` formatter and prints as a string.
                     TyKind::Prim(prim) => match prim_info(*prim).to_string {
                         Some(to_string) => {
-                            self.line(&format!("     (call {})", to_string));
-                            self.line("     (call $print_string)");
+                            self.f.call(to_string);
+                            self.f.call("print_string");
                         }
-                        None => self.line("     (call $print_int)"),
+                        None => self.f.call("print_int"),
                     },
                     // Enums are `i32` values at runtime; print their numeric value.
-                    TyKind::Enum(_) => self.line("     (call $print_int)"),
+                    TyKind::Enum(_) => self.f.call("print_int"),
                     // Arrays aren't self-describing at runtime (the header only says `TAG_ARRAY`), so
                     // the element-typed `to_string` is chosen statically here, then printed.
                     TyKind::Array(elem) => {
-                        self.line(&format!("     (call {})", array_to_string_sym(*elem)));
-                        self.line("     (call $print_string)");
+                        self.f.call(&array_to_string_sym(*elem));
+                        self.f.call("print_string");
                     }
                     // A value struct/union has no heap tag header, so it is rendered by its concrete
                     // `$<Type>_to_string` (chosen statically from the operand's type) and printed.
                     _ if self.interner.is_value_type(*ty) => {
                         if let Some(name) = self.value_name(*ty) {
-                            self.line(&format!("     (call ${}_to_string)", name));
-                            self.line("     (call $print_string)");
+                            self.f.call(&format!("{}_to_string", name));
+                            self.f.call("print_string");
                         } else {
-                            self.line("     (call $print_object)");
+                            self.f.call("print_object");
                         }
                     }
                     // Reference structs, unions, and `object` render through the tag-dispatching
                     // `$print_object` (which routes to each type's `to_string`).
-                    _ => self.line("     (call $print_object)"),
+                    _ => self.f.call("print_object"),
                 }
                 if *newline {
-                    self.line("     (i32.const 10)");
-                    self.line("     (call $print_char)");
+                    self.f.i32_const(10);
+                    self.f.call("print_char");
                 }
             }
             Statement::Nop => {}
@@ -226,7 +226,6 @@ impl Emitter<'_> {
                 splat_rhs,
                 ptr_addr,
             } => {
-                let simd_op = lane.binop_wat(*op).unwrap_or("f32x4.add");
                 if *ptr_addr {
                     self.emit_operand(dest);
                 } else {
@@ -237,23 +236,23 @@ impl Emitter<'_> {
                 } else {
                     self.emit_v128_array_addr(lhs, index, *lane);
                 }
-                self.line("     (v128.load)");
+                self.f.load(LoadKind::V128, 0);
                 if let Some(s) = splat_rhs {
                     self.emit_operand(s);
-                    self.line(&format!("     ({})", lane.splat_wat()));
+                    self.emit_simd_splat(*lane);
                 } else if *ptr_addr {
                     self.emit_operand(rhs);
-                    self.line("     (v128.load)");
+                    self.f.load(LoadKind::V128, 0);
                 } else {
                     self.emit_v128_array_addr(rhs, index, *lane);
-                    self.line("     (v128.load)");
+                    self.f.load(LoadKind::V128, 0);
                 }
-                self.line(&format!("     ({simd_op})"));
-                self.line("     (v128.store)");
+                self.emit_simd_binop(*lane, *op);
+                self.f.store(StoreKind::V128, 0);
             }
             Statement::ForceFree(o) => {
                 self.emit_operand(o);
-                self.line("     (call $free)");
+                self.f.call("free");
             }
             Statement::ArrayElemsCopy {
                 elem_ty,
@@ -266,29 +265,29 @@ impl Emitter<'_> {
                 // `memory.copy(dst+4+dst_off*esize, src+4+src_off*esize, count*esize)`.
                 let (esize, _) = scalar_size(self.interner, *elem_ty);
                 self.emit_operand(dst);
-                self.line("     (local.set $__obj) ;; dst array");
+                self.f.local_set("__obj");
                 self.emit_operand(src);
-                self.line("     (local.set $__src) ;; src array");
+                self.f.local_set("__src");
                 self.emit_operand(count);
-                self.line("     (local.set $__len) ;; element count");
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
+                self.f.local_set("__len");
+                self.f.local_get("__obj");
+                self.f.i32_const(4);
+                self.f.i32_add();
                 self.emit_operand(dst_off);
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (i32.add) ;; dst payload + offset");
-                self.line("     (local.get $__src)");
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.i32_add();
+                self.f.local_get("__src");
+                self.f.i32_const(4);
+                self.f.i32_add();
                 self.emit_operand(src_off);
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (i32.add) ;; src payload + offset");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul) ;; byte count");
-                self.line("     (memory.copy)");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.i32_add();
+                self.f.local_get("__len");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.memory_copy();
             }
             Statement::ArrayElemsFill {
                 elem_ty,
@@ -298,29 +297,29 @@ impl Emitter<'_> {
             } => {
                 let (esize, _) = scalar_size(self.interner, *elem_ty);
                 self.emit_operand(dst);
-                self.line("     (local.set $__obj) ;; dst array");
+                self.f.local_set("__obj");
                 self.emit_operand(count);
-                self.line("     (local.set $__len) ;; element count");
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
+                self.f.local_set("__len");
+                self.f.local_get("__obj");
+                self.f.i32_const(4);
+                self.f.i32_add();
                 self.emit_operand(dst_off);
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (i32.add) ;; dst payload + offset");
-                self.line("     (i32.const 0)");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul) ;; byte count");
-                self.line("     (memory.fill)");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.i32_add();
+                self.f.i32_const(0);
+                self.f.local_get("__len");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.memory_fill();
             }
             Statement::LockAcquire(o) => {
                 self.emit_lock_addr(o);
-                self.line("     (call $__lock_acquire)");
+                self.f.call("__lock_acquire");
             }
             Statement::LockRelease(o) => {
                 self.emit_lock_addr(o);
-                self.line("     (call $__lock_release)");
+                self.f.call("__lock_release");
             }
             Statement::ValueDrop(local) => {
                 if self.is_v128_local(*local) {
@@ -332,18 +331,20 @@ impl Emitter<'_> {
                     "ValueDrop on non-value local"
                 );
                 let l0 = local.0;
-                self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
+                self.emit_value_drop(|s| s.f.local_get(&(l0).to_string()), ty);
                 // Null RC fields so loop re-entry into an inlined region (value_store's pre-drop)
                 // only releases null. Nested inlines must not emit a second `ValueDrop` for the
                 // same local (the inliner skips already-`manual_drop` locals when collecting).
                 if let Some(layout) = self.layouts.get(ty) {
                     for f in &layout.fields {
                         if self.interner.is_rc_tracked(f.ty) {
-                            self.line(&format!("     (local.get ${})", l0));
+                            self.f.local_get(&(l0).to_string());
                             if f.offset > 0 {
-                                self.line(&format!("     (i32.const {}) (i32.add)", f.offset));
+                                self.f.i32_const((f.offset) as i32);
+                                self.f.i32_add();
                             }
-                            self.line("     (i32.const 0) (i32.store)");
+                            self.f.i32_const(0);
+                            self.f.store(StoreKind::I32, 0);
                         }
                     }
                 }
@@ -356,8 +357,8 @@ impl Emitter<'_> {
                 );
                 if self.value_has_glue(ty) {
                     if let Some(name) = self.value_name(ty) {
-                        self.line(&format!("     (local.get ${})", local.0));
-                        self.line(&format!("     (call {})", vs_retain_sym(&name)));
+                        self.f.local_get(&(local.0).to_string());
+                        self.f.call(&vs_retain_sym(&name));
                     }
                 }
             }
@@ -372,10 +373,10 @@ impl Emitter<'_> {
                 );
                 let size = self.value_size(ty);
                 if size > 0 {
-                    self.line(&format!("     (local.get ${})", local.0));
-                    self.line("     (i32.const 0)");
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line("     (memory.fill)");
+                    self.f.local_get(&(local.0).to_string());
+                    self.f.i32_const(0);
+                    self.f.i32_const((size) as i32);
+                    self.f.memory_fill();
                 }
             }
         }
@@ -390,8 +391,8 @@ impl Emitter<'_> {
         let size = self.layouts.get(ty).map(|l| l.size).unwrap_or(0);
         self.emit_operand(o);
         if size > 0 {
-            self.line(&format!("     (i32.const {})", size));
-            self.line("     (i32.add)");
+            self.f.i32_const((size) as i32);
+            self.f.i32_add();
         }
     }
 
@@ -413,28 +414,26 @@ impl Emitter<'_> {
         for (local, global, kind) in vars {
             self.emit_var_spill(local, global, kind);
         }
-        self.line(&format!(
-            "     (call $__dbg_line (i32.const {}) (i32.const {}))",
-            file_id, line
-        ));
+        self.f.i32_const(file_id as i32);
+        self.f.i32_const(line as i32);
+        self.f.call("__dbg_line");
     }
 
     /// Spills one named local into its `i64` pool global, widening/reinterpreting to preserve the
     /// exact bits so the host can decode the value back using the variable's declared kind.
     fn emit_var_spill(&mut self, local: u32, global: u32, kind: crate::emit::debug_map::SpillKind) {
         use crate::emit::debug_map::SpillKind as K;
-        let value = match kind {
-            K::I64 => format!("(local.get ${})", local),
-            K::F64 => format!("(i64.reinterpret_f64 (local.get ${}))", local),
-            K::F32 => format!(
-                "(i64.extend_i32_u (i32.reinterpret_f32 (local.get ${})))",
-                local
-            ),
-            // i32 locals (ints, bools, chars, enums, string/aggregate/reference pointers): keep the
-            // exact 32 bits via an unsigned extend.
-            K::I32 => format!("(i64.extend_i32_u (local.get ${}))", local),
-        };
-        self.line(&format!("     (global.set $__dbg_v{} {})", global, value));
+        self.f.local_get(&local.to_string());
+        match kind {
+            K::I64 => {}
+            K::F64 => self.f.i64_reinterpret_f64(),
+            K::F32 => {
+                self.f.i32_reinterpret_f32();
+                self.f.i64_extend_i32_u();
+            }
+            K::I32 => self.f.i64_extend_i32_u(),
+        }
+        self.f.global_set(&format!("__dbg_v{global}"));
     }
 
     fn emit_assign(&mut self, place: &Place, rvalue: &Rvalue) {
@@ -456,12 +455,12 @@ impl Emitter<'_> {
                         Rvalue::Use(Operand::Copy(Place::Local(src)))
                             if self.is_v128_local(*src) =>
                         {
-                            self.line(&format!("     (local.get ${})", src.0));
-                            self.line(&format!("     (local.set ${})", l.0));
+                            self.f.local_get(&(src.0).to_string());
+                            self.f.local_set(&(l.0).to_string());
                         }
                         Rvalue::Use(o) => {
                             self.emit_v128_operand(o);
-                            self.line(&format!("     (local.set ${})", l.0));
+                            self.f.local_set(&(l.0).to_string());
                         }
                         Rvalue::New { args, .. } => {
                             if let Some(v) = args.first() {
@@ -475,8 +474,8 @@ impl Emitter<'_> {
                                     _ => None,
                                 }
                                 .unwrap_or(crate::SimdLane::I32);
-                                self.line(&format!("     ({})", lane.splat_wat()));
-                                self.line(&format!("     (local.set ${})", l.0));
+                                self.emit_simd_splat(lane);
+                                self.f.local_set(&(l.0).to_string());
                             }
                         }
                         other => crate::internal_error!(
@@ -493,7 +492,7 @@ impl Emitter<'_> {
                             let copy_retain =
                                 !matches!(rvalue, Rvalue::Use(Operand::Copy(Place::Local(_))));
                             self.emit_value_store(
-                                |s| s.line(&format!("     (local.get ${})", l0)),
+                                |s| s.f.local_get(&(l0).to_string()),
                                 ty,
                                 rvalue,
                                 copy_retain,
@@ -506,20 +505,20 @@ impl Emitter<'_> {
                                 Rvalue::Use(o) => self.emit_operand_addr(o),
                                 _ => self.emit_rvalue(rvalue),
                             }
-                            self.line(&format!("     (local.set ${})", l0));
+                            self.f.local_set(&(l0).to_string());
                         }
                     }
                     return;
                 }
                 self.emit_rvalue(rvalue);
-                self.line(&format!("     (local.set ${})", l.0));
+                self.f.local_set(&(l.0).to_string());
             }
             Place::Global(g) => {
                 if let Some(&ty) = self.global_tys.get(&g.0) {
                     if self.interner.is_value_type(ty) {
                         let g0 = g.0;
                         self.emit_value_store(
-                            |s| s.line(&format!("     (global.get $g{})", g0)),
+                            |s| s.f.global_get(&format!("g{}", g0)),
                             ty,
                             rvalue,
                             true,
@@ -528,7 +527,7 @@ impl Emitter<'_> {
                     }
                 }
                 self.emit_rvalue(rvalue);
-                self.line(&format!("     (global.set $g{})", g.0));
+                self.f.global_set(&format!("g{}", g.0));
             }
             Place::Field { base, field } => {
                 if self.is_v128_local(*base) {
@@ -538,10 +537,10 @@ impl Emitter<'_> {
                         .and_then(|l| l.fields.get(*field))
                         .map(|f| f.offset / 4)
                         .unwrap_or(0);
-                    self.line(&format!("     (local.get ${})", base.0));
+                    self.f.local_get(&(base.0).to_string());
                     self.emit_rvalue(rvalue);
-                    self.line(&format!("     (i32x4.replace_lane {lane})"));
-                    self.line(&format!("     (local.set ${})", base.0));
+                    self.f.replace_lane(ReplaceLane::I32x4, lane as u8);
+                    self.f.local_set(&(base.0).to_string());
                     return;
                 }
                 if let Some(f) = self.field_layout_full(*base, *field) {
@@ -588,11 +587,7 @@ impl Emitter<'_> {
             Place::Deref { ptr, elem_ty } => {
                 let p = *ptr;
                 let ety = *elem_ty;
-                self.emit_place_store(
-                    ety,
-                    move |s| s.line(&format!("     (local.get ${})", p.0)),
-                    rvalue,
-                );
+                self.emit_place_store(ety, move |s| s.f.local_get(&(p.0).to_string()), rvalue);
             }
         }
     }
@@ -604,16 +599,16 @@ impl Emitter<'_> {
         lane: crate::SimdLane,
     ) {
         self.emit_operand(arr);
-        self.line("     (i32.const 4)");
-        self.line("     (i32.add)");
+        self.f.i32_const(4);
+        self.f.i32_add();
         self.emit_operand(index);
         let sh = lane.shift();
         if sh == 0 {
-            self.line("     (i32.add)");
+            self.f.i32_add();
         } else {
-            self.line(&format!("     (i32.const {})", sh));
-            self.line("     (i32.shl)");
-            self.line("     (i32.add)");
+            self.f.i32_const((sh) as i32);
+            self.f.i32_shl();
+            self.f.i32_add();
         }
     }
 
@@ -645,29 +640,29 @@ impl Emitter<'_> {
             && !take_transfer;
         if borrowed_ref {
             addr(self);
-            self.line("     (i32.load)");
-            self.line("     (local.set $__rel)");
+            self.f.load(LoadKind::I32, 0);
+            self.f.local_set("__rel");
             self.emit_rvalue(rvalue);
-            self.line("     (local.set $__src)");
-            self.line("     (local.get $__rel)");
-            self.line("     (local.get $__src)");
-            self.line("     (i32.ne)");
-            self.line("     (if (then");
+            self.f.local_set("__src");
+            self.f.local_get("__rel");
+            self.f.local_get("__src");
+            self.f.i32_ne();
+            self.f.if_();
             addr(self);
-            self.line("       (local.get $__src)");
-            self.line(&format!("       ({})", self.store_instr(ty)));
-            self.line("       (local.get $__src)");
-            self.line(&format!("       (call {})", retain_call(self.interner, ty)));
+            self.f.local_get("__src");
+            self.f.store(self.store_kind(ty), 0);
+            self.f.local_get("__src");
+            self.f.call(retain_call(self.interner, ty));
             let release = release_call(self.interner, self.layouts, ty);
-            self.line("       (local.get $__rel)");
-            self.line(&format!("       (call {})", release));
-            self.line("     ))");
+            self.f.local_get("__rel");
+            self.f.call(&release);
+            self.f.end();
             return;
         }
         let stash = self.stash_old_ref(ty, &addr);
         addr(self);
         self.emit_rvalue(rvalue);
-        self.line(&format!("     ({})", self.store_instr(ty)));
+        self.f.store(self.store_kind(ty), 0);
         self.retain_stored_rvalue(ty, rvalue);
         self.release_stash(ty, stash);
     }
@@ -686,7 +681,7 @@ impl Emitter<'_> {
     ) {
         addr(self);
         self.emit_rvalue(rvalue);
-        self.line(&format!("     ({})", self.store_instr(ty)));
+        self.f.store(self.store_kind(ty), 0);
     }
 
     /// Stores into a `weak` field (`ty` is `Option<T>` for a class `T`; see `docs/language/memory.md`
@@ -723,82 +718,80 @@ impl Emitter<'_> {
         // Evaluate the RHS normally (a fully-owned-or-borrowed `Option<T>` per the usual rules) and
         // peek at its bits.
         self.emit_rvalue(rvalue);
-        self.line("     (local.set $__wsrc)");
+        self.f.local_set("__wsrc");
 
         // Stash the old occupant's box pointer (read-only; freed only after the new box is in place).
         self.field_addr(base, offset);
-        self.line("     (i32.load)");
-        self.line("     (local.set $__rel)");
+        self.f.load(LoadKind::I32, 0);
+        self.f.local_set("__rel");
 
         // Allocate the fresh private box and copy the (discriminant, payload) bits into it, without
         // retaining the payload.
-        self.line(&format!("     (i32.const {})", box_size));
-        self.line("     (i32.const 0) ;; tag 0: never dispatched through $release_object");
-        self.line("     (call $malloc)");
-        self.line("     (local.set $__wbox)");
-        self.line("     (local.get $__wbox)");
-        self.line("     (local.get $__wsrc) (i32.load)");
-        self.line("     (i32.store)");
-        self.line(&format!(
-            "     (local.get $__wbox) (i32.const {}) (i32.add)",
-            payload_off
-        ));
-        self.line(&format!(
-            "     (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
-            payload_off
-        ));
-        self.line("     (i32.store)");
+        self.f.i32_const((box_size) as i32);
+        self.f.i32_const(0);
+        self.f.call("malloc");
+        self.f.local_set("__wbox");
+        self.f.local_get("__wbox");
+        self.f.local_get("__wsrc");
+        self.f.load(LoadKind::I32, 0);
+        self.f.store(StoreKind::I32, 0);
+        self.f.local_get("__wbox");
+        self.f.i32_const(payload_off as i32);
+        self.f.i32_add();
+        self.f.local_get("__wsrc");
+        self.f.i32_const(payload_off as i32);
+        self.f.i32_add();
+        self.f.load(LoadKind::I32, 0);
+        self.f.store(StoreKind::I32, 0);
 
         // Register the new box as watching its payload, if it's live.
-        self.line("     (local.get $__wsrc) (i32.load)");
-        self.line(&format!(
-            "     (i32.const {}) (i32.eq) (if (then",
-            some_disc
-        ));
-        self.line(&format!(
-            "       (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
-            payload_off
-        ));
-        self.line("       (local.get $__wbox)");
-        self.line("       (i32.const 0) ;; kind: weak");
-        self.line(&format!(
-            "       (i32.const {}) ;; extra: None's discriminant",
-            none_disc
-        ));
-        self.line("       (call $weak_register)");
-        self.line("     ))");
+        self.f.local_get("__wsrc");
+        self.f.load(LoadKind::I32, 0);
+        self.f.i32_const(some_disc);
+        self.f.i32_eq();
+        self.f.if_();
+        self.f.local_get("__wsrc");
+        self.f.i32_const(payload_off as i32);
+        self.f.i32_add();
+        self.f.load(LoadKind::I32, 0);
+        self.f.local_get("__wbox");
+        self.f.i32_const(0);
+        self.f.i32_const(none_disc);
+        self.f.call("weak_register");
+        self.f.end();
 
         // Store the new box into the field.
         self.field_addr(base, offset);
-        self.line("     (local.get $__wbox)");
-        self.line("     (i32.store)");
+        self.f.local_get("__wbox");
+        self.f.store(StoreKind::I32, 0);
 
         // Now that the new box is safely in place, tear down the old one: unregister it (if it
         // currently watches a live referent) and free it directly — never through
         // `$release_<Option_...>`, since the box was never a strong owner of its payload.
-        self.line("     (local.get $__rel)");
-        self.line("     (if (then");
-        self.line("       (local.get $__rel) (i32.load)");
-        self.line(&format!(
-            "       (i32.const {}) (i32.eq) (if (then",
-            some_disc
-        ));
-        self.line(&format!(
-            "         (local.get $__rel) (i32.const {}) (i32.add) (i32.load)",
-            payload_off
-        ));
-        self.line("         (local.get $__rel)");
-        self.line("         (call $weak_unregister)");
-        self.line("       ))");
-        self.line("       (local.get $__rel) (call $free)");
-        self.line("     ))");
+        self.f.local_get("__rel");
+        self.f.if_();
+        self.f.local_get("__rel");
+        self.f.load(LoadKind::I32, 0);
+        self.f.i32_const(some_disc);
+        self.f.i32_eq();
+        self.f.if_();
+        self.f.local_get("__rel");
+        self.f.i32_const(payload_off as i32);
+        self.f.i32_add();
+        self.f.load(LoadKind::I32, 0);
+        self.f.local_get("__rel");
+        self.f.call("weak_unregister");
+        self.f.end();
+        self.f.local_get("__rel");
+        self.f.call("free");
+        self.f.end();
 
         // The field never owns the RHS wrapper itself; release it if it was a fresh, owned value
         // (a borrowed copy is left untouched, matching the ordinary store rule).
         if !matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line("     (local.get $__wsrc)");
+            self.f.local_get("__wsrc");
             let call = release_call(self.interner, self.layouts, option_ty);
-            self.line(&format!("     (call {})", call));
+            self.f.call(&call);
         }
     }
 
@@ -816,38 +809,38 @@ impl Emitter<'_> {
     ) {
         // Unregister the old occupant, if any (no box to free — the field itself was the slot).
         self.field_addr(base, offset);
-        self.line("     (i32.load)");
-        self.line("     (local.set $__wsrc)");
-        self.line("     (local.get $__wsrc)");
-        self.line("     (if (then");
-        self.line("       (local.get $__wsrc)");
+        self.f.load(LoadKind::I32, 0);
+        self.f.local_set("__wsrc");
+        self.f.local_get("__wsrc");
+        self.f.if_();
+        self.f.local_get("__wsrc");
         self.field_addr(base, offset);
-        self.line("       (call $weak_unregister)");
-        self.line("     ))");
+        self.f.call("weak_unregister");
+        self.f.end();
 
         // Evaluate the RHS, store it directly (no retain), and register it as a new watcher of its
         // referent *before* possibly releasing it below — so an RHS that was its own referent's only
         // owner is correctly poisoned back to `0` right away, rather than left dangling.
         self.emit_rvalue(rvalue);
-        self.line("     (local.set $__wbox)");
+        self.f.local_set("__wbox");
         self.field_addr(base, offset);
-        self.line("     (local.get $__wbox)");
-        self.line("     (i32.store)");
-        self.line("     (local.get $__wbox)");
-        self.line("     (if (then");
-        self.line("       (local.get $__wbox)");
+        self.f.local_get("__wbox");
+        self.f.store(StoreKind::I32, 0);
+        self.f.local_get("__wbox");
+        self.f.if_();
+        self.f.local_get("__wbox");
         self.field_addr(base, offset);
-        self.line("       (i32.const 1) ;; kind: unowned");
-        self.line("       (i32.const 0) ;; extra: unused");
-        self.line("       (call $weak_register)");
-        self.line("     ))");
+        self.f.i32_const(1);
+        self.f.i32_const(0);
+        self.f.call("weak_register");
+        self.f.end();
 
         // The field never takes ownership of the RHS; give back its `+1` if it was a fresh, owned
         // value (a borrowed copy is left untouched).
         if !matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
-            self.line("     (local.get $__wbox)");
+            self.f.local_get("__wbox");
             let call = release_call(self.interner, self.layouts, field_ty);
-            self.line(&format!("     (call {})", call));
+            self.f.call(&call);
         }
     }
 
@@ -864,9 +857,10 @@ impl Emitter<'_> {
             let value = value.clone();
             self.emit_value_copy(
                 |s| {
-                    s.line("     (local.get $__obj)");
+                    s.f.local_get("__obj");
                     if offset > 0 {
-                        s.line(&format!("     (i32.const {}) (i32.add)", offset));
+                        s.f.i32_const((offset) as i32);
+                        s.f.i32_add();
                     }
                 },
                 |s| s.emit_operand_addr(&value),
@@ -875,13 +869,13 @@ impl Emitter<'_> {
             );
             return;
         }
-        self.line("     (local.get $__obj)");
+        self.f.local_get("__obj");
         if offset > 0 {
-            self.line(&format!("     (i32.const {})", offset));
-            self.line("     (i32.add)");
+            self.f.i32_const((offset) as i32);
+            self.f.i32_add();
         }
         self.emit_operand(value);
-        self.line(&format!("     ({})", self.store_instr(value_ty)));
+        self.f.store(self.store_kind(value_ty), 0);
         self.retain_container_value(value_ty, value);
     }
 
@@ -902,18 +896,15 @@ impl Emitter<'_> {
                 && self.interner.is_rc_tracked(value_ty)
                 && !take_param_has_other_real_uses(self.func, l.0)
             {
-                self.line("     (i32.const 0)");
-                self.line(&format!("     (local.set ${})", l.0));
+                self.f.i32_const(0);
+                self.f.local_set(&(l.0).to_string());
                 return;
             }
         }
         let borrowed = matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
         if self.interner.is_rc_tracked(value_ty) && borrowed {
             self.emit_operand(value);
-            self.line(&format!(
-                "     (call {})",
-                retain_call(self.interner, value_ty)
-            ));
+            self.f.call(retain_call(self.interner, value_ty));
         }
     }
 
@@ -927,8 +918,8 @@ impl Emitter<'_> {
             return false;
         }
         emit_addr(self);
-        self.line("     (i32.load)");
-        self.line("     (local.set $__rel)");
+        self.f.load(LoadKind::I32, 0);
+        self.f.local_set("__rel");
         true
     }
 
@@ -939,8 +930,8 @@ impl Emitter<'_> {
             return;
         }
         let call = release_call(self.interner, self.layouts, ty);
-        self.line("     (local.get $__rel)");
-        self.line(&format!("     (call {})", call));
+        self.f.local_get("__rel");
+        self.f.call(&call);
     }
 
     /// Like [`Self::retain_container_value`] but for a field/element written from an rvalue: a
@@ -955,18 +946,17 @@ impl Emitter<'_> {
     /// Writes a zero of `field_ty`'s width into the object under construction (`$__obj + offset`).
     /// Used to clear a struct before a user constructor runs (reused heap blocks are not zeroed).
     pub(super) fn zero_at_obj(&mut self, offset: u32, field_ty: TypeId) {
-        self.line("     (local.get $__obj)");
+        self.f.local_get("__obj");
         if offset > 0 {
-            self.line(&format!("     (i32.const {})", offset));
-            self.line("     (i32.add)");
+            self.f.i32_const((offset) as i32);
+            self.f.i32_add();
         }
-        let zero = match self.store_instr(field_ty) {
-            "f64.store" => "(f64.const 0)",
-            "f32.store" => "(f32.const 0)",
-            "i64.store" => "(i64.const 0)",
-            _ => "(i32.const 0)",
-        };
-        self.line(&format!("     {}", zero));
-        self.line(&format!("     ({})", self.store_instr(field_ty)));
+        match self.store_kind(field_ty) {
+            StoreKind::F64 => self.f.f64_const(0.0),
+            StoreKind::F32 => self.f.f32_const(0.0),
+            StoreKind::I64 => self.f.i64_const(0),
+            _ => self.f.i32_const(0),
+        }
+        self.f.store(self.store_kind(field_ty), 0);
     }
 }

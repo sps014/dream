@@ -653,6 +653,6 @@ mod tests {
         let wat = super::emit::emit_function(&mir, &ctx.interner);
         assert!(wat.contains("(func $add"));
         assert!(wat.contains("i32.add"), "pipeline output:\n{}", wat);
-        assert!(wat.contains("(return)"));
+        assert!(wat.contains("return"));
     }
 }

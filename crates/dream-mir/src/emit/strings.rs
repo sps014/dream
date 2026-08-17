@@ -519,23 +519,14 @@ fn utf16_byte_len(s: &str) -> u32 {
     2 * s.encode_utf16().count() as u32
 }
 
-/// Escapes an interned string's full heap-block bytes as `\HH` pairs: the 12-byte header
-/// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the string data header
-/// (`unit_len`, pad as little-endian i32s), then UTF-16 LE units. No NUL terminator.
-/// Written at the block start (the mapped address minus [`HEAP_HEADER_SIZE`]); the mapped address
-/// itself points at the unit_len word.
-pub(super) fn escape_data(s: &str) -> String {
+pub(super) fn string_block_bytes(s: &str) -> Vec<u8> {
     let units: Vec<u16> = s.encode_utf16().collect();
-    let mut out = String::new();
+    let mut out = Vec::new();
     for word in [0_i32, STRING_TAG, 1, units.len() as i32, 0] {
-        for b in word.to_le_bytes() {
-            let _ = write!(out, "\\{:02x}", b);
-        }
+        out.extend_from_slice(&word.to_le_bytes());
     }
     for u in units {
-        for b in u.to_le_bytes() {
-            let _ = write!(out, "\\{:02x}", b);
-        }
+        out.extend_from_slice(&u.to_le_bytes());
     }
     out
 }

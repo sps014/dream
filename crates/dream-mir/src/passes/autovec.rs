@@ -78,7 +78,7 @@ fn vectorize_loop(
         Some(c) => c,
         None => return false,
     };
-    if cand.lane.binop_wat(cand.op).is_none() {
+    if !cand.lane.supports_binop(cand.op) {
         return false;
     }
     let l = cand.lane.count();

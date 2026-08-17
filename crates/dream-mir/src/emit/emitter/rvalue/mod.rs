@@ -24,7 +24,7 @@ impl Emitter<'_> {
                 self.emit_operand(then_val);
                 self.emit_operand(else_val);
                 self.emit_operand(cond);
-                self.line("     (select)");
+                self.f.select();
             }
             Rvalue::Binary(op, a, b) => {
                 let ta = self.operand_ty(a);
@@ -35,9 +35,9 @@ impl Emitter<'_> {
                 if str_eq {
                     self.emit_operand(a);
                     self.emit_operand(b);
-                    self.line("     (call $string_eq)");
+                    self.f.call("string_eq");
                     if matches!(op, BinOp::Ne) {
-                        self.line("     (i32.eqz)");
+                        self.f.i32_eqz();
                     }
                 } else {
                     // The operation runs at one WASM width, so widen the narrower operand to the
@@ -45,24 +45,31 @@ impl Emitter<'_> {
                     // Without this a mixed-width pair emits e.g. `i64.gt_s` over an i32 operand,
                     // which fails WASM validation.
                     let common = self.wider_numeric(ta, tb);
-                    let w = self.wasm_ty(common);
                     // Integer `/`/`%` by zero would otherwise hit WASM's own opaque
                     // `integer divide by zero` trap (no message, no location); check explicitly and
                     // route through `$dream_panic` instead so the failure is diagnosable like every
                     // other runtime check.
-                    if matches!(op, BinOp::Div | BinOp::Rem) && (w == "i32" || w == "i64") {
+                    if matches!(op, BinOp::Div | BinOp::Rem)
+                        && matches!(
+                            wasm_val_ty(self.interner, common),
+                            ValType::I32 | ValType::I64
+                        )
+                    {
                         self.emit_operand(b);
                         self.emit_numeric_conv(tb, common);
-                        self.line(&format!("     ({}.eqz)", w));
-                        self.line("     (if (then");
+                        match wasm_val_ty(self.interner, common) {
+                            ValType::I64 => self.f.i64_eqz(),
+                            _ => self.f.i32_eqz(),
+                        }
+                        self.f.if_();
                         self.emit_panic(super::super::panic_msgs::DIVIDE_BY_ZERO);
-                        self.line("     ))");
+                        self.f.end();
                     }
                     self.emit_operand(a);
                     self.emit_numeric_conv(ta, common);
                     self.emit_operand(b);
                     self.emit_numeric_conv(tb, common);
-                    self.line(&format!("     ({})", self.binop_instr(*op, common)));
+                    self.f.nullary(self.binop_instr(*op, common));
                     // `byte` shares WASM's `i32` register type (see `wasm_types.rs`), so unlike
                     // every other integer primitive it is *not* naturally kept in range by its own
                     // arithmetic instruction — `i32.add`/`i32.sub`/`i32.mul`/`i32.shl` can produce a
@@ -76,8 +83,8 @@ impl Emitter<'_> {
                     if matches!(self.interner.kind(common), TyKind::Prim(PrimTy::Byte))
                         && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl)
                     {
-                        self.line("     (i32.const 255)");
-                        self.line("     (i32.and)");
+                        self.f.i32_const(255);
+                        self.f.i32_and();
                     }
                 }
             }
@@ -91,31 +98,51 @@ impl Emitter<'_> {
                             TyKind::Prim(PrimTy::Float | PrimTy::Double)
                         ) {
                             self.emit_operand(a);
-                            self.line(&format!("     ({}.neg)", self.wasm_ty(ty)));
+                            match wasm_val_ty(self.interner, ty) {
+                                ValType::F64 => self.f.f64_neg(),
+                                _ => self.f.f32_neg(),
+                            }
                         } else {
-                            self.line(&format!("     ({}.const 0)", self.wasm_ty(ty)));
+                            match wasm_val_ty(self.interner, ty) {
+                                ValType::I64 => self.f.i64_const(0),
+                                ValType::F32 => self.f.f32_const(0.0),
+                                ValType::F64 => self.f.f64_const(0.0),
+                                _ => self.f.i32_const(0),
+                            }
                             self.emit_operand(a);
-                            self.line(&format!("     ({}.sub)", self.wasm_ty(ty)));
+                            match wasm_val_ty(self.interner, ty) {
+                                ValType::I64 => self.f.i64_sub(),
+                                ValType::F32 => self.f.f32_sub(),
+                                ValType::F64 => self.f.f64_sub(),
+                                _ => self.f.i32_sub(),
+                            }
                         }
                     }
                     UnOp::Not => {
                         self.emit_operand(a);
-                        self.line("     (i32.eqz)");
+                        self.f.i32_eqz();
                     }
                     UnOp::BitNot => {
                         // No dedicated bitwise-complement instruction in WASM: `x ^ -1` flips every
                         // bit of the value's native width, which is exactly `~x` for a two's-complement
                         // integer.
-                        let wty = self.wasm_ty(ty);
                         self.emit_operand(a);
-                        self.line(&format!("     ({}.const -1)", wty));
-                        self.line(&format!("     ({}.xor)", wty));
+                        match wasm_val_ty(self.interner, ty) {
+                            ValType::I64 => {
+                                self.f.i64_const(-1);
+                                self.f.i64_xor();
+                            }
+                            _ => {
+                                self.f.i32_const(-1);
+                                self.f.i32_xor();
+                            }
+                        }
                         // `byte` shares WASM's `i32` register (see the `Rvalue::Binary` byte-masking
                         // comment above): flipping all 32 bits leaves the top 24 non-zero, so mask
                         // back down to `[0, 255]` immediately, same as every other byte-producing op.
                         if matches!(self.interner.kind(ty), TyKind::Prim(PrimTy::Byte)) {
-                            self.line("     (i32.const 255)");
-                            self.line("     (i32.and)");
+                            self.f.i32_const(255);
+                            self.f.i32_and();
                         }
                     }
                 }
@@ -128,7 +155,7 @@ impl Emitter<'_> {
                     // Vector<T> lane_count / sum: result left on the stack.
                 } else {
                     self.emit_call_args(callee, args);
-                    self.line(&format!("     (call ${sym})"));
+                    self.f.call(&sym);
                 }
             }
             Rvalue::IndirectCall { target, sig, args } => {
@@ -167,10 +194,7 @@ impl Emitter<'_> {
                             callee.def.0
                         )
                     });
-                self.line(&format!(
-                    "     (i32.const {}) ;; funcref def{}",
-                    idx, callee.def.0
-                ));
+                self.f.i32_const(idx as i32);
             }
             Rvalue::New {
                 def,
@@ -195,13 +219,10 @@ impl Emitter<'_> {
                     // blocks are not zeroed, so it must be zeroed explicitly, same as any field.
                     let is_shared = self.interner.is_shared_type(*ty);
                     let alloc_size = if is_shared { size + 4 } else { size };
-                    self.line(&format!("     (i32.const {})", alloc_size));
-                    self.line(&format!(
-                        "     (i32.const {}) ;; tag",
-                        self.type_tag(*ty, *def)
-                    ));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
+                    self.f.i32_const((alloc_size) as i32);
+                    self.f.i32_const(self.type_tag(*ty, *def));
+                    self.f.call("malloc");
+                    self.f.local_set("__obj");
                     if is_shared {
                         self.zero_at_obj(size, self.interner.int());
                     }
@@ -212,7 +233,7 @@ impl Emitter<'_> {
                         for &(off, fty) in &fields {
                             self.zero_at_obj(off, fty);
                         }
-                        self.line("     (local.get $__obj)");
+                        self.f.local_get("__obj");
                         for arg in args {
                             self.emit_operand(arg);
                         }
@@ -222,8 +243,8 @@ impl Emitter<'_> {
                             ret: self.interner.void(),
                             take_params: vec![],
                         });
-                        self.line(&format!("     (call ${})", sym));
-                        self.line("     (local.get $__obj)");
+                        self.f.call(&sym);
+                        self.f.local_get("__obj");
                     } else {
                         // Implicit zero-arg default constructor: leave every field at its zero
                         // value. Reused heap blocks are not zeroed, so zero each field explicitly.
@@ -231,7 +252,7 @@ impl Emitter<'_> {
                         for &(off, fty) in &fields {
                             self.zero_at_obj(off, fty);
                         }
-                        self.line("     (local.get $__obj)");
+                        self.f.local_get("__obj");
                     }
                 } else {
                     crate::internal_error!("missing layout for struct allocation (type {:?})", ty);
@@ -271,16 +292,13 @@ impl Emitter<'_> {
                         "union def{} variant {} arity ({} args) disagrees with its layout ({} fields)",
                         def.0, variant, args.len(), fields.len()
                     );
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line(&format!(
-                        "     (i32.const {}) ;; tag",
-                        self.type_tag(*ty, *def)
-                    ));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
-                    self.line("     (local.get $__obj)");
-                    self.line(&format!("     (i32.const {}) ;; discriminant", variant));
-                    self.line("     (i32.store)");
+                    self.f.i32_const((size) as i32);
+                    self.f.i32_const(self.type_tag(*ty, *def));
+                    self.f.call("malloc");
+                    self.f.local_set("__obj");
+                    self.f.local_get("__obj");
+                    self.f.i32_const(*variant as i32);
+                    self.f.store(StoreKind::I32, 0);
                     for (i, arg) in args.iter().enumerate() {
                         let &(off, fty) = fields.get(i).unwrap_or_else(|| {
                             crate::internal_error!(
@@ -292,7 +310,7 @@ impl Emitter<'_> {
                         });
                         self.store_at_obj(off, fty, arg);
                     }
-                    self.line("     (local.get $__obj)");
+                    self.f.local_get("__obj");
                 } else {
                     // A union that survived analysis always has a registered layout; a miss is a
                     // compiler bug, so trap loudly rather than emitting a null pointer.
@@ -320,46 +338,46 @@ impl Emitter<'_> {
                             esize
                         )
                     });
-                self.line(&format!("     (i32.const {})", size));
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
-                self.line("     (local.set $__obj)");
-                self.line("     (local.get $__obj)");
-                self.line(&format!("     (i32.const {})", elems.len()));
-                self.line("     (i32.store) ;; length");
+                self.f.i32_const((size) as i32);
+                self.f.i32_const(ARRAY_TAG);
+                self.f.call("malloc");
+                self.f.local_set("__obj");
+                self.f.local_get("__obj");
+                self.f.i32_const((elems.len()) as i32);
+                self.f.store(StoreKind::I32, 0);
                 for (i, e) in elems.iter().enumerate() {
                     self.store_at_obj(4 + esize * (i as u32), *elem_ty, e);
                 }
-                self.line("     (local.get $__obj)");
+                self.f.local_get("__obj");
             }
             Rvalue::ArrayNew { elem_ty, len } => {
                 // Block: `[len: i32][elem0..]`, zero-initialized (recycled freelist blocks are not
                 // zeroed, and reference-typed releases rely on null slots).
                 let (esize, _) = scalar_size(self.interner, *elem_ty);
                 self.emit_operand(len);
-                self.line("     (local.set $__len)");
+                self.f.local_set("__len");
                 // size = 4 + len * esize
-                self.line("     (i32.const 4)");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (i32.add)");
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
-                self.line("     (local.set $__obj)");
-                self.line("     (local.get $__obj)");
-                self.line("     (local.get $__len)");
-                self.line("     (i32.store) ;; length");
+                self.f.i32_const(4);
+                self.f.local_get("__len");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.i32_add();
+                self.f.i32_const(ARRAY_TAG);
+                self.f.call("malloc");
+                self.f.local_set("__obj");
+                self.f.local_get("__obj");
+                self.f.local_get("__len");
+                self.f.store(StoreKind::I32, 0);
                 // memory.fill(dst = obj+4, 0, len*esize)
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
-                self.line("     (i32.const 0)");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (memory.fill)");
-                self.line("     (local.get $__obj)");
+                self.f.local_get("__obj");
+                self.f.i32_const(4);
+                self.f.i32_add();
+                self.f.i32_const(0);
+                self.f.local_get("__len");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.memory_fill();
+                self.f.local_get("__obj");
             }
             Rvalue::Tuple { .. } => {
                 // Value tuples are always stored via `emit_value_store` / `construct_value_tuple`.
@@ -367,7 +385,7 @@ impl Emitter<'_> {
             }
             Rvalue::ArrayLen(o) => {
                 self.emit_operand(o);
-                self.line("     (i32.load) ;; array length is the first word");
+                self.f.load(LoadKind::I32, 0);
             }
             Rvalue::ToBytes { value, ty } => {
                 // `T[]` (a blittable-element array) has no static byte size — its length is a
@@ -381,30 +399,30 @@ impl Emitter<'_> {
                 if let TyKind::Array(elem_ty) = self.interner.kind(*ty) {
                     let (esize, _) = scalar_size(self.interner, *elem_ty);
                     self.emit_operand(value);
-                    self.line("     (local.set $__src) ;; source array");
-                    self.line("     (local.get $__src)");
-                    self.line("     (i32.load) ;; element count");
-                    self.line(&format!("     (i32.const {})", esize));
-                    self.line("     (i32.mul) ;; byte length");
-                    self.line("     (local.set $__len)");
-                    self.line("     (local.get $__len)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
-                    self.line("     (local.get $__obj)");
-                    self.line("     (local.get $__len)");
-                    self.line("     (i32.store) ;; byte length");
-                    self.line("     (local.get $__obj)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line("     (local.get $__src)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line("     (local.get $__len)");
-                    self.line("     (memory.copy)");
-                    self.line("     (local.get $__obj)");
+                    self.f.local_set("__src");
+                    self.f.local_get("__src");
+                    self.f.load(LoadKind::I32, 0);
+                    self.f.i32_const((esize) as i32);
+                    self.f.i32_mul();
+                    self.f.local_set("__len");
+                    self.f.local_get("__len");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.i32_const(ARRAY_TAG);
+                    self.f.call("malloc");
+                    self.f.local_set("__obj");
+                    self.f.local_get("__obj");
+                    self.f.local_get("__len");
+                    self.f.store(StoreKind::I32, 0);
+                    self.f.local_get("__obj");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.local_get("__src");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.local_get("__len");
+                    self.f.memory_copy();
+                    self.f.local_get("__obj");
                     return;
                 }
                 // Allocate a `byte[]` of `[len: i32][size bytes]`. `byte` elements are one byte, so
@@ -413,29 +431,29 @@ impl Emitter<'_> {
                 // double, bool, ...) is a raw WASM value on the stack with no address of its own, so
                 // it is written directly with the matching store instruction instead.
                 let size = self.value_size(*ty);
-                self.line(&format!("     (i32.const {}) ;; 4 + byte size", 4 + size));
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
-                self.line("     (local.set $__obj)");
-                self.line("     (local.get $__obj)");
-                self.line(&format!("     (i32.const {})", size));
-                self.line("     (i32.store) ;; byte length");
+                self.f.i32_const((4 + size) as i32);
+                self.f.i32_const(ARRAY_TAG);
+                self.f.call("malloc");
+                self.f.local_set("__obj");
+                self.f.local_get("__obj");
+                self.f.i32_const((size) as i32);
+                self.f.store(StoreKind::I32, 0);
                 if self.interner.is_value_type(*ty) {
                     // memory.copy(dst = obj+4, src = value address, size)
-                    self.line("     (local.get $__obj)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
+                    self.f.local_get("__obj");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
                     self.emit_operand_addr(value);
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line("     (memory.copy)");
+                    self.f.i32_const((size) as i32);
+                    self.f.memory_copy();
                 } else {
-                    self.line("     (local.get $__obj)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
+                    self.f.local_get("__obj");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
                     self.emit_operand(value);
-                    self.line(&format!("     ({})", self.store_instr(*ty)));
+                    self.f.store(self.store_kind(*ty), 0);
                 }
-                self.line("     (local.get $__obj)");
+                self.f.local_get("__obj");
             }
             Rvalue::FromBytes { bytes, ty } => {
                 // The `T[]` counterpart of the dynamic-length `ToBytes` array path above: the wire
@@ -445,30 +463,30 @@ impl Emitter<'_> {
                 if let TyKind::Array(elem_ty) = self.interner.kind(*ty) {
                     let (esize, _) = scalar_size(self.interner, *elem_ty);
                     self.emit_operand(bytes);
-                    self.line("     (local.set $__src) ;; wire byte[]");
-                    self.line("     (local.get $__src)");
-                    self.line("     (i32.load) ;; byte length");
-                    self.line("     (local.set $__len)");
-                    self.line("     (local.get $__len)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
-                    self.line("     (local.get $__obj)");
-                    self.line("     (local.get $__len)");
-                    self.line(&format!("     (i32.const {})", esize));
-                    self.line("     (i32.div_u) ;; element count");
-                    self.line("     (i32.store) ;; length");
-                    self.line("     (local.get $__obj)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line("     (local.get $__src)");
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line("     (local.get $__len)");
-                    self.line("     (memory.copy)");
-                    self.line("     (local.get $__obj)");
+                    self.f.local_set("__src");
+                    self.f.local_get("__src");
+                    self.f.load(LoadKind::I32, 0);
+                    self.f.local_set("__len");
+                    self.f.local_get("__len");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.i32_const(ARRAY_TAG);
+                    self.f.call("malloc");
+                    self.f.local_set("__obj");
+                    self.f.local_get("__obj");
+                    self.f.local_get("__len");
+                    self.f.i32_const((esize) as i32);
+                    self.f.i32_div_u();
+                    self.f.store(StoreKind::I32, 0);
+                    self.f.local_get("__obj");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.local_get("__src");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.local_get("__len");
+                    self.f.memory_copy();
+                    self.f.local_get("__obj");
                     return;
                 }
                 // A scalar `T` (int, double, bool, ...) is reconstructed by loading it straight out
@@ -479,23 +497,23 @@ impl Emitter<'_> {
                 let size = self.value_size(*ty);
                 if self.interner.is_value_type(*ty) {
                     let tag = self.type_tag(*ty, dream_types::DefId(0));
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line(&format!("     (i32.const {}) ;; tag", tag));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
+                    self.f.i32_const((size) as i32);
+                    self.f.i32_const(tag);
+                    self.f.call("malloc");
+                    self.f.local_set("__obj");
                     // memory.copy(dst = obj, src = bytes+4, size)
-                    self.line("     (local.get $__obj)");
+                    self.f.local_get("__obj");
                     self.emit_operand(bytes);
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line("     (memory.copy)");
-                    self.line("     (local.get $__obj)");
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.i32_const((size) as i32);
+                    self.f.memory_copy();
+                    self.f.local_get("__obj");
                 } else {
                     self.emit_operand(bytes);
-                    self.line("     (i32.const 4)");
-                    self.line("     (i32.add)");
-                    self.line(&format!("     ({})", self.load_instr(*ty)));
+                    self.f.i32_const(4);
+                    self.f.i32_add();
+                    self.f.load(self.load_kind(*ty), 0);
                 }
             }
             Rvalue::ArrayRealloc {
@@ -509,44 +527,44 @@ impl Emitter<'_> {
                 // a wrapped-negative (huge unsigned) size.
                 let (esize, _) = scalar_size(self.interner, *elem_ty);
                 self.emit_operand(array);
-                self.line("     (local.set $__obj) ;; old ptr");
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.load) ;; old length");
-                self.line("     (local.set $__old_len)");
+                self.f.local_set("__obj");
+                self.f.local_get("__obj");
+                self.f.load(LoadKind::I32, 0);
+                self.f.local_set("__old_len");
                 self.emit_operand(new_len);
-                self.line("     (local.set $__len)");
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.const 4)");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (i32.add)");
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $realloc)");
-                self.line("     (local.set $__obj) ;; new (possibly moved) ptr");
-                self.line("     (local.get $__obj)");
-                self.line("     (local.get $__len)");
-                self.line("     (i32.store) ;; length");
-                self.line("     (local.get $__len)");
-                self.line("     (local.get $__old_len)");
-                self.line("     (i32.gt_s)");
-                self.line("     (if (then");
-                self.line("      (local.get $__obj)");
-                self.line("      (i32.const 4)");
-                self.line("      (i32.add)");
-                self.line("      (local.get $__old_len)");
-                self.line(&format!("      (i32.const {})", esize));
-                self.line("      (i32.mul)");
-                self.line("      (i32.add) ;; dst = obj + 4 + old_len*esize");
-                self.line("      (i32.const 0)");
-                self.line("      (local.get $__len)");
-                self.line("      (local.get $__old_len)");
-                self.line("      (i32.sub)");
-                self.line(&format!("      (i32.const {})", esize));
-                self.line("      (i32.mul)");
-                self.line("      (memory.fill)");
-                self.line("     ))");
-                self.line("     (local.get $__obj)");
+                self.f.local_set("__len");
+                self.f.local_get("__obj");
+                self.f.i32_const(4);
+                self.f.local_get("__len");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.i32_add();
+                self.f.i32_const(ARRAY_TAG);
+                self.f.call("realloc");
+                self.f.local_set("__obj");
+                self.f.local_get("__obj");
+                self.f.local_get("__len");
+                self.f.store(StoreKind::I32, 0);
+                self.f.local_get("__len");
+                self.f.local_get("__old_len");
+                self.f.i32_gt_s();
+                self.f.if_();
+                self.f.local_get("__obj");
+                self.f.i32_const(4);
+                self.f.i32_add();
+                self.f.local_get("__old_len");
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.i32_add();
+                self.f.i32_const(0);
+                self.f.local_get("__len");
+                self.f.local_get("__old_len");
+                self.f.i32_sub();
+                self.f.i32_const((esize) as i32);
+                self.f.i32_mul();
+                self.f.memory_fill();
+                self.f.end();
+                self.f.local_get("__obj");
             }
             Rvalue::CharAt(s, i, unchecked) => self.emit_char_at(s, i, *unchecked),
             Rvalue::ByteAt(s, i, unchecked) => self.emit_byte_at(s, i, *unchecked),
@@ -556,8 +574,8 @@ impl Emitter<'_> {
                     self.emit_operand(p);
                 }
                 match n {
-                    2 => self.line("     (call $concat_strings)"),
-                    3 => self.line("     (call $concat_strings3)"),
+                    2 => self.f.call("concat_strings"),
+                    3 => self.f.call("concat_strings3"),
                     n => panic!("ICE: Concat expects 2 or 3 parts, got {}", n),
                 }
             }
@@ -569,7 +587,7 @@ impl Emitter<'_> {
                 self.emit_operand(prefix);
                 self.emit_operand(value);
                 self.emit_operand(suffix);
-                self.line("     (call $concat_str_int_str)");
+                self.f.call("concat_str_int_str");
             }
             Rvalue::ToString(o) => {
                 self.emit_operand(o);
@@ -579,32 +597,32 @@ impl Emitter<'_> {
                 // through the tag-dispatching `$object_to_string`.
                 if self.interner.is_value_type(oty) {
                     if let Some(name) = self.value_name(oty) {
-                        self.line(&format!("     (call ${}_to_string)", name));
+                        self.f.call(&format!("{}_to_string", name));
                         return;
                     }
                 }
                 // A `string` is already its own `to_string`; every other type has a formatter.
                 if let Some(call) = value_to_string_call(self.interner, oty) {
-                    self.line(&format!("     (call {})", call));
+                    self.f.call(&call);
                 }
             }
             Rvalue::EnumName { value, arms } => {
                 let empty = self.string_addr("");
                 self.emit_operand(value);
-                self.line("     (local.set $__len)");
+                self.f.local_set("__len");
                 // Nested `value == disc ? strptr : (...)`, terminating in the empty string.
                 for (disc, name) in arms {
                     let ptr = self.string_addr(name);
-                    self.line("     (local.get $__len)");
-                    self.line(&format!("     (i32.const {})", disc));
-                    self.line("     (i32.eq)");
-                    self.line("     (if (result i32)");
-                    self.line(&format!("      (then (i32.const {}))", ptr));
-                    self.line("      (else");
+                    self.f.local_get("__len");
+                    self.f.i32_const(*disc as i32);
+                    self.f.i32_eq();
+                    self.f.if_ty(BlockTy::I32);
+                    self.f.i32_const((ptr) as i32);
+                    self.f.else_();
                 }
-                self.line(&format!("     (i32.const {})", empty));
+                self.f.i32_const((empty) as i32);
                 for _ in arms {
-                    self.line("     ))");
+                    self.f.end();
                 }
             }
             Rvalue::HashCode(o) => {
@@ -612,7 +630,7 @@ impl Emitter<'_> {
                 let oty = self.operand_ty(o);
                 if self.interner.is_value_type(oty) {
                     if let Some(name) = self.value_name(oty) {
-                        self.line(&format!("     (call ${}_hash_code)", name));
+                        self.f.call(&format!("{}_hash_code", name));
                         return;
                     }
                 }
@@ -622,42 +640,40 @@ impl Emitter<'_> {
                         PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte,
                     )
                     | TyKind::Enum(_) => {}
-                    TyKind::Prim(PrimTy::Long | PrimTy::ULong) => {
-                        self.line("     (call $hash_long)")
-                    }
-                    TyKind::Prim(PrimTy::Float) => self.line("     (i32.reinterpret_f32)"),
-                    TyKind::Prim(PrimTy::Double) => self.line("     (call $hash_double)"),
-                    TyKind::Prim(PrimTy::String) => self.line("     (call $hash_string)"),
-                    _ => self.line("     (call $object_hash_code)"),
+                    TyKind::Prim(PrimTy::Long | PrimTy::ULong) => self.f.call("hash_long"),
+                    TyKind::Prim(PrimTy::Float) => self.f.i32_reinterpret_f32(),
+                    TyKind::Prim(PrimTy::Double) => self.f.call("hash_double"),
+                    TyKind::Prim(PrimTy::String) => self.f.call("hash_string"),
+                    _ => self.f.call("object_hash_code"),
                 }
             }
             Rvalue::StrLen(o) => {
                 self.emit_operand(o);
-                self.line("     (i32.load) ;; unit_len");
+                self.f.load(LoadKind::I32, 0);
             }
             Rvalue::StrByteSize(o) => {
                 self.emit_operand(o);
-                self.line("     (i32.load)");
-                self.line("     (i32.const 1)");
-                self.line("     (i32.shl) ;; unit_len * 2");
+                self.f.load(LoadKind::I32, 0);
+                self.f.i32_const(1);
+                self.f.i32_shl();
             }
             Rvalue::Cast(o, from, to) => self.emit_cast(o, *from, *to),
             Rvalue::IsType(o, target) => {
                 self.emit_operand(o);
-                self.line("     (call $object_tag)");
+                self.f.call("object_tag");
                 // The analyzer only admits `is` against a type with a concrete runtime tag; a
                 // `None` here means an unsupported target slipped through (compiler bug). Comparing
                 // against 0 would silently answer the wrong question, so fail loudly instead.
                 let tag = runtime_tag_for(self.interner, self.tags, *target).unwrap_or_else(|| {
                     crate::internal_error!("`is` target type {:?} has no runtime tag", target)
                 });
-                self.line(&format!("     (i32.const {})", tag));
-                self.line("     (i32.eq)");
+                self.f.i32_const(tag);
+                self.f.i32_eq();
             }
             Rvalue::Discriminant(o) => {
                 // The discriminant is the `i32` at offset 0 of the union block.
                 self.emit_operand(o);
-                self.line("     (i32.load) ;; union discriminant");
+                self.f.load(LoadKind::I32, 0);
             }
             Rvalue::UnionField {
                 base,
@@ -675,13 +691,13 @@ impl Emitter<'_> {
                 if let Some((off, fty)) = slot {
                     self.emit_operand(base);
                     if off > 0 {
-                        self.line(&format!("     (i32.const {})", off));
-                        self.line("     (i32.add)");
+                        self.f.i32_const((off) as i32);
+                        self.f.i32_add();
                     }
                     // A value-struct payload is addressed inline (its bytes live in the union block),
                     // so reading it yields the payload address rather than a load.
                     if !self.interner.is_value_type(fty) {
-                        self.line(&format!("     ({})", self.load_instr(fty)));
+                        self.f.load(self.load_kind(fty), 0);
                     }
                 } else {
                     crate::internal_error!(

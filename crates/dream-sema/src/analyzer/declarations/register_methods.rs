@@ -97,6 +97,15 @@ impl<'a> Analyzer<'a> {
                 &mangled_name,
                 generic_param_names(&method.generic_parameters),
             );
+            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) {
+                if let Some(def) = self
+                    .type_ctx
+                    .defs
+                    .lookup(DefKind::Function, &mangled_name)
+                {
+                    self.intrinsic_defs.push((def, key));
+                }
+            }
 
             let mut new_method = method.clone();
             new_method.name = synthetic_token(TokenKind::IdentifierToken, &mangled_name);

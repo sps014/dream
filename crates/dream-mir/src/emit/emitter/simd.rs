@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::SimdLane;
+use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::TyKind;
 
 impl Emitter<'_> {
@@ -39,66 +40,64 @@ impl Emitter<'_> {
         None
     }
 
-    /// Maps a callee symbol to a SIMD intrinsic key.
-    ///
-    /// Accepts only:
-    /// - exact `@intrinsic("simd_*")` keys from the symbol table, or
-    /// - monomorphized `Vector_<elem>_<op>` names with an allowlisted suffix.
-    ///
-    /// Never matches bare `*_add` / `*_sum` / `*_count` / `*_load_raw` on unrelated symbols
-    /// (`Vec2.sum`, `map_sum`, `debug_get_ref_count`, GPU `reduce_sum`, …).
-    fn simd_intrinsic_key(sym: &str) -> Option<&'static str> {
-        match sym {
-            "simd_v128_load" => Some("simd_v128_load"),
-            "simd_v128_store" => Some("simd_v128_store"),
-            "simd_v128_splat" => Some("simd_v128_splat"),
-            "simd_v128_add" => Some("simd_v128_add"),
-            "simd_v128_sub" => Some("simd_v128_sub"),
-            "simd_v128_mul" => Some("simd_v128_mul"),
-            "simd_v128_min" => Some("simd_v128_min"),
-            "simd_v128_max" => Some("simd_v128_max"),
-            "simd_v128_sum" => Some("simd_v128_sum"),
-            "simd_lane_count" => Some("simd_lane_count"),
-            _ => Self::vector_simd_key(sym),
+    fn simd_binop(lane: SimdLane, op: BinOp) -> Nullary {
+        match (lane, op) {
+            (SimdLane::F32, BinOp::Add) => Nullary::F32x4Add,
+            (SimdLane::F32, BinOp::Sub) => Nullary::F32x4Sub,
+            (SimdLane::F32, BinOp::Mul) => Nullary::F32x4Mul,
+            (SimdLane::I32, BinOp::Add) => Nullary::I32x4Add,
+            (SimdLane::I32, BinOp::Sub) => Nullary::I32x4Sub,
+            (SimdLane::I32, BinOp::Mul) => Nullary::I32x4Mul,
+            (SimdLane::I64, BinOp::Add) => Nullary::I64x2Add,
+            (SimdLane::I64, BinOp::Sub) => Nullary::I64x2Sub,
+            (SimdLane::I64, BinOp::Mul) => Nullary::I64x2Mul,
+            (SimdLane::F64, BinOp::Add) => Nullary::F64x2Add,
+            (SimdLane::F64, BinOp::Sub) => Nullary::F64x2Sub,
+            (SimdLane::F64, BinOp::Mul) => Nullary::F64x2Mul,
+            (SimdLane::I8, BinOp::Add) => Nullary::I8x16Add,
+            (SimdLane::I8, BinOp::Sub) => Nullary::I8x16Sub,
+            _ => crate::internal_error!("unsupported SIMD binop {op:?} for {lane:?}"),
         }
     }
 
-    /// `Vector_int_bin_add` / `Vector_float_load` / … — not `Vec2_sum` or `Foo_load_raw`.
-    fn vector_simd_key(sym: &str) -> Option<&'static str> {
-        if !sym.starts_with("Vector_") {
-            return None;
+    fn simd_min(lane: SimdLane) -> Nullary {
+        match lane {
+            SimdLane::F32 => Nullary::F32x4Min,
+            SimdLane::F64 => Nullary::F64x2Min,
+            SimdLane::I32 => Nullary::I32x4MinS,
+            SimdLane::I8 => Nullary::I8x16MinS,
+            SimdLane::I64 => crate::internal_error!("WASM SIMD has no i64x2.min"),
         }
-        // Longer suffixes first so `_load_raw` wins over `_load`, `_bin_add` over `_add`, etc.
-        const SUFFIXES: &[(&str, &str)] = &[
-            ("_load_raw", "simd_v128_load"),
-            ("_store_raw", "simd_v128_store"),
-            ("_splat_raw", "simd_v128_splat"),
-            ("_bin_add", "simd_v128_add"),
-            ("_bin_sub", "simd_v128_sub"),
-            ("_bin_mul", "simd_v128_mul"),
-            ("_bin_min", "simd_v128_min"),
-            ("_bin_max", "simd_v128_max"),
-            ("_reduce_sum", "simd_v128_sum"),
-            ("_lane_count", "simd_lane_count"),
-            // Public wrappers: owning `Vector` locals are `v128` registers, so these must lower
-            // inline rather than using the pointer sret ABI at the call site.
-            ("_load", "simd_v128_load"),
-            ("_store", "simd_v128_store"),
-            ("_splat", "simd_v128_splat"),
-            ("_add", "simd_v128_add"),
-            ("_sub", "simd_v128_sub"),
-            ("_mul", "simd_v128_mul"),
-            ("_min", "simd_v128_min"),
-            ("_max", "simd_v128_max"),
-            ("_sum", "simd_v128_sum"),
-            ("_count", "simd_lane_count"),
-        ];
-        for &(suffix, key) in SUFFIXES {
-            if sym.ends_with(suffix) {
-                return Some(key);
-            }
+    }
+
+    fn simd_max(lane: SimdLane) -> Nullary {
+        match lane {
+            SimdLane::F32 => Nullary::F32x4Max,
+            SimdLane::F64 => Nullary::F64x2Max,
+            SimdLane::I32 => Nullary::I32x4MaxS,
+            SimdLane::I8 => Nullary::I8x16MaxS,
+            SimdLane::I64 => crate::internal_error!("WASM SIMD has no i64x2.max"),
         }
-        None
+    }
+
+    fn simd_splat(lane: SimdLane) -> Nullary {
+        match lane {
+            SimdLane::F32 => Nullary::F32x4Splat,
+            SimdLane::F64 => Nullary::F64x2Splat,
+            SimdLane::I32 => Nullary::I32x4Splat,
+            SimdLane::I64 => Nullary::I64x2Splat,
+            SimdLane::I8 => Nullary::I8x16Splat,
+        }
+    }
+
+    fn simd_extract(lane: SimdLane) -> ExtractLane {
+        match lane {
+            SimdLane::F32 => ExtractLane::F32x4,
+            SimdLane::I32 => ExtractLane::I32x4,
+            SimdLane::F64 => ExtractLane::F64x2,
+            SimdLane::I64 => ExtractLane::I64x2,
+            SimdLane::I8 => ExtractLane::I8x16S,
+        }
     }
 
     /// Pushes a `v128` value: `local.get` for a register `Vector`, otherwise `v128.load` from an
@@ -106,25 +105,23 @@ impl Emitter<'_> {
     pub(super) fn emit_v128_operand(&mut self, op: &Operand) {
         if let Operand::Copy(Place::Local(l)) = op {
             if self.is_v128_local(*l) {
-                self.line(&format!("     (local.get ${})", l.0));
+                self.f.local_get(&(l.0).to_string());
                 return;
             }
         }
         self.emit_operand(op);
-        self.line("     (v128.load)");
+        self.f.load(LoadKind::V128, 0);
     }
 
     fn finish_v128<F: Fn(&mut Self)>(&mut self, dest_v128: Option<u32>, sret: Option<F>) {
         if let Some(d) = dest_v128 {
-            self.line(&format!("     (local.set ${d})"));
+            self.f.local_set(&d.to_string());
         } else if sret.is_some() {
-            self.line("     (v128.store)");
+            self.f.store(StoreKind::V128, 0);
         }
     }
 
     /// Emits a `Vector<T>` SIMD intrinsic in place of `call $simd_*`. Returns true when handled.
-    /// `dest_v128` is the owning `Vector` local to `local.set`; `sret` pushes a memory destination
-    /// address for a following `v128.store`.
     pub(super) fn try_emit_simd_call<F: Fn(&mut Self)>(
         &mut self,
         callee: &crate::Callee,
@@ -132,12 +129,20 @@ impl Emitter<'_> {
         sret: Option<F>,
         dest_v128: Option<u32>,
     ) -> bool {
-        let Some(key) = Self::simd_intrinsic_key(&self.callee_symbol(callee)) else {
+        let Some(key) = self
+            .intrinsics
+            .get(&callee.def)
+            .copied()
+            .or_else(|| IntrinsicOp::from_key(&self.callee_symbol(callee)))
+        else {
             return false;
         };
-        if key == "simd_lane_count" {
+        if !key.is_simd() {
+            return false;
+        }
+        if key == IntrinsicOp::SimdLaneCount {
             let lane = Self::simd_lane_of(callee, self.interner).unwrap_or(SimdLane::I32);
-            self.line(&format!("     (i32.const {})", lane.count()));
+            self.f.i32_const(lane.count() as i32);
             return true;
         }
         let Some(lane) = Self::simd_lane_of(callee, self.interner).or_else(|| {
@@ -155,7 +160,7 @@ impl Emitter<'_> {
             return false;
         };
         match key {
-            "simd_v128_splat" => {
+            IntrinsicOp::SimdV128Splat => {
                 if let Some(push) = sret.as_ref() {
                     push(self);
                 } else if dest_v128.is_none() {
@@ -164,11 +169,11 @@ impl Emitter<'_> {
                 if let Some(v) = args.first() {
                     self.emit_operand(v);
                 }
-                self.line(&format!("     ({})", lane.splat_wat()));
+                self.f.nullary(Self::simd_splat(lane));
                 self.finish_v128(dest_v128, sret);
                 true
             }
-            "simd_v128_load" => {
+            IntrinsicOp::SimdV128Load => {
                 if let Some(push) = sret.as_ref() {
                     push(self);
                 } else if dest_v128.is_none() {
@@ -177,41 +182,44 @@ impl Emitter<'_> {
                 if args.len() >= 2 {
                     self.emit_v128_array_addr(&args[0], &args[1], lane);
                 }
-                self.line("     (v128.load)");
+                self.f.load(LoadKind::V128, 0);
                 self.finish_v128(dest_v128, sret);
                 true
             }
-            "simd_v128_store" => {
+            IntrinsicOp::SimdV128Store => {
                 if args.len() >= 3 {
                     self.emit_v128_array_addr(&args[1], &args[2], lane);
                     self.emit_v128_operand(&args[0]);
-                    self.line("     (v128.store)");
+                    self.f.store(StoreKind::V128, 0);
                 }
                 true
             }
-            "simd_v128_add" | "simd_v128_sub" | "simd_v128_mul" | "simd_v128_min"
-            | "simd_v128_max" => {
+            IntrinsicOp::SimdV128Add
+            | IntrinsicOp::SimdV128Sub
+            | IntrinsicOp::SimdV128Mul
+            | IntrinsicOp::SimdV128Min
+            | IntrinsicOp::SimdV128Max => {
                 if let Some(push) = sret.as_ref() {
                     push(self);
                 } else if dest_v128.is_none() {
                     return false;
                 }
                 let op = match key {
-                    "simd_v128_add" => lane.binop_wat(BinOp::Add).unwrap_or("i32x4.add"),
-                    "simd_v128_sub" => lane.binop_wat(BinOp::Sub).unwrap_or("i32x4.sub"),
-                    "simd_v128_mul" => lane.binop_wat(BinOp::Mul).unwrap_or("i32x4.mul"),
-                    "simd_v128_min" => lane.min_wat(),
-                    _ => lane.max_wat(),
+                    IntrinsicOp::SimdV128Add => Self::simd_binop(lane, BinOp::Add),
+                    IntrinsicOp::SimdV128Sub => Self::simd_binop(lane, BinOp::Sub),
+                    IntrinsicOp::SimdV128Mul => Self::simd_binop(lane, BinOp::Mul),
+                    IntrinsicOp::SimdV128Min => Self::simd_min(lane),
+                    _ => Self::simd_max(lane),
                 };
                 if args.len() >= 2 {
                     self.emit_v128_operand(&args[0]);
                     self.emit_v128_operand(&args[1]);
                 }
-                self.line(&format!("     ({op})"));
+                self.f.nullary(op);
                 self.finish_v128(dest_v128, sret);
                 true
             }
-            "simd_v128_sum" => {
+            IntrinsicOp::SimdV128Sum => {
                 if let Some(v) = args.first() {
                     self.emit_v128_operand(v);
                     self.emit_v128_sum(lane);
@@ -222,64 +230,45 @@ impl Emitter<'_> {
         }
     }
 
+    pub(super) fn emit_simd_splat(&mut self, lane: SimdLane) {
+        self.f.nullary(Self::simd_splat(lane));
+    }
+
+    pub(super) fn emit_simd_binop(&mut self, lane: SimdLane, op: BinOp) {
+        self.f.nullary(Self::simd_binop(lane, op));
+    }
+
     fn emit_v128_sum(&mut self, lane: SimdLane) {
+        let extract = Self::simd_extract(lane);
+        let n = lane.count() as u8;
+        self.f.local_set("__v128");
         match lane {
-            SimdLane::F32 => {
-                self.line("     (local.set $__v128)");
-                self.line("     (local.get $__v128)");
-                self.line("     (f32x4.extract_lane 0)");
-                self.line("     (local.get $__v128)");
-                self.line("     (f32x4.extract_lane 1)");
-                self.line("     (f32.add)");
-                self.line("     (local.get $__v128)");
-                self.line("     (f32x4.extract_lane 2)");
-                self.line("     (f32.add)");
-                self.line("     (local.get $__v128)");
-                self.line("     (f32x4.extract_lane 3)");
-                self.line("     (f32.add)");
-            }
-            SimdLane::I32 => {
-                self.line("     (local.set $__v128)");
-                self.line("     (local.get $__v128)");
-                self.line("     (i32x4.extract_lane 0)");
-                self.line("     (local.get $__v128)");
-                self.line("     (i32x4.extract_lane 1)");
-                self.line("     (i32.add)");
-                self.line("     (local.get $__v128)");
-                self.line("     (i32x4.extract_lane 2)");
-                self.line("     (i32.add)");
-                self.line("     (local.get $__v128)");
-                self.line("     (i32x4.extract_lane 3)");
-                self.line("     (i32.add)");
-            }
-            SimdLane::F64 => {
-                self.line("     (local.set $__v128)");
-                self.line("     (local.get $__v128)");
-                self.line("     (f64x2.extract_lane 0)");
-                self.line("     (local.get $__v128)");
-                self.line("     (f64x2.extract_lane 1)");
-                self.line("     (f64.add)");
-            }
-            SimdLane::I64 => {
-                self.line("     (local.set $__v128)");
-                self.line("     (local.get $__v128)");
-                self.line("     (i64x2.extract_lane 0)");
-                self.line("     (local.get $__v128)");
-                self.line("     (i64x2.extract_lane 1)");
-                self.line("     (i64.add)");
-            }
             SimdLane::I8 => {
-                self.line("     (local.set $__v128)");
-                self.line("     (i32.const 0)");
-                self.line("     (local.set $__len)");
-                for i in 0..16 {
-                    self.line("     (local.get $__v128)");
-                    self.line(&format!("     (i8x16.extract_lane_s {})", i));
-                    self.line("     (local.get $__len)");
-                    self.line("     (i32.add)");
-                    self.line("     (local.set $__len)");
+                self.f.i32_const(0);
+                self.f.local_set("__len");
+                for i in 0..n {
+                    self.f.local_get("__v128");
+                    self.f.extract_lane(extract, i);
+                    self.f.local_get("__len");
+                    self.f.i32_add();
+                    self.f.local_set("__len");
                 }
-                self.line("     (local.get $__len)");
+                self.f.local_get("__len");
+            }
+            _ => {
+                self.f.local_get("__v128");
+                self.f.extract_lane(extract, 0);
+                for i in 1..n {
+                    self.f.local_get("__v128");
+                    self.f.extract_lane(extract, i);
+                    match lane {
+                        SimdLane::F32 => self.f.f32_add(),
+                        SimdLane::I32 => self.f.i32_add(),
+                        SimdLane::F64 => self.f.f64_add(),
+                        SimdLane::I64 => self.f.i64_add(),
+                        SimdLane::I8 => unreachable!(),
+                    }
+                }
             }
         }
     }

@@ -1342,6 +1342,8 @@ dependencies = [
  "dream-types",
  "indexmap",
  "pretty_assertions",
+ "wasm-encoder 0.252.0",
+ "wasmprinter 0.252.0",
  "wast",
  "wat",
 ]
@@ -1924,7 +1926,7 @@ dependencies = [
  "vec_map",
  "wasm-bindgen",
  "web-sys",
- "windows 0.58.0",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -6009,6 +6011,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmprinter"
+version = "0.252.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7142797de29b35ab8dbf15c00f55fda75d409da4c423a8ab8bd6b667a785824b"
+dependencies = [
+ "anyhow",
+ "termcolor",
+ "wasmparser 0.252.0",
+]
+
+[[package]]
 name = "wasmtime"
 version = "45.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6087,7 +6100,7 @@ dependencies = [
  "target-lexicon 0.13.5",
  "wasm-encoder 0.248.0",
  "wasmparser 0.248.0",
- "wasmprinter",
+ "wasmprinter 0.248.0",
  "wasmtime-internal-component-util",
  "wasmtime-internal-core",
 ]

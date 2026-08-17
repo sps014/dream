@@ -371,10 +371,10 @@ fn run_all_e2e_cases_release() {
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
-/// independently-seeded `HashMap`s within this process) must yield byte-identical `.wat` and
-/// (with `--runtime`) `*.web.runtime.js`. This guards the `IndexMap` conversion of the emission-driving
-/// tables against regressions that would reintroduce `HashMap`-iteration nondeterminism. Uses
-/// release mode so the check covers the production emit path (`strip_dead_functions`).
+/// independently-seeded `HashMap`s within this process) must yield byte-identical `.wasm` (primary)
+/// and printer `.wat` (secondary), plus (with `--runtime`) `*.web.runtime.js`. This guards the
+/// `IndexMap` conversion of the emission-driving tables against regressions that would reintroduce
+/// `HashMap`-iteration nondeterminism. Uses release mode so the check covers builder DCE.
 #[test]
 fn codegen_is_deterministic() {
     let cases_dir = Path::new("tests/cases");
@@ -390,6 +390,7 @@ fn codegen_is_deterministic() {
             continue;
         }
         let src_str = src.to_str().unwrap().to_string();
+        let mut prev_wasm: Option<Vec<u8>> = None;
         let mut prev_wat: Option<String> = None;
         let mut prev_rt: Option<String> = None;
         for run in 0..2 {
@@ -402,6 +403,7 @@ fn codegen_is_deterministic() {
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
             let wat = fs::read_to_string(&out).unwrap();
+            let wasm = fs::read(out.with_extension("wasm")).unwrap();
             let rt_path = out.with_extension("web.runtime.js");
             let rt = fs::read_to_string(&rt_path)
                 .unwrap_or_else(|e| panic!("missing selective runtime for {}: {}", name, e));
@@ -409,10 +411,19 @@ fn codegen_is_deterministic() {
             let _ = fs::remove_file(&rt_path);
             let _ = fs::remove_file(out.with_extension("wasm"));
             let _ = fs::remove_file(out.with_extension("abi.json"));
+            if let Some(ref first) = prev_wasm {
+                assert_eq!(
+                    first, &wasm,
+                    "Nondeterministic .wasm for {} (run {})",
+                    name, run
+                );
+            } else {
+                prev_wasm = Some(wasm);
+            }
             if let Some(ref first) = prev_wat {
                 assert_eq!(
                     first, &wat,
-                    "Nondeterministic codegen for {} (run {})",
+                    "Nondeterministic printer WAT for {} (run {})",
                     name, run
                 );
             } else {

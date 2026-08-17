@@ -14,38 +14,35 @@ impl Emitter<'_> {
             return;
         }
         let size = self.frame.size;
-        self.line("     (global.get $__sp) (local.set $__saved_sp)");
-        self.line(&format!(
-            "     (global.get $__sp) (i32.const {}) (i32.sub) (global.set $__sp)",
-            size
-        ));
+        self.f.global_get("__sp");
+        self.f.local_set("__saved_sp");
+        self.f.global_get("__sp");
+        self.f.i32_const(size as i32);
+        self.f.i32_sub();
+        self.f.global_set("__sp");
         // Zero the whole frame: memory.fill(dest = $__sp, value = 0, len = size).
-        self.line(&format!(
-            "     (global.get $__sp) (i32.const 0) (i32.const {}) (memory.fill)",
-            size
-        ));
+        self.f.global_get("__sp");
+        self.f.i32_const(0);
+        self.f.i32_const(size as i32);
+        self.f.memory_fill();
         for (local, offset) in self.frame.owning_slots() {
             let ty = self.func.local_ty(local);
             let l0 = local.0;
             let slot_addr = |s: &mut Self| {
-                s.line("     (global.get $__sp)");
+                s.f.global_get("__sp");
                 if offset > 0 {
-                    s.line(&format!("     (i32.const {}) (i32.add)", offset));
+                    s.f.i32_const((offset) as i32);
+                    s.f.i32_add();
                 }
             };
             if self.frame.kind(local) == Some(ValueLocalKind::Param) {
                 // A value param arrives as a pointer to the caller's value: copy those bytes into the
                 // callee's private slot (retaining reference fields), then rebind the param to the slot
                 // so the caller's value is never mutated (copy semantics).
-                self.emit_value_copy(
-                    slot_addr,
-                    |s| s.line(&format!("     (local.get ${})", l0)),
-                    ty,
-                    false,
-                );
+                self.emit_value_copy(slot_addr, |s| s.f.local_get(&(l0).to_string()), ty, false);
             }
             slot_addr(self);
-            self.line(&format!("     (local.set ${})", l0));
+            self.f.local_set(&(l0).to_string());
         }
     }
 
@@ -83,7 +80,7 @@ impl Emitter<'_> {
     /// Pushes the address of value place `p` (a value struct is addressed, never loaded).
     fn emit_place_addr(&mut self, p: &Place) {
         match p {
-            Place::Local(l) => self.line(&format!("     (local.get ${})", l.0)),
+            Place::Local(l) => self.f.local_get(&(l.0).to_string()),
             Place::Field { base, field } => {
                 if let Some((off, _)) = self.field_layout(*base, *field) {
                     self.field_addr(*base, off);
@@ -98,8 +95,8 @@ impl Emitter<'_> {
                     self.elem_addr(*base, ety, index, *unchecked);
                 }
             }
-            Place::Deref { ptr, .. } => self.line(&format!("     (local.get ${})", ptr.0)),
-            Place::Global(g) => self.line(&format!("     (global.get $g{})", g.0)),
+            Place::Deref { ptr, .. } => self.f.local_get(&(ptr.0).to_string()),
+            Place::Global(g) => self.f.global_get(&format!("g{}", g.0)),
         }
     }
 
@@ -115,7 +112,7 @@ impl Emitter<'_> {
         }
         if let Some(name) = self.value_name(ty) {
             self.emit_operand_addr(o);
-            self.line(&format!("     (call {})", vs_retain_sym(&name)));
+            self.f.call(&vs_retain_sym(&name));
         }
     }
 
@@ -123,7 +120,7 @@ impl Emitter<'_> {
     pub(super) fn emit_operand_addr(&mut self, o: &Operand) {
         match o {
             Operand::Copy(p) => self.emit_place_addr(p),
-            Operand::Const(_) => self.line("     (i32.const 0)"),
+            Operand::Const(_) => self.f.i32_const(0),
         }
     }
 
@@ -139,12 +136,12 @@ impl Emitter<'_> {
         let size = self.value_size(ty);
         dst(self);
         src(self);
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (memory.copy)");
+        self.f.i32_const((size) as i32);
+        self.f.memory_copy();
         if retain && self.value_has_glue(ty) {
             if let Some(name) = self.value_name(ty) {
                 dst(self);
-                self.line(&format!("     (call {})", vs_retain_sym(&name)));
+                self.f.call(&vs_retain_sym(&name));
             }
         }
     }
@@ -155,7 +152,7 @@ impl Emitter<'_> {
         if self.value_has_glue(ty) {
             if let Some(name) = self.value_name(ty) {
                 at(self);
-                self.line(&format!("     (call {})", vs_drop_sym(&name)));
+                self.f.call(&vs_drop_sym(&name));
             }
         }
     }
@@ -171,9 +168,9 @@ impl Emitter<'_> {
     ) {
         let size = self.value_size(ty);
         dst(self);
-        self.line("     (i32.const 0)");
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (memory.fill)");
+        self.f.i32_const(0);
+        self.f.i32_const((size) as i32);
+        self.f.memory_fill();
         if let Some(ctor) = ctor {
             dst(self);
             for arg in args {
@@ -185,7 +182,7 @@ impl Emitter<'_> {
                 ret: self.interner.void(),
                 take_params: vec![],
             });
-            self.line(&format!("     (call ${})", sym));
+            self.f.call(&sym);
         }
     }
 
@@ -194,9 +191,9 @@ impl Emitter<'_> {
     fn construct_value_tuple(&mut self, dst: impl Fn(&mut Self), ty: TypeId, elems: &[Operand]) {
         let size = self.value_size(ty);
         dst(self);
-        self.line("     (i32.const 0)");
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (memory.fill)");
+        self.f.i32_const(0);
+        self.f.i32_const((size) as i32);
+        self.f.memory_fill();
         let fields: Vec<(u32, TypeId)> = self
             .layouts
             .get(ty)
@@ -209,7 +206,8 @@ impl Emitter<'_> {
             let field_addr = |s: &mut Self| {
                 dst(s);
                 if off > 0 {
-                    s.line(&format!("     (i32.const {}) (i32.add)", off));
+                    s.f.i32_const((off) as i32);
+                    s.f.i32_add();
                 }
             };
             if self.interner.is_value_type(fty) {
@@ -218,7 +216,7 @@ impl Emitter<'_> {
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
-                self.line(&format!("     ({})", self.store_instr(fty)));
+                self.f.store(self.store_kind(fty), 0);
                 self.retain_container_value(fty, arg);
             }
         }
@@ -234,7 +232,7 @@ impl Emitter<'_> {
     ) {
         dst(self);
         self.emit_call_args(callee, args);
-        self.line(&format!("     (call ${})", self.callee_symbol(callee)));
+        self.f.call(&self.callee_symbol(callee));
     }
 
     /// Constructs a value union in place at the `dst` address: zero the block, write the variant
@@ -249,12 +247,12 @@ impl Emitter<'_> {
     ) {
         let size = self.value_size(ty);
         dst(self);
-        self.line("     (i32.const 0)");
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (memory.fill)");
+        self.f.i32_const(0);
+        self.f.i32_const((size) as i32);
+        self.f.memory_fill();
         dst(self);
-        self.line(&format!("     (i32.const {}) ;; discriminant", variant));
-        self.line("     (i32.store)");
+        self.f.i32_const((variant) as i32);
+        self.f.store(StoreKind::I32, 0);
         let fields: Vec<(u32, TypeId)> = self
             .layouts
             .union(ty)
@@ -272,7 +270,8 @@ impl Emitter<'_> {
             let field_addr = |s: &mut Self| {
                 dst(s);
                 if off > 0 {
-                    s.line(&format!("     (i32.const {}) (i32.add)", off));
+                    s.f.i32_const((off) as i32);
+                    s.f.i32_add();
                 }
             };
             if self.interner.is_value_type(fty) {
@@ -281,7 +280,7 @@ impl Emitter<'_> {
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
-                self.line(&format!("     ({})", self.store_instr(fty)));
+                self.f.store(self.store_kind(fty), 0);
                 self.retain_container_value(fty, arg);
             }
         }
@@ -332,8 +331,8 @@ impl Emitter<'_> {
                 if let Place::Local(l) = src {
                     if self.is_v128_local(*l) {
                         dst(self);
-                        self.line(&format!("     (local.get ${})", l.0));
-                        self.line("     (v128.store)");
+                        self.f.local_get(&(l.0).to_string());
+                        self.f.store(StoreKind::V128, 0);
                         return;
                     }
                 }
@@ -348,7 +347,7 @@ impl Emitter<'_> {
                 if let Some(sym) = js_marshal::cast_sym(self.interner, self.layouts, *from, *to) {
                     self.emit_operand(o);
                     dst(self);
-                    self.line(&format!("     (call {})", sym));
+                    self.f.call(&sym);
                 } else {
                     crate::internal_error!("missing js→value-struct marshaler");
                 }
@@ -368,10 +367,11 @@ impl Emitter<'_> {
         for (local, _) in self.frame.teardown_slots(self.func) {
             let ty = self.func.local_ty(local);
             let l0 = local.0;
-            self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
+            self.emit_value_drop(|s| s.f.local_get(&(l0).to_string()), ty);
         }
         if self.frame.size > 0 {
-            self.line("     (local.get $__saved_sp) (global.set $__sp)");
+            self.f.local_get("__saved_sp");
+            self.f.global_set("__sp");
         }
     }
 }

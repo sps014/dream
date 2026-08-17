@@ -377,7 +377,7 @@ impl<'a> Analyzer<'a> {
         node: &dream_syntax::nodes::ProgramNode,
     ) -> Vec<(dream_types::DefId, String)> {
         use dream_types::method_fn;
-        let mut out: Vec<(dream_types::DefId, String)> = Vec::new();
+        let mut out: Vec<(dream_types::DefId, String)> = self.intrinsic_defs.clone();
         for func in node.functions.iter() {
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&func.attributes) {
                 if let Some(def) = self

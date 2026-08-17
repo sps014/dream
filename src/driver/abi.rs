@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Error;
 use std::path::Path;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::driver::gpu_gen::{self, GpuEmitResult};
 use dream_abi::attributes::{
@@ -74,24 +74,12 @@ pub(crate) fn embed_abi_in_wasm(wat_path: &str) -> Result<(), Error> {
 /// is requested). Native `run` / `debug-adapter` also load `abi.gpu` for wgpu kernels/shaders.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
-    wat_text: &str,
     program: &ProgramNode,
     gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     emit_abi: bool,
 ) -> Result<(), Error> {
     let base = Path::new(wat_path);
-
-    let wasm_path = base.with_extension("wasm");
-    match wat::parse_str(wat_text) {
-        Ok(bytes) => {
-            fs::write(&wasm_path, bytes)?;
-            info!("created file: {}", wasm_path.display());
-        }
-        Err(e) => {
-            error!("could not assemble binary wasm: {}", e);
-        }
-    }
 
     if !gpu.is_empty() {
         let wgsl_path = base.with_extension("wgsl");

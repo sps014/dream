@@ -67,8 +67,8 @@ pub(super) fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<
 
 /// Interns every string constant in the program to a data pointer, in first-appearance order
 /// (deterministic). Each string is a heap-object block
-/// `[size=0][tag=STRING][ref_count=1][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
-/// points at the byte_len word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at
+/// `[size=0][tag=STRING][ref_count=1][unit_len:i32][pad:i32][utf16le]`; the mapped address
+/// points at the unit_len word (block start + [`HEAP_HEADER_SIZE`]), with UTF-16 units at
 /// `ptr+8`, so it is a valid runtime string pointer. There is no NUL terminator (the length prefix
 /// makes it redundant). Blocks are laid out consecutively, 4-byte aligned.
 ///
@@ -138,8 +138,8 @@ pub(super) fn string_table(
         .chain(found);
     for s in found {
         if !map.contains_key(&s) {
-            // 12-byte heap header + 8-byte string header (byte_len + scalar_len) + utf8 bytes.
-            let total = HEAP_HEADER_SIZE + 8 + s.len() as u32;
+            // 12-byte heap header + 8-byte string header (unit_len + pad) + UTF-16 LE units.
+            let total = HEAP_HEADER_SIZE + 8 + utf16_byte_len(&s);
             map.insert(s, block + HEAP_HEADER_SIZE);
             block += (total + 3) & !3;
         }
@@ -517,26 +517,27 @@ pub(super) fn strings_in_terminator(t: &Terminator, out: &mut Vec<String>) {
     }
 }
 
+fn utf16_byte_len(s: &str) -> u32 {
+    2 * s.encode_utf16().count() as u32
+}
+
 /// Escapes an interned string's full heap-block bytes as `\HH` pairs: the 12-byte header
 /// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the string data header
-/// (`byte_len`, `scalar_len` as little-endian i32s), then the utf8 bytes. No NUL terminator.
+/// (`unit_len`, pad as little-endian i32s), then UTF-16 LE units. No NUL terminator.
 /// Written at the block start (the mapped address minus [`HEAP_HEADER_SIZE`]); the mapped address
-/// itself points at the byte_len word.
+/// itself points at the unit_len word.
 pub(super) fn escape_data(s: &str) -> String {
+    let units: Vec<u16> = s.encode_utf16().collect();
     let mut out = String::new();
-    for word in [
-        0_i32,
-        STRING_TAG,
-        1,
-        s.len() as i32,
-        s.chars().count() as i32,
-    ] {
+    for word in [0_i32, STRING_TAG, 1, units.len() as i32, 0] {
         for b in word.to_le_bytes() {
             let _ = write!(out, "\\{:02x}", b);
         }
     }
-    for b in s.bytes() {
-        let _ = write!(out, "\\{:02x}", b);
+    for u in units {
+        for b in u.to_le_bytes() {
+            let _ = write!(out, "\\{:02x}", b);
+        }
     }
     out
 }

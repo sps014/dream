@@ -4,12 +4,10 @@ module system.text;
 public class StringIterator : Iterator<char> {
     text: string;
     idx: int;
-    byte_off: int;
 
     public constructor(text: string) {
         this.text = text;
         this.idx = 0;
-        this.byte_off = 0;
     }
 
     // So `for (let c in s.chars())` uses the enumerator protocol on the cursor itself.
@@ -18,14 +16,13 @@ public class StringIterator : Iterator<char> {
         return this;
     }
 
-    // Yields the next character or None.
+    // Yields the next UTF-16 code unit or None.
     @next
     public fun next(): Option<char> {
-        if (this.byte_off >= this.text.byte_size()) {
+        if (this.idx >= this.text.length) {
             return Option.None;
         }
-        let value = string.utf8_decode_at(this.text, this.byte_off);
-        this.byte_off = this.byte_off + string.utf8_width_at(this.text, this.byte_off);
+        let value = this.text.char_at(this.idx);
         this.idx = this.idx + 1;
         return Option.Some(value);
     }

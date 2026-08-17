@@ -808,7 +808,7 @@ fn exec_print_bool_via_to_string() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_string_len_via_strlen() {
-    // `str.length` calls `$str_scalar_len` (Unicode scalar count over the UTF-8 payload).
+    // `str.length` calls `$str_scalar_len` (UTF-16 code-unit count).
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{

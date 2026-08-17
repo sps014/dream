@@ -40,25 +40,29 @@ impl Emitter<'_> {
         if sym.starts_with("simd_") {
             return sym.to_string();
         }
-        let key = if sym.ends_with("load_raw") || sym.ends_with("_load") {
+        // Mangled `Vector<T>` helpers (`Vector_int_bin_add`, `…_load_raw`). Do not use a generic
+        // `*_add` / `*_sum` / `*_count` suffix — that steals `Vec2.sum`, `map_sum`, and
+        // `debug_get_ref_count`.
+        let vector = sym.contains("Vector");
+        let key = if sym.ends_with("load_raw") || (vector && sym.ends_with("_load")) {
             "simd_v128_load"
-        } else if sym.ends_with("store_raw") || sym.ends_with("_store") {
+        } else if sym.ends_with("store_raw") || (vector && sym.ends_with("_store")) {
             "simd_v128_store"
-        } else if sym.ends_with("splat_raw") || sym.ends_with("_splat") {
+        } else if sym.ends_with("splat_raw") || (vector && sym.ends_with("_splat")) {
             "simd_v128_splat"
-        } else if sym.ends_with("bin_add") || sym.ends_with("_add") {
+        } else if sym.ends_with("bin_add") || (vector && sym.ends_with("_add")) {
             "simd_v128_add"
-        } else if sym.ends_with("bin_sub") || sym.ends_with("_sub") {
+        } else if sym.ends_with("bin_sub") || (vector && sym.ends_with("_sub")) {
             "simd_v128_sub"
-        } else if sym.ends_with("bin_mul") || sym.ends_with("_mul") {
+        } else if sym.ends_with("bin_mul") || (vector && sym.ends_with("_mul")) {
             "simd_v128_mul"
-        } else if sym.ends_with("bin_min") || sym.ends_with("_min") {
+        } else if sym.ends_with("bin_min") || (vector && sym.ends_with("_min")) {
             "simd_v128_min"
-        } else if sym.ends_with("bin_max") || sym.ends_with("_max") {
+        } else if sym.ends_with("bin_max") || (vector && sym.ends_with("_max")) {
             "simd_v128_max"
-        } else if sym.ends_with("reduce_sum") || sym.ends_with("_sum") {
+        } else if sym.ends_with("reduce_sum") || (vector && (sym.ends_with("_sum") || sym.ends_with("reduce_sum"))) {
             "simd_v128_sum"
-        } else if sym.ends_with("lane_count") || sym.ends_with("_count") {
+        } else if sym.ends_with("lane_count") || (vector && sym.ends_with("_count")) {
             "simd_lane_count"
         } else {
             return sym.to_string();

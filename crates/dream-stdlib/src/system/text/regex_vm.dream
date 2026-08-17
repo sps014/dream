@@ -388,18 +388,11 @@ internal class RegexVM {
     }
 
     fun scalar_to_byte(borrow input: string, scalar: int): int {
-        let bo = 0;
-        let i = 0;
-        while (i < scalar) {
-            bo = bo + string.utf8_width_at(input, bo);
-            i = i + 1;
-        }
-        return bo;
+        return scalar * 2;
     }
 
     public fun find(borrow input: string, start: int): Option<RegexMatch> {
         let len = input.length;
-        let byte_len = input.byte_size();
         let ncap = 2 * (this.ngroup + 1);
         if (this.on_list.length < this.prog.length) {
             this.on_list = Buffer.alloc<int>(this.prog.length);
@@ -434,10 +427,6 @@ internal class RegexVM {
 
         let matched: Option<int[]> = Option.None;
         let pos = start;
-        let byte_off = 0;
-        if (start != 0) {
-            byte_off = this.scalar_to_byte(input, start);
-        }
         let going = true;
         while (going) {
             if (clist.count == 0) {
@@ -445,40 +434,20 @@ internal class RegexVM {
             } else {
                 if ((pos < len) && this.can_skip(clist)) {
                     let hint = this.prog[this.hint_pc];
-                    let k = hint.class_kind;
-                    let ascii_skip = (k == 1) || (k == 5) || (k == 6) || (k == 7);
-                    let c0 = ' ';
-                    if (ascii_skip && (input.byte_at(byte_off) < 128)) {
-                        c0 = (char)input.byte_at(byte_off);
-                    } else {
-                        c0 = string.utf8_decode_at(input, byte_off);
-                    }
+                    let c0 = input.char_at(pos);
                     if (hint.matches_char(c0) == false) {
                         let skipping = true;
-                        while ((byte_off < byte_len) && skipping) {
-                            let b = input.byte_at(byte_off);
-                            if (ascii_skip && (b < 128)) {
-                                if (hint.matches_char((char)b)) {
-                                    skipping = false;
-                                } else {
-                                    byte_off = byte_off + 1;
-                                    pos = pos + 1;
-                                }
+                        while ((pos < len) && skipping) {
+                            let c = input.char_at(pos);
+                            if (hint.matches_char(c)) {
+                                skipping = false;
                             } else {
-                                let c = string.utf8_decode_at(input, byte_off);
-                                if (hint.matches_char(c)) {
-                                    skipping = false;
-                                } else {
-                                    byte_off = byte_off + string.utf8_width_at(input, byte_off);
-                                    pos = pos + 1;
-                                }
+                                pos = pos + 1;
                             }
                         }
                         if (pos >= len) {
                             going = false;
                         } else {
-                            // Threads still carry captures from the pre-skip position; restart
-                            // unanchored search at the candidate so group 0 starts here.
                             clist.clear();
                             gen = gen + 1;
                             this.search_gen = gen;
@@ -495,7 +464,7 @@ internal class RegexVM {
                     let at_end = pos >= len;
                     let cur = ' ';
                     if (at_end == false) {
-                        cur = string.utf8_decode_at(input, byte_off);
+                        cur = input.char_at(pos);
                     }
                     while ((k < clist.count) && (stop == false)) {
                         let pc = clist.pcs[k];
@@ -528,7 +497,6 @@ internal class RegexVM {
                     if (pos >= len) {
                         going = false;
                     } else {
-                        byte_off = byte_off + string.utf8_width_at(input, byte_off);
                         pos = pos + 1;
                     }
                 }

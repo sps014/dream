@@ -35,7 +35,7 @@ extend string : Comparable<string> {
         return StringIterator(this);
     }
 
-    // Sequential UTF-8 walk (O(1) per character). Prefer this over `s[i]` in hot loops.
+    // Sequential UTF-16 code-unit walk (O(1) per unit). Prefer this over `s[i]` in hot loops.
     public fun chars(): StringIterator {
         return StringIterator(this);
     }
@@ -182,7 +182,7 @@ extend string : Comparable<string> {
             string.copy_utf8(buf, i * n, this, 0, n);
             i = i + 1;
         }
-        return string.from_utf8(buf);
+        return string.from_utf8_prefix_n(buf, total, this.length * times);
     }
 
     // True if this string has the same contents as `other`.

@@ -36,6 +36,65 @@ fn realloc_self_store(place: &Place, rvalue: &Rvalue) -> bool {
     }
 }
 
+/// True if `local` is read by more than one non-RC statement/terminator. Retain/Release/Value*
+/// bookkeeping is ignored so a unique field store of a take param still counts as a move.
+fn take_param_has_other_real_uses(func: &MirFunction, local: u32) -> bool {
+    let mut uses = 0u32;
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if matches!(
+                stmt,
+                Statement::Retain(_)
+                    | Statement::Release(_)
+                    | Statement::ValueDrop(_)
+                    | Statement::ValueRetain(_)
+                    | Statement::ValueKill(_)
+                    | Statement::ForceFree(_)
+                    | Statement::Nop
+                    | Statement::DebugLine(_)
+                    | Statement::SourceLine(_)
+            ) {
+                continue;
+            }
+            if crate::passes::stmt_reads_local(stmt, local) {
+                uses += 1;
+                if uses > 1 {
+                    return true;
+                }
+            }
+        }
+        match &block.terminator {
+            Terminator::If { cond, .. } | Terminator::Switch { value: cond, .. } => {
+                if operand_is_local(cond, local) {
+                    uses += 1;
+                }
+            }
+            Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
+                if operand_is_local(o, local) {
+                    uses += 1;
+                }
+            }
+            Terminator::Await { future, .. } => {
+                if operand_is_local(future, local) {
+                    uses += 1;
+                }
+            }
+            Terminator::TailCall { args, .. } => {
+                uses += args.iter().filter(|a| operand_is_local(a, local)).count() as u32;
+            }
+            _ => {}
+        }
+        if uses > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+fn operand_is_local(op: &Operand, local: u32) -> bool {
+    matches!(op, Operand::Copy(Place::Local(l)) if l.0 == local)
+}
+
 impl Emitter<'_> {
     pub(super) fn emit_stmt(&mut self, stmt: &Statement) {
         match stmt {
@@ -823,9 +882,11 @@ impl Emitter<'_> {
 
     /// Emits a `$retain` / `$js_retain` of an RC-tracked value being stored into a container (struct
     /// field, array element, or union payload), so the container owns its own reference count. A
-    /// no-op for non-tracked values and non-place operands. For a **`take` parameter** of an
-    /// RC-tracked type, ownership transfers with the store: skip retain and null the local so the
-    /// function-exit `Release` is a no-op (otherwise the container and the param would both drop).
+    /// no-op for non-tracked values and non-place operands.
+    ///
+    /// A **`take` parameter** stored as its *only* real use transfers the incoming `+1` (skip retain,
+    /// null the local so function-exit `Release` is a nop). If the same param is also passed later
+    /// (`User(name, [name, city])`), this store is a copy: retain and leave the local intact.
     pub(super) fn retain_container_value(&mut self, value_ty: TypeId, value: &Operand) {
         if let Operand::Copy(Place::Local(l)) = value {
             if self
@@ -834,6 +895,7 @@ impl Emitter<'_> {
                 .get(l.0 as usize)
                 .is_some_and(|d| d.is_take)
                 && self.interner.is_rc_tracked(value_ty)
+                && !take_param_has_other_real_uses(self.func, l.0)
             {
                 self.line("     (i32.const 0)");
                 self.line(&format!("     (local.set ${})", l.0));

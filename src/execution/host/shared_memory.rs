@@ -24,7 +24,14 @@ pub fn threaded_wasm_config() -> Config {
     config.async_stack_size(dream_async_stack_size());
     config.wasm_threads(true);
     config.wasm_simd(true);
+    config.wasm_relaxed_simd(true);
+    config.wasm_tail_call(true);
+    config.wasm_bulk_memory(true);
+    config.wasm_multi_memory(true);
+    config.wasm_extended_const(true);
     config.shared_memory(true);
+    // Off: wasm_gc, wasm_exceptions, wasm_function_references, wasm_shared_everything_threads,
+    // wasm_memory64 — must stay aligned with the wasm-opt allow-list in `src/driver/wasm_opt.rs`.
     // Hard `WebWorker.terminate()` aborts an in-flight body via `Engine::increment_epoch` (see
     // `host::worker`). Owner stores must call `set_epoch_deadline(u64::MAX)` so they are not
     // interrupted when a worker is killed.

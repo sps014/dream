@@ -1,15 +1,15 @@
 module system.text;
 
-// `StringBuilder` — growable UTF-8 string construction (`import system.text;`).
+// `StringBuilder` — growable UTF-16 string construction (`import system.text;`).
 
 public class StringBuilder {
     bytes: byte[];
-    // Bytes used in `bytes` (not capacity).
+    // Payload bytes used in `bytes` (always even; two bytes per UTF-16 unit).
     count: int;
-    // Unicode scalar count of the bytes written so far (`.length`).
+    // UTF-16 code-unit count of the bytes written so far (`.length`).
     scalars: int;
 
-    // Allocates an empty builder with an initial backing buffer capacity in bytes (defaults to 16).
+    // Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
     public constructor(capacity: int = 16) {
         let c = capacity;
         if (c < sequence_min_capacity()) {
@@ -20,7 +20,7 @@ public class StringBuilder {
         this.scalars = 0;
     }
 
-    // Number of Unicode scalars appended so far.
+    // Number of UTF-16 code units appended so far.
     public get length(): int {
         return this.scalars;
     }
@@ -46,40 +46,30 @@ public class StringBuilder {
         }
     }
 
-    // Appends a single Unicode scalar as UTF-8.
-    public fun append_char(c: char): void {
-        let cp = c.to_int();
-        if ((cp < 0) || (cp > 1114111) || ((cp >= 55296) && (cp <= 57343))) {
-            cp = 65533;
-        }
-        if (cp < 128) {
-            this.ensure(1);
-            this.bytes[this.count] = (byte)cp;
-            this.count = this.count + 1;
-        } else if (cp < 2048) {
-            this.ensure(2);
-            this.bytes[this.count] = (byte)(192 + (cp / 64));
-            this.bytes[this.count + 1] = (byte)(128 + (cp % 64));
-            this.count = this.count + 2;
-        } else if (cp < 65536) {
-            this.ensure(3);
-            this.bytes[this.count] = (byte)(224 + (cp / 4096));
-            this.bytes[this.count + 1] = (byte)(128 + ((cp / 64) % 64));
-            this.bytes[this.count + 2] = (byte)(128 + (cp % 64));
-            this.count = this.count + 3;
-        } else {
-            this.ensure(4);
-            this.bytes[this.count] = (byte)(240 + (cp / 262144));
-            this.bytes[this.count + 1] = (byte)(128 + ((cp / 4096) % 64));
-            this.bytes[this.count + 2] = (byte)(128 + ((cp / 64) % 64));
-            this.bytes[this.count + 3] = (byte)(128 + (cp % 64));
-            this.count = this.count + 4;
-        }
+    fun write_unit(u: int): void {
+        this.ensure(2);
+        this.bytes[this.count] = (byte)(u % 256);
+        this.bytes[this.count + 1] = (byte)(u / 256);
+        this.count = this.count + 2;
         this.scalars = this.scalars + 1;
     }
 
-    // Appends every UTF-8 byte of `text`, growing at most once.
-    // Uses the string's cached scalar length (O(1)) instead of rescanning lead bytes.
+    // Appends a Unicode scalar as one or two UTF-16 units.
+    public fun append_char(c: char): void {
+        let cp = c.to_int();
+        if ((cp < 0) || (cp > 1114111)) {
+            cp = 65533;
+        }
+        if (cp < 65536) {
+            this.write_unit(cp);
+            return;
+        }
+        let x = cp - 65536;
+        this.write_unit(55296 + (x / 1024));
+        this.write_unit(56320 + (x % 1024));
+    }
+
+    // Appends every UTF-16 unit of `text`, growing at most once.
     public fun append(borrow text: string): void {
         let byte_len = text.byte_size();
         if (byte_len <= 0) {
@@ -91,8 +81,7 @@ public class StringBuilder {
         this.scalars = this.scalars + text.length;
     }
 
-    // Appends `byte_len` UTF-8 bytes starting at byte index `start` of `text`.
-    // Bytes are bulk-copied; scalar count is derived from UTF-8 lead bytes (non-continuation).
+    // Appends `byte_len` payload bytes starting at byte index `start` of `text`.
     public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void {
         if (byte_len <= 0) {
             return;
@@ -100,17 +89,7 @@ public class StringBuilder {
         this.ensure(byte_len);
         string.copy_utf8(this.bytes, this.count, text, start, byte_len);
         this.count = this.count + byte_len;
-        let i = 0;
-        let sc = 0;
-        while (i < byte_len) {
-            let b = text.byte_at(start + i);
-            // Continuation bytes are 10xxxxxx (128..191); every other byte starts a scalar.
-            if ((b < 128) || (b >= 192)) {
-                sc = sc + 1;
-            }
-            i = i + 1;
-        }
-        this.scalars = this.scalars + sc;
+        this.scalars = this.scalars + (byte_len / 2);
     }
 
     // Appends a decimal integer without allocating an intermediate string.
@@ -127,33 +106,23 @@ public class StringBuilder {
         if (n < 0) {
             x = 0 - n;
         }
-        let buf = Buffer.alloc<byte>(12);
+        let buf = Buffer.alloc<int>(12);
         let i = 0;
         while (x > 0) {
-            buf[i] = (byte)(48 + (x % 10));
+            buf[i] = 48 + (x % 10);
             x = x / 10;
             i = i + 1;
         }
-        let extra = i;
         if (n < 0) {
-            extra = extra + 1;
-        }
-        this.ensure(extra);
-        if (n < 0) {
-            this.bytes[this.count] = (byte)45;
-            this.count = this.count + 1;
-            this.scalars = this.scalars + 1;
+            this.write_unit(45);
         }
         let j = i - 1;
         while (j >= 0) {
-            this.bytes[this.count] = buf[j];
-            this.count = this.count + 1;
-            this.scalars = this.scalars + 1;
+            this.write_unit(buf[j]);
             j = j - 1;
         }
     }
 
-    // Appends `true` or `false`.
     // Appends `"true"` or `"false"` without allocating an intermediate string.
     public fun append_bool(v: bool): void {
         if (v) {
@@ -175,8 +144,7 @@ public class StringBuilder {
         this.scalars = 0;
     }
 
-    // Materializes the accumulated UTF-8 bytes into a single new string.
-    // Passes the running scalar count so the runtime skips a second UTF-8 recount.
+    // Materializes the accumulated UTF-16 units into a single new string.
     public fun build(): string {
         return string.from_utf8_prefix_n(this.bytes, this.count, this.scalars);
     }

@@ -93,7 +93,7 @@ public class Json {
     // Safe ASCII / UTF-8 runs are bulk-copied; only `"`, `\`, and controls take the slow path.
     public static fun _json_escape_into(borrow sb: StringBuilder, borrow s: string): void {
         sb.append_char('"');
-        let n = s.byte_size();
+        let n = s.length;
         let i = 0;
         while (i < n) {
             let run_start = i;
@@ -102,8 +102,8 @@ public class Json {
                 if (i >= n) {
                     scanning = false;
                 } else {
-                    let b = s.byte_at(i);
-                    // Escape `"`, `\`, and ASCII controls; pass through the rest (incl. UTF-8).
+                    let b = s.char_at(i).to_int();
+                    // Escape `"`, `\`, and ASCII controls; pass through the rest.
                     if ((b < 32) || (b == 34) || (b == 92)) {
                         scanning = false;
                     } else {
@@ -112,12 +112,12 @@ public class Json {
                 }
             }
             if (i > run_start) {
-                sb.append_utf8_slice(s, run_start, i - run_start);
+                sb.append_utf8_slice(s, run_start * 2, (i - run_start) * 2);
             }
             if (i >= n) {
                 break;
             }
-            let b = s.byte_at(i);
+            let b = s.char_at(i).to_int();
             if (b == 34) {
                 sb.append_char('\\');
                 sb.append_char('"');

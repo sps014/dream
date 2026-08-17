@@ -83,11 +83,11 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
     // Binaryen to *emit* far newer proposals (e.g. typed function references) that this project's
     // `wasmtime::Config` (`src/execution/wasm_runner.rs`) never opts into, silently producing a
     // `.wasm` that fails to parse at runtime (`-Oz` was observed doing exactly this). Instead,
-    // start from the MVP baseline and enable precisely the proposals Wasmtime enables by default
-    // (`wasmtime::Config::features`: the WASM 2.0 bundle plus multi-memory/relaxed-simd/tail-call/
-    // extended-const/memory64) — the same instruction set the rest of the toolchain already
-    // targets — so `wasm-opt` can neither choke on codegen's output nor introduce anything the
-    // runtime can't load.
+    // start from the MVP baseline and enable precisely the proposals `threaded_wasm_config`
+    // opts into (WASM 2.0 plus multi-memory/relaxed-simd/tail-call/extended-const/threads).
+    // `Feature::Memory64` is omitted: wasmtime 45 leaves `wasm_memory64` off and Dream emits
+    // i32 memories. Never use `FeatureBaseline::All` / `Feature::Gc` / `ExceptionHandling` /
+    // `Strings` — Binaryen may emit opcodes this runtime will not load.
     options.features.baseline = FeatureBaseline::MvpOnly;
     options.features.enabled.extend([
         Feature::MutableGlobals,
@@ -101,7 +101,6 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
         Feature::RelaxedSimd,
         Feature::TailCall,
         Feature::ExtendedConst,
-        Feature::Memory64,
         // Linear memory is always emitted `shared` (`src/mir/emit/module.rs`) so every `WebWorker`
         // instance can import the same `wasmtime::SharedMemory` — Binaryen needs the threads
         // proposal ("Atomics" in its feature naming) enabled just to parse/validate that, even

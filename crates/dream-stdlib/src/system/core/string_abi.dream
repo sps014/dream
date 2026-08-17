@@ -1,17 +1,17 @@
 module system.core;
 
 // Low-level string construction used by core/primitives (and `extend string` in system.text).
-// `alloc`/`set` use Unicode scalar indices; the backing store is always UTF-8.
+// `alloc`/`set` use UTF-16 code-unit indices; the backing store is UTF-16 LE.
 extend string {
-    // Allocates an uninitialized string with capacity for `n` Unicode scalars.
+    // Allocates an uninitialized string with capacity for `n` UTF-16 code units.
     @intrinsic("string_alloc")
     static extern fun alloc(n: int): string;
 
-    // Writes scalar `c` at scalar index `i` of string `s`.
+    // Writes code unit `c` at unit index `i` of string `s`.
     @intrinsic("string_set")
     static extern fun set(borrow s: string, i: int, c: char): void;
 
-    // Builds a string from a full `byte[]` UTF-8 payload (copies bytes; counts scalars once).
+    // Builds a string from a full `byte[]` UTF-8 payload (transcodes to UTF-16).
     @intrinsic("string_from_utf8")
     static extern fun from_utf8(borrow bytes: byte[]): string;
 
@@ -19,11 +19,11 @@ extend string {
     @intrinsic("string_from_utf8_prefix")
     static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string;
 
-    // Like `from_utf8_prefix`, but trusts a precomputed Unicode scalar count (skips recount).
+    // Copies `len` UTF-16 LE payload bytes from `bytes`; `scalars` is the unit count.
     @intrinsic("string_from_utf8_prefix_n")
     static extern fun from_utf8_prefix_n(borrow bytes: byte[], len: int, scalars: int): string;
 
-    // Scalar-indexed substring via one UTF-8 byte-range copy (`$string_substring_raw`).
+    // Unit-indexed substring via one UTF-16 payload copy (`$string_substring_raw`).
     @intrinsic("string_substring_raw")
     static extern fun substring_raw(borrow s: string, start: int, end: int): string;
 
@@ -31,19 +31,19 @@ extend string {
     @intrinsic("string_clone")
     static extern fun clone(borrow s: string): string;
 
-    // Bulk-copies `count` UTF-8 bytes from `src` into `dst` at `dst_off`.
+    // Bulk-copies `count` payload bytes from `src` into `dst` at `dst_off`.
     @intrinsic("string_copy_utf8")
     static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void;
 
-    // UTF-8 lexicographic compare (same order as Unicode scalars): negative / zero / positive.
+    // UTF-16 lexicographic compare (code-unit order): negative / zero / positive.
     @intrinsic("string_compare")
     static extern fun compare_raw(borrow a: string, borrow b: string): int;
 
-    // Unchecked UTF-8 decode at a byte offset (callers must pass a scalar start).
+    // Unchecked UTF-16 unit load at a payload byte offset (even offsets).
     @intrinsic("utf8_decode_at")
     static extern fun utf8_decode_at(borrow s: string, byte_off: int): char;
 
-    // UTF-8 width in bytes of the scalar starting at `byte_off`.
+    // Payload stride in bytes of the unit at `byte_off` (always 2).
     @intrinsic("utf8_width_at")
     static extern fun utf8_width_at(borrow s: string, byte_off: int): int;
 

@@ -154,3 +154,37 @@ fn sink_store_skips_retain_vs_borrow() {
         borrow_wat
     );
 }
+
+#[test]
+fn take_param_array_and_ctor_both_see_value() {
+    // `User(name, [name])` must not null `name` when the array is built; both the field and the
+    // element should observe the same string.
+    let code = format!(
+        "{SYSTEM_STUB}
+        class Box {{
+            public value: string;
+            public tags: string[];
+            public constructor(value: string, tags: string[]) {{
+                this.value = value;
+                this.tags = tags;
+            }}
+        }}
+        fun make(name: string): Box {{
+            return Box(name, [name]);
+        }}
+        fun main(): void {{
+            let b = make(\"hi\");
+            System.println(b.value);
+            System.println(b.tags[0]);
+        }}
+    "
+    );
+    let wat = emit_hir_to_module_optimized(&code);
+    assert!(
+        wat.contains("call $retain"),
+        "array store of a still-live take param must retain:\n{}",
+        wat
+    );
+    let out = run_and_capture_rc(&code, "main");
+    assert_eq!(out.trim(), "hi\nhi");
+}

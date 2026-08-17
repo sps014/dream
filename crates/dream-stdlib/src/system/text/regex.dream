@@ -242,34 +242,27 @@ public class Regex {
         };
     }
 
-    // Linear ASCII digit-run finder for `\d+` / `[0-9]+` (Global). Haystacks may be general
-    // UTF-8; digit runs are ASCII so byte offsets equal scalar offsets inside each run.
+    // Linear ASCII digit-run finder for `\d+` / `[0-9]+` (Global). Haystacks are UTF-16;
+    // digit runs are BMP so each digit is one code unit.
     fun match_ascii_digit_runs(input: string): string[] {
         let results = List<string>(8);
-        let n = input.byte_size();
+        let n = input.length;
         let i = 0;
         while (i < n) {
-            let b = input.byte_at(i);
+            let b = input.char_at(i).to_int();
             if ((b >= 48) && (b <= 57)) {
                 let start = i;
                 i = i + 1;
                 while (i < n) {
-                    let c = input.byte_at(i);
+                    let c = input.char_at(i).to_int();
                     if ((c < 48) || (c > 57)) {
-                        // end run
                         break;
                     }
                     i = i + 1;
                 }
-                // ASCII digit bytes are one scalar each — byte index == scalar index.
                 results.push(input.substring(start, i));
             } else {
-                // Advance one UTF-8 scalar so multi-byte chars aren't mis-scanned mid-sequence.
-                let w = string.utf8_width_at(input, i);
-                if (w < 1) {
-                    w = 1;
-                }
-                i = i + w;
+                i = i + 1;
             }
         }
         return this.to_array(results);

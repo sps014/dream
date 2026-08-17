@@ -235,16 +235,16 @@ fn strings_get_data_segments_and_addresses() {
     };
     let wat = emit_module(&mir, &i, false);
     // The runtime constants are interned first, then panic messages and protocol strings, so the
-    // user's "hi" follows somewhere in the data section. Assert the new 8-byte string header layout:
-    // byte_len=2, scalar_len=2, then 'h','i'.
+    // user's "hi" follows somewhere in the data section. Assert the 8-byte string header layout:
+    // unit_len=2, pad=0, then UTF-16 LE 'h','i'.
     assert!(
         wat.contains("(i32.const"),
         "string data pointer const:\n{}",
         wat
     );
     assert!(
-        wat.contains("\\02\\00\\00\\00\\02\\00\\00\\00\\68\\69"),
-        "string data segment for \"hi\" (byte_len + scalar_len + utf8):\n{}",
+        wat.contains("\\02\\00\\00\\00\\00\\00\\00\\00\\68\\00\\69\\00"),
+        "string data segment for \"hi\" (unit_len + pad + utf16le):\n{}",
         wat
     );
 }

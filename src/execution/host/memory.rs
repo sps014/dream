@@ -45,10 +45,10 @@ const TAG_ARRAY: i32 = abi::TAG_ARRAY;
 /// Byte size of the length/count prefix at an array data pointer (`[len:i32][payload...]`).
 const LEN_PREFIX: usize = abi::LEN_PREFIX_SIZE as usize;
 
-/// Byte size of a string's data header `[byte_len:i32][scalar_len:i32]` before utf8 bytes.
+/// Byte size of a string's data header `[unit_len:i32][pad:i32]` before UTF-16 LE units.
 const STRING_HEADER: usize = abi::STRING_HEADER_SIZE as usize;
 
-/// Offset of utf8 bytes from a string data pointer.
+/// Offset of UTF-16 payload from a string data pointer.
 const STRING_UTF8: usize = abi::STRING_UTF8_OFFSET as usize;
 
 /// Reads the little-endian length/count prefix at `base` in `data`, returning `None` if `base` is
@@ -64,21 +64,28 @@ fn read_len_prefix(data: &[u8], base: usize) -> Option<usize> {
 }
 
 /// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout:
-/// `[byte_len: i32][scalar_len: i32][utf8...]`, so the length prefix gives the byte count directly
-/// (no NUL terminator). A negative or out-of-bounds pointer yields an empty string rather than
-/// panicking.
+/// `[unit_len: i32][pad: i32][utf16le...]`. A negative or out-of-bounds pointer yields an empty
+/// string rather than panicking.
 pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
     let data = shared_bytes(memory);
     if ptr < 0 {
         return String::new();
     }
     let base = ptr as usize;
-    let Some(len) = read_len_prefix(data, base) else {
+    let Some(units) = read_len_prefix(data, base) else {
         return String::new();
     };
     let start = base + STRING_UTF8;
-    let end = start.saturating_add(len).min(data.len());
-    String::from_utf8_lossy(&data[start..end]).into_owned()
+    let nbytes = units.saturating_mul(2);
+    let end = start.saturating_add(nbytes).min(data.len());
+    let slice = &data[start..end];
+    let mut u16s = Vec::with_capacity(slice.len() / 2);
+    let mut i = 0;
+    while i + 1 < slice.len() {
+        u16s.push(u16::from_le_bytes([slice[i], slice[i + 1]]));
+        i += 2;
+    }
+    String::from_utf16_lossy(&u16s)
 }
 
 /// Resolves the caller module's exported linear `memory`, or a wasm trap (`Err`) if it is absent —
@@ -109,23 +116,25 @@ pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<S
 }
 
 /// Allocates `s` as a Dream `string` inside the module's linear memory by calling its exported
-/// `malloc`, storing `[byte_len][scalar_len]`, and copying the UTF-8 bytes at `ptr+8`. Returns the
-/// data pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`). Used by host functions
-/// that return strings. Layout: `[byte_len: i32][scalar_len: i32][utf8...]` (no NUL terminator).
+/// `malloc`, storing `[unit_len][pad]`, and copying UTF-16 LE units at `ptr+8`. Returns the
+/// data pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`).
 pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i32> {
     let malloc = required_malloc(caller)?;
-    let bytes = s.as_bytes();
+    let units: Vec<u16> = s.encode_utf16().collect();
+    let nbytes = units.len() * 2;
     let ptr = malloc.call(
         &mut *caller,
-        (STRING_HEADER as i32 + bytes.len() as i32, TAG_STRING),
+        (STRING_HEADER as i32 + nbytes as i32, TAG_STRING),
     )?;
     let memory = required_memory(caller)?;
     let start = ptr as usize;
     let data = shared_bytes_mut(&memory);
-    data[start..start + LEN_PREFIX].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
-    data[start + LEN_PREFIX..start + STRING_HEADER]
-        .copy_from_slice(&(s.chars().count() as i32).to_le_bytes());
-    data[start + STRING_UTF8..start + STRING_UTF8 + bytes.len()].copy_from_slice(bytes);
+    data[start..start + LEN_PREFIX].copy_from_slice(&(units.len() as i32).to_le_bytes());
+    data[start + LEN_PREFIX..start + STRING_HEADER].copy_from_slice(&0_i32.to_le_bytes());
+    for (i, u) in units.iter().enumerate() {
+        let o = start + STRING_UTF8 + i * 2;
+        data[o..o + 2].copy_from_slice(&u.to_le_bytes());
+    }
     Ok(ptr)
 }
 

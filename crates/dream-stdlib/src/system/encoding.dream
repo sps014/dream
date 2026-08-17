@@ -1,7 +1,7 @@
 module system.encoding;
 
 // UTF-8 / Base64 / hex codecs over `byte[]` and `string`.
-// Dream strings are length-prefixed UTF-8 bytes; `utf8_encode`/`utf8_decode` copy those bytes.
+// Dream strings are UTF-16 in memory; `utf8_encode` transcodes to UTF-8 bytes.
 
 // Maps 0–15 to a lowercase hex digit character.
 public fun hex_digit(v: int): char {
@@ -47,16 +47,49 @@ public fun b64_value(c: char): int {
 
 // UTF-8 / hex / Base64 encode and decode helpers.
 public class Encoding {
-    // Copies the UTF-8 bytes of `text` into a new `byte[]`.
+    // Copies the UTF-8 encoding of `text` into a new `byte[]`.
     public static fun utf8_encode(text: string): byte[] {
-        let n = text.byte_size();
-        let out = Buffer.alloc<byte>(n);
+        let n = text.length;
+        let out = Buffer.alloc<byte>(n * 4);
+        let w = 0;
         let i = 0;
         while (i < n) {
-            out[i] = (byte)text.byte_at(i);
+            let cp = text.char_at(i).to_int();
             i = i + 1;
+            if ((cp >= 55296) && (cp <= 56319) && (i < n)) {
+                let lo = text.char_at(i).to_int();
+                if ((lo >= 56320) && (lo <= 57343)) {
+                    cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320);
+                    i = i + 1;
+                }
+            }
+            if (cp < 128) {
+                out[w] = (byte)cp;
+                w = w + 1;
+            } else if (cp < 2048) {
+                out[w] = (byte)(192 + (cp / 64));
+                out[w + 1] = (byte)(128 + (cp % 64));
+                w = w + 2;
+            } else if (cp < 65536) {
+                out[w] = (byte)(224 + (cp / 4096));
+                out[w + 1] = (byte)(128 + ((cp / 64) % 64));
+                out[w + 2] = (byte)(128 + (cp % 64));
+                w = w + 3;
+            } else {
+                out[w] = (byte)(240 + (cp / 262144));
+                out[w + 1] = (byte)(128 + ((cp / 4096) % 64));
+                out[w + 2] = (byte)(128 + ((cp / 64) % 64));
+                out[w + 3] = (byte)(128 + (cp % 64));
+                w = w + 4;
+            }
         }
-        return out;
+        let exact = Buffer.alloc<byte>(w);
+        let j = 0;
+        while (j < w) {
+            exact[j] = out[j];
+            j = j + 1;
+        }
+        return exact;
     }
 
     // Interprets `bytes` as UTF-8 and builds a Dream string.

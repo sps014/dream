@@ -31,9 +31,9 @@ const STRING_TAG: i32 = super::abi::TAG_STRING;
 const HEAP_HEADER_SIZE: u32 = super::abi::HEAP_HEADER_SIZE;
 
 /// Base address (block start) of the interned string data segment. Each string is a heap-object
-/// block `[size=0][tag=STRING][ref_count=1][byte_len:i32][scalar_len:i32][utf8]`; the mapped address
-/// points at the byte_len word (block start + header), with utf8 bytes at `ptr+8`. `$str_byte_size`
-/// and `$str_scalar_len` are single loads at `ptr` / `ptr+4`. There is no NUL terminator (the length
+/// block `[size=0][tag=STRING][ref_count=1][unit_len:i32][pad:i32][utf16le]`; the mapped address
+/// points at the unit_len word (block start + header), with UTF-16 units at `ptr+8`. `$str_byte_size`
+/// is `unit_len * 2`; `$str_scalar_len` loads `unit_len` at `ptr`. There is no NUL terminator (the length
 /// prefix makes it redundant). The heap starts above.
 const STRING_BASE: u32 = super::abi::STRING_BASE;
 

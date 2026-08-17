@@ -39,15 +39,14 @@ pub const HEADER_REFCOUNT_OFFSET: u32 = 8;
 
 /// Byte size of the length/count prefix preceding an array's elements at the data pointer
 /// (`[count:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. Also the size of the
-/// first word of a string (byte_len); strings additionally store scalar_len at `ptr+4` and utf8 at
-/// `ptr + STRING_UTF8_OFFSET` — see [`STRING_HEADER_SIZE`].
+/// first word of a string (`unit_len`); UTF-16 payload starts at `ptr + STRING_UTF8_OFFSET`.
 pub const LEN_PREFIX_SIZE: u32 = 4;
 
-/// Byte size of a string's data header `[byte_len:i32][scalar_len:i32]` before utf8 bytes.
+/// Byte size of a string's data header `[unit_len:i32][pad:i32]` before UTF-16 LE units.
 pub const STRING_HEADER_SIZE: u32 = 8;
-/// Offset of utf8 bytes from the string data pointer.
+/// Offset of UTF-16 LE payload from the string data pointer.
 pub const STRING_UTF8_OFFSET: u32 = 8;
-/// Offset of cached scalar-length word from the string data pointer.
+/// Pad word (unused; kept so the payload stays 8-byte-header aligned).
 pub const STRING_SCALAR_LEN_OFFSET: u32 = 4;
 
 // -- Linear memory -------------------------------------------------------------------------------

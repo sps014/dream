@@ -37,6 +37,7 @@ pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
 pub use rc::{RcElision, RcInsertion};
+pub(crate) use rc::stmt_reads_local;
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa};

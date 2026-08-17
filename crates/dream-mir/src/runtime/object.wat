@@ -80,9 +80,9 @@
     (local $c i32)
     i32.const -2128831035
     local.set $h
-    ;; byte_len at [p]; utf8 at p+8
+    ;; unit_len * 2 payload bytes at p+8
     local.get $p
-    i32.load
+    call $str_byte_size
     local.set $len
     i32.const 0
     local.set $i
@@ -125,7 +125,7 @@
     (local $end i32)
     (local $tmp i32)
     (local $digit i32)
-    i32.const 20
+    i32.const 32
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
@@ -139,14 +139,14 @@
     (if (then
         local.get $d
         i32.const 48
-        i32.store8
+        i32.store16
         local.get $p
         i32.const 1
         i32.store
         local.get $p
         i32.const 4
         i32.add
-        i32.const 1
+        i32.const 0
         i32.store
         local.get $p
         return
@@ -186,11 +186,13 @@
             ))
             local.get $d
             local.get $i
+            i32.const 1
+            i32.shl
             i32.add
             local.get $digit
             i32.const 48
             i32.add
-            i32.store8
+            i32.store16
             local.get $i
             i32.const 1
             i32.add
@@ -206,9 +208,11 @@
     (if (then
         local.get $d
         local.get $i
+        i32.const 1
+        i32.shl
         i32.add
         i32.const 45
-        i32.store8
+        i32.store16
         local.get $i
         i32.const 1
         i32.add
@@ -220,7 +224,7 @@
     local.get $p
     i32.const 4
     i32.add
-    local.get $i
+    i32.const 0
     i32.store
     i32.const 0
     local.set $start
@@ -236,22 +240,30 @@
             br_if $rev_done
             local.get $d
             local.get $start
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
+            i32.load16_u
             local.set $tmp
             local.get $d
             local.get $start
+            i32.const 1
+            i32.shl
             i32.add
             local.get $d
             local.get $end
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
-            i32.store8
+            i32.load16_u
+            i32.store16
             local.get $d
             local.get $end
+            i32.const 1
+            i32.shl
             i32.add
             local.get $tmp
-            i32.store8
+            i32.store16
             local.get $start
             i32.const 1
             i32.add
@@ -282,26 +294,26 @@
 )
 (func $char_to_string (param $v i32) (result i32)
     (local $p i32)
-    ;; 8-byte string header + 1 char byte
-    i32.const 9
+    (local $w i32)
+    i32.const 16
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
-    ;; byte_len = 1, scalar_len = 1
     local.get $p
-    i32.const 1
+    i32.const 8
+    i32.add
+    i32.const 0
+    local.get $v
+    call $utf16_encode_at
+    local.set $w
+    local.get $p
+    local.get $w
     i32.store
     local.get $p
     i32.const 4
     i32.add
-    i32.const 1
+    i32.const 0
     i32.store
-    ;; char at p+8
-    local.get $p
-    i32.const 8
-    i32.add
-    local.get $v
-    i32.store8
     local.get $p
 )
 ;; ----- New integer primitives: long (i64), ulong (i64), uint (i32), byte (i32) -----
@@ -398,7 +410,7 @@
     (local $end i32)
     (local $tmp i32)
     (local $digit i32)
-    i32.const 28
+    i32.const 56
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
@@ -411,14 +423,14 @@
     (if (then
         local.get $d
         i32.const 48
-        i32.store8
+        i32.store16
         local.get $p
         i32.const 1
         i32.store
         local.get $p
         i32.const 4
         i32.add
-        i32.const 1
+        i32.const 0
         i32.store
         local.get $p
         return
@@ -459,11 +471,13 @@
             ))
             local.get $d
             local.get $i
+            i32.const 1
+            i32.shl
             i32.add
             local.get $digit
             i32.const 48
             i32.add
-            i32.store8
+            i32.store16
             local.get $i
             i32.const 1
             i32.add
@@ -479,9 +493,11 @@
     (if (then
         local.get $d
         local.get $i
+        i32.const 1
+        i32.shl
         i32.add
         i32.const 45
-        i32.store8
+        i32.store16
         local.get $i
         i32.const 1
         i32.add
@@ -493,7 +509,7 @@
     local.get $p
     i32.const 4
     i32.add
-    local.get $i
+    i32.const 0
     i32.store
     i32.const 0
     local.set $start
@@ -509,22 +525,30 @@
             br_if $rev_done
             local.get $d
             local.get $start
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
+            i32.load16_u
             local.set $tmp
             local.get $d
             local.get $start
+            i32.const 1
+            i32.shl
             i32.add
             local.get $d
             local.get $end
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
-            i32.store8
+            i32.load16_u
+            i32.store16
             local.get $d
             local.get $end
+            i32.const 1
+            i32.shl
             i32.add
             local.get $tmp
-            i32.store8
+            i32.store16
             local.get $start
             i32.const 1
             i32.add
@@ -547,7 +571,7 @@
     (local $end i32)
     (local $tmp i32)
     (local $digit i32)
-    i32.const 28
+    i32.const 56
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
@@ -560,14 +584,14 @@
     (if (then
         local.get $d
         i32.const 48
-        i32.store8
+        i32.store16
         local.get $p
         i32.const 1
         i32.store
         local.get $p
         i32.const 4
         i32.add
-        i32.const 1
+        i32.const 0
         i32.store
         local.get $p
         return
@@ -586,11 +610,13 @@
             local.set $digit
             local.get $d
             local.get $i
+            i32.const 1
+            i32.shl
             i32.add
             local.get $digit
             i32.const 48
             i32.add
-            i32.store8
+            i32.store16
             local.get $i
             i32.const 1
             i32.add
@@ -608,7 +634,7 @@
     local.get $p
     i32.const 4
     i32.add
-    local.get $i
+    i32.const 0
     i32.store
     i32.const 0
     local.set $start
@@ -624,22 +650,30 @@
             br_if $rev_done
             local.get $d
             local.get $start
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
+            i32.load16_u
             local.set $tmp
             local.get $d
             local.get $start
+            i32.const 1
+            i32.shl
             i32.add
             local.get $d
             local.get $end
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
-            i32.store8
+            i32.load16_u
+            i32.store16
             local.get $d
             local.get $end
+            i32.const 1
+            i32.shl
             i32.add
             local.get $tmp
-            i32.store8
+            i32.store16
             local.get $start
             i32.const 1
             i32.add

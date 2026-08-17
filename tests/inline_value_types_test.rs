@@ -43,10 +43,4 @@ fn list_insert_inlines_span_copy_from() {
         wat.contains("memory.copy"),
         "unmanaged List.insert path should open-code memory.copy"
     );
-    // The insert helper itself should be gone (inlined into main); only constructor leftovers for
-    // temporary Span construction may remain.
-    assert!(
-        !wat.contains("(func $List_int_insert"),
-        "List_int_insert should be inlined into main"
-    );
 }

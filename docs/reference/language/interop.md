@@ -100,14 +100,14 @@ With the ABI loaded, arguments and returns convert between Dream's heap layout a
 |------------|-------------|-----------------|
 | `int`, `float`, `double` | `number` | `number` |
 | `bool` | `boolean` | `boolean` |
-| `string` | `string` (decoded UTF-8) | return a `string` |
+| `string` | `string` (UTF-16 in linear memory) | return a `string` |
 | `T[]` | `Array` of marshaled elements | (pointer) |
 | `object`, classes, `List<T>` | opaque pointer (`number`) | (pointer) |
 
 For reference types, read the underlying data with the instance helpers:
 
 ```javascript
-mod.readString(ptr);          // length-prefixed UTF-8 string
+mod.readString(ptr);          // length-prefixed UTF-16 LE string
 mod.readArray(ptr, "int");    // -> number[]
 mod.readList(ptr, "string");  // List<string> -> string[]
 mod.readStruct(ptr, [         // class by field schema (declaration order)

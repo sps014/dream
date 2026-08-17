@@ -1,6 +1,6 @@
 # Strings
 
-`string` is UTF-8 text. `+` and `$"hi {name}"` need no import. Extra helpers: `import system.text;` (also pulled in by `import system;`).
+`string` is UTF-16 text in memory (C#/JS-style code units). Files, JSON on the wire, and `Encoding.utf8_*` still use UTF-8. `+` and `$"hi {name}"` need no import. Extra helpers: `import system.text;` (also pulled in by `import system;`).
 
 ```dream
 import system;
@@ -13,17 +13,17 @@ fun main() {
 }
 ```
 
-`.length` counts Unicode scalars, not bytes. Use `.byte_size()` for UTF-8 size. `string.empty` is the shared empty string.
+`.length` counts UTF-16 code units, not Unicode scalars. Use `.byte_size()` for the raw UTF-16 payload size (`length * 2`). `string.empty` is the shared empty string.
 
 ## Look up and change
 
 | Call | Meaning |
 | --- | --- |
-| `char_at(i)` / `s[i]` / `get(i)` | character at index |
-| `s[i] = c` / `set_at(i, c)` | replace a character |
-| `byte_at(i)` | one UTF-8 byte |
-| `for (let c in s)` | walk characters |
-| `string.alloc(n)` | allocate `n` scalars (low-level) |
+| `char_at(i)` / `s[i]` / `get(i)` | UTF-16 code unit at index |
+| `s[i] = c` / `set_at(i, c)` | replace a code unit |
+| `byte_at(i)` | one payload byte (UTF-16 LE) |
+| `for (let c in s)` | walk code units |
+| `string.alloc(n)` | allocate `n` code units (low-level) |
 
 ## Search and transform
 

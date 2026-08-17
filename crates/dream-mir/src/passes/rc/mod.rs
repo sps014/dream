@@ -12,6 +12,7 @@ mod liveness;
 
 pub use elision::RcElision;
 pub use insertion::RcInsertion;
+pub(crate) use liveness::stmt_reads_local;
 
 use crate::{Global, Local, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;

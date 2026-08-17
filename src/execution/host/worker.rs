@@ -176,22 +176,26 @@ fn store_write_string(
     memory: &SharedMemory,
     s: &str,
 ) -> Option<i32> {
-    let bytes = s.as_bytes();
+    let units: Vec<u16> = s.encode_utf16().collect();
+    let nbytes = units.len() * 2;
     let ptr = malloc
         .call(
             &mut *store,
-            (STRING_HEADER + bytes.len() as i32, TAG_STRING),
+            (STRING_HEADER + nbytes as i32, TAG_STRING),
         )
         .ok()?;
     let base = ptr as usize;
     let data = super::memory::shared_bytes_mut(memory);
-    if base + STRING_UTF8 + bytes.len() > data.len() {
+    if base + STRING_UTF8 + nbytes > data.len() {
         return None;
     }
-    data[base..base + LEN_PREFIX as usize].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
+    data[base..base + LEN_PREFIX as usize].copy_from_slice(&(units.len() as i32).to_le_bytes());
     data[base + LEN_PREFIX as usize..base + STRING_HEADER as usize]
-        .copy_from_slice(&(s.chars().count() as i32).to_le_bytes());
-    data[base + STRING_UTF8..base + STRING_UTF8 + bytes.len()].copy_from_slice(bytes);
+        .copy_from_slice(&0_i32.to_le_bytes());
+    for (i, u) in units.iter().enumerate() {
+        let o = base + STRING_UTF8 + i * 2;
+        data[o..o + 2].copy_from_slice(&u.to_le_bytes());
+    }
     Some(ptr)
 }
 

@@ -296,6 +296,7 @@ fn classify(
     o: Local,
 ) -> Option<BTreeMap<usize, TypeId>> {
     let mut fields: BTreeMap<usize, TypeId> = BTreeMap::new();
+    let mut had_load = false;
     for block in &func.blocks {
         for stmt in &block.stmts {
             match stmt {
@@ -318,6 +319,7 @@ fn classify(
                 ) if *base == o => {
                     // The destination's declared type is the field's type (authoritative).
                     fields.insert(*field, func.local_ty(*x));
+                    had_load = true;
                 }
                 // Heap RC on the object itself: dropped in `transform` once the allocation is gone.
                 Statement::Retain(Operand::Copy(Place::Local(l)))
@@ -334,6 +336,11 @@ fn classify(
         if terminator_mentions(&block.terminator, o) {
             return None;
         }
+    }
+    // Stores-only objects (construct + `del()`, never read) must stay heap-allocated so
+    // `$release_*` still runs the destructor. Acc-style helpers always load fields.
+    if !had_load {
+        return None;
     }
     Some(fields)
 }

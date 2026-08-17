@@ -38,18 +38,18 @@
     local.get $ip
     call $long_to_string
     local.set $ipstr
-    ;; 8-byte string header + up to 7 utf8 bytes ('.' + 6 digits)
+    ;; 8-byte string header + up to 7 UTF-16 units ('.' + 6 digits)
     i32.const 24
     i32.const {TAG_STRING}
     call $malloc
     local.set $buf
-    ;; chars live at buf+8; write '.' at [buf+8]
+    ;; chars live at buf+8; write '.' at unit 0
     local.get $buf
     i32.const 8
     i32.add
     i32.const 46
-    i32.store8
-    ;; write the 6 fractional digits into (buf+8)[1..6], least-significant last
+    i32.store16
+    ;; write the 6 fractional digits into units [1..6], least-significant last
     i32.const 6
     local.set $i
     (block $wdone
@@ -62,6 +62,8 @@
             i32.const 8
             i32.add
             local.get $i
+            i32.const 1
+            i32.shl
             i32.add
             local.get $fr
             i64.const 10
@@ -69,7 +71,7 @@
             i32.wrap_i64
             i32.const 48
             i32.add
-            i32.store8
+            i32.store16
             local.get $fr
             i64.const 10
             i64.div_s
@@ -81,7 +83,7 @@
             br $wgen
         )
     )
-    ;; trim trailing '0's; $i ends as the cut length (chars to keep in buf)
+    ;; trim trailing '0's; $i ends as the cut length (units to keep in buf)
     i32.const 7
     local.set $i
     (block $tdone
@@ -96,8 +98,10 @@
             local.get $i
             i32.const 1
             i32.sub
+            i32.const 1
+            i32.shl
             i32.add
-            i32.load8_u
+            i32.load16_u
             i32.const 48
             i32.ne
             br_if $tdone
@@ -113,14 +117,14 @@
     i32.const 1
     i32.eq
     (if (then i32.const 0 local.set $i))
-    ;; store byte_len and scalar_len ($i; ASCII) so $concat_strings sees a valid string
+    ;; store unit_len ($i; ASCII)
     local.get $buf
     local.get $i
     i32.store
     local.get $buf
     i32.const 4
     i32.add
-    local.get $i
+    i32.const 0
     i32.store
     local.get $ipstr
     local.get $buf

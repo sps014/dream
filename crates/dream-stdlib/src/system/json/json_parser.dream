@@ -1,7 +1,7 @@
 module system.json;
 
-// Byte-cursor recursive-descent JSON parser over the input string's UTF-8 bytes
-// (`byte_at` / `byte_size`) — no intermediate `byte[]` copy.
+// Code-unit cursor recursive-descent JSON parser over the input string
+// (`char_at` / `.length`) — no intermediate `byte[]` copy.
 public class JsonParser {
     text: string;
     pos: int;
@@ -12,15 +12,15 @@ public class JsonParser {
     }
 
     fun len(): int {
-        return this.text.byte_size();
+        return this.text.length;
     }
 
     fun b(): int {
-        return this.text.byte_at(this.pos);
+        return this.text.char_at(this.pos).to_int();
     }
 
     fun b_at(i: int): int {
-        return this.text.byte_at(i);
+        return this.text.char_at(i).to_int();
     }
 
     public fun skip_ws(): void {
@@ -158,7 +158,7 @@ public class JsonParser {
                         sb.append_char((char)cp);
                     }
                 } else {
-                    // Bulk-copy unescaped UTF-8 until `"` or `\`.
+                    // Bulk-copy unescaped units until `"` or `\`.
                     let run_start = this.pos;
                     let scanning = true;
                     while (scanning == true) {
@@ -173,7 +173,7 @@ public class JsonParser {
                             }
                         }
                     }
-                    sb.append_utf8_slice(this.text, run_start, this.pos - run_start);
+                    sb.append_utf8_slice(this.text, run_start * 2, (this.pos - run_start) * 2);
                 }
             }
         }

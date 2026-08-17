@@ -9,8 +9,8 @@ ratios are not an ARC-only scoreboard.
 
 | Bench | Dream | C# |
 |-------|-------|-----|
-| `char_scan` | Linear UTF-8 scalar decode (`utf8_decode_at` / width) | `foreach` over UTF-16 chars |
-| `byte_scan` | `byte_at` walk | UTF-16 code-unit indexer (ASCII-fair) |
+| `char_scan` | `char_at` loop over UTF-16 code units | `foreach` over UTF-16 chars |
+| `byte_scan` | `byte_at` walk of UTF-16 LE payload | UTF-16 code-unit indexer (ASCII-fair) |
 | `substring` | `substring(start, end)` | `Substring(start, length)` |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
 | `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, `Compiled` |
@@ -110,6 +110,24 @@ kind 5/7). `"hello" + i.to_string() + "world"` is `$concat_str_int_str`.
 | string_builder | 24 | 7 |
 | map_clear_reuse | 24 | 2 |
 | string_concat | 40 | 9 |
+
+### After (in-memory UTF-16 strings)
+
+Heap `string` is UTF-16 LE code units (C#/JS `char` indexing). `.length` / `char_at` /
+`substring` are O(1) `i32.load` / `i32.load16_u` / `memory.copy`. Same host as
+`./scripts/run-microbenches.sh`.
+
+| Bench | Dream | C# | vs prior Dream |
+|-------|------:|---:|----------------|
+| char_scan | 270 | 23 | ~286 → 270 (unit load vs UTF-8 decode) |
+| byte_scan | 524 | 22 | walks UTF-16 LE payload (2× ASCII bytes) |
+| substring | 29 | 6 | ~119 → 29 (no scalar-to-byte walk) |
+| string_eq | 8 | 4 | ~7 |
+| string_concat | 37 | 9 | ~40 |
+| string_builder | 30 | 14 | ~24 (u16 buffer) |
+| regex_find | 12606 | 956 | ~12877 (Pike on code units) |
+| json_serialize | 1650 | 922 | ~1227 |
+| json_deserialize | 5328 | 1726 | ~5327 |
 
 Native LLVM path (floor for scan/substring/regex): see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md)

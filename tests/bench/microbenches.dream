@@ -11,7 +11,7 @@ import system.text;
 //
 // Notes vs C# (`tests/bench/csharp`):
 // - Dream executes under Wasm/wasmtime + ARC; C# is native JIT + GC.
-// - `char_scan` uses linear `chars()` (UTF-8 scalars); `byte_scan` is the ASCII-fair byte walk.
+// - `char_scan` is a `char_at` loop over UTF-16 units; `byte_scan` walks UTF-16 LE payload bytes.
 // - `substring(start, end)` is start/end indices; C# uses (start, length).
 
 let measuring: bool = true;
@@ -88,20 +88,19 @@ fun bench_string_eq(iters: int): void {
     sink_int(hits);
 }
 
-// Linear UTF-8 scalar walk (O(n) per string). Uses a byte cursor — avoids O(n²) `char_at`
-// and avoids allocating a `StringIterator` class each outer iteration.
+// Linear UTF-16 code-unit walk (O(1) `char_at` per unit).
 fun bench_char_scan(iters: int): void {
     let s = "The quick brown fox jumps over the lazy dog. 0123456789";
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while (i < iters) {
-        let n = s.byte_size();
+        let n = s.length;
         let bo = 0;
         while (bo < n) {
-            let c = string.utf8_decode_at(s, bo);
+            let c = s.char_at(bo);
             acc = acc + (int)c;
-            bo = bo + string.utf8_width_at(s, bo);
+            bo = bo + 1;
         }
         i = i + 1;
     }
@@ -110,7 +109,7 @@ fun bench_char_scan(iters: int): void {
     sink_int(acc);
 }
 
-// Raw UTF-8 byte walk — fair ASCII counterpart to C# indexer scan.
+// Raw UTF-16 LE payload walk.
 fun bench_byte_scan(iters: int): void {
     let s = "The quick brown fox jumps over the lazy dog. 0123456789";
     let sw = Stopwatch();

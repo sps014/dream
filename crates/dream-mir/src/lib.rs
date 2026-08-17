@@ -434,11 +434,11 @@ pub enum Rvalue {
     },
     Binary(BinOp, Operand, Operand),
     Unary(UnOp, Operand),
-    /// `string.len()` via a runtime `$str_scalar_len` call (Unicode scalar count).
+    /// `string.len()` via a runtime `$str_scalar_len` call (UTF-16 code-unit count).
     StrLen(Operand),
-    /// `string.byte_size()` via a runtime `$str_byte_size` call (O(1) byte-length load).
+    /// `string.byte_size()` via a runtime `$str_byte_size` call (`unit_len * 2`).
     StrByteSize(Operand),
-    /// `string.char_at(i)` via the runtime `$char_at` helper: `.0` is the string, `.1` the scalar index.
+    /// `string.char_at(i)` via the runtime `$char_at` helper: `.0` is the string, `.1` the code-unit index.
     CharAt(Operand, Operand),
     /// `string.byte_at(i)` via the runtime `$byte_at` helper: `.0` is the string, `.1` the byte index.
     ByteAt(Operand, Operand),

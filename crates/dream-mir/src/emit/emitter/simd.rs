@@ -36,38 +36,66 @@ impl Emitter<'_> {
         None
     }
 
-    fn simd_intrinsic_key(sym: &str) -> String {
-        if sym.starts_with("simd_") {
-            return sym.to_string();
+    /// Maps a callee symbol to a SIMD intrinsic key.
+    ///
+    /// Accepts only:
+    /// - exact `@intrinsic("simd_*")` keys from the symbol table, or
+    /// - monomorphized `Vector_<elem>_<op>` names with an allowlisted suffix.
+    ///
+    /// Never matches bare `*_add` / `*_sum` / `*_count` / `*_load_raw` on unrelated symbols
+    /// (`Vec2.sum`, `map_sum`, `debug_get_ref_count`, GPU `reduce_sum`, …).
+    fn simd_intrinsic_key(sym: &str) -> Option<&'static str> {
+        match sym {
+            "simd_v128_load" => Some("simd_v128_load"),
+            "simd_v128_store" => Some("simd_v128_store"),
+            "simd_v128_splat" => Some("simd_v128_splat"),
+            "simd_v128_add" => Some("simd_v128_add"),
+            "simd_v128_sub" => Some("simd_v128_sub"),
+            "simd_v128_mul" => Some("simd_v128_mul"),
+            "simd_v128_min" => Some("simd_v128_min"),
+            "simd_v128_max" => Some("simd_v128_max"),
+            "simd_v128_sum" => Some("simd_v128_sum"),
+            "simd_lane_count" => Some("simd_lane_count"),
+            _ => Self::vector_simd_key(sym),
         }
-        // Mangled `Vector<T>` helpers (`Vector_int_bin_add`, `…_load_raw`). Do not use a generic
-        // `*_add` / `*_sum` / `*_count` suffix — that steals `Vec2.sum`, `map_sum`, and
-        // `debug_get_ref_count`.
-        let vector = sym.contains("Vector");
-        let key = if sym.ends_with("load_raw") || (vector && sym.ends_with("_load")) {
-            "simd_v128_load"
-        } else if sym.ends_with("store_raw") || (vector && sym.ends_with("_store")) {
-            "simd_v128_store"
-        } else if sym.ends_with("splat_raw") || (vector && sym.ends_with("_splat")) {
-            "simd_v128_splat"
-        } else if sym.ends_with("bin_add") || (vector && sym.ends_with("_add")) {
-            "simd_v128_add"
-        } else if sym.ends_with("bin_sub") || (vector && sym.ends_with("_sub")) {
-            "simd_v128_sub"
-        } else if sym.ends_with("bin_mul") || (vector && sym.ends_with("_mul")) {
-            "simd_v128_mul"
-        } else if sym.ends_with("bin_min") || (vector && sym.ends_with("_min")) {
-            "simd_v128_min"
-        } else if sym.ends_with("bin_max") || (vector && sym.ends_with("_max")) {
-            "simd_v128_max"
-        } else if sym.ends_with("reduce_sum") || (vector && (sym.ends_with("_sum") || sym.ends_with("reduce_sum"))) {
-            "simd_v128_sum"
-        } else if sym.ends_with("lane_count") || (vector && sym.ends_with("_count")) {
-            "simd_lane_count"
-        } else {
-            return sym.to_string();
-        };
-        key.to_string()
+    }
+
+    /// `Vector_int_bin_add` / `Vector_float_load` / … — not `Vec2_sum` or `Foo_load_raw`.
+    fn vector_simd_key(sym: &str) -> Option<&'static str> {
+        if !sym.starts_with("Vector_") {
+            return None;
+        }
+        // Longer suffixes first so `_load_raw` wins over `_load`, `_bin_add` over `_add`, etc.
+        const SUFFIXES: &[(&str, &str)] = &[
+            ("_load_raw", "simd_v128_load"),
+            ("_store_raw", "simd_v128_store"),
+            ("_splat_raw", "simd_v128_splat"),
+            ("_bin_add", "simd_v128_add"),
+            ("_bin_sub", "simd_v128_sub"),
+            ("_bin_mul", "simd_v128_mul"),
+            ("_bin_min", "simd_v128_min"),
+            ("_bin_max", "simd_v128_max"),
+            ("_reduce_sum", "simd_v128_sum"),
+            ("_lane_count", "simd_lane_count"),
+            // Public wrappers: owning `Vector` locals are `v128` registers, so these must lower
+            // inline rather than using the pointer sret ABI at the call site.
+            ("_load", "simd_v128_load"),
+            ("_store", "simd_v128_store"),
+            ("_splat", "simd_v128_splat"),
+            ("_add", "simd_v128_add"),
+            ("_sub", "simd_v128_sub"),
+            ("_mul", "simd_v128_mul"),
+            ("_min", "simd_v128_min"),
+            ("_max", "simd_v128_max"),
+            ("_sum", "simd_v128_sum"),
+            ("_count", "simd_lane_count"),
+        ];
+        for &(suffix, key) in SUFFIXES {
+            if sym.ends_with(suffix) {
+                return Some(key);
+            }
+        }
+        None
     }
 
     /// Pushes a `v128` value: `local.get` for a register `Vector`, otherwise `v128.load` from an
@@ -101,7 +129,9 @@ impl Emitter<'_> {
         sret: Option<F>,
         dest_v128: Option<u32>,
     ) -> bool {
-        let key = Self::simd_intrinsic_key(&self.callee_symbol(callee));
+        let Some(key) = Self::simd_intrinsic_key(&self.callee_symbol(callee)) else {
+            return false;
+        };
         if key == "simd_lane_count" {
             let lane = Self::simd_lane_of(callee, self.interner).unwrap_or(SimdLane::I32);
             self.line(&format!("     (i32.const {})", lane.count()));
@@ -119,7 +149,7 @@ impl Emitter<'_> {
         }) else {
             return false;
         };
-        match key.as_str() {
+        match key {
             "simd_v128_splat" => {
                 if let Some(push) = sret.as_ref() {
                     push(self);
@@ -161,7 +191,7 @@ impl Emitter<'_> {
                 } else if dest_v128.is_none() {
                     return false;
                 }
-                let op = match key.as_str() {
+                let op = match key {
                     "simd_v128_add" => lane.binop_wat(BinOp::Add).unwrap_or("i32x4.add"),
                     "simd_v128_sub" => lane.binop_wat(BinOp::Sub).unwrap_or("i32x4.sub"),
                     "simd_v128_mul" => lane.binop_wat(BinOp::Mul).unwrap_or("i32x4.mul"),

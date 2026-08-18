@@ -118,7 +118,7 @@ flowchart LR
     A["x = New{..}\nRetain(x)\n... use x ...\nRelease(x)"] -->|RcElision sees adjacent pair| B["x = New{..}\n... use x ..."]
 ```
 
-- `RcInsertion` runs once, module-wide, *before* inlining and the per-function pipeline. It conservatively inserts a `Retain` when a reference is copied/escapes and a `Release` when it dies.
+- `RcInsertion` runs once, module-wide, *before* inlining and the per-function pipeline. It assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies.
 - `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Nim-hard ARC](./11-swift-like-arc-roadmap.md)).
 
 See [05-writing-passes.md](./05-writing-passes.md) for the details, including why RC must be inserted before inlining.

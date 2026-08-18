@@ -20,11 +20,15 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
   ([`weak.wat`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/runtime/weak.wat)).
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
-  (never under-retain); last-use **move** and last-use **destroy** (Release+null after the last
-  statement that uses an owned RC local, including `js`) in `RcInsertion` via CFG liveness.
-  Sink/take params still drop at callee return so inlining cannot copy-prop an early `= null` onto
-  a caller argument that is still live. After inlining, `RcElision` can cancel retain/release pairs
-  that a call barrier would have kept.
+  (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow (last-use **move**, last-use
+  **destroy**, split-edge release when a token is dead on one successor). Sharing still emits `Retain`.
+  Rebind of an owned local through a call/`New` evaluates the RHS into a temp, then `Release`s the
+  old occupant (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of
+  loop-carried owned locals start **Owned** so the first dataflow pass does not treat a back-edge as
+  Empty. Strings/arrays/funcboxes/unions are not destroyed mid-block (hidden borrows); they wait
+  until return. Sink/take params still drop at callee return so inlining cannot copy-prop an early
+  `= null` onto a caller argument that is still live. After inlining, `RcElision` can cancel
+  retain/release pairs that a call barrier would have kept.
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.
 - `ref name: T` parameters for mutable place / value-struct aliasing.
 - Flow-sensitive use-after-move diagnostics after a sink parameter is stored into a field or index.

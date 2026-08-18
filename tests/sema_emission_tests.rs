@@ -1213,28 +1213,39 @@ fn func_value_argument_is_reference_counted() {
         .find(|f| f.name == "main")
         .expect("main should be lowered");
 
+    let mut func_value_moved = false;
     let mut func_value_rc = 0usize;
     let mut reference_rc = 0usize;
     for block in &main.blocks {
         for stmt in &block.stmts {
-            let op = match stmt {
-                Statement::Retain(o) | Statement::Release(o) => o,
-                _ => continue,
-            };
-            if let Operand::Copy(Place::Local(l)) = op {
-                let ty = main.locals[l.0 as usize].ty;
-                if matches!(interner.kind(ty), dream_types::TyKind::Func(_, _)) {
-                    func_value_rc += 1;
-                } else if interner.is_reference(ty) {
-                    reference_rc += 1;
+            match stmt {
+                Statement::Retain(o) | Statement::Release(o) => {
+                    if let Operand::Copy(Place::Local(l)) = o {
+                        let ty = main.locals[l.0 as usize].ty;
+                        if matches!(interner.kind(ty), dream_types::TyKind::Func(_, _)) {
+                            func_value_rc += 1;
+                        } else if interner.is_reference(ty) {
+                            reference_rc += 1;
+                        }
+                    }
                 }
+                Statement::Assign(
+                    Place::Local(l),
+                    dream_mir::Rvalue::Use(Operand::Const(dream_mir::Const::Null)),
+                ) => {
+                    let ty = main.locals[l.0 as usize].ty;
+                    if matches!(interner.kind(ty), dream_types::TyKind::Func(_, _)) {
+                        func_value_moved = true;
+                    }
+                }
+                _ => {}
             }
         }
     }
 
     assert!(
-        func_value_rc > 0,
-        "a function value is a heap funcbox and must be retained/released:\n{:#?}",
+        func_value_rc > 0 || func_value_moved,
+        "a function value is a heap funcbox: last-use moves into a sink or is retain/released:\n{:#?}",
         main
     );
     assert!(

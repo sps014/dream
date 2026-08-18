@@ -1,11 +1,16 @@
-//! [`RcInsertion`]: make reference ownership explicit in MIR.
+//! [`RcInsertion`]: make reference ownership explicit in MIR via compile-time tokens.
 
+use super::is_borrowed_copy;
 use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
-use super::{is_borrowed_copy, rvalue_reads_local};
+use super::tokens::{
+    apply_stmt_tokens, assigns_local, dest_holds_token, is_owned_local, move_source,
+    needs_rebind_temp, rc_op_on_local, release_and_null, sink_call_args, source_line_end,
+    take_arg_effects, TokenAnalysis,
+};
 use crate::passes::MirPass;
 use crate::{Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub struct RcInsertion;
 
@@ -15,7 +20,6 @@ impl MirPass for RcInsertion {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        // Infer non-owning aliases before ownership insertion so field/index loads skip retain.
         super::cursor::infer_cursors(func, interner);
 
         let local_is_ref: Vec<bool> = func
@@ -23,81 +27,56 @@ impl MirPass for RcInsertion {
             .iter()
             .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
-        let local_is_cursor: Vec<bool> = func.locals.iter().map(|d| d.is_cursor).collect();
-        let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
-        let take_params: HashSet<u32> = func
-            .params
-            .iter()
-            .copied()
-            .filter(|p| func.locals[p.0 as usize].is_take)
-            .map(|p| p.0)
+        let analysis = TokenAnalysis::analyze(func, interner);
+        let owned_flags: Vec<bool> = (0..func.locals.len() as u32)
+            .map(|l| is_owned_local(func, interner, l))
             .collect();
-        // Take params own their +1 (like ordinary owned locals). Ordinary params are borrowed.
-        // Cursors never own.
-        let is_owned_ref = |l: u32| {
-            local_is_ref.get(l as usize).copied().unwrap_or(false)
-                && !local_is_cursor.get(l as usize).copied().unwrap_or(false)
-                && (!params.contains(&l) || take_params.contains(&l))
-        };
+        let is_owned = |l: u32| owned_flags.get(l as usize).copied().unwrap_or(false);
         let mut changed = false;
 
-        let live_out = liveness::live_out(func);
-
-        // Last-use move: for `dest = src` where `src` is an owned ref local and `src` is dead after
-        // the copy (CFG liveness, including loop back-edges) — skip Retain and null `src` so the
-        // existing +1 transfers to `dest`. Never move from parameters or non-local places.
-        let mut move_sites: HashSet<(usize, usize)> = HashSet::new();
-        for (bi, block) in func.blocks.iter().enumerate() {
-            for (si, stmt) in block.stmts.iter().enumerate() {
-                let Statement::Assign(Place::Local(dest), rvalue) = stmt else {
-                    continue;
-                };
-                if !is_owned_ref(dest.0) || !is_borrowed_copy(rvalue, interner) {
-                    continue;
-                }
-                if rvalue_reads_local(rvalue, dest.0) {
-                    continue;
-                }
-                let Some(src) = move_source(rvalue, &is_owned_ref) else {
-                    continue;
-                };
-                if !live_after_stmt(func, &live_out, bi, si, src.0) {
-                    move_sites.insert((bi, si));
-                }
-            }
-        }
-
-        // Rule 1: local-assignment RC (release previous occupant, retain borrowed copies). When the
-        // new value depends on the *old* one (e.g. `list = Cons(i, list)`), the old value must be
-        // released *after* the rvalue is evaluated (the rvalue's container store retains it), not
-        // before — otherwise a `+0` old value is freed and then reused mid-evaluation. Such cases
-        // stash the old pointer in a synthetic temp and release it after the store.
-        //
-        // Last-use move: for `dest = src` where `src` is an owned ref local and `src` is dead after
-        // the copy — skip Retain and null `src` so the existing +1 transfers to `dest`.
         let local_types: Vec<dream_types::TypeId> = func.locals.iter().map(|d| d.ty).collect();
         let mut extra_locals: Vec<LocalDecl> = Vec::new();
         let temp_base = func.locals.len() as u32;
         for (bi, block) in func.blocks.iter_mut().enumerate() {
-            let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len());
+            let mut tokens = analysis.token_in[bi].clone();
+            let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len() + 8);
+            for &local in &analysis.start_release[bi] {
+                out.extend(release_and_null(local));
+                if (local as usize) < tokens.len() {
+                    tokens[local as usize] = false;
+                }
+                changed = true;
+            }
             for (si, stmt) in block.stmts.drain(..).enumerate() {
                 let ref_dest = match &stmt {
-                    Statement::Assign(Place::Local(dest), rvalue) if is_owned_ref(dest.0) => {
-                        Some((
-                            *dest,
-                            is_borrowed_copy(rvalue, interner),
-                            rvalue_reads_local(rvalue, dest.0),
-                            move_source(rvalue, &is_owned_ref),
-                        ))
-                    }
+                    Statement::Assign(Place::Local(dest), rvalue) if is_owned(dest.0) => Some((
+                        *dest,
+                        is_borrowed_copy(rvalue, interner),
+                        needs_rebind_temp(rvalue, dest.0),
+                        move_source(rvalue, &is_owned),
+                    )),
                     _ => None,
                 };
+                let had_dest = ref_dest
+                    .as_ref()
+                    .map(|(d, _, _, _)| dest_holds_token(&tokens, d.0))
+                    .unwrap_or(false);
+                apply_stmt_tokens(
+                    &stmt,
+                    interner,
+                    &is_owned,
+                    analysis.assign_move.contains(&(bi, si)),
+                    |l| analysis.sink_move.contains(&(bi, si, l)),
+                    &mut tokens,
+                );
+
+                let (sink_retains, sink_nulls) =
+                    take_arg_effects(&stmt, &is_owned, &local_is_ref, |local| {
+                        analysis.sink_move.contains(&(bi, si, local))
+                    });
+
                 match ref_dest {
-                    Some((dest, retain, true, _)) => {
-                        assert!(
-                            is_owned_ref(dest.0),
-                            "RC insertion on non-owned reference local"
-                        );
+                    Some((dest, retain, true, _)) if had_dest => {
                         let tmp = Local(temp_base + extra_locals.len() as u32);
                         extra_locals.push(LocalDecl {
                             ty: local_types[dest.0 as usize],
@@ -107,117 +86,123 @@ impl MirPass for RcInsertion {
                             is_cursor: false,
                             manual_drop: false,
                         });
+                        let rvalue = match stmt {
+                            Statement::Assign(_, rv) => rv,
+                            _ => unreachable!("ref_dest is an Assign"),
+                        };
+                        for r in sink_retains {
+                            out.push(r);
+                        }
+                        out.push(Statement::Assign(Place::Local(tmp), rvalue));
+                        out.push(Statement::Release(Operand::Copy(Place::Local(dest))));
                         out.push(Statement::Assign(
-                            Place::Local(tmp),
-                            Rvalue::Use(Operand::Copy(Place::Local(dest))),
+                            Place::Local(dest),
+                            Rvalue::Use(Operand::Copy(Place::Local(tmp))),
                         ));
+                        if retain {
+                            out.push(Statement::Retain(Operand::Copy(Place::Local(dest))));
+                        }
+                        for n in sink_nulls.into_iter().filter(|n| {
+                            !matches!(
+                                n,
+                                Statement::Assign(Place::Local(l), _) if *l == dest
+                            )
+                        }) {
+                            out.push(n);
+                        }
+                        changed = true;
+                    }
+                    Some((dest, retain, true, _)) => {
+                        for r in sink_retains {
+                            out.push(r);
+                        }
                         out.push(stmt);
                         if retain {
                             out.push(Statement::Retain(Operand::Copy(Place::Local(dest))));
                         }
-                        out.push(Statement::Release(Operand::Copy(Place::Local(tmp))));
+                        for n in sink_nulls {
+                            out.push(n);
+                        }
                         changed = true;
                     }
                     Some((dest, retain, false, move_from)) => {
-                        out.push(Statement::Release(Operand::Copy(Place::Local(dest))));
+                        if had_dest {
+                            out.push(Statement::Release(Operand::Copy(Place::Local(dest))));
+                        }
+                        for r in sink_retains {
+                            out.push(r);
+                        }
                         out.push(stmt);
-                        if retain && move_sites.contains(&(bi, si)) {
+                        if retain && analysis.assign_move.contains(&(bi, si)) {
                             let src = move_from.expect("move site implies owned local source");
                             out.push(Statement::Assign(
                                 Place::Local(src),
                                 Rvalue::Use(Operand::Const(Const::Null)),
                             ));
-                            changed = true;
                         } else if retain {
                             out.push(Statement::Retain(Operand::Copy(Place::Local(dest))));
-                            changed = true;
-                        } else {
+                        }
+                        for n in sink_nulls {
+                            out.push(n);
+                        }
+                        changed = true;
+                    }
+                    None => {
+                        let had_sink = !sink_retains.is_empty() || !sink_nulls.is_empty();
+                        for r in sink_retains {
+                            out.push(r);
+                        }
+                        out.push(stmt);
+                        for n in sink_nulls {
+                            out.push(n);
+                        }
+                        if had_sink {
                             changed = true;
                         }
                     }
-                    None => out.push(stmt),
                 }
-            }
-            block.stmts = out;
-        }
-        // Sink-call ABI (Nim-style): callee always receives +1.
-        // - Last use of an owned local → move (null source, no retain).
-        // - Still-live owned local → retain a copy, keep the caller's binding.
-        // - Borrowed / non-owned RC → retain into the sink.
-        // Recompute liveness after assign-RC rewrites above.
-        let live_out_calls = liveness::live_out(func);
-        let mut take_moves: HashSet<(usize, usize, u32)> = HashSet::new();
-        for (bi, block) in func.blocks.iter().enumerate() {
-            for (si, stmt) in block.stmts.iter().enumerate() {
-                for local in take_owned_arg_locals(stmt, &is_owned_ref) {
-                    if !live_after_stmt(func, &live_out_calls, bi, si, local) {
-                        take_moves.insert((bi, si, local));
+
+                for local in 0..tokens.len() as u32 {
+                    if analysis.die_after.contains(&(bi, si, local)) {
+                        out.extend(release_and_null(local));
+                        tokens[local as usize] = false;
+                        changed = true;
                     }
                 }
             }
-        }
-        for (bi, block) in func.blocks.iter_mut().enumerate() {
-            let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len() + 4);
-            for (si, stmt) in block.stmts.drain(..).enumerate() {
-                let (retains, nulls) =
-                    take_arg_effects(&stmt, &is_owned_ref, &local_is_ref, |local| {
-                        take_moves.contains(&(bi, si, local))
-                    });
-                for r in retains {
-                    out.push(r);
-                    changed = true;
-                }
-                out.push(stmt);
-                for n in nulls {
-                    out.push(n);
+            for &local in &analysis.end_release[bi] {
+                if dest_holds_token(&tokens, local) {
+                    out.extend(release_and_null(local));
+                    tokens[local as usize] = false;
                     changed = true;
                 }
             }
             block.stmts = out;
         }
-        // Synthetic old-value temps are pure aliases used only for the deferred release; they must not
-        // be released again at scope exit (they are beyond `local_is_ref`, so `is_owned_ref` already
-        // excludes them from Rule 3 below).
+
         func.locals.extend(extra_locals);
 
         insert_value_struct_moves(func, interner, &mut changed);
 
-        // Last-use destroy: Release+null after the last statement that uses an owned RC local, so
-        // UI temps and `js` handles unpin before later unrelated work. Scope-exit Release at Return
-        // stays (nop on null). Skip terminator-only last uses (`if x`).
-        //
-        // Functions with `Await` keep RC locals until resume / `AsyncComplete`: a capture cell or
-        // funcbox can be CFG-dead after the call that produces the awaited future while the host
-        // worker still holds `funcbox_env` as a raw pointer. Releasing before suspend UAF-hangs
-        // `WebWorkerPool.dispatch_async`. Sync functions (UI rebuild) still destroy at last use.
-        // Sink/take params are excluded: early `= null` on a remapped param would copy-prop into the
-        // caller's still-live argument after inlining.
-        let has_await = func
-            .blocks
-            .iter()
-            .any(|b| matches!(b.terminator, Terminator::Await { .. }));
-        if !has_await {
-            insert_early_releases(func, interner, &is_owned_ref, &take_params, &mut changed);
+        if !analysis.has_await {
             insert_early_value_drops(func, interner, &mut changed);
+            // Resume-block future release is last-use destroy of the awaited handle. Async frames
+            // keep that handle until `AsyncComplete` (see `async_rc_alias` live_delta).
+            insert_await_resume_releases(func, interner, &mut changed);
         }
         mark_returned_value_locals_moved(func, interner, &mut changed);
 
-        // Rule 3: scope-exit release at every `Return` / `AsyncComplete`. Await must not release —
-        // coroutine locals stay live across suspend (ownership moves to the Future frame).
-        let owned_locals: Vec<u32> = (0..func.locals.len() as u32)
-            .filter(|i| is_owned_ref(*i))
-            .collect();
         let ret_is_ref = interner.is_rc_tracked(func.ret);
         let mut spills: Vec<LocalDecl> = Vec::new();
         let next_local = func.locals.len() as u32;
-        for block in &mut func.blocks {
+        for (bi, block) in func.blocks.iter_mut().enumerate() {
             let ret = match &block.terminator {
                 Terminator::Return(v) | Terminator::AsyncComplete(v) => v.clone(),
                 _ => continue,
             };
             let is_async_complete = matches!(block.terminator, Terminator::AsyncComplete(_));
             let (skip, spill_from): (Option<u32>, Option<Operand>) = match &ret {
-                Some(Operand::Copy(Place::Local(l))) if is_owned_ref(l.0) => (Some(l.0), None),
+                Some(Operand::Copy(Place::Local(l))) if is_owned(l.0) => (Some(l.0), None),
                 Some(op) if ret_is_ref => (None, Some(op.clone())),
                 _ => (None, None),
             };
@@ -248,14 +233,18 @@ impl MirPass for RcInsertion {
             } else {
                 skip
             };
-            for &i in &owned_locals {
-                if Some(i) == skip {
-                    continue;
+            if let Some(tok) = analysis.token_out.get(bi) {
+                for (i, owned) in tok.iter().enumerate() {
+                    if !*owned || Some(i as u32) == skip {
+                        continue;
+                    }
+                    block
+                        .stmts
+                        .push(Statement::Release(Operand::Copy(Place::Local(Local(
+                            i as u32,
+                        )))));
+                    changed = true;
                 }
-                block
-                    .stmts
-                    .push(Statement::Release(Operand::Copy(Place::Local(Local(i)))));
-                changed = true;
             }
         }
         func.locals.extend(spills);
@@ -263,189 +252,12 @@ impl MirPass for RcInsertion {
     }
 }
 
-fn release_and_null(local: u32) -> [Statement; 2] {
-    [
-        Statement::Release(Operand::Copy(Place::Local(Local(local)))),
-        Statement::Assign(
-            Place::Local(Local(local)),
-            Rvalue::Use(Operand::Const(Const::Null)),
-        ),
-    ]
-}
-
-fn rc_op_on_local(stmt: &Statement, local: u32) -> bool {
-    match stmt {
-        Statement::Retain(Operand::Copy(Place::Local(l)))
-        | Statement::Release(Operand::Copy(Place::Local(l))) => l.0 == local,
-        Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null))) => {
-            l.0 == local
-        }
-        _ => false,
-    }
-}
-
-fn assigns_local(stmt: &Statement, local: u32) -> bool {
-    matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local)
-}
-
-/// Last-use destroy is for pinning (`js` / class temps after a read or DOM op), not for
-/// arguments of `Call`/`New`/`UnionNew`: those callees may store a borrow (funcbox env,
-/// weak field payload, union spine) that CFG liveness does not see.
-fn allows_early_destroy(stmt: &Statement) -> bool {
-    match stmt {
-        Statement::Print { .. } | Statement::JsCall { .. } => true,
-        Statement::Assign(_, rv) => matches!(
-            rv,
-            Rvalue::Use(_)
-                | Rvalue::Select { .. }
-                | Rvalue::Unary(_, _)
-                | Rvalue::Binary(_, _, _)
-                | Rvalue::UnionField { .. }
-                | Rvalue::ToString(_)
-                | Rvalue::Concat(_)
-                | Rvalue::ConcatInt { .. }
-                | Rvalue::StrLen(_)
-                | Rvalue::StrByteSize(_)
-                | Rvalue::CharAt(_, _, _)
-                | Rvalue::ByteAt(_, _, _)
-                | Rvalue::HashCode(_)
-        ),
-        _ => false,
-    }
-}
-
-/// Last statement index that still belongs to the same source line as `si`.
-///
-/// `println(x.id)` lowers to a field load plus a print; `del` must wait until that line finishes.
-/// A later [`Statement::SourceLine`] ends the line (so later work in the same function can run
-/// after destroy). With no later marker, the rest of the block is the current line — typical for
-/// a helper whose last statement is that print, right before `Return`.
-fn source_line_end(block: &crate::BasicBlock, si: usize) -> usize {
-    let mut end = si;
-    for (j, s) in block.stmts.iter().enumerate().skip(si + 1) {
-        if matches!(s, Statement::SourceLine(_)) {
-            break;
-        }
-        end = j;
-    }
-    end
-}
-
-/// Last-use destroy for owned RC locals (classes, strings, collections, `js`).
-fn insert_early_releases(
+fn insert_await_resume_releases(
     func: &mut MirFunction,
     interner: &TypeInterner,
-    is_owned_ref: &dyn Fn(u32) -> bool,
-    take_params: &HashSet<u32>,
     changed: &mut bool,
 ) {
-    let live_out = liveness::live_out(func);
-    let live_in: Vec<HashSet<u32>> = (0..func.blocks.len())
-        .map(|bi| live_in_of(func, &live_out, bi))
-        .collect();
-    let owned: Vec<u32> = (0..func.locals.len() as u32)
-        .filter(|i| {
-            is_owned_ref(*i) && !take_params.contains(i) && {
-                let ty = func.locals[*i as usize].ty;
-                ty != interner.string()
-                    && !matches!(
-                        interner.kind(ty),
-                        dream_types::TyKind::Array(_)
-                            | dream_types::TyKind::Func(_, _)
-                            | dream_types::TyKind::Union(_, _)
-                    )
-            }
-        })
-        .collect();
-    let mut transferred: HashSet<(usize, usize, u32)> = HashSet::new();
-    for (bi, block) in func.blocks.iter().enumerate() {
-        for (si, stmt) in block.stmts.iter().enumerate() {
-            if let Statement::Assign(Place::Local(_), rvalue) = stmt {
-                if is_borrowed_copy(rvalue, interner) {
-                    if let Some(src) = move_source(rvalue, is_owned_ref) {
-                        if !live_after_stmt(func, &live_out, bi, si, src.0) {
-                            transferred.insert((bi, si, src.0));
-                        }
-                    }
-                }
-            }
-            for local in take_owned_arg_locals(stmt, is_owned_ref) {
-                if !live_after_stmt(func, &live_out, bi, si, local) {
-                    transferred.insert((bi, si, local));
-                }
-            }
-        }
-    }
-
-    let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
-    for (bi, block) in func.blocks.iter().enumerate() {
-        for (si, stmt) in block.stmts.iter().enumerate() {
-            for &local in &owned {
-                if transferred.contains(&(bi, si, local)) || rc_op_on_local(stmt, local) {
-                    continue;
-                }
-                let used = stmt_reads_local(stmt, local);
-                let defined_dead =
-                    assigns_local(stmt, local) && !live_after_stmt(func, &live_out, bi, si, local);
-                if !used && !defined_dead {
-                    continue;
-                }
-                if used && live_after_stmt(func, &live_out, bi, si, local) {
-                    continue;
-                }
-                if defined_dead || (used && !live_after_stmt(func, &live_out, bi, si, local)) {
-                    if !allows_early_destroy(stmt) {
-                        continue;
-                    }
-                    // Delay until the end of the source line so `del` does not run mid-expression
-                    // (`println(x.id)` is a field load plus a print).
-                    die_after.insert((bi, source_line_end(block, si), local));
-                }
-            }
-        }
-    }
-
-    for bi in 0..func.blocks.len() {
-        let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + 4);
-        for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
-            out.push(stmt);
-            for &local in &owned {
-                if die_after.contains(&(bi, si, local)) {
-                    out.extend(release_and_null(local));
-                    *changed = true;
-                }
-            }
-        }
-        if let Terminator::Await { future, .. } = &func.blocks[bi].terminator {
-            let future_local = match future {
-                Operand::Copy(Place::Local(l)) => Some(l.0),
-                _ => None,
-            };
-            for &local in &owned {
-                if Some(local) == future_local {
-                    continue;
-                }
-                if !live_in[bi].contains(&local) || live_out[bi].contains(&local) {
-                    continue;
-                }
-                let already = out.iter().any(|s| {
-                    matches!(
-                        s,
-                        Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
-                            if l.0 == local
-                    )
-                });
-                if already {
-                    continue;
-                }
-                out.extend(release_and_null(local));
-                *changed = true;
-            }
-        }
-        func.blocks[bi].stmts = out;
-    }
-
-    // Futures that die after resume: release at the start of the resume block (still needed at Await).
+    let is_owned = |l: u32| is_owned_local(func, interner, l);
     let live_out = liveness::live_out(func);
     let mut resume_releases: Vec<(usize, u32)> = Vec::new();
     for block in &func.blocks {
@@ -453,7 +265,7 @@ fn insert_early_releases(
             let Operand::Copy(Place::Local(l)) = future else {
                 continue;
             };
-            if !is_owned_ref(l.0) {
+            if !is_owned(l.0) {
                 continue;
             }
             if live_in_of(func, &live_out, resume.0 as usize).contains(&l.0) {
@@ -751,110 +563,6 @@ fn insert_early_value_drops(func: &mut MirFunction, interner: &TypeInterner, cha
     }
 }
 
-/// If `rvalue` is a plain copy (or equivalent upcast) of an owned reference local, return that local.
-fn move_source(rvalue: &Rvalue, is_owned_ref: &dyn Fn(u32) -> bool) -> Option<Local> {
-    match rvalue {
-        Rvalue::Use(Operand::Copy(Place::Local(src))) if is_owned_ref(src.0) => Some(*src),
-        _ => None,
-    }
-}
-
-/// Sink-arg sites: ordinary calls use [`Callee::take_params`]; `New` with a user constructor sinks
-/// every argument (ctor params are sink-default and `this` is not in `args`).
-fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])> {
-    match stmt {
-        Statement::Call { callee, args } => Some((callee.take_params.clone(), args)),
-        Statement::Assign(_, Rvalue::Call { callee, args, .. }) => {
-            Some((callee.take_params.clone(), args))
-        }
-        // Constructor payloads are unmarked sinks; without this, callers release after `New` while
-        // the ctor already moved the same +1 into fields (UAF / empty JsonValue maps, etc.).
-        Statement::Assign(
-            _,
-            Rvalue::New {
-                ctor: Some(_),
-                args,
-                ..
-            },
-        ) => Some((vec![true; args.len()], args)),
-        // Indirect `fun` values carry no `take_params` ABI, but async constructors (and other
-        // sink-default callees) still consume the argument. Treat every indirect arg as a sink so
-        // the wrapper does not release a pointer the callee stored on a Future frame.
-        Statement::IndirectCall { args, .. } => Some((vec![true; args.len()], args)),
-        Statement::Assign(_, Rvalue::IndirectCall { args, .. }) => {
-            Some((vec![true; args.len()], args))
-        }
-        // Interface dispatch has no `Callee::take_params`; method args (not `this`) are
-        // sink-default like other instance methods. Without this, a still-live copy into
-        // `handler.emit(record)` transfers no +1 and the callee's scope-exit Release UAF's
-        // the caller's binding (native `logging_basic`; wasm often survives the same UAF).
-        Statement::InterfaceCall { args, .. } => Some((vec![true; args.len()], args)),
-        Statement::Assign(_, Rvalue::InterfaceCall { args, .. }) => {
-            Some((vec![true; args.len()], args))
-        }
-        _ => None,
-    }
-}
-
-/// Sink-arg effects at a call: retains (copies into the callee's +1) and nulls (moves).
-/// `is_move` is true when this owned local is a last-use transfer into the sink.
-fn take_arg_effects(
-    stmt: &Statement,
-    is_owned_ref: &dyn Fn(u32) -> bool,
-    local_is_ref: &[bool],
-    is_move: impl Fn(u32) -> bool,
-) -> (Vec<Statement>, Vec<Statement>) {
-    let Some((take_params, args)) = sink_call_args(stmt) else {
-        return (Vec::new(), Vec::new());
-    };
-    let mut retains = Vec::new();
-    let mut nulls = Vec::new();
-    for (i, arg) in args.iter().enumerate() {
-        if !take_params.get(i).copied().unwrap_or(false) {
-            continue;
-        }
-        match arg {
-            Operand::Copy(Place::Local(l))
-                if local_is_ref.get(l.0 as usize).copied().unwrap_or(false) =>
-            {
-                if is_owned_ref(l.0) && is_move(l.0) {
-                    nulls.push(Statement::Assign(
-                        Place::Local(*l),
-                        Rvalue::Use(Operand::Const(Const::Null)),
-                    ));
-                } else {
-                    retains.push(Statement::Retain(Operand::Copy(Place::Local(*l))));
-                }
-            }
-            Operand::Copy(Place::Field { .. })
-            | Operand::Copy(Place::Index { .. })
-            | Operand::Const(Const::Str(_)) => {
-                retains.push(Statement::Retain(arg.clone()));
-            }
-            _ => {}
-        }
-    }
-    (retains, nulls)
-}
-
-fn take_owned_arg_locals(stmt: &Statement, is_owned_ref: &dyn Fn(u32) -> bool) -> Vec<u32> {
-    let Some((take_params, args)) = sink_call_args(stmt) else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for (i, arg) in args.iter().enumerate() {
-        if !take_params.get(i).copied().unwrap_or(false) {
-            continue;
-        }
-        if let Operand::Copy(Place::Local(l)) = arg {
-            if is_owned_ref(l.0) {
-                out.push(l.0);
-            }
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1003,5 +711,345 @@ mod tests {
             |st| matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == rec.0),
         );
         assert!(has_retain, "still-live interface arg should Retain");
+    }
+
+    fn class_ty(ctx: &mut TypeCtx) -> (dream_types::DefId, dream_types::TypeId) {
+        let def = ctx.register(DefKind::Struct, "User", vec![]);
+        let ty = ctx.interner.struct_ty(def, vec![]);
+        (def, ty)
+    }
+
+    fn count_rc(func: &MirFunction) -> (usize, usize) {
+        let mut retains = 0;
+        let mut releases = 0;
+        for b in &func.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::Retain(_) => retains += 1,
+                    Statement::Release(_) => releases += 1,
+                    _ => {}
+                }
+            }
+        }
+        (retains, releases)
+    }
+
+    #[test]
+    fn birth_borrow_falls_off_block_one_release_zero_retain() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let peek = ctx.register(DefKind::Function, "peek", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.push(Statement::Call {
+            callee: Callee {
+                def: peek,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(x))],
+        });
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let (retains, releases) = count_rc(&func);
+        assert_eq!(retains, 0, "borrow should not retain");
+        assert_eq!(releases, 1, "token dies once: {:?}", func.blocks[0].stmts);
+    }
+
+    #[test]
+    fn last_use_assign_forwards_token_without_retain() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let y = b.new_local(ty, Some("y".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let (retains, releases) = count_rc(&func);
+        assert_eq!(retains, 0);
+        assert_eq!(releases, 1, "only y dies: {:?}", func.blocks[0].stmts);
+        let nulls = func.blocks[0]
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    Statement::Assign(_, Rvalue::Use(Operand::Const(Const::Null)))
+                )
+            })
+            .count();
+        assert_eq!(nulls, 1, "x is consumed");
+    }
+
+    #[test]
+    fn still_live_alias_retains() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let y = b.new_local(ty, Some("y".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
+        let take = ctx.register(DefKind::Function, "take", vec![]);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(y))],
+        });
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(x)))));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let (retains, _) = count_rc(&func);
+        assert_eq!(retains, 1, "copy while x lives must retain");
+    }
+
+    #[test]
+    fn unbalanced_if_releases_on_kept_arm() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let take = ctx.register(DefKind::Function, "take", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let then_blk = b.new_block();
+        let else_blk = b.new_block();
+        let join = b.new_block();
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk,
+            else_blk,
+        });
+        b.switch_to(then_blk);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(x))],
+        });
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(else_blk);
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(join);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let (retains, releases) = count_rc(&func);
+        assert_eq!(retains, 0, "linear take vs unused arm");
+        assert_eq!(releases, 1, "else arm consumes leftover token");
+        let else_rel = func.blocks[else_blk.0 as usize]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::Release(_)));
+        assert!(else_rel, "release is on the arm that still held the token");
+    }
+
+    #[test]
+    fn loop_live_local_does_not_move_into_sink() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let take = ctx.register(DefKind::Function, "take", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(x))],
+        });
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let retains = func
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
+        assert!(
+            retains >= 1,
+            "back-edge keeps x live so take copies: {:?}",
+            func.blocks
+        );
+        let body_nulls = func.blocks[body.0 as usize]
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    Statement::Assign(_, Rvalue::Use(Operand::Const(Const::Null)))
+                )
+            })
+            .count();
+        assert_eq!(body_nulls, 0, "must not move x inside the loop");
+    }
+
+    #[test]
+    fn rebind_evaluates_rhs_before_release() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mutate = ctx.register(DefKind::Function, "mutate_and_return", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Local(x),
+            Rvalue::Call {
+                callee: Callee {
+                    def: mutate,
+                    args: vec![],
+                    ret: ty,
+                    take_params: vec![false],
+                },
+                args: vec![Operand::Copy(Place::Local(x))],
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let stmts = &func.blocks[0].stmts;
+        let call_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(_, Rvalue::Call { .. })));
+        let rel_at = stmts.iter().position(
+            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == x),
+        );
+        assert!(call_at.is_some() && rel_at.is_some(), "{:?}", stmts);
+        assert!(
+            call_at.unwrap() < rel_at.unwrap(),
+            "Release(x) must follow tmp = mutate_and_return(x): {:?}",
+            stmts
+        );
+    }
+
+    #[test]
+    fn hidden_borrow_string_not_released_mid_block_after_call() {
+        let i = dream_types::TypeInterner::new();
+        let peek = dream_types::DefId(0);
+        let mut b = FunctionBuilder::new("f", i.void());
+        let s = b.new_local(i.string(), Some("s".into()));
+        let tmp = b.new_local(i.int(), Some("tmp".into()));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(Const::Str("x".into()))),
+        );
+        b.push(Statement::Call {
+            callee: Callee {
+                def: peek,
+                args: vec![],
+                ret: i.void(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(s))],
+        });
+        b.assign(
+            Place::Local(tmp),
+            Rvalue::Binary(
+                crate::BinOp::Add,
+                Operand::Const(Const::Int(1)),
+                Operand::Const(Const::Int(2)),
+            ),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &i);
+        let stmts = &func.blocks[0].stmts;
+        let call_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Call { .. }))
+            .unwrap();
+        let add_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(_, Rvalue::Binary(..))))
+            .unwrap();
+        let mid = stmts.iter().enumerate().any(|(idx, st)| {
+            idx > call_at
+                && idx < add_at
+                && matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s)
+        });
+        assert!(
+            !mid,
+            "string must not be released between hidden-borrow call and later work: {:?}",
+            stmts
+        );
     }
 }

@@ -814,7 +814,10 @@ mod tests {
             .iter()
             .filter(|s| matches!(s, Statement::Release(_)))
             .count();
-        assert_eq!(releases, 1);
+        assert_eq!(
+            releases, 0,
+            "empty dest is not released; returned local keeps the token"
+        );
         assert!(matches!(
             func.blocks[0].terminator,
             Terminator::Return(Some(Operand::Copy(Place::Local(l)))) if l == s
@@ -836,7 +839,7 @@ mod tests {
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &i));
-        // Expect: release s; assign s="x"; retain s; release t; assign t=s; assign s=null; (return t, no release t)
+        // Expect: assign s="x"; retain s; assign t=s; assign s=null; (return t, no release t)
         // String literal binding retains; move of s→t skips retain on t and nulls s.
         let kinds: Vec<&str> = func.blocks[0]
             .stmts

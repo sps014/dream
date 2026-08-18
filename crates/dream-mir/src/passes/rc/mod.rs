@@ -1,14 +1,15 @@
 //! Reference-counting passes.
 //!
 //! [`RcInsertion`] makes ownership explicit under a single invariant: **every non-parameter
-//! reference local owns exactly one reference count.** [`RcElision`] cancels redundant
+//! reference local owns exactly one reference count** (a compile-time token). [`RcElision`] cancels redundant
 //! `Retain`/`Release` pairs when it can prove the cancel is safe (Goto chains, transparent
-//! diamonds, transparent natural loops). See `docs/compiler/11-swift-like-arc-roadmap.md`.
+//! diamonds, transparent natural loops). See `docs/internals/11-swift-like-arc-roadmap.md`.
 
 mod cursor;
 mod elision;
 mod insertion;
 mod liveness;
+mod tokens;
 
 pub use elision::RcElision;
 pub use insertion::RcInsertion;

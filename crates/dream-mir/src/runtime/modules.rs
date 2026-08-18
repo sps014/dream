@@ -92,54 +92,52 @@ impl LinkedLayout {
     }
 }
 
-pub const RUNTIME_MODULES: &[RuntimeModule] = &[
-    RuntimeModule {
-        id: "regex",
-        need: RuntimeNeed::REGEX,
-        shared_c: &["regex.c"],
-        wasm_extra_c: &["regex_wasm_libc.c"],
-        native_extra_c: &["pcre2/pcre2_jit_compile.c"],
-        vendor_sources: Some("pcre2/SOURCES"),
-        wasm_defines: &[
-            "HAVE_CONFIG_H",
-            "PCRE2_CODE_UNIT_WIDTH=16",
-            "PCRE2_STATIC",
-            "PCRE2_WASM",
-        ],
-        native_defines: &[
-            "DREAM_NATIVE",
-            "HAVE_CONFIG_H",
-            "PCRE2_CODE_UNIT_WIDTH=16",
-            "PCRE2_STATIC",
-        ],
-        include_dirs: &["include", "pcre2"],
-        exports: &[
-            "regex_compile",
-            "regex_free",
-            "regex_group_count",
-            "regex_name_count",
-            "regex_name_at",
-            "regex_name_number",
-            "regex_find",
-            "regex_test",
-        ],
-        wrap: &[
-            "malloc", "free", "realloc", "memcpy", "memmove", "memset", "memcmp", "strlen", "abort",
-        ],
-        stack_size: 131072,
-        data_span: 512 * 1024,
-        wat_out: "regex.wat",
-        intrinsic_keys: &[
-            ATTR_REGEX_COMPILE,
-            ATTR_REGEX_FREE,
-            ATTR_REGEX_FIND,
-            ATTR_REGEX_GROUP_COUNT,
-            ATTR_REGEX_NAME_COUNT,
-            ATTR_REGEX_NAME_AT,
-            ATTR_REGEX_NAME_NUMBER,
-        ],
-    },
-];
+pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
+    id: "regex",
+    need: RuntimeNeed::REGEX,
+    shared_c: &["regex.c"],
+    wasm_extra_c: &["regex_wasm_libc.c"],
+    native_extra_c: &["pcre2/pcre2_jit_compile.c"],
+    vendor_sources: Some("pcre2/SOURCES"),
+    wasm_defines: &[
+        "HAVE_CONFIG_H",
+        "PCRE2_CODE_UNIT_WIDTH=16",
+        "PCRE2_STATIC",
+        "PCRE2_WASM",
+    ],
+    native_defines: &[
+        "DREAM_NATIVE",
+        "HAVE_CONFIG_H",
+        "PCRE2_CODE_UNIT_WIDTH=16",
+        "PCRE2_STATIC",
+    ],
+    include_dirs: &["include", "pcre2"],
+    exports: &[
+        "regex_compile",
+        "regex_free",
+        "regex_group_count",
+        "regex_name_count",
+        "regex_name_at",
+        "regex_name_number",
+        "regex_find",
+        "regex_test",
+    ],
+    wrap: &[
+        "malloc", "free", "realloc", "memcpy", "memmove", "memset", "memcmp", "strlen", "abort",
+    ],
+    stack_size: 131072,
+    data_span: 512 * 1024,
+    wat_out: "regex.wat",
+    intrinsic_keys: &[
+        ATTR_REGEX_COMPILE,
+        ATTR_REGEX_FREE,
+        ATTR_REGEX_FIND,
+        ATTR_REGEX_GROUP_COUNT,
+        ATTR_REGEX_NAME_COUNT,
+        ATTR_REGEX_NAME_AT,
+        ATTR_REGEX_NAME_NUMBER,
+    ],
+}];
 
 const NATIVE_CORE_C: &[&str] = &[
     "heap.c",
@@ -157,7 +155,39 @@ const NATIVE_CORE_C: &[&str] = &[
 ];
 
 pub fn runtime_c_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c")
+    if let Ok(p) = std::env::var("DREAM_RUNTIME_C") {
+        if !p.is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c");
+    if crate_dir.join("native/include/dream_rt_native.h").is_file() {
+        return crate_dir;
+    }
+    for candidate in installed_runtime_c_dirs() {
+        if candidate.join("native/include/dream_rt_native.h").is_file() {
+            return candidate;
+        }
+    }
+    crate_dir
+}
+
+fn installed_runtime_c_dirs() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(home) = std::env::var("DREAM_HOME") {
+        let p = PathBuf::from(home);
+        out.push(p.join("lib/runtime/c"));
+        if p.file_name().and_then(|s| s.to_str()) == Some("bin") {
+            if let Some(parent) = p.parent() {
+                out.push(parent.join("lib/runtime/c"));
+            }
+        }
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    if let Some(home) = home {
+        out.push(PathBuf::from(home).join(".dream/lib/runtime/c"));
+    }
+    out
 }
 
 pub fn native_runtime_include_dir() -> PathBuf {

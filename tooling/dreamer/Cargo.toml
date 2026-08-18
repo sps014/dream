@@ -21,6 +21,8 @@ semver = { version = "1", features = ["serde"] }
 sha2 = "0.10"
 flate2 = "1"
 tar = "0.4"
+lzma-rs = "0.3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = { version = "2", features = ["json"] }
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }

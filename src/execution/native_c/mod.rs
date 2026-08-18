@@ -1,6 +1,7 @@
 //! Compile generated MIR C with the native runtime and run the resulting binary.
 
 pub mod abi;
+mod cc;
 
 use crate::driver::wasm_opt::OptLevel;
 use dream_mir::backend::c::{native_runtime_include_dir, native_runtime_units};
@@ -116,7 +117,7 @@ fn runtime_archive(
     need: dream_mir::runtime::RuntimeNeed,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     static LOCK: Mutex<()> = Mutex::new(());
-    let dir = PathBuf::from("target/dream-native-rt")
+    let dir = cc::native_rt_cache_root()
         .join(opt.native_rt_subdir())
         .join(format!("need_{:x}", need.bits()));
     std::fs::create_dir_all(&dir)?;
@@ -150,25 +151,26 @@ fn runtime_archive(
     }
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
     cflags.extend(opt.cc_flags());
+    let toolchain = cc::resolve_cc()?;
     let mut objs = Vec::new();
     for (i, u) in units.iter().enumerate() {
         let obj = dir.join(format!("{i}.o"));
-        let mut cc = Command::new("cc");
-        cc.args(&cflags);
+        let mut cmd = toolchain.cc_command();
+        cmd.args(&cflags);
         for inc in &u.include_dirs {
-            cc.arg(format!("-I{}", inc.display()));
+            cmd.arg(format!("-I{}", inc.display()));
         }
         for d in &u.defines {
-            cc.arg(format!("-D{d}"));
+            cmd.arg(format!("-D{d}"));
         }
-        let st = cc.arg(&u.path).arg("-o").arg(&obj).status()?;
+        let st = cmd.arg(&u.path).arg("-o").arg(&obj).status()?;
         if !st.success() {
             return Err(format!("cc -c failed for {}", u.path.display()).into());
         }
         objs.push(obj);
     }
     let _ = std::fs::remove_file(&archive);
-    let mut ar = Command::new("ar");
+    let mut ar = toolchain.ar_command();
     ar.arg("crs").arg(&archive);
     for o in &objs {
         ar.arg(o);
@@ -187,8 +189,9 @@ pub fn compile_native_c(
     let bin = c_path.with_extension("bin");
     let src = std::fs::read_to_string(c_path)?;
     let need = runtime_need_from_c_source(&src);
+    let toolchain = cc::resolve_cc()?;
     let rt = runtime_archive(opt, need)?;
-    let mut cmd = Command::new("cc");
+    let mut cmd = toolchain.cc_command();
     cmd.args(opt.cc_flags());
     cmd.args([
         "-std=gnu11",

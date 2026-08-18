@@ -92,6 +92,8 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
+          mkdir -p "$STAGE/lib/runtime"
+          cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
           mkdir -p dist
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
             # Windows runners have no `zip`; use PowerShell Compress-Archive.

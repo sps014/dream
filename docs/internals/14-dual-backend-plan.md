@@ -1,7 +1,6 @@
 # 14 — Dual backend: Wasm (default) and native C (opt-in)
 
-Same MIR, two emitters. There is **no LLVM backend**. An old `llvm` branch that deleted WAT
-and emitted textual LLVM IR is abandoned; do not merge or revive it.
+Same MIR, two emitters. There is **no LLVM backend**.
 
 ## What ships
 
@@ -9,7 +8,7 @@ and emitted textual LLVM IR is abandoned; do not merge or revive it.
 |---|---|---|
 | Emit | Relooper → WAT/WASM (`backend/wasm`) | MIR → C99 (`backend/c`) |
 | Runtime | Same-module `runtime/*.wat`; PCRE2 interpreter in `regex.wat` | `runtime/c/native/` (`uintptr_t`, `memcpy`, mmap heap, platform SIMD); PCRE2-16 **JIT** |
-| Run | `dream run` → wasmtime | `dream run --backend c` → host `cc` then exec |
+| Run | `dream run` → wasmtime | `dream run --backend c` → `zig cc` or `CC`, then exec |
 | Web / Node | `--runtime --web` / `--node` | Rejected (no WASM module) |
 
 Opt-in compile-to-C:
@@ -34,7 +33,7 @@ Numeric ABI (`TAG_*`, string header, future slots) is shared in
 - Native helpers: `crates/dream-mir/src/runtime/c/native/`.
 - Shared regex wrapper: `crates/dream-mir/src/runtime/c/regex.c` (`-DDREAM_NATIVE` on the host path).
 - Catalog (link lists, PCRE2 sources, `--global-base`): `crates/dream-mir/src/runtime/modules.rs`.
-- Rebuild `regex.wat` only: `scripts/build-runtime.sh` (wasi-sdk 33; not cargo / Windows CI).
+- Rebuild `regex.wat` only: `dreamer toolchain install wasi-sdk` then `scripts/build-runtime.sh` (not cargo / Windows CI).
 
 ## Non-goals
 

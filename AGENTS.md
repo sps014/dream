@@ -11,7 +11,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **Determinism is non-negotiable.** Two compiles of the same source must produce byte-identical `.wat`/`.wasm`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
-- **Guest same-module runtime is WAT.** `crates/dream-mir/src/runtime/*.wat` (except linked `regex.wat`) is the source the WASM backend `include_str!`s. Edit those files. Native helpers live under `runtime/c/native/`. The only C→WAT step is PCRE2: edit `runtime/c/regex.c` then `scripts/build-runtime.sh` (wasi-sdk 33). Do not add a clang extract pipeline or WAT ident rewriter for core helpers.
+- **Guest same-module runtime is WAT.** `crates/dream-mir/src/runtime/*.wat` (except linked `regex.wat`) is the source the WASM backend `include_str!`s. Edit those files. Native helpers live under `runtime/c/native/`. The only C→WAT step is PCRE2: edit `runtime/c/regex.c` then `scripts/build-runtime.sh` (wasi-sdk 33 via `dreamer toolchain install wasi-sdk`). Do not add a clang extract pipeline or WAT ident rewriter for core helpers.
 
 ## What Dream is
 
@@ -158,7 +158,7 @@ node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
 # Guest WAT: edit crates/dream-mir/src/runtime/*.wat. PCRE2 only:
-# macOS/Linux wasi-sdk 33 + wasm2wat; crates/dream-mir/src/runtime/README.md
+# dreamer toolchain install wasi-sdk + wasm2wat; crates/dream-mir/src/runtime/README.md
 # Not invoked by cargo/dream/Windows CI.
 scripts/build-runtime.sh                   # PCRE2 only: writes regex.wat (wasi-sdk; skip on Windows CI)
 scripts/build-runtime.sh --check           # skips if clang has no wasm32

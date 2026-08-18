@@ -79,6 +79,16 @@ try {
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
         Where-Object { $_.Name -match '^(dream|dreamer|dream-lsp)(\.exe)?$' } |
         ForEach-Object { Copy-Item $_.FullName -Destination $BinDir -Force }
+    Get-ChildItem -Path (Join-Path $Work "out") -Recurse -Directory |
+        Where-Object { $_.FullName -match '[\\/]lib[\\/]runtime[\\/]c$' } |
+        Select-Object -First 1 |
+        ForEach-Object {
+            $libRt = Join-Path $Prefix "lib\runtime"
+            New-Item -ItemType Directory -Force -Path $libRt | Out-Null
+            $destC = Join-Path $libRt "c"
+            if (Test-Path $destC) { Remove-Item -Recurse -Force $destC }
+            Copy-Item $_.FullName -Destination $destC -Recurse -Force
+        }
 
     $Ext = if ($Target -like "windows-*") { ".exe" } else { "" }
     @"

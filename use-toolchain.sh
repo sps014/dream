@@ -217,6 +217,14 @@ ln -sfn "$_dreamer_bin" "${_dream_bin_dir}/dreamer${_dream_ext}"
 ln -sfn "$_dream_lsp_bin" "${_dream_bin_dir}/dream-lsp${_dream_ext}"
 echo "Linked ${_dream_bin_dir}/{dream,dreamer,dream-lsp} -> ${_dream_home}/"
 
+_dream_rt_src="${_dream_root}/crates/dream-mir/src/runtime/c"
+if [ -f "${_dream_rt_src}/native/include/dream_rt_native.h" ]; then
+  mkdir -p "${_dream_user_dir}/lib/runtime"
+  rm -rf "${_dream_user_dir}/lib/runtime/c"
+  cp -R "${_dream_rt_src}" "${_dream_user_dir}/lib/runtime/c"
+  echo "Copied native runtime C -> ${_dream_user_dir}/lib/runtime/c"
+fi
+
 export DREAM_HOME="$_dream_home"
 export DREAMER_HOME="$_dream_home"
 export DREAM_BIN="$_dream_bin"
@@ -241,6 +249,11 @@ ${_dream_marker}
 export DREAM_HOME="${DREAM_HOME}"
 export DREAMER_HOME="${DREAMER_HOME}"
 export DREAM_BIN="${DREAM_BIN}"
+if [ -f "\$HOME/.dream/toolchains.env" ]; then
+  set -a
+  . "\$HOME/.dream/toolchains.env"
+  set +a
+fi
 case ":\${PATH}:" in
   *":${_dream_bin_dir}:"*) ;;
   *) export PATH="${_dream_bin_dir}:\${PATH}" ;;

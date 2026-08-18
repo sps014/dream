@@ -39,14 +39,14 @@ need_clang() {
       echo "build-runtime --check: clang not found; skipping (WAT is checked in)."
       exit 0
     fi
-    die "clang not found. Install wasi-sdk 33; see crates/dream-mir/src/runtime/README.md"
+    die "clang not found. Run: dreamer toolchain install wasi-sdk"
   fi
   if ! echo 'int x;' | "$clang" --target=wasm32 -nostdlib -c -o /dev/null -x c - >/dev/null 2>&1; then
     if [[ "$CHECK" -eq 1 ]]; then
       echo "build-runtime --check: clang has no wasm32 target (Apple/Xcode clang is not enough; use wasi-sdk). Skipping."
       exit 0
     fi
-    die "clang cannot target wasm32. Install wasi-sdk 33 (https://github.com/WebAssembly/wasi-sdk)."
+    die "clang cannot target wasm32. Run: dreamer toolchain install wasi-sdk"
   fi
   echo "$clang"
 }

@@ -427,7 +427,7 @@ fn print_usage(program: &str) {
         "  -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z; default: s); overrides --release"
     );
     error!("  --backend wasm|c     Codegen backend (default: wasm / Wasmtime)");
-    error!("  --native-c           Same as --backend c. Compiles with cc to .bin; `run` execs it");
+    error!("  --native-c           Same as --backend c. Compiles with zig cc / CC to .bin; `run` execs it");
     error!(
         "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
     );

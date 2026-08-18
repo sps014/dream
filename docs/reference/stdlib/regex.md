@@ -17,7 +17,7 @@ Do **not** hand-edit `crates/dream-mir/src/runtime/regex.wat`. Change
 `crates/dream-mir/src/runtime/c/regex.c` (and/or vendored PCRE2), then:
 
 ```bash
-scripts/build-runtime.sh   # wasi-sdk 33; see crates/dream-mir/src/runtime/c/pcre2/README.md
+scripts/build-runtime.sh   # wasi-sdk 33 via `dreamer toolchain install wasi-sdk`
 ```
 
 That compiles PCRE2 + the wrapper and writes `runtime/regex.wat`. The emitter splices that file

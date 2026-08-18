@@ -17,12 +17,12 @@ in `../deps/sljit`.
 
 ## How to rebuild WASM `regex.wat`
 
-Needs [wasi-sdk 33](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-33) and
+Needs wasi-sdk 33 (`dreamer toolchain install wasi-sdk`) and
 `wasm-tools` or `wasm2wat`. Install steps: [`../../README.md`](../../README.md).
 
 ```bash
 # from the Dream repo root
-export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"  # or your SDK dir
+dreamer toolchain install wasi-sdk
 scripts/build-runtime.sh
 ```
 

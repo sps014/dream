@@ -138,6 +138,14 @@ find "${WORK}/out" -type f \( -name 'dream' -o -name 'dream.exe' -o -name 'dream
 
 chmod +x "${BIN_DIR}/dream" "${BIN_DIR}/dreamer" "${BIN_DIR}/dream-lsp" 2>/dev/null || true
 
+# Native-C runtime sources (packed next to the binaries in the release archive).
+RT_SRC="$(find "${WORK}/out" -type d -path '*/lib/runtime/c' 2>/dev/null | head -n1 || true)"
+if [ -n "$RT_SRC" ] && [ -f "${RT_SRC}/native/include/dream_rt_native.h" ]; then
+  mkdir -p "${PREFIX}/lib/runtime"
+  rm -rf "${PREFIX}/lib/runtime/c"
+  cp -R "$RT_SRC" "${PREFIX}/lib/runtime/c"
+fi
+
 EXT=
 case "$TARGET" in
   windows-*) EXT=.exe ;;
@@ -154,6 +162,12 @@ cat > "${PREFIX}/env.sh" <<EOF
 export DREAM_HOME="${BIN_DIR}"
 export DREAMER_HOME="${BIN_DIR}"
 export DREAM_BIN="${BIN_DIR}/dream${EXT}"
+if [ -f "${PREFIX}/toolchains.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${PREFIX}/toolchains.env"
+  set +a
+fi
 case ":\$PATH:" in
   *":${BIN_DIR}:"*) ;;
   *) export PATH="${BIN_DIR}:\$PATH" ;;

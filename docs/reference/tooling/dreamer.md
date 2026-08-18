@@ -230,6 +230,11 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
+| `dreamer toolchain install [cc\|wasi-sdk]` | Download a pinned **Zig** (`cc` → `zig cc` for `--backend c`) and/or **wasi-sdk 33** (rebuild `regex.wat`) into `~/.dream/toolchains/`. Omit the name to install both. |
+| `dreamer toolchain list` | Show which of those components are installed. |
+| `dreamer toolchain uninstall cc\|wasi-sdk` | Remove a component directory. |
+
+`dreamer toolchain install` is **not** `dreamer install` (packages). It fetches pinned **Zig 0.16.0** (`zig cc` / `zig ar`) and/or **wasi-sdk 33** into `~/.dream/toolchains/`, verifies SHA-256, and writes `~/.dream/toolchains.env` (`DREAM_ZIG`, `WASI_SDK_PATH`). `dream --backend c` uses `DREAM_CC` / `CC`, then that Zig, then `cc`/`clang` on `PATH`. Rebuilding `regex.wat` still needs wasi-sdk; `cargo test` / Windows CI do not.
 
 ### Native `dreamer pack`
 

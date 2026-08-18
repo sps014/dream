@@ -154,6 +154,24 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
+    /// Install or manage optional compilers (Zig `cc`, wasi-sdk) under ~/.dream/toolchains/.
+    Toolchain {
+        #[command(subcommand)]
+        cmd: ToolchainCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum ToolchainCmd {
+    /// Download pinned Zig and/or wasi-sdk 33 for this OS/arch.
+    Install {
+        /// `cc` (Zig) or `wasi-sdk`. Omit to install both.
+        component: Option<String>,
+    },
+    /// Show which toolchain components are installed.
+    List,
+    /// Remove a component (`cc` or `wasi-sdk`).
+    Uninstall { component: String },
 }
 
 fn main() -> ExitCode {
@@ -246,6 +264,11 @@ fn main() -> ExitCode {
         Cmd::Pack { targets, package } => commands::pack::run(&cwd, &targets, package.as_deref()),
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree { package } => commands::tree::run(&cwd, package.as_deref()),
+        Cmd::Toolchain { cmd } => match cmd {
+            ToolchainCmd::Install { component } => commands::toolchain::install(component),
+            ToolchainCmd::List => commands::toolchain::list(),
+            ToolchainCmd::Uninstall { component } => commands::toolchain::uninstall(component),
+        },
     };
 
     match result {

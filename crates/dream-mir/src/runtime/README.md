@@ -16,27 +16,15 @@ See [`c/README.md`](c/README.md) for C (regex + native).
 
 `cargo build` / `dream` do **not** need this. Only run it when you change `c/regex.c`, `c/regex_wasm_libc.c`, or vendored PCRE2.
 
-**Do not use Apple/Xcode `clang`.** Pin **wasi-sdk 33** from [wasi-sdk releases](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-33). You also need `wasm2wat` (WABT) or `wasm-tools print` on `PATH`.
+**Do not use Apple/Xcode `clang`.** Pin **wasi-sdk 33** via `dreamer toolchain install wasi-sdk`. You also need `wasm2wat` (WABT) or `wasm-tools print` on `PATH`.
 
 ### 1. Install wasi-sdk 33
 
-| Host | Asset |
-|---|---|
-| macOS Apple Silicon | `wasi-sdk-33.0-arm64-macos.tar.gz` |
-| macOS Intel | `wasi-sdk-33.0-x86_64-macos.tar.gz` |
-| Linux aarch64 | `wasi-sdk-33.0-arm64-linux.tar.gz` |
-| Linux x86_64 | `wasi-sdk-33.0-x86_64-linux.tar.gz` |
-
 ```bash
-# Example: macOS arm64. Swap the URL/filename for Linux or Intel Mac (table above).
-mkdir -p ~/.dream/toolchains
-curl -L --fail -o /tmp/wasi-sdk.tar.gz \
-  https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sdk-33.0-arm64-macos.tar.gz
-tar -xzf /tmp/wasi-sdk.tar.gz -C ~/.dream/toolchains
-export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"
+dreamer toolchain install wasi-sdk
 ```
 
-`scripts/build-runtime.sh` also finds `~/.dream/toolchains/wasi-sdk-*/bin/clang` if `WASI_SDK_PATH` is unset.
+That downloads the pinned wasi-sdk 33 tarball for this OS/arch into `~/.dream/toolchains/` and writes `WASI_SDK_PATH` in `~/.dream/toolchains.env`. `scripts/build-runtime.sh` also finds `~/.dream/toolchains/wasi-sdk-*/bin/clang` if `WASI_SDK_PATH` is unset.
 
 ### 2. Install `wasm2wat` (if you do not already have `wasm-tools`)
 
@@ -49,7 +37,7 @@ Linux: `wabt` package or a WABT release on `PATH`.
 ### 3. Link PCRE2 → `regex.wat`
 
 ```bash
-export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"
+dreamer toolchain install wasi-sdk   # once; writes WASI_SDK_PATH
 scripts/build-runtime.sh
 scripts/build-runtime.sh --check
 ```
@@ -62,6 +50,12 @@ Apple clang without wasm32: `--check` **skips**. A machine that has wasi-sdk mus
 
 Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empty` / `_true` / `_false` / `_minus`.
 
-## Native C (host clang, not WAT)
+## Native C (host `zig cc` / clang, not WAT)
 
-[`c/native/`](c/native/) : `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Linked C libraries (PCRE2) come from the catalog only when `RuntimeNeed` is set. Default `dream run` stays wasmtime. See [`c/native/README.md`](c/native/README.md).
+[`c/native/`](c/native/) : `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Linked C libraries (PCRE2) come from the catalog only when `RuntimeNeed` is set. Default `dream run` stays wasmtime. For `--backend c` without a system `cc`:
+
+```bash
+dreamer toolchain install cc    # pinned Zig → zig cc
+```
+
+See [`c/native/README.md`](c/native/README.md).

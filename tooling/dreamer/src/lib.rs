@@ -9,4 +9,5 @@ pub mod manifest;
 pub mod registry;
 pub mod resolver;
 pub mod serve;
+pub mod toolchain;
 pub mod workspace;

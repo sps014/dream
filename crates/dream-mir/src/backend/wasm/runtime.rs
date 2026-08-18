@@ -60,10 +60,11 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
     out
 }
 
-/// True when this module imports any `WebWorker` / worker-pool host function. Only those programs
-/// share linear memory across instances, so only they need the allocator spinlock.
-pub(super) fn module_needs_threads(mir: &crate::Mir) -> bool {
-    mir.imports.iter().any(|imp| {
+/// True when this module needs WASM shared memory + atomics: `WebWorker` host imports, a remaining
+/// `@shared class` layout (`Lock` / `Semaphore` / user shared types), or atomics would otherwise
+/// run against a private memory (wait/notify traps).
+pub(super) fn module_needs_threads(mir: &crate::Mir, interner: &TypeInterner) -> bool {
+    if mir.imports.iter().any(|imp| {
         imp.module == "Dream"
             && matches!(
                 imp.field.as_str(),
@@ -74,7 +75,13 @@ pub(super) fn module_needs_threads(mir: &crate::Mir) -> bool {
                     | "workerPoolSpawn"
                     | "workerPoolDispatch"
             )
-    })
+    }) {
+        return true;
+    }
+    mir.layouts
+        .structs
+        .keys()
+        .any(|ty| interner.is_shared_type(*ty))
 }
 
 /// Builds the `*_to_string` runtime (object formatters + generated `$bool_to_string` + the float/

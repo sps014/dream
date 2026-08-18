@@ -85,16 +85,11 @@ pub(super) fn fn_ptr_abi(
 ) -> (String, CTy, Vec<CTy>) {
     match interner.kind(ty) {
         TyKind::Func(params, ret) => {
-            let mut ps: Vec<CTy> = params.iter().map(|p| c_ty(interner, *p)).collect();
-            if interner.is_value_type(*ret) {
-                ps.insert(0, CTy::Ptr);
-                let name = format!("dream_fn_{}__v", cty_tokens(&ps));
-                (name, CTy::Void, ps)
-            } else {
-                let r = c_ty(interner, *ret);
-                let name = format!("dream_fn_{}__{}", cty_tokens(&ps), cty_token(&r));
-                (name, r, ps)
-            }
+            // Native C returns value structs as `dream_ptr` (heap copy), not WASM sret.
+            let ps: Vec<CTy> = params.iter().map(|p| c_ty(interner, *p)).collect();
+            let r = c_ty(interner, *ret);
+            let name = format!("dream_fn_{}__{}", cty_tokens(&ps), cty_token(&r));
+            (name, r, ps)
         }
         other => crate::internal_error!("fn_ptr_abi on non-function type {other:?}"),
     }

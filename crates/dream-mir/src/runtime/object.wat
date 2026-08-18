@@ -71,11 +71,56 @@
     i32.reinterpret_f32)
 
 (func $hash_string (param i32) (result i32)
-    i32.const -2147483648
+    (local i32 i32 i32 i32)
+    block  ;; label = @1
+      local.get 0
+      br_if 0 (;@1;)
+      i32.const 0
+      return
+    end
     i32.const -2128831035
+    local.set 1
     local.get 0
-    call $str_byte_size
-    select)
+    i32.load
+    local.set 2
+    local.get 0
+    i32.const 4
+    i32.add
+    i32.load
+    local.tee 4
+    local.get 0
+    i32.const 8
+    i32.add
+    local.get 4
+    select
+    local.set 4
+    i32.const 0
+    local.set 3
+    block  ;; label = @1
+      loop  ;; label = @2
+        local.get 3
+        local.get 2
+        i32.ge_s
+        br_if 1 (;@1;)
+        local.get 1
+        local.get 4
+        local.get 3
+        i32.const 1
+        i32.shl
+        i32.add
+        i32.load16_u
+        i32.xor
+        i32.const 16777619
+        i32.mul
+        local.set 1
+        local.get 3
+        i32.const 1
+        i32.add
+        local.set 3
+        br 0 (;@2;)
+      end
+    end
+    local.get 1)
 
 (func $int_to_string (param i32) (result i32)
     (local i32 i32 i32 i32 i32 i32 i32)

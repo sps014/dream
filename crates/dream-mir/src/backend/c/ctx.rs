@@ -52,7 +52,7 @@ impl<'a> Cx<'a> {
         self.tags
             .get(&ty)
             .copied()
-            .unwrap_or_else(|| crate::internal_error!("no runtime tag registered for type {ty:?}"))
+            .unwrap_or(crate::abi::TAG_STRUCT_BASE)
     }
 
     pub(super) fn callee_c(&self, def: DefId, args: &[TypeId]) -> String {

@@ -2055,7 +2055,7 @@
     local.get 7)
 
 (func $string_substring_raw (param i32 i32 i32) (result i32)
-    (local i32)
+    (local i32 i32)
     block  ;; label = @1
       local.get 0
       i32.eqz
@@ -2084,40 +2084,47 @@
       local.tee 2
       i32.le_u
       br_if 0 (;@1;)
-      i32.const 12
+      local.get 3
+      local.get 2
+      i32.sub
+      local.tee 3
+      i32.const 1
+      i32.shl
+      i32.const 8
+      i32.add
       i32.const 5
       call $malloc
       local.tee 1
       local.get 3
-      local.get 2
-      i32.sub
       i32.store
+      local.get 1
+      i32.const 4
+      i32.add
+      local.get 1
+      i32.const 8
+      i32.add
+      i32.store
+      local.get 1
+      i32.const 8
+      i32.add
       local.get 0
       i32.const 4
       i32.add
       i32.load
-      local.set 3
-      local.get 1
-      i32.const 8
-      i32.add
-      local.get 0
-      i32.store
-      local.get 1
-      i32.const 4
-      i32.add
-      local.get 3
+      local.tee 4
       local.get 0
       i32.const 8
       i32.add
-      local.get 3
+      local.get 4
       select
       local.get 2
       i32.const 1
       i32.shl
       i32.add
-      i32.store
-      local.get 0
-      call $retain
+      local.get 3
+      i32.const 1
+      i32.shl
+      memory.copy
       local.get 1
       return
     end
@@ -3233,32 +3240,6 @@
     i32.lt_s
     select
     local.set 2
-    block  ;; label = @1
-      local.get 0
-      i32.const -4
-      i32.add
-      i32.load
-      i32.const 1
-      i32.ne
-      br_if 0 (;@1;)
-      local.get 0
-      local.get 2
-      i32.store
-      local.get 0
-      i32.const 4
-      i32.add
-      local.get 0
-      i32.const 8
-      i32.add
-      i32.store
-      local.get 0
-      i32.const -8
-      i32.add
-      i32.const 5
-      i32.store
-      local.get 0
-      return
-    end
     local.get 1
     i32.const 8
     i32.add

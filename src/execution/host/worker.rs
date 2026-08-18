@@ -171,8 +171,9 @@ fn store_write_string(
         return None;
     }
     data[base..base + LEN_PREFIX as usize].copy_from_slice(&(units.len() as i32).to_le_bytes());
+    let pad = ptr.wrapping_add(STRING_UNITS as i32);
     data[base + LEN_PREFIX as usize..base + STRING_HEADER as usize]
-        .copy_from_slice(&0_i32.to_le_bytes());
+        .copy_from_slice(&pad.to_le_bytes());
     for (i, u) in units.iter().enumerate() {
         let o = base + STRING_UNITS + i * 2;
         data[o..o + 2].copy_from_slice(&u.to_le_bytes());

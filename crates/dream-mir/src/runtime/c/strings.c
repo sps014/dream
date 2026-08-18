@@ -405,11 +405,10 @@ int32_t string_substring_raw(int32_t ptr, int32_t start, int32_t end) {
     if (byte_len == 0) {
         return interned_empty();
     }
-    p = rt_malloc(12, TAG_STRING);
+    p = rt_malloc(byte_len + 8, TAG_STRING);
     i32_store(p, scalars);
-    i32_store(p + 4, str_data(ptr) + byte_start);
-    i32_store(p + 8, ptr);
-    rt_retain(ptr);
+    str_init_owned(p);
+    mem_copy(p + 8, str_data(ptr) + byte_start, byte_len);
     return p;
 }
 
@@ -578,19 +577,11 @@ int32_t string_builder_append(int32_t bytes, int32_t count, int32_t text) {
 EXPORT("string_from_builder")
 int32_t string_from_builder(int32_t bytes, int32_t len, int32_t scalars) {
     int32_t p;
-    int32_t rc;
     if (bytes == 0 || len <= 0) {
         return interned_empty();
     }
     if (scalars < 0) {
         scalars = (int32_t)((uint32_t)len >> 1);
-    }
-    rc = i32_load(bytes - 4);
-    if (rc == 1) {
-        i32_store(bytes - 8, TAG_STRING);
-        i32_store(bytes, scalars);
-        str_init_owned(bytes);
-        return bytes;
     }
     p = rt_malloc(len + 8, TAG_STRING);
     i32_store(p, scalars);

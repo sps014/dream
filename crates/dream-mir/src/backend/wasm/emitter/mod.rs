@@ -418,8 +418,8 @@ impl Emitter<'_> {
         self.f.i32_add();
     }
 
-    /// Emits `s[i]` as an inlined UTF-16 unit load. When `unchecked` is false, a located
-    /// `index >= unit_len` check runs first (precise file:line panic).
+    /// Emits `s[i]` as a UTF-16 unit load via `$char_at` (pad vs inline payload). When `unchecked`
+    /// is false, a located `index >= unit_len` check runs first (precise file:line panic).
     fn emit_char_at(&mut self, s: &Operand, i: &Operand, unchecked: bool) {
         if !unchecked {
             self.emit_operand(i);
@@ -431,16 +431,11 @@ impl Emitter<'_> {
             self.f.end();
         }
         self.emit_operand(s);
-        self.f
-            .load(LoadKind::I32, crate::abi::STRING_SCALAR_LEN_OFFSET);
         self.emit_operand(i);
-        self.f.i32_const(1);
-        self.f.i32_shl();
-        self.f.i32_add();
-        self.f.load(LoadKind::I32_16U, 0);
+        self.f.call("char_at");
     }
 
-    /// Emits `s.byte_at(i)` as an inlined payload byte load, with an optional byte-length check.
+    /// Emits `s.byte_at(i)` via `$byte_at`, with an optional byte-length check.
     fn emit_byte_at(&mut self, s: &Operand, i: &Operand, unchecked: bool) {
         if !unchecked {
             self.emit_operand(i);
@@ -454,11 +449,8 @@ impl Emitter<'_> {
             self.f.end();
         }
         self.emit_operand(s);
-        self.f
-            .load(LoadKind::I32, crate::abi::STRING_SCALAR_LEN_OFFSET);
         self.emit_operand(i);
-        self.f.i32_add();
-        self.f.load(LoadKind::I32_8U, 0);
+        self.f.call("byte_at");
     }
 
     /// The struct field's `(byte offset, type)` from the layout table, or `None` when `base` is not a

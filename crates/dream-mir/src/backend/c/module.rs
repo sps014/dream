@@ -740,6 +740,26 @@ fn emit_fn_typedefs(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         seen.entry(name).or_insert((ret, params));
     };
     for f in &cx.mir.functions {
+        for decl in &f.locals {
+            add(decl.ty);
+        }
+        if f.is_async {
+            if let Some(hir) = f.hir_fn.as_ref() {
+                let body = crate::lower::lower_async_poll_body(hir, cx.interner);
+                for decl in &body.locals {
+                    add(decl.ty);
+                }
+                for b in &body.blocks {
+                    for s in &b.stmts {
+                        match s {
+                            Statement::IndirectCall { sig, .. } => add(*sig),
+                            Statement::Assign(_, Rvalue::IndirectCall { sig, .. }) => add(*sig),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
         for b in &f.blocks {
             for s in &b.stmts {
                 match s {

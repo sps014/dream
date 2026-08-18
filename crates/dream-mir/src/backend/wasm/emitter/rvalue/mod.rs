@@ -156,6 +156,10 @@ impl Emitter<'_> {
                 } else {
                     self.emit_call_args(callee, args);
                     self.f.call(&sym);
+                    // `$funcbox_env` is an i32 load; stdlib types it as `long` so native pointers fit.
+                    if sym.trim_start_matches('$') == "funcbox_env" {
+                        self.emit_numeric_conv(self.interner.byte(), callee.ret);
+                    }
                 }
             }
             Rvalue::IndirectCall { target, sig, args } => {

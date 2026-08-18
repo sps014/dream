@@ -105,6 +105,8 @@ void string_set(dream_ptr ptr, int32_t i, int32_t c) {
 
 dream_ptr string_substring_raw(dream_ptr ptr, int32_t start, int32_t end) {
     int32_t n;
+    int32_t len;
+    dream_ptr p;
     if (!ptr) {
         return dream_string_alloc(0);
     }
@@ -124,7 +126,17 @@ dream_ptr string_substring_raw(dream_ptr ptr, int32_t start, int32_t end) {
     if (end < start) {
         end = start;
     }
-    return dream_substring(ptr, start, end);
+    len = end - start;
+    if (len <= 0) {
+        return dream_string_alloc(0);
+    }
+    p = dream_string_alloc(len);
+    memcpy(
+        (char *)dream_p(p) + STRING_UNITS_OFFSET,
+        dream_str_units(ptr) + start,
+        (size_t)len << 1
+    );
+    return p;
 }
 
 dream_ptr string_clone(dream_ptr ptr) {
@@ -140,19 +152,11 @@ dream_ptr string_clone(dream_ptr ptr) {
 
 dream_ptr string_from_builder(dream_ptr bytes, int32_t len, int32_t scalars) {
     dream_ptr p;
-    int32_t *rc;
     if (!bytes || len <= 0) {
         return dream_string_alloc(0);
     }
     if (scalars < 0) {
         scalars = len >> 1;
-    }
-    rc = (int32_t *)((char *)dream_p(bytes) - 4);
-    if (*rc == 1) {
-        ((int32_t *)((char *)dream_p(bytes) - 8))[0] = TAG_STRING;
-        dream_i32(bytes)[0] = scalars;
-        dream_str_init_owned(bytes);
-        return bytes;
     }
     p = dream_malloc(len + 8, TAG_STRING);
     dream_i32(p)[0] = scalars;

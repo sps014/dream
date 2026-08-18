@@ -148,19 +148,20 @@ public class StringBuilder {
         this.scalars = 0;
     }
 
-    // Materializes the accumulated UTF-16 units into a single new string.
+    // Materializes the accumulated UTF-16 units into a single new string without emptying the
+    // builder (`clear` is the explicit reset). `to_string()` shares this snapshot so `print`/`+`
+    // keep working after `build()`.
     public fun build(): string {
         let n = this.count;
         let sc = this.scalars;
-        let buf = this.bytes;
-        this.bytes = Buffer.alloc<byte>(sequence_min_capacity() + 4);
-        this.count = 0;
-        this.scalars = 0;
-        return string.from_builder(buf, n, sc);
+        if (n <= 0) {
+            return string.empty;
+        }
+        let copy = Buffer.alloc<byte>(n + 8);
+        Buffer.elems_copy<byte>(copy, 4, this.bytes, 4, n);
+        return string.from_builder(copy, n, sc);
     }
 
-    // Object-protocol override, so `print`/`println`/`+`/interpolation all use `build()`'s output
-    // automatically, without an explicit `.build()` call.
     @override public fun to_string(): string {
         return this.build();
     }

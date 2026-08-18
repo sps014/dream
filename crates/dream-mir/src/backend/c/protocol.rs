@@ -670,10 +670,16 @@ pub(super) fn emit_iface_trampolines(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 Expr::unary(UnOp::Not, Expr::id("fn")),
                 Stmt::call("abort", vec![]),
             ));
-            b.ret(Some(Expr::IndirectCall {
+            let call = Expr::IndirectCall {
                 callee: Box::new(Expr::id("fn")),
                 args: pnames.into_iter().map(Expr::id).collect(),
-            }));
+            };
+            if matches!(b.ret, CTy::Void) {
+                b.expr_stmt(call);
+                b.ret(None);
+            } else {
+                b.ret(Some(call));
+            }
             m.push_func(b);
         }
     }

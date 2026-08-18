@@ -67,14 +67,22 @@ int32_t hash_double(double v) {
 }
 EXPORT("hash_string")
 int32_t hash_string(int32_t p) {
-    int32_t h = -2128831035;
-    int32_t len = rt_str_byte_size(p);
-    int32_t i = 0;
-    while ((uint32_t)i < (uint32_t)len) {
-        h = (h ^ (int32_t)u8_load(str_data(p) + i)) * 16777619;
+    uint32_t h = 2166136261u;
+    int32_t n;
+    int32_t i;
+    int32_t d;
+    if (p == 0) {
+        return 0;
+    }
+    n = i32_load(p);
+    d = str_data(p);
+    i = 0;
+    while (i < n) {
+        h ^= (uint32_t)u16_load(d + (i << 1));
+        h *= 16777619u;
         i = i + 1;
     }
-    return h;
+    return (int32_t)h;
 }
 
 static void reverse_units(int32_t d, int32_t n) {

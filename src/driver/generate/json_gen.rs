@@ -918,6 +918,10 @@ fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
         // RC insertion policy (sink `New` args, cursors, …) changes emitted harness WAT without
         // touching the Dream sources above — fold it in so the cache cannot go stale.
         include_str!("../../../crates/dream-mir/src/passes/rc/insertion.rs").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/backend/wasm/emitter/rvalue/mod.rs")
+            .hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/backend/wasm/emitter/mod.rs").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/backend/wasm/runtime.rs").hash(&mut h);
         h.finish()
     };
     let entry = super::current_entry_file();
@@ -940,7 +944,8 @@ fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
         let compiler =
             crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
                 .with_skip_generators(true)
-                .with_release(true);
+                .with_release(true)
+                .with_optimize(None);
         compiler
             .compile(&src, &out)
             .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;

@@ -163,7 +163,7 @@ fn emit_module_encoded(
         crate::abi::EXPORT_MEMORY,
         initial_pages,
         crate::abi::MAX_MEMORY_PAGES,
-        module_needs_threads(mir),
+        module_needs_threads(mir, interner),
     );
 
     m.global_i32("free_list_head", true, 0);
@@ -193,7 +193,7 @@ fn emit_module_encoded(
         }
     }
 
-    m.ingest_wat(&runtime_prelude(debug, module_needs_threads(mir)));
+    m.ingest_wat(&runtime_prelude(debug, module_needs_threads(mir, interner)));
     for (id, layout) in &layouts {
         m.ingest_linked_wat(super::linked_runtime_wat(id), *layout);
     }

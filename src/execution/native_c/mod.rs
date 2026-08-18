@@ -104,10 +104,10 @@ fn libdream_dir() -> Option<PathBuf> {
     dirs.into_iter().find(|d| d.join(name).exists())
 }
 
-fn runtime_archive() -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn runtime_archive(release: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
     static LOCK: Mutex<()> = Mutex::new(());
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let dir = PathBuf::from("target/dream-native-rt");
+    let dir = PathBuf::from("target/dream-native-rt").join(if release { "release" } else { "debug" });
     std::fs::create_dir_all(&dir)?;
     let archive = dir.join("libdream_rt.a");
     let stamp = dir.join(".stamp");
@@ -122,11 +122,17 @@ fn runtime_archive() -> Result<PathBuf, Box<dyn std::error::Error>> {
     if archive.exists() && !stale {
         return Ok(archive);
     }
+    let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
+    if release {
+        cflags.extend(["-O3", "-flto", "-march=native"]);
+    } else {
+        cflags.push("-O2");
+    }
     let mut objs = Vec::new();
     for f in native_runtime_c_files() {
         let obj = dir.join(f.file_name().unwrap()).with_extension("o");
         let st = Command::new("cc")
-            .args(["-O2", "-std=gnu11", "-pthread", "-w", "-c"])
+            .args(&cflags)
             .arg(format!("-I{}", native_runtime_include_dir().display()))
             .arg(&f)
             .arg("-o")
@@ -152,9 +158,13 @@ fn runtime_archive() -> Result<PathBuf, Box<dyn std::error::Error>> {
 
 pub fn compile_native_c(c_path: &Path, release: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let bin = c_path.with_extension("bin");
-    let rt = runtime_archive()?;
+    let rt = runtime_archive(release)?;
     let mut cmd = Command::new("cc");
-    cmd.arg(if release { "-O3" } else { "-O0" });
+    if release {
+        cmd.args(["-O3", "-flto", "-march=native"]);
+    } else {
+        cmd.arg("-O0");
+    }
     cmd.args([
         "-std=gnu11",
         "-pthread",

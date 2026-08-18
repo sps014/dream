@@ -117,7 +117,12 @@ int32_t utf8_width_at(dream_ptr s, int32_t i) {
 }
 
 int32_t utf8_decode_at(dream_ptr s, int32_t i) {
-    return s ? *(const uint16_t *)((const char *)dream_p(s) + STRING_UTF8_OFFSET + i) : 0;
+    uint16_t u = 0;
+    if (!s) {
+        return 0;
+    }
+    memcpy(&u, (const char *)dream_p(s) + STRING_UTF8_OFFSET + i, 2);
+    return (int32_t)u;
 }
 
 int32_t dream_char_at(dream_ptr ptr, int32_t i) {

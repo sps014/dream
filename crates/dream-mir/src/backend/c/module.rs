@@ -127,7 +127,22 @@ fn emit_worker_invoke(out: &mut String, cx: &Cx<'_>) {
     } else {
         out.push_str("  (void)env;\n");
     }
-    out.push_str("  return ((dream_fn)dream_ft[fn])(arg, 0, 0, 0, 0, 0, 0, 0);\n}\n\n");
+    out.push_str("  dream_ptr result = ((dream_fn)dream_ft[fn])(arg, 0, 0, 0, 0, 0, 0, 0);\n");
+    let async_indices: Vec<_> = cx
+        .mir
+        .functions
+        .iter()
+        .filter(|f| f.is_async)
+        .map(|f| cx.func_index(f))
+        .collect();
+    if !async_indices.is_empty() {
+        out.push_str("  switch (fn) {\n");
+        for index in async_indices {
+            out.push_str(&format!("    case {index}: dream_run_loop(); return *(dream_ptr *)((char *)dream_p(result) + 8);\n"));
+        }
+        out.push_str("    default: break;\n  }\n");
+    }
+    out.push_str("  return result;\n}\n\n");
 }
 
 fn emit_imports(out: &mut String, cx: &Cx<'_>) {
@@ -188,12 +203,54 @@ fn emit_imports(out: &mut String, cx: &Cx<'_>) {
                 | "fileWrite"
                 | "fileAppend"
                 | "fileExists"
+                | "fileSize"
+                | "fileOpen"
+                | "fileHandleRead"
+                | "fileHandleWrite"
+                | "fileHandleSeek"
+                | "fileHandleClose"
+                | "processRun"
+                | "processSpawn"
+                | "processWriteStdin"
+                | "processReadStream"
+                | "processReadStreamLine"
+                | "processWait"
+                | "processKill"
+                | "httpRequest"
+                | "httpRequestBytes"
+                | "httpRequestStream"
+                | "httpRequestStreamBytes"
+                | "httpReadChunk"
+                | "httpCloseStream"
+                | "tcpConnect"
+                | "wsConnect"
+                | "dateZoneOffsetMinutes"
+                | "dateLocalZoneName"
                 | "workerSpawn"
                 | "workerPoolSpawn"
                 | "workerPost"
                 | "workerRecv"
                 | "workerPoolDispatch"
                 | "workerTerminate"
+                | "sin"
+                | "cos"
+                | "tan"
+                | "asin"
+                | "acos"
+                | "atan"
+                | "atan2"
+                | "sqrt"
+                | "pow"
+                | "floor"
+                | "ceil"
+                | "round"
+                | "dream_host_abs"
+                | "unicodeNormalize"
+                | "unicodeToLower"
+                | "unicodeToUpper"
+                | "unicodeGraphemes"
+                | "cryptoAesGcmEncrypt"
+                | "cryptoAesGcmDecrypt"
         ) && !host.starts_with("gpu")
         {
             let zeros: Vec<String> = (0..imp.params.len())
@@ -279,9 +336,9 @@ fn emit_async_pair(out: &mut String, cx: &Cx<'_>, stub: &MirFunction, poll_idx: 
                 p.0
             ));
         } else {
-            let ty = c_ty(cx.interner, param_ty);
+            let ty = local_c_ty(cx.interner, param_ty);
             out.push_str(&format!(
-                "  *({ty} *)((char *)dream_p(__self) + {off}) = l{};\n",
+                "  *({ty} *)((char *)dream_p(__self) + {off}) = ({ty})l{};\n",
                 p.0
             ));
         }
@@ -384,6 +441,12 @@ fn emit_async_pair(out: &mut String, cx: &Cx<'_>, stub: &MirFunction, poll_idx: 
 
 fn proto(cx: &Cx<'_>, f: &MirFunction) -> String {
     let name = c_ident(&func_symbol(f));
+    // `*sink*` helpers exist to defeat -O3/LTO deleting timed microbench loops.
+    let attr = if name.to_ascii_lowercase().contains("sink") {
+        "__attribute__((noinline, noclone, optnone)) "
+    } else {
+        ""
+    };
     let ret = if f.is_async {
         "dream_ptr"
     } else {
@@ -399,12 +462,11 @@ fn proto(cx: &Cx<'_>, f: &MirFunction) -> String {
     } else {
         params.join(", ")
     };
-    format!("{ret} {name}({args})")
+    format!("{attr}{ret} {name}({args})")
 }
 
 fn emit_func(out: &mut String, cx: &Cx<'_>, f: &MirFunction) {
     out.push_str(&format!("{} {{\n", proto(cx, f)));
-    let returns_value = cx.interner.is_value_type(f.ret);
     for p in &f.params {
         let ty = f.local_ty(*p);
         let decl = &f.locals[p.0 as usize];
@@ -430,16 +492,9 @@ fn emit_func(out: &mut String, cx: &Cx<'_>, f: &MirFunction) {
             let size = crate::backend::c::types::native_scalar_size(cx, decl.ty)
                 .0
                 .max(1);
-            if returns_value {
-                out.push_str(&format!(
-                    "  dream_ptr l{i} = dream_malloc({size}, {});\n",
-                    crate::abi::TAG_STRUCT_BASE
-                ));
-            } else {
-                out.push_str(&format!(
-                    "  _Alignas(8) unsigned char __vs{i}[{size}];\n  dream_ptr l{i} = (dream_ptr)(uintptr_t)__vs{i};\n"
-                ));
-            }
+            out.push_str(&format!(
+                "  _Alignas(8) unsigned char __vs{i}[{size}] = {{0}};\n  dream_ptr l{i} = (dream_ptr)(uintptr_t)__vs{i};\n"
+            ));
         } else {
             out.push_str(&format!(
                 "  {} l{i} = 0;\n",

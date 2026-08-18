@@ -1,6 +1,7 @@
 #include "include/dream_rt_native.h"
 
 #include <pthread.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 #if defined(_WIN32)
@@ -12,6 +13,8 @@
 
 #define NCLASS 13
 #define CHUNK (1u << 22)
+#define MAGIC_LIVE 0x4c495645u
+#define MAGIC_FREE 0x46524545u
 
 static dream_ptr freelist[NCLASS];
 static char *arena;
@@ -19,6 +22,9 @@ static size_t arena_off;
 static size_t arena_len;
 static int32_t live_objects;
 static int32_t total_allocations;
+static int32_t last_freed;
+static char *chunks[32];
+static int nchunks;
 static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static int size_class(int32_t size) {
@@ -49,6 +55,19 @@ static void *map_chunk(size_t n) {
 #endif
 }
 
+static int in_heap(char *p) {
+    int i;
+    if (p == NULL || ((uintptr_t)p & 15u) != 0) {
+        return 0;
+    }
+    for (i = 0; i < nchunks; i++) {
+        if (p >= chunks[i] && p < chunks[i] + (ptrdiff_t)CHUNK) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static char *bump(size_t n) {
     size_t aligned = (n + 15u) & ~15u;
     if (arena == NULL || arena_off + aligned > arena_len) {
@@ -57,6 +76,9 @@ static char *bump(size_t n) {
         arena_len = CHUNK;
         if (arena == NULL) {
             abort();
+        }
+        if (nchunks < 32) {
+            chunks[nchunks++] = arena;
         }
     }
     {
@@ -72,17 +94,31 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     char *block = NULL;
     int32_t alloc_size = total;
     pthread_mutex_lock(&heap_mu);
-    if (idx <= 12) {
+    if (idx >= 0 && idx <= 12) {
         alloc_size = class_bytes(idx);
-        if (freelist[idx] != 0) {
+        while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
-            freelist[idx] = (dream_ptr)(uintptr_t)(*(void **)(block + 4));
+            if (!in_heap(block) || ((uint32_t *)block)[1] != MAGIC_FREE) {
+                freelist[idx] = 0;
+                block = NULL;
+                break;
+            }
+            {
+                void *next = NULL;
+                memcpy(&next, block + 8, sizeof(next));
+                if (next == (void *)block) {
+                    next = NULL;
+                }
+                freelist[idx] = (dream_ptr)(uintptr_t)next;
+            }
+            break;
         }
     }
     if (block == NULL) {
         block = bump((size_t)alloc_size);
         ((int32_t *)block)[0] = alloc_size;
     }
+    ((uint32_t *)block)[1] = MAGIC_LIVE;
     ((int32_t *)block)[2] = tag;
     ((int32_t *)block)[3] = 1;
     live_objects += 1;
@@ -97,15 +133,7 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? __atomic_load_n((int32_t *)((char *)dream_p(ptr) - 4), __ATOMIC_RELAXED) : 0;
 }
 int32_t debug_get_heap_ptr(void) { return (int32_t)arena_off; }
-int32_t debug_get_free_list_head(void) {
-    int i;
-    for (i = 0; i < NCLASS; i++) {
-        if (freelist[i]) {
-            return (int32_t)(uintptr_t)freelist[i];
-        }
-    }
-    return 0;
-}
+int32_t debug_get_free_list_head(void) { return last_freed; }
 
 void dream_free(dream_ptr ptr) {
     char *block;
@@ -114,10 +142,15 @@ void dream_free(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+    dream_weak_clear_all(ptr);
     pthread_mutex_lock(&heap_mu);
     block = (char *)dream_p(ptr) - 16;
+    if (!in_heap(block)) {
+        pthread_mutex_unlock(&heap_mu);
+        return;
+    }
     sz = ((int32_t *)block)[0];
-    if (sz == 0) {
+    if (sz == 0 || ((uint32_t *)block)[1] != MAGIC_LIVE) {
         pthread_mutex_unlock(&heap_mu);
         return;
     }
@@ -125,8 +158,16 @@ void dream_free(dream_ptr ptr) {
     if (idx > 12) {
         idx = 12;
     }
-    *(void **)(block + 4) = dream_p(freelist[idx]);
+    ((uint32_t *)block)[1] = MAGIC_FREE;
+    {
+        void *next = dream_p(freelist[idx]);
+        if (next == (void *)block) {
+            next = NULL;
+        }
+        memcpy(block + 8, &next, sizeof(next));
+    }
     freelist[idx] = (dream_ptr)block;
+    last_freed += 1;
     if (live_objects > 0) {
         live_objects -= 1;
     }

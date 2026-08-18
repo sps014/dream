@@ -26,16 +26,39 @@ int64_t dream_unbox_long(dream_ptr p) { return p ? *(int64_t *)dream_p(p) : 0; }
 int64_t dream_unbox_ulong(dream_ptr p) { return p ? *(int64_t *)dream_p(p) : 0; }
 int32_t dream_unbox_byte(dream_ptr p) { return p ? *(int32_t *)dream_p(p) : 0; }
 
-int32_t dream_hash_value(dream_ptr p) {
-    return dream_object_hash_code(p);
-}
-
-int32_t dream_object_hash_code(dream_ptr p) {
+int32_t dream_string_hash(dream_ptr p) {
+    uint32_t hash = 2166136261u;
+    int32_t i;
+    int32_t len = dream_str_len(p);
+    const uint16_t *units;
     if (!p) {
         return 0;
     }
-    return (int32_t)((uintptr_t)p * 2654435761u);
+    units = (const uint16_t *)((const char *)dream_p(p) + STRING_UTF8_OFFSET);
+    for (i = 0; i < len; i++) {
+        hash ^= units[i];
+        hash *= 16777619u;
+    }
+    return (int32_t)hash;
 }
+
+int32_t dream_bitcast_f32(float v) {
+    int32_t bits;
+    memcpy(&bits, &v, 4);
+    return bits;
+}
+
+int32_t dream_hash_long(int64_t v) {
+    return (int32_t)v ^ (int32_t)((uint64_t)v >> 32);
+}
+
+int32_t dream_hash_double(double v) {
+    int64_t bits;
+    memcpy(&bits, &v, 8);
+    return dream_hash_long(bits);
+}
+
+int32_t dream_hash_value(dream_ptr p) { return dream_object_hash_code(p); }
 
 dream_ptr dream_array_to_string(dream_ptr arr) {
     dream_ptr r = dream_string_alloc(1);

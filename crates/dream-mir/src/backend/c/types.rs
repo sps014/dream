@@ -77,8 +77,7 @@ pub(super) fn load_cast(cx: &Cx<'_>, ty: TypeId) -> &'static str {
         TyKind::Prim(PrimTy::Double) => "double",
         TyKind::Prim(PrimTy::Float) => "float",
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "int64_t",
-        TyKind::Prim(PrimTy::Byte | PrimTy::Bool) => "uint8_t",
-        TyKind::Prim(PrimTy::Char) => "uint16_t",
+        TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::Char) => "uint8_t",
         TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => "int32_t",
         _ if cx.interner.is_value_type(ty) => "int32_t",
         _ => "dream_ptr",
@@ -114,9 +113,8 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
         "realloc" => "dream_realloc".into(),
         "free" | "force_free" => "dream_free".into(),
         "retain" | "retain_shared" => "dream_retain".into(),
-        "release_generic" | "release_object" | "release_funcbox" | "js_release" => {
-            "dream_release".into()
-        }
+        "release_generic" | "release_object" | "js_release" => "dream_release".into(),
+        "release_funcbox" => "dream_release_funcbox".into(),
         "js_retain" => "dream_retain".into(),
         "concat_strings" => "dream_concat_strings".into(),
         "str_scalar_len" => "dream_str_len".into(),

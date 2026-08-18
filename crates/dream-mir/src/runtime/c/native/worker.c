@@ -51,6 +51,7 @@ static void *worker_main(void *arg) {
         }
         pthread_mutex_unlock(&w->mu);
         dream_ptr r = dream_worker_invoke(j->fn, j->env, j->msg);
+        dream_release(j->msg);
         free(j);
         pthread_mutex_lock(&w->mu);
         w->reply = r;

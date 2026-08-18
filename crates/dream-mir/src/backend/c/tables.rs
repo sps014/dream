@@ -102,6 +102,13 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
                 v.push(variant.name.clone());
             } else {
                 v.push(format!("{}(", variant.name));
+                for (i, f) in variant.fields.iter().enumerate() {
+                    v.push(if i == 0 {
+                        format!("{}: ", f.name)
+                    } else {
+                        format!(", {}: ", f.name)
+                    });
+                }
                 v.push(")".into());
             }
         }

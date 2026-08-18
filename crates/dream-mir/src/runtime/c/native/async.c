@@ -24,9 +24,9 @@ typedef struct Node {
     struct Node *next;
 } Node;
 
-static Node *rq_head;
-static Node *rq_tail;
-static Node *timer_head;
+static _Thread_local Node *rq_head;
+static _Thread_local Node *rq_tail;
+static _Thread_local Node *timer_head;
 
 static int32_t *i32_at(dream_ptr p, int32_t off) {
     return (int32_t *)((char *)dream_p(p) + off);

@@ -190,7 +190,11 @@ dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
 dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag);
 int32_t dream_hash_value(dream_ptr p);
+int32_t dream_string_hash(dream_ptr p);
 int32_t dream_object_hash_code(dream_ptr p);
+int32_t dream_bitcast_f32(float v);
+int32_t dream_hash_double(double v);
+int32_t dream_hash_long(int64_t v);
 dream_ptr dream_object_to_string(dream_ptr p);
 void dream_print_object(dream_ptr p);
 void dream_panic(dream_ptr msg);
@@ -227,6 +231,7 @@ int32_t dream_unbox_byte(dream_ptr p);
 dream_ptr dream_funcbox_new(int32_t idx, dream_ptr env);
 int32_t dream_funcbox_funcidx(dream_ptr box);
 dream_ptr dream_funcbox_env(dream_ptr box);
+void dream_release_funcbox(dream_ptr box);
 
 void dream_lock_acquire(dream_ptr lock_addr);
 void dream_lock_release(dream_ptr lock_addr);
@@ -264,6 +269,8 @@ dream_ptr simd_v128_min(dream_ptr a, dream_ptr b);
 dream_ptr simd_v128_max(dream_ptr a, dream_ptr b);
 float simd_v128_sum(dream_ptr v);
 void dream_weak_clear_all(dream_ptr obj);
+void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
+void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 
 int32_t debug_get_live_objects(void);
 int32_t debug_get_total_allocations(void);
@@ -287,13 +294,36 @@ int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 int64_t timeNowNanos(void);
 int64_t Time_nano_time(void);
 int64_t dateNowMillis(void);
-int32_t dateLocalOffsetMinutes(void);
+int32_t dateLocalOffsetMinutes(int64_t epoch_millis);
+int32_t dateZoneOffsetMinutes(dream_ptr zone_name, int64_t epoch_millis);
+dream_ptr dateLocalZoneName(void);
 
 void print_int(int32_t v);
 void print_string(dream_ptr s);
 void print_char(int32_t c);
 void print_float(float v);
 void print_double(double v);
+
+int32_t fileOpen(dream_ptr path, dream_ptr mode);
+int64_t fileSize(dream_ptr path);
+dream_ptr fileHandleRead(int32_t fd, int32_t count);
+int64_t fileHandleWrite(int32_t fd, dream_ptr data);
+int32_t fileHandleSeek(int32_t fd, int64_t position);
+void fileHandleClose(int32_t fd);
+
+dream_ptr processRun(dream_ptr command, dream_ptr joined_args, dream_ptr cwd);
+dream_ptr processSpawn(dream_ptr command, dream_ptr joined_args, dream_ptr cwd);
+int32_t processWriteStdin(int32_t handle, dream_ptr data);
+dream_ptr processReadStream(int32_t handle, int32_t stream, int32_t max_bytes);
+dream_ptr processReadStreamLine(int32_t handle, int32_t stream);
+dream_ptr processWait(int32_t handle);
+int32_t processKill(int32_t handle);
+
+dream_ptr httpRequestStream(
+    dream_ptr url, dream_ptr method, dream_ptr headers, dream_ptr body, int32_t timeout_ms,
+    int32_t http_version);
+dream_ptr tcpConnect(dream_ptr host, int32_t port, int32_t timeout_ms);
+dream_ptr wsConnect(dream_ptr url, int32_t timeout_ms);
 
 void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t));
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);

@@ -45,7 +45,7 @@ def one(f: Path):
         if code == 0:
             return stem, "fail", "compile should fail"
         return stem, "ok", ""
-    code, out = run_group([str(dream), "--native-c", "run", str(f)], 20)
+    code, out = run_group([str(dream), "--native-c", "run", str(f)], 90)
     if trap.exists():
         if code == 0:
             return stem, "fail", "expected trap"

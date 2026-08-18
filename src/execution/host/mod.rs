@@ -20,7 +20,7 @@ mod datetime;
 mod ffi_helpers;
 mod file;
 pub(crate) mod gpu;
-mod http;
+pub(crate) mod http;
 mod math;
 mod memory;
 mod net;

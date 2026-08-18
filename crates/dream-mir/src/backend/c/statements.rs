@@ -1,22 +1,45 @@
 use crate::backend::c::calls::{emit_call, emit_iface, emit_indirect, emit_js_call};
 use crate::backend::c::ctx::Cx;
 use crate::backend::c::places::{emit_operand, emit_store};
-use crate::backend::c::rvalue::{emit_rvalue, to_string_fn};
+use crate::backend::c::rvalue::{emit_rvalue, emit_union_new_at, to_string_fn};
 use crate::backend::c::types::elem_size;
-use crate::{Place, Rvalue, Statement};
+use crate::{Place, Statement};
 use dream_types::{PrimTy, TyKind};
 
 pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, stmt: &Statement) {
     match stmt {
         Statement::Nop | Statement::SourceLine(_) | Statement::DebugLine(_) => {}
         Statement::Assign(place, rv) => {
+            if let (
+                Place::Local(l),
+                crate::Rvalue::UnionNew {
+                    ty,
+                    variant,
+                    args,
+                    ..
+                },
+            ) = (place, rv)
+            {
+                if cx.interner.is_value_type(f.local_ty(*l))
+                    && !crate::backend::c::places::is_value_place_alias(f, *l, rv)
+                {
+                    out.push_str("  ");
+                    out.push_str(&emit_union_new_at(
+                        cx,
+                        f,
+                        &format!("l{}", l.0),
+                        *ty,
+                        *variant,
+                        args,
+                    ));
+                    out.push_str("\n");
+                    return;
+                }
+            }
             let rhs = emit_rvalue(cx, f, rv);
             out.push_str("  ");
             out.push_str(&emit_store(cx, f, place, rv, &rhs));
             out.push_str(";\n");
-            if field_store_copies_ref(cx, f, place, rv) {
-                out.push_str(&format!("  dream_retain({rhs});\n"));
-            }
         }
         Statement::Retain(o) => {
             out.push_str(&format!("  dream_retain({});\n", emit_operand(cx, f, o)));
@@ -152,10 +175,16 @@ pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, s
             out.push_str(&format!("  {call};\n"));
         }
         Statement::ValueDrop(l) => {
-            emit_value_refs(out, cx, f.local_ty(*l), &format!("l{}", l.0), false);
+            if !f.locals[l.0 as usize].is_ref
+                && !crate::backend::c::places::is_alias_value_local(f, *l)
+            {
+                emit_value_refs(out, cx, f.local_ty(*l), &format!("l{}", l.0), false);
+            }
         }
         Statement::ValueRetain(l) => {
-            emit_value_refs(out, cx, f.local_ty(*l), &format!("l{}", l.0), true);
+            if !crate::backend::c::places::is_alias_value_local(f, *l) {
+                emit_value_refs(out, cx, f.local_ty(*l), &format!("l{}", l.0), true);
+            }
         }
         Statement::ValueKill(l) => {
             let size = elem_size(cx, f.local_ty(*l));
@@ -171,26 +200,56 @@ pub(super) fn emit_value_refs(
     base: &str,
     retain: bool,
 ) {
-    let Some(layout) = cx.nstruct(ty) else {
-        return;
-    };
-    for field in &layout.fields {
-        if field.is_weak || field.is_unowned {
-            continue;
-        }
-        let at = format!("((dream_ptr)((char *)dream_p({base}) + {}))", field.offset);
-        if cx.interner.is_value_type(field.ty) {
-            emit_value_refs(out, cx, field.ty, &at, retain);
-        } else if cx.interner.is_rc_tracked(field.ty) {
-            let value = format!("*(dream_ptr *)dream_p({at})");
-            if retain {
-                out.push_str(&format!("  dream_retain({value});\n"));
-            } else {
-                let release = crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
-                out.push_str(&format!("  {release}({value});\n"));
+    if let Some(layout) = cx.nstruct(ty) {
+        for field in &layout.fields {
+            if field.is_weak || field.is_unowned {
+                continue;
+            }
+            let at = format!("((dream_ptr)((char *)dream_p({base}) + {}))", field.offset);
+            if cx.interner.is_value_type(field.ty) {
+                emit_value_refs(out, cx, field.ty, &at, retain);
+            } else if cx.interner.is_rc_tracked(field.ty) {
+                let value = format!("*(dream_ptr *)dream_p({at})");
+                if retain {
+                    out.push_str(&format!("  dream_retain({value});\n"));
+                } else {
+                    let release = crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
+                    out.push_str(&format!("  {release}({value});\n"));
+                }
             }
         }
+        return;
     }
+    let Some(u) = cx.nunion(ty) else {
+        return;
+    };
+    out.push_str(&format!("  switch (*(int32_t *)dream_p({base})) {{\n"));
+    for variant in &u.variants {
+        out.push_str(&format!("    case {}:\n", variant.discriminant));
+        for field in &variant.fields {
+            if field.is_weak || field.is_unowned {
+                continue;
+            }
+            let at = format!(
+                "((dream_ptr)((char *)dream_p({base}) + {}))",
+                field.offset
+            );
+            if cx.interner.is_value_type(field.ty) {
+                emit_value_refs(out, cx, field.ty, &at, retain);
+            } else if cx.interner.is_rc_tracked(field.ty) {
+                let value = format!("*(dream_ptr *)dream_p({at})");
+                if retain {
+                    out.push_str(&format!("      dream_retain({value});\n"));
+                } else {
+                    let release =
+                        crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
+                    out.push_str(&format!("      {release}({value});\n"));
+                }
+            }
+        }
+        out.push_str("      break;\n");
+    }
+    out.push_str("    default: break;\n  }\n");
 }
 
 fn operand_ty(
@@ -226,26 +285,6 @@ fn operand_ty(
     }
 }
 
-fn field_store_copies_ref(cx: &Cx<'_>, f: &crate::MirFunction, place: &Place, rv: &Rvalue) -> bool {
-    let Place::Field { base, field } = place else {
-        return false;
-    };
-    let Some(layout) = cx.nstruct(f.local_ty(*base)) else {
-        return false;
-    };
-    let Some(fld) = layout.fields.get(*field) else {
-        crate::internal_error!("missing field {field} on type {:?}", f.local_ty(*base));
-    };
-    !fld.is_weak
-        && !fld.is_unowned
-        && cx.interner.is_rc_tracked(fld.ty)
-        && matches!(
-            rv,
-            Rvalue::Use(crate::Operand::Copy(_))
-                | Rvalue::Use(crate::Operand::Const(crate::Const::Str(_)))
-        )
-}
-
 fn emit_print(
     out: &mut String,
     cx: &Cx<'_>,
@@ -276,7 +315,9 @@ fn emit_print(
             if conv.is_empty() {
                 out.push_str(&format!("  print_string({a});\n"));
             } else {
-                out.push_str(&format!("  print_string({conv}({a}));\n"));
+                out.push_str(&format!(
+                    "  {{ dream_ptr __ps = {conv}({a}); print_string(__ps); dream_release(__ps); }}\n"
+                ));
             }
         }
     }

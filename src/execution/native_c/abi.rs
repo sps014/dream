@@ -381,8 +381,28 @@ pub extern "C" fn gpuSamplerCreate(filter: i32) -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn gpuSamplerCreateEx(filter: i32, address: i32, mip_filter: i32) -> i32 {
+    textures::sampler_create_ex(filter, address, mip_filter)
+}
+
+#[no_mangle]
 pub extern "C" fn gpuTextureCreateRgba8(w: i32, h: i32) -> i32 {
     textures::texture_create_rgba8(w, h)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureCreateDepth(w: i32, h: i32) -> i32 {
+    textures::texture_create_depth(w, h)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureCreateRgba16Float(w: i32, h: i32) -> i32 {
+    textures::texture_create_rgba16float(w, h)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureCreateCubeRgba8(size: i32) -> i32 {
+    textures::texture_create_cube_rgba8(size)
 }
 
 #[no_mangle]
@@ -473,4 +493,200 @@ pub extern "C" fn gpuSurfacePollEvents(id: i32) -> usize {
 #[no_mangle]
 pub extern "C" fn gpuRenderBlit(sid: i32, tid: i32) -> i32 {
     surface::blit(sid, tid)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn unicodeNormalize(text: usize, form: i32) -> usize {
+    use unicode_normalization::UnicodeNormalization;
+    let s = read_string(text);
+    let out = match form {
+        1 => s.nfd().collect::<String>(),
+        2 => s.nfkc().collect::<String>(),
+        3 => s.nfkd().collect::<String>(),
+        _ => s.nfc().collect::<String>(),
+    };
+    alloc_string(&out)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn unicodeToLower(text: usize) -> usize {
+    alloc_string(&read_string(text).to_lowercase())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn unicodeToUpper(text: usize) -> usize {
+    alloc_string(&read_string(text).to_uppercase())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn unicodeGraphemes(text: usize) -> usize {
+    use unicode_segmentation::UnicodeSegmentation;
+    let s = read_string(text);
+    let parts: Vec<String> = s.graphemes(true).map(str::to_string).collect();
+    alloc_string_array(&parts)
+}
+
+fn alloc_string_array(items: &[String]) -> usize {
+    let alloc = GUEST.lock().ok().and_then(|g| g.array_new);
+    let Some(alloc) = alloc else {
+        return 0;
+    };
+    unsafe {
+        let p = alloc(items.len() as i32, 8);
+        if p == 0 {
+            return 0;
+        }
+        let slots = (p as *mut u8).add(4).cast::<usize>();
+        for (i, item) in items.iter().enumerate() {
+            slots.add(i).write(alloc_string(item));
+        }
+        p
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cryptoAesGcmEncrypt(
+    key: usize,
+    nonce: usize,
+    plaintext: usize,
+    aad: usize,
+) -> usize {
+    use aes_gcm::aead::{Aead, KeyInit, Payload};
+    use aes_gcm::{Aes256Gcm, Nonce};
+    let key = read_bytes(key);
+    let nonce_bytes = read_bytes(nonce);
+    let plaintext = read_bytes(plaintext);
+    let aad = read_bytes(aad);
+    let Ok(cipher) = Aes256Gcm::new_from_slice(&key) else {
+        return alloc_bytes(&[]);
+    };
+    if nonce_bytes.len() != 12 {
+        return alloc_bytes(&[]);
+    }
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    match cipher.encrypt(nonce, Payload { msg: &plaintext, aad: &aad }) {
+        Ok(out) => alloc_bytes(&out),
+        Err(_) => alloc_bytes(&[]),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cryptoAesGcmDecrypt(
+    key: usize,
+    nonce: usize,
+    ciphertext: usize,
+    aad: usize,
+) -> usize {
+    use aes_gcm::aead::{Aead, KeyInit, Payload};
+    use aes_gcm::{Aes256Gcm, Nonce};
+    let key = read_bytes(key);
+    let nonce_bytes = read_bytes(nonce);
+    let ciphertext = read_bytes(ciphertext);
+    let aad = read_bytes(aad);
+    let Ok(cipher) = Aes256Gcm::new_from_slice(&key) else {
+        return alloc_bytes(&[0u8]);
+    };
+    if nonce_bytes.len() != 12 {
+        return alloc_bytes(&[0u8]);
+    }
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    match cipher.decrypt(nonce, Payload { msg: &ciphertext, aad: &aad }) {
+        Ok(plain) => {
+            let mut tagged = Vec::with_capacity(1 + plain.len());
+            tagged.push(1u8);
+            tagged.extend_from_slice(&plain);
+            alloc_bytes(&tagged)
+        }
+        Err(_) => alloc_bytes(&[0u8]),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpRequest(
+    url: usize,
+    method: usize,
+    headers: usize,
+    body: usize,
+    timeout_ms: i32,
+    http_version: i32,
+) -> usize {
+    let out = crate::execution::host::http::perform_http(
+        &read_string(method),
+        &read_string(url),
+        &read_string(headers),
+        read_string(body).into_bytes(),
+        timeout_ms,
+        http_version,
+    );
+    alloc_bytes(&out)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpRequestBytes(
+    url: usize,
+    method: usize,
+    headers: usize,
+    body: usize,
+    timeout_ms: i32,
+    http_version: i32,
+) -> usize {
+    let out = crate::execution::host::http::perform_http(
+        &read_string(method),
+        &read_string(url),
+        &read_string(headers),
+        read_bytes(body),
+        timeout_ms,
+        http_version,
+    );
+    alloc_bytes(&out)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpRequestStream(
+    url: usize,
+    method: usize,
+    headers: usize,
+    body: usize,
+    timeout_ms: i32,
+    http_version: i32,
+) -> usize {
+    let out = crate::execution::host::http::open_http_stream(
+        &read_string(method),
+        &read_string(url),
+        &read_string(headers),
+        read_string(body).into_bytes(),
+        timeout_ms,
+        http_version,
+    );
+    alloc_bytes(&out)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpRequestStreamBytes(
+    url: usize,
+    method: usize,
+    headers: usize,
+    body: usize,
+    timeout_ms: i32,
+    http_version: i32,
+) -> usize {
+    let out = crate::execution::host::http::open_http_stream(
+        &read_string(method),
+        &read_string(url),
+        &read_string(headers),
+        read_bytes(body),
+        timeout_ms,
+        http_version,
+    );
+    alloc_bytes(&out)
+}
+
+#[no_mangle]
+pub extern "C" fn httpReadChunk(handle: i32, max_bytes: i32) -> usize {
+    alloc_bytes(&crate::execution::host::http::http_read_chunk(handle, max_bytes))
+}
+
+#[no_mangle]
+pub extern "C" fn httpCloseStream(handle: i32) -> i32 {
+    crate::execution::host::http::http_close_stream(handle)
 }

@@ -84,7 +84,7 @@ fn response_head(response: &reqwest::blocking::Response) -> String {
 /// "Name: value\n" lines), a blank line, then the raw body bytes. `body` is sent verbatim unless the
 /// verb is GET/HEAD or it is empty. Network/protocol errors come back as a status `0` response whose
 /// body is the error text. `timeout_ms == 0` means no timeout. `http_version` is `1` (default) or `2`.
-fn perform_http(
+pub(crate) fn perform_http(
     method: &str,
     url: &str,
     headers_json: &str,
@@ -165,7 +165,7 @@ static NEXT_STREAM_HANDLE: AtomicU32 = AtomicU32::new(1);
 /// [`perform_http`] exactly except the "body" is the decimal handle id, so `HttpResponse`'s
 /// existing head parser can be reused unchanged on the Dream side (see `wrap_stream` in
 /// `http_client.dream`).
-fn open_http_stream(
+pub(crate) fn open_http_stream(
     method: &str,
     url: &str,
     headers_json: &str,
@@ -203,7 +203,7 @@ fn open_http_stream(
 
 /// Reads up to `max_bytes` from an open stream handle. Wire: `"data\n<bytes>"` | `"eof\n"` |
 /// `"error\n<message>"`.
-fn http_read_chunk(handle: i32, max_bytes: i32) -> Vec<u8> {
+pub(crate) fn http_read_chunk(handle: i32, max_bytes: i32) -> Vec<u8> {
     let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
     let Some(response) = table.get_mut(&(handle as u32)) else {
         return b"error\nstream not found".to_vec();
@@ -230,7 +230,7 @@ fn http_read_chunk(handle: i32, max_bytes: i32) -> Vec<u8> {
     }
 }
 
-fn http_close_stream(handle: i32) -> i32 {
+pub(crate) fn http_close_stream(handle: i32) -> i32 {
     let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
     table.shift_remove(&(handle as u32)).is_some() as i32
 }

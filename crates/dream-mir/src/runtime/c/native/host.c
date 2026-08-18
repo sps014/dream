@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
 #endif
 
 __attribute__((constructor))
@@ -31,6 +32,7 @@ static char *dream_str_utf8(dream_ptr s) {
     int32_t n;
     char *out;
     int32_t i;
+    size_t used = 0;
     const uint16_t *u;
     if (!s) {
         out = (char *)malloc(1);
@@ -40,26 +42,113 @@ static char *dream_str_utf8(dream_ptr s) {
         return out;
     }
     n = dream_str_len(s);
-    out = (char *)malloc((size_t)n + 1);
+    out = (char *)malloc((size_t)n * 3 + 1);
     if (!out) {
         return NULL;
     }
     u = (const uint16_t *)((const char *)dream_p(s) + STRING_UTF8_OFFSET);
     for (i = 0; i < n; i++) {
-        out[i] = u[i] < 128 ? (char)u[i] : '?';
+        uint32_t cp = u[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < n) {
+            uint16_t low = u[i + 1];
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                cp = 0x10000 + (((cp - 0xD800) << 10) | (low - 0xDC00));
+                i += 1;
+            }
+        }
+        if (cp < 0x80) {
+            out[used++] = (char)cp;
+        } else if (cp < 0x800) {
+            out[used++] = (char)(0xC0 | (cp >> 6));
+            out[used++] = (char)(0x80 | (cp & 0x3F));
+        } else if (cp < 0x10000) {
+            out[used++] = (char)(0xE0 | (cp >> 12));
+            out[used++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[used++] = (char)(0x80 | (cp & 0x3F));
+        } else {
+            out[used++] = (char)(0xF0 | (cp >> 18));
+            out[used++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+            out[used++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[used++] = (char)(0x80 | (cp & 0x3F));
+        }
     }
-    out[n] = 0;
+    out[used] = 0;
     return out;
 }
 
 static dream_ptr dream_str_from_utf8(const char *s) {
     size_t n = s ? strlen(s) : 0;
-    size_t i;
-    dream_ptr p = dream_string_alloc((int32_t)n);
-    uint16_t *u = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
-    for (i = 0; i < n; i++) {
-        u[i] = (uint16_t)(unsigned char)s[i];
+    size_t i = 0;
+    size_t units = 0;
+    const unsigned char *in = (const unsigned char *)s;
+    uint16_t *u;
+    dream_ptr p;
+    while (i < n) {
+        unsigned char c = in[i];
+        uint32_t cp;
+        if (c < 0x80) {
+            cp = c;
+            i += 1;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < n) {
+            cp = ((uint32_t)(c & 0x1F) << 6) | (uint32_t)(in[i + 1] & 0x3F);
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0 && i + 2 < n) {
+            cp = ((uint32_t)(c & 0x0F) << 12) | ((uint32_t)(in[i + 1] & 0x3F) << 6)
+                | (uint32_t)(in[i + 2] & 0x3F);
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0 && i + 3 < n) {
+            cp = ((uint32_t)(c & 0x07) << 18) | ((uint32_t)(in[i + 1] & 0x3F) << 12)
+                | ((uint32_t)(in[i + 2] & 0x3F) << 6) | (uint32_t)(in[i + 3] & 0x3F);
+            i += 4;
+        } else {
+            cp = 0xFFFD;
+            i += 1;
+        }
+        units += (cp > 0xFFFF) ? 2 : 1;
     }
+    p = dream_string_alloc((int32_t)units);
+    u = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    i = 0;
+    units = 0;
+    while (i < n) {
+        unsigned char c = in[i];
+        uint32_t cp;
+        if (c < 0x80) {
+            cp = c;
+            i += 1;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < n) {
+            cp = ((uint32_t)(c & 0x1F) << 6) | (uint32_t)(in[i + 1] & 0x3F);
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0 && i + 2 < n) {
+            cp = ((uint32_t)(c & 0x0F) << 12) | ((uint32_t)(in[i + 1] & 0x3F) << 6)
+                | (uint32_t)(in[i + 2] & 0x3F);
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0 && i + 3 < n) {
+            cp = ((uint32_t)(c & 0x07) << 18) | ((uint32_t)(in[i + 1] & 0x3F) << 12)
+                | ((uint32_t)(in[i + 2] & 0x3F) << 6) | (uint32_t)(in[i + 3] & 0x3F);
+            i += 4;
+        } else {
+            cp = 0xFFFD;
+            i += 1;
+        }
+        if (cp > 0xFFFF) {
+            cp -= 0x10000;
+            u[units++] = (uint16_t)(0xD800 + (cp >> 10));
+            u[units++] = (uint16_t)(0xDC00 + (cp & 0x3FF));
+        } else {
+            u[units++] = (uint16_t)cp;
+        }
+    }
+    return p;
+}
+
+static dream_ptr dream_chars_from_utf8(const char *s) {
+    size_t n = s ? strlen(s) : 0;
+    dream_ptr p = dream_array_new((int32_t)n, 1);
+    if (n) {
+        memcpy((char *)dream_p(p) + 4, s, n);
+    }
+    *(int32_t *)((char *)dream_p(p) - 4) = INT32_MAX;
     return p;
 }
 
@@ -83,7 +172,21 @@ void print_string(dream_ptr s) {
     fflush(stdout);
 }
 
-void print_float(float v) { printf("%.8g", (double)v); }
+static void print_float_shortest(float v) {
+    char text[32];
+    char *end;
+    snprintf(text, sizeof(text), "%.6f", (double)v);
+    end = text + strlen(text);
+    while (end > text && end[-1] == '0') {
+        *--end = 0;
+    }
+    if (end > text && end[-1] == '.') {
+        *--end = 0;
+    }
+    fputs(text, stdout);
+}
+
+void print_float(float v) { print_float_shortest(v); }
 
 void print_double(double v) { printf("%.16g", v); }
 
@@ -181,6 +284,22 @@ int32_t fileExists(dream_ptr path) {
         free(p);
     }
     return ok;
+}
+
+int64_t fileSize(dream_ptr path) {
+#ifndef _WIN32
+    char *text = dream_str_utf8(path);
+    struct stat st;
+    int64_t size = -1;
+    if (text && stat(text, &st) == 0) {
+        size = (int64_t)st.st_size;
+    }
+    free(text);
+    return size;
+#else
+    (void)path;
+    return -1;
+#endif
 }
 
 int32_t processPlatform(void) { return 0; }
@@ -364,19 +483,24 @@ dream_ptr processRun(dream_ptr command, dream_ptr joined_args, dream_ptr cwd) {
     close(pipe_fd[0]);
     waitpid(pid, &status, 0);
     {
-        int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -2;
         char header[64];
-        int header_len = snprintf(header, sizeof(header), "%d\n%zu\n", exit_code, used);
+        int header_len;
+        if (exit_code == 127 && used == 0) {
+            const char *message = "failed to spawn process";
+            header_len = snprintf(header, sizeof(header), "-1\n");
+            used = strlen(message);
+            memcpy(output, message, used);
+        } else {
+            header_len = snprintf(header, sizeof(header), "%d\n%zu\n", exit_code, used);
+        }
         int32_t total = header_len + (int32_t)used;
-        int32_t i;
-        result = dream_array_new(total, 4);
-        for (i = 0; i < header_len; i++) {
-            ((int32_t *)((char *)dream_p(result) + 4))[i] = (unsigned char)header[i];
+        result = dream_array_new(total, 1);
+        memcpy((char *)dream_p(result) + 4, header, (size_t)header_len);
+        if (used) {
+            memcpy((char *)dream_p(result) + 4 + header_len, output, used);
         }
-        for (i = 0; i < (int32_t)used; i++) {
-            ((int32_t *)((char *)dream_p(result) + 4))[header_len + i] =
-                (unsigned char)output[i];
-        }
+        *(int32_t *)((char *)dream_p(result) - 4) = INT32_MAX;
     }
     free(output);
     free(program);
@@ -388,6 +512,141 @@ dream_ptr processRun(dream_ptr command, dream_ptr joined_args, dream_ptr cwd) {
     return dream_array_new(0, 4);
 #endif
 }
+
+#ifndef _WIN32
+#define DREAM_CHILDREN_MAX 32
+typedef struct {
+    pid_t pid;
+    int stdin_fd;
+    int stdout_fd;
+    int stderr_fd;
+} DreamChild;
+
+static DreamChild dream_children[DREAM_CHILDREN_MAX];
+
+static DreamChild *dream_child(int32_t handle) {
+    if (handle <= 0 || handle > DREAM_CHILDREN_MAX) {
+        return NULL;
+    }
+    return dream_children[handle - 1].pid ? &dream_children[handle - 1] : NULL;
+}
+
+static void dream_child_close(DreamChild *child) {
+    if (child->stdin_fd >= 0) close(child->stdin_fd);
+    if (child->stdout_fd >= 0) close(child->stdout_fd);
+    if (child->stderr_fd >= 0) close(child->stderr_fd);
+    memset(child, 0, sizeof(*child));
+}
+
+dream_ptr processSpawn(dream_ptr command, dream_ptr joined_args, dream_ptr cwd) {
+    char *program = dream_str_utf8(command);
+    char *args = dream_str_utf8(joined_args);
+    char *directory = dream_str_utf8(cwd);
+    char *argv[128];
+    char *cursor;
+    int argc = 0;
+    int in_pipe[2], out_pipe[2], err_pipe[2];
+    int slot;
+    pid_t pid;
+    if (!program || pipe(in_pipe) || pipe(out_pipe) || pipe(err_pipe)) {
+        free(program); free(args); free(directory);
+        return dream_chars_from_utf8("-1\nfailed to spawn process");
+    }
+    argv[argc++] = program;
+    cursor = args;
+    while (cursor && *cursor && argc < 127) {
+        char *next = strchr(cursor, '\n');
+        if (next) *next++ = 0;
+        argv[argc++] = cursor;
+        cursor = next;
+    }
+    argv[argc] = NULL;
+    for (slot = 0; slot < DREAM_CHILDREN_MAX && dream_children[slot].pid; slot++) {}
+    if (slot == DREAM_CHILDREN_MAX || (pid = fork()) < 0) {
+        close(in_pipe[0]); close(in_pipe[1]); close(out_pipe[0]); close(out_pipe[1]);
+        close(err_pipe[0]); close(err_pipe[1]);
+        free(program); free(args); free(directory);
+        return dream_chars_from_utf8("-1\nfailed to spawn process");
+    }
+    if (pid == 0) {
+        dup2(in_pipe[0], STDIN_FILENO);
+        dup2(out_pipe[1], STDOUT_FILENO);
+        dup2(err_pipe[1], STDERR_FILENO);
+        close(in_pipe[0]); close(in_pipe[1]); close(out_pipe[0]); close(out_pipe[1]);
+        close(err_pipe[0]); close(err_pipe[1]);
+        if (directory && *directory) chdir(directory);
+        execvp(program, argv);
+        _exit(127);
+    }
+    close(in_pipe[0]); close(out_pipe[1]); close(err_pipe[1]);
+    dream_children[slot].pid = pid;
+    dream_children[slot].stdin_fd = in_pipe[1];
+    dream_children[slot].stdout_fd = out_pipe[0];
+    dream_children[slot].stderr_fd = err_pipe[0];
+    free(program); free(args); free(directory);
+    {
+        char wire[32];
+        snprintf(wire, sizeof(wire), "%d\n", slot + 1);
+        return dream_chars_from_utf8(wire);
+    }
+}
+
+int32_t processWriteStdin(int32_t handle, dream_ptr data) {
+    DreamChild *child = dream_child(handle);
+    int32_t len = data ? dream_i32(data)[0] : 0;
+    if (!child || child->stdin_fd < 0) return 0;
+    return write(child->stdin_fd, (char *)dream_p(data) + 4, (size_t)len) == len;
+}
+
+static dream_ptr dream_child_read(int32_t handle, int32_t stream, int32_t max_bytes, int line) {
+    DreamChild *child = dream_child(handle);
+    int fd;
+    char buf[4097];
+    ssize_t n;
+    if (!child) return dream_chars_from_utf8(line ? "0" : "");
+    fd = stream ? child->stderr_fd : child->stdout_fd;
+    if (fd < 0) return dream_chars_from_utf8(line ? "0" : "");
+    if (line) {
+        size_t used = 1;
+        buf[0] = '1';
+        while (used < sizeof(buf) - 1 && (n = read(fd, buf + used, 1)) == 1) {
+            if (buf[used++] == '\n') { used--; break; }
+        }
+        if (used == 1) return dream_chars_from_utf8("0");
+        buf[used] = 0;
+        return dream_chars_from_utf8(buf);
+    }
+    if (max_bytes < 0) max_bytes = 0;
+    if (max_bytes > 4096) max_bytes = 4096;
+    n = read(fd, buf, (size_t)max_bytes);
+    if (n <= 0) return dream_chars_from_utf8("");
+    buf[n] = 0;
+    return dream_chars_from_utf8(buf);
+}
+
+dream_ptr processReadStream(int32_t handle, int32_t stream, int32_t max_bytes) {
+    return dream_child_read(handle, stream, max_bytes, 0);
+}
+
+dream_ptr processReadStreamLine(int32_t handle, int32_t stream) {
+    return dream_child_read(handle, stream, 4096, 1);
+}
+
+dream_ptr processWait(int32_t handle) {
+    DreamChild *child = dream_child(handle);
+    int status;
+    char wire[32];
+    if (!child || waitpid(child->pid, &status, 0) < 0) return dream_chars_from_utf8("-1");
+    snprintf(wire, sizeof(wire), "%d", WIFEXITED(status) ? WEXITSTATUS(status) : -2);
+    dream_child_close(child);
+    return dream_chars_from_utf8(wire);
+}
+
+int32_t processKill(int32_t handle) {
+    DreamChild *child = dream_child(handle);
+    return child && kill(child->pid, SIGKILL) == 0;
+}
+#endif
 
 static const uint8_t *dream_array_bytes(dream_ptr bytes, int32_t *len) {
     if (!bytes) {
@@ -482,7 +741,100 @@ int64_t timeNowNanos(void) {
 
 int64_t Time_nano_time(void) { return timeNowNanos(); }
 
-int32_t dateLocalOffsetMinutes(void) { return 0; }
+static int32_t dream_zone_offset_minutes(const char *zone, int64_t epoch_millis) {
+#ifndef _WIN32
+    const char *previous = getenv("TZ");
+    char *saved = previous ? strdup(previous) : NULL;
+    struct stat zoneinfo;
+    time_t instant = (time_t)(epoch_millis / 1000);
+    struct tm local_tm;
+    struct tm utc_tm;
+    int32_t offset;
+    if (!zone || !*zone) return -999999;
+    if (strcmp(zone, "UTC") != 0) {
+        char path[4096];
+        if (snprintf(path, sizeof(path), "/usr/share/zoneinfo/%s", zone) >= (int)sizeof(path)
+            || stat(path, &zoneinfo) != 0) {
+            return -999999;
+        }
+    }
+    setenv("TZ", zone, 1);
+    tzset();
+    if (!localtime_r(&instant, &local_tm) || !gmtime_r(&instant, &utc_tm)) {
+        offset = -999999;
+    } else {
+        utc_tm.tm_isdst = -1;
+        offset = (int32_t)(difftime(mktime(&local_tm), mktime(&utc_tm)) / 60);
+    }
+    if (saved) {
+        setenv("TZ", saved, 1);
+    } else {
+        unsetenv("TZ");
+    }
+    free(saved);
+    tzset();
+    return offset;
+#else
+    (void)zone;
+    (void)epoch_millis;
+    return -999999;
+#endif
+}
+
+int32_t dateLocalOffsetMinutes(int64_t epoch_millis) {
+#ifndef _WIN32
+    time_t instant = (time_t)(epoch_millis / 1000);
+    struct tm local_tm;
+    struct tm utc_tm;
+    if (!localtime_r(&instant, &local_tm) || !gmtime_r(&instant, &utc_tm)) return 0;
+    utc_tm.tm_isdst = -1;
+    return (int32_t)(difftime(mktime(&local_tm), mktime(&utc_tm)) / 60);
+#else
+    (void)epoch_millis;
+    return 0;
+#endif
+}
+
+int32_t dateZoneOffsetMinutes(dream_ptr zone_name, int64_t epoch_millis) {
+    char *zone = dream_str_utf8(zone_name);
+    int32_t offset = dream_zone_offset_minutes(zone, epoch_millis);
+    free(zone);
+    return offset;
+}
+
+dream_ptr dateLocalZoneName(void) {
+#ifndef _WIN32
+    tzset();
+    return dream_str_from_utf8(tzname[0] ? tzname[0] : "UTC");
+#else
+    return dream_str_from_utf8("UTC");
+#endif
+}
+
+dream_ptr httpRequestStream(
+    dream_ptr url, dream_ptr method, dream_ptr headers, dream_ptr body, int32_t timeout_ms,
+    int32_t http_version) {
+    (void)url; (void)method; (void)headers; (void)body; (void)timeout_ms; (void)http_version;
+    return dream_chars_from_utf8("-1\nnative C HTTP streams are unsupported");
+}
+
+dream_ptr tcpConnect(dream_ptr host, int32_t port, int32_t timeout_ms) {
+    (void)host; (void)port; (void)timeout_ms;
+    return dream_chars_from_utf8("-1\nnative C TCP connections are unsupported");
+}
+
+dream_ptr wsConnect(dream_ptr url, int32_t timeout_ms) {
+    char *text = dream_str_utf8(url);
+    dream_ptr result;
+    (void)timeout_ms;
+    if (text && strncmp(text, "ws://", 5) != 0) {
+        result = dream_chars_from_utf8("-2\nunsupported WebSocket scheme");
+    } else {
+        result = dream_chars_from_utf8("-1\nnative C WebSocket connections are unsupported");
+    }
+    free(text);
+    return result;
+}
 
 void consoleExit(int32_t code) { exit(code); }
 

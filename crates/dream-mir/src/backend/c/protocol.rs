@@ -1,5 +1,5 @@
 use crate::backend::c::ctx::Cx;
-use crate::backend::c::rvalue::to_string_fn;
+use crate::backend::c::rvalue::{hash_code_expr, to_string_fn};
 use crate::backend::c::types::c_ident;
 use crate::backend::wasm::func_symbol;
 use dream_types::{TyKind, TypeId};
@@ -40,21 +40,26 @@ pub(super) fn emit_protocol(out: &mut String, cx: &Cx<'_>) {
         if !user.contains(&sym) {
             out.push_str(&format!("dream_ptr {}(dream_ptr p);\n", c_ident(&sym)));
         }
+        let hash = format!("{}_hash_code", layout.name);
+        if !user.contains(&hash) {
+            out.push_str(&format!("int32_t {}(dream_ptr p);\n", c_ident(&hash)));
+        }
     }
     for layout in cx.native.unions.values() {
         let sym = format!("{}_to_string", layout.name);
         if !user.contains(&sym) {
             out.push_str(&format!("dream_ptr {}(dream_ptr p);\n", c_ident(&sym)));
         }
+        let hash = format!("{}_hash_code", layout.name);
+        if !user.contains(&hash) {
+            out.push_str(&format!("int32_t {}(dream_ptr p);\n", c_ident(&hash)));
+        }
     }
     if !array_elems.is_empty() || !cx.native.structs.is_empty() || !cx.native.unions.is_empty() {
         out.push('\n');
     }
     for elem in array_elems {
-        out.push_str(&format!(
-            "dream_ptr {}(dream_ptr p) {{ return dream_array_to_string(p); }}\n",
-            c_ident(&format!("array_to_string_t{}", elem.0))
-        ));
+        emit_array_to_string(out, cx, elem);
     }
     if !out.is_empty() {
         out.push('\n');
@@ -73,7 +78,54 @@ pub(super) fn emit_protocol(out: &mut String, cx: &Cx<'_>) {
         }
         emit_union_to_string(out, cx, *ty, &layout.name);
     }
+    for (ty, layout) in &cx.native.structs {
+        let hash = format!("{}_hash_code", layout.name);
+        if !user.contains(&hash) {
+            emit_struct_hash_code(out, cx, *ty, layout);
+        }
+    }
+    for (ty, layout) in &cx.native.unions {
+        let hash = format!("{}_hash_code", layout.name);
+        if !user.contains(&hash) {
+            emit_union_hash_code(out, cx, *ty, layout);
+        }
+    }
     emit_object_to_string_router(out, cx);
+    emit_object_hash_code_router(out, cx);
+}
+
+fn emit_array_to_string(out: &mut String, cx: &Cx<'_>, elem: TypeId) {
+    let fn_name = c_ident(&format!("array_to_string_t{}", elem.0));
+    let es = crate::backend::c::types::elem_size(cx, elem);
+    let cast = crate::backend::c::types::load_cast(cx, elem);
+    let conv = to_string_fn(cx, elem);
+    out.push_str(&format!(
+        "dream_ptr {fn_name}(dream_ptr p) {{\n  int32_t n = p ? *(int32_t *)dream_p(p) : 0;\n  int32_t i;\n  dream_ptr r = {};\n",
+        cx.str_sym("[")
+    ));
+    out.push_str("  for (i = 0; i < n; i++) {\n");
+    out.push_str(&format!(
+        "    if (i) {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
+        cx.str_sym(", ")
+    ));
+    if cx.interner.is_value_type(elem) {
+        out.push_str(&format!(
+            "    {{ dream_ptr __p = {conv}((dream_ptr)((char *)dream_p(p) + 4 + (size_t)i * {es})); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
+        ));
+    } else if conv.is_empty() {
+        out.push_str(&format!(
+            "    {{ dream_ptr __c = dream_concat_strings(r, *({cast} *)((char *)dream_p(p) + 4 + (size_t)i * {es})); dream_release(r); r = __c; }}\n"
+        ));
+    } else {
+        out.push_str(&format!(
+            "    {{ dream_ptr __p = {conv}(*({cast} *)((char *)dream_p(p) + 4 + (size_t)i * {es})); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
+        ));
+    }
+    out.push_str("  }\n");
+    out.push_str(&format!(
+        "  {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); return __c; }}\n}}\n\n",
+        cx.str_sym("]")
+    ));
 }
 
 fn emit_struct_to_string(
@@ -108,7 +160,7 @@ fn emit_struct_to_string(
             format!(", {}: ", f.name)
         };
         out.push_str(&format!(
-            "  r = dream_concat_strings(r, {});\n",
+            "  {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
             cx.str_sym(&label)
         ));
         let value = if cx.interner.is_value_type(f.ty) {
@@ -119,10 +171,12 @@ fn emit_struct_to_string(
         };
         let text = to_string_fn(cx, f.ty);
         if text.is_empty() {
-            out.push_str(&format!("  r = dream_concat_strings(r, {value});\n"));
+            out.push_str(&format!(
+                "  {{ dream_ptr __c = dream_concat_strings(r, {value}); dream_release(r); r = __c; }}\n"
+            ));
         } else {
             out.push_str(&format!(
-                "  r = dream_concat_strings(r, {text}({value}));\n"
+                "  {{ dream_ptr __p = {text}({value}); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
             ));
         }
     }
@@ -132,17 +186,150 @@ fn emit_struct_to_string(
         " }"
     };
     out.push_str(&format!(
-        "  return dream_concat_strings(r, {});\n}}\n\n",
+        "  {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); return __c; }}\n}}\n\n",
         cx.str_sym(end)
     ));
 }
 
-fn emit_union_to_string(out: &mut String, cx: &Cx<'_>, _ty: TypeId, name: &str) {
+fn emit_union_to_string(out: &mut String, cx: &Cx<'_>, ty: TypeId, name: &str) {
     let fn_name = c_ident(&format!("{name}_to_string"));
+    let Some(layout) = cx.native.unions.get(&ty) else {
+        out.push_str(&format!(
+            "dream_ptr {fn_name}(dream_ptr p) {{\n  (void)p;\n  return {};\n}}\n\n",
+            cx.str_sym("<object>")
+        ));
+        return;
+    };
+    out.push_str(&format!("dream_ptr {fn_name}(dream_ptr p) {{\n"));
+    out.push_str("  int32_t d;\n  dream_ptr r;\n  if (!p) return ");
+    out.push_str(cx.str_sym("null"));
+    out.push_str(";\n  d = *(int32_t *)dream_p(p);\n  r = ");
+    out.push_str(cx.str_sym("<object>"));
+    out.push_str(";\n  switch (d) {\n");
+    for variant in &layout.variants {
+        let (prefix, labels, suffix) = union_variant_pieces(variant);
+        out.push_str(&format!("    case {}: {{\n", variant.discriminant));
+        out.push_str(&format!("      r = {};\n", cx.str_sym(&prefix)));
+        for (i, f) in variant.fields.iter().enumerate() {
+            out.push_str(&format!(
+                "      {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
+                cx.str_sym(&labels[i])
+            ));
+            let value = field_value_expr(cx, f);
+            let text = to_string_fn(cx, f.ty);
+            if text.is_empty() {
+                out.push_str(&format!(
+                    "      {{ dream_ptr __c = dream_concat_strings(r, {value}); dream_release(r); r = __c; }}\n"
+                ));
+            } else {
+                out.push_str(&format!(
+                    "      {{ dream_ptr __p = {text}({value}); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
+                ));
+            }
+        }
+        if !suffix.is_empty() {
+            out.push_str(&format!(
+                "      {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
+                cx.str_sym(&suffix)
+            ));
+        }
+        out.push_str("      break;\n    }\n");
+    }
+    out.push_str("    default: break;\n  }\n  return r;\n}\n\n");
+}
+
+fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<String>, String) {
+    if v.fields.is_empty() {
+        return (v.name.clone(), Vec::new(), String::new());
+    }
+    let prefix = format!("{}(", v.name);
+    let labels = v
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            if i == 0 {
+                format!("{}: ", f.name)
+            } else {
+                format!(", {}: ", f.name)
+            }
+        })
+        .collect();
+    (prefix, labels, ")".to_string())
+}
+
+fn field_value_expr(cx: &Cx<'_>, f: &dream_hir::FieldLayout) -> String {
+    if cx.interner.is_value_type(f.ty) {
+        format!("(dream_ptr)((char *)dream_p(p) + {})", f.offset)
+    } else {
+        let cast = crate::backend::c::types::load_cast(cx, f.ty);
+        format!("*({cast} *)((char *)dream_p(p) + {})", f.offset)
+    }
+}
+
+fn emit_struct_hash_code(
+    out: &mut String,
+    cx: &Cx<'_>,
+    _ty: TypeId,
+    layout: &dream_hir::TypeLayout,
+) {
+    let fn_name = c_ident(&format!("{}_hash_code", layout.name));
+    out.push_str(&format!("int32_t {fn_name}(dream_ptr p) {{\n  int32_t h = 17;\n"));
+    for f in &layout.fields {
+        emit_hash_field(out, cx, f);
+    }
+    out.push_str("  return h;\n}\n\n");
+}
+
+fn emit_union_hash_code(
+    out: &mut String,
+    cx: &Cx<'_>,
+    _ty: TypeId,
+    layout: &dream_hir::UnionLayout,
+) {
+    let fn_name = c_ident(&format!("{}_hash_code", layout.name));
     out.push_str(&format!(
-        "dream_ptr {fn_name}(dream_ptr p) {{\n  if (!p) return {};\n  return dream_object_to_string(p);\n}}\n\n",
-        cx.str_sym("null")
+        "int32_t {fn_name}(dream_ptr p) {{\n  int32_t d = p ? *(int32_t *)dream_p(p) : 0;\n  int32_t h = 17 * 31 + d;\n  switch (d) {{\n"
     ));
+    for variant in &layout.variants {
+        out.push_str(&format!("    case {}: {{\n", variant.discriminant));
+        for f in &variant.fields {
+            emit_hash_field(out, cx, f);
+        }
+        out.push_str("      break;\n    }\n");
+    }
+    out.push_str("    default: break;\n  }\n  return h;\n}\n\n");
+}
+
+fn emit_hash_field(out: &mut String, cx: &Cx<'_>, f: &dream_hir::FieldLayout) {
+    let value = field_value_expr(cx, f);
+    let hashed = hash_code_expr(cx, f.ty, &value);
+    out.push_str(&format!("      h = h * 31 + {hashed};\n"));
+}
+
+fn emit_object_hash_code_router(out: &mut String, cx: &Cx<'_>) {
+    out.push_str("int32_t dream_object_hash_code(dream_ptr p) {\n");
+    out.push_str("  int32_t tag;\n  if (!p) return 0;\n  tag = dream_object_tag(p);\n  switch (tag) {\n");
+    out.push_str("    case TAG_INT: case TAG_UINT: case TAG_BOOL: case TAG_CHAR: case TAG_BYTE: return *(int32_t *)dream_p(p);\n");
+    out.push_str("    case TAG_LONG: case TAG_ULONG: return dream_hash_long(*(int64_t *)dream_p(p));\n");
+    out.push_str("    case TAG_FLOAT: return dream_bitcast_f32(*(float *)dream_p(p));\n");
+    out.push_str("    case TAG_DOUBLE: return dream_hash_double(*(double *)dream_p(p));\n");
+    out.push_str("    case TAG_STRING: return dream_string_hash(p);\n");
+    let mut tagged: Vec<_> = cx.tags.iter().collect();
+    tagged.sort_by_key(|(_, t)| **t);
+    for (ty, tag) in tagged {
+        if let Some(l) = cx.native.structs.get(ty) {
+            if matches!(cx.interner.kind(*ty), TyKind::Tuple(_)) {
+                continue;
+            }
+            let fn_name = c_ident(&format!("{}_hash_code", l.name));
+            out.push_str(&format!("    case {tag}: return {fn_name}(p);\n"));
+        } else if let Some(l) = cx.native.unions.get(ty) {
+            let fn_name = c_ident(&format!("{}_hash_code", l.name));
+            out.push_str(&format!("    case {tag}: return {fn_name}(p);\n"));
+        }
+    }
+    out.push_str("    default: return (int32_t)(uintptr_t)p;\n  }\n}\n\n");
 }
 
 fn emit_object_to_string_router(out: &mut String, cx: &Cx<'_>) {
@@ -205,7 +392,7 @@ pub(super) fn emit_iface_trampolines(out: &mut String, cx: &Cx<'_>) {
 pub(super) fn emit_iface_init(out: &mut String, cx: &Cx<'_>) {
     out.push_str("static void dream_init_itables(void) {\n");
     for imp in &cx.mir.interfaces.impls {
-        let Some(tag) = cx.tags.get(&imp.class_ty) else {
+        let Some(tag) = interface_tag(cx, imp.class_ty) else {
             continue;
         };
         for (iid, symbols) in &imp.entries {
@@ -221,4 +408,11 @@ pub(super) fn emit_iface_init(out: &mut String, cx: &Cx<'_>) {
         }
     }
     out.push_str("}\n\n");
+}
+
+fn interface_tag(cx: &Cx<'_>, ty: TypeId) -> Option<i32> {
+    match cx.interner.kind(ty) {
+        TyKind::Array(_) => Some(crate::abi::TAG_ARRAY),
+        _ => cx.tags.get(&ty).copied(),
+    }
 }

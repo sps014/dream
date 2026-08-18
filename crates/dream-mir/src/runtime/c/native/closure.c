@@ -15,3 +15,24 @@ int32_t dream_funcbox_funcidx(dream_ptr box) {
 dream_ptr dream_funcbox_env(dream_ptr box) {
     return box ? ((dream_ptr *)dream_p(box))[1] : 0;
 }
+
+void dream_release_funcbox(dream_ptr box) {
+    int32_t *rc;
+    int32_t old;
+    dream_ptr env;
+    if (!box) {
+        return;
+    }
+    rc = (int32_t *)((char *)dream_p(box) - 4);
+    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
+        return;
+    }
+    old = __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL);
+    if (old != 1) {
+        return;
+    }
+    env = ((dream_ptr *)dream_p(box))[1];
+    ((dream_ptr *)dream_p(box))[1] = 0;
+    dream_release(env);
+    dream_free(box);
+}

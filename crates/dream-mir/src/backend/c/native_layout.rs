@@ -26,7 +26,7 @@ impl NativeLayouts {
             let mut rest = Vec::new();
             let mut progress = false;
             for (ty, wasm) in pending {
-                match relayout_struct(interner, &structs, &wasm) {
+                match relayout_struct(interner, &structs, &mir.layouts.unions, &wasm) {
                     Some(native) => {
                         structs.insert(ty, native);
                         progress = true;
@@ -39,7 +39,7 @@ impl NativeLayouts {
             }
             if !progress {
                 for (ty, wasm) in rest {
-                    structs.insert(ty, force_struct(interner, &structs, &wasm));
+                    structs.insert(ty, force_struct(interner, &structs, &mir.layouts.unions, &wasm));
                 }
                 break;
             }
@@ -47,7 +47,7 @@ impl NativeLayouts {
         }
         let mut unions = IndexMap::new();
         for (ty, wasm) in &mir.layouts.unions {
-            unions.insert(*ty, relayout_union(interner, &structs, wasm));
+            unions.insert(*ty, relayout_union(interner, &structs, &mir.layouts.unions, wasm));
         }
         Self { structs, unions }
     }
@@ -56,16 +56,20 @@ impl NativeLayouts {
 fn native_scalar(
     interner: &TypeInterner,
     structs: &IndexMap<TypeId, TypeLayout>,
+    unions: &IndexMap<TypeId, UnionLayout>,
     ty: TypeId,
 ) -> Option<(u32, u32)> {
     if interner.is_value_type(ty) {
         if let Some(l) = structs.get(&ty) {
             let align = l.fields.iter().fold(4u32, |a, f| {
-                native_scalar(interner, structs, f.ty)
+                native_scalar(interner, structs, unions, f.ty)
                     .map(|(_, al)| a.max(al))
                     .unwrap_or(a)
             });
             return Some((l.size, align.max(1)));
+        }
+        if let Some(u) = unions.get(&ty) {
+            return Some(union_native_size(interner, structs, unions, u));
         }
         return None;
     }
@@ -77,19 +81,41 @@ fn native_scalar(
     }
 }
 
+fn union_native_size(
+    interner: &TypeInterner,
+    structs: &IndexMap<TypeId, TypeLayout>,
+    unions: &IndexMap<TypeId, UnionLayout>,
+    wasm: &UnionLayout,
+) -> (u32, u32) {
+    let mut size = 4u32;
+    let mut align = 4u32;
+    for v in &wasm.variants {
+        let mut offset = 4u32;
+        for f in &v.fields {
+            let (fsz, fal) = native_scalar(interner, structs, unions, f.ty).unwrap_or((8, 8));
+            offset = align_up(offset, fal);
+            offset += fsz;
+            align = align.max(fal);
+        }
+        size = size.max(offset);
+    }
+    (align_up(size, align.max(1)), align.max(1))
+}
+
 fn relayout_struct(
     interner: &TypeInterner,
     structs: &IndexMap<TypeId, TypeLayout>,
+    unions: &IndexMap<TypeId, UnionLayout>,
     wasm: &TypeLayout,
 ) -> Option<TypeLayout> {
     if wasm.packed {
-        return pack_struct(interner, structs, wasm);
+        return pack_struct(interner, structs, unions, wasm);
     }
     let mut offset = 0u32;
     let mut max_align = 4u32;
     let mut fields = Vec::with_capacity(wasm.fields.len());
     for f in &wasm.fields {
-        let (size, align) = native_scalar(interner, structs, f.ty)?;
+        let (size, align) = native_scalar(interner, structs, unions, f.ty)?;
         offset = align_up(offset, align);
         fields.push(FieldLayout {
             offset,
@@ -112,12 +138,13 @@ fn relayout_struct(
 fn pack_struct(
     interner: &TypeInterner,
     structs: &IndexMap<TypeId, TypeLayout>,
+    unions: &IndexMap<TypeId, UnionLayout>,
     wasm: &TypeLayout,
 ) -> Option<TypeLayout> {
     let mut offset = 0u32;
     let mut fields = Vec::with_capacity(wasm.fields.len());
     for f in &wasm.fields {
-        let (size, _) = native_scalar(interner, structs, f.ty)?;
+        let (size, _) = native_scalar(interner, structs, unions, f.ty)?;
         fields.push(FieldLayout {
             offset,
             ty: f.ty,
@@ -138,14 +165,16 @@ fn pack_struct(
 fn force_struct(
     interner: &TypeInterner,
     structs: &IndexMap<TypeId, TypeLayout>,
+    unions: &IndexMap<TypeId, UnionLayout>,
     wasm: &TypeLayout,
 ) -> TypeLayout {
-    relayout_struct(interner, structs, wasm).unwrap_or_else(|| wasm.clone())
+    relayout_struct(interner, structs, unions, wasm).unwrap_or_else(|| wasm.clone())
 }
 
 fn relayout_union(
     interner: &TypeInterner,
     structs: &IndexMap<TypeId, TypeLayout>,
+    unions: &IndexMap<TypeId, UnionLayout>,
     wasm: &UnionLayout,
 ) -> UnionLayout {
     let mut variants = Vec::with_capacity(wasm.variants.len());
@@ -154,7 +183,7 @@ fn relayout_union(
         let mut offset = 4u32;
         let mut fields = Vec::with_capacity(v.fields.len());
         for f in &v.fields {
-            let (fsz, align) = native_scalar(interner, structs, f.ty).unwrap_or((8, 8));
+            let (fsz, align) = native_scalar(interner, structs, unions, f.ty).unwrap_or((8, 8));
             offset = align_up(offset, align);
             fields.push(FieldLayout {
                 offset,

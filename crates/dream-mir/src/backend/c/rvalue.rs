@@ -5,11 +5,7 @@ use crate::backend::c::types::{c_ident, elem_size, load_cast, runtime_c_name};
 use crate::{Rvalue, UnOp};
 use dream_types::{PrimTy, TyKind};
 
-pub(super) fn emit_rvalue(
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    rv: &Rvalue,
-) -> String {
+pub(super) fn emit_rvalue(cx: &Cx<'_>, f: &crate::MirFunction, rv: &Rvalue) -> String {
     match rv {
         Rvalue::Use(o) => emit_operand(cx, f, o),
         Rvalue::Select {
@@ -73,7 +69,10 @@ pub(super) fn emit_rvalue(
             let n = emit_operand(cx, f, len);
             format!("dream_array_new({n}, {es})")
         }
-        Rvalue::HashCode(o) => format!("dream_hash_value({})", emit_operand(cx, f, o)),
+        Rvalue::HashCode(o) => {
+            let value = emit_operand(cx, f, o);
+            hash_code_expr(cx, operand_ty(cx, f, o), &value)
+        }
         Rvalue::ToString(o) => {
             let ty = operand_ty(cx, f, o);
             let conv = to_string_fn(cx, ty);
@@ -83,25 +82,15 @@ pub(super) fn emit_rvalue(
                 format!("{conv}({})", emit_operand(cx, f, o))
             }
         }
-        Rvalue::Concat(parts) => {
-            if parts.is_empty() {
-                cx.str_sym("").to_string()
-            } else {
-                let mut e = emit_operand(cx, f, &parts[0]);
-                for p in &parts[1..] {
-                    e = format!("dream_concat_strings({e}, {})", emit_operand(cx, f, p));
-                }
-                e
-            }
-        }
+        Rvalue::Concat(parts) => emit_concat_parts(cx, f, parts),
         Rvalue::ConcatInt {
             prefix,
             value,
             suffix,
         } => format!(
-            "dream_concat_strings(dream_concat_strings({}, dream_int_to_string((int32_t)({}))), {})",
-            emit_operand(cx, f, prefix),
+            "({{ dream_ptr __n = dream_int_to_string((int32_t)({})); dream_ptr __a = dream_concat_strings({}, __n); dream_release(__n); dream_ptr __r = dream_concat_strings(__a, {}); dream_release(__a); __r; }})",
             emit_operand(cx, f, value),
+            emit_operand(cx, f, prefix),
             emit_operand(cx, f, suffix)
         ),
         Rvalue::EnumName { value, arms } => {
@@ -253,11 +242,7 @@ pub(super) fn emit_rvalue(
     }
 }
 
-fn operand_ty(
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    o: &crate::Operand,
-) -> dream_types::TypeId {
+fn operand_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &crate::Operand) -> dream_types::TypeId {
     match o {
         crate::Operand::Copy(crate::Place::Local(l)) => f.local_ty(*l),
         crate::Operand::Copy(crate::Place::Global(g)) => cx
@@ -333,15 +318,17 @@ fn emit_new(
     ctor: Option<dream_types::DefId>,
     args: &[crate::Operand],
 ) -> String {
-    let layout = cx.nstruct(ty).unwrap_or_else(|| {
-        crate::internal_error!("missing layout for struct allocation {ty:?}")
-    });
+    let layout = cx
+        .nstruct(ty)
+        .unwrap_or_else(|| crate::internal_error!("missing layout for struct allocation {ty:?}"));
     let mut size = layout.size;
     if cx.interner.is_shared_type(ty) {
         size += 4;
     }
     let tag = cx.type_tag(ty, def);
-    let mut s = format!("({{ dream_ptr __o = dream_malloc({size}, {tag}); memset(dream_p(__o), 0, {size}); ");
+    let mut s = format!(
+        "({{ dream_ptr __o = dream_malloc({size}, {tag}); memset(dream_p(__o), 0, {size}); "
+    );
     if let Some(ctor) = ctor {
         let name = runtime_c_name(&cx.callee_c(ctor, &[]));
         let mut call_args = vec!["__o".to_string()];
@@ -349,6 +336,87 @@ fn emit_new(
         s.push_str(&format!("{name}({}); ", call_args.join(", ")));
     }
     s.push_str("__o; })");
+    s
+}
+
+fn emit_concat_parts(cx: &Cx<'_>, f: &crate::MirFunction, parts: &[crate::Operand]) -> String {
+    if parts.is_empty() {
+        return cx.str_sym("").to_string();
+    }
+    if parts.len() == 1 {
+        return emit_operand(cx, f, &parts[0]);
+    }
+    let first = emit_operand(cx, f, &parts[0]);
+    let second = emit_operand(cx, f, &parts[1]);
+    if parts.len() == 2 {
+        return format!("dream_concat_strings({first}, {second})");
+    }
+    let mut s = format!(
+        "({{ dream_ptr __r = dream_concat_strings({first}, {second}); dream_ptr __n; "
+    );
+    for p in &parts[2..] {
+        s.push_str(&format!(
+            "__n = dream_concat_strings(__r, {}); dream_release(__r); __r = __n; ",
+            emit_operand(cx, f, p)
+        ));
+    }
+    s.push_str("__r; })");
+    s
+}
+
+pub(super) fn emit_union_new_at(
+    cx: &Cx<'_>,
+    f: &crate::MirFunction,
+    dest: &str,
+    ty: dream_types::TypeId,
+    variant: usize,
+    args: &[crate::Operand],
+) -> String {
+    let u = cx
+        .nunion(ty)
+        .unwrap_or_else(|| crate::internal_error!("missing union layout {ty:?}"));
+    let var = u
+        .variants
+        .iter()
+        .find(|v| v.discriminant as usize == variant)
+        .unwrap_or_else(|| crate::internal_error!("missing variant {variant}"));
+    let size = u.size;
+    let mut s = format!(
+        "memset(dream_p({dest}), 0, {size}); *(int32_t*)dream_p({dest}) = {variant}; "
+    );
+    for (i, arg) in args.iter().enumerate() {
+        let fld = &var.fields[i];
+        if cx.interner.is_value_type(fld.ty) {
+            let fsz = elem_size(cx, fld.ty);
+            s.push_str(&format!(
+                "memcpy((char*)dream_p({dest}) + {}, dream_p({}), {fsz}); ",
+                fld.offset,
+                emit_operand(cx, f, arg)
+            ));
+            if !matches!(arg, crate::Operand::Copy(crate::Place::Local(_))) {
+                crate::backend::c::statements::emit_value_refs(
+                    &mut s,
+                    cx,
+                    fld.ty,
+                    &format!("((dream_ptr)((char*)dream_p({dest}) + {}))", fld.offset),
+                    true,
+                );
+            }
+            continue;
+        }
+        let cast = load_cast(cx, fld.ty);
+        s.push_str(&format!(
+            "*({cast}*)((char*)dream_p({dest}) + {}) = ({cast})({}); ",
+            fld.offset,
+            emit_operand(cx, f, arg)
+        ));
+        if cx.interner.is_rc_tracked(fld.ty) {
+            s.push_str(&format!(
+                "dream_retain(*({cast}*)((char*)dream_p({dest}) + {})); ",
+                fld.offset
+            ));
+        }
+    }
     s
 }
 
@@ -360,45 +428,15 @@ fn emit_union_new(
     variant: usize,
     args: &[crate::Operand],
 ) -> String {
-    let u = cx.nunion(ty).unwrap_or_else(|| {
-        crate::internal_error!("missing union layout {ty:?}")
-    });
-    let var = u
-        .variants
-        .iter()
-        .find(|v| v.discriminant as usize == variant)
-        .unwrap_or_else(|| crate::internal_error!("missing variant {variant}"));
+    let size = cx
+        .nunion(ty)
+        .unwrap_or_else(|| crate::internal_error!("missing union layout {ty:?}"))
+        .size;
     let tag = cx.type_tag(ty, def);
-    let size = u.size;
-    let mut s = format!(
-        "({{ dream_ptr __o = dream_malloc({size}, {tag}); memset(dream_p(__o), 0, {size}); *(int32_t*)dream_p(__o) = {variant}; "
-    );
-    for (i, arg) in args.iter().enumerate() {
-        let fld = &var.fields[i];
-        if cx.interner.is_value_type(fld.ty) {
-            let size = elem_size(cx, fld.ty);
-            s.push_str(&format!(
-                "memcpy((char*)dream_p(__o) + {}, dream_p({}), {size}); ",
-                fld.offset,
-                emit_operand(cx, f, arg)
-            ));
-            continue;
-        }
-        let cast = load_cast(cx, fld.ty);
-        s.push_str(&format!(
-            "*({cast}*)((char*)dream_p(__o) + {}) = ({cast})({}); ",
-            fld.offset,
-            emit_operand(cx, f, arg)
-        ));
-        if cx.interner.is_rc_tracked(fld.ty) {
-            s.push_str(&format!(
-                "dream_retain(*(dream_ptr *)((char*)dream_p(__o) + {})); ",
-                fld.offset
-            ));
-        }
-    }
-    s.push_str("__o; })");
-    s
+    format!(
+        "({{ dream_ptr __o = dream_malloc({size}, {tag}); {} __o; }})",
+        emit_union_new_at(cx, f, "__o", ty, variant, args)
+    )
 }
 
 fn emit_array_lit(
@@ -421,10 +459,22 @@ fn emit_array_lit(
             s.push_str(&format!(
                 "memcpy((char*)dream_p(__o) + 4 + {i}*{es}, dream_p({value}), {es}); "
             ));
+            crate::backend::c::statements::emit_value_refs(
+                &mut s,
+                cx,
+                elem_ty,
+                &format!("((dream_ptr)((char*)dream_p(__o) + 4 + {i}*{es}))"),
+                true,
+            );
         } else {
             s.push_str(&format!(
                 "*({cast}*)((char*)dream_p(__o) + 4 + {i}*{es}) = ({cast})({value}); "
             ));
+            if cx.interner.is_rc_tracked(elem_ty) {
+                s.push_str(&format!(
+                    "dream_retain(*({cast}*)((char*)dream_p(__o) + 4 + {i}*{es})); "
+                ));
+            }
         }
     }
     s.push_str("__o; })");
@@ -437,9 +487,9 @@ fn emit_tuple(
     ty: dream_types::TypeId,
     elems: &[crate::Operand],
 ) -> String {
-    let layout = cx.nstruct(ty).unwrap_or_else(|| {
-        crate::internal_error!("missing tuple layout {ty:?}")
-    });
+    let layout = cx
+        .nstruct(ty)
+        .unwrap_or_else(|| crate::internal_error!("missing tuple layout {ty:?}"));
     let size = layout.size.max(1);
     let mut s = format!(
         "({{ dream_ptr __o = dream_malloc({size}, {}); memset(dream_p(__o), 0, {size}); ",
@@ -481,6 +531,14 @@ fn emit_cast(
     }
     let fk = cx.interner.kind(from);
     let tk = cx.interner.kind(to);
+    let to_is_ref_box = matches!(tk, TyKind::Object | TyKind::Interface(..));
+    if to_is_ref_box && cx.interner.is_value_type(from) {
+        let size = elem_size(cx, from);
+        let tag = cx.type_tag(from, dream_types::DefId(0));
+        return format!(
+            "({{ dream_ptr __box = dream_malloc({size}, {tag}); memcpy(dream_p(__box), dream_p({src}), {size}); __box; }})"
+        );
+    }
     match (fk, tk) {
         (TyKind::Prim(PrimTy::Int), TyKind::Prim(PrimTy::Long)) => {
             format!("((int64_t)(int32_t)({src}))")
@@ -519,18 +577,45 @@ fn emit_cast(
             _ => src,
         },
         (TyKind::Object, TyKind::Prim(p)) => match p {
-            PrimTy::Int => format!("dream_unbox_int({src})"),
-            PrimTy::Float => format!("dream_unbox_float({src})"),
-            PrimTy::Double => format!("dream_unbox_double({src})"),
-            PrimTy::Bool => format!("dream_unbox_bool({src})"),
-            PrimTy::Char => format!("dream_unbox_char({src})"),
-            PrimTy::Long => format!("dream_unbox_long({src})"),
-            PrimTy::UInt => format!("dream_unbox_uint({src})"),
-            PrimTy::ULong => format!("dream_unbox_ulong({src})"),
-            PrimTy::Byte => format!("dream_unbox_byte({src})"),
+            PrimTy::Int => checked_unbox(cx, &src, to, "dream_unbox_int"),
+            PrimTy::Float => checked_unbox(cx, &src, to, "dream_unbox_float"),
+            PrimTy::Double => checked_unbox(cx, &src, to, "dream_unbox_double"),
+            PrimTy::Bool => checked_unbox(cx, &src, to, "dream_unbox_bool"),
+            PrimTy::Char => checked_unbox(cx, &src, to, "dream_unbox_char"),
+            PrimTy::Long => checked_unbox(cx, &src, to, "dream_unbox_long"),
+            PrimTy::UInt => checked_unbox(cx, &src, to, "dream_unbox_uint"),
+            PrimTy::ULong => checked_unbox(cx, &src, to, "dream_unbox_ulong"),
+            PrimTy::Byte => checked_unbox(cx, &src, to, "dream_unbox_byte"),
             PrimTy::String => src,
         },
         _ => format!("({})", src),
+    }
+}
+
+fn checked_unbox(cx: &Cx<'_>, src: &str, ty: dream_types::TypeId, unbox: &str) -> String {
+    let tag = runtime_tag(cx, ty);
+    let panic = cx.str_sym(crate::backend::wasm::panic_msgs::INVALID_CAST);
+    format!(
+        "({{ dream_ptr __boxed = (dream_ptr)({src}); if (dream_object_tag(__boxed) != {tag}) dream_panic({panic}); {unbox}(__boxed); }})"
+    )
+}
+
+pub(super) fn hash_code_expr(cx: &Cx<'_>, ty: dream_types::TypeId, value: &str) -> String {
+    match cx.interner.kind(ty) {
+        TyKind::Prim(PrimTy::String) => format!("dream_string_hash({value})"),
+        TyKind::Prim(PrimTy::Float) => format!("dream_bitcast_f32({value})"),
+        TyKind::Prim(PrimTy::Double) => format!("dream_hash_double({value})"),
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => format!("dream_hash_long({value})"),
+        TyKind::Prim(_) | TyKind::Enum(_) => format!("(int32_t)({value})"),
+        _ => {
+            if let Some(l) = cx.nstruct(ty) {
+                format!("{}({value})", c_ident(&format!("{}_hash_code", l.name)))
+            } else if let Some(u) = cx.nunion(ty) {
+                format!("{}({value})", c_ident(&format!("{}_hash_code", u.name)))
+            } else {
+                format!("dream_object_hash_code({value})")
+            }
+        }
     }
 }
 

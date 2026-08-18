@@ -118,13 +118,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             let open = self.match_token(TokenKind::OpenBracketToken);
             let elements =
                 self.parse_delimited_list(TokenKind::CloseBracketToken, |p| p.parse_expression(0))?;
-            return Ok(ExpressionNode::ArrayLiteral(open, elements));
+            let expr = ExpressionNode::ArrayLiteral(open, elements);
+            return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
-            return self.parse_set_or_map_literal();
+            let expr = self.parse_set_or_map_literal()?;
+            return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::BooleanToken {
-            return Ok(ExpressionNode::Literal(Type::Boolean(
-                self.match_token(TokenKind::BooleanToken),
-            )));
+            let expr =
+                ExpressionNode::Literal(Type::Boolean(self.match_token(TokenKind::BooleanToken)));
+            return self.parse_postfix_chain(expr);
         }
         // A primitive type name used as a static-call receiver, e.g. `int.parse("5")`. The
         // keyword is treated as an identifier so the member/method-access loop below applies;
@@ -192,14 +194,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         } else if self.current_token().kind == TokenKind::NumberToken {
             let token = self.next_token();
-            return Ok(ExpressionNode::Literal(Self::classify_number_literal(
-                token,
-            )));
+            let expr = ExpressionNode::Literal(Self::classify_number_literal(token));
+            return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::StringToken {
-            return Ok(ExpressionNode::Literal(Type::String(self.next_token())));
+            let expr = ExpressionNode::Literal(Type::String(self.next_token()));
+            return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::InterpolatedStringToken {
             let tok = self.next_token();
-            return self.parse_interpolated_string(tok);
+            let expr = self.parse_interpolated_string(tok)?;
+            return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::CharToken {
             // A char literal `'a'` is a `char` whose backing token text is the (ASCII/code point)
             // value, so codegen can emit `i32.const <value>`. Escapes like '\n', '\t', '\\', '\''
@@ -208,7 +211,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             let value = Self::char_literal_value(&tok.text);
             let char_token =
                 SyntaxToken::new(TokenKind::CharToken, tok.position, value.to_string());
-            return Ok(ExpressionNode::Literal(Type::Char(char_token)));
+            let expr = ExpressionNode::Literal(Type::Char(char_token));
+            return self.parse_postfix_chain(expr);
         }
 
         let cur = self.current_token();
@@ -264,8 +268,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Disambiguates a leading `(` between a cast (`(Type)expr`) and a parenthesized expression
     /// (`(expr)`), assuming the cursor is on the `(`. A cast is recognized when the parenthesized
     /// content is a type name (`(int)`, `(Node)`, `(Foo[])`) immediately followed by an
-    /// expression-starting token. Parenthesized expressions allow a postfix chain so method calls
-    /// on literals work (e.g. `(7).hash_code()`, `(arr)[0]`).
+    /// expression-starting token. Parenthesized expressions allow a postfix chain for grouping
+    /// (e.g. `(-5).abs()`, `(arr)[0]`, `("x" + y).len()`).
     pub(crate) fn parse_paren_or_cast(&mut self) -> Result<ExpressionNode<'a>, Error> {
         // Casts are a single type in parens, never a comma-separated tuple type.
         let is_cast = if self.peek_token(1).kind == TokenKind::DataTypeToken
@@ -364,9 +368,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         //eat the close parenthesis
         self.match_token(TokenKind::CloseParenthesisToken);
-        // Allow postfix access on a parenthesized expression, e.g. `(7).hash_code()`,
-        // `("x" + y).len()`, or `(arr)[0]`. This is required for method calls on literals
-        // whose bare form would mis-lex (`7.hash_code()` reads `7.` as a float).
+        // Allow postfix access on a parenthesized expression, e.g. `(-5).abs()`,
+        // `("x" + y).len()`, or `(arr)[0]`. Bare literals already take a postfix chain;
+        // parens are still needed when unary minus (or another prefix) binds first.
         let parenthesized = ExpressionNode::Parenthesized(open, self.arena.alloc(first));
         self.parse_postfix_chain(parenthesized)
     }

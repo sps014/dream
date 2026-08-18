@@ -1,7 +1,8 @@
 // Fullscreen Seascape raymarch after Alexander Alekseev / TDM (Shadertoy Ms2SD1).
 // A displaced mesh cannot match that look — this ports heightMapTracing + getSeaColor.
 //
-// Native: cargo run -- run sample/graphics/ocean/ocean.dream
+// Native C: cargo run -- --native-c --release run sample/graphics/ocean/ocean.dream
+// Native wasm: cargo run -- run sample/graphics/ocean/ocean.dream
 // Browser: cargo run -- --runtime --web sample/graphics/ocean/ocean.dream
 //          then serve sample/graphics/ocean → ocean.html
 

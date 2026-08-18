@@ -8,13 +8,31 @@ A displaced mesh cannot match Shadertoy; this sample uses the same tracing appro
 
 [`@gpu`](../../../docs/reference/language/shaders.md#gpu-helpers) helpers hold noise / map / lighting.
 
-## Build
+## Build (browser)
 
 ```sh
 cargo run -- --release --runtime --web -Oz sample/graphics/ocean/ocean.dream
 ```
 
 ## Run
+
+### Native C (`--native-c` / `--backend c`)
+
+Compiles to C, links the native runtime with `cc`, and presents through wgpu / winit
+(same window path as wasmtime `dream run`, not the browser).
+
+```sh
+cargo run -- --native-c --release run sample/graphics/ocean/ocean.dream
+# same as: cargo run -- --backend c --release run sample/graphics/ocean/ocean.dream
+```
+
+### Native wasm (Wasmtime)
+
+```sh
+cargo run -- run sample/graphics/ocean/ocean.dream
+```
+
+### Browser (WebGPU)
 
 ```sh
 npx serve sample/graphics/ocean
@@ -28,7 +46,7 @@ npx serve .
 # open http://localhost:3000/sample/graphics/ocean/ocean.html
 ```
 
-Requires WebGPU. Build first — a missing `.wasm` is a 404.
+Requires WebGPU. Build with `--runtime --web` first — a missing `.wasm` is a 404.
 
 ## Notes
 

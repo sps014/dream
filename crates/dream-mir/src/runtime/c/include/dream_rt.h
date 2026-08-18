@@ -8,16 +8,20 @@
 #define EXPORT(name) __attribute__((export_name(name)))
 #define IMPORT(name) __attribute__((import_module("env"), import_name(name)))
 
-/* Per-program interned strings; defined by the Dream emitter before splice. */
-extern int32_t __rt_str_empty;
-extern int32_t __rt_str_true;
-extern int32_t __rt_str_false;
-extern int32_t __rt_str_minus;
-
 extern int32_t free_list_head;
 extern int32_t live_objects;
 extern int32_t total_allocations;
 extern int32_t weak_list_head;
+
+/* Emitter globals are WASM `global`s, not C data. Import tiny getters spliced in
+ * `runtime_prelude` (`$__rt_str_empty_get`, …). */
+IMPORT("__rt_str_empty_get") int32_t intern_empty(void);
+IMPORT("__rt_str_true_get") int32_t intern_true(void);
+IMPORT("__rt_str_false_get") int32_t intern_false(void);
+IMPORT("__rt_str_minus_get") int32_t intern_minus(void);
+IMPORT("free_list_head_get") int32_t wasm_free_list_head(void);
+IMPORT("live_objects_get") int32_t wasm_live_objects(void);
+IMPORT("total_allocations_get") int32_t wasm_total_allocations(void);
 
 static inline int32_t i32_load(int32_t addr) {
     return *(int32_t *)(uintptr_t)(uint32_t)addr;
@@ -86,6 +90,26 @@ static inline int32_t atomic_fetch_add_i32(int32_t addr, int32_t v) {
 static inline int32_t atomic_fetch_sub_i32(int32_t addr, int32_t v) {
     return __c11_atomic_fetch_sub((_Atomic int32_t *)(uintptr_t)(uint32_t)addr, v,
                                   __ATOMIC_SEQ_CST);
+}
+
+/* Owned strings store the UTF-16 address in the pad word (`ptr+8`). Slices point at a parent. */
+static inline int32_t str_data(int32_t p) {
+    int32_t d;
+    if (p == 0) {
+        return 0;
+    }
+    d = i32_load(p + (int32_t)STRING_SCALAR_LEN_OFFSET);
+    if (d == DREAM_STR_PAD_INLINE) {
+        return p + (int32_t)STRING_UNITS_OFFSET;
+    }
+    return d;
+}
+
+static inline void str_init_owned(int32_t p) {
+    if (p == 0) {
+        return;
+    }
+    i32_store(p + (int32_t)STRING_SCALAR_LEN_OFFSET, p + (int32_t)STRING_UNITS_OFFSET);
 }
 
 #endif

@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# Compile crates/dream-mir/src/runtime/c/*.c to wasm32 objects and extract named WAT functions.
+# Link catalogued C libraries (PCRE2 regex) to wasm32 and write runtime/*.wat.
 #
-#   scripts/build-runtime.sh           # write c/generated/*.wat (does not splice into dream)
-#   scripts/build-runtime.sh --check   # skip if no wasm32 clang; else fail on extract-gate errors
+#   scripts/build-runtime.sh         # write c/generated/regex.wasm + promote regex.wat
+#   scripts/build-runtime.sh --check # skip if no wasm32 clang; else fail on link errors
 #
 # Does NOT run during `cargo build` / `dream`. Windows CI must not invoke this.
-# Pin: wasi-sdk 33 clang (not Apple/Xcode clang). Optional wasm2wat / wasm-tools / wasm-opt.
+# Same-module guest helpers are authored as runtime/*.wat — this script does not touch them.
+# Pin: wasi-sdk 33 clang (not Apple/Xcode clang). Optional wasm2wat / wasm-tools.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-C_DIR="$ROOT/crates/dream-mir/src/runtime/c"
-INC="$C_DIR/include"
-OUT_DIR="$C_DIR/generated"
 CHECK=0
 if [[ "${1:-}" == "--check" ]]; then
   CHECK=1
@@ -19,7 +17,6 @@ fi
 
 die() { echo "build-runtime: $*" >&2; exit 1; }
 
-# Prefer an explicit SDK, then a local install from the README, then PATH clang.
 find_clang() {
   if [[ -n "${WASI_SDK_PATH:-}" && -x "${WASI_SDK_PATH}/bin/clang" ]]; then
     echo "${WASI_SDK_PATH}/bin/clang"
@@ -54,132 +51,120 @@ need_clang() {
   echo "$clang"
 }
 
-FORBIDDEN='__stack_pointer|__memory_base|__table_base|__wasm_call_ctors|\bmemcpy\b|\bmemmove\b'
-
-print_wat() {
-  local obj="$1"
-  if command -v wasm-tools >/dev/null 2>&1; then
-    wasm-tools print "$obj"
-  elif command -v wasm2wat >/dev/null 2>&1; then
-    wasm2wat --enable-threads "$obj"
-  else
-    die "need wasm-tools or wasm2wat to print relocatable wasm"
-  fi
-}
-
-# Relocatable objects import env.NAME as $rt_NAME (C identifier). Rewrite calls to $NAME.
-rewrite_imports() {
-  python3 - "$1" <<'PY'
-import re, sys
-path = sys.argv[1]
-text = open(path, encoding="utf-8").read()
-for m in re.finditer(
-    r'\(import\s+"env"\s+"([^"]+)"\s+\(func\s+(\$[^\s)]+)',
-    text,
-):
-    wasm_name, local = m.group(1), m.group(2)
-    want = "$" + wasm_name
-    if local != want:
-        text = text.replace("call " + local, "call " + want)
-print(text)
-PY
-}
-
-extract_funcs() {
-  python3 -c '
-import re, sys
-text = sys.stdin.read()
-funcs = []
-i = 0
-while True:
-    m = re.search(r"\(func\b", text[i:])
-    if not m:
-        break
-    start = i + m.start()
-    depth = 0
-    j = start
-    while j < len(text):
-        if text[j] == "(":
-            depth += 1
-        elif text[j] == ")":
-            depth -= 1
-            if depth == 0:
-                j += 1
-                break
-        j += 1
-    chunk = text[start:j].strip()
-    line_start = text.rfind("\n", 0, start) + 1
-    prefix = text[line_start:start]
-    if chunk.startswith("(func") and prefix.strip() == "" and re.match(r"\(func\s+\$", chunk):
-        funcs.append(chunk)
-    i = j
-print("\n\n".join(funcs))
-'
-}
-
 CLANG="$(need_clang)"
 echo "build-runtime: using $CLANG"
+
+C_DIR="$ROOT/crates/dream-mir/src/runtime/c"
+RT_DIR="$ROOT/crates/dream-mir/src/runtime"
+OUT_DIR="$C_DIR/generated"
 mkdir -p "$OUT_DIR"
 
-# Relocatable objects (-c): no linker-injected $__stack_pointer / ctors.
-CFLAGS=(
-  --target=wasm32
-  -nostdlib
-  -O3
-  -ffunction-sections
-  -fno-builtin
-  -fno-exceptions
-  -mbulk-memory
-  -matomics
-  -I "$INC"
-  -c
-)
-
-failed=0
-for src in "$C_DIR"/*.c; do
-  base="$(basename "$src" .c)"
-  obj="$OUT_DIR/${base}.o"
-  wat="$OUT_DIR/${base}.wat"
-  echo "build-runtime: $base"
-  if ! "$CLANG" "${CFLAGS[@]}" -o "$obj" "$src" 2>"$OUT_DIR/${base}.clang.err"; then
-    echo "build-runtime: clang failed for $base:" >&2
-    cat "$OUT_DIR/${base}.clang.err" >&2
-    failed=1
-    continue
-  fi
-  if ! printed="$(print_wat "$obj" 2>"$OUT_DIR/${base}.print.err")"; then
-    echo "build-runtime: wasm print failed for $base:" >&2
-    cat "$OUT_DIR/${base}.print.err" >&2
-    failed=1
-    continue
-  fi
-  printf '%s\n' "$printed" > "$OUT_DIR/${base}.full.wat"
-  rewritten="$(rewrite_imports "$OUT_DIR/${base}.full.wat")"
-  printf '%s\n' "$rewritten" > "$OUT_DIR/${base}.full.wat"
-  if echo "$rewritten" | grep -E "$FORBIDDEN" >/dev/null; then
-    echo "build-runtime: extract gate failed for $base (stack pointer / memcpy / ctors)." >&2
-    echo "  Handwritten crates/dream-mir/src/runtime/${base}.wat stays the emit artifact." >&2
-    failed=1
-    continue
-  fi
-  printf '%s\n' "$rewritten" | extract_funcs > "$wat"
-  if [[ ! -s "$wat" ]]; then
-    echo "build-runtime: no funcs extracted from $base" >&2
-    failed=1
-    continue
-  fi
-done
-
-if [[ "$failed" -ne 0 ]]; then
-  if [[ "$CHECK" -eq 1 ]]; then
-    die "clang/extract gates failed"
-  fi
-  die "some units failed"
+echo "build-runtime: writing catalog manifest"
+if ! cargo run -q -p dream-mir --bin dream-runtime-manifest --manifest-path "$ROOT/Cargo.toml" \
+  > "$OUT_DIR/runtime-manifest.json"; then
+  die "dream-runtime-manifest failed"
 fi
 
-echo "build-runtime: wrote $OUT_DIR/*.wat"
-echo "  Emit still include_str!s handwritten runtime/*.wat (debug/thread placeholders, proven goldens)."
-echo "  Copy a generated file over runtime/*.wat only after extract gates + --release goldens."
+WASM_LD="$(dirname "$CLANG")/wasm-ld"
+SYSROOT="$(dirname "$(dirname "$CLANG")")/share/wasi-sysroot"
+if [[ ! -x "$WASM_LD" ]]; then
+  die "wasm-ld not found at $WASM_LD"
+fi
+
+python3 - "$OUT_DIR" "$CLANG" "$WASM_LD" "$SYSROOT" "$C_DIR" "$RT_DIR" <<'PY'
+import json, os, subprocess, sys
+
+out_dir, clang, wasm_ld, sysroot, c_dir, rt_dir = sys.argv[1:7]
+manifest = json.load(open(os.path.join(out_dir, "runtime-manifest.json"), encoding="utf-8"))
+failed = 0
+
+def run(cmd, err_path):
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        open(err_path, "w", encoding="utf-8").write(p.stderr or p.stdout or "")
+    return p
+
+def print_wat(wasm):
+    for tool in (("wasm-tools", "print", wasm), ("wasm2wat", "--enable-threads", wasm)):
+        try:
+            p = subprocess.run(list(tool), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        except FileNotFoundError:
+            continue
+        if p.returncode == 0:
+            return p.stdout
+        raise SystemExit("wasm print failed: " + (p.stderr or ""))
+    raise SystemExit("need wasm-tools or wasm2wat to print linked wasm")
+
+for mod in manifest["modules"]:
+    mid = mod["id"]
+    print("build-runtime: link", mid)
+    objs = []
+    cflags = [
+        "--target=wasm32-wasi", "-nostdlib", "-O3", "-fno-builtin", "-fno-exceptions",
+        "-mbulk-memory", "--sysroot=" + sysroot, "-c",
+    ]
+    for d in mod["include_dirs"]:
+        cflags.extend(["-I", os.path.join(c_dir, d)])
+    for d in mod["wasm_defines"]:
+        cflags.append("-D" + d)
+    for rel in mod["wasm_c"]:
+        src = os.path.join(c_dir, rel)
+        base = rel.replace("/", "_").replace(".c", "")
+        obj = os.path.join(out_dir, base + ".o")
+        err = os.path.join(out_dir, base + ".err")
+        p = run([clang] + cflags + ["-o", obj, src], err)
+        if p.returncode != 0:
+            sys.stderr.write(open(err, encoding="utf-8").read())
+            failed = 1
+            continue
+        objs.append(obj)
+    if failed:
+        continue
+    wasm = os.path.join(out_dir, mid + ".wasm")
+    cmd = [wasm_ld, "--no-entry", "--allow-undefined", "--import-memory"]
+    for w in mod["wrap"]:
+        cmd.append("--wrap=" + w)
+    for e in mod["exports"]:
+        cmd.append("--export=" + e)
+    cmd.extend([
+        "--global-base=" + str(mod["global_base"]),
+        "-z", "stack-size=" + str(mod["stack_size"]),
+        "-o", wasm,
+    ])
+    cmd.extend(objs)
+    err = os.path.join(out_dir, mid + ".link.err")
+    p = run(cmd, err)
+    if p.returncode != 0:
+        print("build-runtime: wasm-ld %s failed:" % mid, file=sys.stderr)
+        sys.stderr.write(open(err, encoding="utf-8").read())
+        failed = 1
+        continue
+    try:
+        printed = print_wat(wasm)
+    except SystemExit as e:
+        print(e, file=sys.stderr)
+        failed = 1
+        continue
+    open(os.path.join(out_dir, mid + ".full.wat"), "w", encoding="utf-8").write(printed)
+    dest = os.path.join(rt_dir, mod["wat_out"])
+    banner = ";; Generated by scripts/build-runtime.sh from runtime/c (linked). Edit the .c, not this file.\n"
+    body = banner + printed
+    if not body.endswith("\n"):
+        body += "\n"
+    open(dest, "w", encoding="utf-8").write(body)
+    print("build-runtime: wrote", dest)
+
+sys.exit(failed)
+PY
+status=$?
+if [[ "$status" -ne 0 ]]; then
+  if [[ "$CHECK" -eq 1 ]]; then
+    die "clang/link failed"
+  fi
+  die "link failed"
+fi
+
+echo "build-runtime: wrote linked WAT under $RT_DIR"
 if [[ "$CHECK" -eq 1 ]]; then
   echo "build-runtime --check: ok"
 fi

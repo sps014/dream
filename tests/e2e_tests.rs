@@ -1,9 +1,9 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
-    attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
+    attach_abi_from_wat_path, decode_string, link_console_functions, link_crypto_functions,
     link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
     link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, read_string_from_memory,
+    link_worker_functions, with_guest_bytes,
 };
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -106,16 +106,15 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     let config = dream::execution::host::threaded_wasm_config();
     let engine = Engine::new(&config).expect("Failed to create engine");
     let module = Module::new(&engine, &wasm_bytes).expect("Failed to create module");
-    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
-        .expect("module should import env.memory");
-    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
-
     let mut store = Store::new(&engine, ());
     store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
-    linker
-        .define(&mut store, "env", "memory", shared_mem.clone())
-        .expect("Failed to define shared memory");
+    if let Some(shared_mem) =
+        dream::execution::host::define_env_memory(&engine, &mut store, &mut linker, &module)
+            .expect("module should import env.memory")
+    {
+        dream::execution::host::set_worker_runtime(engine.clone(), shared_mem, module.clone());
+    }
 
     // 4. Setup Host Functions
     let env = TestEnv::new();
@@ -159,12 +158,7 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
             "env",
             "print_string",
             move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let memory = caller
-                    .get_export("memory")
-                    .unwrap()
-                    .into_shared_memory()
-                    .unwrap();
-                let s = read_string_from_memory(&memory, ptr);
+                let s = with_guest_bytes(&mut caller, |data| decode_string(data, ptr)).unwrap();
                 env_clone.print(&s);
             },
         )
@@ -269,8 +263,10 @@ const SMOKE_CASES: &[&str] = &[
     "async_basic",
     "async_generic_sink_reuse",
     "collection_literals",
+    "map_basics",
     "interfaces",
     "object_protocol",
+    "literal_methods",
     "diagnostics",
     "last_use_destroy",
     "struct_last_use_move",
@@ -589,6 +585,7 @@ fn dream_test_runs_attr_marked_functions() {
             release: false,
             filter: None,
             verbose: false,
+            ..Default::default()
         },
     )
     .expect("dream test should succeed");

@@ -105,12 +105,7 @@ fun types_from_json(arr: JsonValue): List<GenType> {
 }
 
 async fun main(): void {
-    let path = System.env_or("DREAM_JSON_GEN_SNAPSHOT", "");
-    if (path.is_empty()) {
-        System.println("__DREAM_JSON_GEN_ERR__");
-        System.println("DREAM_JSON_GEN_SNAPSHOT is not set");
-        return;
-    }
+    let path = "@@SNAPSHOT_PATH@@";
     let text_res = await File.read(path);
     switch (text_res) {
         Ok(text) => {

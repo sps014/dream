@@ -1,0 +1,426 @@
+use super::*;
+use crate::backend::shared::{func_symbol, poll_symbol};
+
+/// Maps each function's `(DefId, instance args)` to its emitted symbol, so call sites (which carry
+/// the callee's def + monomorphization args) resolve to the same symbol the header uses. Keying by
+/// the instance args — not the def alone — keeps distinct generic instances distinct.
+pub(super) fn symbol_table(mir: &crate::Mir) -> HashMap<(DefId, Vec<TypeId>), String> {
+    let mut table: HashMap<(DefId, Vec<TypeId>), String> = mir
+        .functions
+        .iter()
+        .map(|f| ((f.def, f.instance.clone()), func_symbol(f)))
+        .collect();
+    // Imports have no MIR body but are call targets: map their def to the imported `$name` so calls
+    // resolve to the import instead of the `$def{N}` fallback.
+    for imp in &mir.imports {
+        table.insert((imp.def, vec![]), imp.name.clone());
+    }
+    // Intrinsic externs have no body/import: map their def to the intrinsic key so a call resolves to
+    // the runtime helper `$<key>` (e.g. `$string_alloc`) or is recognized as an async intrinsic
+    // (`sleep`) rather than falling back to `$def{N}`.
+    for (def, key) in &mir.intrinsics {
+        table.entry((*def, vec![])).or_insert_with(|| key.clone());
+    }
+    table
+}
+
+pub(super) fn intrinsic_ops(
+    mir: &crate::Mir,
+) -> HashMap<DefId, dream_abi::intrinsics::IntrinsicOp> {
+    mir.intrinsics
+        .iter()
+        .filter_map(|(d, k)| dream_abi::intrinsics::IntrinsicOp::from_key(k).map(|op| (*d, op)))
+        .collect()
+}
+
+/// Maps each function's `(DefId, instance args)` to its declared parameter types, so call sites can
+/// apply implicit numeric widening (e.g. an `int`/`float` argument passed to a `double` parameter)
+/// to match the callee's WASM signature, and — for a `fun(...)`-typed parameter — unbox a boxed
+/// closure value to its raw funcidx before the call (see `Emitter::emit_call_args`; host imports
+/// have no env-restoring prologue, so only the funcidx half of the box is meaningful to them).
+/// Keyed like [`symbol_table`]; imports are included (always with an empty instance) since they are
+/// call targets too, just with no MIR body to read parameter types from otherwise.
+pub(super) fn signature_table(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+) -> HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> {
+    let mut table: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = mir
+        .functions
+        .iter()
+        .map(|f| {
+            let params = f.params.iter().map(|p| f.local_ty(*p)).collect();
+            ((f.def, f.instance.clone()), params)
+        })
+        .collect();
+    for imp in &mir.imports {
+        // A `ref` param crosses the wire as an `i32` pointer (see `emit_imports`), not the
+        // element type: substitute `int` here so the caller reports i32 in the argument-widening
+        // path (`emit_call_args`) and the call site emits the box address as-is instead of
+        // widening it to the element's WASM type.
+        let int_id = interner.int();
+        let params = imp
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                if imp.param_by_ref.get(i).copied().unwrap_or(false) {
+                    int_id
+                } else {
+                    *t
+                }
+            })
+            .collect();
+        table.insert((imp.def, vec![]), params);
+    }
+    table
+}
+
+/// The sparse `$__ft` table: only address-taken functions, used interface methods, and async poll
+/// bodies. Slot `0` is the null funcref sentinel (never populated).
+pub(super) struct IndirectTable {
+    /// Constructor / sync body `(def, instance)` → table index (`>= 1`).
+    pub slots: HashMap<(DefId, Vec<TypeId>), usize>,
+    /// Async poll `(def, instance)` → table index (`>= 1`).
+    pub polls: HashMap<(DefId, Vec<TypeId>), usize>,
+    /// Elem symbols in slot order (`elem[i]` lives at index `i + 1`).
+    pub elem: Vec<String>,
+}
+
+/// Builds [`IndirectTable`] from first-class `FuncRef`s, live itable methods, and async polls.
+/// Walking `mir.functions` for emission order keeps the table deterministic.
+pub(super) fn func_table(mir: &crate::Mir) -> IndirectTable {
+    let mut needed: HashSet<(DefId, Vec<TypeId>)> = HashSet::new();
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                funcrefs_in_stmt(s, &mut needed);
+            }
+        }
+        if let Some(hir_fn) = &f.hir_fn {
+            let mut edges = crate::HirEdges::default();
+            crate::hir_body_edges(&hir_fn.body, &mut edges);
+            needed.extend(edges.funcrefs);
+        }
+    }
+    let used_slots = used_iface_slots(mir);
+    for imp in &mir.interfaces.impls {
+        for (iid, symbols) in &imp.entries {
+            for (slot, sym) in symbols.iter().enumerate() {
+                if !used_slots.contains(&(*iid, slot)) {
+                    continue;
+                }
+                if let Some(f) = mir.functions.iter().find(|f| f.name == *sym) {
+                    needed.insert((f.def, f.instance.clone()));
+                }
+            }
+        }
+    }
+
+    let mut elem = Vec::new();
+    let mut slots = HashMap::new();
+    for f in &mir.functions {
+        let key = (f.def, f.instance.clone());
+        if needed.contains(&key) {
+            elem.push(format!("${}", func_symbol(f)));
+            slots.insert(key, elem.len());
+        }
+    }
+    let mut polls = HashMap::new();
+    for f in mir.functions.iter().filter(|f| f.is_async) {
+        elem.push(format!("${}", poll_symbol(f)));
+        polls.insert((f.def, f.instance.clone()), elem.len());
+    }
+    IndirectTable { slots, polls, elem }
+}
+
+fn funcrefs_in_stmt(s: &crate::Statement, out: &mut HashSet<(DefId, Vec<TypeId>)>) {
+    if let crate::Statement::Assign(_, rv) = s {
+        funcrefs_in_rvalue(rv, out);
+    }
+}
+
+fn funcrefs_in_rvalue(rv: &crate::Rvalue, out: &mut HashSet<(DefId, Vec<TypeId>)>) {
+    if let crate::Rvalue::FuncRef(callee) = rv {
+        out.insert((callee.def, callee.args.clone()));
+    }
+}
+
+/// Every MIR function, used to distinguish in-module callees from host imports (the sparse
+/// [`IndirectTable::slots`] map is *not* a complete defined-function set).
+pub(super) fn defined_functions(mir: &crate::Mir) -> HashSet<(DefId, Vec<TypeId>)> {
+    mir.functions
+        .iter()
+        .map(|f| (f.def, f.instance.clone()))
+        .collect()
+}
+
+/// The canonical `call_indirect` type name + `(param …)`/`(result …)` WASM types for a function-typed
+/// `ty` (nullable stripped). Named by its *WASM* signature (so `fun(int)` and `fun(bool)` share one),
+/// which is all `call_indirect` distinguishes. `None` if `ty` is not a function type.
+pub(super) fn func_sig(
+    interner: &TypeInterner,
+    ty: TypeId,
+) -> Option<(String, Vec<&'static str>, Option<&'static str>)> {
+    match interner.kind(ty) {
+        TyKind::Func(params, ret) => {
+            let mut ptys: Vec<&'static str> =
+                params.iter().map(|p| wasm_ty_of(interner, *p)).collect();
+            // A value(`struct`/union)-returning function uses the sret ABI: a hidden leading `i32`
+            // destination pointer, and no WASM result. `call_indirect` (interface trampolines,
+            // first-class function values) must name a `(type ...)` of this exact shape, so model it
+            // here — the single source of truth shared by the signature declarations, the trampolines,
+            // and the callers.
+            if interner.is_value_type(*ret) {
+                ptys.insert(0, "i32");
+                let name = format!("$sig_sret_{}__v", ptys.join("_"));
+                return Some((name, ptys, None));
+            }
+            let rty = match interner.kind(*ret) {
+                TyKind::Void => None,
+                _ => Some(wasm_ty_of(interner, *ret)),
+            };
+            let name = format!("$sig_{}__{}", ptys.join("_"), rty.unwrap_or("v"));
+            Some((name, ptys, rty))
+        }
+        _ => None,
+    }
+}
+
+/// True when interface method signature `ty` (a `Func(params, ret)`) returns a value type by the
+/// sret ABI, so its dispatch trampoline and call sites carry a hidden leading destination pointer.
+pub(super) fn func_sig_is_sret(interner: &TypeInterner, ty: TypeId) -> bool {
+    match interner.kind(ty) {
+        TyKind::Func(_, ret) => interner.is_value_type(*ret),
+        _ => false,
+    }
+}
+
+/// Assigns each struct and (discriminated) union a distinct runtime tag, starting at
+/// [`STRUCT_TAG_BASE`], in layout-table order (deterministic). The same map drives both the tag
+/// stamped at allocation (`New`/`UnionNew`) and the `$object_to_string`/`$print_object` dispatch, so
+/// they always agree; the exact numeric value only needs to be self-consistent within a module.
+pub(super) fn struct_tags(mir: &crate::Mir) -> HashMap<TypeId, i32> {
+    mir.layouts
+        .structs
+        .keys()
+        .chain(mir.layouts.unions.keys())
+        .enumerate()
+        .map(|(i, ty)| (*ty, STRUCT_TAG_BASE + i as i32))
+        .collect()
+}
+
+/// The symbol of the dispatch trampoline for method slot `method_slot` of the interface with the
+/// stable id `iface_id`. Interface call sites `(call $<sym>)` this trampoline, which performs the
+/// tag-indexed itable lookup and forwards through `$__ft`.
+pub(super) fn iface_dispatch_symbol(iface_id: usize, method_slot: usize) -> String {
+    format!("__iface_dispatch_{}_{}", iface_id, method_slot)
+}
+
+/// The emitted linear-memory data + WAT trampolines that implement interface dispatch.
+pub(super) struct InterfaceDispatch {
+    /// `(data ...)` segments holding the per-interface tag-indexed method tables.
+    pub data: String,
+    /// The `(func $__iface_dispatch_I_S ...)` trampolines, one per interface method slot.
+    pub trampolines: String,
+    /// The heap bump-pointer start, past the emitted itable region (8-byte aligned).
+    pub heap_start: u32,
+}
+
+/// The set of `(iface_id, method_slot)` pairs that some surviving function actually dispatches
+/// through. Interface calls appear explicitly as `InterfaceCall` statements/rvalues (sync) or in the
+/// preserved HIR body (async), so this is a complete accounting — dispatch trampolines for pairs not
+/// listed here are dead and can be skipped.
+pub(super) fn used_iface_slots(mir: &crate::Mir) -> std::collections::HashSet<(usize, usize)> {
+    use crate::{Rvalue, Statement};
+    let mut used = std::collections::HashSet::new();
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::InterfaceCall {
+                        iface_id,
+                        method_slot,
+                        ..
+                    } => {
+                        used.insert((*iface_id, *method_slot));
+                    }
+                    Statement::Assign(
+                        _,
+                        Rvalue::InterfaceCall {
+                            iface_id,
+                            method_slot,
+                            ..
+                        },
+                    ) => {
+                        used.insert((*iface_id, *method_slot));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if f.is_async {
+            if let Some(hir_fn) = &f.hir_fn {
+                let mut edges = crate::HirEdges::default();
+                crate::hir_body_edges(&hir_fn.body, &mut edges);
+                used.extend(edges.iface_calls);
+            }
+        }
+    }
+    used
+}
+
+/// Builds the interface dispatch machinery: a dense, tag-indexed method table per interface plus a
+/// dispatch trampoline per interface method slot.
+///
+/// Each interface `iid` gets a contiguous `i32` table of `num_tags * method_count` entries laid out
+/// in linear memory starting at `itab_base`. Entry `[tag * method_count + slot]` holds the `$__ft`
+/// index of the concrete `{Class}_{method}` that the class with runtime `tag` supplies for that
+/// interface method slot (0 for tags that do not implement the interface). At a call site the
+/// trampoline computes `tag = $object_tag(this)`, loads that entry, and `call_indirect`s it.
+pub(super) fn emit_interface_dispatch(
+    mir: &crate::Mir,
+    interner: &TypeInterner,
+    itab_base: u32,
+    used_slots: &std::collections::HashSet<(usize, usize)>,
+    ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
+) -> InterfaceDispatch {
+    let ifaces = &mir.interfaces.interfaces;
+    // No surviving interface call sites means nothing loads from these tables — skip emitting the
+    // dense (often all-zero) itable data segments, which would otherwise bloat the `.wasm` for
+    // free: WASM linear memory is already zero-initialized.
+    if ifaces.is_empty() || used_slots.is_empty() {
+        return InterfaceDispatch {
+            data: String::new(),
+            trampolines: String::new(),
+            heap_start: itab_base,
+        };
+    }
+
+    let tags = struct_tags(mir);
+    let max_tag = tags.values().copied().max().unwrap_or(STRUCT_TAG_BASE - 1);
+    // Dense per-interface tables are sized `num_tags * method_count`; guard the `+1` and the sign so
+    // a corrupt (negative/overflowing) tag can't wrap into a huge allocation or truncate the row
+    // count. Tags are assigned as small `STRUCT_TAG_BASE + i`, so this only trips on a real bug.
+    let num_tags = if max_tag >= 0 {
+        (max_tag as usize).saturating_add(1)
+    } else {
+        0
+    };
+
+    // Concrete method symbol -> its `$__ft` slot. Matches [`func_table`]: index 0 is the reserved
+    // null funcref sentinel; only address-taken / itable / poll functions occupy later slots.
+    let by_symbol: HashMap<&str, usize> = mir
+        .functions
+        .iter()
+        .filter_map(|f| {
+            ftable
+                .get(&(f.def, f.instance.clone()))
+                .map(|&idx| (f.name.as_str(), idx))
+        })
+        .collect();
+
+    // One dense [num_tags * method_count] table per interface, filled from each class's impl.
+    let mut tables: Vec<Vec<i32>> = ifaces
+        .iter()
+        .map(|inf| vec![0i32; num_tags * inf.method_count])
+        .collect();
+    for imp in &mir.interfaces.impls {
+        // Arrays share a single runtime tag (`TAG_ARRAY`); they are not in `struct_tags`.
+        // Per-interface tables still isolate `Collection_int` from `Collection_string`, so the
+        // shared tag does not collide across element types.
+        let tag = match interner.kind(imp.class_ty) {
+            TyKind::Array(_) => crate::abi::TAG_ARRAY as usize,
+            _ => match tags.get(&imp.class_ty) {
+                Some(t) => *t as usize,
+                None => continue,
+            },
+        };
+        for (iid, symbols) in &imp.entries {
+            let k = ifaces[*iid].method_count;
+            for (slot, sym) in symbols.iter().enumerate() {
+                if slot >= k {
+                    continue;
+                }
+                // A missing symbol here is an impl entry for a method that whole-module DCE pruned
+                // (e.g. a constraint method never dispatched through this interface at runtime). The
+                // slot is therefore never reached, so 0 is a harmless filler; keep it lenient rather
+                // than trapping on dead-but-listed entries.
+                let idx = by_symbol.get(sym.as_str()).copied().unwrap_or(0);
+                tables[*iid][tag * k + slot] = idx as i32;
+            }
+        }
+    }
+
+    // Lay the tables out consecutively (4-byte words), recording each interface's base address.
+    // Skip writing a `(data ...)` segment when every word is zero — memory is already zeroed, and
+    // embedding kilobytes of `\00` only inflates the module.
+    let mut bases: Vec<u32> = Vec::with_capacity(ifaces.len());
+    let mut data = String::new();
+    let mut addr = itab_base;
+    for table in &tables {
+        bases.push(addr);
+        if !table.is_empty() && table.iter().any(|w| *w != 0) {
+            let mut bytes = String::new();
+            for word in table {
+                for b in word.to_le_bytes() {
+                    let _ = write!(bytes, "\\{:02x}", b);
+                }
+            }
+            let _ = writeln!(data, "(data (i32.const {}) \"{}\")", addr, bytes);
+        }
+        addr += (table.len() as u32) * 4;
+    }
+    let heap_start = (addr.max(itab_base) + 7) & !7;
+
+    // A dispatch trampoline per (interface, method slot): forward the args, look the concrete method
+    // up in the interface's tag-indexed table, and `call_indirect` it through `$__ft`.
+    let mut trampolines = String::new();
+    for (iid, inf) in ifaces.iter().enumerate() {
+        let k = inf.method_count;
+        for slot in 0..k {
+            // Skip trampolines for method slots no surviving call site dispatches through: they are
+            // dead code (nothing references the symbol). The itable data above keeps its full layout
+            // so runtime indexing of the *used* slots stays correct.
+            if !used_slots.contains(&(iid, slot)) {
+                continue;
+            }
+            let (signame, ptys, rty) = match func_sig(interner, inf.sigs[slot]) {
+                Some(s) => s,
+                None => continue,
+            };
+            // With the sret ABI the hidden destination pointer is param 0, so the receiver (`this`,
+            // used to index the itable) is param 1; otherwise the receiver is param 0.
+            let is_sret = func_sig_is_sret(interner, inf.sigs[slot]);
+            let recv_idx = if is_sret { 1 } else { 0 };
+            let _ = write!(trampolines, "(func ${}", iface_dispatch_symbol(iid, slot));
+            for p in &ptys {
+                let _ = write!(trampolines, " (param {})", p);
+            }
+            if let Some(r) = rty {
+                let _ = write!(trampolines, " (result {})", r);
+            }
+            trampolines.push('\n');
+            // Push the forwarded call arguments (an sret destination pointer first when present,
+            // then the receiver / `this`, then the real args).
+            for i in 0..ptys.len() {
+                let _ = writeln!(trampolines, "  (local.get {})", i);
+            }
+            // idx = itable[base + (object_tag(this) * method_count + slot) * 4]
+            let _ = writeln!(trampolines, "  (local.get {})", recv_idx);
+            let _ = writeln!(trampolines, "  (call $object_tag)");
+            let _ = writeln!(trampolines, "  (i32.const {}) (i32.mul)", k);
+            let _ = writeln!(trampolines, "  (i32.const {}) (i32.add)", slot);
+            let _ = writeln!(trampolines, "  (i32.const 2) (i32.shl)");
+            let _ = writeln!(trampolines, "  (i32.const {}) (i32.add)", bases[iid]);
+            let _ = writeln!(trampolines, "  (i32.load)");
+            let _ = writeln!(trampolines, "  (call_indirect $__ft (type {}))", signame);
+            let _ = writeln!(trampolines, ")");
+        }
+    }
+
+    InterfaceDispatch {
+        data,
+        trampolines,
+        heap_start,
+    }
+}

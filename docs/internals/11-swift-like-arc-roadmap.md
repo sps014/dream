@@ -61,7 +61,7 @@ levers (no SSO / `@stack` class / value collections):
    (no capacity-sized realloc). Prefer `clear` + refill over `new` each batch.
 3. **ScratchArena** — bump `Span<T>` from one owned slab (`ScratchArena<T : unmanaged>`);
    `reset()` rewinds (`system.core`).
-4. **Contiguous / SOA hot paths** — regex Pike-VM uses parallel `List<int>` / `List<int[]>`
+4. **Contiguous / SOA hot paths** — regex is PCRE2; keep other stdlib hot loops on dense arrays.
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
    [`ownership.md`](../reference/language/ownership.md)).

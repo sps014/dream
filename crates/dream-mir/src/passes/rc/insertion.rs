@@ -784,6 +784,14 @@ fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])> {
         Statement::Assign(_, Rvalue::IndirectCall { args, .. }) => {
             Some((vec![true; args.len()], args))
         }
+        // Interface dispatch has no `Callee::take_params`; method args (not `this`) are
+        // sink-default like other instance methods. Without this, a still-live copy into
+        // `handler.emit(record)` transfers no +1 and the callee's scope-exit Release UAF's
+        // the caller's binding (native `logging_basic`; wasm often survives the same UAF).
+        Statement::InterfaceCall { args, .. } => Some((vec![true; args.len()], args)),
+        Statement::Assign(_, Rvalue::InterfaceCall { args, .. }) => {
+            Some((vec![true; args.len()], args))
+        }
         _ => None,
     }
 }
@@ -967,5 +975,33 @@ mod tests {
             .iter()
             .any(|st| matches!(st, Statement::ValueRetain(l) if l.0 == s.0));
         assert!(has_retain, "still-live call arg should ValueRetain");
+    }
+
+    #[test]
+    fn still_live_iface_arg_retains() {
+        let mut ctx = TypeCtx::new();
+        let str_ty = ctx.interner.string();
+        let sig = ctx.interner.func(vec![str_ty, str_ty], ctx.interner.void());
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let recv = b.new_local(str_ty, Some("h".into()));
+        let rec = b.new_local(str_ty, Some("r".into()));
+        b.push(Statement::InterfaceCall {
+            receiver: Operand::Copy(Place::Local(recv)),
+            iface_id: 0,
+            method_slot: 0,
+            sig,
+            args: vec![Operand::Copy(Place::Local(rec))],
+        });
+        b.assign(
+            Place::Local(rec),
+            Rvalue::Use(Operand::Copy(Place::Local(rec))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let has_retain = func.blocks[0].stmts.iter().any(
+            |st| matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == rec.0),
+        );
+        assert!(has_retain, "still-live interface arg should Retain");
     }
 }

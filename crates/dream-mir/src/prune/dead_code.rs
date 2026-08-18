@@ -33,15 +33,12 @@ pub fn prune_module(mir: &mut Mir, interner: &TypeInterner) {
     prune_dead_globals(mir);
     prune_dead_layouts(mir, interner);
     prune_dead_imports(mir, interner);
+    prune_dead_intrinsics(mir);
 }
 
-/// Drops `mir.imports` whose `DefId` is not referenced by any surviving call / `JsCall` / `FuncRef`.
-///
-/// Generated struct↔js marshalers (emitted later as WAT) call the `js*` host bridges by symbol, so
-/// whenever a surviving `Cast` involves `js` — or any `JsCall` remains — every import whose host
-/// `field` starts with `js` is kept even if no MIR call edge names it. GPU-only modules keep
-/// `jsRetain`/`jsRelease` so host handle RC stays bound.
-fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
+/// Collects every `DefId` named by a surviving direct call, `JsCall`, `FuncRef`, constructor, or
+/// async HIR callee. Used to tree-shake host imports and `@intrinsic` keys.
+fn live_callee_defs(mir: &Mir) -> HashSet<dream_types::DefId> {
     let mut live_defs: HashSet<dream_types::DefId> = HashSet::new();
     for f in &mir.functions {
         for b in &f.blocks {
@@ -70,6 +67,25 @@ fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
             }
         }
     }
+    live_defs
+}
+
+/// Drops `@intrinsic` registry entries whose `DefId` is not called from surviving functions.
+/// Linked runtimes (regex/PCRE2) key off this list; keeping prelude-wide keys would ingest them
+/// into every `import system;` program.
+fn prune_dead_intrinsics(mir: &mut Mir) {
+    let live = live_callee_defs(mir);
+    mir.intrinsics.retain(|(def, _)| live.contains(def));
+}
+
+/// Drops `mir.imports` whose `DefId` is not referenced by any surviving call / `JsCall` / `FuncRef`.
+///
+/// Generated struct↔js marshalers (emitted later as WAT) call the `js*` host bridges by symbol, so
+/// whenever a surviving `Cast` involves `js` — or any `JsCall` remains — every import whose host
+/// `field` starts with `js` is kept even if no MIR call edge names it. GPU-only modules keep
+/// `jsRetain`/`jsRelease` so host handle RC stays bound.
+fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
+    let live_defs = live_callee_defs(mir);
 
     let keep_js_bridges = module_uses_js_bridges(mir, interner);
     // GPU resources are `js` handles; `$release_js` calls `$js_release` even when no `js*` stdlib

@@ -167,7 +167,8 @@ class DreamInstance {
   readString(ptr) {
     if (!ptr) return "";
     const units = this.view.getInt32(ptr, true);
-    const start = ptr + 8;
+    const pad = this.view.getInt32(ptr + 4, true);
+    const start = pad === 0 ? ptr + 8 : pad;
     const bytes = this.bytes.slice(start, start + units * 2);
     return new TextDecoder("utf-16le").decode(bytes);
   }
@@ -184,7 +185,7 @@ class DreamInstance {
     const units = str.length;
     const ptr = this.exports.malloc(8 + units * 2, TAGS.STRING);
     this.view.setInt32(ptr, units, true);
-    this.view.setInt32(ptr + 4, 0, true);
+    this.view.setInt32(ptr + 4, ptr + 8, true);
     for (let i = 0; i < units; i++) {
       this.view.setUint16(ptr + 8 + i * 2, str.charCodeAt(i), true);
     }

@@ -111,6 +111,29 @@ impl PassManager {
         pm
     }
 
+    /// Native C emit: same as [`Self::default_pipeline`] without wasm `v128` autovec so clang
+    /// can vectorize scalar loops at `DREAM_F32_LANES` (AVX2 = 8).
+    pub fn native_c_pipeline() -> Self {
+        let mut pm = PassManager::new();
+        pm.add(CopyConstProp);
+        pm.add(GlobalProp);
+        pm.add(Sccp);
+        pm.add(ConstFold);
+        pm.add(Algebraic);
+        pm.add(Gvn);
+        pm.add(Licm);
+        pm.add(Abc);
+        pm.add(LoopUnroll);
+        pm.add(Sroa);
+        pm.add(Dse);
+        pm.add(SimplifyCfg);
+        pm.add(Tco);
+        pm.add(Dce);
+        pm.add(RcElision);
+        debug_assert!(pm.passes.iter().all(|p| p.name() != "autovec"));
+        pm
+    }
+
     /// A minimal, value-preserving pipeline for debug-info builds. It deliberately omits every pass
     /// that can eliminate, fold, or coalesce user locals (const/copy propagation, SCCP, GVN, DCE,
     /// DSE), so each declared variable still lives in a distinct slot the debugger can read at every

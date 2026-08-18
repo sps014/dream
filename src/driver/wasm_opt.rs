@@ -1,6 +1,6 @@
 //! `.wasm` post-processing via Binaryen's `wasm-opt` (the `wasm-opt` crate), driven by `--release`
 //! (default level [`OptLevel::RELEASE_DEFAULT`]) and/or an explicit `-O`/`--optimize` level. This
-//! runs *after* the MIR pass pipeline and builder DCE (`crates/dream-mir/src/emit/builder`) already
+//! runs *after* the MIR pass pipeline and builder DCE (`crates/dream-mir/src/backend/wasm/builder`) already
 //! applied — it is an independent, coarser-grained shrink/speed pass over the assembled binary, not
 //! a replacement for either.
 
@@ -28,6 +28,58 @@ impl OptLevel {
     pub const RELEASE_DEFAULT: OptLevel = OptLevel::O3;
     /// wasm-opt level for downloadable `--web` modules when `--release` did not get an explicit `-O`.
     pub const WEB_RELEASE_DEFAULT: OptLevel = OptLevel::Size;
+}
+
+impl OptLevel {
+    /// CLI token (`-O3`, `-Os`, …) so `dream` and `dreamer` pass the same flag.
+    pub fn as_cli_flag(self) -> &'static str {
+        match self {
+            Self::O0 => "-O0",
+            Self::O1 => "-O1",
+            Self::O2 => "-O2",
+            Self::O3 => "-O3",
+            Self::O4 => "-O4",
+            Self::Size => "-Os",
+            Self::SizeAggressive => "-Oz",
+        }
+    }
+
+    /// `--release` without `-O` is `-O3`; no flags is `-O0` (debug `cc`).
+    pub fn from_cli(release: bool, explicit: Option<Self>) -> Self {
+        explicit.unwrap_or(if release {
+            Self::RELEASE_DEFAULT
+        } else {
+            Self::O0
+        })
+    }
+
+    /// clang flags for this level. Speed builds (`-O3`/`-O4`) use LTO + host ISA.
+    pub fn cc_flags(self) -> &'static [&'static str] {
+        match self {
+            Self::O0 => &[
+                "-O0",
+                "-pipe",
+                "-fno-asynchronous-unwind-tables",
+                "-fno-unwind-tables",
+            ],
+            Self::O1 => &["-O1"],
+            Self::O2 => &["-O2"],
+            Self::O3 | Self::O4 => &["-O3", "-flto", "-march=native"],
+            Self::Size => &["-Os"],
+            Self::SizeAggressive => &["-Oz"],
+        }
+    }
+
+    pub fn native_rt_subdir(self) -> &'static str {
+        match self {
+            Self::O0 => "O0",
+            Self::O1 => "O1",
+            Self::O2 => "O2",
+            Self::O3 | Self::O4 => "O3",
+            Self::Size => "Os",
+            Self::SizeAggressive => "Oz",
+        }
+    }
 }
 
 impl FromStr for OptLevel {
@@ -148,5 +200,19 @@ mod tests {
     fn release_default_is_speed() {
         assert_eq!(OptLevel::RELEASE_DEFAULT, OptLevel::O3);
         assert_eq!(OptLevel::WEB_RELEASE_DEFAULT, OptLevel::Size);
+    }
+
+    #[test]
+    fn from_cli_matches_dream_tokens() {
+        assert_eq!(OptLevel::from_cli(false, None), OptLevel::O0);
+        assert_eq!(OptLevel::from_cli(true, None), OptLevel::O3);
+        assert_eq!(
+            OptLevel::from_cli(true, Some(OptLevel::Size)),
+            OptLevel::Size
+        );
+        assert_eq!(OptLevel::O3.as_cli_flag(), "-O3");
+        assert_eq!(OptLevel::Size.as_cli_flag(), "-Os");
+        assert_eq!(OptLevel::O3.native_rt_subdir(), "O3");
+        assert_eq!(OptLevel::O4.native_rt_subdir(), "O3");
     }
 }

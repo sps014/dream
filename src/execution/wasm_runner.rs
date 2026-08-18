@@ -1,11 +1,11 @@
 use super::cwasm::{deserialize_module_file, module_from_bytes};
 use super::host::{
-    aot_wasm_config, attach_c_abi_from_json, attach_c_abi_from_wat_path, enable_ansi_support,
-    link_c_ffi_imports, link_console_functions, link_crypto_functions, link_datetime_functions,
-    link_ffi_helpers, link_file_functions, link_gpu_functions, link_http_functions,
-    link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_webview_functions, link_worker_functions, read_string_from_memory, set_worker_runtime,
-    shared_memory_for,
+    aot_wasm_config, attach_c_abi_from_json, attach_c_abi_from_wat_path, decode_string,
+    define_env_memory, enable_ansi_support, link_c_ffi_imports, link_console_functions,
+    link_crypto_functions, link_datetime_functions, link_ffi_helpers, link_file_functions,
+    link_gpu_functions, link_http_functions, link_math_functions, link_net_functions,
+    link_process_functions, link_text_functions, link_webview_functions, link_worker_functions,
+    set_worker_runtime, with_guest_bytes,
 };
 use std::cell::RefCell;
 use std::fs;
@@ -118,22 +118,19 @@ fn run_loaded_module(
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
     // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up via
     // `DREAM_STACK_SIZE` / `[package.metadata.dream] stack-size` (see `host::stack_size`).
-    // `aot_wasm_config` also enables the WASM threads proposal and `SharedMemory` creation,
-    // needed since the module imports its linear memory as `shared`.
+    // `aot_wasm_config` enables the WASM threads proposal so modules that *do* import shared
+    // memory can still instantiate. Linear memory is shared only when the guest declares
+    // `shared` (WebWorker / atomics); otherwise `define_env_memory` installs a private `Memory`.
 
-    // One `SharedMemory` for this whole run, imported by the owner instance below and by every
-    // `WebWorker` instance spawned afterward (`set_worker_runtime` hands the same engine + memory +
-    // compiled module to `workerSpawn`) — linear memory is genuinely shared, not copied per instance.
-    let shared_mem = shared_memory_for(&engine, &module)?;
-    set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
-
+    // Threaded runs share one `SharedMemory` across the owner instance and every `WebWorker`
+    // spawned afterward (`set_worker_runtime`). Non-threaded modules skip that path.
     let mut store = Store::new(&engine, ());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
     store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
-
     link_host_functions(&mut linker)?;
-    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
+    if let Some(shared_mem) = define_env_memory(&engine, &mut store, &mut linker, &module)? {
+        set_worker_runtime(engine.clone(), shared_mem, module.clone());
+    }
 
     link_c_ffi_imports(&mut linker, &module, search_roots)?;
 
@@ -224,11 +221,7 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
         "env",
         "print_string",
         |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
-            let memory = caller
-                .get_export("memory")
-                .and_then(Extern::into_shared_memory)
-                .ok_or_else(|| Error::msg("module must export `memory`"))?;
-            let s = read_string_from_memory(&memory, ptr);
+            let s = with_guest_bytes(&mut caller, |data| decode_string(data, ptr))?;
             if !append_capture(&s) {
                 print!("{}", s);
             }
@@ -240,11 +233,7 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
         "env",
         "println",
         |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
-            let memory = caller
-                .get_export("memory")
-                .and_then(Extern::into_shared_memory)
-                .ok_or_else(|| Error::msg("module must export `memory`"))?;
-            let s = read_string_from_memory(&memory, ptr);
+            let s = with_guest_bytes(&mut caller, |data| decode_string(data, ptr))?;
             if !append_capture(&(s.clone() + "\n")) {
                 println!("{}", s);
             }

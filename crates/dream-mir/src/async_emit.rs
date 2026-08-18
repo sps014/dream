@@ -3,33 +3,35 @@
 //! An `async fun` compiles to a **constructor** (allocates a `Future` frame, stores params, enqueues
 //! the first poll, returns the frame pointer) and a **poll** function (resumable state machine between
 //! `await` points). The cooperative scheduler runtime lives in `mir/runtime/async.wat`.
+//!
+//! Saved locals are laid out in **local-index order** (not name order), 8-byte aligned, starting at
+//! [`crate::abi::FutureLayout::slots`]. WASM uses wasm32 field sizes; the C backend uses native
+//! pointer sizes from [`crate::abi::TargetAbi::native`].
 
-use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of, FuncBuilder};
 use super::lower::lower_async_poll_body;
 use super::passes::MirPass;
 use super::MirFunction;
+use crate::abi::{
+    FutureLayout, FUTURE_KIND_ALL, FUTURE_KIND_ANY, FUTURE_KIND_HOST, FUTURE_KIND_TASK,
+    FUTURE_STATUS_CANCELLED,
+};
+use crate::backend::shared::func_symbol;
+use crate::backend::wasm::{emit_async_poll, poll_symbol, wasm_ty_of, FuncBuilder};
 use dream_hir::scalar_size;
-use dream_types::{TypeId, TypeInterner};
+use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
-pub(crate) const F_STATE: i32 = 0;
-pub(crate) const F_RESULT: i32 = 8;
-/// Inline `i64`/`f32`/`f64` async result (avoids heap boxing into `F_RESULT`'s `i32` slot).
-pub(crate) const F_WIDE: i32 = 56;
-pub(crate) const F_AWAITING: i32 = 20;
-/// Byte size of a `Future` frame's fixed header region (locals are appended past it). Shared with
-/// the emitter's `sleep` intrinsic and the host bridge (`execution/host/http.rs`,
-/// `runtime/dream.js`), which allocate host futures of exactly this size.
-pub const F_SLOTS: i32 = 64;
-const KIND_TASK: i32 = 0;
-/// `Future.kind` for a host-driven future (timer / HTTP / extern async): settled by the host via
-/// `__dream_resolve` rather than by re-polling Dream code.
-pub const KIND_HOST: i32 = 1;
-/// Poll-table index stored in a host future; `-1` means "no Dream poll function" (the host settles
-/// it directly), so the scheduler never dispatches through the function table for it.
-pub const HOST_POLL_INDEX: i32 = -1;
+pub(crate) const F_STATE: i32 = FutureLayout::WASM32.state as i32;
+pub(crate) const F_RESULT: i32 = FutureLayout::WASM32.result as i32;
+pub(crate) const F_WIDE: i32 = FutureLayout::WASM32.wide as i32;
+pub(crate) const F_AWAITING: i32 = FutureLayout::WASM32.awaiting as i32;
+/// Byte size of a wasm32 `Future` frame's fixed header (locals start here). Host futures use this.
+pub const F_SLOTS: i32 = FutureLayout::WASM32.slots as i32;
+pub const KIND_HOST: i32 = FUTURE_KIND_HOST;
+pub use crate::abi::HOST_POLL_INDEX;
+
 const SLOT_SIZE: i32 = 8;
 
 const RUNTIME_ASYNC: &str = include_str!("runtime/async.wat");
@@ -39,39 +41,12 @@ pub fn module_has_async(functions: &[MirFunction]) -> bool {
 }
 
 pub fn async_runtime_wat() -> String {
-    const F_POLL: i32 = 12;
-    const F_KIND: i32 = 24;
-    const F_QUEUED: i32 = 48;
-    const F_NEXT: i32 = 44;
-    const F_RESULTS: i32 = 40;
-    const F_RESULT: i32 = 8;
-    const F_STATUS: i32 = 4;
-    const F_WAKER: i32 = 16;
-    const F_DUE: i32 = 52;
-    const F_CHILDREN: i32 = 28;
-    const F_COUNT: i32 = 32;
-    const F_REMAINING: i32 = 36;
-    const KIND_ALL: i32 = 2;
-    const KIND_ANY: i32 = 3;
-    const STATUS_CANCELLED: i32 = 2;
-    RUNTIME_ASYNC
-        .replace("{F_POLL}", &F_POLL.to_string())
-        .replace("{F_KIND}", &F_KIND.to_string())
-        .replace("{F_QUEUED}", &F_QUEUED.to_string())
-        .replace("{F_NEXT}", &F_NEXT.to_string())
-        .replace("{F_RESULTS}", &F_RESULTS.to_string())
-        .replace("{F_RESULT}", &F_RESULT.to_string())
-        .replace("{F_STATUS}", &F_STATUS.to_string())
-        .replace("{F_WAKER}", &F_WAKER.to_string())
-        .replace("{F_AWAITING}", &F_AWAITING.to_string())
-        .replace("{F_DUE}", &F_DUE.to_string())
-        .replace("{F_CHILDREN}", &F_CHILDREN.to_string())
-        .replace("{F_COUNT}", &F_COUNT.to_string())
-        .replace("{F_REMAINING}", &F_REMAINING.to_string())
-        .replace("{F_SLOTS}", &F_SLOTS.to_string())
-        .replace("{KIND_ALL}", &KIND_ALL.to_string())
-        .replace("{KIND_ANY}", &KIND_ANY.to_string())
-        .replace("{STATUS_CANCELLED}", &STATUS_CANCELLED.to_string())
+    FutureLayout::WASM32
+        .substitute_wat(RUNTIME_ASYNC)
+        .replace("{KIND_ALL}", &FUTURE_KIND_ALL.to_string())
+        .replace("{KIND_ANY}", &FUTURE_KIND_ANY.to_string())
+        .replace("{KIND_HOST}", &FUTURE_KIND_HOST.to_string())
+        .replace("{STATUS_CANCELLED}", &FUTURE_STATUS_CANCELLED.to_string())
         .replace("{tag_array}", &super::abi::TAG_ARRAY.to_string())
         .replace(
             "{RQ_HEAD_ADDR}",
@@ -102,45 +77,62 @@ pub(crate) struct AsyncSlots {
     /// lifetime, so the local's WASM value is always just `self + offset` — recomputed fresh on
     /// every poll, never itself saved or restored (its bytes already live at that fixed address).
     pub(crate) value_locals: HashMap<usize, u32>,
+    /// Byte size of the whole frame (header + slots).
+    pub(crate) frame_size: i32,
 }
 
-fn async_slots(func: &MirFunction, interner: &TypeInterner) -> (AsyncSlots, i32) {
-    let mut entries: Vec<(usize, String, String)> = func
-        .locals
-        .iter()
-        .enumerate()
-        .map(|(i, d)| {
-            let name = d.name.clone().unwrap_or_else(|| format!("_{i}"));
-            (i, name, wasm_ty_of(interner, d.ty).to_string())
-        })
-        .collect();
-    entries.sort_by(|a, b| a.1.cmp(&b.1));
+/// Lays out Future-frame slots in **local-index order**, 8-byte aligned, starting at `slots_start`.
+/// `local_bytes` returns `(size, is_value_type)` for a non-void local; void locals are omitted.
+pub(crate) fn layout_async_slots(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    slots_start: i32,
+    ty_name: impl Fn(TypeId) -> String,
+    local_bytes: impl Fn(TypeId) -> (u32, bool),
+) -> AsyncSlots {
+    let mut entries = Vec::new();
     let mut offsets = HashMap::new();
     let mut ref_locals = Vec::new();
     let mut value_locals = HashMap::new();
-    let mut cursor = F_SLOTS;
-    for (local_idx, _, _) in &entries {
-        let ty = func.locals[*local_idx].ty;
-        offsets.insert(*local_idx, cursor);
-        if interner.is_value_type(ty) {
-            let size = scalar_size(interner, ty).0.max(SLOT_SIZE as u32);
-            value_locals.insert(*local_idx, size);
-            cursor += size as i32;
-        } else {
-            cursor += SLOT_SIZE;
-            if interner.is_rc_tracked(ty) {
-                ref_locals.push(*local_idx);
-            }
+    let mut cursor = slots_start;
+    for (i, decl) in func.locals.iter().enumerate() {
+        if matches!(interner.kind(decl.ty), TyKind::Void) {
+            continue;
         }
+        cursor = (cursor + 7) & !7;
+        offsets.insert(i, cursor);
+        let name = decl.name.clone().unwrap_or_else(|| format!("_{i}"));
+        entries.push((i, name, ty_name(decl.ty)));
+        let (size, is_value) = local_bytes(decl.ty);
+        if is_value {
+            value_locals.insert(i, size);
+        } else if interner.is_rc_tracked(decl.ty) {
+            ref_locals.push(i);
+        }
+        cursor += size as i32;
     }
-    (
-        AsyncSlots {
-            entries,
-            offsets,
-            ref_locals,
-            value_locals,
+    AsyncSlots {
+        entries,
+        offsets,
+        ref_locals,
+        value_locals,
+        frame_size: cursor,
+    }
+}
+
+fn async_slots(func: &MirFunction, interner: &TypeInterner) -> AsyncSlots {
+    layout_async_slots(
+        func,
+        interner,
+        F_SLOTS,
+        |ty| wasm_ty_of(interner, ty).to_string(),
+        |ty| {
+            if interner.is_value_type(ty) {
+                (scalar_size(interner, ty).0.max(SLOT_SIZE as u32), true)
+            } else {
+                (SLOT_SIZE as u32, false)
+            }
         },
-        cursor,
     )
 }
 
@@ -168,7 +160,7 @@ pub(crate) fn emit_async_function_parts(
     poll_idx: usize,
     debug: bool,
     locate_panics: bool,
-    debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
+    debug_fn: Option<&crate::backend::wasm::debug_map::DebugFunction>,
     intrinsics: &HashMap<dream_types::DefId, dream_abi::intrinsics::IntrinsicOp>,
 ) -> (String, FuncBuilder) {
     let hir = func.hir_fn.as_ref().unwrap_or_else(|| {
@@ -191,7 +183,8 @@ pub(crate) fn emit_async_function_parts(
         }
     }
     let _ = crate::passes::RcInsertion.run(&mut body, interner);
-    let (slots, frame_size) = async_slots(&body, interner);
+    let slots = async_slots(&body, interner);
+    let frame_size = slots.frame_size;
     let sym = func_symbol(func);
     let mut out = String::new();
 
@@ -225,7 +218,7 @@ pub(crate) fn emit_async_function_parts(
     out.push_str(" (result i32)\n (local $self i32)\n");
     let _ = writeln!(out, " i32.const {frame_size}");
     let _ = writeln!(out, " i32.const {poll_idx}");
-    let _ = writeln!(out, " i32.const {KIND_TASK}");
+    let _ = writeln!(out, " i32.const {FUTURE_KIND_TASK}");
     out.push_str(" call $dream_new_future\n local.set $self\n");
     for (pi, p) in body.params.iter().enumerate() {
         let idx = p.0 as usize;
@@ -282,21 +275,6 @@ pub(crate) fn emit_async_function_parts(
         intrinsics,
     );
     (out, poll)
-}
-
-pub fn emit_async_main_wrapper(entry_sym: &str, has_args_param: bool) -> String {
-    let mut out = String::from("(func (export \"main\")");
-    if has_args_param {
-        out.push_str("\n (local $args i32)");
-        out.push_str("\n i32.const 4");
-        out.push_str(&format!("\n i32.const {}", super::abi::TAG_ARRAY));
-        out.push_str("\n call $malloc\n local.set $args\n local.get $args\n i32.const 0\n i32.store\n local.get $args");
-    }
-    let _ = writeln!(
-        out,
-        "\n call ${entry_sym}\n drop\n call $dream_run_loop\n)\n"
-    );
-    out
 }
 
 #[cfg(test)]

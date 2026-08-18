@@ -2,6 +2,7 @@
 
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
 use crate::driver::compiler::{Compiler, Target};
+use crate::driver::wasm_opt::OptLevel;
 use crate::execution::wasm_runner::execute_wasm;
 use dream_sema::analyzer::CrateType;
 use std::fs;
@@ -11,6 +12,8 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Default)]
 pub struct TestOptions {
     pub release: bool,
+    pub optimize: Option<OptLevel>,
+    pub native_c: bool,
     pub filter: Option<String>,
     pub verbose: bool,
 }
@@ -133,13 +136,18 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     fs::write(&runner_path, &runner_source)
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
 
-    let wat_path = out_dir.join(format!("{stem}.wat"));
-    let compiler = Compiler::new(Target::Wasm)
-        .with_release(opts.release)
-        .with_crate_type(CrateType::Bin)
-        .with_emit_abi(false);
+    let mut compiler = Compiler::new(if opts.native_c {
+        Target::NativeC
+    } else {
+        Target::Wasm
+    })
+    .with_release(opts.release)
+    .with_crate_type(CrateType::Bin)
+    .with_emit_abi(false);
+    if let Some(level) = opts.optimize {
+        compiler = compiler.with_optimize(Some(level));
+    }
     let runner_str = runner_path.to_string_lossy().into_owned();
-    let wat_str = wat_path.to_string_lossy().into_owned();
     if opts.verbose {
         let _ = writeln!(
             io::stderr(),
@@ -148,12 +156,26 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
             tests.len()
         );
     }
-    compiler
-        .compile(&runner_str, &wat_str)
-        .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
-
     let _ = writeln!(io::stderr(), "running {}:", path.display());
-    execute_wasm(&wat_str).map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
+    if opts.native_c {
+        let c_path = out_dir.join(format!("{stem}.c"));
+        let c_str = c_path.to_string_lossy().into_owned();
+        compiler
+            .compile(&runner_str, &c_str)
+            .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
+        let cc_opt = OptLevel::from_cli(opts.release, opts.optimize);
+        let bin = crate::execution::native_c::compile_native_c(&c_path, cc_opt)
+            .map_err(|e| format!("cc '{}': {}", path.display(), e))?;
+        crate::execution::native_c::run_native_bin(&bin, &c_str)
+            .map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
+    } else {
+        let wat_path = out_dir.join(format!("{stem}.wat"));
+        let wat_str = wat_path.to_string_lossy().into_owned();
+        compiler
+            .compile(&runner_str, &wat_str)
+            .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
+        execute_wasm(&wat_str).map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
+    }
     Ok(tests.len())
 }
 

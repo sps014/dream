@@ -48,5 +48,5 @@ public class WebWorkerPool {
     static extern fun spawn_host(): int;
 
     @js("Dream", "workerPoolDispatch")
-    static extern async fun dispatch_host(id: int, funcidx: int, env: int, borrow msg: string): string;
+    static extern async fun dispatch_host(id: int, funcidx: int, env: long, borrow msg: string): string;
 }

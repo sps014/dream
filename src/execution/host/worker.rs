@@ -58,7 +58,7 @@ fn worker_debug() -> Option<Arc<dyn WorkerDebug>> {
 const TAG_STRING: i32 = abi::TAG_STRING;
 const LEN_PREFIX: i32 = abi::LEN_PREFIX_SIZE as i32;
 const STRING_HEADER: i32 = abi::STRING_HEADER_SIZE as i32;
-const STRING_UTF8: usize = abi::STRING_UTF8_OFFSET as usize;
+const STRING_UNITS: usize = abi::STRING_UNITS_OFFSET as usize;
 
 /// A unit of work sent from the owner to a worker thread: which `fun(string): string` body to
 /// run (its function-table index plus closure environment word) and the message to run it with.
@@ -167,14 +167,15 @@ fn store_write_string(
         .ok()?;
     let base = ptr as usize;
     let data = super::memory::shared_bytes_mut(memory);
-    if base + STRING_UTF8 + nbytes > data.len() {
+    if base + STRING_UNITS + nbytes > data.len() {
         return None;
     }
     data[base..base + LEN_PREFIX as usize].copy_from_slice(&(units.len() as i32).to_le_bytes());
+    let pad = ptr.wrapping_add(STRING_UNITS as i32);
     data[base + LEN_PREFIX as usize..base + STRING_HEADER as usize]
-        .copy_from_slice(&0_i32.to_le_bytes());
+        .copy_from_slice(&pad.to_le_bytes());
     for (i, u) in units.iter().enumerate() {
-        let o = base + STRING_UTF8 + i * 2;
+        let o = base + STRING_UNITS + i * 2;
         data[o..o + 2].copy_from_slice(&u.to_le_bytes());
     }
     Some(ptr)
@@ -362,8 +363,8 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "workerSpawn",
-        |_caller: Caller<'_, ()>, fn_idx: i32, env: i32| -> Result<i32> {
-            spawn_worker_thread(fn_idx, env)
+        |_caller: Caller<'_, ()>, fn_idx: i32, env: i64| -> Result<i32> {
+            spawn_worker_thread(fn_idx, env as i32)
         },
     )?;
 
@@ -426,7 +427,7 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "workerPoolDispatch",
-        |mut caller: Caller<'_, ()>, id: i32, fn_idx: i32, env: i32, msg_ptr: i32| -> Result<i32> {
+        |mut caller: Caller<'_, ()>, id: i32, fn_idx: i32, env: i64, msg_ptr: i32| -> Result<i32> {
             let msg = read_arg_string(&mut caller, msg_ptr)?;
             let handle = workers()
                 .lock()
@@ -435,7 +436,7 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
                 .map(|h| (h.to_worker.clone(), h.from_worker.clone()));
             let reply = match handle {
                 Some((tx, rx)) => {
-                    let _ = tx.send(Job::Message(fn_idx, env, msg));
+                    let _ = tx.send(Job::Message(fn_idx, env as i32, msg));
                     let guard = rx.lock().unwrap();
                     guard.recv().unwrap_or_default()
                 }

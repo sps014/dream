@@ -1,4 +1,5 @@
 use crate::artifact_alias;
+use crate::compile_flags::CompileFlags;
 use crate::manifest::{PackageType, RunTarget};
 use crate::workspace::Workspace;
 use anyhow::{bail, Result};
@@ -6,9 +7,20 @@ use std::path::Path;
 use std::process::Command;
 
 pub fn run(start_dir: &Path, release: bool, package: Option<&str>) -> Result<()> {
+    run_with(
+        start_dir,
+        CompileFlags {
+            release,
+            ..CompileFlags::default()
+        },
+        package,
+    )
+}
+
+pub fn run_with(start_dir: &Path, flags: CompileFlags, package: Option<&str>) -> Result<()> {
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
-    compile_entry(&workspace, release, None)
+    compile_entry(&workspace, &flags, None)
 }
 
 /// Compile the package root, optionally restricting JS runtime emission to `only`
@@ -17,15 +29,17 @@ pub fn run(start_dir: &Path, release: bool, package: Option<&str>) -> Result<()>
 ///
 /// After a successful compile that emitted web and/or node runtimes, refreshes
 /// `target/web/` and/or `target/node/` aliases from the active profile.
-pub fn compile_entry(workspace: &Workspace, release: bool, only: Option<RunTarget>) -> Result<()> {
+pub fn compile_entry(
+    workspace: &Workspace,
+    flags: &CompileFlags,
+    only: Option<RunTarget>,
+) -> Result<()> {
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;
     let pkg = workspace.manifest.package()?;
 
     let mut cmd = Command::new(&dream_bin);
-    if release {
-        cmd.arg("--release");
-    }
+    flags.apply(&mut cmd);
 
     match pkg.package_type {
         PackageType::Lib => {
@@ -70,7 +84,13 @@ pub fn compile_entry(workspace: &Workspace, release: bool, only: Option<RunTarge
 
     if want_web || want_node {
         let stem = artifact_alias::entry_stem(&compile_root)?;
-        artifact_alias::refresh_host_aliases(&workspace.root, &stem, release, want_web, want_node)?;
+        artifact_alias::refresh_host_aliases(
+            &workspace.root,
+            &stem,
+            flags.release,
+            want_web,
+            want_node,
+        )?;
     }
     Ok(())
 }

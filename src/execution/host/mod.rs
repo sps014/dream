@@ -19,8 +19,8 @@ mod datetime;
 #[cfg(feature = "c-ffi")]
 mod ffi_helpers;
 mod file;
-mod gpu;
-mod http;
+pub(crate) mod gpu;
+pub(crate) mod http;
 mod math;
 mod memory;
 mod net;
@@ -43,12 +43,14 @@ pub use gpu::{attach_abi_from_wat_path, link_gpu_functions, set_packaged_app_ico
 pub use http::link_http_functions;
 pub use math::link_math_functions;
 pub use memory::{
-    read_string_from_memory, shared_bytes, shared_bytes_mut, write_bytes_to_memory,
-    write_string_to_memory,
+    decode_string, read_string_from_memory, shared_bytes, shared_bytes_mut, with_guest_bytes,
+    with_guest_bytes_mut, write_bytes_to_memory, write_string_to_memory,
 };
 pub use net::link_net_functions;
 pub use process::link_process_functions;
-pub use shared_memory::{aot_wasm_config, shared_memory_for, threaded_wasm_config};
+pub use shared_memory::{
+    aot_wasm_config, define_env_memory, shared_memory_for, threaded_wasm_config,
+};
 pub use stack_size::{dream_async_stack_size, dream_stack_size, parse_size_bytes};
 pub use text::link_text_functions;
 pub use webview::link_webview_functions;

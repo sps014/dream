@@ -17,6 +17,8 @@ use dream_syntax::syntax_tree::SyntaxTree;
 
 pub enum Target {
     Wasm,
+    /// MIR → C99 (`dream_mir::backend::c`). Default `dream run` stays [`Target::Wasm`].
+    NativeC,
 }
 
 /// Orchestrates the compilation pipeline: source loading (delegated to `source_loader`/`prelude`),
@@ -326,6 +328,8 @@ impl Compiler {
             dream_mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
             let pipeline = if debug_info {
                 dream_mir::passes::PassManager::debug_pipeline()
+            } else if matches!(target, Target::NativeC) {
+                dream_mir::passes::PassManager::native_c_pipeline()
             } else {
                 dream_mir::passes::PassManager::default_pipeline()
             };
@@ -338,7 +342,7 @@ impl Compiler {
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
             let (bytes, debug_map) = match target {
-                Target::Wasm => dream_mir::emit::emit_module_bytes(
+                Target::Wasm => dream_mir::backend::wasm::emit_module_bytes(
                     &mir,
                     interner,
                     debug,
@@ -347,6 +351,10 @@ impl Compiler {
                         || debug_info
                         || matches!(self.crate_type, dream_sema::analyzer::CrateType::Lib),
                 ),
+                Target::NativeC => {
+                    let c = dream_mir::backend::c::emit_c_module(&mir, interner);
+                    (c.into_bytes(), None)
+                }
             };
             (bytes, debug_map, live_imports)
         }));
@@ -360,10 +368,16 @@ impl Compiler {
         })?;
 
         info!("finished code generation");
+        if matches!(self.target, Target::NativeC) {
+            fs::write(out_path, &bytes)?;
+            info!("created file: {}", out_path);
+            emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+            return Ok(());
+        }
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
         fs::write(&wasm_path, &bytes)?;
         info!("created file: {}", wasm_path.display());
-        let text = dream_mir::emit::print_wasm(&bytes);
+        let text = dream_mir::backend::wasm::print_wasm(&bytes);
         fs::write(out_path, &text)?;
         info!("created file: {}", out_path);
 
@@ -376,13 +390,7 @@ impl Compiler {
         }
 
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        emit_wasm_and_abi(
-            out_path,
-            ast.get_root(),
-            &gpu,
-            &live_imports,
-            self.emit_abi,
-        )?;
+        emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
 
         // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`).
         if !self.runtimes.is_empty() {

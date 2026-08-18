@@ -1,22 +1,21 @@
-# Freestanding C guest runtime
+# Guest C (linked libs + native)
 
-Compile with `scripts/build-runtime.sh`. **macOS and Linux install steps** (wasi-sdk 33, `wasm2wat`) are in [../README.md](../README.md). Not part of `cargo build`.
+Same-module WASM helpers are **WAT** (`../allocator.wat`, `../strings.wat`, …). This directory is:
+
+- **Linked wasm32 libraries** — today PCRE2 (`regex.c`, `regex_wasm_libc.c`, `pcre2/`). Rebuild with `scripts/build-runtime.sh`.
+- **Native host runtime** — [`native/`](native/) for `dream --native-c`.
+
+Modules are declared in [`../modules.rs`](../modules.rs). The shell script compiles catalog `wasm_c` with `wasm-ld` (`wrap` / `exports` / `global_base` / `stack_size`) and writes `wat_out`. It does not extract or rewrite helper bodies.
 
 ## Do
 
-- One concern per `.c` file; share ABI via `include/dream_abi.h` and imports via `include/dream_rt.h`.
-- `EXPORT("malloc")` (etc.) must match names in `abi.rs` / host / existing WAT.
-- Keep helpers `static`. Locals are scalars only.
-- Cross-file calls are ordinary prototypes (`rt_malloc` → WASM `$malloc` after splice).
-- Compile per `.c` (`--allow-undefined`). Dream’s module provides `$malloc`, `$print_string`, globals.
-- Keep `$__alloc_lock_*` in handwritten WAT unless atomics in C are proven (`i32.atomic.*`).
-- If `--release` goldens regress, leave that function’s WAT handwritten.
+- Share numeric ABI via `include/dream_abi.h`. Portable wrappers (wasm regex + native) include `include/dream_guest.h`.
+- Link: `wasm-ld --import-memory` with catalog `wrap` / `exports` / `global_base` / `stack_size`.
+- Native-only files live in [`native/`](native/).
 
 ## Don't
 
 - Do not run clang from `dream` or default CI (`cargo test --workspace`, `windows-latest` release jobs).
-- Do not emit a second WASM module, `(memory)`, data segments, or C `static` mutable globals / constructors (`__wasm_call_ctors`).
-- Do not use libc, `memcpy`, VLAs, or `&` on locals (extract script rejects `$__stack_pointer` / `memcpy`).
-- Do not rename `$malloc` / `$retain` / `$print_string`.
-- Do not hand-edit `generated/*.wat` as source; edit `.c`. Handwritten `../allocator.wat` (placeholders) and `../sync.wat` / `../async.wat` are still emit source until replaced.
+- Do not hand-edit `../regex.wat`; edit `regex.c` / `pcre2/` then `scripts/build-runtime.sh`.
+- Do not add a guest-C extract pipeline for `$malloc` / strings / panic. Author those as WAT.
 - Do not use clang `-O4` / wasm-opt `-O4`.

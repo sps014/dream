@@ -1,7 +1,37 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use dreamer::commands;
+use dreamer::compile_flags::CompileFlags;
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+/// Same `--release` / `-O` / `--native-c` tokens as `dream`.
+#[derive(Args, Clone, Debug, Default)]
+struct OptFlags {
+    /// Trimmed build; wasm-opt / cc default `-O3` (`-Os` with `--web`).
+    #[arg(long)]
+    release: bool,
+    /// wasm-opt and cc level (`0`-`4`, `s`, `z`; bare `-O` is `-Os`). Overrides `--release`.
+    #[arg(
+        short = 'O',
+        long = "optimize",
+        num_args = 0..=1,
+        default_missing_value = "s",
+        value_name = "LVL"
+    )]
+    optimize: Option<String>,
+    /// Compile with the native C backend (`dream --native-c`).
+    #[arg(long)]
+    native_c: bool,
+    /// Compiler backend: `wasm` or `c`.
+    #[arg(long, value_name = "KIND")]
+    backend: Option<String>,
+}
+
+impl OptFlags {
+    fn into_compile_flags(self) -> anyhow::Result<CompileFlags> {
+        CompileFlags::from_cli(self.release, self.optimize, self.native_c, self.backend)
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -67,10 +97,8 @@ enum Cmd {
     },
     /// Install dependencies, then compile the project's entry point.
     Build {
-        /// Produce a trimmed release build with wasm-opt (passed through as `--release` to `dream`;
-        /// override the default `-Os` level with dream's `-O` flags if needed).
-        #[arg(long)]
-        release: bool,
+        #[command(flatten)]
+        opt: OptFlags,
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
@@ -79,9 +107,8 @@ enum Cmd {
         /// Host to run when package.targets lists more than one (`native`, `web`, or `node`).
         #[arg(long, value_name = "HOST")]
         target: Option<String>,
-        /// Compile/run with the release profile (`target/release` + refreshed web/node aliases).
-        #[arg(long)]
-        release: bool,
+        #[command(flatten)]
+        opt: OptFlags,
         /// TCP port for `--target web` (default 8787). Reuses/restarts the previous project server.
         #[arg(long, value_name = "PORT")]
         port: Option<u16>,
@@ -93,9 +120,8 @@ enum Cmd {
     },
     /// Install dependencies (incl. dev), then run `@test` suites under `tests/`.
     Test {
-        /// Pass `--release` through to `dream test`.
-        #[arg(long)]
-        release: bool,
+        #[command(flatten)]
+        opt: OptFlags,
         /// Only run `@test` functions whose names contain this substring.
         #[arg(long, value_name = "SUBSTR")]
         filter: Option<String>,
@@ -179,19 +205,39 @@ fn main() -> ExitCode {
         Cmd::Remove { name, package } => commands::remove::run(&cwd, &name, package.as_deref()),
         Cmd::Install => commands::install::run(&cwd),
         Cmd::Update { name } => commands::update::run(&cwd, name),
-        Cmd::Build { release, package } => commands::build::run(&cwd, release, package.as_deref()),
+        Cmd::Build { opt, package } => match opt.into_compile_flags() {
+            Ok(flags) => commands::build::run_with(&cwd, flags, package.as_deref()),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::FAILURE;
+            }
+        },
         Cmd::Run {
             target,
-            release,
+            opt,
             port,
             package,
             args,
-        } => commands::run::run(&cwd, target, release, port, &args, package.as_deref()),
+        } => match opt.into_compile_flags() {
+            Ok(flags) => {
+                commands::run::run_with(&cwd, target, flags, port, &args, package.as_deref())
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::FAILURE;
+            }
+        },
         Cmd::Test {
-            release,
+            opt,
             filter,
             package,
-        } => commands::test::run(&cwd, release, filter, package.as_deref()),
+        } => match opt.into_compile_flags() {
+            Ok(flags) => commands::test::run_with(&cwd, flags, filter, package.as_deref()),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::FAILURE;
+            }
+        },
         Cmd::Publish {
             registry,
             token,

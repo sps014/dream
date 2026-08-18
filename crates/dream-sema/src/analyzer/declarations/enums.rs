@@ -209,7 +209,7 @@ impl<'a> Analyzer<'a> {
         // `@stack` additionally allows any number of reference-typed payload fields to still go
         // inline, each stored as a retained pointer exactly like a reference field embedded in a
         // value `struct` already is (see `construct_value_union` in
-        // `mir::emit::emitter::value_struct`). Self-reference is still rejected: an inline recursive
+        // `mir::backend::wasm::emitter::value_struct`). Self-reference is still rejected: an inline recursive
         // value union would have infinite size. This relaxation is opt-in only, gated behind
         // `@stack`, rather than automatic: several existing constructs (e.g. a `weak parent:
         // Option<Node>` field, see `docs/language/memory.md`) depend on `Option<T>` staying a heap

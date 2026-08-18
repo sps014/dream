@@ -84,11 +84,7 @@ fn test_hir_emission_while_loop() {
         "missing loop comparison:\n{}",
         wat
     );
-    assert!(
-        wat.contains("loop"),
-        "missing structured loop:\n{}",
-        wat
-    );
+    assert!(wat.contains("loop"), "missing structured loop:\n{}", wat);
     assert!(
         !wat.contains("br_table"),
         "sync while should not use br_table dispatch:\n{}",
@@ -567,7 +563,7 @@ fn test_hir_emission_global_initializer_runs_in_start() {
 
     let interner = analyzer.interner();
     let mir = dream_mir::lower::lower_program(&hir, interner);
-    let wat = dream_mir::emit::emit_module(&mir, interner, false);
+    let wat = dream_mir::backend::wasm::emit_module(&mir, interner, false);
     assert!(
         wat.contains("(func $__dream_init"),
         "missing init function:\n{}",
@@ -1076,17 +1072,13 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
 #[test]
 fn test_indirect_call_emits_table_and_signature() {
     let (mir, interner) = indirect_call_demo();
-    let wat = dream_mir::emit::emit_module(&mir, &interner, false);
+    let wat = dream_mir::backend::wasm::emit_module(&mir, &interner, false);
     assert!(
         wat.contains("(table $__ft"),
         "function table missing:\n{}",
         wat
     );
-    assert!(
-        wat.contains("$add"),
-        "elem section missing:\n{}",
-        wat
-    );
+    assert!(wat.contains("$add"), "elem section missing:\n{}", wat);
     assert!(
         wat.contains("(type $sig_i32_i32__i32"),
         "call_indirect signature missing:\n{}",
@@ -1109,7 +1101,7 @@ fn test_indirect_call_emits_table_and_signature() {
 fn exec_indirect_call_through_function_table() {
     // End-to-end: `f(2, 3)` dispatches through the table to `add`, printing `5`.
     let (mir, interner) = indirect_call_demo();
-    let wat = dream_mir::emit::emit_module(&mir, &interner, false);
+    let wat = dream_mir::backend::wasm::emit_module(&mir, &interner, false);
     assert_eq!(run_wat(&wat, "main"), "5");
 }
 
@@ -1898,7 +1890,8 @@ fn test_js_fuses_get_as_string_at_typed_boundary() {
         wat
     );
     assert!(
-        !wat.replace("call $js_get_as_string", "").contains("call $js_get"),
+        !wat.replace("call $js_get_as_string", "")
+            .contains("call $js_get"),
         "should not emit plain js.get:\n{}",
         wat
     );

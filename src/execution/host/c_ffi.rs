@@ -11,7 +11,7 @@ use libloading::Library;
 use serde::Deserialize;
 use wasmtime::*;
 
-use super::memory::{required_memory, shared_bytes, shared_bytes_mut};
+use super::memory::{decode_string, with_guest_bytes, with_guest_bytes_mut};
 
 thread_local! {
     // Set for the duration of a native C call so Dream `fun` callbacks can re-enter the
@@ -467,7 +467,7 @@ fn invoke_c(
         return invoke_c_scalar_fallback(fn_ptr, wasm_args, wasm_results);
     }
 
-    let memory = required_memory(caller)?;
+    let guest = with_guest_bytes(caller, |d| d.to_vec())?;
     let arg_types: Vec<Type> = param_tags.iter().map(|t| ffi_arg_type(t)).collect();
     let ret_type = ffi_return_type(result_tag);
     let cif = Cif::new(arg_types.clone(), ret_type);
@@ -503,14 +503,14 @@ fn invoke_c(
             "double" => c_args.push(ArgSlot::F64(wasm_val.f64().unwrap_or(0.0))),
             "string" => {
                 let ptr = wasm_val.i32().unwrap_or(0);
-                let s = super::memory::read_string_from_memory(&memory, ptr);
+                let s = decode_string(&guest, ptr);
                 let cstr = CString::new(s).map_err(|_| Error::msg("string contains NUL"))?;
                 c_args.push(ArgSlot::Ptr(cstr.as_ptr() as usize));
                 c_strings.push(cstr);
             }
             "string_utf16" => {
                 let ptr = wasm_val.i32().unwrap_or(0);
-                let s = super::memory::read_string_from_memory(&memory, ptr);
+                let s = decode_string(&guest, ptr);
                 let wide: Vec<u16> = s.encode_utf16().chain(std::iter::once(0)).collect();
                 let p = wide.as_ptr() as usize;
                 c_args.push(ArgSlot::Ptr(p));
@@ -527,7 +527,7 @@ fn invoke_c(
                     guest_ptr,
                     name,
                     &struct_sizes,
-                    &memory,
+                    &guest,
                     &mut struct_scratch,
                 );
                 c_args.push(ArgSlot::Ptr(ptr));
@@ -540,7 +540,7 @@ fn invoke_c(
                     guest_ptr,
                     name,
                     &struct_sizes,
-                    &memory,
+                    &guest,
                     &mut struct_scratch,
                 );
                 c_args.push(ArgSlot::Ptr(ptr));
@@ -611,42 +611,38 @@ fn invoke_c(
     drop(cb_data_owners);
     let ret = ret?;
 
-    // Re-fetch memory after the C call (caller still valid).
-    let memory = required_memory(caller)?;
-
-    for (i, tag) in param_tags.iter().enumerate() {
-        let wasm_val = wasm_args.get(i).copied().unwrap_or(Val::I32(0));
-        if tag.starts_with("out_int") {
-            let guest_ptr = wasm_val.i32().unwrap_or(0);
-            if guest_ptr > 0 {
-                let data = shared_bytes_mut(&memory);
-                let base = guest_ptr as usize;
-                if base + 4 <= data.len() {
-                    data[base..base + 4].copy_from_slice(&out_i32.to_le_bytes());
-                }
-            }
-        } else if tag.starts_with("out_long") {
-            let guest_ptr = wasm_val.i32().unwrap_or(0);
-            if guest_ptr > 0 {
-                let data = shared_bytes_mut(&memory);
-                let base = guest_ptr as usize;
-                if base + 8 <= data.len() {
-                    data[base..base + 8].copy_from_slice(&out_i64.to_le_bytes());
-                }
-            }
-        } else if tag.starts_with("out_struct:") {
-            let guest_ptr = wasm_val.i32().unwrap_or(0);
-            if guest_ptr > 0 {
-                if let Some(buf) = struct_scratch.get(&i) {
-                    let data = shared_bytes_mut(&memory);
+    with_guest_bytes_mut(caller, |data| {
+        for (i, tag) in param_tags.iter().enumerate() {
+            let wasm_val = wasm_args.get(i).copied().unwrap_or(Val::I32(0));
+            if tag.starts_with("out_int") {
+                let guest_ptr = wasm_val.i32().unwrap_or(0);
+                if guest_ptr > 0 {
                     let base = guest_ptr as usize;
-                    if base + buf.len() <= data.len() {
-                        data[base..base + buf.len()].copy_from_slice(buf);
+                    if base + 4 <= data.len() {
+                        data[base..base + 4].copy_from_slice(&out_i32.to_le_bytes());
+                    }
+                }
+            } else if tag.starts_with("out_long") {
+                let guest_ptr = wasm_val.i32().unwrap_or(0);
+                if guest_ptr > 0 {
+                    let base = guest_ptr as usize;
+                    if base + 8 <= data.len() {
+                        data[base..base + 8].copy_from_slice(&out_i64.to_le_bytes());
+                    }
+                }
+            } else if tag.starts_with("out_struct:") {
+                let guest_ptr = wasm_val.i32().unwrap_or(0);
+                if guest_ptr > 0 {
+                    if let Some(buf) = struct_scratch.get(&i) {
+                        let base = guest_ptr as usize;
+                        if base + buf.len() <= data.len() {
+                            data[base..base + buf.len()].copy_from_slice(buf);
+                        }
                     }
                 }
             }
         }
-    }
+    })?;
 
     if let Some(slot) = wasm_results.first_mut() {
         match result_tag {
@@ -810,7 +806,7 @@ fn struct_arg_pointer(
     guest_ptr: i32,
     struct_name: &str,
     struct_sizes: &HashMap<String, u32>,
-    memory: &wasmtime::SharedMemory,
+    guest: &[u8],
     scratch: &mut HashMap<usize, Vec<u8>>,
 ) -> usize {
     if guest_ptr <= 0 {
@@ -821,13 +817,12 @@ fn struct_arg_pointer(
         // Unknown/zero-sized: hand the C side NULL so bugs are loud rather than corrupting memory.
         _ => return 0,
     };
-    let data = shared_bytes(memory);
     let base = guest_ptr as usize;
-    if base + size > data.len() {
+    if base + size > guest.len() {
         return 0;
     }
     let mut buf = vec![0u8; size];
-    buf.copy_from_slice(&data[base..base + size]);
+    buf.copy_from_slice(&guest[base..base + size]);
     scratch.insert(param_index, buf);
     // Re-read the pointer *after* moving the buffer into the map: the Vec's heap allocation
     // stays put on move, but reading it out of `scratch` avoids relying on that guarantee.

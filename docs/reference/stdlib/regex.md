@@ -2,7 +2,26 @@
 
 **Import:** `import system.text;`
 
-A regex engine written in Dream (not the host `RegExp`). Works the same on every host.
+Dream uses **one** vendored [PCRE2](https://github.com/PCRE2Project/pcre2) **16-bit** engine
+(version 10.45 under `crates/dream-mir/src/runtime/c/pcre2/`).
+
+| Backend | How it runs |
+| --- | --- |
+| Native C (`dream --native-c`) | PCRE2-16 with **JIT** (sljit) |
+| WASM (`dream run` / `.wasm`) | Same sources, **interpreter only** (`-DPCRE2_WASM`, no W^X in linear memory) |
+
+Invalid patterns compile to a dead engine (handle `0`) that never matches. The stdlib
+`Regex` type is a thin `@intrinsic` wrapper; there is no in-language Pike/backtracker.
+
+Do **not** hand-edit `crates/dream-mir/src/runtime/regex.wat`. Change
+`crates/dream-mir/src/runtime/c/regex.c` (and/or vendored PCRE2), then:
+
+```bash
+scripts/build-runtime.sh   # wasi-sdk 33; see crates/dream-mir/src/runtime/c/pcre2/README.md
+```
+
+That compiles PCRE2 + the wrapper and writes `runtime/regex.wat`. The emitter splices that file
+only when the program uses `regex_*` intrinsics.
 
 ```dream
 import system;
@@ -32,10 +51,10 @@ Combine with `|`. Default is `RegexFlags.None`.
 | --- | --- |
 | `Regex(pattern, flags)` | compile |
 | `test(input)` | any match? |
-| `replace(input, replacement)` | substitute |
+| `replace(input, replacement)` | substitute (`$&`, `$1`, `${name}`, `$$`) |
 | `match(input)` | `string[]` of matches |
-| `match_info(input)` | `Option<RegexMatchInfo>` with groups and indices |
+| `match_info(input)` | `Option<RegexMatchInfo>` with groups and names |
+
+The `regex_find` microbench uses Global `[a-z]+\d+` (not a dedicated digit-run fast path).
 
 A full example: [`sample/interop/regex.dream`](https://github.com/sps014/dream/blob/main/sample/interop/regex.dream).
-
-The Pike VM can skip bytes that cannot start an unanchored match (digit class, `[a-z]` / `[a-zA-Z]`, and single-character prefixes). Bare `\d+` still has a dedicated digit-run fast path; that path is **not** what the `regex_find` microbench measures (that bench uses `[a-z]+\d+`).

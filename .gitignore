@@ -13,12 +13,23 @@ site/
 *.abi.json
 *.runtime.js
 
+tests/*/*.C
+tests/*/*.bin
+# Native C emit (`dream --native-c`) next to the entry file.
+sample/**/*.c
+sample/**/*.bin
+*.tmp
+*.dSYM/
+
 *.wgsl
 
 # Keep the hand-written runtime WAT assets that the codegen embeds via include_str!.
 # (Previously under /src/; now owned by dream-mir.)
 !/crates/dream-mir/src/runtime/**/*.wat
 !/src/**/*.wat
+
+# Clang/wasm-ld scratch for linked regex; `regex.wat` is the emit artifact.
+/crates/dream-mir/src/runtime/c/generated/
 
 node_modules/
 .DS_Store

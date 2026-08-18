@@ -1,5 +1,5 @@
 import system;
-fun main() {
+async fun main() {
     let sw = Stopwatch();
     
     // We can't deterministically test actual elapsed time since CI/environments vary,
@@ -28,24 +28,17 @@ fun main() {
     sw.stop();
     System.println(sw.elapsed_nanos() >= 0L); // Should be >= 0
     
-    // Test start/stop accumulation
+    // Counted empty loops are DCE'd by optimizing backends; sleep is observable work.
     sw.reset();
     sw.start();
-    // Simulate some work...
-    let i = 0;
-    while (i < 1000) {
-        i = i + 1;
-    }
+    await Time.sleep(1);
     sw.stop();
     
     let acc1 = sw.elapsed_nanos();
     System.println(acc1 > 0L);
     
     sw.start();
-    let j = 0;
-    while (j < 1000) {
-        j = j + 1;
-    }
+    await Time.sleep(1);
     sw.stop();
     
     let acc2 = sw.elapsed_nanos();

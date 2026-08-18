@@ -1,0 +1,492 @@
+//! Linked C libraries (today: PCRE2 regex) plus native compile file lists.
+//!
+//! Guest same-module helpers are authored as `runtime/*.wat`. `scripts/build-runtime.sh` only
+//! rebuilds linked `wat_out` (regex). Native `--native-c` uses `runtime/c/native/`.
+
+use indexmap::IndexMap;
+use std::path::{Path, PathBuf};
+
+use dream_abi::intrinsics::{
+    ATTR_REGEX_COMPILE, ATTR_REGEX_FIND, ATTR_REGEX_FREE, ATTR_REGEX_GROUP_COUNT,
+    ATTR_REGEX_NAME_AT, ATTR_REGEX_NAME_COUNT, ATTR_REGEX_NAME_NUMBER,
+};
+
+/// Origin of the first linked C library’s data (`wasm-ld --global-base`). Stack grows down from
+/// this address; interned strings live far below it.
+pub const LINKED_REGION_ORIGIN: u32 = 2 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RuntimeNeed(u32);
+
+impl RuntimeNeed {
+    pub const CORE: Self = Self(1 << 0);
+    pub const REGEX: Self = Self(1 << 1);
+
+    pub fn bits(self) -> u32 {
+        self.0
+    }
+
+    pub fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub fn insert(&mut self, other: Self) {
+        self.0 |= other.0;
+    }
+
+    pub fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    pub fn name(self) -> &'static str {
+        if self == Self::CORE {
+            "core"
+        } else if self == Self::REGEX {
+            "regex"
+        } else {
+            "mixed"
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RuntimeModule {
+    pub id: &'static str,
+    pub need: RuntimeNeed,
+    pub shared_c: &'static [&'static str],
+    pub wasm_extra_c: &'static [&'static str],
+    pub native_extra_c: &'static [&'static str],
+    /// Path relative to `runtime/c` of a vendor file list (`pcre2/SOURCES`).
+    pub vendor_sources: Option<&'static str>,
+    pub wasm_defines: &'static [&'static str],
+    pub native_defines: &'static [&'static str],
+    pub include_dirs: &'static [&'static str],
+    pub exports: &'static [&'static str],
+    pub wrap: &'static [&'static str],
+    pub stack_size: u32,
+    pub data_span: u32,
+    pub wat_out: &'static str,
+    pub intrinsic_keys: &'static [&'static str],
+}
+
+/// Layout of one linked wasm32 object after region allocation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkedLayout {
+    pub id: &'static str,
+    /// `--global-base` / start of C data.
+    pub base: u32,
+    /// Relocated `$__stack_pointer_*` init (C stack grows down from here).
+    pub stack_top: u32,
+    pub stack_size: u32,
+    /// Bytes reserved for data at `[base, base + span)`.
+    pub span: u32,
+}
+
+impl LinkedLayout {
+    pub fn data_end(self) -> u32 {
+        self.base.saturating_add(self.span)
+    }
+
+    pub fn stack_global(self) -> String {
+        format!("__stack_pointer_{}", self.id)
+    }
+}
+
+pub const RUNTIME_MODULES: &[RuntimeModule] = &[
+    RuntimeModule {
+        id: "regex",
+        need: RuntimeNeed::REGEX,
+        shared_c: &["regex.c"],
+        wasm_extra_c: &["regex_wasm_libc.c"],
+        native_extra_c: &["pcre2/pcre2_jit_compile.c"],
+        vendor_sources: Some("pcre2/SOURCES"),
+        wasm_defines: &[
+            "HAVE_CONFIG_H",
+            "PCRE2_CODE_UNIT_WIDTH=16",
+            "PCRE2_STATIC",
+            "PCRE2_WASM",
+        ],
+        native_defines: &[
+            "DREAM_NATIVE",
+            "HAVE_CONFIG_H",
+            "PCRE2_CODE_UNIT_WIDTH=16",
+            "PCRE2_STATIC",
+        ],
+        include_dirs: &["include", "pcre2"],
+        exports: &[
+            "regex_compile",
+            "regex_free",
+            "regex_group_count",
+            "regex_name_count",
+            "regex_name_at",
+            "regex_name_number",
+            "regex_find",
+            "regex_test",
+        ],
+        wrap: &[
+            "malloc", "free", "realloc", "memcpy", "memmove", "memset", "memcmp", "strlen", "abort",
+        ],
+        stack_size: 131072,
+        data_span: 512 * 1024,
+        wat_out: "regex.wat",
+        intrinsic_keys: &[
+            ATTR_REGEX_COMPILE,
+            ATTR_REGEX_FREE,
+            ATTR_REGEX_FIND,
+            ATTR_REGEX_GROUP_COUNT,
+            ATTR_REGEX_NAME_COUNT,
+            ATTR_REGEX_NAME_AT,
+            ATTR_REGEX_NAME_NUMBER,
+        ],
+    },
+];
+
+const NATIVE_CORE_C: &[&str] = &[
+    "heap.c",
+    "strings.c",
+    "object.c",
+    "format.c",
+    "panic.c",
+    "weak.c",
+    "closure.c",
+    "async.c",
+    "sync.c",
+    "simd.c",
+    "host.c",
+    "worker.c",
+];
+
+pub fn runtime_c_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c")
+}
+
+pub fn native_runtime_include_dir() -> PathBuf {
+    runtime_c_dir().join("native/include")
+}
+
+pub fn native_pcre2_include_dir() -> PathBuf {
+    runtime_c_dir().join("pcre2")
+}
+
+pub fn vendor_c_names(list_path: &str) -> Vec<String> {
+    let text = std::fs::read_to_string(runtime_c_dir().join(list_path)).unwrap_or_default();
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| l.to_string())
+        .collect()
+}
+
+fn vendor_c_names_static(list_path: &str) -> Vec<&'static str> {
+    match list_path {
+        "pcre2/SOURCES" => include_str!("c/pcre2/SOURCES")
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+pub fn runtime_need_from_keys<'a, I>(keys: I) -> RuntimeNeed
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut need = RuntimeNeed::CORE;
+    for key in keys {
+        for m in RUNTIME_MODULES {
+            if m.intrinsic_keys.contains(&key) {
+                need.insert(m.need);
+            }
+        }
+    }
+    need
+}
+
+pub fn runtime_need_from_mir(mir: &crate::Mir) -> RuntimeNeed {
+    runtime_need_from_keys(mir.intrinsics.iter().map(|(_, k)| k.as_str()))
+}
+
+pub fn runtime_need_from_c_source(src: &str) -> RuntimeNeed {
+    let mut need = RuntimeNeed::CORE;
+    for m in RUNTIME_MODULES {
+        if m.need == RuntimeNeed::CORE {
+            continue;
+        }
+        if m.exports.iter().any(|e| src.contains(e)) {
+            need.insert(m.need);
+        }
+    }
+    need
+}
+
+/// Bump-allocate a data window per live catalog module, starting at
+/// [`LINKED_REGION_ORIGIN`]. Deterministic catalog order.
+pub fn allocate_linked_layouts(need: RuntimeNeed) -> IndexMap<&'static str, LinkedLayout> {
+    let mut cursor = LINKED_REGION_ORIGIN;
+    let mut out = IndexMap::new();
+    for m in RUNTIME_MODULES {
+        if !need.contains(m.need) {
+            continue;
+        }
+        let layout = LinkedLayout {
+            id: m.id,
+            base: cursor,
+            stack_top: cursor,
+            stack_size: m.stack_size,
+            span: m.data_span,
+        };
+        cursor = layout.data_end();
+        cursor = (cursor + 15) & !15;
+        out.insert(m.id, layout);
+    }
+    out
+}
+
+pub struct NativeCompileUnit {
+    pub path: PathBuf,
+    pub defines: Vec<String>,
+    pub include_dirs: Vec<PathBuf>,
+}
+
+fn catalog_include_dirs(m: &RuntimeModule) -> Vec<PathBuf> {
+    let c = runtime_c_dir();
+    let mut dirs = vec![native_runtime_include_dir(), c.join("include")];
+    for rel in m.include_dirs {
+        let p = c.join(rel);
+        if !dirs.iter().any(|d| d == &p) {
+            dirs.push(p);
+        }
+    }
+    dirs
+}
+
+fn push_unit(units: &mut Vec<NativeCompileUnit>, path: PathBuf, m: &RuntimeModule) {
+    units.push(NativeCompileUnit {
+        path,
+        defines: m.native_defines.iter().map(|s| (*s).to_string()).collect(),
+        include_dirs: catalog_include_dirs(m),
+    });
+}
+
+/// Native objects for `need`: always-on host C plus catalog `shared_c`/`native_extra_c`/`SOURCES`
+/// for live linked modules.
+pub fn native_runtime_units(need: RuntimeNeed) -> Vec<NativeCompileUnit> {
+    let native = runtime_c_dir().join("native");
+    let native_inc = native_runtime_include_dir();
+    let mut units = Vec::new();
+    for name in NATIVE_CORE_C {
+        units.push(NativeCompileUnit {
+            path: native.join(name),
+            defines: vec!["DREAM_NATIVE".into()],
+            include_dirs: vec![native_inc.clone()],
+        });
+    }
+    let c = runtime_c_dir();
+    for m in RUNTIME_MODULES {
+        if !need.contains(m.need) {
+            continue;
+        }
+        for rel in m.shared_c {
+            push_unit(&mut units, c.join(rel), m);
+        }
+        if let Some(list) = m.vendor_sources {
+            let parent = Path::new(list).parent().unwrap_or(Path::new("."));
+            for name in vendor_c_names_static(list) {
+                push_unit(&mut units, c.join(parent).join(name), m);
+            }
+        }
+        for rel in m.native_extra_c {
+            push_unit(&mut units, c.join(rel), m);
+        }
+    }
+    units
+}
+
+pub fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {
+    native_runtime_units(need)
+        .into_iter()
+        .map(|u| u.path)
+        .collect()
+}
+
+fn json_str(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn json_str_arr(items: &[&str]) -> String {
+    let body = items
+        .iter()
+        .map(|s| json_str(s))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{body}]")
+}
+
+fn json_string_arr(items: &[String]) -> String {
+    let body = items
+        .iter()
+        .map(|s| json_str(s))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{body}]")
+}
+
+/// JSON consumed by `scripts/build-runtime.sh`. Linked `global_base` comes from
+/// [`allocate_linked_layouts`] over every catalog module (not per-program tree-shake).
+pub fn manifest_json() -> String {
+    let c_dir = "crates/dream-mir/src/runtime/c";
+    let rt_dir = "crates/dream-mir/src/runtime";
+    let mut all = RuntimeNeed::CORE;
+    for m in RUNTIME_MODULES {
+        all.insert(m.need);
+    }
+    let layouts = allocate_linked_layouts(all);
+    let mut modules = Vec::new();
+    for m in RUNTIME_MODULES {
+        let mut wasm_c: Vec<String> = m.shared_c.iter().map(|s| (*s).to_string()).collect();
+        wasm_c.extend(m.wasm_extra_c.iter().map(|s| (*s).to_string()));
+        if let Some(list) = m.vendor_sources {
+            let parent = Path::new(list)
+                .parent()
+                .and_then(|p| p.to_str())
+                .unwrap_or("");
+            for name in vendor_c_names(list) {
+                if parent.is_empty() {
+                    wasm_c.push(name);
+                } else {
+                    wasm_c.push(format!("{parent}/{name}"));
+                }
+            }
+        }
+        let layout = layouts.get(m.id);
+        let global_base = layout.map(|l| l.base).unwrap_or(0);
+        let stack_size = m.stack_size;
+        modules.push(format!(
+            "{{\"id\":{id},\"kind\":\"link\",\"need\":{need},\"wasm_c\":{wasm_c},\"native_extra_c\":{native_extra},\"wasm_defines\":{wasm_def},\"native_defines\":{nat_def},\"include_dirs\":{inc},\"exports\":{exp},\"wrap\":{wrap},\"stack_size\":{stack},\"data_span\":{span},\"global_base\":{base},\"wat_out\":{wat}}}",
+            id = json_str(m.id),
+            need = json_str(m.need.name()),
+            wasm_c = json_string_arr(&wasm_c),
+            native_extra = json_str_arr(m.native_extra_c),
+            wasm_def = json_str_arr(m.wasm_defines),
+            nat_def = json_str_arr(m.native_defines),
+            inc = json_str_arr(m.include_dirs),
+            exp = json_str_arr(m.exports),
+            wrap = json_str_arr(m.wrap),
+            stack = stack_size,
+            span = m.data_span,
+            base = global_base,
+            wat = json_str(m.wat_out),
+        ));
+    }
+    format!(
+        "{{\"c_dir\":{c_dir},\"runtime_dir\":{rt_dir},\"linked_origin\":{origin},\"modules\":[{modules}]}}\n",
+        c_dir = json_str(c_dir),
+        rt_dir = json_str(rt_dir),
+        origin = LINKED_REGION_ORIGIN,
+        modules = modules.join(",")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalog_sources_exist_on_disk() {
+        let c = runtime_c_dir();
+        assert!(!RUNTIME_MODULES.is_empty());
+        for m in RUNTIME_MODULES {
+            for rel in m
+                .shared_c
+                .iter()
+                .chain(m.wasm_extra_c)
+                .chain(m.native_extra_c)
+            {
+                assert!(c.join(rel).is_file(), "{}", rel);
+            }
+            if let Some(list) = m.vendor_sources {
+                assert!(c.join(list).is_file(), "{}", list);
+                let parent = Path::new(list).parent().unwrap_or(Path::new("."));
+                let names = vendor_c_names_static(list);
+                assert!(!names.is_empty(), "{}", list);
+                for name in names {
+                    assert!(
+                        c.join(parent).join(name).is_file(),
+                        "{}/{}",
+                        parent.display(),
+                        name
+                    );
+                }
+            }
+        }
+        for name in NATIVE_CORE_C {
+            assert!(c.join("native").join(name).is_file(), "native/{}", name);
+        }
+    }
+
+    #[test]
+    fn manifest_json_has_regex_link() {
+        let j = manifest_json();
+        assert!(j.contains("\"id\":\"regex\""), "{}", j);
+        assert!(j.contains("\"kind\":\"link\""), "{}", j);
+        assert!(j.contains("regex.c"), "{}", j);
+        assert!(j.contains("pcre2_compile.c"), "{}", j);
+        assert!(!j.contains("\"kind\":\"extract\""), "{}", j);
+        assert!(
+            j.contains(&format!("\"global_base\":{}", LINKED_REGION_ORIGIN)),
+            "{}",
+            j
+        );
+    }
+
+    #[test]
+    fn regex_need_from_intrinsic_keys() {
+        let n = runtime_need_from_keys(["regex_compile", "print"]);
+        assert!(n.contains(RuntimeNeed::CORE));
+        assert!(n.contains(RuntimeNeed::REGEX));
+        let core = runtime_need_from_keys(["print"]);
+        assert!(core.contains(RuntimeNeed::CORE));
+        assert!(!core.contains(RuntimeNeed::REGEX));
+    }
+
+    #[test]
+    fn linked_allocator_is_catalog_driven() {
+        let layouts = allocate_linked_layouts(RuntimeNeed::CORE.union(RuntimeNeed::REGEX));
+        let regex = layouts.get("regex").expect("regex layout");
+        assert_eq!(regex.base, LINKED_REGION_ORIGIN);
+        assert_eq!(regex.stack_top, LINKED_REGION_ORIGIN);
+        assert_eq!(regex.span, 512 * 1024);
+        let none = allocate_linked_layouts(RuntimeNeed::CORE);
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn native_units_tree_shake_pcre2() {
+        let core = native_runtime_c_files(RuntimeNeed::CORE);
+        assert!(core.iter().all(|p| !p.to_string_lossy().contains("pcre2")));
+        assert!(core
+            .iter()
+            .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("regex.c")));
+        let with = native_runtime_c_files(RuntimeNeed::CORE.union(RuntimeNeed::REGEX));
+        assert!(with
+            .iter()
+            .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("regex.c")));
+        assert!(with
+            .iter()
+            .any(|p| p.to_string_lossy().contains("pcre2_compile.c")));
+        assert!(with
+            .iter()
+            .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("pcre2_jit_compile.c")));
+    }
+}

@@ -65,7 +65,10 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        (dream_mir::emit::emit_program(&mir, interner), count)
+        (
+            dream_mir::backend::wasm::emit_program(&mir, interner),
+            count,
+        )
     })
 }
 
@@ -101,17 +104,12 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
     let config = host::threaded_wasm_config();
     let engine = Engine::new(&config).expect("engine should build");
     let module = Module::new(&engine, &wasm).expect("module should compile");
-    let shared_mem =
-        host::shared_memory_for(&engine, &module).expect("module should import env.memory");
-
     let out = Arc::new(Mutex::new(String::new()));
     let mut store = Store::new(&engine, out.clone());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
     store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
-    linker
-        .define(&mut store, "env", "memory", shared_mem.clone())
-        .expect("failed to define shared memory");
+    host::define_env_memory(&engine, &mut store, &mut linker, &module)
+        .expect("module should import env.memory");
 
     linker
         .func_wrap(
@@ -156,12 +154,8 @@ pub fn run_wat(wat: &str, entry: &str) -> String {
             "env",
             "print_string",
             |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
-                let mem = c
-                    .get_export("memory")
-                    .unwrap()
-                    .into_shared_memory()
-                    .unwrap();
-                let s = host::read_string_from_memory(&mem, ptr);
+                let s =
+                    host::with_guest_bytes(&mut c, |data| host::decode_string(data, ptr)).unwrap();
                 c.data().lock().unwrap().push_str(&s);
             },
         )
@@ -189,7 +183,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_mir::backend::wasm::emit_module(&mir, interner, false)
     })
 }
 
@@ -198,7 +192,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
 pub fn emit_hir_to_module(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_mir::backend::wasm::emit_module(&mir, interner, false)
     })
 }
 
@@ -213,7 +207,7 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
         for f in &mut mir.functions {
             dream_mir::passes::RcInsertion.run(f, interner);
         }
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_mir::backend::wasm::emit_module(&mir, interner, false)
     })
 }
 

@@ -11,6 +11,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **Determinism is non-negotiable.** Two compiles of the same source must produce byte-identical `.wat`/`.wasm`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
+- **Guest same-module runtime is WAT.** `crates/dream-mir/src/runtime/*.wat` (except linked `regex.wat`) is the source the WASM backend `include_str!`s. Edit those files. Native helpers live under `runtime/c/native/`. The only C→WAT step is PCRE2: edit `runtime/c/regex.c` then `scripts/build-runtime.sh` (wasi-sdk 33). Do not add a clang extract pipeline or WAT ident rewriter for core helpers.
 
 ## What Dream is
 
@@ -31,7 +32,7 @@ Dream/
 │   ├── dream-abi/                  Shared constants: attributes, intrinsics, JS ABI names
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
-│   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit, runtime/*.wat
+│   └── dream-mir/                  CFG MIR, passes, relooper, backend/{wasm,c}, runtime/*.wat
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
@@ -156,13 +157,15 @@ cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node 
 node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
-# Guest WAT runtime (optional): C under crates/dream-mir/src/runtime/c/ → WAT.
-# macOS/Linux: wasi-sdk 33 + wasm2wat; see crates/dream-mir/src/runtime/README.md
-# Not used by cargo/dream/Windows CI.
-scripts/build-runtime.sh
+# Guest WAT: edit crates/dream-mir/src/runtime/*.wat. PCRE2 only:
+# macOS/Linux wasi-sdk 33 + wasm2wat; crates/dream-mir/src/runtime/README.md
+# Not invoked by cargo/dream/Windows CI.
+scripts/build-runtime.sh                   # PCRE2 only: writes regex.wat (wasi-sdk; skip on Windows CI)
 scripts/build-runtime.sh --check           # skips if clang has no wasm32
 
 # Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
+# Native C hotpath (does not change `dream run`): scripts/bench-native-c.sh
+
 cargo test --workspace
 cargo test --workspace -- --ignored
 
@@ -220,7 +223,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 3. `crates/dream-sema/`: type-check + validate; emit HIR via `hir_emit/`.
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
-6. `crates/dream-mir/src/emit/`: emit WAT if new runtime behavior is needed; extend `runtime/*.wat` for new intrinsics.
+6. `crates/dream-mir/src/backend/wasm/`: emit if new lowering is needed. New **same-module runtime helpers** go in `runtime/*.wat`. Native C is `runtime/c/native/` + `backend/c/` (`--native-c`). Regex/PCRE2 is `runtime/c/regex.c` then `scripts/build-runtime.sh`.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
 9. Run the full pre-commit gate above. See `docs/internals/07-adding-a-language-feature.md` for a worked example.

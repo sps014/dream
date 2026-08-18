@@ -40,15 +40,28 @@ pub const HEADER_REFCOUNT_OFFSET: u32 = 8;
 
 /// Byte size of the length/count prefix preceding an array's elements at the data pointer
 /// (`[count:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. Also the size of the
-/// first word of a string (`unit_len`); UTF-16 payload starts at `ptr + STRING_UTF8_OFFSET`.
+/// first word of a string (`unit_len`); UTF-16 payload starts at `ptr + STRING_UNITS_OFFSET`.
 pub const LEN_PREFIX_SIZE: u32 = 4;
 
 /// Byte size of a string's data header `[unit_len:i32][pad:i32]` before UTF-16 LE units.
 pub const STRING_HEADER_SIZE: u32 = 8;
-/// Offset of UTF-16 LE payload from the string data pointer.
-pub const STRING_UTF8_OFFSET: u32 = 8;
-/// Pad word (unused; kept so the payload stays 8-byte-header aligned).
+/// Offset of UTF-16 LE units from the string data pointer when the pad word is inline (`0`).
+pub const STRING_UNITS_OFFSET: u32 = 8;
+/// Pad word at `ptr + 4`. WASM: `0` = units at [`STRING_UNITS_OFFSET`]; nonzero = i32 payload
+/// address. Native: [`DREAM_STR_PAD_INLINE`] = inline units; [`DREAM_STR_SLICE`] = fat slice
+/// (`parent:dream_ptr` at +8, `units:*u16` at +8+ptr_size).
 pub const STRING_SCALAR_LEN_OFFSET: u32 = 4;
+/// Native/WASM pad value for an owned inline UTF-16 payload.
+pub const DREAM_STR_PAD_INLINE: i32 = 0;
+/// Native-only pad value: fat slice (parent + external units pointer). Never used as a WASM
+/// payload address (those are interned `mapped_ptr + STRING_UNITS_OFFSET`, always `>= STRING_BASE`).
+pub const DREAM_STR_SLICE: i32 = 1;
+/// Native malloc header `[size:i32][magic:i32][tag:i32][rc:i32]`. WASM uses [`HEAP_HEADER_SIZE`].
+pub const NATIVE_HEAP_HEADER_SIZE: u32 = 16;
+/// `data_ptr - RC_FROM_DATA` is the refcount word ([`HEADER_REFCOUNT_OFFSET`] from block start).
+pub const RC_FROM_DATA: u32 = HEAP_HEADER_SIZE - HEADER_REFCOUNT_OFFSET;
+/// `data_ptr - TAG_FROM_DATA` is the type-tag word ([`HEADER_TAG_OFFSET`] from block start).
+pub const TAG_FROM_DATA: u32 = HEAP_HEADER_SIZE - HEADER_TAG_OFFSET;
 
 // -- Linear memory -------------------------------------------------------------------------------
 //
@@ -82,6 +95,12 @@ pub const MAX_MEMORY_PAGES: u32 = 65536;
 
 /// Base address (block start) of the interned string data segment; the heap begins above it.
 pub const STRING_BASE: u32 = 1024;
+
+/// `RegexFlags.IgnoreCase` / `Multiline` / `DotAll` — lockstep with `dream_abi.h` and
+/// `regex_flags.dream`.
+pub const DREAM_REGEX_IGNORE_CASE: i32 = 2;
+pub const DREAM_REGEX_MULTILINE: i32 = 4;
+pub const DREAM_REGEX_DOTALL: i32 = 8;
 
 // -- Cross-thread allocator coordination (linear memory is `shared`, see `execution::host::shared_memory`) --
 //
@@ -133,6 +152,166 @@ pub const HEADER_LOCK_WORD_SIZE: u32 = 4;
 /// the max distinct thread ids this scheme supports — 65536 of each is far beyond any realistic
 /// nesting depth or worker-thread count.
 pub const LOCK_DEPTH_BITS: u32 = 16;
+
+/// Pointer width / alignment for a backend, plus the layouts that depend on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetAbi {
+    pub ptr_size: u32,
+    pub ptr_align: u32,
+    pub heap_header_size: u32,
+    pub future: FutureLayout,
+}
+
+impl TargetAbi {
+    pub const WASM32: Self = Self {
+        ptr_size: 4,
+        ptr_align: 4,
+        heap_header_size: HEAP_HEADER_SIZE,
+        future: FutureLayout::WASM32,
+    };
+
+    pub fn native() -> Self {
+        Self {
+            ptr_size: std::mem::size_of::<usize>() as u32,
+            ptr_align: std::mem::align_of::<usize>() as u32,
+            heap_header_size: NATIVE_HEAP_HEADER_SIZE,
+            future: FutureLayout::native(),
+        }
+    }
+}
+
+pub const FUTURE_KIND_TASK: i32 = 0;
+pub const FUTURE_KIND_HOST: i32 = 1;
+pub const FUTURE_KIND_ALL: i32 = 2;
+pub const FUTURE_KIND_ANY: i32 = 3;
+pub const FUTURE_STATUS_PENDING: i32 = 0;
+pub const FUTURE_STATUS_READY: i32 = 1;
+pub const FUTURE_STATUS_CANCELLED: i32 = 2;
+pub const HOST_POLL_INDEX: i32 = -1;
+
+/// Byte offsets of the `Future` frame header. WASM uses packed i32 fields ([`FutureLayout::WASM32`]);
+/// native packs the same fields with host pointer size so `F_WIDE` never aliases `F_REMAINING`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FutureLayout {
+    pub state: u32,
+    pub status: u32,
+    pub result: u32,
+    pub poll: u32,
+    pub waker: u32,
+    pub awaiting: u32,
+    pub kind: u32,
+    pub children: u32,
+    pub count: u32,
+    pub remaining: u32,
+    pub results: u32,
+    pub next: u32,
+    pub queued: u32,
+    pub due: u32,
+    /// Native combinator element size. `0` on wasm32 (unused; combinators live in WAT).
+    pub esize: u32,
+    pub wide: u32,
+    /// Start of saved locals. Host-allocated futures are exactly this many bytes.
+    pub slots: u32,
+}
+
+impl FutureLayout {
+    /// Historical wasm32 packing: every header field is an `i32`, `F_WIDE` is 8 bytes at 56,
+    /// locals start at 64. Kept as a `const` so WAT/JS/host stay byte-stable.
+    pub const WASM32: Self = Self::compute(4, 4, false);
+
+    pub fn native() -> Self {
+        Self::compute(
+            std::mem::size_of::<usize>() as u32,
+            std::mem::align_of::<usize>() as u32,
+            true,
+        )
+    }
+
+    pub const fn compute(ptr_size: u32, ptr_align: u32, native: bool) -> Self {
+        let mut c = 0u32;
+        let state = place(&mut c, 4, 4);
+        let status = place(&mut c, 4, 4);
+        let result = place(&mut c, ptr_size, ptr_align);
+        let poll = place(&mut c, 4, 4);
+        let waker = place(&mut c, ptr_size, ptr_align);
+        let awaiting = place(&mut c, ptr_size, ptr_align);
+        let kind = place(&mut c, 4, 4);
+        let children = place(&mut c, ptr_size, ptr_align);
+        let count = place(&mut c, 4, 4);
+        let remaining = place(&mut c, 4, 4);
+        let results = place(&mut c, ptr_size, ptr_align);
+        let next = place(&mut c, ptr_size, ptr_align);
+        let queued = place(&mut c, 4, 4);
+        let due = place(&mut c, 4, 4);
+        let esize = if native { place(&mut c, 4, 4) } else { 0 };
+        let wide = place(&mut c, 8, 8);
+        let slots = align_up(c, 8);
+        Self {
+            state,
+            status,
+            result,
+            poll,
+            waker,
+            awaiting,
+            kind,
+            children,
+            count,
+            remaining,
+            results,
+            next,
+            queued,
+            due,
+            esize,
+            wide,
+            slots,
+        }
+    }
+
+    pub fn substitute_wat(&self, src: &str) -> String {
+        src.replace("{F_RESULTS}", &self.results.to_string())
+            .replace("{F_RESULT}", &self.result.to_string())
+            .replace("{F_REMAINING}", &self.remaining.to_string())
+            .replace("{F_AWAITING}", &self.awaiting.to_string())
+            .replace("{F_CHILDREN}", &self.children.to_string())
+            .replace("{F_STATUS}", &self.status.to_string())
+            .replace("{F_QUEUED}", &self.queued.to_string())
+            .replace("{F_WAKER}", &self.waker.to_string())
+            .replace("{F_STATE}", &self.state.to_string())
+            .replace("{F_SLOTS}", &self.slots.to_string())
+            .replace("{F_WIDE}", &self.wide.to_string())
+            .replace("{F_POLL}", &self.poll.to_string())
+            .replace("{F_KIND}", &self.kind.to_string())
+            .replace("{F_NEXT}", &self.next.to_string())
+            .replace("{F_COUNT}", &self.count.to_string())
+            .replace("{F_DUE}", &self.due.to_string())
+            .replace("{F_ESIZE}", &self.esize.to_string())
+    }
+}
+
+const fn align_up(offset: u32, align: u32) -> u32 {
+    let rem = offset % align;
+    if rem == 0 {
+        offset
+    } else {
+        offset + (align - rem)
+    }
+}
+
+const fn place(cursor: &mut u32, size: u32, align: u32) -> u32 {
+    let off = align_up(*cursor, align);
+    *cursor = off + size;
+    off
+}
+
+/// Address of the refcount word given a data pointer.
+pub fn rc_addr(data_ptr: u32) -> u32 {
+    data_ptr.wrapping_sub(RC_FROM_DATA)
+}
+
+/// Address of the first array element given an array data pointer (`[len][payload…]`).
+pub fn elem_base(array_ptr: u32) -> u32 {
+    array_ptr.wrapping_add(LEN_PREFIX_SIZE)
+}
 
 // -- Runtime export / import symbol names --------------------------------------------------------
 //
@@ -190,9 +369,9 @@ mod abi_h_lockstep {
                     // SHADOW_STACK_SIZE (16 * WASM_PAGE_SIZE) — skip compound forms.
                     continue;
                 }
-                return rest.parse().unwrap_or_else(|_| {
-                    panic!("bad #define {}: {}", name, rest)
-                });
+                return rest
+                    .parse()
+                    .unwrap_or_else(|_| panic!("bad #define {}: {}", name, rest));
             }
         }
         panic!("missing #define {} in dream_abi.h", name);
@@ -213,45 +392,205 @@ mod abi_h_lockstep {
         assert_eq!(header_define(h, "TAG_ULONG"), TAG_ULONG as i64);
         assert_eq!(header_define(h, "TAG_BYTE"), TAG_BYTE as i64);
         assert_eq!(header_define(h, "TAG_STRUCT_BASE"), TAG_STRUCT_BASE as i64);
-        assert_eq!(header_define(h, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);
-        assert_eq!(header_define(h, "HEADER_TAG_OFFSET"), HEADER_TAG_OFFSET as i64);
+        assert_eq!(
+            header_define(h, "HEAP_HEADER_SIZE"),
+            HEAP_HEADER_SIZE as i64
+        );
+        assert_eq!(
+            header_define(h, "HEADER_TAG_OFFSET"),
+            HEADER_TAG_OFFSET as i64
+        );
         assert_eq!(
             header_define(h, "HEADER_REFCOUNT_OFFSET"),
             HEADER_REFCOUNT_OFFSET as i64
         );
         assert_eq!(header_define(h, "LEN_PREFIX_SIZE"), LEN_PREFIX_SIZE as i64);
-        assert_eq!(header_define(h, "STRING_HEADER_SIZE"), STRING_HEADER_SIZE as i64);
-        assert_eq!(header_define(h, "STRING_UTF8_OFFSET"), STRING_UTF8_OFFSET as i64);
+        assert_eq!(
+            header_define(h, "STRING_HEADER_SIZE"),
+            STRING_HEADER_SIZE as i64
+        );
+        assert_eq!(
+            header_define(h, "STRING_UNITS_OFFSET"),
+            STRING_UNITS_OFFSET as i64
+        );
         assert_eq!(
             header_define(h, "STRING_SCALAR_LEN_OFFSET"),
             STRING_SCALAR_LEN_OFFSET as i64
         );
         assert_eq!(header_define(h, "WASM_PAGE_SIZE"), WASM_PAGE_SIZE as i64);
-        assert_eq!(header_define(h, "INITIAL_HEAP_PAGES"), INITIAL_HEAP_PAGES as i64);
-        assert_eq!(header_define(h, "MAX_MEMORY_PAGES"), MAX_MEMORY_PAGES as i64);
+        assert_eq!(
+            header_define(h, "INITIAL_HEAP_PAGES"),
+            INITIAL_HEAP_PAGES as i64
+        );
+        assert_eq!(
+            header_define(h, "MAX_MEMORY_PAGES"),
+            MAX_MEMORY_PAGES as i64
+        );
         assert_eq!(header_define(h, "STRING_BASE"), STRING_BASE as i64);
+        assert_eq!(
+            header_define(h, "DREAM_REGEX_IGNORE_CASE"),
+            DREAM_REGEX_IGNORE_CASE as i64
+        );
+        assert_eq!(
+            header_define(h, "DREAM_REGEX_MULTILINE"),
+            DREAM_REGEX_MULTILINE as i64
+        );
+        assert_eq!(
+            header_define(h, "DREAM_REGEX_DOTALL"),
+            DREAM_REGEX_DOTALL as i64
+        );
         assert_eq!(header_define(h, "ALLOC_LOCK_ADDR"), ALLOC_LOCK_ADDR as i64);
         assert_eq!(header_define(h, "HEAP_PTR_ADDR"), HEAP_PTR_ADDR as i64);
         assert_eq!(
             header_define(h, "THREAD_ID_COUNTER_ADDR"),
             THREAD_ID_COUNTER_ADDR as i64
         );
-        assert_eq!(header_define(h, "ASYNC_RQ_HEAD_ADDR"), ASYNC_RQ_HEAD_ADDR as i64);
-        assert_eq!(header_define(h, "ASYNC_RQ_TAIL_ADDR"), ASYNC_RQ_TAIL_ADDR as i64);
+        assert_eq!(
+            header_define(h, "ASYNC_RQ_HEAD_ADDR"),
+            ASYNC_RQ_HEAD_ADDR as i64
+        );
+        assert_eq!(
+            header_define(h, "ASYNC_RQ_TAIL_ADDR"),
+            ASYNC_RQ_TAIL_ADDR as i64
+        );
         assert_eq!(
             header_define(h, "ASYNC_TIMER_HEAD_ADDR"),
             ASYNC_TIMER_HEAD_ADDR as i64
         );
-        assert_eq!(header_define(h, "ASYNC_VCLOCK_ADDR"), ASYNC_VCLOCK_ADDR as i64);
+        assert_eq!(
+            header_define(h, "ASYNC_VCLOCK_ADDR"),
+            ASYNC_VCLOCK_ADDR as i64
+        );
         assert_eq!(
             header_define(h, "HEADER_LOCK_WORD_SIZE"),
             HEADER_LOCK_WORD_SIZE as i64
         );
         assert_eq!(header_define(h, "LOCK_DEPTH_BITS"), LOCK_DEPTH_BITS as i64);
         assert_eq!(
+            header_define(h, "NATIVE_HEAP_HEADER_SIZE"),
+            NATIVE_HEAP_HEADER_SIZE as i64
+        );
+        assert_eq!(
+            header_define(h, "DREAM_STR_PAD_INLINE"),
+            DREAM_STR_PAD_INLINE as i64
+        );
+        assert_eq!(header_define(h, "DREAM_STR_SLICE"), DREAM_STR_SLICE as i64);
+        assert_eq!(header_define(h, "RC_FROM_DATA"), RC_FROM_DATA as i64);
+        assert_eq!(header_define(h, "TAG_FROM_DATA"), TAG_FROM_DATA as i64);
+        let w = FutureLayout::WASM32;
+        assert_eq!(w.state, 0);
+        assert_eq!(w.status, 4);
+        assert_eq!(w.result, 8);
+        assert_eq!(w.poll, 12);
+        assert_eq!(w.waker, 16);
+        assert_eq!(w.awaiting, 20);
+        assert_eq!(w.kind, 24);
+        assert_eq!(w.children, 28);
+        assert_eq!(w.count, 32);
+        assert_eq!(w.remaining, 36);
+        assert_eq!(w.results, 40);
+        assert_eq!(w.next, 44);
+        assert_eq!(w.queued, 48);
+        assert_eq!(w.due, 52);
+        assert_eq!(w.wide, 56);
+        assert_eq!(w.slots, 64);
+        assert_eq!(w.esize, 0);
+        assert_ne!(w.wide, w.remaining);
+        for (name, want) in [
+            ("F_STATE_WASM", w.state),
+            ("F_STATUS_WASM", w.status),
+            ("F_RESULT_WASM", w.result),
+            ("F_POLL_WASM", w.poll),
+            ("F_WAKER_WASM", w.waker),
+            ("F_AWAITING_WASM", w.awaiting),
+            ("F_KIND_WASM", w.kind),
+            ("F_CHILDREN_WASM", w.children),
+            ("F_COUNT_WASM", w.count),
+            ("F_REMAINING_WASM", w.remaining),
+            ("F_RESULTS_WASM", w.results),
+            ("F_NEXT_WASM", w.next),
+            ("F_QUEUED_WASM", w.queued),
+            ("F_DUE_WASM", w.due),
+            ("F_WIDE_WASM", w.wide),
+            ("F_SLOTS_WASM", w.slots),
+        ] {
+            assert_eq!(header_define(h, name), want as i64, "{name}");
+        }
+        let n = FutureLayout::native();
+        assert_ne!(n.wide, n.remaining);
+        assert!(n.wide + 8 <= n.slots);
+        assert!(n.esize + 4 <= n.wide || n.wide + 8 <= n.esize);
+        assert_eq!(std::mem::size_of::<usize>(), 8);
+        for (name, want) in [
+            ("F_STATE_NATIVE", n.state),
+            ("F_STATUS_NATIVE", n.status),
+            ("F_RESULT_NATIVE", n.result),
+            ("F_POLL_NATIVE", n.poll),
+            ("F_WAKER_NATIVE", n.waker),
+            ("F_AWAITING_NATIVE", n.awaiting),
+            ("F_KIND_NATIVE", n.kind),
+            ("F_CHILDREN_NATIVE", n.children),
+            ("F_COUNT_NATIVE", n.count),
+            ("F_REMAINING_NATIVE", n.remaining),
+            ("F_RESULTS_NATIVE", n.results),
+            ("F_NEXT_NATIVE", n.next),
+            ("F_QUEUED_NATIVE", n.queued),
+            ("F_DUE_NATIVE", n.due),
+            ("F_ESIZE_NATIVE", n.esize),
+            ("F_WIDE_NATIVE", n.wide),
+            ("F_SLOTS_NATIVE", n.slots),
+        ] {
+            assert_eq!(header_define(h, name), want as i64, "{name}");
+        }
+        assert_eq!(
             SHADOW_STACK_SIZE,
             16 * WASM_PAGE_SIZE,
             "keep dream_abi.h SHADOW_STACK_SIZE in sync"
+        );
+    }
+
+    #[test]
+    fn core_js_tags_match_abi_rs() {
+        let js = include_str!("../../../runtime/src/core.js");
+        let marshal = include_str!("../../../runtime/src/marshal.js");
+        fn js_num(src: &str, key: &str) -> i64 {
+            let pat = format!("{key}:");
+            for line in src.lines() {
+                let line = line.trim();
+                if let Some(rest) = line.strip_prefix(&pat) {
+                    let n = rest.trim().trim_end_matches(',');
+                    return n.parse().unwrap_or_else(|_| panic!("bad {}: {}", key, n));
+                }
+            }
+            panic!("missing {} in JS", key);
+        }
+        fn js_assign(src: &str, name: &str) -> i64 {
+            let pat = format!("export const {name} = ");
+            for line in src.lines() {
+                let line = line.trim();
+                if let Some(rest) = line.strip_prefix(&pat) {
+                    let n = rest.split(['/', ';']).next().unwrap().trim();
+                    return n.parse().unwrap_or_else(|_| panic!("bad {}: {}", name, n));
+                }
+            }
+            panic!("missing {} in JS", name);
+        }
+        assert_eq!(js_num(js, "INT"), TAG_INT as i64);
+        assert_eq!(js_num(js, "FLOAT"), TAG_FLOAT as i64);
+        assert_eq!(js_num(js, "DOUBLE"), TAG_DOUBLE as i64);
+        assert_eq!(js_num(js, "BOOL"), TAG_BOOL as i64);
+        assert_eq!(js_num(js, "STRING"), TAG_STRING as i64);
+        assert_eq!(js_num(js, "ARRAY"), TAG_ARRAY as i64);
+        assert_eq!(js_num(js, "CHAR"), TAG_CHAR as i64);
+        assert_eq!(js_num(js, "LONG"), TAG_LONG as i64);
+        assert_eq!(js_num(js, "UINT"), TAG_UINT as i64);
+        assert_eq!(js_num(js, "ULONG"), TAG_ULONG as i64);
+        assert_eq!(js_num(js, "BYTE"), TAG_BYTE as i64);
+        assert_eq!(js_num(js, "STRUCT_BASE"), TAG_STRUCT_BASE as i64);
+        assert_eq!(js_assign(js, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);
+        assert_eq!(
+            js_assign(marshal, "FUTURE_SLOTS_SIZE"),
+            FutureLayout::WASM32.slots as i64
         );
     }
 }

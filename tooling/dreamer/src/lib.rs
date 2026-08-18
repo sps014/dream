@@ -1,5 +1,6 @@
 pub mod artifact_alias;
 pub mod commands;
+pub mod compile_flags;
 pub mod dream_bin;
 pub mod fetch;
 pub mod git;

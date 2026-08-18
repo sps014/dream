@@ -16,6 +16,20 @@ import system.text;
 
 let measuring: bool = true;
 
+// Heap sink so -O3/LTO cannot delete timed loops that it would otherwise
+// constant-fold (interned `==`, `char_at` over a literal, …).
+class BenchSink {
+    public v: int;
+    public constructor() {
+        this.v = 0;
+    }
+    public fun add(x: int): int {
+        this.v = this.v + x;
+        return x;
+    }
+}
+let bench_sink = BenchSink();
+
 fun report(name: string, nanos: long, iters: int): void {
     if (measuring == false) {
         return;
@@ -68,9 +82,11 @@ fun bench_string_concat(iters: int): void {
 }
 
 fun bench_string_eq(iters: int): void {
-    let a = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let b = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let c = "abcdefghijklmnopqrstuvwxyz0123456780";
+    let lit = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let a = lit.substring(0, lit.length);
+    let b = lit.substring(0, lit.length);
+    let other = "abcdefghijklmnopqrstuvwxyz0123456780";
+    let c = other.substring(0, other.length);
     let sw = Stopwatch();
     let hits = 0;
     let i = 0;
@@ -81,6 +97,7 @@ fun bench_string_eq(iters: int): void {
         if (a == c) {
             hits = hits - 1;
         }
+        bench_sink.add(hits);
         i = i + 1;
     }
     sw.stop();
@@ -90,7 +107,8 @@ fun bench_string_eq(iters: int): void {
 
 // Linear UTF-16 code-unit walk (O(1) `char_at` per unit).
 fun bench_char_scan(iters: int): void {
-    let s = "The quick brown fox jumps over the lazy dog. 0123456789";
+    let lit = "The quick brown fox jumps over the lazy dog. 0123456789";
+    let s = lit.substring(0, lit.length);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -103,6 +121,7 @@ fun bench_char_scan(iters: int): void {
             bo = bo + 1;
         }
         i = i + 1;
+        bench_sink.add(acc);
     }
     sw.stop();
     report("char_scan", sw.elapsed_nanos(), iters);
@@ -111,7 +130,8 @@ fun bench_char_scan(iters: int): void {
 
 // Raw UTF-16 LE payload walk.
 fun bench_byte_scan(iters: int): void {
-    let s = "The quick brown fox jumps over the lazy dog. 0123456789";
+    let lit = "The quick brown fox jumps over the lazy dog. 0123456789";
+    let s = lit.substring(0, lit.length);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -123,6 +143,7 @@ fun bench_byte_scan(iters: int): void {
             j = j + 1;
         }
         i = i + 1;
+        bench_sink.add(acc);
     }
     sw.stop();
     report("byte_scan", sw.elapsed_nanos(), iters);

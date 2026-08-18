@@ -16,10 +16,14 @@ use std::collections::HashSet;
 use crate::driver::source_loader::ProgramAccumulator;
 
 #[cfg(feature = "native")]
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(feature = "native")]
 use std::sync::Mutex;
 
 #[cfg(feature = "native")]
 const HARNESS_SOURCE: &str = include_str!("json_gen_harness.dream");
+#[cfg(feature = "native")]
+const SNAPSHOT_ENV: &str = "DREAM_JSON_GEN_SNAPSHOT";
 #[cfg(feature = "native")]
 const OK_MARKER: &str = "__DREAM_JSON_GEN_OK__";
 #[cfg(feature = "native")]
@@ -731,30 +735,58 @@ struct JsonGenError {
 
 #[cfg(feature = "native")]
 fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
-    // Concurrent `compile()` calls share one `snapshot.json` beside the cached harness WAT.
+    // `System.env_or` reads process env, so concurrent compiles in this process must not
+    // overlap `set_var`. Snapshot *files* are unique so another `dream` (LSP, bench) cannot
+    // overwrite our input the way a shared `snapshot.json` did.
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
     let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
-    let (wat_path, snap_path) = harness_wat_and_snapshot().map_err(|e| JsonGenError {
+    let wat_path = cached_harness_wat().map_err(|e| JsonGenError {
         message: e,
         type_name: None,
         field_name: None,
     })?;
-    std::fs::write(&snap_path, snapshot.as_bytes()).map_err(|e| JsonGenError {
-        message: format!("@json generator: failed to write snapshot: {e}"),
+    let snap_path = write_unique_snapshot(&wat_path, snapshot)?;
+
+    std::env::set_var(SNAPSHOT_ENV, snap_path.as_os_str());
+    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path);
+    std::env::remove_var(SNAPSHOT_ENV);
+    let _ = std::fs::remove_file(&snap_path);
+
+    let output = output.map_err(|e| JsonGenError {
+        message: format!("@json generator: failed to run Dream harness: {e}"),
         type_name: None,
         field_name: None,
     })?;
 
-    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path).map_err(|e| {
-        JsonGenError {
-            message: format!("@json generator: failed to run Dream harness: {e}"),
-            type_name: None,
-            field_name: None,
-        }
-    })?;
-
     parse_generator_output(&output)
+}
+
+#[cfg(feature = "native")]
+fn write_unique_snapshot(
+    wat_path: &str,
+    snapshot: &str,
+) -> Result<std::path::PathBuf, JsonGenError> {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let dir = std::path::Path::new(wat_path)
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let path = dir.join(format!(
+        "snapshot-{}-{}-{}.json",
+        std::process::id(),
+        nanos,
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&path, snapshot.as_bytes()).map_err(|e| JsonGenError {
+        message: format!("@json generator: failed to write snapshot: {e}"),
+        type_name: None,
+        field_name: None,
+    })?;
+    Ok(path)
 }
 
 #[cfg(feature = "native")]
@@ -887,7 +919,7 @@ fn lookup_json_error_span(
 }
 
 #[cfg(feature = "native")]
-fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
+fn cached_harness_wat() -> Result<String, String> {
     // Fingerprint harness + generator Dream sources so a stdlib edit invalidates the cache.
     // Also fold string ABI constants + StringBuilder: a stale harness WAT with the old
     // `[len][utf8@+4]` layout will fail host `read_string` after a string-layout change.
@@ -930,14 +962,8 @@ fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
         .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
     let src_path = dir.join("harness.dream");
     let wat_path = dir.join("harness.wat");
-    let snap_path = dir.join("snapshot.json");
     if !wat_path.is_file() {
-        let escaped = snap_path
-            .to_string_lossy()
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"");
-        let src = HARNESS_SOURCE.replace("@@SNAPSHOT_PATH@@", &escaped);
-        std::fs::write(&src_path, src)
+        std::fs::write(&src_path, HARNESS_SOURCE)
             .map_err(|e| format!("@json generator: write harness source: {e}"))?;
         let src = src_path.to_string_lossy().into_owned();
         let out = wat_path.to_string_lossy().into_owned();
@@ -950,5 +976,5 @@ fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
             .compile(&src, &out)
             .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;
     }
-    Ok((wat_path.to_string_lossy().into_owned(), snap_path))
+    Ok(wat_path.to_string_lossy().into_owned())
 }

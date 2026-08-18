@@ -26,6 +26,19 @@ static int32_t last_freed;
 static char *chunks[32];
 static int nchunks;
 static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
+int dream_rt_mt;
+
+static void heap_lock(void) {
+    if (dream_rt_mt) {
+        heap_lock();
+    }
+}
+
+static void heap_unlock(void) {
+    if (dream_rt_mt) {
+        heap_unlock();
+    }
+}
 
 static int size_class(int32_t size) {
     int32_t s = size;
@@ -93,7 +106,7 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     int idx = size_class(total);
     char *block = NULL;
     int32_t alloc_size = total;
-    pthread_mutex_lock(&heap_mu);
+    heap_lock();
     if (idx >= 0 && idx <= 12) {
         alloc_size = class_bytes(idx);
         while (freelist[idx] != 0) {
@@ -123,7 +136,7 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     ((int32_t *)block)[3] = 1;
     live_objects += 1;
     total_allocations += 1;
-    pthread_mutex_unlock(&heap_mu);
+    heap_unlock();
     return (dream_ptr)(block + 16);
 }
 
@@ -143,15 +156,11 @@ void dream_free(dream_ptr ptr) {
         return;
     }
     dream_weak_clear_all(ptr);
-    pthread_mutex_lock(&heap_mu);
+    heap_lock();
     block = (char *)dream_p(ptr) - 16;
-    if (!in_heap(block)) {
-        pthread_mutex_unlock(&heap_mu);
-        return;
-    }
     sz = ((int32_t *)block)[0];
     if (sz == 0 || ((uint32_t *)block)[1] != MAGIC_LIVE) {
-        pthread_mutex_unlock(&heap_mu);
+        heap_unlock();
         return;
     }
     idx = size_class(sz);
@@ -171,7 +180,7 @@ void dream_free(dream_ptr ptr) {
     if (live_objects > 0) {
         live_objects -= 1;
     }
-    pthread_mutex_unlock(&heap_mu);
+    heap_unlock();
 }
 
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {

@@ -11,6 +11,9 @@
 
 typedef uintptr_t dream_ptr;
 
+/* 0 until `workerSpawn`; retain/malloc then skip atomics/mutexes. */
+extern int dream_rt_mt;
+
 #define DREAM_ALWAYS_INLINE static inline __attribute__((always_inline))
 
 DREAM_ALWAYS_INLINE void *dream_p(dream_ptr p) {
@@ -46,6 +49,12 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
         return;
     }
     rc = (int32_t *)((char *)dream_p(ptr) - 4);
+    if (!dream_rt_mt) {
+        if (*rc != INT32_MAX) {
+            *rc += 1;
+        }
+        return;
+    }
     if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
         return;
     }
@@ -61,6 +70,17 @@ DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
         return;
     }
     rc = (int32_t *)((char *)dream_p(ptr) - 4);
+    if (!dream_rt_mt) {
+        if (*rc == INT32_MAX) {
+            return;
+        }
+        old = *rc;
+        *rc = old - 1;
+        if (old == 1) {
+            dream_free(ptr);
+        }
+        return;
+    }
     if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
         return;
     }
@@ -93,8 +113,113 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings(dream_ptr a, dream_ptr b) {
     p = dream_malloc((int32_t)(len1 + len2 + 8), TAG_STRING);
     dream_i32(p)[0] = sc1 + sc2;
     dream_i32(p)[1] = 0;
-    dream_mem_copy(p + STRING_UTF8_OFFSET, a + STRING_UTF8_OFFSET, len1);
-    dream_mem_copy(p + STRING_UTF8_OFFSET + len1, b + STRING_UTF8_OFFSET, len2);
+    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET, (char *)dream_p(a) + STRING_UTF8_OFFSET, len1);
+    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET + len1,
+           (char *)dream_p(b) + STRING_UTF8_OFFSET, len2);
+    return p;
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_u32_ndigits(uint32_t u) {
+    if (u < 10u) {
+        return 1;
+    }
+    if (u < 100u) {
+        return 2;
+    }
+    if (u < 1000u) {
+        return 3;
+    }
+    if (u < 10000u) {
+        return 4;
+    }
+    if (u < 100000u) {
+        return 5;
+    }
+    if (u < 1000000u) {
+        return 6;
+    }
+    if (u < 10000000u) {
+        return 7;
+    }
+    if (u < 100000000u) {
+        return 8;
+    }
+    if (u < 1000000000u) {
+        return 9;
+    }
+    return 10;
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_i32_utf16_len(int32_t v) {
+    if (v == 0) {
+        return 1;
+    }
+    if (v < 0) {
+        if (v == (int32_t)0x80000000) {
+            return 11;
+        }
+        return 1 + dream_u32_ndigits((uint32_t)-v);
+    }
+    return dream_u32_ndigits((uint32_t)v);
+}
+
+DREAM_ALWAYS_INLINE void dream_write_i32_utf16(uint16_t *out, int32_t v) {
+    int32_t n = dream_i32_utf16_len(v);
+    uint32_t u;
+    if (v == 0) {
+        out[0] = 48;
+        return;
+    }
+    if (v < 0) {
+        out[0] = 45;
+        if (v == (int32_t)0x80000000) {
+            static const char min[] = "2147483648";
+            int32_t i;
+            for (i = 0; i < 10; i++) {
+                out[1 + i] = (uint16_t)min[i];
+            }
+            return;
+        }
+        u = (uint32_t)-v;
+    } else {
+        u = (uint32_t)v;
+    }
+    while (u != 0) {
+        out[--n] = (uint16_t)(48u + u % 10u);
+        u /= 10u;
+    }
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_int_to_string_fast(int32_t v) {
+    int32_t n = dream_i32_utf16_len(v);
+    dream_ptr p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
+    dream_i32(p)[0] = n;
+    dream_i32(p)[1] = 0;
+    dream_write_i32_utf16((uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET), v);
+    return p;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v, dream_ptr suf) {
+    int32_t plen = dream_str_len(pref);
+    int32_t slen = dream_str_len(suf);
+    int32_t nd = dream_i32_utf16_len(v);
+    int32_t total = plen + nd + slen;
+    dream_ptr p;
+    uint16_t *d;
+    if (total <= 0) {
+        return 0;
+    }
+    p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
+    dream_i32(p)[0] = total;
+    dream_i32(p)[1] = 0;
+    d = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    if (plen != 0) {
+        memcpy(d, (char *)dream_p(pref) + STRING_UTF8_OFFSET, (size_t)plen << 1);
+    }
+    dream_write_i32_utf16(d + plen, v);
+    if (slen != 0) {
+        memcpy(d + plen + nd, (char *)dream_p(suf) + STRING_UTF8_OFFSET, (size_t)slen << 1);
+    }
     return p;
 }
 
@@ -116,7 +241,8 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
     p = dream_malloc((int32_t)(bytes + 8), TAG_STRING);
     dream_i32(p)[0] = n;
     dream_i32(p)[1] = 0;
-    dream_mem_copy(p + STRING_UTF8_OFFSET, s + STRING_UTF8_OFFSET + ((size_t)start << 1), bytes);
+    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET,
+           (char *)dream_p(s) + STRING_UTF8_OFFSET + ((size_t)start << 1), bytes);
     return p;
 }
 

@@ -15,15 +15,26 @@ static dream_ptr from_utf8(const char *s) {
 }
 
 dream_ptr dream_int_to_string(int32_t v) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d", v);
-    return from_utf8(buf);
+    return dream_int_to_string_fast(v);
 }
 
 dream_ptr dream_uint_to_string(int32_t v) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%u", (unsigned)v);
-    return from_utf8(buf);
+    uint32_t u = (uint32_t)v;
+    int32_t n = u == 0 ? 1 : dream_u32_ndigits(u);
+    dream_ptr p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
+    uint16_t *out;
+    dream_i32(p)[0] = n;
+    dream_i32(p)[1] = 0;
+    out = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    if (u == 0) {
+        out[0] = 48;
+        return p;
+    }
+    while (u != 0) {
+        out[--n] = (uint16_t)(48u + u % 10u);
+        u /= 10u;
+    }
+    return p;
 }
 
 dream_ptr dream_long_to_string(int64_t v) {

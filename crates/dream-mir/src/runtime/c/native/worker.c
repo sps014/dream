@@ -75,6 +75,7 @@ static Worker *find_worker(int32_t id) {
 int32_t workerSpawn(int32_t fn, int64_t env) {
     Worker *w = (Worker *)calloc(1, sizeof(Worker));
     int i;
+    __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->fn = fn;
     w->env = (dream_ptr)(uintptr_t)env;
     pthread_mutex_init(&w->mu, NULL);

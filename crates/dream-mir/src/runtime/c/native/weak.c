@@ -51,6 +51,9 @@ void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
 
 void dream_weak_clear_all(dream_ptr obj) {
     dream_weak_node *dead = NULL;
+    if (weak_list_head == NULL) {
+        return;
+    }
     pthread_mutex_lock(&weak_mu);
     {
         dream_weak_node **link = &weak_list_head;

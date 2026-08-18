@@ -73,6 +73,30 @@ mod tests {
     }
 
     #[test]
+    fn concat_int_is_one_alloc() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("cat", i.string());
+        let v = b.new_param(i.int(), Some("v".into()));
+        let t = b.new_local(i.string(), Some("r".into()));
+        b.assign(
+            Place::Local(t),
+            Rvalue::ConcatInt {
+                prefix: Operand::Const(Const::Str("hello".into())),
+                value: Operand::Copy(Place::Local(v)),
+                suffix: Operand::Const(Const::Str("world".into())),
+            },
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_concat_str_int_str"), "{}", c);
+        assert!(!c.contains("dream_concat_strings("), "{}", c);
+    }
+
+    #[test]
     fn interned_string_is_not_null() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("hi", i.string());

@@ -88,9 +88,9 @@ pub(super) fn emit_rvalue(cx: &Cx<'_>, f: &crate::MirFunction, rv: &Rvalue) -> S
             value,
             suffix,
         } => format!(
-            "({{ dream_ptr __n = dream_int_to_string((int32_t)({})); dream_ptr __a = dream_concat_strings({}, __n); dream_release(__n); dream_ptr __r = dream_concat_strings(__a, {}); dream_release(__a); __r; }})",
-            emit_operand(cx, f, value),
+            "dream_concat_str_int_str({}, (int32_t)({}), {})",
             emit_operand(cx, f, prefix),
+            emit_operand(cx, f, value),
             emit_operand(cx, f, suffix)
         ),
         Rvalue::EnumName { value, arms } => {
@@ -619,7 +619,7 @@ pub(super) fn hash_code_expr(cx: &Cx<'_>, ty: dream_types::TypeId, value: &str) 
 
 pub(super) fn to_string_fn(cx: &Cx<'_>, ty: dream_types::TypeId) -> String {
     match cx.interner.kind(ty) {
-        TyKind::Prim(PrimTy::Int) => "dream_int_to_string".into(),
+        TyKind::Prim(PrimTy::Int) => "dream_int_to_string_fast".into(),
         TyKind::Prim(PrimTy::UInt) => "dream_uint_to_string".into(),
         TyKind::Prim(PrimTy::Long) => "dream_long_to_string".into(),
         TyKind::Prim(PrimTy::ULong) => "dream_ulong_to_string".into(),

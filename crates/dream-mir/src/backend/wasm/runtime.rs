@@ -34,6 +34,17 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
         )
         .replace("{HEAP_PTR_ADDR}", &crate::abi::HEAP_PTR_ADDR.to_string());
     out.push('\n');
+    // Guest C cannot `global.get` interned-string / debug globals; these wrappers are the ABI.
+    out.push_str(
+        "(func $__rt_str_empty_get (result i32) global.get $__rt_str_empty)\n\
+(func $__rt_str_true_get (result i32) global.get $__rt_str_true)\n\
+(func $__rt_str_false_get (result i32) global.get $__rt_str_false)\n\
+(func $__rt_str_minus_get (result i32) global.get $__rt_str_minus)\n\
+(func $free_list_head_get (result i32) global.get $free_list_head)\n\
+(func $live_objects_get (result i32) global.get $live_objects)\n\
+(func $total_allocations_get (result i32) global.get $total_allocations)\n",
+    );
+    out.push('\n');
     // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. Empty
     // interned string pointers come from `$__rt_str_empty` (defined by the emitter). `$char_at`
     // itself no longer bounds-checks: callers emit a located check inline before calling it (see

@@ -80,8 +80,7 @@ public class StringBuilder {
             return;
         }
         this.ensure(byte_len);
-        string.copy_utf8(this.bytes, this.count + 4, text, 0, byte_len);
-        this.count = this.count + byte_len;
+        this.count = string.builder_append(this.bytes, this.count, text);
         this.scalars = this.scalars + text.length;
     }
 
@@ -151,7 +150,13 @@ public class StringBuilder {
 
     // Materializes the accumulated UTF-16 units into a single new string.
     public fun build(): string {
-        return string.from_builder(this.bytes, this.count, this.scalars);
+        let n = this.count;
+        let sc = this.scalars;
+        let buf = this.bytes;
+        this.bytes = Buffer.alloc<byte>(sequence_min_capacity() + 4);
+        this.count = 0;
+        this.scalars = 0;
+        return string.from_builder(buf, n, sc);
     }
 
     // Object-protocol override, so `print`/`println`/`+`/interpolation all use `build()`'s output

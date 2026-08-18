@@ -46,7 +46,7 @@ static char *dream_str_utf8(dream_ptr s) {
     if (!out) {
         return NULL;
     }
-    u = (const uint16_t *)((const char *)dream_p(s) + STRING_UTF8_OFFSET);
+    u = dream_str_units(s);
     for (i = 0; i < n; i++) {
         uint32_t cp = u[i];
         if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < n) {

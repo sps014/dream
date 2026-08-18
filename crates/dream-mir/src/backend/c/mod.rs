@@ -17,7 +17,10 @@ mod tables;
 mod terminator;
 mod types;
 
-pub use module::{emit_c_module, native_runtime_c_files, native_runtime_include_dir};
+pub use module::{
+    emit_c_module, native_pcre2_include_dir, native_runtime_c_files, native_runtime_include_dir,
+    pcre2_interpreter_c_names, PCRE2_JIT_C, WASM_PCRE2_WRAPPER_C,
+};
 
 #[cfg(test)]
 mod tests {
@@ -171,8 +174,6 @@ mod tests {
             !h.contains("(uint32_t)addr"),
             "native ABI must not truncate pointers"
         );
-        let pike = include_str!("../../runtime/c/native/pike.c");
-        assert!(pike.contains("goto *"));
         let heap = include_str!("../../runtime/c/native/heap.c");
         assert!(heap.contains("mmap") || heap.contains("VirtualAlloc"));
         assert!(super::types::native_header_declares("print_int"));

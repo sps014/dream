@@ -1,9 +1,0 @@
-module system.text;
-
-// The `\p{...}` categories this engine recognizes. Approximate (range-based, not a full Unicode
-// Character Database): covers the common scripts/ranges for each category rather than every
-// codepoint the Unicode Standard assigns to it.
-internal enum RegexUnicodeProp {
-    Letter, // \p{L} / \p{Letter}
-    Number, // \p{N} / \p{Number}
-}

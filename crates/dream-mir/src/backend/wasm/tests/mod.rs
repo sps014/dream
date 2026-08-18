@@ -235,8 +235,8 @@ fn strings_get_data_segments_and_addresses() {
     };
     let wat = emit_module(&mir, &i, false);
     // The runtime constants are interned first, then panic messages and protocol strings, so the
-    // user's "hi" follows somewhere in the data section. Assert the 8-byte string header layout:
-    // unit_len=2, pad=0, then UTF-16 LE 'h','i'.
+    // user's "hi" follows somewhere in the data section. UTF-16 LE 'h','i' lives after the
+    // `[size][tag][rc][unit_len][payload_ptr]` header.
     assert!(
         wat.contains("(i32.const"),
         "string data pointer const:\n{}",
@@ -487,7 +487,7 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
     assert!(
         runtime.contains("global.get $__rt_str_true")
             && runtime.contains("global.get $__rt_str_false")
-            && runtime.contains("global.get $__rt_str_minus"),
+            && runtime.contains("call $__rt_str_minus_get"),
         "to_string runtime must load interned strings from emitter globals:\n{}",
         runtime
     );

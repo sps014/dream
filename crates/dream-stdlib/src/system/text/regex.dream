@@ -1,75 +1,62 @@
 module system.text;
 
-// Regular expressions — a self-contained engine, no host runtime involved. `Regex(pattern, flags)`
-// parses and compiles the pattern once into a flat instruction program (see `regex_parser.dream`
-// and `regex_compiler.dream`). Patterns without a backreference run on Dream's own Pike-VM
-// (`regex_vm.dream`), which also evaluates lookaround assertions via compiled sub-programs
-// (`regex_sub_table.dream`); a pattern containing a backreference (`\1`, `\k<name>`) instead runs
-// the *same* compiled program on the backtracking interpreter (`regex_backtracker.dream`), since
-// a backreference isn't a regular-language construct the Pike-VM's thread simulation can express.
-// See docs/stdlib/regex.md for the supported syntax.
+// Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
+// PCRE2-compatible engine. Invalid patterns compile to a dead engine that never matches.
+
+@intrinsic("regex_compile")
+static extern fun regex_compile(pattern: string, flags: RegexFlags): long;
+@intrinsic("regex_free")
+static extern fun regex_free(h: long): void;
+@intrinsic("regex_find")
+static extern fun regex_find(h: long, input: string, pos: int): int[];
+@intrinsic("regex_group_count")
+static extern fun regex_group_count(h: long): int;
+@intrinsic("regex_name_count")
+static extern fun regex_name_count(h: long): int;
+@intrinsic("regex_name_at")
+static extern fun regex_name_at(h: long, i: int): string;
+@intrinsic("regex_name_number")
+static extern fun regex_name_number(h: long, i: int): int;
+
 public class Regex {
-    pattern: string;
-    prog: RegexInst[];
-    table: RegexSubTable;
-    ngroup: int;
-    ignore_case: bool;
-    multiline: bool;
-    dot_all: bool;
+    engine: long;
     global: bool;
-    use_backtrack: bool;
+    ngroup: int;
     group_names: string[];
     group_name_numbers: int[];
-    pike: RegexVM;
-    back: RegexBacktrackVM;
-    // True when the pattern is a simple unanchored ASCII digit run (`\d+` / `[0-9]+`).
-    // Speeds that pattern only — microbench `regex_find` must not use bare `\d+`.
-    ascii_digit_plus: bool;
-    match_scratch: List<string>;
 
     public constructor(pattern: string, flags: RegexFlags = 0) {
-        this.pattern = pattern;
-        this.ignore_case = flags.has(RegexFlags.IgnoreCase);
-        this.multiline = flags.has(RegexFlags.Multiline);
-        this.dot_all = flags.has(RegexFlags.DotAll);
         this.global = flags.has(RegexFlags.Global);
-
-        let parser = RegexParser(this.pattern);
-        let ast = parser.parse();
-        this.ngroup = parser.groups();
-        this.use_backtrack = parser.backreferenced();
-        this.group_names = this.to_string_array(parser.names());
-        this.group_name_numbers = this.to_int_array(parser.name_indices());
-
-        this.table = RegexSubTable();
-        let compiler = RegexCompiler(this.ignore_case, this.dot_all, this.table);
-        this.prog = compiler.compile(ast);
-        this.pike = RegexVM(this.prog, this.ngroup, this.multiline, this.table);
-        this.back = RegexBacktrackVM(this.prog, this.ngroup, this.multiline, this.table);
-        this.ascii_digit_plus = (this.use_backtrack == false)
-            && (this.ignore_case == false)
-            && (this.ngroup == 0)
-            && this.pike.is_ascii_digit_plus();
-        this.match_scratch = List<string>(8);
-    }
-
-    // Finds the next match starting at or after `pos`, dispatching to whichever engine this
-    // pattern requires. Lookaround still allocates a nested VM so it cannot clobber these queues.
-    fun find_at(input: string, pos: int): Option<RegexMatch> {
-        if (this.use_backtrack) {
-            return this.back.find(input, pos);
+        this.engine = regex_compile(pattern, flags);
+        this.ngroup = regex_group_count(this.engine);
+        let nc = regex_name_count(this.engine);
+        this.group_names = Buffer.alloc<string>(nc);
+        this.group_name_numbers = Buffer.alloc<int>(nc);
+        let i = 0;
+        while (i < nc) {
+            this.group_names[i] = regex_name_at(this.engine, i);
+            this.group_name_numbers[i] = regex_name_number(this.engine, i);
+            i = i + 1;
         }
-        return this.pike.find(input, pos);
     }
 
-    // True if `input` contains a match for this pattern.
+    del() {
+        regex_free(this.engine);
+        this.engine = 0;
+    }
+
+    fun find_at(input: string, pos: int): Option<RegexMatch> {
+        let g = regex_find(this.engine, input, pos);
+        if (g.length == 0) {
+            return Option.None;
+        }
+        return Option.Some(RegexMatch(g, this.ngroup));
+    }
+
     public fun test(input: string): bool {
         return this.find_at(input, 0).is_some();
     }
 
-    // Returns `input` with every match replaced by `replacement` (`g` flag: every match; without
-    // it, only the first). `replacement` may reference capture groups with `$1`..`$9`, `${N}`, or
-    // `${name}` for a named group, the whole match with `$&`; `$$` is a literal `$`.
     public fun replace(input: string, replacement: string): string {
         let n = input.length;
         let sb = StringBuilder();
@@ -84,15 +71,19 @@ public class Regex {
                     Some(m) => {
                         let s = m.start();
                         let e = m.end();
-                        sb.append(input.substring(pos, s));
-                        this.append_replacement(sb, replacement, input, m);
+                        if (s > pos) {
+                            sb.append_utf8_slice(input, pos * 2, (s - pos) * 2);
+                        }
+                        this.write_replacement(sb, replacement, input, m);
                         if (e > s) {
                             pos = e;
                         } else {
                             if (s < n) {
-                                sb.append(input.substring(s, s + 1));
+                                sb.append_char(input.char_at(s));
+                                pos = s + 1;
+                            } else {
+                                pos = n + 1;
                             }
-                            pos = s + 1;
                         }
                         if (this.global == false) {
                             going = false;
@@ -104,63 +95,17 @@ public class Regex {
                 }
             }
         }
-        sb.append(input.substring(pos, n));
+        if (pos < n) {
+            sb.append_utf8_slice(input, pos * 2, (n - pos) * 2);
+        } else if (pos == n) {
+            // keep tail empty
+        }
         return sb.build();
     }
 
-    fun is_all_digits(s: string): bool {
-        if (s.length == 0) {
-            return false;
-        }
+    fun write_replacement(sb: StringBuilder, replacement: string, input: string, m: RegexMatch): void {
         let i = 0;
-        while (i < s.length) {
-            if (s.char_at(i).is_digit() == false) {
-                return false;
-            }
-            i = i + 1;
-        }
-        return true;
-    }
-
-    fun parse_int(s: string): int {
-        let value = 0;
-        let zero = '0';
-        let i = 0;
-        while (i < s.length) {
-            value = (value * 10) + (s.char_at(i).to_int() - zero.to_int());
-            i = i + 1;
-        }
-        return value;
-    }
-
-    // Resolves the group number for a named group, or -1 if `name` isn't one of this pattern's
-    // named groups.
-    fun name_to_group(name: string): int {
-        let i = 0;
-        while (i < this.group_names.length) {
-            if (this.group_names[i] == name) {
-                return this.group_name_numbers[i];
-            }
-            i = i + 1;
-        }
-        return 0 - 1;
-    }
-
-    // `${...}`: either digits (a numeric group) or a name registered via `(?<name>...)`.
-    fun resolve_braced_token(token: string, input: string, m: RegexMatch): string {
-        if (this.is_all_digits(token)) {
-            return m.group_text(input, this.parse_int(token));
-        }
-        let g = this.name_to_group(token);
-        if (g >= 0) {
-            return m.group_text(input, g);
-        }
-        return string.empty; // unknown name: best-effort, no crash
-    }
-
-    fun append_replacement(sb: StringBuilder, replacement: string, input: string, m: RegexMatch): void {
         let rn = replacement.length;
-        let i = 0;
         while (i < rn) {
             let c = replacement.char_at(i);
             if ((c == '$') && (i + 1 < rn)) {
@@ -179,7 +124,7 @@ public class Regex {
                         j = j + 1;
                     }
                     if (j < rn) {
-                        j = j + 1; // consume '}'
+                        j = j + 1;
                     }
                     sb.append(this.resolve_braced_token(token.build(), input, m));
                     i = j;
@@ -199,45 +144,64 @@ public class Regex {
         }
     }
 
-    // Returns the matches in `input` as an array: every full match with the `g` flag, otherwise
-    // the first match's full text followed by each capture group (a group that didn't
-    // participate is "").
-    public fun match(input: string): string[] {
-        if (this.global && this.ascii_digit_plus) {
-            return this.match_ascii_digit_runs(input);
+    fun resolve_braced_token(token: string, input: string, m: RegexMatch): string {
+        if (token.length == 0) {
+            return "";
         }
+        let all_digits = true;
+        let v = 0;
+        let i = 0;
+        while (i < token.length) {
+            let ch = token.char_at(i);
+            if (ch.is_digit() == false) {
+                all_digits = false;
+            } else {
+                v = v * 10 + (ch.to_int() - '0'.to_int());
+            }
+            i = i + 1;
+        }
+        if (all_digits) {
+            return m.group_text(input, v);
+        }
+        i = 0;
+        while (i < this.group_names.length) {
+            if (this.group_names[i] == token) {
+                return m.group_text(input, this.group_name_numbers[i]);
+            }
+            i = i + 1;
+        }
+        return "";
+    }
+
+    public fun match(input: string): string[] {
         let n = input.length;
         if (this.global) {
-            this.match_scratch.clear();
-            if (this.use_backtrack) {
-                let pos = 0;
-                let going = true;
-                while (going) {
-                    if (pos > n) {
-                        going = false;
-                    } else {
-                        let m_opt = this.find_at(input, pos);
-                        switch (m_opt) {
-                            Some(m) => {
-                                this.match_scratch.push(m.group_text(input, 0));
-                                let s = m.start();
-                                let e = m.end();
-                                if (e > s) {
-                                    pos = e;
-                                } else {
-                                    pos = s + 1;
-                                }
-                            },
-                            None => {
-                                going = false;
-                            },
-                        }
+            let scratch = List<string>(8);
+            let pos = 0;
+            let going = true;
+            while (going) {
+                if (pos > n) {
+                    going = false;
+                } else {
+                    let m_opt = this.find_at(input, pos);
+                    switch (m_opt) {
+                        Some(m) => {
+                            scratch.push(m.group_text(input, 0));
+                            let s = m.start();
+                            let e = m.end();
+                            if (e > s) {
+                                pos = e;
+                            } else {
+                                pos = s + 1;
+                            }
+                        },
+                        None => {
+                            going = false;
+                        },
                     }
                 }
-            } else {
-                this.pike.collect_group0(input, this.match_scratch);
             }
-            return this.to_array(this.match_scratch);
+            return this.to_array(scratch);
         }
         let m_opt = this.find_at(input, 0);
         return switch (m_opt) {
@@ -246,35 +210,6 @@ public class Regex {
         };
     }
 
-    // Linear ASCII digit-run finder for `\d+` / `[0-9]+` (Global). Haystacks are UTF-16;
-    // digit runs are BMP so each digit is one code unit.
-    fun match_ascii_digit_runs(input: string): string[] {
-        let results = List<string>(8);
-        let n = input.length;
-        let i = 0;
-        while (i < n) {
-            let b = input.char_at(i).to_int();
-            if ((b >= 48) && (b <= 57)) {
-                let start = i;
-                i = i + 1;
-                while (i < n) {
-                    let c = input.char_at(i).to_int();
-                    if ((c < 48) || (c > 57)) {
-                        break;
-                    }
-                    i = i + 1;
-                }
-                results.push(input.substring(start, i));
-            } else {
-                i = i + 1;
-            }
-        }
-        return this.to_array(results);
-    }
-
-    // Richer match info for the first match in `input`: the full match, every capture group's
-    // text (`groups[0]` is group 1), and `.named(name)` lookup for `(?<name>...)` groups. `None`
-    // if the pattern doesn't match anywhere in `input`.
     public fun match_info(input: string): Option<RegexMatchInfo> {
         let m_opt = this.find_at(input, 0);
         return switch (m_opt) {
@@ -310,26 +245,6 @@ public class Regex {
         let i = 0;
         while (i < list.length) {
             arr[i] = list.get(i).unwrap_or(string.empty);
-            i = i + 1;
-        }
-        return arr;
-    }
-
-    fun to_string_array(list: List<string>): string[] {
-        let arr = Buffer.alloc<string>(list.length);
-        let i = 0;
-        while (i < list.length) {
-            arr[i] = list.get(i).unwrap_or(string.empty);
-            i = i + 1;
-        }
-        return arr;
-    }
-
-    fun to_int_array(list: List<int>): int[] {
-        let arr = Buffer.alloc<int>(list.length);
-        let i = 0;
-        while (i < list.length) {
-            arr[i] = list.get(i).unwrap_or(0);
             i = i + 1;
         }
         return arr;

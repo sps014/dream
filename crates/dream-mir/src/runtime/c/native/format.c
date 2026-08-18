@@ -24,7 +24,7 @@ dream_ptr dream_uint_to_string(int32_t v) {
     dream_ptr p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
     uint16_t *out;
     dream_i32(p)[0] = n;
-    dream_i32(p)[1] = 0;
+    dream_str_init_owned(p);
     out = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
     if (u == 0) {
         out[0] = 48;

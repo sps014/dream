@@ -422,8 +422,7 @@ impl Emitter<'_> {
             self.f.end();
         }
         self.emit_operand(s);
-        self.f.i32_const(crate::abi::STRING_UTF8_OFFSET as i32);
-        self.f.i32_add();
+        self.f.load(LoadKind::I32, 4);
         self.emit_operand(i);
         self.f.i32_const(1);
         self.f.i32_shl();
@@ -445,8 +444,7 @@ impl Emitter<'_> {
             self.f.end();
         }
         self.emit_operand(s);
-        self.f.i32_const(crate::abi::STRING_UTF8_OFFSET as i32);
-        self.f.i32_add();
+        self.f.load(LoadKind::I32, 4);
         self.emit_operand(i);
         self.f.i32_add();
         self.f.load(LoadKind::I32_8U, 0);

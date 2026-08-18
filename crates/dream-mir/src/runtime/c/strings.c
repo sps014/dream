@@ -2,6 +2,29 @@
 
 IMPORT("malloc") int32_t rt_malloc(int32_t size, int32_t tag);
 IMPORT("retain") void rt_retain(int32_t ptr);
+IMPORT("release_generic") void rt_release(int32_t ptr);
+
+EXPORT("string_fini")
+void string_fini(int32_t p) {
+    int32_t d;
+    if (p == 0) {
+        return;
+    }
+    if (i32_load(p - 8) != TAG_STRING) {
+        return;
+    }
+    d = str_data(p);
+    if (d == p + 8) {
+        return;
+    }
+    rt_release(i32_load(p + 8));
+}
+
+EXPORT("string_release")
+void string_release(int32_t p) {
+    string_fini(p);
+    rt_release(p);
+}
 
 EXPORT("str_byte_size")
 int32_t str_byte_size(int32_t ptr) {
@@ -9,7 +32,7 @@ int32_t str_byte_size(int32_t ptr) {
 }
 
 EXPORT("strlen")
-int32_t strlen_dream(int32_t ptr) {
+int32_t strlen(int32_t ptr) {
     return str_byte_size(ptr);
 }
 
@@ -22,7 +45,7 @@ int32_t utf8_width_at(int32_t ptr, int32_t off) {
 
 EXPORT("utf8_decode_at")
 int32_t utf8_decode_at(int32_t ptr, int32_t off) {
-    return (int32_t)u16_load(ptr + 8 + off);
+    return (int32_t)u16_load(str_data(ptr) + off);
 }
 
 EXPORT("utf8_width_raw")
@@ -81,8 +104,9 @@ int32_t str_scalar_len(int32_t ptr) {
 }
 
 static int32_t interned_empty(void) {
-    rt_retain(__rt_str_empty);
-    return __rt_str_empty;
+    int32_t empty = intern_empty();
+    rt_retain(empty);
+    return empty;
 }
 
 EXPORT("concat_strings")
@@ -105,9 +129,9 @@ int32_t concat_strings(int32_t str1, int32_t str2) {
     }
     new_ptr = rt_malloc(len1 + len2 + 8, TAG_STRING);
     i32_store(new_ptr, sc1 + sc2);
-    i32_store(new_ptr + 4, 0);
-    mem_copy(new_ptr + 8, str1 + 8, len1);
-    mem_copy(new_ptr + 8 + len1, str2 + 8, len2);
+    str_init_owned(new_ptr);
+    mem_copy(new_ptr + 8, str_data(str1), len1);
+    mem_copy(new_ptr + 8 + len1, str_data(str2), len2);
     return new_ptr;
 }
 
@@ -135,12 +159,12 @@ int32_t concat_strings3(int32_t str1, int32_t str2, int32_t str3) {
     }
     new_ptr = rt_malloc(len1 + len2 + len3 + 8, TAG_STRING);
     i32_store(new_ptr, sc1 + sc2 + sc3);
-    i32_store(new_ptr + 4, 0);
-    mem_copy(new_ptr + 8, str1 + 8, len1);
+    str_init_owned(new_ptr);
+    mem_copy(new_ptr + 8, str_data(str1), len1);
     off = len1;
-    mem_copy(new_ptr + 8 + off, str2 + 8, len2);
+    mem_copy(new_ptr + 8 + off, str_data(str2), len2);
     off = off + len2;
-    mem_copy(new_ptr + 8 + off, str3 + 8, len3);
+    mem_copy(new_ptr + 8 + off, str_data(str3), len3);
     return new_ptr;
 }
 
@@ -200,10 +224,10 @@ int32_t concat_str_int_str(int32_t pref, int32_t v, int32_t suf) {
     }
     p = rt_malloc((total << 1) + 8, TAG_STRING);
     i32_store(p, total);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     d = p + 8;
     if (plen != 0) {
-        mem_copy(d, pref + 8, plen << 1);
+        mem_copy(d, str_data(pref), plen << 1);
     }
     pos = d + (plen << 1);
     if (v == 0) {
@@ -221,14 +245,14 @@ int32_t concat_str_int_str(int32_t pref, int32_t v, int32_t suf) {
         }
     }
     if (slen != 0) {
-        mem_copy(d + ((plen + ndigits) << 1), suf + 8, slen << 1);
+        mem_copy(d + ((plen + ndigits) << 1), str_data(suf), slen << 1);
     }
     return p;
 }
 
 EXPORT("debug_get_free_list_head")
 int32_t debug_get_free_list_head(void) {
-    return free_list_head;
+    return wasm_free_list_head();
 }
 
 EXPORT("debug_get_heap_ptr")
@@ -238,12 +262,12 @@ int32_t debug_get_heap_ptr(void) {
 
 EXPORT("debug_get_live_objects")
 int32_t debug_get_live_objects(void) {
-    return live_objects;
+    return wasm_live_objects();
 }
 
 EXPORT("debug_get_total_allocations")
 int32_t debug_get_total_allocations(void) {
-    return total_allocations;
+    return wasm_total_allocations();
 }
 
 EXPORT("debug_get_ref_count")
@@ -273,14 +297,14 @@ int32_t string_eq(int32_t a, int32_t b) {
     words = (uint32_t)len >> 2;
     i = 0;
     while ((uint32_t)i < (uint32_t)words) {
-        if (i32_load(a + 8 + (i << 2)) != i32_load(b + 8 + (i << 2))) {
+        if (i32_load(str_data(a) + (i << 2)) != i32_load(str_data(b) + (i << 2))) {
             return 0;
         }
         i = i + 1;
     }
     i = words << 2;
     while ((uint32_t)i < (uint32_t)len) {
-        if (u8_load(a + 8 + i) != u8_load(b + 8 + i)) {
+        if (u8_load(str_data(a) + i) != u8_load(str_data(b) + i)) {
             return 0;
         }
         i = i + 1;
@@ -310,8 +334,8 @@ int32_t string_compare(int32_t a, int32_t b) {
     words = (uint32_t)n >> 2;
     i = 0;
     while ((uint32_t)i < (uint32_t)words) {
-        wa = a == 0 ? 0 : i32_load(a + 8 + (i << 2));
-        wb = b == 0 ? 0 : i32_load(b + 8 + (i << 2));
+        wa = a == 0 ? 0 : i32_load(str_data(a) + (i << 2));
+        wb = b == 0 ? 0 : i32_load(str_data(b) + (i << 2));
         if (wa != wb) {
             ba = 0;
             while (ba < 4) {
@@ -329,8 +353,8 @@ int32_t string_compare(int32_t a, int32_t b) {
     }
     i = words << 2;
     while ((uint32_t)i < (uint32_t)n) {
-        ba = a == 0 ? 0 : (int32_t)u8_load(a + 8 + i);
-        bb = b == 0 ? 0 : (int32_t)u8_load(b + 8 + i);
+        ba = a == 0 ? 0 : (int32_t)u8_load(str_data(a) + i);
+        bb = b == 0 ? 0 : (int32_t)u8_load(str_data(b) + i);
         if (ba != bb) {
             return (uint32_t)ba < (uint32_t)bb ? -1 : 1;
         }
@@ -355,7 +379,7 @@ int32_t string_substring_raw(int32_t ptr, int32_t start, int32_t end) {
     int32_t byte_len;
     int32_t p;
     if (ptr == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     sc = i32_load(ptr);
     s = start;
@@ -379,21 +403,32 @@ int32_t string_substring_raw(int32_t ptr, int32_t start, int32_t end) {
     scalars = e - s;
     byte_len = scalars << 1;
     if (byte_len == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
-    p = rt_malloc(byte_len + 8, TAG_STRING);
+    p = rt_malloc(12, TAG_STRING);
     i32_store(p, scalars);
-    i32_store(p + 4, 0);
-    mem_copy(p + 8, ptr + 8 + byte_start, byte_len);
+    i32_store(p + 4, str_data(ptr) + byte_start);
+    i32_store(p + 8, ptr);
+    rt_retain(ptr);
     return p;
 }
 
 EXPORT("string_clone")
 int32_t string_clone(int32_t ptr) {
+    int32_t n;
+    int32_t p;
     if (ptr == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
-    return string_substring_raw(ptr, 0, str_scalar_len(ptr));
+    n = i32_load(ptr);
+    if (n <= 0) {
+        return interned_empty();
+    }
+    p = rt_malloc((n << 1) + 8, TAG_STRING);
+    i32_store(p, n);
+    str_init_owned(p);
+    mem_copy(p + 8, str_data(ptr), n << 1);
+    return p;
 }
 
 EXPORT("string_copy_utf8")
@@ -401,24 +436,24 @@ void string_copy_utf8(int32_t dst, int32_t dst_off, int32_t src, int32_t src_off
     if (count == 0 || dst == 0 || src == 0) {
         return;
     }
-    mem_copy(dst + 4 + dst_off, src + 8 + src_off, count);
+    mem_copy(dst + 4 + dst_off, str_data(src) + src_off, count);
 }
 
 EXPORT("char_at")
 int32_t char_at(int32_t ptr, int32_t i) {
-    return (int32_t)u16_load(ptr + 8 + (i << 1));
+    return (int32_t)u16_load(str_data(ptr) + (i << 1));
 }
 
 EXPORT("byte_at")
 int32_t byte_at(int32_t ptr, int32_t i) {
-    return (int32_t)u8_load(ptr + 8 + i);
+    return (int32_t)u8_load(str_data(ptr) + i);
 }
 
 EXPORT("string_alloc")
 int32_t string_alloc(int32_t n) {
     int32_t p = rt_malloc((n << 1) + 8, TAG_STRING);
     i32_store(p, 0);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     return p;
 }
 
@@ -431,7 +466,7 @@ int32_t utf8_bytes_to_string(int32_t base, int32_t byte_len) {
     int32_t cp;
     int32_t w;
     if (byte_len == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     p = rt_malloc((byte_len << 1) + 8, TAG_STRING);
     dst = p + 8;
@@ -442,14 +477,14 @@ int32_t utf8_bytes_to_string(int32_t base, int32_t byte_len) {
         off = off + utf8_width_raw(base, off);
     }
     i32_store(p, units);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     return p;
 }
 
 EXPORT("string_from_utf8")
 int32_t string_from_utf8(int32_t bytes) {
     if (bytes == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     return utf8_bytes_to_string(bytes + 4, i32_load(bytes));
 }
@@ -463,13 +498,13 @@ void string_set(int32_t ptr, int32_t i, int32_t c) {
     }
     if ((uint32_t)c >= 0x10000u) {
         if (i == n) {
-            w = utf16_encode_at(ptr + 8, n, c);
+            w = utf16_encode_at(str_data(ptr), n, c);
             i32_store(ptr, n + w);
             return;
         }
         c = 0xFFFD;
     }
-    u16_store(ptr + 8 + (i << 1), (uint16_t)c);
+    u16_store(str_data(ptr) + (i << 1), (uint16_t)c);
     if (i == n) {
         i32_store(ptr, n + 1);
     }
@@ -479,7 +514,7 @@ EXPORT("string_from_utf8_prefix")
 int32_t string_from_utf8_prefix(int32_t bytes, int32_t len) {
     int32_t count;
     if (bytes == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     count = i32_load(bytes);
     if (len < 0) {
@@ -496,7 +531,7 @@ int32_t string_from_utf8_prefix_n(int32_t bytes, int32_t len, int32_t scalars) {
     int32_t count;
     int32_t p;
     if (bytes == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     count = i32_load(bytes);
     if (len < 0) {
@@ -506,14 +541,14 @@ int32_t string_from_utf8_prefix_n(int32_t bytes, int32_t len, int32_t scalars) {
         len = count;
     }
     if (len == 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     if (scalars < 0) {
         scalars = (int32_t)((uint32_t)len >> 1);
     }
     p = rt_malloc(len + 8, TAG_STRING);
     i32_store(p, scalars);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     mem_copy(p + 8, bytes + 4, len);
     return p;
 }
@@ -526,18 +561,40 @@ void array_store16(int32_t arr, int32_t off, int32_t u) {
     u16_store(arr + 4 + off, (uint16_t)u);
 }
 
+EXPORT("string_builder_append")
+int32_t string_builder_append(int32_t bytes, int32_t count, int32_t text) {
+    int32_t n;
+    if (bytes == 0 || text == 0) {
+        return count;
+    }
+    n = i32_load(text) << 1;
+    if (n <= 0) {
+        return count;
+    }
+    mem_copy(bytes + 8 + count, str_data(text), n);
+    return count + n;
+}
+
 EXPORT("string_from_builder")
 int32_t string_from_builder(int32_t bytes, int32_t len, int32_t scalars) {
     int32_t p;
+    int32_t rc;
     if (bytes == 0 || len <= 0) {
-        return __rt_str_empty;
+        return interned_empty();
     }
     if (scalars < 0) {
         scalars = (int32_t)((uint32_t)len >> 1);
     }
+    rc = i32_load(bytes - 4);
+    if (rc == 1) {
+        i32_store(bytes - 8, TAG_STRING);
+        i32_store(bytes, scalars);
+        str_init_owned(bytes);
+        return bytes;
+    }
     p = rt_malloc(len + 8, TAG_STRING);
     i32_store(p, scalars);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     mem_copy(p + 8, bytes + 8, len);
     return p;
 }

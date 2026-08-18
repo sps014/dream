@@ -292,64 +292,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/text/fmt.dream"),
             ),
             (
-                "<std>/system/text/regex_node_kind.dream",
-                include_str!("system/text/regex_node_kind.dream"),
-            ),
-            (
-                "<std>/system/text/regex_empty_kind.dream",
-                include_str!("system/text/regex_empty_kind.dream"),
-            ),
-            (
-                "<std>/system/text/regex_unicode_prop.dream",
-                include_str!("system/text/regex_unicode_prop.dream"),
-            ),
-            (
-                "<std>/system/text/regex_unicode_ranges.dream",
-                include_str!("system/text/regex_unicode_ranges.dream"),
-            ),
-            (
-                "<std>/system/text/regex_node.dream",
-                include_str!("system/text/regex_node.dream"),
-            ),
-            (
-                "<std>/system/text/regex_op.dream",
-                include_str!("system/text/regex_op.dream"),
-            ),
-            (
-                "<std>/system/text/regex_sub_table.dream",
-                include_str!("system/text/regex_sub_table.dream"),
-            ),
-            (
-                "<std>/system/text/regex_backtrack_frame.dream",
-                include_str!("system/text/regex_backtrack_frame.dream"),
-            ),
-            (
-                "<std>/system/text/regex_backtracker.dream",
-                include_str!("system/text/regex_backtracker.dream"),
-            ),
-            (
                 "<std>/system/text/regex_match_info.dream",
                 include_str!("system/text/regex_match_info.dream"),
             ),
             (
-                "<std>/system/text/regex_inst.dream",
-                include_str!("system/text/regex_inst.dream"),
-            ),
-            (
-                "<std>/system/text/regex_compiler.dream",
-                include_str!("system/text/regex_compiler.dream"),
-            ),
-            (
-                "<std>/system/text/regex_parser.dream",
-                include_str!("system/text/regex_parser.dream"),
-            ),
-            (
                 "<std>/system/text/regex_match.dream",
                 include_str!("system/text/regex_match.dream"),
-            ),
-            (
-                "<std>/system/text/regex_vm.dream",
-                include_str!("system/text/regex_vm.dream"),
             ),
             (
                 "<std>/system/text/regex_flags.dream",

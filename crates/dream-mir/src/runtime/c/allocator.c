@@ -5,6 +5,8 @@ IMPORT("__alloc_lock_acquire") void rt_alloc_lock_acquire(void);
 IMPORT("__alloc_lock_release") void rt_alloc_lock_release(void);
 #endif
 
+IMPORT("string_fini") void rt_string_fini(int32_t ptr);
+
 EXPORT("size_class")
 int32_t size_class(int32_t size) {
     int32_t s = size;
@@ -136,6 +138,7 @@ void free_dream(int32_t ptr) {
     if (ptr == 0) {
         return;
     }
+    rt_string_fini(ptr);
 #ifdef NEEDS_THREADS
     rt_alloc_lock_acquire();
 #endif

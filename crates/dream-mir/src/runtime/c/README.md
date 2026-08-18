@@ -18,6 +18,6 @@ Compile with `scripts/build-runtime.sh`. **macOS and Linux install steps** (wasi
 - Do not emit a second WASM module, `(memory)`, data segments, or C `static` mutable globals / constructors (`__wasm_call_ctors`).
 - Do not use libc, `memcpy`, VLAs, or `&` on locals (extract script rejects `$__stack_pointer` / `memcpy`).
 - Do not rename `$malloc` / `$retain` / `$print_string`.
-- Do not hand-edit `generated/*.wat` as source; edit `.c`. Handwritten `../allocator.wat` (placeholders) and `../sync.wat` / `../async.wat` are still emit source until replaced.
+- Do not hand-edit `generated/*.wat` or promoted `../strings.wat` / `../object.wat` / `../format.wat` / `../regex.wat`; edit `.c` (and `pcre2/` for regex) then re-run `scripts/build-runtime.sh`. Handwritten `../allocator.wat` (placeholders) and `../sync.wat` / `../async.wat` stay emit source until replaced.
 - Do not use clang `-O4` / wasm-opt `-O4`.
 - Native host C (real pointers / memcpy / mmap) lives in [`native/`](native/), not this wasm extract tree.

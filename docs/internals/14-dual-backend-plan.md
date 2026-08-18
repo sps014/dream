@@ -13,10 +13,10 @@ A worktree at `../Dream-llvm` may still exist for archaeology only.
 ## Active plan
 
 1. **Wasm hotpath on `main`** — keep WAT → wasmtime; grind list/map/string/allocator without
-   benchmax. Honest `regex_find` stays `[a-z]+\d+` (Pike VM).
+   benchmax. Honest `regex_find` stays `[a-z]+\d+` (PCRE2 interpreter in-module).
 2. **Native codegen** — MIR → C lives in [`crates/dream-mir/src/backend/c`](../../crates/dream-mir/src/backend/c)
    with host runtime [`crates/dream-mir/src/runtime/c/native`](../../crates/dream-mir/src/runtime/c/native)
-   (`uintptr_t`, `memcpy`, mmap heap, platform SIMD, Pike computed goto). `dream run` stays
+   (`uintptr_t`, `memcpy`, mmap heap, platform SIMD, PCRE2-16 JIT). `dream run` stays
    WAT → wasmtime until `scripts/bench-native-c.sh` and `microbenches.dream` beat `--release` wasm.
    `Target::NativeC` is opt-in; do not merge branch `llvm`.
 

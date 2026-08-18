@@ -150,8 +150,17 @@ fn emit_module_encoded(
     let (vg_addrs, static_end) = value_global_addrs(mir, interner, heap_base(&strings));
     let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots, &ftable.slots);
 
+    let uses_regex = mir
+        .intrinsics
+        .iter()
+        .any(|(_, k)| k.starts_with("regex_"));
     let data_end = iface.heap_start;
-    let heap_base = data_end + SHADOW_STACK_SIZE;
+    let mut heap_base = data_end + SHADOW_STACK_SIZE;
+    if uses_regex {
+        heap_base = heap_base.max(
+            crate::abi::LINKED_RT_BASE + crate::abi::LINKED_RT_SPAN + SHADOW_STACK_SIZE,
+        );
+    }
     let initial_pages = heap_base.div_ceil(WASM_PAGE_SIZE) + INITIAL_HEAP_PAGES;
     m.import_memory("env", "memory", initial_pages, crate::abi::MAX_MEMORY_PAGES);
 
@@ -183,6 +192,9 @@ fn emit_module_encoded(
     }
 
     m.ingest_wat(&runtime_prelude(debug, module_needs_threads(mir)));
+    if uses_regex {
+        m.ingest_wat(RUNTIME_REGEX);
+    }
     m.ingest_wat(RUNTIME_WEAK);
     m.ingest_wat(RUNTIME_CLOSURE);
     m.ingest_wat(&RUNTIME_SYNC.replace(
@@ -211,7 +223,7 @@ fn emit_module_encoded(
 
     for (s, addr) in &strings {
         let block = addr - HEAP_HEADER_SIZE;
-        m.data(block, string_block_bytes(s));
+        m.data(block, string_block_bytes(s, *addr));
     }
     m.ingest_wat(&iface.data);
 

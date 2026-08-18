@@ -519,10 +519,10 @@ fn utf16_byte_len(s: &str) -> u32 {
     2 * s.encode_utf16().count() as u32
 }
 
-pub(super) fn string_block_bytes(s: &str) -> Vec<u8> {
+pub(super) fn string_block_bytes(s: &str, mapped_ptr: u32) -> Vec<u8> {
     let units: Vec<u16> = s.encode_utf16().collect();
     let mut out = Vec::new();
-    for word in [0_i32, STRING_TAG, 1, units.len() as i32, 0] {
+    for word in [0_i32, STRING_TAG, 1, units.len() as i32, (mapped_ptr + 8) as i32] {
         out.extend_from_slice(&word.to_le_bytes());
     }
     for u in units {

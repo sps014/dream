@@ -41,10 +41,10 @@ int32_t double_to_string(double v) {
         i = 0;
     }
     i32_store(buf, i);
-    i32_store(buf + 4, 0);
+    str_init_owned(buf);
     res = rt_concat_strings(ipstr, buf);
     if (neg) {
-        res = rt_concat_strings(__rt_str_minus, res);
+        res = rt_concat_strings(intern_minus(), res);
     }
     return res;
 }

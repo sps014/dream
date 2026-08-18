@@ -24,16 +24,41 @@ DREAM_ALWAYS_INLINE int32_t *dream_i32(dream_ptr p) {
     return (int32_t *)p;
 }
 
+#define DREAM_STR_SLICE 1
+
 DREAM_ALWAYS_INLINE int32_t dream_str_len(dream_ptr str) {
     return str ? dream_i32(str)[0] : 0;
 }
 
+DREAM_ALWAYS_INLINE int32_t dream_str_byte_size(dream_ptr str) {
+    return dream_str_len(str) << 1;
+}
+
+DREAM_ALWAYS_INLINE const uint16_t *dream_str_units(dream_ptr s) {
+    const uint16_t *d;
+    if (!s) {
+        return NULL;
+    }
+    if (dream_i32(s)[1] == DREAM_STR_SLICE) {
+        memcpy(&d, (char *)dream_p(s) + 8 + sizeof(dream_ptr), sizeof(d));
+        return d;
+    }
+    return (const uint16_t *)((char *)dream_p(s) + STRING_UTF8_OFFSET);
+}
+
+DREAM_ALWAYS_INLINE void dream_str_init_owned(dream_ptr p) {
+    if (p) {
+        dream_i32(p)[1] = 0;
+    }
+}
+
 DREAM_ALWAYS_INLINE uint16_t dream_char_at_u(dream_ptr str, int32_t i) {
-    return ((const uint16_t *)((const char *)dream_p(str) + STRING_UTF8_OFFSET))[i];
+    const uint16_t *u = dream_str_units(str);
+    return u ? u[i] : 0;
 }
 
 DREAM_ALWAYS_INLINE uint8_t dream_byte_at_u(dream_ptr str, int32_t i) {
-    return ((const uint8_t *)((const char *)dream_p(str) + STRING_UTF8_OFFSET))[i];
+    return ((const uint8_t *)dream_str_units(str))[i];
 }
 
 DREAM_ALWAYS_INLINE void dream_mem_copy(dream_ptr dst, dream_ptr src, size_t n) {
@@ -112,10 +137,9 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings(dream_ptr a, dream_ptr b) {
     }
     p = dream_malloc((int32_t)(len1 + len2 + 8), TAG_STRING);
     dream_i32(p)[0] = sc1 + sc2;
-    dream_i32(p)[1] = 0;
-    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET, (char *)dream_p(a) + STRING_UTF8_OFFSET, len1);
-    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET + len1,
-           (char *)dream_p(b) + STRING_UTF8_OFFSET, len2);
+    dream_str_init_owned(p);
+    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET, dream_str_units(a), len1);
+    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET + len1, dream_str_units(b), len2);
     return p;
 }
 
@@ -192,9 +216,9 @@ DREAM_ALWAYS_INLINE void dream_write_i32_utf16(uint16_t *out, int32_t v) {
 
 DREAM_ALWAYS_INLINE dream_ptr dream_int_to_string_fast(int32_t v) {
     int32_t n = dream_i32_utf16_len(v);
-    dream_ptr p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
+    dream_ptr     p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
     dream_i32(p)[0] = n;
-    dream_i32(p)[1] = 0;
+    dream_str_init_owned(p);
     dream_write_i32_utf16((uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET), v);
     return p;
 }
@@ -211,38 +235,56 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v
     }
     p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
     dream_i32(p)[0] = total;
-    dream_i32(p)[1] = 0;
+    dream_str_init_owned(p);
     d = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
     if (plen != 0) {
-        memcpy(d, (char *)dream_p(pref) + STRING_UTF8_OFFSET, (size_t)plen << 1);
+        memcpy(d, dream_str_units(pref), (size_t)plen << 1);
     }
     dream_write_i32_utf16(d + plen, v);
     if (slen != 0) {
-        memcpy(d + plen + nd, (char *)dream_p(suf) + STRING_UTF8_OFFSET, (size_t)slen << 1);
+        memcpy(d + plen + nd, dream_str_units(suf), (size_t)slen << 1);
     }
     return p;
 }
 
 DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_t end) {
     int32_t n;
+    int32_t len;
     dream_ptr p;
-    size_t bytes;
+    const uint16_t *data;
     if (s == 0) {
         return 0;
+    }
+    len = dream_str_len(s);
+    if (start < 0) {
+        start = 0;
+    }
+    if (end < 0) {
+        end = 0;
+    }
+    if (start > len) {
+        start = len;
+    }
+    if (end > len) {
+        end = len;
+    }
+    if (end < start) {
+        end = start;
     }
     n = end - start;
     if (n <= 0) {
         p = dream_malloc(8, TAG_STRING);
         dream_i32(p)[0] = 0;
-        dream_i32(p)[1] = 0;
+        dream_str_init_owned(p);
         return p;
     }
-    bytes = (size_t)n << 1;
-    p = dream_malloc((int32_t)(bytes + 8), TAG_STRING);
+    p = dream_malloc((int32_t)(8 + 2 * (int32_t)sizeof(dream_ptr)), TAG_STRING);
     dream_i32(p)[0] = n;
-    dream_i32(p)[1] = 0;
-    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET,
-           (char *)dream_p(s) + STRING_UTF8_OFFSET + ((size_t)start << 1), bytes);
+    dream_i32(p)[1] = DREAM_STR_SLICE;
+    memcpy((char *)dream_p(p) + 8, &s, sizeof(s));
+    data = dream_str_units(s) + start;
+    memcpy((char *)dream_p(p) + 8 + sizeof(dream_ptr), &data, sizeof(data));
+    dream_retain(s);
     return p;
 }
 
@@ -403,26 +445,38 @@ DREAM_ALWAYS_INLINE int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
     if (n != dream_str_len(b)) {
         return 0;
     }
-    return memcmp((char *)dream_p(a) + STRING_UTF8_OFFSET, (char *)dream_p(b) + STRING_UTF8_OFFSET,
-                  (size_t)n << 1) == 0;
+    return memcmp(dream_str_units(a), dream_str_units(b), (size_t)n << 1) == 0;
 }
-
-int dream_pike_add_to_threadq(const int32_t *opcodes, const int32_t *outs, const int32_t *out1s,
-                              const int32_t *cap_ids, int32_t ninst, int32_t start_pc, int32_t pos,
-                              int32_t *on_list, int32_t gen, int32_t *out_pcs, int32_t *out_n);
 
 typedef dream_ptr (*dream_fn)(dream_ptr, dream_ptr, dream_ptr, dream_ptr, dream_ptr, dream_ptr,
                               dream_ptr, dream_ptr);
-
-DREAM_ALWAYS_INLINE int32_t dream_str_byte_size(dream_ptr str) {
-    return dream_str_len(str) << 1;
-}
 
 DREAM_ALWAYS_INLINE int32_t dream_object_tag(dream_ptr p) {
     if (p == 0) {
         return 0;
     }
     return ((int32_t *)((char *)dream_p(p) - 8))[0];
+}
+
+DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
+    dream_ptr parent;
+    if (!p || dream_object_tag(p) != TAG_STRING || dream_i32(p)[1] != DREAM_STR_SLICE) {
+        return;
+    }
+    memcpy(&parent, (char *)dream_p(p) + 8, sizeof(parent));
+    dream_i32(p)[1] = 0;
+    dream_release(parent);
+}
+
+DREAM_ALWAYS_INLINE int32_t string_builder_append(dream_ptr bytes, int32_t count, dream_ptr text) {
+    int32_t n = dream_str_byte_size(text);
+    const uint16_t *src;
+    if (n <= 0 || !bytes || !text) {
+        return count;
+    }
+    src = dream_str_units(text);
+    memcpy((char *)dream_p(bytes) + 8 + count, src, (size_t)n);
+    return count + n;
 }
 
 int32_t dream_hash_value(dream_ptr p);
@@ -502,6 +556,15 @@ dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32
 void dream_weak_clear_all(dream_ptr obj);
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
+
+int64_t regex_compile(dream_ptr pattern, int32_t flags);
+void regex_free(int64_t h);
+int32_t regex_group_count(int64_t h);
+int32_t regex_name_count(int64_t h);
+dream_ptr regex_name_at(int64_t h, int32_t i);
+int32_t regex_name_number(int64_t h, int32_t i);
+dream_ptr regex_find(int64_t h, dream_ptr input, int32_t pos);
+int32_t regex_test(int64_t h, dream_ptr input);
 
 int32_t debug_get_live_objects(void);
 int32_t debug_get_total_allocations(void);

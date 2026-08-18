@@ -50,7 +50,18 @@ unsafe fn read_string(p: usize) -> String {
     if n <= 0 {
         return String::new();
     }
-    let units = std::slice::from_raw_parts((p as *const u8).add(8).cast::<u16>(), n as usize);
+    const DREAM_STR_SLICE: i32 = 1;
+    let pad = *((p as *const i32).add(1));
+    let units = if pad == DREAM_STR_SLICE {
+        let d = std::ptr::read(
+            (p as *const u8)
+                .add(8 + std::mem::size_of::<usize>())
+                .cast::<*const u16>(),
+        );
+        std::slice::from_raw_parts(d, n as usize)
+    } else {
+        std::slice::from_raw_parts((p as *const u8).add(8).cast::<u16>(), n as usize)
+    };
     String::from_utf16_lossy(units)
 }
 

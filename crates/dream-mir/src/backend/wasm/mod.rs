@@ -59,6 +59,7 @@ const RUNTIME_ALLOCATOR: &str = include_str!("../../runtime/allocator.wat");
 /// The fixed string runtime (`$str_scalar_len`/`$str_byte_size`/`$char_at`/`$byte_at`/`$string_eq`/`$concat_strings`/…).
 /// Self-contained given the allocator + memory.
 const RUNTIME_STRINGS: &str = include_str!("../../runtime/strings.wat");
+const RUNTIME_REGEX: &str = include_str!("../../runtime/regex.wat");
 const RUNTIME_SIMD: &str = include_str!("../../runtime/simd.wat");
 
 /// The object runtime: box/unbox/hash plus the integer-family `*_to_string` formatters

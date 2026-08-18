@@ -65,9 +65,15 @@ scripts/build-runtime.sh --check   # same compile; exit 1 if extract gates fail
 
 Apple clang without wasm32: `--check` **skips** (so `cargo test` stays green). A machine that has wasi-sdk must pass `--check`.
 
-### 4. Promote generated WAT (optional)
+### 4. Promote generated WAT
 
-If extract gates pass **and** `--release` goldens are not slower, copy `c/generated/<file>.wat` over `<file>.wat`. Allocator debug/thread placeholders (`;;@DEBUG_*@` / `;;@ALLOC_LOCK_*@`) stay handwritten until C variants exist.
+`scripts/build-runtime.sh` writes `c/generated/*.wat` and then **promotes**:
+
+- `strings.wat` / `object.wat` / `format.wat` from the matching `c/*.c` (edit C, not WAT)
+- `regex.wat` from `c/regex.c` + vendored PCRE2 ([`c/pcre2/SOURCES`](c/pcre2/SOURCES); see [`c/pcre2/README.md`](c/pcre2/README.md))
+
+**Do not hand-edit those files.** Allocator debug/thread placeholders (`;;@DEBUG_*@` /
+`;;@ALLOC_LOCK_*@`) stay in handwritten `allocator.wat` until C can express them.
 
 **Windows:** do not install wasi-sdk on `windows-latest` CI. Shipping `dream.exe` embeds the checked-in `.wat` files.
 
@@ -77,4 +83,6 @@ Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empt
 
 ## Native C (host clang, not WAT)
 
-[`c/native/`](c/native/) is a **separate** ABI: `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width, Pike computed goto. It is not spliced into WASM. Default `dream run` stays wasmtime until `scripts/bench-native-c.sh` plus `microbenches.dream` beat `--release` wasm. See [`c/native/README.md`](c/native/README.md).
+[`c/native/`](c/native/) is a **separate** ABI: `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width, PCRE2-16 JIT. It is not spliced into WASM. Default `dream run` stays wasmtime until `scripts/bench-native-c.sh` plus `microbenches.dream` beat `--release` wasm. See [`c/native/README.md`](c/native/README.md).
+
+WASM regex is the same PCRE2 sources compiled without JIT (`runtime/regex.wat`), spliced only when the program uses `Regex`.

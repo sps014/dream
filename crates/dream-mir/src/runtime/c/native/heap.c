@@ -155,6 +155,7 @@ void dream_free(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+    dream_str_fini(ptr);
     dream_weak_clear_all(ptr);
     heap_lock();
     block = (char *)dream_p(ptr) - 16;

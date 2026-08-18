@@ -64,8 +64,8 @@ fn read_len_prefix(data: &[u8], base: usize) -> Option<usize> {
 }
 
 /// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout:
-/// `[unit_len: i32][pad: i32][utf16le...]`. A negative or out-of-bounds pointer yields an empty
-/// string rather than panicking.
+/// `[unit_len: i32][pad: i32][utf16le...]`. When `pad` is non-zero it is the UTF-16
+/// payload address (substring slice); `0` means units live at `ptr+8`.
 pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
     let data = shared_bytes(memory);
     if ptr < 0 {
@@ -75,8 +75,16 @@ pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
     let Some(units) = read_len_prefix(data, base) else {
         return String::new();
     };
-    let start = base + STRING_UTF8;
+    let pad = read_len_prefix(data, base + LEN_PREFIX).unwrap_or(0);
+    let start = if pad == 0 {
+        base + STRING_UTF8
+    } else {
+        pad
+    };
     let nbytes = units.saturating_mul(2);
+    if start >= data.len() {
+        return String::new();
+    }
     let end = start.saturating_add(nbytes).min(data.len());
     let slice = &data[start..end];
     let mut u16s = Vec::with_capacity(slice.len() / 2);

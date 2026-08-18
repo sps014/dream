@@ -175,7 +175,7 @@ What `@unsafe` does **not** do: it does not insert runtime checks, and it does n
 ## Performance notes
 
 - Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop — one growable UTF-16 buffer, one final `build()`.
-- Use `byte_size` / `byte_at` for the raw UTF-16 LE payload; `char_at` / `substring` index UTF-16 code units and `substring` copies that unit range with one `memory.copy`.
+- Use `byte_size` / `byte_at` for the raw UTF-16 LE payload; `char_at` / `substring` index UTF-16 code units. `substring` is an O(1) slice (header + payload pointer + retain of the parent); `string.clone` deep-copies at isolation boundaries.
 - `List` / `Map` / `Set` `clear()` keeps capacity: live slots are zeroed in place (no capacity-sized realloc). Prefer `clear` + refill over allocating a new collection each batch.
 - `ScratchArena<T : unmanaged>` bump-allocates short-lived `Span<T>` slices from one owned slab;
   `reset()` rewinds the cursor without freeing to the OS — use it for parse/match/fill scratch

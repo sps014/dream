@@ -25,6 +25,9 @@ tests/*/*.bin
 !/crates/dream-mir/src/runtime/**/*.wat
 !/src/**/*.wat
 
+# Clang extract + PCRE2 link scratch; promote via scripts/build-runtime.sh.
+/crates/dream-mir/src/runtime/c/generated/
+
 node_modules/
 .DS_Store
 

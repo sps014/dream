@@ -31,6 +31,7 @@ pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: T
         TyKind::Object | TyKind::Interface(..) => "$release_object".to_string(),
         // Funcboxes deep-release their env word; `$release_generic` would only free the box.
         TyKind::Func(..) => "$release_funcbox".to_string(),
+        TyKind::Prim(dream_types::PrimTy::String) => "$string_release".to_string(),
         _ => "$release_generic".to_string(),
     }
 }
@@ -360,5 +361,10 @@ pub(super) fn emit_release_funcs(
     write_struct_union_tag_arms(out, mir, tags, |name| {
         format!("(local.get $ptr) (call $release_{})", name)
     });
+    let _ = writeln!(
+        out,
+        "  (local.get $tag) (i32.const {}) (i32.eq) (if (then (local.get $ptr) (call $string_release) (return)))",
+        crate::abi::TAG_STRING
+    );
     out.push_str("  (local.get $ptr) (call $release_generic)\n)\n");
 }

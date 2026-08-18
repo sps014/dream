@@ -34,7 +34,7 @@ int32_t dream_string_hash(dream_ptr p) {
     if (!p) {
         return 0;
     }
-    units = (const uint16_t *)((const char *)dream_p(p) + STRING_UTF8_OFFSET);
+    units = dream_str_units(p);
     for (i = 0; i < len; i++) {
         hash ^= units[i];
         hash *= 16777619u;

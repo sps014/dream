@@ -699,29 +699,76 @@ fn emit_func(m: &mut ModuleBuilder, cx: &Cx<'_>, f: &MirFunction) {
     m.push_func(b);
 }
 
+const NATIVE_GUEST_C: &[&str] = &[
+    "heap.c",
+    "strings.c",
+    "object.c",
+    "format.c",
+    "panic.c",
+    "weak.c",
+    "closure.c",
+    "async.c",
+    "sync.c",
+    "regex.c",
+    "simd.c",
+    "host.c",
+    "worker.c",
+];
+
+/// Interpreter `.c` names from `runtime/c/pcre2/SOURCES` (wasm `build-runtime.sh` + native).
+pub fn pcre2_interpreter_c_names() -> Vec<&'static str> {
+    include_str!("../../runtime/c/pcre2/SOURCES")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect()
+}
+
+/// Native-only JIT (not compiled for wasm; no W^X in linear memory).
+pub const PCRE2_JIT_C: &[&str] = &["pcre2_jit_compile.c"];
+
+/// Guest wasm extras linked with the interpreter (`scripts/build-runtime.sh`).
+pub const WASM_PCRE2_WRAPPER_C: &[&str] = &["regex.c", "regex_wasm_libc.c"];
+
 /// `.c` files the native linker must compile with generated user C.
 pub fn native_runtime_c_files() -> Vec<std::path::PathBuf> {
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/native");
-    [
-        "heap.c",
-        "strings.c",
-        "object.c",
-        "format.c",
-        "panic.c",
-        "weak.c",
-        "closure.c",
-        "async.c",
-        "sync.c",
-        "pike.c",
-        "simd.c",
-        "host.c",
-        "worker.c",
-    ]
-    .iter()
-    .map(|n| root.join(n))
-    .collect()
+    let native = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/native");
+    let pcre2 = native_pcre2_include_dir();
+    let mut files: Vec<std::path::PathBuf> = NATIVE_GUEST_C.iter().map(|n| native.join(n)).collect();
+    for name in pcre2_interpreter_c_names() {
+        files.push(pcre2.join(name));
+    }
+    for name in PCRE2_JIT_C {
+        files.push(pcre2.join(name));
+    }
+    files
+}
+
+pub fn native_pcre2_include_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/pcre2")
 }
 
 pub fn native_runtime_include_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/native/include")
+}
+
+#[cfg(test)]
+mod source_list_tests {
+    use super::*;
+
+    #[test]
+    fn pcre2_source_lists_exist_on_disk() {
+        let pcre2 = native_pcre2_include_dir();
+        let guest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c");
+        assert!(!pcre2_interpreter_c_names().is_empty());
+        for name in pcre2_interpreter_c_names() {
+            assert!(pcre2.join(name).is_file(), "{}", name);
+        }
+        for name in PCRE2_JIT_C {
+            assert!(pcre2.join(name).is_file(), "{}", name);
+        }
+        for name in WASM_PCRE2_WRAPPER_C {
+            assert!(guest.join(name).is_file(), "{}", name);
+        }
+    }
 }

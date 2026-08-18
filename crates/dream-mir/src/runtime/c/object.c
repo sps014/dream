@@ -71,7 +71,7 @@ int32_t hash_string(int32_t p) {
     int32_t len = rt_str_byte_size(p);
     int32_t i = 0;
     while ((uint32_t)i < (uint32_t)len) {
-        h = (h ^ (int32_t)u8_load(p + 8 + i)) * 16777619;
+        h = (h ^ (int32_t)u8_load(str_data(p) + i)) * 16777619;
         i = i + 1;
     }
     return h;
@@ -99,7 +99,7 @@ int32_t int_to_string(int32_t v) {
     if (v == 0) {
         u16_store(d, 48);
         i32_store(p, 1);
-        i32_store(p + 4, 0);
+        str_init_owned(p);
         return p;
     }
     if (v < 0) {
@@ -119,7 +119,7 @@ int32_t int_to_string(int32_t v) {
         i = i + 1;
     }
     i32_store(p, i);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     reverse_units(d, i);
     return p;
 }
@@ -137,7 +137,7 @@ int32_t char_to_string(int32_t v) {
     int32_t p = rt_malloc(16, TAG_STRING);
     int32_t w = rt_utf16_encode_at(p + 8, 0, v);
     i32_store(p, w);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     return p;
 }
 EXPORT("box_byte")
@@ -199,7 +199,7 @@ int32_t long_to_string(int64_t v) {
     if (v == 0) {
         u16_store(d, 48);
         i32_store(p, 1);
-        i32_store(p + 4, 0);
+        str_init_owned(p);
         return p;
     }
     if (v < 0) {
@@ -219,7 +219,7 @@ int32_t long_to_string(int64_t v) {
         i = i + 1;
     }
     i32_store(p, i);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     reverse_units(d, i);
     return p;
 }
@@ -234,7 +234,7 @@ int32_t ulong_to_string(int64_t v) {
     if (u == 0) {
         u16_store(d, 48);
         i32_store(p, 1);
-        i32_store(p + 4, 0);
+        str_init_owned(p);
         return p;
     }
     while (u != 0) {
@@ -244,7 +244,7 @@ int32_t ulong_to_string(int64_t v) {
         u = u / 10;
     }
     i32_store(p, i);
-    i32_store(p + 4, 0);
+    str_init_owned(p);
     reverse_units(d, i);
     return p;
 }

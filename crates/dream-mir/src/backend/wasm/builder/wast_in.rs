@@ -1,7 +1,7 @@
 //! Parse handwritten WAT field fragments and lower them into [`ModuleBuilder`] by name.
 
 use super::func::{BlockTy, ExtractLane, FuncBuilder, Label, LoadKind, Op, ReplaceLane, StoreKind};
-use super::{strip_dollar, ModuleBuilder, ValType};
+use super::{ModuleBuilder, ValType};
 use crate::internal_error;
 use wast::core::{
     Expression, FuncKind, FunctionType, GlobalKind, InnerTypeKind, Instruction, ItemKind,
@@ -10,6 +10,12 @@ use wast::core::{
 use wast::parser::{self, ParseBuffer};
 use wast::token::Index;
 use wast::Wat;
+
+#[derive(Default)]
+struct IngestCtx {
+    types: Vec<String>,
+    tables: Vec<String>,
+}
 
 pub(super) fn ingest(m: &mut ModuleBuilder, text: &str) {
     let stripped: String = text
@@ -39,20 +45,86 @@ pub(super) fn ingest(m: &mut ModuleBuilder, text: &str) {
     let ModuleKind::Text(fields) = module.kind else {
         internal_error!("runtime WAT must be text, not binary");
     };
+    let mut ctx = IngestCtx::default();
+    for field in &fields {
+        ingest_decl(m, field, &mut ctx);
+    }
     for field in fields {
-        ingest_field(m, field);
+        ingest_body(m, field, &ctx);
     }
 }
 
-fn ingest_field(m: &mut ModuleBuilder, field: ModuleField<'_>) {
+fn ingest_decl(m: &mut ModuleBuilder, field: &ModuleField<'_>, ctx: &mut IngestCtx) {
     match field {
         ModuleField::Type(ty) => {
-            let name = ty.id.map(|id| id.name().to_string());
-            if let InnerTypeKind::Func(ft) = ty.def.kind {
-                let (params, results) = func_sig(&ft);
-                m.intern_type(name.as_deref(), params, results);
+            if let InnerTypeKind::Func(ft) = &ty.def.kind {
+                let (params, results) = func_sig(ft);
+                let name = ty
+                    .id
+                    .map(|id| id.name().to_string())
+                    .unwrap_or_else(|| m.next_anon());
+                m.intern_type(Some(&name), params, results);
+                ctx.types.push(name);
             }
         }
+        ModuleField::Table(t) => {
+            let name = t
+                .id
+                .map(|id| id.name().to_string())
+                .unwrap_or_else(|| m.next_anon());
+            let (min, max) = match &t.kind {
+                wast::core::TableKind::Normal { ty, .. } => {
+                    let min = ty.limits.min as u32;
+                    let max = ty.limits.max.unwrap_or(ty.limits.min) as u32;
+                    (min, max)
+                }
+                _ => (1, 1),
+            };
+            m.table(&name, min, max);
+            ctx.tables.push(name);
+        }
+        ModuleField::Global(g) => {
+            let Some(id) = g.id else {
+                return;
+            };
+            let ty = val_ty(g.ty.ty);
+            let (mut init, is_f32, is_f64) = match &g.kind {
+                GlobalKind::Inline(expr) => const_from_expr(expr, ty),
+                GlobalKind::Import(_) => return,
+            };
+            if id.name() == "__stack_pointer" {
+                init = crate::abi::LINKED_RT_STACK_TOP as i64;
+            }
+            m.global(id.name(), ty, g.ty.mutable, init, is_f32, is_f64);
+        }
+        ModuleField::Import(imp) => {
+            if let wast::core::ImportItems::Single { module, name, sig } = &imp.items {
+                match &sig.kind {
+                    ItemKind::Func(ty) => {
+                        if m.has_func(name) {
+                            return;
+                        }
+                        let (params, results) = ty.inline.as_ref().map(func_sig).unwrap_or_default();
+                        let iname = sig
+                            .id
+                            .map(|id| id.name().to_string())
+                            .unwrap_or_else(|| (*name).to_string());
+                        if m.has_func(&iname) {
+                            return;
+                        }
+                        m.import_func(module, name, &iname, params, results);
+                    }
+                    ItemKind::Memory(_) => {}
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn ingest_body(m: &mut ModuleBuilder, field: ModuleField<'_>, ctx: &IngestCtx) {
+    match field {
         ModuleField::Func(func) => {
             let name = func
                 .id
@@ -65,14 +137,19 @@ fn ingest_field(m: &mut ModuleBuilder, field: ModuleField<'_>) {
             }
             match func.kind {
                 FuncKind::Inline { locals, expression } => {
-                    for (i, loc) in locals.iter().enumerate() {
-                        let n = loc
-                            .id
-                            .map(|id| id.name().to_string())
-                            .unwrap_or_else(|| format!("__l{i}"));
+                    let mut next_local = fb.param_types().len();
+                    for loc in locals.iter() {
+                        let n = loc.id.map(|id| id.name().to_string()).unwrap_or_else(|| {
+                            let name = next_local.to_string();
+                            next_local += 1;
+                            name
+                        });
+                        if loc.id.is_some() {
+                            next_local += 1;
+                        }
                         fb.local(&n, val_ty(loc.ty));
                     }
-                    lower_expr(&mut fb, &expression);
+                    lower_expr(&mut fb, &expression, ctx);
                     let fname = fb.name.clone();
                     m.push_func(fb);
                     for e in exports {
@@ -82,23 +159,12 @@ fn ingest_field(m: &mut ModuleBuilder, field: ModuleField<'_>) {
                 FuncKind::Import(..) => {}
             }
         }
-        ModuleField::Global(g) => {
-            let Some(id) = g.id else {
-                return;
-            };
-            let ty = val_ty(g.ty.ty);
-            let (init, is_f32, is_f64) = match g.kind {
-                GlobalKind::Inline(expr) => const_from_expr(&expr, ty),
-                GlobalKind::Import(_) => return,
-            };
-            m.global(id.name(), ty, g.ty.mutable, init, is_f32, is_f64);
-        }
         ModuleField::Export(e) => {
             let item = idx_name(&e.item);
             match e.kind {
                 wast::core::ExportKind::Func => m.export_func(e.name, &item),
                 wast::core::ExportKind::Table => m.export_table(e.name, &item),
-                wast::core::ExportKind::Memory => m.export_memory(e.name),
+                wast::core::ExportKind::Memory => {}
                 wast::core::ExportKind::Global => m.export_global(e.name, &item),
                 wast::core::ExportKind::Tag => {}
             }
@@ -117,19 +183,52 @@ fn ingest_field(m: &mut ModuleBuilder, field: ModuleField<'_>) {
                 m.data(off, bytes);
             }
         }
-        ModuleField::Import(imp) => {
-            if let wast::core::ImportItems::Single { module, name, sig } = imp.items {
-                if let ItemKind::Func(ty) = sig.kind {
-                    let (params, results) = ty.inline.as_ref().map(func_sig).unwrap_or_default();
-                    let iname = sig
-                        .id
-                        .map(|id| id.name().to_string())
-                        .unwrap_or_else(|| name.to_string());
-                    m.import_func(module, name, &iname, params, results);
+        ModuleField::Elem(e) => {
+            if let wast::core::ElemKind::Active { table, offset } = e.kind {
+                let table_name = match table {
+                    Some(idx) => resolve_table(ctx, &idx),
+                    None => ctx
+                        .tables
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "__ft".to_string()),
+                };
+                let off = match offset.instrs.first() {
+                    Some(Instruction::I32Const(v)) => *v,
+                    _ => 0,
+                };
+                let mut funcs = Vec::new();
+                if let wast::core::ElemPayload::Indices(idxs) = e.payload {
+                    for idx in idxs {
+                        funcs.push(idx_name(&idx));
+                    }
                 }
+                m.elem(&table_name, off, funcs);
             }
         }
         _ => {}
+    }
+}
+
+fn resolve_table(ctx: &IngestCtx, idx: &Index<'_>) -> String {
+    match idx {
+        Index::Id(id) => id.name().to_string(),
+        Index::Num(n, _) => ctx
+            .tables
+            .get(*n as usize)
+            .cloned()
+            .unwrap_or_else(|| "__ft".to_string()),
+    }
+}
+
+fn resolve_type(ctx: &IngestCtx, idx: &Index<'_>) -> String {
+    match idx {
+        Index::Id(id) => id.name().to_string(),
+        Index::Num(n, _) => ctx
+            .types
+            .get(*n as usize)
+            .cloned()
+            .unwrap_or_else(|| n.to_string()),
     }
 }
 
@@ -215,13 +314,13 @@ fn const_from_expr(expr: &Expression<'_>, ty: ValType) -> (i64, bool, bool) {
     (0, false, false)
 }
 
-fn lower_expr(f: &mut FuncBuilder, expr: &Expression<'_>) {
+fn lower_expr(f: &mut FuncBuilder, expr: &Expression<'_>, ctx: &IngestCtx) {
     for inst in expr.instrs.iter() {
-        lower_inst(f, inst);
+        lower_inst(f, inst, ctx);
     }
 }
 
-fn lower_inst(f: &mut FuncBuilder, inst: &Instruction<'_>) {
+fn lower_inst(f: &mut FuncBuilder, inst: &Instruction<'_>, ctx: &IngestCtx) {
     match inst {
         Instruction::Unreachable => f.push(Op::Unreachable),
         Instruction::Nop => f.push(Op::Nop),
@@ -253,12 +352,9 @@ fn lower_inst(f: &mut FuncBuilder, inst: &Instruction<'_>) {
                 .ty
                 .index
                 .as_ref()
-                .map(idx_name)
+                .map(|idx| resolve_type(ctx, idx))
                 .unwrap_or_else(String::new);
-            let table = match &ci.table {
-                Index::Id(id) => id.name().to_string(),
-                Index::Num(_, _) => "__ft".to_string(),
-            };
+            let table = resolve_table(ctx, &ci.table);
             f.call_indirect(&ty, &table);
         }
         Instruction::Drop => f.push(Op::Drop),
@@ -738,7 +834,58 @@ fn lower_inst(f: &mut FuncBuilder, inst: &Instruction<'_>) {
     }
 }
 
-#[allow(dead_code)]
-fn _strip(s: &str) -> &str {
-    strip_dollar(s)
+#[cfg(test)]
+mod ingest_tests {
+    use super::*;
+    use crate::backend::wasm::builder::{ModuleBuilder, ValType};
+
+    #[test]
+    fn linked_module_skips_provided_imports_and_owns_its_table() {
+        let mut m = ModuleBuilder::new();
+        m.import_func(
+            "env",
+            "malloc",
+            "malloc",
+            vec![ValType::I32, ValType::I32],
+            vec![ValType::I32],
+        );
+        ingest(
+            &mut m,
+            r#"(module
+  (type (;0;) (func (param i32) (result i32)))
+  (import "env" "malloc" (func $malloc_tagged (type 0)))
+  (import "env" "memory" (memory 1))
+  (func $user (type 0) (param i32) (result i32)
+    local.get 0
+    i32.const 0
+    call_indirect (type 0))
+  (table (;0;) 1 1 funcref)
+  (global $__stack_pointer (mut i32) (i32.const 16))
+  (elem (i32.const 0) func $user)
+)"#,
+        );
+        let wat = m.finish_wat();
+        assert_eq!(
+            wat.matches("(import \"env\" \"malloc\"").count(),
+            1,
+            "{}",
+            wat
+        );
+        assert!(
+            !wat.contains("malloc_tagged"),
+            "provided malloc must not be re-imported:\n{}",
+            wat
+        );
+        assert!(
+            wat.contains(&format!("i32.const {}", crate::abi::LINKED_RT_STACK_TOP)),
+            "C stack must move off interned strings:\n{}",
+            wat
+        );
+        assert!(
+            !wat.contains("call_indirect $__ft"),
+            "linked table must not steal Dream table 0:\n{}",
+            wat
+        );
+        assert!(wat.contains("call_indirect"), "{}", wat);
+    }
 }

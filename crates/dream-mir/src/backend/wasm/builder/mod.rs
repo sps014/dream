@@ -135,6 +135,15 @@ impl ModuleBuilder {
         i
     }
 
+    pub(crate) fn has_func(&self, name: &str) -> bool {
+        let n = strip_dollar(name);
+        self.funcs.contains_key(n)
+            || self
+                .func_imports
+                .iter()
+                .any(|i| i.name == n || i.field == n)
+    }
+
     pub(crate) fn import_func(
         &mut self,
         module: &str,

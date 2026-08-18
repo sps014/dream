@@ -3,7 +3,9 @@
 pub mod abi;
 
 use crate::driver::wasm_opt::OptLevel;
-use dream_mir::backend::c::{native_runtime_c_files, native_runtime_include_dir};
+use dream_mir::backend::c::{
+    native_pcre2_include_dir, native_runtime_c_files, native_runtime_include_dir,
+};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -144,15 +146,20 @@ fn runtime_archive(opt: OptLevel) -> Result<PathBuf, Box<dyn std::error::Error>>
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
     cflags.extend(opt.cc_flags());
     let mut objs = Vec::new();
+    let pcre_inc = native_pcre2_include_dir();
     for f in native_runtime_c_files() {
         let obj = dir.join(f.file_name().unwrap()).with_extension("o");
-        let st = Command::new("cc")
-            .args(&cflags)
-            .arg(format!("-I{}", native_runtime_include_dir().display()))
-            .arg(&f)
-            .arg("-o")
-            .arg(&obj)
-            .status()?;
+        let mut cc = Command::new("cc");
+        cc.args(&cflags)
+            .arg(format!("-I{}", native_runtime_include_dir().display()));
+        if f.components().any(|c| c.as_os_str() == "pcre2")
+            || f.file_name().is_some_and(|n| n == "regex.c")
+        {
+            cc.arg("-DHAVE_CONFIG_H")
+                .arg("-DPCRE2_CODE_UNIT_WIDTH=16")
+                .arg(format!("-I{}", pcre_inc.display()));
+        }
+        let st = cc.arg(&f).arg("-o").arg(&obj).status()?;
         if !st.success() {
             return Err(format!("cc -c failed for {}", f.display()).into());
         }

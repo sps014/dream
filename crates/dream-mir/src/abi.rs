@@ -83,6 +83,14 @@ pub const MAX_MEMORY_PAGES: u32 = 65536;
 /// Base address (block start) of the interned string data segment; the heap begins above it.
 pub const STRING_BASE: u32 = 1024;
 
+/// Reserved linear-memory window for a linked wasm32 C library (PCRE2 data + its C stack).
+/// wasm-ld `--global-base` matches `LINKED_RT_BASE`; `$__stack_pointer` is relocated here on ingest
+/// (lld would otherwise place the C stack at 128KiB, on top of interned strings).
+pub const LINKED_RT_BASE: u32 = 2 * 1024 * 1024;
+pub const LINKED_RT_SPAN: u32 = 512 * 1024;
+/// C stack grows down from this address (same as the data base; data lives at `LINKED_RT_BASE`+).
+pub const LINKED_RT_STACK_TOP: u32 = LINKED_RT_BASE;
+
 // -- Cross-thread allocator coordination (linear memory is `shared`, see `execution::host::shared_memory`) --
 //
 // The segregated free-list table occupies bytes [4, 44) for size-class heads 0..8

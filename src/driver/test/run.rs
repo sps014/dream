@@ -1,4 +1,4 @@
-//! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/{debug,release}/`, compile+run.
+//! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/`, compile+run.
 
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
 use crate::driver::compiler::{Compiler, Target};
@@ -129,7 +129,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     }
 
     let runner_source = synthesize_runner(&source, &tests);
-    let out_dir = test_cache_dir(path, opts.release);
+    let out_dir = test_cache_dir(path, opts.release, opts.native_c);
     fs::create_dir_all(&out_dir).map_err(|e| format!("create {}: {}", out_dir.display(), e))?;
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("tests");
     let runner_path = out_dir.join(format!("{stem}.runner.dream"));
@@ -222,20 +222,28 @@ fn escape_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn test_cache_dir(test_file: &Path, release: bool) -> PathBuf {
+fn test_cache_dir(test_file: &Path, release: bool, native_c: bool) -> PathBuf {
     let source_dir = test_file
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let profile = if release { "release" } else { "debug" };
+    let sub = if native_c {
+        if release {
+            "release"
+        } else {
+            "debug"
+        }
+    } else {
+        "web"
+    };
     let mut dir = source_dir.to_path_buf();
     loop {
         if dir.join("dream.toml").is_file() {
-            return dir.join("target").join("test").join(profile);
+            return dir.join("target").join("test").join(sub);
         }
         if !dir.pop() {
             break;
         }
     }
-    source_dir.join("target").join("test").join(profile)
+    source_dir.join("target").join("test").join(sub)
 }

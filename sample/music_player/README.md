@@ -5,7 +5,7 @@ written entirely in [`music_player.dream`](music_player.dream). Every DOM query,
 element, event listener, and property get/set is ordinary Dream code compiled to WebAssembly via
 the dynamic [`js` interop type](../../docs/reference/language/js-type.md); there is **no hand-written
 JavaScript logic** anywhere in this sample. Prefer the tree-shaken host emitted next to the `.wasm`
-(`target/release/music_player.web.runtime.js`); the page falls back to [`runtime/dream.js`](../../runtime/dream.js)
+(`target/web/music_player.web.runtime.js`); the page falls back to [`runtime/dream.js`](../../runtime/dream.js)
 if that file is missing.
 
 ## Build the artifacts first
@@ -20,7 +20,7 @@ cargo run -- --release --runtime --web -Oz sample/music_player/music_player.drea
 
 ## Run in the browser
 
-`music_player.html` prefers `./target/release/music_player.web.runtime.js` (from `--runtime --web`). Serve this
+`music_player.html` prefers `./target/web/music_player.web.runtime.js` (from `--runtime --web`). Serve this
 folder, or the repository root:
 
 ```sh

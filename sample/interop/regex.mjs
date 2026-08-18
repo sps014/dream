@@ -11,6 +11,6 @@ import { run } from "../../runtime/dream.js";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const wasmPath = process.argv[2] || here + "target/debug/regex.wasm";
+const wasmPath = process.argv[2] || here + "target/web/regex.wasm";
 
 await run(wasmPath);

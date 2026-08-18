@@ -215,7 +215,7 @@ fn artifact_wasm_path(workspace: &Workspace) -> Result<PathBuf> {
     Ok(workspace
         .root
         .join("target")
-        .join("release")
+        .join("web")
         .join(format!("{stem}.wasm")))
 }
 

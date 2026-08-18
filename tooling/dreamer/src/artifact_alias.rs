@@ -1,18 +1,18 @@
-//! Stable host artifact aliases under `target/web/` and `target/node/`.
+//! Stable host artifact dirs under `target/web/` and `target/node/`.
 //!
-//! Real compiler output stays in `target/debug|release/`. After a build that emits JS runtimes,
-//! dreamer copies the relevant siblings into these alias dirs so `index.html` / `run.mjs` can
-//! reference a profile-independent path.
+//! The compiler writes wasm to `target/web/` (debug and `--release` share that path). After a
+//! build that emitted a Node runtime, dreamer copies the wasm + `*.node.runtime.js` into
+//! `target/node/` so `run.mjs` can use a host-specific folder.
 
 use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::Path;
 
-/// Refresh `target/web` and/or `target/node` from `target/{debug|release}` after a compile.
+/// Ensure `target/web/` has the wasm (+ web runtime when requested) and refresh `target/node/`
+/// from that same folder when Node was part of the compile.
 pub fn refresh_host_aliases(
     project_root: &Path,
     entry_stem: &str,
-    release: bool,
     web: bool,
     node: bool,
 ) -> Result<()> {
@@ -20,51 +20,35 @@ pub fn refresh_host_aliases(
         return Ok(());
     }
 
-    let profile = if release { "release" } else { "debug" };
-    let src_dir = project_root.join("target").join(profile);
-    if !src_dir.is_dir() {
+    let web_dir = project_root.join("target").join("web");
+    if !web_dir.is_dir() {
         bail!(
             "expected compile artifacts under {} after build",
-            src_dir.display()
+            web_dir.display()
         );
     }
 
+    copy_required(&web_dir, &web_dir, &format!("{entry_stem}.wasm"))?;
     if web {
-        refresh_one(
-            &src_dir,
-            &project_root.join("target").join("web"),
-            entry_stem,
-            HostAlias::Web,
+        copy_required(
+            &web_dir,
+            &web_dir,
+            &format!("{entry_stem}.web.runtime.js"),
         )?;
     }
+    let _ = copy_if_present(&web_dir, &web_dir, &format!("{entry_stem}.abi.json"));
+
     if node {
-        refresh_one(
-            &src_dir,
-            &project_root.join("target").join("node"),
-            entry_stem,
-            HostAlias::Node,
-        )?;
+        refresh_node(&web_dir, &project_root.join("target").join("node"), entry_stem)?;
     }
     Ok(())
 }
 
-enum HostAlias {
-    Web,
-    Node,
-}
-
-fn refresh_one(src_dir: &Path, dest_dir: &Path, stem: &str, host: HostAlias) -> Result<()> {
+fn refresh_node(src_dir: &Path, dest_dir: &Path, stem: &str) -> Result<()> {
     fs::create_dir_all(dest_dir)
         .with_context(|| format!("creating alias dir {}", dest_dir.display()))?;
-
-    let runtime_name = match host {
-        HostAlias::Web => format!("{stem}.web.runtime.js"),
-        HostAlias::Node => format!("{stem}.node.runtime.js"),
-    };
-
     copy_required(src_dir, dest_dir, &format!("{stem}.wasm"))?;
-    copy_required(src_dir, dest_dir, &runtime_name)?;
-    // Optional sidecar used by some hosts / tooling.
+    copy_required(src_dir, dest_dir, &format!("{stem}.node.runtime.js"))?;
     let _ = copy_if_present(src_dir, dest_dir, &format!("{stem}.abi.json"));
     Ok(())
 }
@@ -78,6 +62,9 @@ fn copy_required(src_dir: &Path, dest_dir: &Path, name: &str) -> Result<()> {
             dest_dir.display()
         );
     }
+    if src_dir == dest_dir {
+        return Ok(());
+    }
     let dest = dest_dir.join(name);
     fs::copy(&src, &dest)
         .with_context(|| format!("copying {} → {}", src.display(), dest.display()))?;
@@ -88,6 +75,9 @@ fn copy_if_present(src_dir: &Path, dest_dir: &Path, name: &str) -> Result<bool> 
     let src = src_dir.join(name);
     if !src.is_file() {
         return Ok(false);
+    }
+    if src_dir == dest_dir {
+        return Ok(true);
     }
     let dest = dest_dir.join(name);
     fs::copy(&src, &dest)
@@ -109,46 +99,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn refresh_copies_web_and_node_artifacts() {
+    fn refresh_copies_node_from_web() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        let debug = root.join("target").join("debug");
-        fs::create_dir_all(&debug).unwrap();
-        fs::write(debug.join("main.wasm"), b"wasm").unwrap();
-        fs::write(debug.join("main.web.runtime.js"), b"web").unwrap();
-        fs::write(debug.join("main.node.runtime.js"), b"node").unwrap();
-        fs::write(debug.join("main.abi.json"), b"{}").unwrap();
+        let web = root.join("target").join("web");
+        fs::create_dir_all(&web).unwrap();
+        fs::write(web.join("main.wasm"), b"wasm").unwrap();
+        fs::write(web.join("main.web.runtime.js"), b"web").unwrap();
+        fs::write(web.join("main.node.runtime.js"), b"node").unwrap();
+        fs::write(web.join("main.abi.json"), b"{}").unwrap();
 
-        refresh_host_aliases(root, "main", false, true, true).unwrap();
+        refresh_host_aliases(root, "main", true, true).unwrap();
 
-        assert_eq!(
-            fs::read(root.join("target/web/main.wasm")).unwrap(),
-            b"wasm"
-        );
-        assert_eq!(
-            fs::read(root.join("target/web/main.web.runtime.js")).unwrap(),
-            b"web"
-        );
-        assert_eq!(
-            fs::read(root.join("target/web/main.abi.json")).unwrap(),
-            b"{}"
-        );
+        assert_eq!(fs::read(root.join("target/web/main.wasm")).unwrap(), b"wasm");
         assert_eq!(
             fs::read(root.join("target/node/main.node.runtime.js")).unwrap(),
             b"node"
         );
+        assert_eq!(fs::read(root.join("target/node/main.wasm")).unwrap(), b"wasm");
     }
 
     #[test]
-    fn refresh_release_profile() {
+    fn refresh_web_only_stays_in_web() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        let release = root.join("target").join("release");
-        fs::create_dir_all(&release).unwrap();
-        fs::write(release.join("app.wasm"), b"r").unwrap();
-        fs::write(release.join("app.web.runtime.js"), b"w").unwrap();
+        let web = root.join("target").join("web");
+        fs::create_dir_all(&web).unwrap();
+        fs::write(web.join("app.wasm"), b"r").unwrap();
+        fs::write(web.join("app.web.runtime.js"), b"w").unwrap();
 
-        refresh_host_aliases(root, "app", true, true, false).unwrap();
+        refresh_host_aliases(root, "app", true, false).unwrap();
         assert!(root.join("target/web/app.wasm").is_file());
         assert!(!root.join("target/node").exists());
     }

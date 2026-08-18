@@ -217,10 +217,10 @@ fn build_compiles_a_project_using_an_installed_dependency() {
     assert!(
         project_dir
             .join("target")
-            .join("debug")
+            .join("web")
             .join("main.wat")
             .is_file(),
-        "expected artifacts under target/debug/"
+        "expected artifacts under target/web/"
     );
     assert!(!project_dir.join("src").join("main.wat").exists());
 }
@@ -301,7 +301,6 @@ fn build_refreshes_web_and_node_aliases() {
     .unwrap();
 
     commands::build::run(&project_dir, false, None).unwrap();
-    assert!(project_dir.join("target/debug/main.wasm").is_file());
     assert!(project_dir.join("target/web/main.wasm").is_file());
     assert!(project_dir.join("target/web/main.web.runtime.js").is_file());
     assert!(project_dir
@@ -309,23 +308,16 @@ fn build_refreshes_web_and_node_aliases() {
         .is_file());
     assert!(project_dir.join("target/node/main.wasm").is_file());
 
-    let debug_wasm = std::fs::read(project_dir.join("target/debug/main.wasm")).unwrap();
-    let web_wasm = std::fs::read(project_dir.join("target/web/main.wasm")).unwrap();
-    assert_eq!(debug_wasm, web_wasm);
-
     commands::build::run(&project_dir, true, None).unwrap();
-    assert!(project_dir.join("target/release/main.wasm").is_file());
-    let release_wasm = std::fs::read(project_dir.join("target/release/main.wasm")).unwrap();
-    let web_wasm_after = std::fs::read(project_dir.join("target/web/main.wasm")).unwrap();
-    assert_eq!(
-        release_wasm, web_wasm_after,
-        "release build should refresh target/web from target/release"
+    assert!(
+        project_dir.join("target/web/main.wasm").is_file(),
+        "release build should write wasm to target/web"
     );
 }
 
 #[test]
 #[ignore = "invokes the full compiler; cargo test --workspace -- --ignored"]
-fn build_lib_writes_under_target_debug() {
+fn build_lib_writes_under_target_web() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
         eprintln!("skipping: no `dream` compiler binary found on PATH or in target/");
@@ -337,7 +329,7 @@ fn build_lib_writes_under_target_debug() {
     commands::build::run(&project_dir, false, None).unwrap();
     assert!(project_dir
         .join("target")
-        .join("debug")
+        .join("web")
         .join("mylib.wat")
         .is_file());
 }
@@ -441,7 +433,7 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     assert!(commands::build::run(&root, false, None).is_err());
     if dreamer::dream_bin::locate().is_ok() {
         commands::build::run(&root, false, Some("cli")).unwrap();
-        assert!(cli.join("target").join("debug").join("main.wat").is_file());
+        assert!(cli.join("target").join("web").join("main.wat").is_file());
         commands::build::run(&cli, false, None).unwrap();
     }
 

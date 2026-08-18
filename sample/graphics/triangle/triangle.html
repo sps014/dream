@@ -33,7 +33,7 @@
       // Fall back to the full repo runtime when serving from the repository root.
       let run;
       try {
-        ({ run } = await import("./target/debug/triangle.web.runtime.js"));
+        ({ run } = await import("./target/web/triangle.web.runtime.js"));
       } catch (_) {
         ({ run } = await import("../../../runtime/dream.js"));
       }
@@ -43,7 +43,7 @@
         hud.classList.toggle("err", err);
       };
       try {
-        await run("./target/debug/triangle.wasm", { canvas: "c" });
+        await run("./target/web/triangle.wasm", { canvas: "c" });
         setHud("triangle");
       } catch (e) {
         console.error(e);

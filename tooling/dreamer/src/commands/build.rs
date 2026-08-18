@@ -27,8 +27,8 @@ pub fn run_with(start_dir: &Path, flags: CompileFlags, package: Option<&str>) ->
 /// (used by `dreamer run` for a single selected host). When `only` is `None`, emit every
 /// JS host listed in `package.targets`.
 ///
-/// After a successful compile that emitted web and/or node runtimes, refreshes
-/// `target/web/` and/or `target/node/` aliases from the active profile.
+/// After a successful compile that emitted web and/or node runtimes, verifies
+/// `target/web/` and copies Node artifacts into `target/node/`.
 pub fn compile_entry(
     workspace: &Workspace,
     flags: &CompileFlags,
@@ -84,13 +84,7 @@ pub fn compile_entry(
 
     if want_web || want_node {
         let stem = artifact_alias::entry_stem(&compile_root)?;
-        artifact_alias::refresh_host_aliases(
-            &workspace.root,
-            &stem,
-            flags.release,
-            want_web,
-            want_node,
-        )?;
+        artifact_alias::refresh_host_aliases(&workspace.root, &stem, want_web, want_node)?;
     }
     Ok(())
 }

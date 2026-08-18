@@ -11,7 +11,7 @@ import { run } from "../../runtime/dream.js";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const wasmPath = process.argv[2] || here + "target/debug/async_fetch.wasm";
+const wasmPath = process.argv[2] || here + "target/web/async_fetch.wasm";
 
 // Simulate a network call: resolve after a short delay.
 const fakeUser = (id) =>

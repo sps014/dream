@@ -33,8 +33,8 @@
       The Dream program in <code>../webworker.dream</code> spawns <code>WebWorker</code>s that each run
       a fresh instance of the same module in a real browser <code>Worker</code> (separate memory), and
       exchanges typed string messages. First build the module:
-      <code>cargo run -- sample/webworker.dream</code> (writes <code>sample/target/debug/webworker.wasm</code> +
-      <code>sample/target/debug/webworker.abi.json</code>). Then serve the <strong>repository root</strong> over
+      <code>cargo run -- sample/webworker.dream</code> (writes <code>sample/target/web/webworker.wasm</code> +
+      <code>sample/target/web/webworker.abi.json</code>). Then serve the <strong>repository root</strong> over
       HTTP (e.g. <code>npx serve .</code>) and open <code>/sample/interop/webworker.html</code>. All
       the <code>Worker</code>/<code>postMessage</code> glue lives in <code>runtime/dream.js</code>.
     </p>
@@ -46,7 +46,7 @@
       const log = document.getElementById("log");
       // Capture the Dream program's stdout so we can show it on the page.
       let out = "";
-      await run("../target/debug/webworker.wasm", {
+      await run("../target/web/webworker.wasm", {
         abi: "../webworker.abi.json",
         stdout: (s) => {
           out += s;

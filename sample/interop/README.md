@@ -11,7 +11,7 @@ none. Build the one you want before running it:
 
 ```sh
 # from the repository root
-cargo run -- sample/interop/interop.dream      # writes target/debug/interop.{wasm,wat,abi.json}
+cargo run -- sample/interop/interop.dream      # writes target/web/interop.{wasm,wat,abi.json}
 ```
 
 Optionally emit a tree-shaken sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host chunks
@@ -20,7 +20,7 @@ this program needs):
 ```sh
 cargo run -- --runtime --web sample/interop/js.dream    # browser
 cargo run -- --runtime --node sample/interop/js.dream   # Node ≥ 18
-# then: import { run } from "./target/debug/js.web.runtime.js" instead of ../../runtime/dream.js
+# then: import { run } from "./target/web/js.web.runtime.js" instead of ../../runtime/dream.js
 ```
 
 Or build them all at once:

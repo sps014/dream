@@ -74,13 +74,14 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   `dreamer pack` error), and are typechecked via the conventional `src/<import_segment>.dream` root
   (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`). Binaries require `entry` and a top-level `main`.
 - `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler (**bin only**).
-- Package builds emit under `target/debug/` (default) or `target/release/` (`--release`), not beside
-  sources. Bare `dream file.dream` (no enclosing `dream.toml`) still uses
-  `<source-dir>/target/debug/` or `target/release/` — never siblings next to the `.dream` file.
-- **Web/Node hosts use stable aliases** `target/web/` and `target/node/` (refreshed by
-  `dreamer build` / `dreamer run` from the active profile). Scaffolded `index.html` / `run.mjs`
-  always import those paths — no need to edit them when switching debug ↔ release. Existing
-  projects that hardcode `target/debug/…` should retarget once to `target/web/` / `target/node/`.
+- Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native C
+  under `target/debug/` or `target/release/`. Bare `dream file.dream` (no enclosing `dream.toml`)
+  still uses `<source-dir>/target/web/` (wasm) or `target/debug|release/` (native C) — never siblings
+  next to the `.dream` file.
+- **Node hosts** also get `target/node/` (copied from `target/web/` by `dreamer build` / `dreamer run`
+  when `targets` includes `node`). Scaffolded `index.html` / `run.mjs` import `target/web/` /
+  `target/node/` — no need to edit them when switching debug ↔ release. Existing projects that
+  hardcode `target/debug/…` should retarget once to `target/web/` / `target/node/`.
 - `[package].targets` is an optional list of hosts this project supports: `native` (wasmtime via
   `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
   Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
@@ -223,8 +224,8 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer remove <name> [-p <name>]` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. In a `[workspace]`, installs all members into the root lock/`dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release] [-p <name>]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
-| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
+| `dreamer build [--release] [-p <name>]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. |
+| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` still applies wasm-opt / cc; wasm files stay in `target/web/`. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
 | `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package, Cranelift-AOT the `.wasm` to `.cwasm`, and embed that in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
@@ -267,7 +268,7 @@ Per host:
 
 - **native** — `dream run [--release] <entry> [args…]` (wasmtime).
 - **node** — compile with `--runtime --node` (refreshing `target/node/`), then `node run.mjs`.
-- **web** — compile with `--runtime --web` (refreshing `target/web/`), then serve the project root on
+- **web** — compile with `--runtime --web` (wasm in `target/web/`), then serve the project root on
   `http://127.0.0.1:8787/index.html` by default (colored log; Ctrl-C to stop). A later
   `dreamer run --target web` restarts that server on the same port. Override with `--port`.
 

@@ -11,7 +11,7 @@ cargo run -- --runtime --web sample/graphics/triangle/triangle.dream
 ```
 
 This writes `triangle.wasm`, `triangle.abi.json`, `triangle.wgsl`, and
-`triangle.web.runtime.js` under `target/debug/`. Open `triangle.html` only after
+`triangle.web.runtime.js` under `target/web/`. Open `triangle.html` only after
 building — a missing `.wasm` is a 404.
 
 ## Run
@@ -27,7 +27,7 @@ through a winit window.
 
 ### Browser (WebGPU)
 
-Serve the **sample directory** (uses `./target/debug/triangle.web.runtime.js` + `./target/debug/triangle.wasm`):
+Serve the **sample directory** (uses `./target/web/triangle.web.runtime.js` + `./target/web/triangle.wasm`):
 
 ```bash
 npx serve sample/graphics/triangle

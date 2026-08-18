@@ -32,8 +32,8 @@
     <p class="muted">
       A Dream program that <code>await</code>s <code>HttpClient</code> calls, which wrap the
       browser's <code>fetch</code> via the <code>Dream</code> host module. First build the module:
-      <code>cargo run -- sample/interop/http.dream</code> (writes <code>target/debug/http.wasm</code> +
-      <code>target/debug/http.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
+      <code>cargo run -- sample/interop/http.dream</code> (writes <code>target/web/http.wasm</code> +
+      <code>target/web/http.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
       over HTTP (e.g. <code>npx serve .</code>) and open <code>/sample/interop/http.html</code>.
       This calls the real <code>fetch</code>, so the sample's <code>https://example.com</code> URLs
       are placeholders: point them at endpoints that exist <em>and</em> send permissive CORS headers,
@@ -55,7 +55,7 @@
       };
 
       // The HTTP helpers are built in to dream.js (they call the page's global `fetch`).
-      await run("target/debug/http.wasm");
+      await run("target/web/http.wasm");
     </script>
   </body>
 </html>

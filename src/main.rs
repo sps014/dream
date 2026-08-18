@@ -468,7 +468,7 @@ fn print_usage(program: &str) {
         program
     );
     error!(
-        "  Artifacts land in target/debug/ (or target/release/ with --release), never beside the source"
+        "  Wasm artifacts land in target/web/; native C in target/debug/ (or target/release/ with --release)"
     );
 }
 
@@ -485,10 +485,13 @@ fn find_project_root(file_path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Derives the output `.wat` / `.c` path under `target/debug/` or `target/release/`.
+/// Derives the output `.wat` / `.c` path under `target/`, never beside the source.
+///
+/// Wasm always uses `target/web/` so hosts do not switch on debug vs `--release`.
+/// Native C uses `target/debug/` or `target/release/`.
 ///
 /// Uses the enclosing `dream.toml` directory when one exists; otherwise the source file's
-/// directory. Never writes siblings next to the `.dream` file.
+/// directory.
 fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Option<String> {
     let path = Path::new(file_path);
     let file_stem = path.file_stem()?.to_str()?;
@@ -497,8 +500,16 @@ fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Op
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let root = find_project_root(path).unwrap_or_else(|| source_dir.to_path_buf());
-    let profile = if release { "release" } else { "debug" };
-    let out_dir = root.join("target").join(profile);
+    let sub = if native_c {
+        if release {
+            "release"
+        } else {
+            "debug"
+        }
+    } else {
+        "web"
+    };
+    let out_dir = root.join("target").join(sub);
     let ext = if native_c { "c" } else { "wat" };
     let result = out_dir.join(format!("{file_stem}.{ext}"));
     Some(result.to_str()?.to_string())

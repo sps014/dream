@@ -7,7 +7,7 @@ import { run } from "../../runtime/dream.js";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const wasmPath = process.argv[2] || here + "target/debug/callbacks.wasm";
+const wasmPath = process.argv[2] || here + "target/web/callbacks.wasm";
 
 // A JS function Dream will call back into (JS -> Dream callback), reachable via js_global.
 globalThis.logger = (msg) => console.log("[logger]", msg);

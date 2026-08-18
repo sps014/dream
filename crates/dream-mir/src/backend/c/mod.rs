@@ -37,7 +37,7 @@ mod tests {
         let mut b = FunctionBuilder::new("scan", i.int());
         let s = b.new_param(i.string(), Some("s".into()));
         let idx = b.new_param(i.int(), Some("i".into()));
-        let t = b.new_local(i.int(), Some("c".into()));
+        let t = b.new_local(i.char(), Some("c".into()));
         b.assign(
             Place::Local(t),
             Rvalue::CharAt(
@@ -54,6 +54,50 @@ mod tests {
         let c = emit_c_module(&mir, &i);
         assert!(c.contains("dream_char_at_u"), "{}", c);
         assert!(c.contains("dream_rt_native.h"), "{}", c);
+        assert!(
+            !c.contains("uint8_t t"),
+            "char_at must not truncate UTF-16 units through uint8_t:\n{}",
+            c
+        );
+    }
+
+    #[test]
+    fn funcbox_env_temp_is_pointer_width() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("call_it", i.void());
+        let box_ = b.new_param(i.int(), Some("box".into()));
+        let env = b.new_local(i.int(), Some("env".into()));
+        b.assign(
+            Place::Local(env),
+            Rvalue::Call {
+                callee: crate::Callee {
+                    def: dream_types::DefId(1),
+                    args: vec![],
+                    ret: i.int(),
+                    take_params: vec![],
+                },
+                args: vec![Operand::Copy(Place::Local(box_))],
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            intrinsics: vec![(dream_types::DefId(1), "funcbox_env".into())],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_funcbox_env"), "{}", c);
+        assert!(
+            !c.contains("int32_t t0 = dream_funcbox_env"),
+            "{}",
+            c
+        );
+        assert!(
+            c.contains("int64_t t0 = dream_funcbox_env")
+                || c.contains("dream_ptr t0 = dream_funcbox_env"),
+            "{}",
+            c
+        );
     }
 
     #[test]
@@ -101,6 +145,78 @@ mod tests {
         let c = emit_c_module(&mir, &i);
         assert!(c.contains("dream_concat_str_int_str"), "{}", c);
         assert!(!c.contains("dream_concat_strings("), "{}", c);
+    }
+
+    #[test]
+    fn substring_raw_maps_to_slice_helper() {
+        assert_eq!(
+            super::types::runtime_c_name("string_substring_raw"),
+            "dream_substring"
+        );
+        let strings = include_str!("../../runtime/c/native/strings.c");
+        assert!(strings.contains("return dream_substring"));
+        assert!(!strings.contains("dream_string_alloc(len)"));
+    }
+
+    #[test]
+    fn string_builder_push_maps_to_native_helper() {
+        assert_eq!(
+            super::types::runtime_c_name("string_builder_push"),
+            "dream_sb_push"
+        );
+        assert!(super::types::native_header_declares("dream_sb_push"));
+        assert!(include_str!("../../runtime/strings.wat").contains("$string_builder_push"));
+    }
+
+    #[test]
+    fn field_store_of_call_evals_rhs_once() {
+        use crate::Callee;
+        use dream_hir::{LayoutTable, TypeLayout};
+        use dream_types::{DefKind, TypeCtx};
+
+        let mut ctx = TypeCtx::new();
+        let cell_def = ctx.register(DefKind::Struct, "Cell", vec![]);
+        let cell_ty = ctx.interner.struct_ty(cell_def, vec![]);
+        let layout = TypeLayout::from_fields(
+            &ctx.interner,
+            "Cell",
+            vec![("n".into(), ctx.interner.int(), false, false)],
+        );
+        let foo = ctx.register(DefKind::Function, "foo", vec![]);
+        let fdef = ctx.register(DefKind::Function, "f", vec![]);
+        let mut foo_fn = FunctionBuilder::new("foo", ctx.interner.int());
+        foo_fn.set_def(foo, vec![]);
+        foo_fn.terminate(Terminator::Return(Some(Operand::Const(crate::Const::Int(0)))));
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        b.set_def(fdef, vec![]);
+        let obj = b.new_param(cell_ty, Some("o".into()));
+        b.assign(
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
+            Rvalue::Call {
+                callee: Callee {
+                    def: foo,
+                    args: vec![],
+                    ret: ctx.interner.int(),
+                    take_params: vec![],
+                },
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mut layouts = LayoutTable::default();
+        layouts.insert(cell_ty, layout);
+        let mir = Mir {
+            functions: vec![foo_fn.finish(), b.finish()],
+            layouts,
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &ctx.interner);
+        let body = c.split("void f(").nth(1).unwrap_or(&c);
+        let calls = body.matches("foo(").count();
+        assert_eq!(calls, 1, "call stored into a field must run once:\n{c}");
     }
 
     #[test]

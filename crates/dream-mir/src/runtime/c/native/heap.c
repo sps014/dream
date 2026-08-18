@@ -28,6 +28,10 @@ static int nchunks;
 static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
 int dream_rt_mt;
 
+/* One exclusive block per size class: alloc/free of short-lived strings (arc_locals,
+ * substring slices) skip the locked freelist after the first churn. */
+static _Thread_local char *tls_free[NCLASS];
+
 static void heap_lock(void) {
     if (dream_rt_mt) {
         pthread_mutex_lock(&heap_mu);
@@ -68,19 +72,6 @@ static void *map_chunk(size_t n) {
 #endif
 }
 
-static int in_heap(char *p) {
-    int i;
-    if (p == NULL || ((uintptr_t)p & 15u) != 0) {
-        return 0;
-    }
-    for (i = 0; i < nchunks; i++) {
-        if (p >= chunks[i] && p < chunks[i] + (ptrdiff_t)CHUNK) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 static char *bump(size_t n) {
     size_t aligned = (n + 15u) & ~15u;
     if (arena == NULL || arena_off + aligned > arena_len) {
@@ -106,12 +97,24 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     int idx = size_class(total);
     char *block = NULL;
     int32_t alloc_size = total;
-    heap_lock();
     if (idx >= 0 && idx <= 12) {
         alloc_size = class_bytes(idx);
+        block = tls_free[idx];
+        if (block != NULL) {
+            tls_free[idx] = NULL;
+            ((uint32_t *)block)[1] = MAGIC_LIVE;
+            ((int32_t *)block)[2] = tag;
+            ((int32_t *)block)[3] = 1;
+            live_objects += 1;
+            total_allocations += 1;
+            return (dream_ptr)(block + 16);
+        }
+    }
+    heap_lock();
+    if (idx >= 0 && idx <= 12) {
         while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
-            if (!in_heap(block) || ((uint32_t *)block)[1] != MAGIC_FREE) {
+            if (((uint32_t *)block)[1] != MAGIC_FREE) {
                 freelist[idx] = 0;
                 block = NULL;
                 break;
@@ -156,18 +159,28 @@ void dream_free(dream_ptr ptr) {
         return;
     }
     dream_str_fini(ptr);
-    dream_weak_clear_all(ptr);
-    heap_lock();
+    if (dream_weak_any) {
+        dream_weak_clear_all(ptr);
+    }
     block = (char *)dream_p(ptr) - 16;
     sz = ((int32_t *)block)[0];
     if (sz == 0 || ((uint32_t *)block)[1] != MAGIC_LIVE) {
-        heap_unlock();
         return;
     }
     idx = size_class(sz);
     if (idx > 12) {
         idx = 12;
     }
+    if (tls_free[idx] == NULL) {
+        ((uint32_t *)block)[1] = MAGIC_FREE;
+        last_freed += 1;
+        if (live_objects > 0) {
+            live_objects -= 1;
+        }
+        tls_free[idx] = block;
+        return;
+    }
+    heap_lock();
     ((uint32_t *)block)[1] = MAGIC_FREE;
     {
         void *next = dream_p(freelist[idx]);

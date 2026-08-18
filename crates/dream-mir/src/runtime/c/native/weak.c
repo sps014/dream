@@ -13,6 +13,7 @@ typedef struct dream_weak_node {
 
 static dream_weak_node *weak_list_head;
 static pthread_mutex_t weak_mu = PTHREAD_MUTEX_INITIALIZER;
+int dream_weak_any;
 
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra) {
     dream_weak_node *node;
@@ -29,6 +30,7 @@ void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_p
     pthread_mutex_lock(&weak_mu);
     node->next = weak_list_head;
     weak_list_head = node;
+    dream_weak_any = 1;
     pthread_mutex_unlock(&weak_mu);
 }
 
@@ -40,6 +42,7 @@ void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
         dream_weak_node *node = *link;
         if (node->target == target && node->slot == slot) {
             *link = node->next;
+            dream_weak_any = weak_list_head != NULL;
             pthread_mutex_unlock(&weak_mu);
             dream_free((dream_ptr)(uintptr_t)node);
             return;
@@ -75,6 +78,7 @@ void dream_weak_clear_all(dream_ptr obj) {
         }
     }
     pthread_mutex_unlock(&weak_mu);
+    dream_weak_any = weak_list_head != NULL;
     while (dead) {
         dream_weak_node *node = dead;
         dead = node->next;

@@ -106,39 +106,10 @@ void string_set(dream_ptr ptr, int32_t i, int32_t c) {
 }
 
 dream_ptr string_substring_raw(dream_ptr ptr, int32_t start, int32_t end) {
-    int32_t n;
-    int32_t len;
-    dream_ptr p;
     if (!ptr) {
         return dream_string_alloc(0);
     }
-    n = dream_str_len(ptr);
-    if (start < 0) {
-        start = 0;
-    }
-    if (end < 0) {
-        end = 0;
-    }
-    if (start > n) {
-        start = n;
-    }
-    if (end > n) {
-        end = n;
-    }
-    if (end < start) {
-        end = start;
-    }
-    len = end - start;
-    if (len <= 0) {
-        return dream_string_alloc(0);
-    }
-    p = dream_string_alloc(len);
-    memcpy(
-        (char *)dream_p(p) + STRING_UNITS_OFFSET,
-        dream_str_units(ptr) + start,
-        (size_t)len << 1
-    );
-    return p;
+    return dream_substring(ptr, start, end);
 }
 
 dream_ptr string_clone(dream_ptr ptr) {

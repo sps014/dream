@@ -192,8 +192,7 @@ DREAM_ALWAYS_INLINE int32_t dream_i32_utf16_len(int32_t v) {
     return dream_u32_ndigits((uint32_t)v);
 }
 
-DREAM_ALWAYS_INLINE void dream_write_i32_utf16(uint16_t *out, int32_t v) {
-    int32_t n = dream_i32_utf16_len(v);
+DREAM_ALWAYS_INLINE void dream_write_i32_utf16_n(uint16_t *out, int32_t v, int32_t n) {
     uint32_t u;
     if (v == 0) {
         out[0] = 48;
@@ -217,6 +216,10 @@ DREAM_ALWAYS_INLINE void dream_write_i32_utf16(uint16_t *out, int32_t v) {
         out[--n] = (uint16_t)(48u + u % 10u);
         u /= 10u;
     }
+}
+
+DREAM_ALWAYS_INLINE void dream_write_i32_utf16(uint16_t *out, int32_t v) {
+    dream_write_i32_utf16_n(out, v, dream_i32_utf16_len(v));
 }
 
 DREAM_ALWAYS_INLINE dream_ptr dream_int_to_string_fast(int32_t v) {
@@ -245,7 +248,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v
     if (plen != 0) {
         memcpy(d, dream_str_units(pref), (size_t)plen << 1);
     }
-    dream_write_i32_utf16(d + plen, v);
+    dream_write_i32_utf16_n(d + plen, v, nd);
     if (slen != 0) {
         memcpy(d + plen + nd, dream_str_units(suf), (size_t)slen << 1);
     }
@@ -257,21 +260,16 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
     int32_t len;
     dream_ptr p;
     const uint16_t *data;
+    int32_t *rc;
     if (s == 0) {
         return 0;
     }
     len = dream_str_len(s);
-    if (start < 0) {
-        start = 0;
+    if ((uint32_t)start > (uint32_t)len) {
+        start = start < 0 ? 0 : len;
     }
-    if (end < 0) {
-        end = 0;
-    }
-    if (start > len) {
-        start = len;
-    }
-    if (end > len) {
-        end = len;
+    if ((uint32_t)end > (uint32_t)len) {
+        end = end < 0 ? 0 : len;
     }
     if (end < start) {
         end = start;
@@ -289,7 +287,14 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
     memcpy((char *)dream_p(p) + 8, &s, sizeof(s));
     data = dream_str_units(s) + start;
     memcpy((char *)dream_p(p) + 8 + sizeof(dream_ptr), &data, sizeof(data));
-    dream_retain(s);
+    rc = (int32_t *)((char *)dream_p(s) - RC_FROM_DATA);
+    if (*rc != INT32_MAX) {
+        if (!dream_rt_mt) {
+            *rc += 1;
+        } else {
+            dream_retain(s);
+        }
+    }
     return p;
 }
 
@@ -485,6 +490,38 @@ int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
+
+DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
+    int32_t n;
+    int32_t nbytes;
+    int32_t count;
+    int32_t cap;
+    int32_t need;
+    dream_ptr bytes;
+    if (!sb || !text) {
+        return;
+    }
+    n = dream_str_len(text);
+    if (n <= 0) {
+        return;
+    }
+    nbytes = n << 1;
+    bytes = *(dream_ptr *)dream_p(sb);
+    count = *(int32_t *)((char *)dream_p(sb) + 8);
+    cap = bytes ? *(int32_t *)dream_p(bytes) : 0;
+    need = count + nbytes + 4;
+    if (__builtin_expect(need > cap, 0)) {
+        int32_t new_cap = cap * 2;
+        if (new_cap < need) {
+            new_cap = need;
+        }
+        bytes = dream_array_realloc(bytes, new_cap, 1);
+        *(dream_ptr *)dream_p(sb) = bytes;
+    }
+    memcpy((char *)dream_p(bytes) + 8 + count, dream_str_units(text), (size_t)nbytes);
+    *(int32_t *)((char *)dream_p(sb) + 8) = count + nbytes;
+    *(int32_t *)((char *)dream_p(sb) + 12) = *(int32_t *)((char *)dream_p(sb) + 12) + n;
+}
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
 dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag);
@@ -562,6 +599,7 @@ int32_t dream_semaphore_try_acquire(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms);
 dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32_t argc);
 void dream_weak_clear_all(dream_ptr obj);
+extern int dream_weak_any;
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 

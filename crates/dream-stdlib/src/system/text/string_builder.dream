@@ -72,16 +72,13 @@ public class StringBuilder {
         this.write_unit(56320 + (x % 1024));
     }
 
+    @intrinsic("string_builder_push")
+    static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
+
     // Appends every UTF-16 unit of `text`, growing at most once.
     @inline
     public fun append(borrow text: string): void {
-        let byte_len = text.byte_size();
-        if (byte_len <= 0) {
-            return;
-        }
-        this.ensure(byte_len);
-        this.count = string.builder_append(this.bytes, this.count, text);
-        this.scalars = this.scalars + text.length;
+        StringBuilder.push_raw(this, text);
     }
 
     // Appends `byte_len` payload bytes starting at byte index `start` of `text`.
@@ -148,18 +145,15 @@ public class StringBuilder {
         this.scalars = 0;
     }
 
-    // Materializes the accumulated UTF-16 units into a single new string without emptying the
-    // builder (`clear` is the explicit reset). `to_string()` shares this snapshot so `print`/`+`
-    // keep working after `build()`.
+    // Snapshot into a new string. `from_builder` copies once; do not stage through a
+    // second `byte[]` (that doubled the finish memcpy).
     public fun build(): string {
         let n = this.count;
         let sc = this.scalars;
         if (n <= 0) {
             return string.empty;
         }
-        let copy = Buffer.alloc<byte>(n + 8);
-        Buffer.elems_copy<byte>(copy, 4, this.bytes, 4, n);
-        return string.from_builder(copy, n, sc);
+        return string.from_builder(this.bytes, n, sc);
     }
 
     @override public fun to_string(): string {

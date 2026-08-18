@@ -65,6 +65,36 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
         }
     }
 
+    // Codegen materializes `Await.dest` in the resume block. Forwarding copies of that
+    // dest (`let g = await …`) must own the result or the unique RC from `AsyncComplete`
+    // is never released (async_rc_return live_delta).
+    for block in &func.blocks {
+        if let Terminator::Await {
+            dest: Some(d),
+            resume,
+            ..
+        } = &block.terminator
+        {
+            escaped.insert(d.0);
+            forwarding.remove(&d.0);
+            let ri = resume.0 as usize;
+            if ri < func.blocks.len() {
+                for stmt in &func.blocks[ri].stmts {
+                    if let Statement::Assign(
+                        Place::Local(user),
+                        Rvalue::Use(Operand::Copy(Place::Local(src))),
+                    ) = stmt
+                    {
+                        if src.0 == d.0 {
+                            escaped.insert(user.0);
+                            forwarding.remove(&user.0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     for id in candidates.union(&forwarding).copied() {
         if !escaped.contains(&id) {
             func.locals[id as usize].is_cursor = true;

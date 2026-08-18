@@ -3356,3 +3356,96 @@
       end
     end
     local.get 3)
+
+(func $string_builder_push (param $sb i32) (param $text i32)
+  (local $n i32) (local $nbytes i32) (local $bytes i32) (local $count i32) (local $cap i32) (local $need i32) (local $new_cap i32) (local $src i32)
+  block $done
+    local.get $sb
+    i32.eqz
+    br_if $done
+    local.get $text
+    i32.eqz
+    br_if $done
+    local.get $text
+    i32.load
+    local.tee $n
+    i32.eqz
+    br_if $done
+    local.get $n
+    i32.const 1
+    i32.shl
+    local.set $nbytes
+    local.get $sb
+    i32.load
+    local.set $bytes
+    local.get $sb
+    i32.load offset=4
+    local.set $count
+    local.get $bytes
+    i32.eqz
+    br_if $done
+    local.get $bytes
+    i32.load
+    local.set $cap
+    local.get $count
+    local.get $nbytes
+    i32.add
+    i32.const 4
+    i32.add
+    local.tee $need
+    local.get $cap
+    i32.gt_s
+    if
+      local.get $cap
+      i32.const 1
+      i32.shl
+      local.set $new_cap
+      local.get $new_cap
+      local.get $need
+      i32.lt_s
+      if
+        local.get $need
+        local.set $new_cap
+      end
+      local.get $bytes
+      local.get $new_cap
+      i32.const 4
+      i32.add
+      i32.const 6
+      call $realloc
+      local.tee $bytes
+      local.get $new_cap
+      i32.store
+      local.get $sb
+      local.get $bytes
+      i32.store
+    end
+    local.get $text
+    i32.load offset=4
+    local.tee $src
+    local.get $text
+    i32.const 8
+    i32.add
+    local.get $src
+    select
+    local.set $src
+    local.get $bytes
+    i32.const 8
+    i32.add
+    local.get $count
+    i32.add
+    local.get $src
+    local.get $nbytes
+    memory.copy
+    local.get $sb
+    local.get $count
+    local.get $nbytes
+    i32.add
+    i32.store offset=4
+    local.get $sb
+    local.get $sb
+    i32.load offset=8
+    local.get $n
+    i32.add
+    i32.store offset=8
+  end)

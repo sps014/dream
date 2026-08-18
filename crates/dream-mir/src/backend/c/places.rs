@@ -1,6 +1,6 @@
 use super::ast::{CTy, Expr, Stmt, UnOp};
 use super::emit::Emitter;
-use super::types::{array_elem_ty, elem_size, load_cast};
+use super::types::{array_elem_ty, elem_size, load_cast, local_c_ty};
 use crate::{Operand, Place};
 
 impl<'a> Emitter<'a> {
@@ -105,7 +105,61 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    fn bind_rhs(&mut self, ty: CTy, rhs: Expr) -> Expr {
+        if rhs.is_dup_safe() {
+            rhs
+        } else {
+            self.b.temp(ty, Some(rhs))
+        }
+    }
+
+    fn store_val_ty(&self, place: &Place) -> CTy {
+        let value_ptr = |ty| {
+            if self.cx.interner.is_value_type(ty) {
+                CTy::Ptr
+            } else {
+                load_cast(self.cx, ty)
+            }
+        };
+        match place {
+            // Locals are register-width (`int` is i64, `char` is i32). `load_cast` is the
+            // in-memory packed layout and would truncate UTF-16 chars and native pointers.
+            Place::Local(l) => {
+                let ty = self.f.local_ty(*l);
+                if self.cx.interner.is_value_type(ty) {
+                    CTy::Ptr
+                } else {
+                    local_c_ty(self.cx.interner, ty)
+                }
+            }
+            Place::Global(g) => {
+                if g.0 == 0 {
+                    CTy::Ptr
+                } else {
+                    self.cx
+                        .mir
+                        .globals
+                        .iter()
+                        .find(|global| global.id == *g)
+                        .map(|global| value_ptr(global.ty))
+                        .unwrap_or(CTy::Ptr)
+                }
+            }
+            Place::Field { base, field } => self
+                .cx
+                .nstruct(self.f.local_ty(*base))
+                .and_then(|layout| layout.fields.get(*field))
+                .map(|fld| value_ptr(fld.ty))
+                .unwrap_or(CTy::Ptr),
+            Place::Index { base, .. } => {
+                value_ptr(array_elem_ty(self.cx.interner, self.f.local_ty(*base)))
+            }
+            Place::Deref { elem_ty, .. } => value_ptr(*elem_ty),
+        }
+    }
+
     pub(super) fn store(&mut self, place: &Place, rv: &crate::Rvalue, rhs: Expr) -> Expr {
+        let rhs = self.bind_rhs(self.store_val_ty(place), rhs);
         match place {
             Place::Local(l) if self.cx.interner.is_value_type(self.f.local_ty(*l)) => {
                 if is_value_place_alias(self.f, *l, rv) {

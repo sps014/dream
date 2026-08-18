@@ -221,6 +221,37 @@ impl Expr {
     pub fn load(ty: CTy, ptr: Expr) -> Self {
         Expr::lvalue(ty, ptr)
     }
+
+    /// True when printing this expression twice cannot re-run a call or statement-expression.
+    pub fn is_dup_safe(&self) -> bool {
+        !self.has_side_effect()
+    }
+
+    fn has_side_effect(&self) -> bool {
+        match self {
+            Expr::Call { .. }
+            | Expr::IndirectCall { .. }
+            | Expr::Gnu { .. }
+            | Expr::PostInc(_)
+            | Expr::Comma(_, _) => true,
+            Expr::Cast { expr, .. }
+            | Expr::Unary { expr, .. }
+            | Expr::Deref(expr)
+            | Expr::AddrOf(expr) => expr.has_side_effect(),
+            Expr::Binary { lhs, rhs, .. } | Expr::Index { base: lhs, index: rhs } => {
+                lhs.has_side_effect() || rhs.has_side_effect()
+            }
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => cond.has_side_effect() || then_e.has_side_effect() || else_e.has_side_effect(),
+            Expr::Compound(elems) | Expr::CompoundTyped { elems, .. } => {
+                elems.iter().any(Expr::has_side_effect)
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

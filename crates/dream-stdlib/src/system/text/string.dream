@@ -42,7 +42,7 @@ extend string : Comparable<string> {
         return StringIterator(this);
     }
 
-    // Gets a substring from start to end (UTF-8 byte-slice copy).
+    // Gets a substring from start to end (O(1) slice of the parent).
     public fun substring(start: int, end: int): string {
         return string.substring_raw(this, start, end);
     }

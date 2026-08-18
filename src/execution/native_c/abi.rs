@@ -42,7 +42,7 @@ fn ensure_abi() {
     });
 }
 
-unsafe fn read_string(p: usize) -> String {
+pub(super) unsafe fn read_string(p: usize) -> String {
     if p == 0 {
         return String::new();
     }
@@ -70,7 +70,7 @@ unsafe fn read_string(p: usize) -> String {
     String::from_utf16_lossy(units)
 }
 
-unsafe fn read_bytes(p: usize) -> Vec<u8> {
+pub(super) unsafe fn read_bytes(p: usize) -> Vec<u8> {
     if p == 0 {
         return Vec::new();
     }
@@ -111,7 +111,7 @@ fn alloc_string(s: &str) -> usize {
     }
 }
 
-fn alloc_bytes(bytes: &[u8]) -> usize {
+pub(super) fn alloc_bytes(bytes: &[u8]) -> usize {
     let alloc = GUEST.lock().ok().and_then(|g| g.array_new);
     let Some(alloc) = alloc else {
         return 0;

@@ -1,6 +1,7 @@
 //! Compile generated MIR C with the native runtime and run the resulting binary.
 
 pub mod abi;
+pub mod webview;
 mod cc;
 
 use crate::driver::wasm_opt::OptLevel;

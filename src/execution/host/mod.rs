@@ -29,7 +29,7 @@ mod process;
 mod shared_memory;
 mod stack_size;
 mod text;
-mod webview;
+pub(crate) mod webview;
 mod worker;
 
 #[cfg(feature = "c-ffi")]

@@ -455,7 +455,7 @@ fn child_bounds(width: u32, height: u32) -> Rect {
     }
 }
 
-fn create_webview(title: &str, width: i32, height: i32) -> i32 {
+pub(crate) fn create_webview(title: &str, width: i32, height: i32) -> i32 {
     let w = width.max(1) as u32;
     let h = height.max(1) as u32;
     let created = with_event_loop(|el| {
@@ -570,7 +570,7 @@ fn with_entry_mut<R>(id: i32, f: impl FnOnce(&mut WebViewEntry) -> R) -> Option<
     })
 }
 
-fn load_url(id: i32, url: &str) -> i32 {
+pub(crate) fn load_url(id: i32, url: &str) -> i32 {
     pump();
     match with_entry_mut(id, |e| {
         e.page_ready.store(false, Ordering::SeqCst);
@@ -593,7 +593,7 @@ fn load_url(id: i32, url: &str) -> i32 {
     }
 }
 
-fn load_html(id: i32, html: &str) -> i32 {
+pub(crate) fn load_html(id: i32, html: &str) -> i32 {
     pump();
     match with_entry_mut(id, |e| {
         e.page_ready.store(false, Ordering::SeqCst);
@@ -616,7 +616,7 @@ fn load_html(id: i32, html: &str) -> i32 {
     }
 }
 
-fn load_file(id: i32, path: &str) -> i32 {
+pub(crate) fn load_file(id: i32, path: &str) -> i32 {
     pump();
     let abs: PathBuf = if Path::new(path).is_absolute() {
         PathBuf::from(path)
@@ -650,7 +650,7 @@ fn load_file(id: i32, path: &str) -> i32 {
     }
 }
 
-fn close(id: i32) {
+pub(crate) fn close(id: i32) {
     pump();
     if id <= 0 {
         return;
@@ -665,7 +665,7 @@ fn close(id: i32) {
 }
 
 /// One `WebView.run` iteration: pump AppKit, then return `closed\n` + poll payload.
-fn tick(id: i32) -> Vec<u8> {
+pub(crate) fn tick(id: i32) -> Vec<u8> {
     pump_for(Duration::from_millis(16));
     let closed = with_entry_mut(id, |e| e.close_requested).unwrap_or(true);
     let messages =
@@ -676,19 +676,19 @@ fn tick(id: i32) -> Vec<u8> {
     out
 }
 
-fn close_requested(id: i32) -> bool {
+pub(crate) fn close_requested(id: i32) -> bool {
     pump_for(Duration::from_millis(16));
     with_entry_mut(id, |e| e.close_requested).unwrap_or(true)
 }
 
-fn poll_messages(id: i32) -> Vec<u8> {
+pub(crate) fn poll_messages(id: i32) -> Vec<u8> {
     pump();
     let messages =
         with_entry_mut(id, |e| e.pending.drain(..).collect::<Vec<_>>()).unwrap_or_default();
     encode_poll(&messages)
 }
 
-fn reply(id: i32, reply_id: i32, body: &str) {
+pub(crate) fn reply(id: i32, reply_id: i32, body: &str) {
     pump();
     let script = format!(
         "window.Dream && Dream.__resolve({}, {});",
@@ -698,7 +698,7 @@ fn reply(id: i32, reply_id: i32, body: &str) {
     let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
 }
 
-fn reply_bytes(id: i32, reply_id: i32, body: &[u8]) {
+pub(crate) fn reply_bytes(id: i32, reply_id: i32, body: &[u8]) {
     pump();
     let script = format!(
         "window.Dream && Dream.__resolveBytes({}, {});",
@@ -708,7 +708,7 @@ fn reply_bytes(id: i32, reply_id: i32, body: &[u8]) {
     let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
 }
 
-fn reply_err(id: i32, reply_id: i32, message: &str) {
+pub(crate) fn reply_err(id: i32, reply_id: i32, message: &str) {
     pump();
     let script = format!(
         "window.Dream && Dream.__reject({}, {});",
@@ -718,7 +718,7 @@ fn reply_err(id: i32, reply_id: i32, message: &str) {
     let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
 }
 
-fn emit(id: i32, channel: &str, body: &str) {
+pub(crate) fn emit(id: i32, channel: &str, body: &str) {
     pump();
     let script = format!(
         "window.Dream && Dream.__dispatch({}, {});",
@@ -728,7 +728,7 @@ fn emit(id: i32, channel: &str, body: &str) {
     let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
 }
 
-fn emit_bytes(id: i32, channel: &str, body: &[u8]) {
+pub(crate) fn emit_bytes(id: i32, channel: &str, body: &[u8]) {
     pump();
     let script = format!(
         "window.Dream && Dream.__dispatchBytes({}, {});",
@@ -753,7 +753,7 @@ fn decode_eval_callback(result_json: &str) -> Result<String, String> {
     }
 }
 
-fn eval_js(id: i32, js: &str) -> Vec<u8> {
+pub(crate) fn eval_js(id: i32, js: &str) -> Vec<u8> {
     pump();
     let wrapped = format!(
         "(function(){{ try {{ var __r = (function(){{ {js} }})(); return (__r === undefined || __r === null) ? '' : String(__r); }} catch(e) {{ return '__dream_eval_err__:' + (e && e.message ? e.message : String(e)); }} }})()"

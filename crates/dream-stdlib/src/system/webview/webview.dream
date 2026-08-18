@@ -150,55 +150,87 @@ public class WebView {
     }
 
     fun upsert_on(channel: string, fire: fun(string): void): void {
+        let found = 0 - 1;
         let i = 0;
         while (i < this._on.length) {
-            let entry = this._on.get(i).unwrap_or(WebViewOnEntry(channel, fire));
-            if (entry.channel == channel) {
-                entry.fire = fire;
-                return;
+            switch (this._on.get(i)) {
+                Some(entry) => {
+                    if (entry.channel == channel) {
+                        found = i;
+                    }
+                },
+                None => {},
             }
             i = i + 1;
         }
-        this._on.push(WebViewOnEntry(channel, fire));
+        if (found >= 0) {
+            this._on.set(found, WebViewOnEntry(channel, fire));
+        } else {
+            this._on.push(WebViewOnEntry(channel, fire));
+        }
     }
 
     fun upsert_serve(channel: string, fire: fun(string): string): void {
+        let found = 0 - 1;
         let i = 0;
         while (i < this._serve.length) {
-            let entry = this._serve.get(i).unwrap_or(WebViewServeEntry(channel, fire));
-            if (entry.channel == channel) {
-                entry.fire = fire;
-                return;
+            switch (this._serve.get(i)) {
+                Some(entry) => {
+                    if (entry.channel == channel) {
+                        found = i;
+                    }
+                },
+                None => {},
             }
             i = i + 1;
         }
-        this._serve.push(WebViewServeEntry(channel, fire));
+        if (found >= 0) {
+            this._serve.set(found, WebViewServeEntry(channel, fire));
+        } else {
+            this._serve.push(WebViewServeEntry(channel, fire));
+        }
     }
 
     fun upsert_on_bytes(channel: string, fire: fun(byte[]): void): void {
+        let found = 0 - 1;
         let i = 0;
         while (i < this._on_bytes.length) {
-            let entry = this._on_bytes.get(i).unwrap_or(WebViewOnBytesEntry(channel, fire));
-            if (entry.channel == channel) {
-                entry.fire = fire;
-                return;
+            switch (this._on_bytes.get(i)) {
+                Some(entry) => {
+                    if (entry.channel == channel) {
+                        found = i;
+                    }
+                },
+                None => {},
             }
             i = i + 1;
         }
-        this._on_bytes.push(WebViewOnBytesEntry(channel, fire));
+        if (found >= 0) {
+            this._on_bytes.set(found, WebViewOnBytesEntry(channel, fire));
+        } else {
+            this._on_bytes.push(WebViewOnBytesEntry(channel, fire));
+        }
     }
 
     fun upsert_serve_bytes(channel: string, fire: fun(byte[]): byte[]): void {
+        let found = 0 - 1;
         let i = 0;
         while (i < this._serve_bytes.length) {
-            let entry = this._serve_bytes.get(i).unwrap_or(WebViewServeBytesEntry(channel, fire));
-            if (entry.channel == channel) {
-                entry.fire = fire;
-                return;
+            switch (this._serve_bytes.get(i)) {
+                Some(entry) => {
+                    if (entry.channel == channel) {
+                        found = i;
+                    }
+                },
+                None => {},
             }
             i = i + 1;
         }
-        this._serve_bytes.push(WebViewServeBytesEntry(channel, fire));
+        if (found >= 0) {
+            this._serve_bytes.set(found, WebViewServeBytesEntry(channel, fire));
+        } else {
+            this._serve_bytes.push(WebViewServeBytesEntry(channel, fire));
+        }
     }
 
     @native

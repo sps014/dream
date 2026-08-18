@@ -26,6 +26,20 @@ dream_ptr dream_array_new(int32_t len, int32_t esize) {
     return p;
 }
 
+__attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes,
+                                                              int32_t need) {
+    int32_t cap = bytes ? dream_i32(bytes)[0] : 0;
+    int32_t new_cap = cap * 2;
+    if (new_cap < need) {
+        new_cap = need;
+    }
+    bytes = dream_array_realloc(bytes, new_cap, 1);
+    if (sb) {
+        sb->bytes = bytes;
+    }
+    return bytes;
+}
+
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize) {
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
     dream_ptr p = dream_realloc(arr, 4 + new_len * esize, TAG_ARRAY);

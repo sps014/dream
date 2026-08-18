@@ -1,12 +1,17 @@
 use super::ast::{CTy, Expr};
 use super::emit::Emitter;
 use super::types::{c_ident, runtime_c_name};
-use crate::{Callee, Operand};
+use crate::{Callee, Const, Operand};
 
 impl<'a> Emitter<'a> {
     pub(super) fn call_expr(&mut self, callee: &Callee, args: &[Operand]) -> Expr {
         let raw = self.cx.callee_c(callee.def, &callee.args);
         let name = runtime_c_name(&raw);
+        if name == "dream_sb_push" {
+            if let Some(e) = self.sb_push_expr(args) {
+                return e;
+            }
+        }
         let mut args_e: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
         if name == "dream_all" {
             let es = match self.cx.interner.kind(callee.ret) {
@@ -20,6 +25,36 @@ impl<'a> Emitter<'a> {
             args_e.push(Expr::i(es as i64));
         }
         Expr::call(name, args_e)
+    }
+
+    fn sb_push_expr(&mut self, args: &[Operand]) -> Option<Expr> {
+        if args.len() < 2 {
+            return None;
+        }
+        let text = args.get(1)?;
+        let s = match text {
+            Operand::Const(Const::Str(s)) => s.as_str(),
+            _ => return None,
+        };
+        let n = s.encode_utf16().count() as i64;
+        if n <= 0 {
+            return None;
+        }
+        let sym = self.cx.str_sym(s);
+        Some(Expr::call(
+            "dream_sb_push_units",
+            vec![
+                self.operand(&args[0]),
+                Expr::cast(
+                    CTy::VoidPtr,
+                    Expr::ptr_add(
+                        Expr::id(sym),
+                        Expr::i(crate::abi::STRING_UNITS_OFFSET as i64),
+                    ),
+                ),
+                Expr::i(n),
+            ],
+        ))
     }
 
     pub(super) fn indirect_expr(

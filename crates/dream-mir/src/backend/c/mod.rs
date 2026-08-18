@@ -233,6 +233,8 @@ mod tests {
             "dream_sb_push"
         );
         assert!(super::types::native_header_declares("dream_sb_push"));
+        assert!(super::types::native_header_declares("dream_sb_grow_bytes"));
+        assert!(super::types::native_header_declares("dream_sb_push_units"));
         assert!(include_str!("../../runtime/strings.wat").contains("$string_builder_push"));
     }
 

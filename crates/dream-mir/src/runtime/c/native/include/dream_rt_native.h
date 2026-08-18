@@ -188,19 +188,8 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings(dream_ptr a, dream_ptr b) {
         dream_retain(a);
         return a;
     }
-    if (dream_str_can_hold(a, sc1 + sc2)) {
-        memcpy((char *)dream_p(a) + STRING_UNITS_OFFSET + len1, dream_str_units(b), len2);
-        dream_i32(a)[0] = sc1 + sc2;
-        dream_retain(a);
-        return a;
-    }
-    if (dream_str_can_hold(b, sc1 + sc2)) {
-        memmove((char *)dream_p(b) + STRING_UNITS_OFFSET + len1, dream_str_units(b), len2);
-        memcpy((char *)dream_p(b) + STRING_UNITS_OFFSET, dream_str_units(a), len1);
-        dream_i32(b)[0] = sc1 + sc2;
-        dream_retain(b);
-        return b;
-    }
+    /* Operand buffers stay immutable: RC==1 is not "dead". `"--" + boundary` would
+     * otherwise rewrite a live `boundary`. Dest reuse is `_into` only. */
     p = dream_malloc((int32_t)(len1 + len2 + 8), TAG_STRING);
     dream_concat_fill(p, a, b, sc1, sc2);
     return p;
@@ -214,7 +203,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings_into(dream_ptr dest, dream_pt
         dream_release(dest);
         return 0;
     }
-    if (dream_str_can_hold(dest, sc1 + sc2)) {
+    if (dest != a && dest != b && dream_str_can_hold(dest, sc1 + sc2)) {
         dream_concat_fill(dest, a, b, sc1, sc2);
         return dest;
     }
@@ -330,11 +319,6 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v
     if (total <= 0) {
         return 0;
     }
-    if (dream_str_can_hold(pref, total)) {
-        dream_concat_str_int_str_fill(pref, pref, v, suf, plen, nd, slen);
-        dream_retain(pref);
-        return pref;
-    }
     p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
     dream_concat_str_int_str_fill(p, pref, v, suf, plen, nd, slen);
     return p;
@@ -351,7 +335,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str_into(dream_ptr dest, drea
         dream_release(dest);
         return 0;
     }
-    if (dream_str_can_hold(dest, total)) {
+    if (dest != pref && dest != suf && dream_str_can_hold(dest, total)) {
         dream_concat_str_int_str_fill(dest, pref, v, suf, plen, nd, slen);
         return dest;
     }
@@ -655,36 +639,78 @@ dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
 
+/* Native `StringBuilder` payload (bytes, count, scalars). Typed so memcpy into the
+ * `byte[]` is not treated as clobbering the builder fields. */
+typedef struct {
+    dream_ptr bytes;
+    int32_t count;
+    int32_t scalars;
+} dream_sb;
+
+dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes, int32_t need);
+
+DREAM_ALWAYS_INLINE const void *dream_str_units_fast(dream_ptr s) {
+    const uint16_t *d;
+    if (dream_i32(s)[1] == DREAM_STR_SLICE) {
+        memcpy(&d, (char *)dream_p(s) + STRING_UNITS_OFFSET + sizeof(dream_ptr), sizeof(d));
+        return d;
+    }
+    return (const char *)dream_p(s) + STRING_UNITS_OFFSET;
+}
+
 DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
+    dream_sb *restrict s;
     int32_t n;
     int32_t nbytes;
     int32_t count;
     int32_t cap;
-    int32_t need;
     dream_ptr bytes;
-    if (!sb || !text) {
+    char *restrict dst;
+    const char *restrict src;
+    if (__builtin_expect(!sb || !text, 0)) {
         return;
     }
-    n = dream_str_len(text);
-    if (n <= 0) {
+    n = dream_i32(text)[0];
+    if (__builtin_expect(n <= 0, 0)) {
         return;
     }
     nbytes = n << 1;
-    bytes = *(dream_ptr *)dream_p(sb);
-    count = *(int32_t *)((char *)dream_p(sb) + 8);
-    cap = bytes ? *(int32_t *)dream_p(bytes) : 0;
-    need = count + nbytes + 4;
-    if (__builtin_expect(need > cap, 0)) {
-        int32_t new_cap = cap * 2;
-        if (new_cap < need) {
-            new_cap = need;
-        }
-        bytes = dream_array_realloc(bytes, new_cap, 1);
-        *(dream_ptr *)dream_p(sb) = bytes;
+    s = (dream_sb *)dream_p(sb);
+    bytes = s->bytes;
+    count = s->count;
+    cap = bytes ? dream_i32(bytes)[0] : 0;
+    if (__builtin_expect(count + nbytes + 4 > cap, 0)) {
+        bytes = dream_sb_grow_bytes(s, bytes, count + nbytes + 4);
     }
-    memcpy((char *)dream_p(bytes) + 8 + count, dream_str_units(text), (size_t)nbytes);
-    *(int32_t *)((char *)dream_p(sb) + 8) = count + nbytes;
-    *(int32_t *)((char *)dream_p(sb) + 12) = *(int32_t *)((char *)dream_p(sb) + 12) + n;
+    src = (const char *)dream_str_units_fast(text);
+    dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
+    memcpy(dst, src, (size_t)nbytes);
+    s->count = count + nbytes;
+    s->scalars += n;
+}
+
+DREAM_ALWAYS_INLINE void dream_sb_push_units(dream_ptr sb, const void *src, int32_t n) {
+    dream_sb *restrict s;
+    int32_t nbytes;
+    int32_t count;
+    int32_t cap;
+    dream_ptr bytes;
+    char *restrict dst;
+    if (__builtin_expect(!sb || !src || n <= 0, 0)) {
+        return;
+    }
+    nbytes = n << 1;
+    s = (dream_sb *)dream_p(sb);
+    bytes = s->bytes;
+    count = s->count;
+    cap = bytes ? dream_i32(bytes)[0] : 0;
+    if (__builtin_expect(count + nbytes + 4 > cap, 0)) {
+        bytes = dream_sb_grow_bytes(s, bytes, count + nbytes + 4);
+    }
+    dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
+    memcpy(dst, src, (size_t)(uint32_t)nbytes);
+    s->count = count + nbytes;
+    s->scalars += n;
 }
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);

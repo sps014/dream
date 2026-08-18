@@ -620,9 +620,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
         }
         {
             let mut e = Emitter::new(cx, &body, &mut poll);
-            for stmt in &block.stmts {
-                e.stmt(stmt);
-            }
+            e.stmts(&block.stmts);
         }
         for (i, decl) in body.locals.iter().enumerate() {
             if matches!(cx.interner.kind(decl.ty), TyKind::Void)
@@ -725,9 +723,7 @@ fn emit_func(m: &mut ModuleBuilder, cx: &Cx<'_>, f: &MirFunction) {
         b.label(format!("L{bi}"));
         {
             let mut e = Emitter::new(cx, f, &mut b);
-            for stmt in &block.stmts {
-                e.stmt(stmt);
-            }
+            e.stmts(&block.stmts);
             e.term(&block.terminator);
         }
     }

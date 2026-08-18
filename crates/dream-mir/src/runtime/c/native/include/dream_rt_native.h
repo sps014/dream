@@ -123,6 +123,54 @@ DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
 dream_ptr dream_malloc(int32_t size, int32_t tag);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
 
+DREAM_ALWAYS_INLINE int32_t dream_str_rc(dream_ptr p) {
+    if (p == 0) {
+        return 0;
+    }
+    return ((int32_t *)((char *)dream_p(p) - RC_FROM_DATA))[0];
+}
+
+DREAM_ALWAYS_INLINE int dream_str_unique_owned(dream_ptr p) {
+    if (p == 0 || dream_str_rc(p) != 1) {
+        return 0;
+    }
+    if (((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] != TAG_STRING) {
+        return 0;
+    }
+    if (dream_i32(p)[1] == DREAM_STR_SLICE) {
+        return 0;
+    }
+    return 1;
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_str_unit_cap(dream_ptr p) {
+    int32_t block;
+    int32_t payload;
+    if (p == 0) {
+        return 0;
+    }
+    block = ((int32_t *)((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE))[0];
+    payload = block - NATIVE_HEAP_HEADER_SIZE;
+    if (payload <= STRING_HEADER_SIZE) {
+        return 0;
+    }
+    return (payload - STRING_HEADER_SIZE) / 2;
+}
+
+DREAM_ALWAYS_INLINE int dream_str_can_hold(dream_ptr p, int32_t units) {
+    return dream_str_unique_owned(p) && units <= dream_str_unit_cap(p);
+}
+
+DREAM_ALWAYS_INLINE void dream_concat_fill(dream_ptr p, dream_ptr a, dream_ptr b, int32_t sc1,
+                                           int32_t sc2) {
+    size_t len1 = (size_t)sc1 << 1;
+    size_t len2 = (size_t)sc2 << 1;
+    dream_i32(p)[0] = sc1 + sc2;
+    dream_str_init_owned(p);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, dream_str_units(a), len1);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET + len1, dream_str_units(b), len2);
+}
+
 DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings(dream_ptr a, dream_ptr b) {
     int32_t sc1 = dream_str_len(a);
     int32_t sc2 = dream_str_len(b);
@@ -140,11 +188,38 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings(dream_ptr a, dream_ptr b) {
         dream_retain(a);
         return a;
     }
+    if (dream_str_can_hold(a, sc1 + sc2)) {
+        memcpy((char *)dream_p(a) + STRING_UNITS_OFFSET + len1, dream_str_units(b), len2);
+        dream_i32(a)[0] = sc1 + sc2;
+        dream_retain(a);
+        return a;
+    }
+    if (dream_str_can_hold(b, sc1 + sc2)) {
+        memmove((char *)dream_p(b) + STRING_UNITS_OFFSET + len1, dream_str_units(b), len2);
+        memcpy((char *)dream_p(b) + STRING_UNITS_OFFSET, dream_str_units(a), len1);
+        dream_i32(b)[0] = sc1 + sc2;
+        dream_retain(b);
+        return b;
+    }
     p = dream_malloc((int32_t)(len1 + len2 + 8), TAG_STRING);
-    dream_i32(p)[0] = sc1 + sc2;
-    dream_str_init_owned(p);
-    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, dream_str_units(a), len1);
-    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET + len1, dream_str_units(b), len2);
+    dream_concat_fill(p, a, b, sc1, sc2);
+    return p;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings_into(dream_ptr dest, dream_ptr a, dream_ptr b) {
+    int32_t sc1 = dream_str_len(a);
+    int32_t sc2 = dream_str_len(b);
+    dream_ptr p;
+    if (sc1 == 0 && sc2 == 0) {
+        dream_release(dest);
+        return 0;
+    }
+    if (dream_str_can_hold(dest, sc1 + sc2)) {
+        dream_concat_fill(dest, a, b, sc1, sc2);
+        return dest;
+    }
+    p = dream_concat_strings(a, b);
+    dream_release(dest);
     return p;
 }
 
@@ -231,20 +306,12 @@ DREAM_ALWAYS_INLINE dream_ptr dream_int_to_string_fast(int32_t v) {
     return p;
 }
 
-DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v, dream_ptr suf) {
-    int32_t plen = dream_str_len(pref);
-    int32_t slen = dream_str_len(suf);
-    int32_t nd = dream_i32_utf16_len(v);
-    int32_t total = plen + nd + slen;
-    dream_ptr p;
-    uint16_t *d;
-    if (total <= 0) {
-        return 0;
-    }
-    p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
-    dream_i32(p)[0] = total;
+DREAM_ALWAYS_INLINE void dream_concat_str_int_str_fill(dream_ptr p, dream_ptr pref, int32_t v,
+                                                       dream_ptr suf, int32_t plen, int32_t nd,
+                                                       int32_t slen) {
+    uint16_t *d = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
+    dream_i32(p)[0] = plen + nd + slen;
     dream_str_init_owned(p);
-    d = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     if (plen != 0) {
         memcpy(d, dream_str_units(pref), (size_t)plen << 1);
     }
@@ -252,28 +319,98 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v
     if (slen != 0) {
         memcpy(d + plen + nd, dream_str_units(suf), (size_t)slen << 1);
     }
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v, dream_ptr suf) {
+    int32_t plen = dream_str_len(pref);
+    int32_t slen = dream_str_len(suf);
+    int32_t nd = dream_i32_utf16_len(v);
+    int32_t total = plen + nd + slen;
+    dream_ptr p;
+    if (total <= 0) {
+        return 0;
+    }
+    if (dream_str_can_hold(pref, total)) {
+        dream_concat_str_int_str_fill(pref, pref, v, suf, plen, nd, slen);
+        dream_retain(pref);
+        return pref;
+    }
+    p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
+    dream_concat_str_int_str_fill(p, pref, v, suf, plen, nd, slen);
     return p;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str_into(dream_ptr dest, dream_ptr pref,
+                                                            int32_t v, dream_ptr suf) {
+    int32_t plen = dream_str_len(pref);
+    int32_t slen = dream_str_len(suf);
+    int32_t nd = dream_i32_utf16_len(v);
+    int32_t total = plen + nd + slen;
+    dream_ptr p;
+    if (total <= 0) {
+        dream_release(dest);
+        return 0;
+    }
+    if (dream_str_can_hold(dest, total)) {
+        dream_concat_str_int_str_fill(dest, pref, v, suf, plen, nd, slen);
+        return dest;
+    }
+    p = dream_concat_str_int_str(pref, v, suf);
+    dream_release(dest);
+    return p;
+}
+
+DREAM_ALWAYS_INLINE void dream_substring_clamp(dream_ptr s, int32_t *start, int32_t *end) {
+    int32_t len = dream_str_len(s);
+    if ((uint32_t)*start > (uint32_t)len) {
+        *start = *start < 0 ? 0 : len;
+    }
+    if ((uint32_t)*end > (uint32_t)len) {
+        *end = *end < 0 ? 0 : len;
+    }
+    if (*end < *start) {
+        *end = *start;
+    }
+}
+
+DREAM_ALWAYS_INLINE void dream_slice_retain_parent(dream_ptr s) {
+    int32_t *rc = (int32_t *)((char *)dream_p(s) - RC_FROM_DATA);
+    if (*rc == INT32_MAX) {
+        return;
+    }
+    if (!dream_rt_mt) {
+        *rc += 1;
+    } else {
+        dream_retain(s);
+    }
+}
+
+DREAM_ALWAYS_INLINE void dream_slice_fill(dream_ptr p, dream_ptr s, int32_t n,
+                                          const uint16_t *data) {
+    dream_i32(p)[0] = n;
+    dream_i32(p)[1] = DREAM_STR_SLICE;
+    memcpy((char *)dream_p(p) + 8, &s, sizeof(s));
+    memcpy((char *)dream_p(p) + 8 + sizeof(dream_ptr), &data, sizeof(data));
+}
+
+DREAM_ALWAYS_INLINE int dream_slice_unique(dream_ptr p) {
+    if (p == 0 || dream_str_rc(p) != 1) {
+        return 0;
+    }
+    if (((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] != TAG_STRING) {
+        return 0;
+    }
+    return dream_i32(p)[1] == DREAM_STR_SLICE;
 }
 
 DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_t end) {
     int32_t n;
-    int32_t len;
     dream_ptr p;
     const uint16_t *data;
-    int32_t *rc;
     if (s == 0) {
         return 0;
     }
-    len = dream_str_len(s);
-    if ((uint32_t)start > (uint32_t)len) {
-        start = start < 0 ? 0 : len;
-    }
-    if ((uint32_t)end > (uint32_t)len) {
-        end = end < 0 ? 0 : len;
-    }
-    if (end < start) {
-        end = start;
-    }
+    dream_substring_clamp(s, &start, &end);
     n = end - start;
     if (n <= 0) {
         p = dream_malloc(8, TAG_STRING);
@@ -282,19 +419,46 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
         return p;
     }
     p = dream_malloc((int32_t)(8 + 2 * (int32_t)sizeof(dream_ptr)), TAG_STRING);
-    dream_i32(p)[0] = n;
-    dream_i32(p)[1] = DREAM_STR_SLICE;
-    memcpy((char *)dream_p(p) + 8, &s, sizeof(s));
     data = dream_str_units(s) + start;
-    memcpy((char *)dream_p(p) + 8 + sizeof(dream_ptr), &data, sizeof(data));
-    rc = (int32_t *)((char *)dream_p(s) - RC_FROM_DATA);
-    if (*rc != INT32_MAX) {
-        if (!dream_rt_mt) {
-            *rc += 1;
-        } else {
-            dream_retain(s);
-        }
+    dream_slice_fill(p, s, n, data);
+    dream_slice_retain_parent(s);
+    return p;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_substring_into(dream_ptr dest, dream_ptr s, int32_t start,
+                                                   int32_t end) {
+    int32_t n;
+    const uint16_t *data;
+    dream_ptr p;
+    if (s == 0) {
+        dream_release(dest);
+        return 0;
     }
+    dream_substring_clamp(s, &start, &end);
+    n = end - start;
+    if (dream_slice_unique(dest)) {
+        dream_ptr old_parent = 0;
+        memcpy(&old_parent, (char *)dream_p(dest) + 8, sizeof(old_parent));
+        if (n <= 0) {
+            dream_i32(dest)[0] = 0;
+            dream_str_init_owned(dest);
+            if (old_parent != 0) {
+                dream_release(old_parent);
+            }
+            return dest;
+        }
+        data = dream_str_units(s) + start;
+        if (old_parent != s) {
+            dream_slice_retain_parent(s);
+            if (old_parent != 0) {
+                dream_release(old_parent);
+            }
+        }
+        dream_slice_fill(dest, s, n, data);
+        return dest;
+    }
+    p = dream_substring(s, start, end);
+    dream_release(dest);
     return p;
 }
 

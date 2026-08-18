@@ -28,7 +28,7 @@ pub use module::emit_c_module;
 mod tests {
     use super::emit_c_module;
     use crate::build::FunctionBuilder;
-    use crate::{Const, Mir, Operand, Place, Rvalue, Terminator};
+    use crate::{Callee, Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
     use dream_types::TypeInterner;
 
     #[test]
@@ -156,6 +156,74 @@ mod tests {
         let strings = include_str!("../../runtime/c/native/strings.c");
         assert!(strings.contains("return dream_substring"));
         assert!(!strings.contains("dream_string_alloc(len)"));
+        assert!(super::types::native_header_declares("dream_substring_into"));
+        assert!(super::types::native_header_declares("dream_concat_strings_into"));
+        assert!(super::types::native_header_declares(
+            "dream_concat_str_int_str_into"
+        ));
+    }
+
+    #[test]
+    fn substring_rebind_reuses_dest_header() {
+        let i = TypeInterner::new();
+        let def = dream_types::DefId(1);
+        let mut b = FunctionBuilder::new("sub", i.void());
+        let s = b.new_param(i.string(), Some("s".into()));
+        let dest = b.new_local(i.string(), Some("d".into()));
+        let tmp = b.new_local(i.string(), Some("t".into()));
+        b.assign(
+            Place::Local(tmp),
+            Rvalue::Call {
+                callee: Callee {
+                    def,
+                    args: vec![],
+                    ret: i.string(),
+                    take_params: vec![false, false, false],
+                },
+                args: vec![
+                    Operand::Copy(Place::Local(s)),
+                    Operand::Const(Const::Int(1)),
+                    Operand::Const(Const::Int(2)),
+                ],
+            },
+        );
+        b.push(Statement::Release(Operand::Copy(Place::Local(dest))));
+        b.assign(
+            Place::Local(dest),
+            Rvalue::Use(Operand::Copy(Place::Local(tmp))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            intrinsics: vec![(def, "string_substring_raw".into())],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_substring_into"), "{}", c);
+    }
+
+    #[test]
+    fn concat_int_rebind_reuses_dest_buffer() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("cat", i.void());
+        let v = b.new_param(i.int(), Some("v".into()));
+        let dest = b.new_local(i.string(), Some("d".into()));
+        b.push(Statement::Release(Operand::Copy(Place::Local(dest))));
+        b.assign(
+            Place::Local(dest),
+            Rvalue::ConcatInt {
+                prefix: Operand::Const(Const::Str("hello".into())),
+                value: Operand::Copy(Place::Local(v)),
+                suffix: Operand::Const(Const::Str("world".into())),
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_concat_str_int_str_into"), "{}", c);
     }
 
     #[test]

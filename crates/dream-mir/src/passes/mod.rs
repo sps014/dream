@@ -36,7 +36,7 @@ pub use iv::IvCanon;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
-pub(crate) use rc::stmt_reads_local;
+pub(crate) use rc::{rvalue_reads_local, stmt_reads_local};
 pub use rc::{RcElision, RcInsertion};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;

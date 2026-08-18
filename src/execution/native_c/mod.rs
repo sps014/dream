@@ -3,6 +3,7 @@
 pub mod abi;
 
 use dream_mir::backend::c::{native_runtime_c_files, native_runtime_include_dir};
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -106,9 +107,16 @@ fn libdream_dir() -> Option<PathBuf> {
 
 fn runtime_archive(release: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
     static LOCK: Mutex<()> = Mutex::new(());
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = PathBuf::from("target/dream-native-rt").join(if release { "release" } else { "debug" });
     std::fs::create_dir_all(&dir)?;
+    // Cross-process: each `dream` PID has its own Mutex, so parallel probe jobs can race `ar`.
+    let lock_file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(dir.join(".lock"))?;
+    lock_file.lock()?;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let archive = dir.join("libdream_rt.a");
     let stamp = dir.join(".stamp");
     let newest = native_runtime_c_files()
@@ -163,7 +171,12 @@ pub fn compile_native_c(c_path: &Path, release: bool) -> Result<PathBuf, Box<dyn
     if release {
         cmd.args(["-O3", "-flto", "-march=native"]);
     } else {
-        cmd.arg("-O0");
+        cmd.args([
+            "-O0",
+            "-pipe",
+            "-fno-asynchronous-unwind-tables",
+            "-fno-unwind-tables",
+        ]);
     }
     cmd.args([
         "-std=gnu11",

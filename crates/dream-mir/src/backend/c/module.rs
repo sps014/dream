@@ -10,7 +10,11 @@ use crate::{Mir, MirFunction};
 use dream_types::{TyKind, TypeInterner};
 
 pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
-    let cx = Cx::new(mir, interner);
+    emit_c_module_ex(mir, interner, false)
+}
+
+pub fn emit_c_module_ex(mir: &Mir, interner: &TypeInterner, release: bool) -> String {
+    let cx = Cx::new_ex(mir, interner, release);
     let mut out = String::new();
     out.push_str("#include \"dream_rt_native.h\"\n");
     out.push_str("#include <math.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
@@ -148,8 +152,11 @@ fn emit_worker_invoke(out: &mut String, cx: &Cx<'_>) {
 fn emit_imports(out: &mut String, cx: &Cx<'_>) {
     for imp in &cx.mir.imports {
         let host = crate::backend::c::types::import_host_name(imp);
-        let name = crate::backend::c::types::import_call_name(cx.mir, imp);
         let async_wrap = crate::backend::c::types::import_is_async_future(cx.mir, imp);
+        if !async_wrap && crate::backend::c::types::native_header_declares(&host) {
+            continue;
+        }
+        let name = crate::backend::c::types::import_call_name(cx.mir, imp);
         let host_ret = if async_wrap {
             match cx.interner.kind(imp.ret.unwrap()) {
                 TyKind::Struct(_, args) => match args.first() {
@@ -178,7 +185,9 @@ fn emit_imports(out: &mut String, cx: &Cx<'_>) {
             .map(|i| format!("a{i}"))
             .collect::<Vec<_>>()
             .join(", ");
-        out.push_str(&format!("{ret} {host}({args});\n"));
+        if !crate::backend::c::types::native_header_declares(&host) {
+            out.push_str(&format!("{ret} {host}({args});\n"));
+        }
         if async_wrap {
             out.push_str(&format!("dream_ptr {name}({args}) {{\n"));
             out.push_str("  dream_ptr __f = dream_new_future(64, -1, 1);\n");
@@ -192,85 +201,8 @@ fn emit_imports(out: &mut String, cx: &Cx<'_>) {
                 ));
             }
             out.push_str("  return __f;\n}\n");
-        } else if !matches!(
-            host.as_str(),
-            "print_int"
-                | "print_string"
-                | "print_char"
-                | "print_float"
-                | "print_double"
-                | "fileRead"
-                | "fileWrite"
-                | "fileAppend"
-                | "fileExists"
-                | "fileSize"
-                | "fileOpen"
-                | "fileHandleRead"
-                | "fileHandleWrite"
-                | "fileHandleSeek"
-                | "fileHandleClose"
-                | "processRun"
-                | "processSpawn"
-                | "processWriteStdin"
-                | "processReadStream"
-                | "processReadStreamLine"
-                | "processWait"
-                | "processKill"
-                | "httpRequest"
-                | "httpRequestBytes"
-                | "httpRequestStream"
-                | "httpRequestStreamBytes"
-                | "httpReadChunk"
-                | "httpCloseStream"
-                | "tcpConnect"
-                | "wsConnect"
-                | "dateZoneOffsetMinutes"
-                | "dateLocalZoneName"
-                | "workerSpawn"
-                | "workerPoolSpawn"
-                | "workerPost"
-                | "workerRecv"
-                | "workerPoolDispatch"
-                | "workerTerminate"
-                | "sin"
-                | "cos"
-                | "tan"
-                | "asin"
-                | "acos"
-                | "atan"
-                | "atan2"
-                | "sqrt"
-                | "pow"
-                | "floor"
-                | "ceil"
-                | "round"
-                | "dream_host_abs"
-                | "unicodeNormalize"
-                | "unicodeToLower"
-                | "unicodeToUpper"
-                | "unicodeGraphemes"
-                | "cryptoAesGcmEncrypt"
-                | "cryptoAesGcmDecrypt"
-        ) && !host.starts_with("gpu")
-        {
-            let zeros: Vec<String> = (0..imp.params.len())
-                .map(|i| format!("(void)a{i};"))
-                .collect();
-            let body = if ret == "void" {
-                zeros.join(" ")
-            } else {
-                format!("{} return 0;", zeros.join(" "))
-            };
-            out.push_str(&format!(
-                "__attribute__((weak)) {ret} {host}({args}) {{ {body} }}\n"
-            ));
         }
     }
-    out.push_str("void print_int(int32_t v);\n");
-    out.push_str("void print_string(dream_ptr s);\n");
-    out.push_str("void print_char(int32_t c);\n");
-    out.push_str("void print_float(float v);\n");
-    out.push_str("void print_double(double v);\n\n");
 }
 
 fn emit_ftable_decl(out: &mut String, cx: &Cx<'_>, async_n: usize) {
@@ -441,9 +373,10 @@ fn emit_async_pair(out: &mut String, cx: &Cx<'_>, stub: &MirFunction, poll_idx: 
 
 fn proto(cx: &Cx<'_>, f: &MirFunction) -> String {
     let name = c_ident(&func_symbol(f));
-    // `*sink*` helpers exist to defeat -O3/LTO deleting timed microbench loops.
+    // Keep `*sink*` as a real call so -O3/LTO cannot delete timed loops, but do not
+    // mark it `optnone` — that made every microbench iteration pay for an unoptimized callee.
     let attr = if name.to_ascii_lowercase().contains("sink") {
-        "__attribute__((noinline, noclone, optnone)) "
+        "__attribute__((noinline, noclone)) "
     } else {
         ""
     };
@@ -498,7 +431,7 @@ fn emit_func(out: &mut String, cx: &Cx<'_>, f: &MirFunction) {
         } else {
             out.push_str(&format!(
                 "  {} l{i} = 0;\n",
-                local_c_ty(cx.interner, decl.ty)
+                c_ty(cx.interner, decl.ty)
             ));
         }
     }

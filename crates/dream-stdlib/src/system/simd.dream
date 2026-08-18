@@ -45,12 +45,12 @@ public struct Vector<T : unmanaged> {
 
     // Writes this vector's lanes into `dest` starting at `offset`.
     @inline
-    public fun store(dest: T[], offset: int): void {
+    public fun store(borrow dest: T[], offset: int): void {
         Vector<T>.store_raw(this, dest, offset);
     }
 
     @intrinsic("simd_v128_store")
-    static extern fun store_raw(v: Vector<T>, dest: T[], offset: int): void;
+    static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void;
 
     // Returns lane `i` (`0 .. count`).
     public fun lane(i: int): T {

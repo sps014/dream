@@ -14,10 +14,12 @@ pub(super) struct Cx<'a> {
     pub tags: HashMap<TypeId, i32>,
     pub ft: HashMap<(DefId, Vec<TypeId>), usize>,
     pub native: NativeLayouts,
+    /// `--release`: skip per-index bounds traps so clang can vectorize counted loops.
+    pub omit_bounds: bool,
 }
 
 impl<'a> Cx<'a> {
-    pub(super) fn new(mir: &'a Mir, interner: &'a TypeInterner) -> Self {
+    pub(super) fn new_ex(mir: &'a Mir, interner: &'a TypeInterner, omit_bounds: bool) -> Self {
         let symbols = symbol_table(mir);
         let mut ft = HashMap::new();
         for (idx, f) in (1usize..).zip(mir.functions.iter()) {
@@ -31,6 +33,7 @@ impl<'a> Cx<'a> {
             native: NativeLayouts::compute(mir, interner),
             mir,
             interner,
+            omit_bounds,
         }
     }
 

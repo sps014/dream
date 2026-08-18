@@ -133,6 +133,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
 
 typedef float dream_f32v __attribute__((vector_size(DREAM_F32_LANES * 4)));
 typedef int32_t dream_i32v __attribute__((vector_size(DREAM_I32_LANES * 4)));
+typedef float dream_f32x4 __attribute__((vector_size(16)));
 
 DREAM_ALWAYS_INLINE void dream_arr_add_f32(float *c, const float *a, const float *b, int32_t n) {
     int32_t i = 0;
@@ -164,6 +165,122 @@ DREAM_ALWAYS_INLINE void dream_arr_add_i32(int32_t *c, const int32_t *a, const i
     }
 }
 
+DREAM_ALWAYS_INLINE void dream_v128_splat_f32(void *dest, float v) {
+    dream_f32x4 r = {v, v, v, v};
+    memcpy(dest, &r, 16);
+}
+
+DREAM_ALWAYS_INLINE void dream_v128_f32_bin(void *dest, const void *a, const void *b, int32_t op) {
+    dream_f32x4 x;
+    dream_f32x4 y;
+    memcpy(&x, a, 16);
+    memcpy(&y, b, 16);
+    if (op == 1) {
+        x = x - y;
+    } else if (op == 2) {
+        x = x * y;
+    } else if (op == 3 || op == 4) {
+        float xa[4];
+        float ya[4];
+        float ra[4];
+        int i;
+        memcpy(xa, a, 16);
+        memcpy(ya, b, 16);
+        for (i = 0; i < 4; i++) {
+            ra[i] = op == 3 ? (xa[i] < ya[i] ? xa[i] : ya[i]) : (xa[i] > ya[i] ? xa[i] : ya[i]);
+        }
+        memcpy(dest, ra, 16);
+        return;
+    } else {
+        x = x + y;
+    }
+    memcpy(dest, &x, 16);
+}
+
+DREAM_ALWAYS_INLINE int32_t simd_lane_count(void) { return 4; }
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_load(dream_ptr arr, int32_t off) {
+    return (dream_ptr)((char *)dream_p(arr) + 4 + (size_t)off * 4);
+}
+
+DREAM_ALWAYS_INLINE void simd_v128_store(dream_ptr v, dream_ptr dest, int32_t off) {
+    memcpy((char *)dream_p(dest) + 4 + (size_t)off * 4, dream_p(v), 16);
+}
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_splat(float v) {
+    (void)v;
+    return 0;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_add(dream_ptr a, dream_ptr b) {
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_sub(dream_ptr a, dream_ptr b) {
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_mul(dream_ptr a, dream_ptr b) {
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_min(dream_ptr a, dream_ptr b) {
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr simd_v128_max(dream_ptr a, dream_ptr b) {
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+DREAM_ALWAYS_INLINE float simd_v128_sum(dream_ptr v) {
+    const float *x = (const float *)dream_p(v);
+    return x[0] + x[1] + x[2] + x[3];
+}
+
+DREAM_ALWAYS_INLINE void dream_simd_binop(dream_ptr dest, dream_ptr lhs, dream_ptr rhs, int32_t esize,
+                                          int32_t op) {
+    if (!dest || !lhs || !rhs) {
+        return;
+    }
+    if (esize == 4 && op == 0) {
+        dream_v128_f32_bin(dream_p(dest), dream_p(lhs), dream_p(rhs), 0);
+        return;
+    }
+    if (esize == 8) {
+        double a = *(const double *)dream_p(lhs);
+        double b = *(const double *)dream_p(rhs);
+        *(double *)dream_p(dest) = op == 1 ? a - b : op == 2 ? a * b : op == 3 ? a / b : a + b;
+        return;
+    }
+    dream_v128_f32_bin(dream_p(dest), dream_p(lhs), dream_p(rhs), op);
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
+    int32_t n;
+    if (a == b) {
+        return 1;
+    }
+    if (a == 0 || b == 0) {
+        return 0;
+    }
+    n = dream_str_len(a);
+    if (n != dream_str_len(b)) {
+        return 0;
+    }
+    return memcmp((char *)dream_p(a) + STRING_UTF8_OFFSET, (char *)dream_p(b) + STRING_UTF8_OFFSET,
+                  (size_t)n << 1) == 0;
+}
+
 int dream_pike_add_to_threadq(const int32_t *opcodes, const int32_t *outs, const int32_t *out1s,
                               const int32_t *cap_ids, int32_t ninst, int32_t start_pc, int32_t pos,
                               int32_t *on_list, int32_t gen, int32_t *out_pcs, int32_t *out_n);
@@ -182,14 +299,13 @@ DREAM_ALWAYS_INLINE int32_t dream_object_tag(dream_ptr p) {
     return ((int32_t *)((char *)dream_p(p) - 8))[0];
 }
 
-int32_t dream_string_eq(dream_ptr a, dream_ptr b);
+int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
 dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag);
-int32_t dream_hash_value(dream_ptr p);
 int32_t dream_string_hash(dream_ptr p);
 int32_t dream_object_hash_code(dream_ptr p);
 int32_t dream_bitcast_f32(float v);
@@ -257,17 +373,6 @@ void dream_semaphore_release(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms);
 dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32_t argc);
-void dream_simd_binop(dream_ptr dest, dream_ptr lhs, dream_ptr rhs, int32_t esize, int32_t op);
-int32_t simd_lane_count(void);
-dream_ptr simd_v128_load(dream_ptr arr, int32_t off);
-void simd_v128_store(dream_ptr v, dream_ptr dest, int32_t off);
-dream_ptr simd_v128_splat(float v);
-dream_ptr simd_v128_add(dream_ptr a, dream_ptr b);
-dream_ptr simd_v128_sub(dream_ptr a, dream_ptr b);
-dream_ptr simd_v128_mul(dream_ptr a, dream_ptr b);
-dream_ptr simd_v128_min(dream_ptr a, dream_ptr b);
-dream_ptr simd_v128_max(dream_ptr a, dream_ptr b);
-float simd_v128_sum(dream_ptr v);
 void dream_weak_clear_all(dream_ptr obj);
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);

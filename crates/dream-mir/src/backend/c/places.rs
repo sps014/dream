@@ -153,7 +153,7 @@ pub(super) fn emit_store(
                     | crate::Rvalue::Use(Operand::Copy(Place::Deref { .. }))
                     | crate::Rvalue::UnionField { .. }
             );
-            return memcpy_value(
+            memcpy_value(
                 cx,
                 rv,
                 rhs,
@@ -161,7 +161,7 @@ pub(super) fn emit_store(
                 &format!("dream_p(l{})", l.0),
                 &format!("l{}", l.0),
                 retain_copy,
-            );
+            )
         }
         Place::Local(l) => format!("l{} = ({rhs})", l.0),
         Place::Global(g) => {
@@ -280,7 +280,8 @@ fn index_addr(
     unchecked: bool,
 ) -> String {
     let idx = emit_operand(cx, f, index);
-    if unchecked
+    if cx.omit_bounds
+        || unchecked
         || !matches!(
             cx.interner.kind(f.local_ty(base)),
             dream_types::TyKind::Array(_)

@@ -1,21 +1,5 @@
 #include "include/dream_rt_native.h"
 
-int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
-    int32_t n;
-    if (a == b) {
-        return 1;
-    }
-    if (a == 0 || b == 0) {
-        return 0;
-    }
-    n = dream_str_len(a);
-    if (n != dream_str_len(b)) {
-        return 0;
-    }
-    return memcmp((char *)dream_p(a) + STRING_UTF8_OFFSET, (char *)dream_p(b) + STRING_UTF8_OFFSET,
-                  (size_t)n << 1) == 0;
-}
-
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
     if (units < 0) {
@@ -70,29 +54,6 @@ dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag) {
         memcpy(dream_p(p), (char *)dream_p(bytes) + 4, (size_t)n);
     }
     return p;
-}
-
-void dream_simd_binop(dream_ptr dest, dream_ptr lhs, dream_ptr rhs, int32_t esize, int32_t op) {
-    int i;
-    if (!dest || !lhs || !rhs) {
-        return;
-    }
-    if (esize == 4 && op == 0) {
-        dream_arr_add_f32((float *)dream_p(dest), (const float *)dream_p(lhs),
-                          (const float *)dream_p(rhs), 4);
-        return;
-    }
-    for (i = 0; i < 16; i += esize > 0 ? esize : 4) {
-        if (esize == 8) {
-            double a = ((double *)dream_p(lhs))[i / 8];
-            double b = ((double *)dream_p(rhs))[i / 8];
-            ((double *)dream_p(dest))[i / 8] = op == 1 ? a - b : op == 2 ? a * b : op == 3 ? a / b : a + b;
-        } else {
-            int32_t a = ((int32_t *)dream_p(lhs))[i / 4];
-            int32_t b = ((int32_t *)dream_p(rhs))[i / 4];
-            ((int32_t *)dream_p(dest))[i / 4] = op == 1 ? a - b : op == 2 ? a * b : op == 3 ? (b ? a / b : 0) : a + b;
-        }
-    }
 }
 
 void string_copy_utf8(dream_ptr dst, int32_t dst_off, dream_ptr src, int32_t src_off, int32_t count) {

@@ -45,7 +45,9 @@ def one(f: Path):
         if code == 0:
             return stem, "fail", "compile should fail"
         return stem, "ok", ""
-    code, out = run_group([str(dream), "--native-c", "run", str(f)], 90)
+    # Debug `cc -O0` of large `@json` units is ~20s serial / ~45s at 8-way; leave headroom
+    # for a cold `libdream_rt.a` rebuild and a loaded machine.
+    code, out = run_group([str(dream), "--native-c", "run", str(f)], 180)
     if trap.exists():
         if code == 0:
             return stem, "fail", "expected trap"

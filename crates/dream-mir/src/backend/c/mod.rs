@@ -13,7 +13,9 @@ mod tables;
 mod terminator;
 mod types;
 
-pub use module::{emit_c_module, native_runtime_c_files, native_runtime_include_dir};
+pub use module::{
+    emit_c_module, emit_c_module_ex, native_runtime_c_files, native_runtime_include_dir,
+};
 
 #[cfg(test)]
 mod tests {
@@ -147,5 +149,9 @@ mod tests {
         assert!(pike.contains("goto *"));
         let heap = include_str!("../../runtime/c/native/heap.c");
         assert!(heap.contains("mmap") || heap.contains("VirtualAlloc"));
+        assert!(super::types::native_header_declares("print_int"));
+        assert!(super::types::native_header_declares("simd_lane_count"));
+        assert!(super::types::native_header_declares("dream_malloc"));
+        assert!(!super::types::native_header_declares("not_a_real_host_fn"));
     }
 }

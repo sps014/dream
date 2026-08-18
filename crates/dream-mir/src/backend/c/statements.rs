@@ -2,14 +2,18 @@ use crate::backend::c::calls::{emit_call, emit_iface, emit_indirect, emit_js_cal
 use crate::backend::c::ctx::Cx;
 use crate::backend::c::places::{emit_operand, emit_store};
 use crate::backend::c::rvalue::{emit_rvalue, emit_union_new_at, to_string_fn};
-use crate::backend::c::types::elem_size;
-use crate::{Place, Statement};
+use crate::backend::c::types::{elem_size, runtime_c_name};
+use crate::{Callee, Operand, Place, Statement};
+use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::{PrimTy, TyKind};
 
 pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, stmt: &Statement) {
     match stmt {
         Statement::Nop | Statement::SourceLine(_) | Statement::DebugLine(_) => {}
         Statement::Assign(place, rv) => {
+            if emit_simd_assign(out, cx, f, place, rv) {
+                return;
+            }
             if let (
                 Place::Local(l),
                 crate::Rvalue::UnionNew {
@@ -32,7 +36,7 @@ pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, s
                         *variant,
                         args,
                     ));
-                    out.push_str("\n");
+                    out.push('\n');
                     return;
                 }
             }
@@ -60,6 +64,9 @@ pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, s
             emit_print(out, cx, f, arg, *ty, *newline);
         }
         Statement::Call { callee, args } => {
+            if emit_simd_call(out, cx, f, callee, args) {
+                return;
+            }
             out.push_str(&format!("  {};\n", emit_call(cx, f, callee, args)));
         }
         Statement::JsCall {
@@ -191,6 +198,153 @@ pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, s
             out.push_str(&format!("  memset(dream_p(l{}), 0, {size});\n", l.0));
         }
     }
+}
+
+fn simd_call_name(cx: &Cx<'_>, callee: &Callee) -> String {
+    let raw = cx.callee_c(callee.def, &callee.args);
+    let mapped = runtime_c_name(&raw);
+    if mapped.starts_with("simd_") {
+        return mapped;
+    }
+    match IntrinsicOp::from_key(&raw).or_else(|| IntrinsicOp::from_key(&mapped)) {
+        Some(IntrinsicOp::SimdLaneCount) => "simd_lane_count".into(),
+        Some(IntrinsicOp::SimdV128Load) => "simd_v128_load".into(),
+        Some(IntrinsicOp::SimdV128Store) => "simd_v128_store".into(),
+        Some(IntrinsicOp::SimdV128Splat) => "simd_v128_splat".into(),
+        Some(IntrinsicOp::SimdV128Add) => "simd_v128_add".into(),
+        Some(IntrinsicOp::SimdV128Sub) => "simd_v128_sub".into(),
+        Some(IntrinsicOp::SimdV128Mul) => "simd_v128_mul".into(),
+        Some(IntrinsicOp::SimdV128Min) => "simd_v128_min".into(),
+        Some(IntrinsicOp::SimdV128Max) => "simd_v128_max".into(),
+        Some(IntrinsicOp::SimdV128Sum) => "simd_v128_sum".into(),
+        _ => mapped,
+    }
+}
+
+fn simd_es(cx: &Cx<'_>, callee: &Callee) -> u32 {
+    callee
+        .args
+        .first()
+        .map(|ty| elem_size(cx, *ty))
+        .unwrap_or(4)
+        .max(1)
+}
+
+fn value_dest(cx: &Cx<'_>, f: &crate::MirFunction, place: &Place) -> Option<String> {
+    match place {
+        Place::Local(l) if cx.interner.is_value_type(f.local_ty(*l)) => {
+            Some(format!("dream_p(l{})", l.0))
+        }
+        Place::Field { base, field } => {
+            let layout = cx.nstruct(f.local_ty(*base))?;
+            let fld = layout.fields.get(*field)?;
+            if cx.interner.is_value_type(fld.ty) {
+                Some(format!("(char *)dream_p(l{}) + {}", base.0, fld.offset))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn emit_simd_assign(
+    out: &mut String,
+    cx: &Cx<'_>,
+    f: &crate::MirFunction,
+    place: &Place,
+    rv: &crate::Rvalue,
+) -> bool {
+    let crate::Rvalue::Call { callee, args } = rv else {
+        return false;
+    };
+    let name = simd_call_name(cx, callee);
+    if name == "simd_lane_count" {
+        let Place::Local(l) = place else {
+            return false;
+        };
+        out.push_str(&format!("  l{} = 4;\n", l.0));
+        return true;
+    }
+    if name == "simd_v128_sum" {
+        let Place::Local(l) = place else {
+            return false;
+        };
+        out.push_str(&format!(
+            "  l{} = simd_v128_sum({});\n",
+            l.0,
+            emit_operand(cx, f, &args[0])
+        ));
+        return true;
+    }
+    let Some(dest) = value_dest(cx, f, place) else {
+        return false;
+    };
+    let es = simd_es(cx, callee);
+    let a: Vec<String> = args.iter().map(|o| emit_operand(cx, f, o)).collect();
+    let line = match name.as_str() {
+        "simd_v128_load" if a.len() >= 2 => format!(
+            "  memcpy({dest}, (char *)dream_p({}) + 4 + (size_t)({}) * {es}, 16);\n",
+            a[0], a[1]
+        ),
+        "simd_v128_splat" if a.len() == 1 => {
+            format!("  dream_v128_splat_f32({dest}, (float)({}));\n", a[0])
+        }
+        "simd_v128_add" if a.len() >= 2 => {
+            format!(
+                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 0);\n",
+                a[0], a[1]
+            )
+        }
+        "simd_v128_sub" if a.len() >= 2 => {
+            format!(
+                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 1);\n",
+                a[0], a[1]
+            )
+        }
+        "simd_v128_mul" if a.len() >= 2 => {
+            format!(
+                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 2);\n",
+                a[0], a[1]
+            )
+        }
+        "simd_v128_min" if a.len() >= 2 => {
+            format!(
+                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 3);\n",
+                a[0], a[1]
+            )
+        }
+        "simd_v128_max" if a.len() >= 2 => {
+            format!(
+                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 4);\n",
+                a[0], a[1]
+            )
+        }
+        _ => return false,
+    };
+    out.push_str(&line);
+    true
+}
+
+fn emit_simd_call(
+    out: &mut String,
+    cx: &Cx<'_>,
+    f: &crate::MirFunction,
+    callee: &Callee,
+    args: &[Operand],
+) -> bool {
+    let name = simd_call_name(cx, callee);
+    if name != "simd_v128_store" || args.len() < 3 {
+        return false;
+    }
+    let es = simd_es(cx, callee);
+    out.push_str(&format!(
+        "  memcpy((char *)dream_p({}) + 4 + (size_t)({}) * {es}, dream_p({}), 16);\n",
+        emit_operand(cx, f, &args[1]),
+        emit_operand(cx, f, &args[2]),
+        emit_operand(cx, f, &args[0]),
+    ));
+    true
 }
 
 pub(super) fn emit_value_refs(

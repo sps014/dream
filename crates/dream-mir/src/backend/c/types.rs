@@ -1,6 +1,45 @@
 use crate::backend::c::ctx::Cx;
 use crate::BinOp;
 use dream_types::{PrimTy, TyKind, TypeId};
+use std::collections::HashSet;
+use std::sync::OnceLock;
+
+const NATIVE_RT_HEADER: &str =
+    include_str!("../../runtime/c/native/include/dream_rt_native.h");
+
+/// Names declared in `dream_rt_native.h` (including `static inline` helpers).
+pub(super) fn native_header_declares(name: &str) -> bool {
+    static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
+    NAMES.get_or_init(parse_native_header_fns).contains(name)
+}
+
+fn parse_native_header_fns() -> HashSet<String> {
+    let mut names = HashSet::new();
+    for raw in NATIVE_RT_HEADER.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with("//") || line.starts_with('*')
+        {
+            continue;
+        }
+        let Some(paren) = line.find('(') else {
+            continue;
+        };
+        let before = line[..paren].trim();
+        let ident = before
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .trim_start_matches('*');
+        if !ident.is_empty()
+            && ident
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            names.insert(ident.to_string());
+        }
+    }
+    names
+}
 
 pub(super) fn c_ident(name: &str) -> String {
     let mut s = String::new();

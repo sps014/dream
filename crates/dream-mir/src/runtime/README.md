@@ -2,7 +2,7 @@
 
 Dream splices `*.wat` in this directory into the **same module** as user code (`include_str!` in `dream-mir`). That is what `dream` / `cargo test` / Windows CI use. They never run clang.
 
-C under [`c/`](c/) is the **authoring** source for the same helpers. `scripts/build-runtime.sh` compiles it to wasm32 and extracts WAT. Until a generated file is copied over after extract gates + golden checks, **handwritten `*.wat` remains the emit artifact** (hybrid). `--release` still runs fused `wasm-opt -O3` on the whole module.
+C under [`c/`](c/) is the **authoring** source for the same helpers. The module catalog in [`modules.rs`](modules.rs) is the source of truth for which `.c` files extract or link, include dirs, `-D` flags, exports, and `wasm-ld --global-base`. `scripts/build-runtime.sh` reads that catalog as JSON from `dream-runtime-manifest`. Until a generated file is copied over after extract gates + golden checks, **handwritten `*.wat` remains the emit artifact** (hybrid). `--release` still runs fused `wasm-opt -O3` on the whole module.
 
 See [`c/README.md`](c/README.md) for C do/don't.
 
@@ -67,22 +67,22 @@ Apple clang without wasm32: `--check` **skips** (so `cargo test` stays green). A
 
 ### 4. Promote generated WAT
 
-`scripts/build-runtime.sh` writes `c/generated/*.wat` and then **promotes**:
+`scripts/build-runtime.sh` writes `c/generated/*.wat` and then **promotes** each catalog module with `promote: true`:
 
-- `strings.wat` / `object.wat` / `format.wat` from the matching `c/*.c` (edit C, not WAT)
-- `regex.wat` from `c/regex.c` + vendored PCRE2 ([`c/pcre2/SOURCES`](c/pcre2/SOURCES); see [`c/pcre2/README.md`](c/pcre2/README.md))
+- Extract modules (`strings` / `object` / `format`) from matching `c/*.c`
+- Link modules (`regex`) from `c/regex.c` + `wasm_extra_c` + `pcre2/SOURCES` ([`c/pcre2/README.md`](c/pcre2/README.md))
 
 **Do not hand-edit those files.** Allocator debug/thread placeholders (`;;@DEBUG_*@` /
 `;;@ALLOC_LOCK_*@`) stay in handwritten `allocator.wat` until C can express them.
 
 **Windows:** do not install wasi-sdk on `windows-latest` CI. Shipping `dream.exe` embeds the checked-in `.wat` files.
 
-`TAG_*` / heap offsets live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and [`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`).
+`TAG_*` / heap offsets / `DREAM_REGEX_*` live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and [`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`). Portable wrappers include [`c/include/dream_guest.h`](c/include/dream_guest.h).
 
 Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empty` / `_true` / `_false` / `_minus`, not baked addresses.
 
 ## Native C (host clang, not WAT)
 
-[`c/native/`](c/native/) is a **separate** ABI: `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width, PCRE2-16 JIT. It is not spliced into WASM. Default `dream run` stays wasmtime until `scripts/bench-native-c.sh` plus `microbenches.dream` beat `--release` wasm. See [`c/native/README.md`](c/native/README.md).
+[`c/native/`](c/native/) is a **separate** ABI: `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Shared wrappers (today: `c/regex.c`) compile with `-DDREAM_NATIVE`. Linked C libraries (PCRE2) are pulled from the catalog only when `RuntimeNeed` is set. Default `dream run` stays wasmtime until `scripts/bench-native-c.sh` plus `microbenches.dream` beat `--release` wasm. See [`c/native/README.md`](c/native/README.md).
 
 WASM regex is the same PCRE2 sources compiled without JIT (`runtime/regex.wat`), spliced only when the program uses `Regex`.

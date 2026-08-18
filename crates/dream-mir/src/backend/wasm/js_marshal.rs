@@ -310,7 +310,8 @@ fn emit_js_to_struct(
 fn emit_array_to_js(out: &mut String, elem: TypeId, interner: &TypeInterner, mir: &crate::Mir) {
     let (esize, _) = scalar_size(interner, elem);
     let addr = format!(
-        "(local.get $arr) (i32.const 4) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)"
+        "(local.get $arr) (i32.const {}) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)",
+        crate::abi::LEN_PREFIX_SIZE
     );
     let val = value_to_js(interner, mir, &addr, elem).expect("array element is marshalable");
     let _ = writeln!(
@@ -363,14 +364,16 @@ fn emit_js_to_array(
     );
     let _ = writeln!(
         out,
-        "  (i32.const 4) (local.get $n) (i32.const {esize}) (i32.mul) (i32.add) (i32.const {}) (call $malloc) (local.set $o)",
+        "  (i32.const {}) (local.get $n) (i32.const {esize}) (i32.mul) (i32.add) (i32.const {}) (call $malloc) (local.set $o)",
+        crate::abi::LEN_PREFIX_SIZE,
         ARRAY_TAG
     );
     out.push_str("  (local.get $o) (local.get $n) (i32.store)\n");
     out.push_str("  (block $brk (loop $lp\n");
     out.push_str("    (local.get $i) (local.get $n) (i32.ge_s) (br_if $brk)\n");
     let dst = format!(
-        "(local.get $o) (i32.const 4) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)"
+        "(local.get $o) (i32.const {}) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)",
+        crate::abi::LEN_PREFIX_SIZE
     );
     if !write_from_js(out, "    ", interner, mir, &dst, &jsval, elem) {
         crate::internal_error!("array element should be marshalable");

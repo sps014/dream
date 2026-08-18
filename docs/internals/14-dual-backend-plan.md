@@ -16,7 +16,9 @@ A worktree at `../Dream-llvm` may still exist for archaeology only.
    benchmax. Honest `regex_find` stays `[a-z]+\d+` (PCRE2 interpreter in-module).
 2. **Native codegen** — MIR → C lives in [`crates/dream-mir/src/backend/c`](../../crates/dream-mir/src/backend/c)
    with host runtime [`crates/dream-mir/src/runtime/c/native`](../../crates/dream-mir/src/runtime/c/native)
-   (`uintptr_t`, `memcpy`, mmap heap, platform SIMD, PCRE2-16 JIT). `dream run` stays
+   (`uintptr_t`, `memcpy`, mmap heap, platform SIMD). Shared C libs (PCRE2-16 JIT) are declared in
+   [`crates/dream-mir/src/runtime/modules.rs`](../../crates/dream-mir/src/runtime/modules.rs)
+   and compiled from `runtime/c/regex.c` with `-DDREAM_NATIVE`. `dream run` stays
    WAT → wasmtime until `scripts/bench-native-c.sh` and `microbenches.dream` beat `--release` wasm.
    `Target::NativeC` is opt-in; do not merge branch `llvm`.
 

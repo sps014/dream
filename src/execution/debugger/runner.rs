@@ -2,7 +2,7 @@
 //! `dream_debug.*` host hooks and DAP-routed print builtins, and attaching newly spawned `WebWorker`
 //! threads as their own DAP threads. Split out of `mod.rs`.
 
-use crate::execution::host::{link_c_ffi_imports, read_string_from_memory, WorkerDebug};
+use crate::execution::host::{link_c_ffi_imports, WorkerDebug};
 use crate::execution::wasm_runner::link_runtime_host_functions;
 use serde_json::json;
 use std::sync::atomic::Ordering;
@@ -83,18 +83,18 @@ fn run_program(
     let config = crate::execution::host::threaded_wasm_config();
     let engine = Engine::new(&config)?;
     let module = Module::new(&engine, &wasm_bytes)?;
-    let shared_mem = crate::execution::host::shared_memory_for(&engine, &module)?;
-    crate::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
     let mut store = Store::new(&engine, ());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
     store.set_epoch_deadline(u64::MAX);
     let mut linker: Linker<()> = Linker::new(&engine);
 
-    // Program output is routed to DAP `output` events (stdout is reserved for the DAP stream).
     link_debug_print_functions(&mut linker, writer)?;
     link_runtime_host_functions(&mut linker)?;
     link_debug_hooks(&mut linker, shared, source_map, writer, MAIN_THREAD)?;
-    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
+    if let Some(shared_mem) =
+        crate::execution::host::define_env_memory(&engine, &mut store, &mut linker, &module)?
+    {
+        crate::execution::host::set_worker_runtime(engine.clone(), shared_mem, module.clone());
+    }
     let search_roots = vec![std::path::Path::new(wat_path)
         .parent()
         .map(|p| p.to_path_buf())
@@ -342,9 +342,7 @@ fn link_debug_hooks(
 }
 
 pub(super) fn read_caller_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<String> {
-    let memory = caller
-        .get_export("memory")
-        .and_then(Extern::into_shared_memory)
-        .ok_or_else(|| Error::msg("module must export `memory`"))?;
-    Ok(read_string_from_memory(&memory, ptr))
+    crate::execution::host::with_guest_bytes(caller, |data| {
+        crate::execution::host::decode_string(data, ptr)
+    })
 }

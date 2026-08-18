@@ -1,4 +1,4 @@
-use super::builder::{ModuleBuilder, ValType};
+use super::builder::{FuncBuilder, LoadKind, ModuleBuilder, StoreKind, ValType};
 use super::*;
 
 /// The emission-driving lookup tables derived once per module and shared by every per-function emit:
@@ -150,19 +150,21 @@ fn emit_module_encoded(
     let (vg_addrs, static_end) = value_global_addrs(mir, interner, heap_base(&strings));
     let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots, &ftable.slots);
 
-    let uses_regex = mir
-        .intrinsics
-        .iter()
-        .any(|(_, k)| k.starts_with("regex_"));
+    let need = crate::runtime::runtime_need_from_mir(mir);
+    let layouts = crate::runtime::allocate_linked_layouts(need);
     let data_end = iface.heap_start;
     let mut heap_base = data_end + SHADOW_STACK_SIZE;
-    if uses_regex {
-        heap_base = heap_base.max(
-            crate::abi::LINKED_RT_BASE + crate::abi::LINKED_RT_SPAN + SHADOW_STACK_SIZE,
-        );
+    if let Some(end) = layouts.values().map(|l| l.data_end()).max() {
+        heap_base = heap_base.max(end + SHADOW_STACK_SIZE);
     }
     let initial_pages = heap_base.div_ceil(WASM_PAGE_SIZE) + INITIAL_HEAP_PAGES;
-    m.import_memory("env", "memory", initial_pages, crate::abi::MAX_MEMORY_PAGES);
+    m.import_memory(
+        crate::abi::ENV_MODULE,
+        crate::abi::EXPORT_MEMORY,
+        initial_pages,
+        crate::abi::MAX_MEMORY_PAGES,
+        module_needs_threads(mir),
+    );
 
     m.global_i32("free_list_head", true, 0);
     m.global_i32("__tid", true, 0);
@@ -192,8 +194,8 @@ fn emit_module_encoded(
     }
 
     m.ingest_wat(&runtime_prelude(debug, module_needs_threads(mir)));
-    if uses_regex {
-        m.ingest_wat(RUNTIME_REGEX);
+    for (id, layout) in &layouts {
+        m.ingest_linked_wat(super::linked_runtime_wat(id), *layout);
     }
     m.ingest_wat(RUNTIME_WEAK);
     m.ingest_wat(RUNTIME_CLOSURE);
@@ -207,15 +209,11 @@ fn emit_module_encoded(
     m.ingest_wat(&to_string_runtime());
     m.ingest_wat(RUNTIME_PANIC);
 
-    let mut proto = String::new();
-    emit_object_protocol(&mut proto, mir, interner, &strings, &tags);
-    m.ingest_wat(&proto);
+    emit_object_protocol(&mut m, mir, interner, &strings, &tags);
     let mut js = String::new();
     emit_js_marshal(&mut js, mir, interner, &strings, &tags);
     m.ingest_wat(&js);
-    let mut rel = String::new();
-    emit_release_funcs(&mut rel, mir, interner, &tags, &value_glue);
-    m.ingest_wat(&rel);
+    emit_release_funcs(&mut m, mir, interner, &tags, &value_glue);
     let mut glue = String::new();
     emit_value_glue(&mut glue, mir, interner, &value_glue);
     m.ingest_wat(&glue);
@@ -272,16 +270,21 @@ fn emit_module_encoded(
         if f.name == crate::lower::INIT_FN_NAME {
             has_init = true;
         } else if f.instance.is_empty() && f.name == crate::abi::ENTRY_FN && f.is_async {
-            m.ingest_wat(&crate::async_emit::emit_async_main_wrapper(
-                &func_symbol(f),
-                !f.params.is_empty(),
-            ));
+            emit_async_main_wrapper(&mut m, &func_symbol(f), !f.params.is_empty());
         } else if f.instance.is_empty() && f.name == crate::abi::ENTRY_FN && !f.params.is_empty() {
-            m.ingest_wat(&format!(
-                "(func (export \"main\")\n (local $args i32)\n i32.const 4\n i32.const {}\n call $malloc\n local.set $args\n local.get $args\n i32.const 0\n i32.store\n local.get $args\n call ${}\n)",
-                crate::abi::TAG_ARRAY,
-                func_symbol(f),
-            ));
+            let mut main = FuncBuilder::new("__dream_main_args");
+            main.local("args", ValType::I32);
+            main.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
+            main.i32_const(crate::abi::TAG_ARRAY);
+            main.call("malloc");
+            main.local_set("args");
+            main.local_get("args");
+            main.i32_const(0);
+            main.store(StoreKind::I32, 0);
+            main.local_get("args");
+            main.call(&func_symbol(f));
+            m.push_func(main);
+            m.export_func(crate::abi::ENTRY_FN, "__dream_main_args");
         } else if f.instance.is_empty() && (export_user_fns || f.name == crate::abi::ENTRY_FN) {
             m.export_func(&f.name, &func_symbol(f));
         }
@@ -290,36 +293,69 @@ fn emit_module_encoded(
     m.intern_type(Some("__worker_sig"), vec![ValType::I32], vec![ValType::I32]);
     let has_closure_env = mir.globals.iter().any(|g| g.id.0 == 0);
     let has_async_runtime = crate::async_emit::module_has_async(&mir.functions);
-    let publish_env = if has_closure_env {
-        " local.get $env\n global.set $g0\n"
-    } else {
-        ""
-    };
-    m.ingest_wat(&format!(
-        "(func $__dream_worker_invoke_raw (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n{publish_env} local.get $arg\n local.get $fn\n call_indirect $__ft (type $__worker_sig))"
-    ));
+    let mut raw = FuncBuilder::new("__dream_worker_invoke_raw");
+    raw.param("fn", ValType::I32);
+    raw.param("env", ValType::I32);
+    raw.param("arg", ValType::I32);
+    raw.result(ValType::I32);
+    if has_closure_env {
+        raw.local_get("env");
+        raw.global_set("g0");
+    }
+    raw.local_get("arg");
+    raw.local_get("fn");
+    raw.call_indirect("__worker_sig", "__ft");
+    m.push_func(raw);
     if has_async_runtime {
-        m.ingest_wat(&format!(
-            "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n (local $r i32)\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw\n local.set $r\n local.get $r\n i32.const 0\n i32.ne\n local.get $r\n call $object_tag\n i32.eqz\n i32.and\n (if\n  (then\n   call $dream_run_loop\n   local.get $r\n   i32.load offset={}\n   local.set $r\n  )\n )\n local.get $r)",
-            crate::async_emit::F_RESULT,
-        ));
+        let mut inv = FuncBuilder::new("__dream_worker_invoke");
+        inv.param("fn", ValType::I32);
+        inv.param("env", ValType::I32);
+        inv.param("arg", ValType::I32);
+        inv.result(ValType::I32);
+        inv.local("r", ValType::I32);
+        inv.local_get("fn");
+        inv.local_get("env");
+        inv.local_get("arg");
+        inv.call("__dream_worker_invoke_raw");
+        inv.local_set("r");
+        inv.local_get("r");
+        inv.i32_const(0);
+        inv.i32_ne();
+        inv.local_get("r");
+        inv.call("object_tag");
+        inv.i32_eqz();
+        inv.i32_and();
+        inv.if_();
+        inv.call("dream_run_loop");
+        inv.local_get("r");
+        inv.load(LoadKind::I32, crate::async_emit::F_RESULT as u32);
+        inv.local_set("r");
+        inv.end();
+        inv.local_get("r");
+        m.push_func(inv);
     } else {
-        m.ingest_wat(
-            "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw)",
-        );
+        let mut inv = FuncBuilder::new("__dream_worker_invoke");
+        inv.param("fn", ValType::I32);
+        inv.param("env", ValType::I32);
+        inv.param("arg", ValType::I32);
+        inv.result(ValType::I32);
+        inv.local_get("fn");
+        inv.local_get("env");
+        inv.local_get("arg");
+        inv.call("__dream_worker_invoke_raw");
+        m.push_func(inv);
     }
 
-    let mut init = String::from("(func $__runtime_init\n");
-    init.push_str(&format!(
-        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  drop\n",
-        crate::abi::HEAP_PTR_ADDR,
-        heap_base
-    ));
+    let mut init = FuncBuilder::new("__runtime_init");
+    init.i32_const(crate::abi::HEAP_PTR_ADDR as i32);
+    init.i32_const(0);
+    init.i32_const(heap_base as i32);
+    init.atomic_rmw_cmpxchg(0);
+    init.drop_();
     if has_init {
-        init.push_str(&format!("  call ${}\n", crate::lower::INIT_FN_NAME));
+        init.call(crate::lower::INIT_FN_NAME);
     }
-    init.push_str(")\n");
-    m.ingest_wat(&init);
+    m.push_func(init);
     m.set_start("__runtime_init");
 
     use crate::abi;
@@ -335,6 +371,26 @@ fn emit_module_encoded(
     }
 
     (m.finish(), dbg_module)
+}
+
+fn emit_async_main_wrapper(m: &mut ModuleBuilder, entry_sym: &str, has_args_param: bool) {
+    let mut f = FuncBuilder::new("__dream_async_main");
+    if has_args_param {
+        f.local("args", ValType::I32);
+        f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
+        f.i32_const(crate::abi::TAG_ARRAY);
+        f.call("malloc");
+        f.local_set("args");
+        f.local_get("args");
+        f.i32_const(0);
+        f.store(StoreKind::I32, 0);
+        f.local_get("args");
+    }
+    f.call(entry_sym);
+    f.drop_();
+    f.call("dream_run_loop");
+    m.push_func(f);
+    m.export_func(crate::abi::ENTRY_FN, "__dream_async_main");
 }
 
 fn intern_func_signatures(m: &mut ModuleBuilder, interner: &TypeInterner) {

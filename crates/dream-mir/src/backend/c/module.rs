@@ -4,11 +4,12 @@ use super::ctx::Cx;
 use super::emit::Emitter;
 use super::protocol::{emit_iface_init, emit_iface_trampolines, emit_protocol};
 use super::release::emit_release_helpers;
-use super::types::{c_ident, c_ty, local_c_ty};
-use crate::backend::wasm::func_symbol;
+use super::types::{c_ident, c_ty, fn_ptr_abi, local_c_ty};
+use crate::backend::shared::func_symbol;
 use crate::passes::MirPass;
-use crate::{Mir, MirFunction};
-use dream_types::{TyKind, TypeInterner};
+use crate::{Mir, MirFunction, Rvalue, Statement};
+use dream_types::{TyKind, TypeId, TypeInterner};
+use indexmap::IndexMap;
 
 pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
     let cx = Cx::new(mir, interner);
@@ -19,6 +20,7 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
     m.include("<stdio.h>");
     m.include("<stdlib.h>");
     m.include("<string.h>");
+    emit_fn_typedefs(&mut m, &cx);
     emit_string_table(&mut m, &cx);
     emit_globals(&mut m, &cx);
     emit_imports(&mut m, &cx);
@@ -34,10 +36,14 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
         });
         let _ = attr;
         if f.is_async {
-            m.proto(CTy::I32, poll_name(f), vec![Param {
-                ty: CTy::Ptr,
-                name: "__self".into(),
-            }]);
+            m.proto(
+                CTy::I32,
+                poll_name(f),
+                vec![Param {
+                    ty: CTy::Ptr,
+                    name: "__self".into(),
+                }],
+            );
         }
     }
     emit_release_helpers(&mut m, &cx);
@@ -59,7 +65,10 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
     ft_get.stmt(Stmt::Return(Some(Expr::ternary(
         Expr::and(
             Expr::bin(crate::BinOp::Gt, Expr::id("i"), Expr::i(0)),
-            Expr::lt(Expr::id("i"), Expr::i((mir.functions.len() + 1 + async_n) as i64)),
+            Expr::lt(
+                Expr::id("i"),
+                Expr::i((mir.functions.len() + 1 + async_n) as i64),
+            ),
         ),
         Expr::index(Expr::id("dream_ft"), Expr::id("i")),
         Expr::i(0),
@@ -85,7 +94,10 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
         if main.params.is_empty() {
             entry.call("main_dream", vec![]);
         } else {
-            entry.call("main_dream", vec![Expr::call("dream_array_new", vec![Expr::i(0), Expr::i(8)])]);
+            entry.call(
+                "main_dream",
+                vec![Expr::call("dream_array_new", vec![Expr::i(0), Expr::i(8)])],
+            );
         }
         if async_n > 0 {
             entry.call("dream_run_loop", vec![]);
@@ -150,7 +162,10 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             name: sym.clone(),
             init: Some(Expr::cast(
                 CTy::Ptr,
-                Expr::add(Expr::cast(CTy::CharPtr, Expr::addr_of(Expr::id(format!("{sym}_blk")))), Expr::i(16)),
+                Expr::add(
+                    Expr::cast(CTy::CharPtr, Expr::addr_of(Expr::id(format!("{sym}_blk")))),
+                    Expr::i(crate::abi::NATIVE_HEAP_HEADER_SIZE as i64),
+                ),
             )),
         });
     }
@@ -230,19 +245,10 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         "result",
         Some(Expr::IndirectCall {
             callee: Box::new(Expr::cast(
-                CTy::Ident("dream_fn".into()),
+                CTy::Ident("dream_fn_ptr__ptr".into()),
                 Expr::index(Expr::id("dream_ft"), Expr::id("fn")),
             )),
-            args: vec![
-                Expr::id("arg"),
-                Expr::i(0),
-                Expr::i(0),
-                Expr::i(0),
-                Expr::i(0),
-                Expr::i(0),
-                Expr::i(0),
-                Expr::i(0),
-            ],
+            args: vec![Expr::id("arg")],
         }),
     ));
     let async_indices: Vec<_> = cx
@@ -308,7 +314,9 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 name: format!("a{i}"),
             })
             .collect();
-        let call_args: Vec<Expr> = (0..imp.params.len()).map(|i| Expr::id(format!("a{i}"))).collect();
+        let call_args: Vec<Expr> = (0..imp.params.len())
+            .map(|i| Expr::id(format!("a{i}")))
+            .collect();
         if !super::types::native_header_declares(&host) {
             m.proto(host_ret.clone(), host.clone(), params.clone());
         }
@@ -420,18 +428,21 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
     };
     let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
     let _ = crate::passes::RcInsertion.run(&mut body, cx.interner);
-    let mut size = 64i32;
-    let mut offs = Vec::new();
-    for decl in body.locals.iter() {
-        if matches!(cx.interner.kind(decl.ty), TyKind::Void) {
-            offs.push(0);
-            continue;
-        }
-        let sz = super::types::native_scalar_size(cx, decl.ty).0.max(8) as i32;
-        size = (size + 7) & !7;
-        offs.push(size);
-        size += sz;
-    }
+    let fut = crate::abi::FutureLayout::native();
+    let slots = crate::async_emit::layout_async_slots(
+        &body,
+        cx.interner,
+        fut.slots as i32,
+        |_| String::new(),
+        |ty| {
+            let sz = super::types::native_scalar_size(cx, ty).0.max(8);
+            (sz, cx.interner.is_value_type(ty))
+        },
+    );
+    let size = slots.frame_size;
+    let offs: Vec<i32> = (0..body.locals.len())
+        .map(|i| slots.offsets.get(&i).copied().unwrap_or(0))
+        .collect();
     let (ret, name, params, attr) = proto_parts(cx, stub);
     let mut stub_fn = FuncBuilder::new(ret, name);
     stub_fn.attr = attr;
@@ -459,7 +470,11 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
             );
         } else {
             let ty = local_c_ty(cx.interner, param_ty);
-            stub_fn.stmt(Stmt::store(ty, Expr::ptr_add(Expr::id("__self"), Expr::i(off as i64)), Expr::local(p.0)));
+            stub_fn.stmt(Stmt::store(
+                ty,
+                Expr::ptr_add(Expr::id("__self"), Expr::i(off as i64)),
+                Expr::local(p.0),
+            ));
         }
     }
     stub_fn.call("dream_enqueue", vec![Expr::id("__self")]);
@@ -496,7 +511,13 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
     poll.stmt(Stmt::decl(
         CTy::I32,
         "__st",
-        Some(Expr::load(CTy::I32, Expr::dream_p(Expr::id("__self")))),
+        Some(Expr::load(
+            CTy::I32,
+            Expr::ptr_add(
+                Expr::id("__self"),
+                Expr::i(crate::abi::FutureLayout::native().state as i64),
+            ),
+        )),
     ));
     let mut arms = Vec::new();
     for (bi, _) in body.blocks.iter().enumerate() {
@@ -534,6 +555,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
         poll.label(format!("L{bi}"));
         if let Some(d) = resume_dest[bi] {
             let dest_ty = body.local_ty(crate::Local(d));
+            let fut = crate::abi::FutureLayout::native();
             if cx.interner.is_value_type(dest_ty) {
                 let sz = super::types::native_scalar_size(cx, dest_ty).0;
                 poll.stmt(Stmt::block(vec![
@@ -542,7 +564,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                         "__ch",
                         Some(Expr::load(
                             CTy::Ptr,
-                            Expr::ptr_add(Expr::id("__self"), Expr::i(36)),
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(fut.awaiting as i64)),
                         )),
                     ),
                     Stmt::call(
@@ -551,7 +573,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                             Expr::dream_p(Expr::local(d)),
                             Expr::dream_p(Expr::load(
                                 CTy::Ptr,
-                                Expr::ptr_add(Expr::id("__ch"), Expr::i(8)),
+                                Expr::ptr_add(Expr::id("__ch"), Expr::i(fut.result as i64)),
                             )),
                             Expr::i(sz as i64),
                         ],
@@ -561,15 +583,23 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                 let ty = local_c_ty(cx.interner, dest_ty);
                 let value = match cx.interner.kind(dest_ty) {
                     TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
-                        Expr::load(CTy::I64, Expr::ptr_add(Expr::id("__ch"), Expr::i(56)))
+                        Expr::load(
+                            CTy::I64,
+                            Expr::ptr_add(Expr::id("__ch"), Expr::i(fut.wide as i64)),
+                        )
                     }
-                    TyKind::Prim(dream_types::PrimTy::Float) => {
-                        Expr::load(CTy::F32, Expr::ptr_add(Expr::id("__ch"), Expr::i(56)))
-                    }
-                    TyKind::Prim(dream_types::PrimTy::Double) => {
-                        Expr::load(CTy::F64, Expr::ptr_add(Expr::id("__ch"), Expr::i(56)))
-                    }
-                    _ => Expr::load(CTy::Ptr, Expr::ptr_add(Expr::id("__ch"), Expr::i(8))),
+                    TyKind::Prim(dream_types::PrimTy::Float) => Expr::load(
+                        CTy::F32,
+                        Expr::ptr_add(Expr::id("__ch"), Expr::i(fut.wide as i64)),
+                    ),
+                    TyKind::Prim(dream_types::PrimTy::Double) => Expr::load(
+                        CTy::F64,
+                        Expr::ptr_add(Expr::id("__ch"), Expr::i(fut.wide as i64)),
+                    ),
+                    _ => Expr::load(
+                        CTy::Ptr,
+                        Expr::ptr_add(Expr::id("__ch"), Expr::i(fut.result as i64)),
+                    ),
                 };
                 poll.stmt(Stmt::block(vec![
                     Stmt::decl(
@@ -577,7 +607,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                         "__ch",
                         Some(Expr::load(
                             CTy::Ptr,
-                            Expr::ptr_add(Expr::id("__self"), Expr::i(36)),
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(fut.awaiting as i64)),
                         )),
                     ),
                     Stmt::assign(Expr::local(d), Expr::cast(ty, value)),
@@ -591,7 +621,8 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
             }
         }
         for (i, decl) in body.locals.iter().enumerate() {
-            if matches!(cx.interner.kind(decl.ty), TyKind::Void) || cx.interner.is_value_type(decl.ty)
+            if matches!(cx.interner.kind(decl.ty), TyKind::Void)
+                || cx.interner.is_value_type(decl.ty)
             {
                 continue;
             }
@@ -699,76 +730,34 @@ fn emit_func(m: &mut ModuleBuilder, cx: &Cx<'_>, f: &MirFunction) {
     m.push_func(b);
 }
 
-const NATIVE_GUEST_C: &[&str] = &[
-    "heap.c",
-    "strings.c",
-    "object.c",
-    "format.c",
-    "panic.c",
-    "weak.c",
-    "closure.c",
-    "async.c",
-    "sync.c",
-    "regex.c",
-    "simd.c",
-    "host.c",
-    "worker.c",
-];
-
-/// Interpreter `.c` names from `runtime/c/pcre2/SOURCES` (wasm `build-runtime.sh` + native).
-pub fn pcre2_interpreter_c_names() -> Vec<&'static str> {
-    include_str!("../../runtime/c/pcre2/SOURCES")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .collect()
-}
-
-/// Native-only JIT (not compiled for wasm; no W^X in linear memory).
-pub const PCRE2_JIT_C: &[&str] = &["pcre2_jit_compile.c"];
-
-/// Guest wasm extras linked with the interpreter (`scripts/build-runtime.sh`).
-pub const WASM_PCRE2_WRAPPER_C: &[&str] = &["regex.c", "regex_wasm_libc.c"];
-
-/// `.c` files the native linker must compile with generated user C.
-pub fn native_runtime_c_files() -> Vec<std::path::PathBuf> {
-    let native = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/native");
-    let pcre2 = native_pcre2_include_dir();
-    let mut files: Vec<std::path::PathBuf> = NATIVE_GUEST_C.iter().map(|n| native.join(n)).collect();
-    for name in pcre2_interpreter_c_names() {
-        files.push(pcre2.join(name));
+fn emit_fn_typedefs(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let mut seen: IndexMap<String, (CTy, Vec<CTy>)> = IndexMap::new();
+    let mut add = |ty: TypeId| {
+        if !matches!(cx.interner.kind(ty), TyKind::Func(..)) {
+            return;
+        }
+        let (name, ret, params) = fn_ptr_abi(cx.interner, ty);
+        seen.entry(name).or_insert((ret, params));
+    };
+    for f in &cx.mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::IndirectCall { sig, .. } => add(*sig),
+                    Statement::Assign(_, Rvalue::IndirectCall { sig, .. }) => add(*sig),
+                    _ => {}
+                }
+            }
+        }
     }
-    for name in PCRE2_JIT_C {
-        files.push(pcre2.join(name));
+    for inf in &cx.mir.interfaces.interfaces {
+        for &sig in &inf.sigs {
+            add(sig);
+        }
     }
-    files
-}
-
-pub fn native_pcre2_include_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/pcre2")
-}
-
-pub fn native_runtime_include_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c/native/include")
-}
-
-#[cfg(test)]
-mod source_list_tests {
-    use super::*;
-
-    #[test]
-    fn pcre2_source_lists_exist_on_disk() {
-        let pcre2 = native_pcre2_include_dir();
-        let guest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c");
-        assert!(!pcre2_interpreter_c_names().is_empty());
-        for name in pcre2_interpreter_c_names() {
-            assert!(pcre2.join(name).is_file(), "{}", name);
-        }
-        for name in PCRE2_JIT_C {
-            assert!(pcre2.join(name).is_file(), "{}", name);
-        }
-        for name in WASM_PCRE2_WRAPPER_C {
-            assert!(guest.join(name).is_file(), "{}", name);
-        }
+    seen.entry("dream_fn_ptr__ptr".into())
+        .or_insert((CTy::Ptr, vec![CTy::Ptr]));
+    for (name, (ret, params)) in seen {
+        m.push(Item::Typedef { name, ret, params });
     }
 }

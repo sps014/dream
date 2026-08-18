@@ -41,6 +41,7 @@ struct MemoryImport {
     field: String,
     min: u32,
     max: u32,
+    shared: bool,
 }
 
 struct TableDef {
@@ -165,12 +166,20 @@ impl ModuleBuilder {
         });
     }
 
-    pub(crate) fn import_memory(&mut self, module: &str, field: &str, min: u32, max: u32) {
+    pub(crate) fn import_memory(
+        &mut self,
+        module: &str,
+        field: &str,
+        min: u32,
+        max: u32,
+        shared: bool,
+    ) {
         self.memory = Some(MemoryImport {
             module: module.to_string(),
             field: field.to_string(),
             min,
             max,
+            shared,
         });
     }
 
@@ -280,7 +289,11 @@ impl ModuleBuilder {
     }
 
     pub(crate) fn ingest_wat(&mut self, fields: &str) {
-        wast_in::ingest(self, fields);
+        wast_in::ingest(self, fields, None);
+    }
+
+    pub(crate) fn ingest_linked_wat(&mut self, fields: &str, layout: crate::runtime::LinkedLayout) {
+        wast_in::ingest(self, fields, Some(layout));
     }
 
     /// Encode the module. When [`Self::dce`] is set, drop unreachable functions first.
@@ -398,7 +411,7 @@ impl ModuleBuilder {
                     minimum: mem.min as u64,
                     maximum: Some(mem.max as u64),
                     memory64: false,
-                    shared: true,
+                    shared: mem.shared,
                     page_size_log2: None,
                 }),
             );
@@ -527,7 +540,9 @@ impl ModuleBuilder {
         if !self.elems.is_empty() {
             let mut elems = ElementSection::new();
             for e in &self.elems {
-                let table = *table_idx.get(&e.table).unwrap_or(&0);
+                let table = *table_idx.get(&e.table).unwrap_or_else(|| {
+                    crate::internal_error!("elem segment targets unknown table ${}", e.table)
+                });
                 let idxs: Vec<u32> = e
                     .funcs
                     .iter()

@@ -897,7 +897,7 @@ fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
         let mut h = DefaultHasher::new();
         HARNESS_SOURCE.hash(&mut h);
         dream_mir::abi::STRING_HEADER_SIZE.hash(&mut h);
-        dream_mir::abi::STRING_UTF8_OFFSET.hash(&mut h);
+        dream_mir::abi::STRING_UNITS_OFFSET.hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
             .hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
@@ -937,9 +937,10 @@ fn harness_wat_and_snapshot() -> Result<(String, std::path::PathBuf), String> {
             .map_err(|e| format!("@json generator: write harness source: {e}"))?;
         let src = src_path.to_string_lossy().into_owned();
         let out = wat_path.to_string_lossy().into_owned();
-        let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
-            .with_skip_generators(true)
-            .with_release(true);
+        let compiler =
+            crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+                .with_skip_generators(true)
+                .with_release(true);
         compiler
             .compile(&src, &out)
             .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;

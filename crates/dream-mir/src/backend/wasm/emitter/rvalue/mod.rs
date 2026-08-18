@@ -218,7 +218,11 @@ impl Emitter<'_> {
                     // retain/release — see `src/mir/abi.rs`'s shared-lock-word note). Reused heap
                     // blocks are not zeroed, so it must be zeroed explicitly, same as any field.
                     let is_shared = self.interner.is_shared_type(*ty);
-                    let alloc_size = if is_shared { size + 4 } else { size };
+                    let alloc_size = if is_shared {
+                        size + crate::abi::HEADER_LOCK_WORD_SIZE
+                    } else {
+                        size
+                    };
                     self.f.i32_const((alloc_size) as i32);
                     self.f.i32_const(self.type_tag(*ty, *def));
                     self.f.call("malloc");
@@ -330,7 +334,7 @@ impl Emitter<'_> {
                 // silently-truncated (undersized) allocation.
                 let size = (elems.len() as u32)
                     .checked_mul(esize)
-                    .and_then(|payload| payload.checked_add(4))
+                    .and_then(|payload| payload.checked_add(crate::abi::LEN_PREFIX_SIZE))
                     .unwrap_or_else(|| {
                         crate::internal_error!(
                             "array literal size overflows u32 ({} elems x {} bytes)",
@@ -346,7 +350,11 @@ impl Emitter<'_> {
                 self.f.i32_const((elems.len()) as i32);
                 self.f.store(StoreKind::I32, 0);
                 for (i, e) in elems.iter().enumerate() {
-                    self.store_at_obj(4 + esize * (i as u32), *elem_ty, e);
+                    self.store_at_obj(
+                        crate::abi::LEN_PREFIX_SIZE + esize * (i as u32),
+                        *elem_ty,
+                        e,
+                    );
                 }
                 self.f.local_get("__obj");
             }
@@ -356,8 +364,8 @@ impl Emitter<'_> {
                 let (esize, _) = scalar_size(self.interner, *elem_ty);
                 self.emit_operand(len);
                 self.f.local_set("__len");
-                // size = 4 + len * esize
-                self.f.i32_const(4);
+                // size = LEN_PREFIX + len * esize
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.local_get("__len");
                 self.f.i32_const((esize) as i32);
                 self.f.i32_mul();
@@ -370,7 +378,7 @@ impl Emitter<'_> {
                 self.f.store(StoreKind::I32, 0);
                 // memory.fill(dst = obj+4, 0, len*esize)
                 self.f.local_get("__obj");
-                self.f.i32_const(4);
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.i32_add();
                 self.f.i32_const(0);
                 self.f.local_get("__len");
@@ -406,7 +414,7 @@ impl Emitter<'_> {
                     self.f.i32_mul();
                     self.f.local_set("__len");
                     self.f.local_get("__len");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.i32_const(ARRAY_TAG);
                     self.f.call("malloc");
@@ -415,10 +423,10 @@ impl Emitter<'_> {
                     self.f.local_get("__len");
                     self.f.store(StoreKind::I32, 0);
                     self.f.local_get("__obj");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.local_get("__src");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.local_get("__len");
                     self.f.memory_copy();
@@ -431,7 +439,8 @@ impl Emitter<'_> {
                 // double, bool, ...) is a raw WASM value on the stack with no address of its own, so
                 // it is written directly with the matching store instruction instead.
                 let size = self.value_size(*ty);
-                self.f.i32_const((4 + size) as i32);
+                self.f
+                    .i32_const((crate::abi::LEN_PREFIX_SIZE + size) as i32);
                 self.f.i32_const(ARRAY_TAG);
                 self.f.call("malloc");
                 self.f.local_set("__obj");
@@ -441,14 +450,14 @@ impl Emitter<'_> {
                 if self.interner.is_value_type(*ty) {
                     // memory.copy(dst = obj+4, src = value address, size)
                     self.f.local_get("__obj");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.emit_operand_addr(value);
                     self.f.i32_const((size) as i32);
                     self.f.memory_copy();
                 } else {
                     self.f.local_get("__obj");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.emit_operand(value);
                     self.f.store(self.store_kind(*ty), 0);
@@ -468,7 +477,7 @@ impl Emitter<'_> {
                     self.f.load(LoadKind::I32, 0);
                     self.f.local_set("__len");
                     self.f.local_get("__len");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.i32_const(ARRAY_TAG);
                     self.f.call("malloc");
@@ -479,10 +488,10 @@ impl Emitter<'_> {
                     self.f.i32_div_u();
                     self.f.store(StoreKind::I32, 0);
                     self.f.local_get("__obj");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.local_get("__src");
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.local_get("__len");
                     self.f.memory_copy();
@@ -504,14 +513,14 @@ impl Emitter<'_> {
                     // memory.copy(dst = obj, src = bytes+4, size)
                     self.f.local_get("__obj");
                     self.emit_operand(bytes);
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.i32_const((size) as i32);
                     self.f.memory_copy();
                     self.f.local_get("__obj");
                 } else {
                     self.emit_operand(bytes);
-                    self.f.i32_const(4);
+                    self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                     self.f.i32_add();
                     self.f.load(self.load_kind(*ty), 0);
                 }
@@ -534,7 +543,7 @@ impl Emitter<'_> {
                 self.emit_operand(new_len);
                 self.f.local_set("__len");
                 self.f.local_get("__obj");
-                self.f.i32_const(4);
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.local_get("__len");
                 self.f.i32_const((esize) as i32);
                 self.f.i32_mul();
@@ -550,7 +559,7 @@ impl Emitter<'_> {
                 self.f.i32_gt_s();
                 self.f.if_();
                 self.f.local_get("__obj");
-                self.f.i32_const(4);
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.i32_add();
                 self.f.local_get("__old_len");
                 self.f.i32_const((esize) as i32);

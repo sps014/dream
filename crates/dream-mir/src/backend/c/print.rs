@@ -76,6 +76,23 @@ fn print_item(out: &mut String, item: &Item) {
             print_func(out, f);
             out.push('\n');
         }
+        Item::Typedef { name, ret, params } => {
+            out.push_str("typedef ");
+            print_ty(out, ret);
+            out.push_str(" (*");
+            out.push_str(name);
+            out.push_str(")(");
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                print_ty(out, p);
+            }
+            if params.is_empty() {
+                out.push_str("void");
+            }
+            out.push_str(");\n");
+        }
     }
 }
 
@@ -245,7 +262,12 @@ fn print_stmt(out: &mut String, stmt: &Stmt, ind: usize, nl: bool) {
                     out.push('\n');
                     continue;
                 }
-                if arm.body.len() == 1 && !matches!(arm.body[0], Stmt::Block(_) | Stmt::Switch { .. } | Stmt::If { .. } | Stmt::For { .. }) {
+                if arm.body.len() == 1
+                    && !matches!(
+                        arm.body[0],
+                        Stmt::Block(_) | Stmt::Switch { .. } | Stmt::If { .. } | Stmt::For { .. }
+                    )
+                {
                     out.push(' ');
                     print_stmt_inline(out, &arm.body[0], ind + 1);
                     out.push('\n');
@@ -400,9 +422,7 @@ fn print_for_clause(out: &mut String, stmt: &Stmt) {
             out.push_str("++");
         }
         Stmt::Expr(e) => print_expr(out, e, 0),
-        Stmt::Decl {
-            ty, name, init, ..
-        } => {
+        Stmt::Decl { ty, name, init, .. } => {
             print_decl_ty(out, ty, name);
             if let Some(e) = init {
                 out.push_str(" = ");
@@ -455,10 +475,6 @@ fn print_expr(out: &mut String, expr: &Expr, prec: u8) {
     match expr {
         Expr::Ident(s) => out.push_str(s),
         Expr::Int(n) => out.push_str(&n.to_string()),
-        Expr::UInt(n) => {
-            out.push_str(&n.to_string());
-            out.push('u');
-        }
         Expr::Long(n) => {
             out.push_str(&n.to_string());
             out.push_str("LL");
@@ -627,9 +643,7 @@ fn print_expr(out: &mut String, expr: &Expr, prec: u8) {
 
 fn print_stmt_compact(out: &mut String, stmt: &Stmt) {
     match stmt {
-        Stmt::Decl {
-            ty, name, init, ..
-        } => {
+        Stmt::Decl { ty, name, init, .. } => {
             print_decl_ty(out, ty, name);
             if let Some(e) = init {
                 out.push_str(" = ");

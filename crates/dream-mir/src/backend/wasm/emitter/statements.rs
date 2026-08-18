@@ -271,14 +271,14 @@ impl Emitter<'_> {
                 self.emit_operand(count);
                 self.f.local_set("__len");
                 self.f.local_get("__obj");
-                self.f.i32_const(4);
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.i32_add();
                 self.emit_operand(dst_off);
                 self.f.i32_const((esize) as i32);
                 self.f.i32_mul();
                 self.f.i32_add();
                 self.f.local_get("__src");
-                self.f.i32_const(4);
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.i32_add();
                 self.emit_operand(src_off);
                 self.f.i32_const((esize) as i32);
@@ -301,7 +301,7 @@ impl Emitter<'_> {
                 self.emit_operand(count);
                 self.f.local_set("__len");
                 self.f.local_get("__obj");
-                self.f.i32_const(4);
+                self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
                 self.f.i32_add();
                 self.emit_operand(dst_off);
                 self.f.i32_const((esize) as i32);
@@ -604,7 +604,7 @@ impl Emitter<'_> {
         lane: crate::SimdLane,
     ) {
         self.emit_operand(arr);
-        self.f.i32_const(4);
+        self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
         self.f.i32_add();
         self.emit_operand(index);
         let sh = lane.shift();

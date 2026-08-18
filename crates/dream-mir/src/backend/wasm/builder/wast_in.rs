@@ -11,13 +11,16 @@ use wast::parser::{self, ParseBuffer};
 use wast::token::Index;
 use wast::Wat;
 
+pub(crate) use crate::runtime::LinkedLayout;
+
 #[derive(Default)]
 struct IngestCtx {
     types: Vec<String>,
     tables: Vec<String>,
+    linked: Option<LinkedLayout>,
 }
 
-pub(super) fn ingest(m: &mut ModuleBuilder, text: &str) {
+pub(super) fn ingest(m: &mut ModuleBuilder, text: &str, linked: Option<LinkedLayout>) {
     let stripped: String = text
         .lines()
         .map(|l| match l.find(";;") {
@@ -45,7 +48,12 @@ pub(super) fn ingest(m: &mut ModuleBuilder, text: &str) {
     let ModuleKind::Text(fields) = module.kind else {
         internal_error!("runtime WAT must be text, not binary");
     };
-    let mut ctx = IngestCtx::default();
+    // Table indices in a fragment are fragment-local (same as types). Seeding from the
+    // host module would map regex `table 0` onto `$__ft` and overwrite poll entries.
+    let mut ctx = IngestCtx {
+        linked,
+        ..Default::default()
+    };
     for field in &fields {
         ingest_decl(m, field, &mut ctx);
     }
@@ -68,10 +76,9 @@ fn ingest_decl(m: &mut ModuleBuilder, field: &ModuleField<'_>, ctx: &mut IngestC
             }
         }
         ModuleField::Table(t) => {
-            let name = t
-                .id
-                .map(|id| id.name().to_string())
-                .unwrap_or_else(|| m.next_anon());
+            let name =
+                t.id.map(|id| id.name().to_string())
+                    .unwrap_or_else(|| m.next_anon());
             let (min, max) = match &t.kind {
                 wast::core::TableKind::Normal { ty, .. } => {
                     let min = ty.limits.min as u32;
@@ -92,10 +99,14 @@ fn ingest_decl(m: &mut ModuleBuilder, field: &ModuleField<'_>, ctx: &mut IngestC
                 GlobalKind::Inline(expr) => const_from_expr(expr, ty),
                 GlobalKind::Import(_) => return,
             };
-            if id.name() == "__stack_pointer" {
-                init = crate::abi::LINKED_RT_STACK_TOP as i64;
+            let mut name = id.name().to_string();
+            if name == "__stack_pointer" {
+                if let Some(layout) = ctx.linked {
+                    name = layout.stack_global();
+                    init = layout.stack_top as i64;
+                }
             }
-            m.global(id.name(), ty, g.ty.mutable, init, is_f32, is_f64);
+            m.global(&name, ty, g.ty.mutable, init, is_f32, is_f64);
         }
         ModuleField::Import(imp) => {
             if let wast::core::ImportItems::Single { module, name, sig } = &imp.items {
@@ -104,7 +115,8 @@ fn ingest_decl(m: &mut ModuleBuilder, field: &ModuleField<'_>, ctx: &mut IngestC
                         if m.has_func(name) {
                             return;
                         }
-                        let (params, results) = ty.inline.as_ref().map(func_sig).unwrap_or_default();
+                        let (params, results) =
+                            ty.inline.as_ref().map(func_sig).unwrap_or_default();
                         let iname = sig
                             .id
                             .map(|id| id.name().to_string())
@@ -114,7 +126,14 @@ fn ingest_decl(m: &mut ModuleBuilder, field: &ModuleField<'_>, ctx: &mut IngestC
                         }
                         m.import_func(module, name, &iname, params, results);
                     }
-                    ItemKind::Memory(_) => {}
+                    ItemKind::Memory(mt) => {
+                        if m.memory.is_some() {
+                            return;
+                        }
+                        let min = mt.limits.min as u32;
+                        let max = mt.limits.max.unwrap_or(mt.limits.min) as u32;
+                        m.import_memory(module, name, min, max, mt.shared);
+                    }
                     _ => {}
                 }
             }
@@ -164,8 +183,14 @@ fn ingest_body(m: &mut ModuleBuilder, field: ModuleField<'_>, ctx: &IngestCtx) {
             match e.kind {
                 wast::core::ExportKind::Func => m.export_func(e.name, &item),
                 wast::core::ExportKind::Table => m.export_table(e.name, &item),
-                wast::core::ExportKind::Memory => {}
-                wast::core::ExportKind::Global => m.export_global(e.name, &item),
+                wast::core::ExportKind::Memory => {
+                    if m.memory.is_none() {
+                        internal_error!("runtime WAT exported memory but the module has none");
+                    }
+                }
+                wast::core::ExportKind::Global => {
+                    m.export_global(e.name, &remap_global(ctx, &item))
+                }
                 wast::core::ExportKind::Tag => {}
             }
         }
@@ -174,11 +199,24 @@ fn ingest_body(m: &mut ModuleBuilder, field: ModuleField<'_>, ctx: &IngestCtx) {
             if let wast::core::DataKind::Active { offset, .. } = d.kind {
                 let off = match offset.instrs.first() {
                     Some(Instruction::I32Const(v)) => *v as u32,
-                    _ => 0,
+                    other => {
+                        internal_error!("data segment offset is not i32.const ({other:?})")
+                    }
                 };
                 let mut bytes = Vec::new();
                 for v in &d.data {
                     v.push_onto(&mut bytes);
+                }
+                if let Some(layout) = ctx.linked {
+                    let end = off.saturating_add(bytes.len() as u32);
+                    if off < layout.base || end > layout.data_end() {
+                        internal_error!(
+                            "linked module {} data [{off:#x}, {end:#x}) outside [{:#x}, {:#x})",
+                            layout.id,
+                            layout.base,
+                            layout.data_end()
+                        );
+                    }
                 }
                 m.data(off, bytes);
             }
@@ -187,15 +225,11 @@ fn ingest_body(m: &mut ModuleBuilder, field: ModuleField<'_>, ctx: &IngestCtx) {
             if let wast::core::ElemKind::Active { table, offset } = e.kind {
                 let table_name = match table {
                     Some(idx) => resolve_table(ctx, &idx),
-                    None => ctx
-                        .tables
-                        .first()
-                        .cloned()
-                        .unwrap_or_else(|| "__ft".to_string()),
+                    None => implicit_func_table(ctx),
                 };
                 let off = match offset.instrs.first() {
                     Some(Instruction::I32Const(v)) => *v,
-                    _ => 0,
+                    other => internal_error!("elem offset is not i32.const ({other:?})"),
                 };
                 let mut funcs = Vec::new();
                 if let wast::core::ElemPayload::Indices(idxs) = e.payload {
@@ -210,14 +244,27 @@ fn ingest_body(m: &mut ModuleBuilder, field: ModuleField<'_>, ctx: &IngestCtx) {
     }
 }
 
+/// Dream's sparse function table. Fragments that never declare a table (async.wat
+/// `call_indirect`) mean "module table 0", which is always this name.
+const FUNC_TABLE: &str = "__ft";
+
+fn implicit_func_table(ctx: &IngestCtx) -> String {
+    ctx.tables
+        .first()
+        .cloned()
+        .unwrap_or_else(|| FUNC_TABLE.to_string())
+}
+
 fn resolve_table(ctx: &IngestCtx, idx: &Index<'_>) -> String {
     match idx {
         Index::Id(id) => id.name().to_string(),
-        Index::Num(n, _) => ctx
-            .tables
-            .get(*n as usize)
-            .cloned()
-            .unwrap_or_else(|| "__ft".to_string()),
+        Index::Num(n, _) => ctx.tables.get(*n as usize).cloned().unwrap_or_else(|| {
+            if ctx.tables.is_empty() && *n == 0 {
+                FUNC_TABLE.to_string()
+            } else {
+                internal_error!("unknown table index {n} during WAT ingest")
+            }
+        }),
     }
 }
 
@@ -257,7 +304,9 @@ fn val_ty(t: wast::core::ValType<'_>) -> ValType {
         wast::core::ValType::F32 => ValType::F32,
         wast::core::ValType::F64 => ValType::F64,
         wast::core::ValType::V128 => ValType::V128,
-        wast::core::ValType::Ref(_) => ValType::I32,
+        wast::core::ValType::Ref(_) => {
+            internal_error!("runtime WAT used a reftype; funcref/externref are not lowered to i32")
+        }
     }
 }
 
@@ -266,6 +315,15 @@ fn idx_name(idx: &Index<'_>) -> String {
         Index::Id(id) => id.name().to_string(),
         Index::Num(n, _) => n.to_string(),
     }
+}
+
+fn remap_global(ctx: &IngestCtx, name: &str) -> String {
+    if name == "__stack_pointer" {
+        if let Some(layout) = ctx.linked {
+            return layout.stack_global();
+        }
+    }
+    name.to_string()
 }
 
 fn label_of(idx: &Index<'_>) -> Label {
@@ -362,8 +420,8 @@ fn lower_inst(f: &mut FuncBuilder, inst: &Instruction<'_>, ctx: &IngestCtx) {
         Instruction::LocalGet(idx) => f.local_get(&idx_name(idx)),
         Instruction::LocalSet(idx) => f.local_set(&idx_name(idx)),
         Instruction::LocalTee(idx) => f.local_tee(&idx_name(idx)),
-        Instruction::GlobalGet(idx) => f.global_get(&idx_name(idx)),
-        Instruction::GlobalSet(idx) => f.global_set(&idx_name(idx)),
+        Instruction::GlobalGet(idx) => f.global_get(&remap_global(ctx, &idx_name(idx))),
+        Instruction::GlobalSet(idx) => f.global_set(&remap_global(ctx, &idx_name(idx))),
         Instruction::I32Load(a) => {
             f.load_offset(LoadKind::I32, a.offset as u32, align_log2(a.align))
         }
@@ -837,7 +895,7 @@ fn lower_inst(f: &mut FuncBuilder, inst: &Instruction<'_>, ctx: &IngestCtx) {
 #[cfg(test)]
 mod ingest_tests {
     use super::*;
-    use crate::backend::wasm::builder::{ModuleBuilder, ValType};
+    use crate::backend::wasm::builder::{FuncBuilder, ModuleBuilder, ValType};
 
     #[test]
     fn linked_module_skips_provided_imports_and_owns_its_table() {
@@ -863,6 +921,13 @@ mod ingest_tests {
   (global $__stack_pointer (mut i32) (i32.const 16))
   (elem (i32.const 0) func $user)
 )"#,
+            Some(crate::runtime::LinkedLayout {
+                id: "regex",
+                base: crate::runtime::LINKED_REGION_ORIGIN,
+                stack_top: crate::runtime::LINKED_REGION_ORIGIN,
+                stack_size: 131072,
+                span: 512 * 1024,
+            }),
         );
         let wat = m.finish_wat();
         assert_eq!(
@@ -877,8 +942,16 @@ mod ingest_tests {
             wat
         );
         assert!(
-            wat.contains(&format!("i32.const {}", crate::abi::LINKED_RT_STACK_TOP)),
+            wat.contains(&format!(
+                "i32.const {}",
+                crate::runtime::LINKED_REGION_ORIGIN
+            )),
             "C stack must move off interned strings:\n{}",
+            wat
+        );
+        assert!(
+            wat.contains("__stack_pointer_regex"),
+            "linked SP must be renamed per module:\n{}",
             wat
         );
         assert!(
@@ -887,5 +960,45 @@ mod ingest_tests {
             wat
         );
         assert!(wat.contains("call_indirect"), "{}", wat);
+    }
+
+    #[test]
+    fn linked_elem_does_not_overwrite_func_table() {
+        let mut m = ModuleBuilder::new();
+        m.table("__ft", 3, 3);
+        m.elem("__ft", 1, vec!["poll_task".into()]);
+        let mut poll = FuncBuilder::new("poll_task");
+        poll.param("self", ValType::I32);
+        poll.result(ValType::I32);
+        poll.i32_const(0);
+        m.push_func(poll);
+        ingest(
+            &mut m,
+            r#"(module
+  (type (;0;) (func (param i32) (result i32)))
+  (func $default_free (type 0) (param i32) (result i32)
+    local.get 0)
+  (table (;0;) 2 2 funcref)
+  (elem (i32.const 1) func $default_free)
+)"#,
+            Some(crate::runtime::LinkedLayout {
+                id: "regex",
+                base: crate::runtime::LINKED_REGION_ORIGIN,
+                stack_top: crate::runtime::LINKED_REGION_ORIGIN,
+                stack_size: 131072,
+                span: 512 * 1024,
+            }),
+        );
+        let wat = m.finish_wat();
+        assert!(
+            wat.contains("(elem (;0;) (table $__ft) (i32.const 1) func $poll_task)"),
+            "Dream poll slots must stay on $__ft:\n{}",
+            wat
+        );
+        assert!(
+            !wat.contains("(elem (;1;) (table $__ft)"),
+            "linked elem must not land on $__ft:\n{}",
+            wat
+        );
     }
 }

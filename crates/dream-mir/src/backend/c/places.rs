@@ -49,7 +49,10 @@ impl<'a> Emitter<'a> {
             Place::Field { base, field } => {
                 let ty = self.f.local_ty(*base);
                 let Some(layout) = self.cx.nstruct(ty) else {
-                    return Expr::index(Expr::cast(CTy::ptr_to(CTy::Ptr), Expr::local(base.0)), Expr::i(*field as i64));
+                    return Expr::index(
+                        Expr::cast(CTy::ptr_to(CTy::Ptr), Expr::local(base.0)),
+                        Expr::i(*field as i64),
+                    );
                 };
                 let fld = layout.fields.get(*field).unwrap_or_else(|| {
                     crate::internal_error!("missing field {field} on type {ty:?}")
@@ -60,7 +63,10 @@ impl<'a> Emitter<'a> {
                 let cast = load_cast(self.cx, fld.ty);
                 let load = Expr::load(cast.clone(), Expr::field_ptr(base.0, fld.offset));
                 if fld.is_unowned {
-                    let panic = Expr::id(self.cx.str_sym(crate::backend::wasm::panic_msgs::UNOWNED_NULL_DEREF));
+                    let panic = Expr::id(
+                        self.cx
+                            .str_sym(crate::backend::shared::panic_msgs::UNOWNED_NULL_DEREF),
+                    );
                     self.b.expr_block(|b| {
                         let t = b.temp(cast.clone(), Some(load.clone()));
                         b.stmt(Stmt::if_(
@@ -90,7 +96,10 @@ impl<'a> Emitter<'a> {
                 if self.cx.interner.is_value_type(*elem_ty) {
                     Expr::local(ptr.0)
                 } else {
-                    Expr::load(load_cast(self.cx, *elem_ty), Expr::dream_p(Expr::local(ptr.0)))
+                    Expr::load(
+                        load_cast(self.cx, *elem_ty),
+                        Expr::dream_p(Expr::local(ptr.0)),
+                    )
                 }
             }
         }
@@ -108,10 +117,9 @@ impl<'a> Emitter<'a> {
                 if let crate::Rvalue::Use(Operand::Copy(Place::Local(src))) = rv {
                     let src_ty = self.f.local_ty(*src);
                     if !self.cx.interner.is_value_type(src_ty)
-                        && self
-                            .cx
-                            .nstruct(src_ty)
-                            .is_some_and(|layout| layout.size == elem_size(self.cx, self.f.local_ty(*l)))
+                        && self.cx.nstruct(src_ty).is_some_and(|layout| {
+                            layout.size == elem_size(self.cx, self.f.local_ty(*l))
+                        })
                     {
                         return self.b.expr_block(|b| {
                             b.assign(Expr::local(l.0), Expr::local(src.0));
@@ -284,13 +292,13 @@ impl<'a> Emitter<'a> {
 
     fn unowned_store(&mut self, slot: Expr, rhs: Expr) -> Expr {
         self.b.expr_block(|b| {
-            let old = b.temp(
-                CTy::Ptr,
-                Some(Expr::load(CTy::Ptr, slot.clone())),
-            );
+            let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
             b.stmt(Stmt::if_(
                 old.clone(),
-                Stmt::call("dream_weak_unregister", vec![old.clone(), Expr::cast(CTy::Ptr, slot.clone())]),
+                Stmt::call(
+                    "dream_weak_unregister",
+                    vec![old.clone(), Expr::cast(CTy::Ptr, slot.clone())],
+                ),
             ));
             let new = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
             b.stmt(Stmt::store(CTy::Ptr, slot.clone(), new.clone()));
@@ -310,7 +318,14 @@ impl<'a> Emitter<'a> {
         })
     }
 
-    fn rc_store(&mut self, cast: CTy, slot: Expr, rhs: Expr, release: String, borrowed: bool) -> Expr {
+    fn rc_store(
+        &mut self,
+        cast: CTy,
+        slot: Expr,
+        rhs: Expr,
+        release: String,
+        borrowed: bool,
+    ) -> Expr {
         self.b.expr_block(|b| {
             let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
             let v = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
@@ -346,11 +361,14 @@ impl<'a> Emitter<'a> {
             )
         {
             return Expr::add(
-                Expr::ptr_add(Expr::local(base.0), Expr::i(4)),
+                Expr::ptr_add(Expr::local(base.0), super::types::len_prefix()),
                 Expr::mul(idx, Expr::i(elem_size as i64)),
             );
         }
-        let panic = Expr::id(self.cx.str_sym(crate::backend::wasm::panic_msgs::INDEX_OUT_OF_BOUNDS));
+        let panic = Expr::id(
+            self.cx
+                .str_sym(crate::backend::shared::panic_msgs::INDEX_OUT_OF_BOUNDS),
+        );
         let idx_e = idx.clone();
         self.b.expr_block(move |b| {
             let t_idx = b.temp(CTy::I32, Some(Expr::cast(CTy::I32, idx_e.clone())));
@@ -362,15 +380,24 @@ impl<'a> Emitter<'a> {
                     Expr::i(0),
                 )),
             );
-            let in_i32 = Expr::eq(Expr::cast(CTy::I64, idx_e.clone()), Expr::cast(CTy::I64, t_idx.clone()));
-            let oob = Expr::ge(Expr::cast(CTy::U32, t_idx.clone()), Expr::cast(CTy::U32, t_len));
+            let in_i32 = Expr::eq(
+                Expr::cast(CTy::I64, idx_e.clone()),
+                Expr::cast(CTy::I64, t_idx.clone()),
+            );
+            let oob = Expr::ge(
+                Expr::cast(CTy::U32, t_idx.clone()),
+                Expr::cast(CTy::U32, t_len),
+            );
             b.stmt(Stmt::if_(
                 Expr::and(in_i32, oob),
                 Stmt::call("dream_panic", vec![panic.clone()]),
             ));
             Expr::add(
-                Expr::ptr_add(Expr::local(base.0), Expr::i(4)),
-                Expr::mul(Expr::cast(CTy::I64, idx_e.clone()), Expr::i(elem_size as i64)),
+                Expr::ptr_add(Expr::local(base.0), super::types::len_prefix()),
+                Expr::mul(
+                    Expr::cast(CTy::I64, idx_e.clone()),
+                    Expr::i(elem_size as i64),
+                ),
             )
         })
     }
@@ -401,7 +428,11 @@ impl<'a> Emitter<'a> {
             self.b.expr_block(|b| {
                 b.call(
                     "memcpy",
-                    vec![dest.clone(), Expr::dream_p(rhs.clone()), Expr::i(size as i64)],
+                    vec![
+                        dest.clone(),
+                        Expr::dream_p(rhs.clone()),
+                        Expr::i(size as i64),
+                    ],
                 );
                 if retain_copy {
                     let mut e = Emitter::new(cx, func, b);
@@ -449,7 +480,10 @@ impl<'a> Emitter<'a> {
             let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
             let box_ = b.temp(
                 CTy::Ptr,
-                Some(Expr::call("dream_malloc", vec![Expr::i(size as i64), Expr::i(0)])),
+                Some(Expr::call(
+                    "dream_malloc",
+                    vec![Expr::i(size as i64), Expr::i(0)],
+                )),
             );
             b.call(
                 "memcpy",
@@ -470,7 +504,10 @@ impl<'a> Emitter<'a> {
                         Expr::load(CTy::Ptr, Expr::ptr_add(src.clone(), Expr::i(poff as i64))),
                         box_.clone(),
                         Expr::i(0),
-                        Expr::cast(CTy::Ptr, Expr::cast(CTy::Named("intptr_t"), Expr::i(none as i64))),
+                        Expr::cast(
+                            CTy::Ptr,
+                            Expr::cast(CTy::Named("intptr_t"), Expr::i(none as i64)),
+                        ),
                     ],
                 ),
             ));
@@ -489,7 +526,10 @@ impl<'a> Emitter<'a> {
                         Stmt::call(
                             "dream_weak_unregister",
                             vec![
-                                Expr::load(CTy::Ptr, Expr::ptr_add(old.clone(), Expr::i(poff as i64))),
+                                Expr::load(
+                                    CTy::Ptr,
+                                    Expr::ptr_add(old.clone(), Expr::i(poff as i64)),
+                                ),
                                 old.clone(),
                             ],
                         ),

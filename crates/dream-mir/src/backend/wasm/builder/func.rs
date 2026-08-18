@@ -270,6 +270,14 @@ impl FuncBuilder {
         self.ops.push(Op::I32Const(v));
     }
 
+    pub(crate) fn atomic_rmw_sub(&mut self, offset: u32) {
+        self.ops.push(Op::AtomicRmwSub { offset });
+    }
+
+    pub(crate) fn atomic_rmw_cmpxchg(&mut self, offset: u32) {
+        self.ops.push(Op::AtomicRmwCmpxchg { offset });
+    }
+
     pub(crate) fn i64_const(&mut self, v: i64) {
         self.ops.push(Op::I64Const(v));
     }

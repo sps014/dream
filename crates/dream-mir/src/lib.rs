@@ -17,6 +17,7 @@ pub mod passes;
 pub mod print;
 mod prune;
 pub mod relooper;
+pub mod runtime;
 mod simd;
 
 pub use simd::SimdLane;

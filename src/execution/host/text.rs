@@ -6,7 +6,7 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 use wasmtime::*;
 
-use super::memory::{read_arg_string, write_string_to_memory};
+use super::memory::{read_arg_string, with_guest_bytes_mut, write_string_to_memory};
 
 fn write_string_array_to_memory(caller: &mut Caller<'_, ()>, items: &[String]) -> Result<i32> {
     use dream_mir::abi;
@@ -18,18 +18,18 @@ fn write_string_array_to_memory(caller: &mut Caller<'_, ()>, items: &[String]) -
         .map_err(|_| Error::msg("unexpected `malloc` signature"))?;
     let count = items.len() as i32;
     let ptr = malloc.call(&mut *caller, (4 + count * 4, abi::TAG_ARRAY))?;
-    let memory = caller
-        .get_export(abi::EXPORT_MEMORY)
-        .and_then(Extern::into_shared_memory)
-        .ok_or_else(|| Error::msg("module must export `memory`"))?;
-    let data = super::memory::shared_bytes_mut(&memory);
-    let base = ptr as usize;
-    data[base..base + 4].copy_from_slice(&count.to_le_bytes());
-    for (i, item) in items.iter().enumerate() {
-        let elem_ptr = write_string_to_memory(caller, item)?;
-        let off = base + 4 + i * 4;
-        data[off..off + 4].copy_from_slice(&elem_ptr.to_le_bytes());
-    }
+    let elem_ptrs: Vec<i32> = items
+        .iter()
+        .map(|item| write_string_to_memory(caller, item))
+        .collect::<Result<Vec<_>>>()?;
+    with_guest_bytes_mut(caller, |data| {
+        let base = ptr as usize;
+        data[base..base + 4].copy_from_slice(&count.to_le_bytes());
+        for (i, elem_ptr) in elem_ptrs.iter().enumerate() {
+            let off = base + 4 + i * 4;
+            data[off..off + 4].copy_from_slice(&elem_ptr.to_le_bytes());
+        }
+    })?;
     Ok(ptr)
 }
 

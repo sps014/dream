@@ -1,6 +1,6 @@
 use crate::abi::TAG_STRUCT_BASE;
 use crate::backend::c::types::c_ident;
-use crate::backend::wasm::func_symbol;
+use crate::backend::shared::func_symbol;
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeId};
 use indexmap::IndexMap;
@@ -51,7 +51,7 @@ pub(super) fn intern_strings(
     for s in protocol_strings(mir) {
         found.push(s);
     }
-    for base in crate::backend::wasm::panic_msgs::ALL {
+    for base in crate::backend::shared::panic_msgs::ALL {
         found.push(base.to_string());
     }
     let mut map = IndexMap::new();

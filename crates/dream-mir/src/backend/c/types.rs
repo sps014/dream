@@ -79,8 +79,56 @@ pub(super) fn c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> CTy {
     }
 }
 
+pub(super) fn fn_ptr_abi(
+    interner: &dream_types::TypeInterner,
+    ty: TypeId,
+) -> (String, CTy, Vec<CTy>) {
+    match interner.kind(ty) {
+        TyKind::Func(params, ret) => {
+            let mut ps: Vec<CTy> = params.iter().map(|p| c_ty(interner, *p)).collect();
+            if interner.is_value_type(*ret) {
+                ps.insert(0, CTy::Ptr);
+                let name = format!("dream_fn_{}__v", cty_tokens(&ps));
+                (name, CTy::Void, ps)
+            } else {
+                let r = c_ty(interner, *ret);
+                let name = format!("dream_fn_{}__{}", cty_tokens(&ps), cty_token(&r));
+                (name, r, ps)
+            }
+        }
+        other => crate::internal_error!("fn_ptr_abi on non-function type {other:?}"),
+    }
+}
+
+fn cty_tokens(ts: &[CTy]) -> String {
+    if ts.is_empty() {
+        return "void".into();
+    }
+    ts.iter().map(cty_token).collect::<Vec<_>>().join("_")
+}
+
+fn cty_token(t: &CTy) -> String {
+    match t {
+        CTy::Void => "v".into(),
+        CTy::I32 => "i32".into(),
+        CTy::I64 => "i64".into(),
+        CTy::F32 => "f32".into(),
+        CTy::F64 => "f64".into(),
+        CTy::Ptr | CTy::VoidPtr | CTy::CharPtr => "ptr".into(),
+        _ => "x".into(),
+    }
+}
+
 pub(super) fn elem_size(cx: &Cx<'_>, ty: TypeId) -> u32 {
     native_scalar_size(cx, ty).0
+}
+
+pub(super) fn len_prefix() -> super::ast::Expr {
+    super::ast::Expr::i(crate::abi::LEN_PREFIX_SIZE as i64)
+}
+
+pub(super) fn rc_delta() -> super::ast::Expr {
+    super::ast::Expr::i(-(crate::abi::RC_FROM_DATA as i64))
 }
 
 pub(super) fn native_scalar_size(cx: &Cx<'_>, ty: TypeId) -> (u32, u32) {

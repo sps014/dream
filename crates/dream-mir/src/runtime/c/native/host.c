@@ -107,7 +107,7 @@ static dream_ptr dream_str_from_utf8(const char *s) {
         units += (cp > 0xFFFF) ? 2 : 1;
     }
     p = dream_string_alloc((int32_t)units);
-    u = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    u = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     i = 0;
     units = 0;
     while (i < n) {

@@ -83,37 +83,42 @@ impl<'a> Emitter<'a> {
                 }
             }
             Terminator::AsyncComplete(None) => {
-                self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                self.b
+                    .call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
                 self.b.ret(Some(Expr::i(0)));
             }
             Terminator::AsyncComplete(Some(o)) => {
                 let result = self.operand(o);
+                let wide = crate::abi::FutureLayout::native().wide as i64;
                 match self.cx.interner.kind(self.f.ret) {
                     TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
                         self.b.stmt(Stmt::store(
                             CTy::I64,
-                            Expr::ptr_add(Expr::id("__self"), Expr::i(56)),
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(wide)),
                             result,
                         ));
-                        self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                        self.b
+                            .call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
                         self.b.ret(Some(Expr::i(0)));
                     }
                     TyKind::Prim(dream_types::PrimTy::Float) => {
                         self.b.stmt(Stmt::store(
                             CTy::F32,
-                            Expr::ptr_add(Expr::id("__self"), Expr::i(56)),
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(wide)),
                             result,
                         ));
-                        self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                        self.b
+                            .call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
                         self.b.ret(Some(Expr::i(0)));
                     }
                     TyKind::Prim(dream_types::PrimTy::Double) => {
                         self.b.stmt(Stmt::store(
                             CTy::F64,
-                            Expr::ptr_add(Expr::id("__self"), Expr::i(56)),
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(wide)),
                             result,
                         ));
-                        self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                        self.b
+                            .call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
                         self.b.ret(Some(Expr::i(0)));
                     }
                     _ => {
@@ -133,7 +138,10 @@ impl<'a> Emitter<'a> {
                 let fut = self.operand(future);
                 self.b.stmt(Stmt::store(
                     CTy::I32,
-                    Expr::dream_p(Expr::id("__self")),
+                    Expr::ptr_add(
+                        Expr::id("__self"),
+                        Expr::i(crate::abi::FutureLayout::native().state as i64),
+                    ),
                     Expr::i(resume.0 as i64),
                 ));
                 self.b.call("dream_await", vec![Expr::id("__self"), fut]);

@@ -10,10 +10,10 @@
 
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
-    attach_abi_from_wat_path, link_console_functions, link_crypto_functions,
+    attach_abi_from_wat_path, decode_string, link_console_functions, link_crypto_functions,
     link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
     link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, read_string_from_memory,
+    link_worker_functions, with_guest_bytes,
 };
 use dream_abi::attributes::CompileTargets;
 use rayon::prelude::*;
@@ -84,16 +84,15 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     let config = dream::execution::host::threaded_wasm_config();
     let engine = Engine::new(&config).map_err(|e| format!("engine: {e:#}"))?;
     let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
-    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
-        .map_err(|e| format!("shared memory: {e:#}"))?;
-    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone(), module.clone());
     let mut store = Store::new(&engine, ());
-    // Owner must ignore worker-kill epoch bumps (see `threaded_wasm_config` / `workerTerminate`).
     store.set_epoch_deadline(u64::MAX);
     let mut linker = Linker::new(&engine);
-    linker
-        .define(&mut store, "env", "memory", shared_mem.clone())
-        .map_err(|e| format!("define shared memory: {e:#}"))?;
+    if let Some(shared_mem) =
+        dream::execution::host::define_env_memory(&engine, &mut store, &mut linker, &module)
+            .map_err(|e| format!("env memory: {e:#}"))?
+    {
+        dream::execution::host::set_worker_runtime(engine.clone(), shared_mem, module.clone());
+    }
     let env = TestEnv::new();
 
     let e = env.clone();
@@ -122,12 +121,7 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
             "env",
             "print_string",
             move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let memory = caller
-                    .get_export("memory")
-                    .unwrap()
-                    .into_shared_memory()
-                    .unwrap();
-                let s = read_string_from_memory(&memory, ptr);
+                let s = with_guest_bytes(&mut caller, |data| decode_string(data, ptr)).unwrap();
                 e.print(&s);
             },
         )

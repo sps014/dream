@@ -1,7 +1,7 @@
-//! Shared WASM linear memory wiring (WASM threads proposal), used by every wasmtime execution entry
-//! point (`execution::wasm_runner`, `execution::debugger::runner`, `execution::host::worker`, and the
-//! test harnesses) so the owner instance and every spawned `WebWorker` instance of the *same* module
-//! import one identical `wasmtime::SharedMemory` rather than each getting a private linear memory.
+//! Shared WASM linear memory wiring (WASM threads proposal). Threaded modules import
+//! `env.memory` as `shared` so the owner instance and every spawned `WebWorker` of the same
+//! module share one `wasmtime::SharedMemory`. Modules without threads import a private
+//! `wasmtime::Memory` instead.
 //!
 //! `src/mir/emit/module.rs` emits linear memory as an *import* (`(import "env" "memory" (memory min
 //! max shared))`) rather than a module-defined memory specifically so this crossing is possible: a
@@ -60,17 +60,44 @@ pub fn threaded_wasm_config() -> Config {
 /// Allocates a `SharedMemory` matching the `"env"."memory"` import type declared by `module` — the
 /// single backing store every instance of this module (the owner instance and every worker thread
 /// spawned afterward) imports, so linear memory is genuinely shared rather than copied.
-pub fn shared_memory_for(engine: &Engine, module: &Module) -> Result<SharedMemory> {
+pub fn env_memory_type(module: &Module) -> Result<MemoryType> {
     for import in module.imports() {
         if import.module() == "env" && import.name() == "memory" {
             if let ExternType::Memory(mt) = import.ty() {
-                let min = mt.minimum() as u32;
-                let max = mt.maximum().map(|m| m as u32).unwrap_or(min);
-                return SharedMemory::new(engine, MemoryType::shared(min, max));
+                return Ok(mt);
             }
         }
     }
-    Err(Error::msg(
-        "module does not import `env.memory` as a shared memory",
-    ))
+    Err(Error::msg("module does not import `env.memory`"))
+}
+
+/// Allocates a `SharedMemory` matching the `"env"."memory"` import when that import is shared.
+pub fn shared_memory_for(engine: &Engine, module: &Module) -> Result<SharedMemory> {
+    let mt = env_memory_type(module)?;
+    if !mt.is_shared() {
+        return Err(Error::msg(
+            "module does not import `env.memory` as a shared memory",
+        ));
+    }
+    SharedMemory::new(engine, mt)
+}
+
+/// Defines `"env"."memory"` as shared or private to match the guest import. Returns the
+/// `SharedMemory` when the module uses threads; `None` for a private linear memory.
+pub fn define_env_memory<T>(
+    engine: &Engine,
+    store: &mut Store<T>,
+    linker: &mut Linker<T>,
+    module: &Module,
+) -> Result<Option<SharedMemory>> {
+    let mt = env_memory_type(module)?;
+    if mt.is_shared() {
+        let sm = SharedMemory::new(engine, mt)?;
+        linker.define(&mut *store, "env", "memory", sm.clone())?;
+        Ok(Some(sm))
+    } else {
+        let mem = Memory::new(&mut *store, mt)?;
+        linker.define(&mut *store, "env", "memory", mem)?;
+        Ok(None)
+    }
 }

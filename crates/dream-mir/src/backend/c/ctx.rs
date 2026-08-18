@@ -35,17 +35,11 @@ impl<'a> Cx<'a> {
     }
 
     pub(super) fn nstruct(&self, ty: TypeId) -> Option<&TypeLayout> {
-        self.native
-            .structs
-            .get(&ty)
-            .or_else(|| self.mir.layouts.structs.get(&ty))
+        self.native.structs.get(&ty)
     }
 
     pub(super) fn nunion(&self, ty: TypeId) -> Option<&dream_hir::UnionLayout> {
-        self.native
-            .unions
-            .get(&ty)
-            .or_else(|| self.mir.layouts.unions.get(&ty))
+        self.native.unions.get(&ty)
     }
 
     pub(super) fn str_sym(&self, s: &str) -> &str {
@@ -54,8 +48,11 @@ impl<'a> Cx<'a> {
         })
     }
 
-    pub(super) fn type_tag(&self, ty: TypeId, fallback: DefId) -> i32 {
-        self.tags.get(&ty).copied().unwrap_or(fallback.0 as i32)
+    pub(super) fn type_tag(&self, ty: TypeId, _fallback: DefId) -> i32 {
+        self.tags
+            .get(&ty)
+            .copied()
+            .unwrap_or_else(|| crate::internal_error!("no runtime tag registered for type {ty:?}"))
     }
 
     pub(super) fn callee_c(&self, def: DefId, args: &[TypeId]) -> String {
@@ -63,7 +60,9 @@ impl<'a> Cx<'a> {
             .get(&(def, args.to_vec()))
             .cloned()
             .or_else(|| self.symbols.get(&(def, vec![])).cloned())
-            .unwrap_or_else(|| format!("def{}", def.0))
+            .unwrap_or_else(|| {
+                crate::internal_error!("no C symbol for def{} instance {args:?}", def.0)
+            })
     }
 
     pub(super) fn func_index(&self, f: &MirFunction) -> usize {

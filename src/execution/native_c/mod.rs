@@ -3,9 +3,8 @@
 pub mod abi;
 
 use crate::driver::wasm_opt::OptLevel;
-use dream_mir::backend::c::{
-    native_pcre2_include_dir, native_runtime_c_files, native_runtime_include_dir,
-};
+use dream_mir::backend::c::{native_runtime_include_dir, native_runtime_units};
+use dream_mir::runtime::runtime_need_from_c_source;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -112,9 +111,14 @@ fn libdream_dir() -> Option<PathBuf> {
     dirs.into_iter().find(|d| d.join(name).exists())
 }
 
-fn runtime_archive(opt: OptLevel) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn runtime_archive(
+    opt: OptLevel,
+    need: dream_mir::runtime::RuntimeNeed,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
     static LOCK: Mutex<()> = Mutex::new(());
-    let dir = PathBuf::from("target/dream-native-rt").join(opt.native_rt_subdir());
+    let dir = PathBuf::from("target/dream-native-rt")
+        .join(opt.native_rt_subdir())
+        .join(format!("need_{:x}", need.bits()));
     std::fs::create_dir_all(&dir)?;
     // Cross-process: each `dream` PID has its own Mutex, so parallel probe jobs can race `ar`.
     let lock_file = OpenOptions::new()
@@ -127,9 +131,10 @@ fn runtime_archive(opt: OptLevel) -> Result<PathBuf, Box<dyn std::error::Error>>
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let archive = dir.join("libdream_rt.a");
     let stamp = dir.join(".stamp");
-    let newest = native_runtime_c_files()
-        .into_iter()
-        .filter_map(|p| std::fs::metadata(p).ok()?.modified().ok())
+    let units = native_runtime_units(need);
+    let newest = units
+        .iter()
+        .filter_map(|u| std::fs::metadata(&u.path).ok()?.modified().ok())
         .max();
     let stale = match (
         newest,
@@ -146,22 +151,19 @@ fn runtime_archive(opt: OptLevel) -> Result<PathBuf, Box<dyn std::error::Error>>
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
     cflags.extend(opt.cc_flags());
     let mut objs = Vec::new();
-    let pcre_inc = native_pcre2_include_dir();
-    for f in native_runtime_c_files() {
-        let obj = dir.join(f.file_name().unwrap()).with_extension("o");
+    for (i, u) in units.iter().enumerate() {
+        let obj = dir.join(format!("{i}.o"));
         let mut cc = Command::new("cc");
-        cc.args(&cflags)
-            .arg(format!("-I{}", native_runtime_include_dir().display()));
-        if f.components().any(|c| c.as_os_str() == "pcre2")
-            || f.file_name().is_some_and(|n| n == "regex.c")
-        {
-            cc.arg("-DHAVE_CONFIG_H")
-                .arg("-DPCRE2_CODE_UNIT_WIDTH=16")
-                .arg(format!("-I{}", pcre_inc.display()));
+        cc.args(&cflags);
+        for inc in &u.include_dirs {
+            cc.arg(format!("-I{}", inc.display()));
         }
-        let st = cc.arg(&f).arg("-o").arg(&obj).status()?;
+        for d in &u.defines {
+            cc.arg(format!("-D{d}"));
+        }
+        let st = cc.arg(&u.path).arg("-o").arg(&obj).status()?;
         if !st.success() {
-            return Err(format!("cc -c failed for {}", f.display()).into());
+            return Err(format!("cc -c failed for {}", u.path.display()).into());
         }
         objs.push(obj);
     }
@@ -183,7 +185,9 @@ pub fn compile_native_c(
     opt: OptLevel,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let bin = c_path.with_extension("bin");
-    let rt = runtime_archive(opt)?;
+    let src = std::fs::read_to_string(c_path)?;
+    let need = runtime_need_from_c_source(&src);
+    let rt = runtime_archive(opt, need)?;
     let mut cmd = Command::new("cc");
     cmd.args(opt.cc_flags());
     cmd.args([

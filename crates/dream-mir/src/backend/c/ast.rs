@@ -40,7 +40,6 @@ pub enum UnOp {
 pub enum Expr {
     Ident(String),
     Int(i64),
-    UInt(u64),
     Long(i64),
     Float(f64),
     F32(f32),
@@ -357,6 +356,11 @@ pub enum Item {
         params: Vec<Param>,
     },
     Func(Func),
+    Typedef {
+        name: String,
+        ret: CTy,
+        params: Vec<CTy>,
+    },
 }
 
 #[derive(Clone, Debug, Default)]

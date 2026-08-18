@@ -134,7 +134,7 @@ dream_ptr string_clone(dream_ptr ptr) {
         return dream_string_alloc(0);
     }
     p = dream_string_alloc(n);
-    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET, dream_str_units(ptr), (size_t)n << 1);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, dream_str_units(ptr), (size_t)n << 1);
     return p;
 }
 
@@ -157,7 +157,7 @@ dream_ptr string_from_builder(dream_ptr bytes, int32_t len, int32_t scalars) {
     p = dream_malloc(len + 8, TAG_STRING);
     dream_i32(p)[0] = scalars;
     dream_str_init_owned(p);
-    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET, (char *)dream_p(bytes) + 8, (size_t)len);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 8, (size_t)len);
     return p;
 }
 
@@ -167,7 +167,7 @@ static dream_ptr utf8_to_utf16(const uint8_t *src, int32_t n) {
     dream_ptr p;
     uint16_t *u;
     p = dream_string_alloc(n);
-    u = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    u = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     while (i < n) {
         uint32_t c = src[i++];
         if (c < 0x80) {
@@ -223,7 +223,7 @@ dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalar
         scalars = len >> 1;
     }
     p = dream_string_alloc(scalars);
-    memcpy((char *)dream_p(p) + STRING_UTF8_OFFSET, (char *)dream_p(bytes) + 4, (size_t)len);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 4, (size_t)len);
     return p;
 }
 

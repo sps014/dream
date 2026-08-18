@@ -65,7 +65,7 @@ dream_ptr dream_array_to_string(dream_ptr arr) {
     uint16_t *u;
     (void)arr;
     dream_i32(r)[0] = 2;
-    u = (uint16_t *)((char *)dream_p(r) + STRING_UTF8_OFFSET);
+    u = (uint16_t *)((char *)dream_p(r) + STRING_UNITS_OFFSET);
     u[0] = '[';
     u[1] = ']';
     return r;

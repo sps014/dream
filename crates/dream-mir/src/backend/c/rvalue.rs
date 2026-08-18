@@ -19,15 +19,9 @@ impl<'a> Emitter<'a> {
             ),
             Rvalue::Binary(op, a, b) => {
                 if *op == crate::BinOp::Eq
-                    && matches!(
-                        self.operand_kind(a),
-                        Some(TyKind::Prim(PrimTy::String))
-                    )
+                    && matches!(self.operand_kind(a), Some(TyKind::Prim(PrimTy::String)))
                 {
-                    return Expr::call(
-                        "dream_string_eq",
-                        vec![self.operand(a), self.operand(b)],
-                    );
+                    return Expr::call("dream_string_eq", vec![self.operand(a), self.operand(b)]);
                 }
                 if matches!(op, crate::BinOp::Div | crate::BinOp::Rem) && self.is_integer_operand(a)
                 {
@@ -38,7 +32,10 @@ impl<'a> Emitter<'a> {
                         let t = b.temp(CTy::I64, Some(Expr::cast(CTy::I64, rhs.clone())));
                         Expr::ternary(
                             Expr::eq(t.clone(), Expr::i(0)),
-                            Expr::comma(Expr::call("dream_panic", vec![symbol.clone()]), Expr::i(0)),
+                            Expr::comma(
+                                Expr::call("dream_panic", vec![symbol.clone()]),
+                                Expr::i(0),
+                            ),
                             Expr::bin(*op, lhs.clone(), t),
                         )
                     });
@@ -66,7 +63,10 @@ impl<'a> Emitter<'a> {
             ),
             Rvalue::ArrayNew { elem_ty, len } => {
                 let es = elem_size(self.cx, *elem_ty);
-                Expr::call("dream_array_new", vec![self.operand(len), Expr::i(es as i64)])
+                Expr::call(
+                    "dream_array_new",
+                    vec![self.operand(len), Expr::i(es as i64)],
+                )
             }
             Rvalue::HashCode(o) => {
                 let ty = self.operand_ty(o);
@@ -109,7 +109,7 @@ impl<'a> Emitter<'a> {
             }
             Rvalue::Call { callee, args } => self.call_expr(callee, args),
             Rvalue::IndirectCall { target, args, sig } => {
-                let call = self.indirect_expr(target, args);
+                let call = self.indirect_expr(target, args, *sig);
                 match self.cx.interner.kind(*sig) {
                     TyKind::Func(_, ret)
                         if matches!(
@@ -144,7 +144,12 @@ impl<'a> Emitter<'a> {
                     .unwrap_or(0);
                 Expr::i(idx as i64)
             }
-            Rvalue::New { def, ty, ctor, args } => self.emit_new(*def, *ty, *ctor, args),
+            Rvalue::New {
+                def,
+                ty,
+                ctor,
+                args,
+            } => self.emit_new(*def, *ty, *ctor, args),
             Rvalue::Tuple { ty, elems } => self.emit_tuple(*ty, elems),
             Rvalue::UnionNew {
                 def,
@@ -208,7 +213,11 @@ impl<'a> Emitter<'a> {
                 let es = elem_size(self.cx, *elem_ty);
                 Expr::call(
                     "dream_array_realloc",
-                    vec![self.operand(array), self.operand(new_len), Expr::i(es as i64)],
+                    vec![
+                        self.operand(array),
+                        self.operand(new_len),
+                        Expr::i(es as i64),
+                    ],
                 )
             }
             Rvalue::Cast(v, from, to) => self.emit_cast(v, *from, *to),
@@ -219,9 +228,10 @@ impl<'a> Emitter<'a> {
                 variant,
                 field,
             } => {
-                let u = self.cx.nunion(*ty).unwrap_or_else(|| {
-                    crate::internal_error!("missing union layout for {ty:?}")
-                });
+                let u = self
+                    .cx
+                    .nunion(*ty)
+                    .unwrap_or_else(|| crate::internal_error!("missing union layout for {ty:?}"));
                 let var = u
                     .variants
                     .iter()
@@ -290,13 +300,12 @@ impl<'a> Emitter<'a> {
         ctor: Option<dream_types::DefId>,
         args: &[crate::Operand],
     ) -> Expr {
-        let layout = self
-            .cx
-            .nstruct(ty)
-            .unwrap_or_else(|| crate::internal_error!("missing layout for struct allocation {ty:?}"));
+        let layout = self.cx.nstruct(ty).unwrap_or_else(|| {
+            crate::internal_error!("missing layout for struct allocation {ty:?}")
+        });
         let mut size = layout.size;
         if self.cx.interner.is_shared_type(ty) {
-            size += 4;
+            size += crate::abi::HEADER_LOCK_WORD_SIZE;
         }
         let tag = self.cx.type_tag(ty, def);
         let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
@@ -375,7 +384,11 @@ impl<'a> Emitter<'a> {
         let size = u.size;
         self.b.call(
             "memset",
-            vec![Expr::dream_p(dest.clone()), Expr::i(0), Expr::i(size as i64)],
+            vec![
+                Expr::dream_p(dest.clone()),
+                Expr::i(0),
+                Expr::i(size as i64),
+            ],
         );
         self.b.stmt(Stmt::store(
             CTy::I32,
@@ -482,7 +495,7 @@ impl<'a> Emitter<'a> {
             ));
             for (i, value) in values.iter().enumerate() {
                 let at = Expr::add(
-                    Expr::ptr_add(o.clone(), Expr::i(4)),
+                    Expr::ptr_add(o.clone(), super::types::len_prefix()),
                     Expr::mul(Expr::i(i as i64), Expr::i(es as i64)),
                 );
                 if is_val {
@@ -602,7 +615,9 @@ impl<'a> Emitter<'a> {
             (TyKind::Prim(PrimTy::Float), TyKind::Prim(PrimTy::Double)) => {
                 Expr::cast(CTy::F64, Expr::cast(CTy::F32, src))
             }
-            (TyKind::Prim(PrimTy::Double), TyKind::Prim(PrimTy::Float)) => Expr::cast(CTy::F32, src),
+            (TyKind::Prim(PrimTy::Double), TyKind::Prim(PrimTy::Float)) => {
+                Expr::cast(CTy::F32, src)
+            }
             (TyKind::Prim(PrimTy::Double), TyKind::Prim(PrimTy::Int)) => Expr::cast(CTy::I32, src),
             (TyKind::Prim(PrimTy::Float), TyKind::Prim(PrimTy::Int)) => Expr::cast(CTy::I32, src),
             (TyKind::Prim(PrimTy::Long), TyKind::Prim(PrimTy::Int)) => Expr::cast(CTy::I32, src),
@@ -654,7 +669,10 @@ impl<'a> Emitter<'a> {
 
     fn checked_unbox(&mut self, src: Expr, ty: dream_types::TypeId, unbox: &'static str) -> Expr {
         let tag = runtime_tag(self.cx, ty);
-        let panic = Expr::id(self.cx.str_sym(crate::backend::wasm::panic_msgs::INVALID_CAST));
+        let panic = Expr::id(
+            self.cx
+                .str_sym(crate::backend::shared::panic_msgs::INVALID_CAST),
+        );
         self.b.expr_block(move |b| {
             let boxed = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, src.clone())));
             b.stmt(Stmt::if_(

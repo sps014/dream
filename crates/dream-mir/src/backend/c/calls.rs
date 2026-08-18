@@ -22,27 +22,24 @@ impl<'a> Emitter<'a> {
         Expr::call(name, args_e)
     }
 
-    pub(super) fn indirect_expr(&mut self, target: &Operand, args: &[Operand]) -> Expr {
-        let mut args_e: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
-        while args_e.len() < 8 {
-            args_e.push(Expr::i(0));
+    pub(super) fn indirect_expr(
+        &mut self,
+        target: &Operand,
+        args: &[Operand],
+        sig: dream_types::TypeId,
+    ) -> Expr {
+        let args_e: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
+        let (td, _, params) = super::types::fn_ptr_abi(self.cx.interner, sig);
+        if args_e.len() != params.len() {
+            crate::internal_error!(
+                "indirect call arity {} != signature arity {}",
+                args_e.len(),
+                params.len()
+            );
         }
         let t = self.operand(target);
-        let idx = Expr::ternary(
-            Expr::lt(
-                Expr::cast(CTy::Named("uintptr_t"), t.clone()),
-                Expr::UInt(65536),
-            ),
-            Expr::cast(CTy::I32, Expr::cast(CTy::Named("uintptr_t"), t.clone())),
-            Expr::call(
-                "dream_funcbox_funcidx",
-                vec![Expr::cast(CTy::Ptr, t.clone())],
-            ),
-        );
-        let fn_ptr = Expr::cast(
-            CTy::Ident("dream_fn".into()),
-            Expr::index(Expr::id("dream_ft"), idx),
-        );
+        let idx = Expr::cast(CTy::I32, t);
+        let fn_ptr = Expr::cast(CTy::Ident(td), Expr::index(Expr::id("dream_ft"), idx));
         Expr::IndirectCall {
             callee: Box::new(fn_ptr),
             args: args_e,
@@ -58,9 +55,6 @@ impl<'a> Emitter<'a> {
     ) -> Expr {
         let mut all = vec![self.operand(receiver)];
         all.extend(args.iter().map(|a| self.operand(a)));
-        while all.len() < 8 {
-            all.push(Expr::i(0));
-        }
         Expr::call(
             c_ident(&format!("__iface_dispatch_{iface_id}_{method_slot}")),
             all,

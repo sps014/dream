@@ -3,20 +3,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define F_STATUS 4
-#define F_RESULT 8
-#define F_WAKER 16
-#define F_KIND 24
-#define F_POLL 28
-#define F_QUEUED 32
-#define F_AWAITING 36
-#define F_CHILDREN 44
-#define F_COUNT 52
-#define F_REMAINING 56
-#define F_ESIZE 60
-#define KIND_HOST 1
-#define KIND_ALL 2
-#define KIND_ANY 3
+#define KIND_HOST FUTURE_KIND_HOST
+#define KIND_ALL FUTURE_KIND_ALL
+#define KIND_ANY FUTURE_KIND_ANY
 
 typedef struct Node {
     dream_ptr f;
@@ -37,15 +26,15 @@ static dream_ptr *ptr_at(dream_ptr p, int32_t off) {
 }
 
 static dream_ptr arr_get(dream_ptr arr, int32_t i) {
-    return ((dream_ptr *)((char *)dream_p(arr) + 4))[i];
+    return ((dream_ptr *)((char *)dream_p(arr) + LEN_PREFIX_SIZE))[i];
 }
 
 void *dream_ft_get(int32_t i);
 static void combinator_progress(dream_ptr w, dream_ptr child);
 
 dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind) {
-    dream_ptr p = dream_malloc(size < 64 ? 64 : size, 0);
-    memset(dream_p(p), 0, (size_t)(size < 64 ? 64 : size));
+    dream_ptr p = dream_malloc(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, 0);
+    memset(dream_p(p), 0, (size_t)(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size));
     i32_at(p, F_POLL)[0] = poll;
     i32_at(p, F_KIND)[0] = kind;
     return p;
@@ -190,7 +179,7 @@ void dream_run_loop(void) {
 }
 
 dream_ptr dream_sleep(int32_t ms) {
-    dream_ptr f = dream_new_future(64, -1, KIND_HOST);
+    dream_ptr f = dream_new_future((int32_t)F_SLOTS, HOST_POLL_INDEX, KIND_HOST);
     Node *n = (Node *)calloc(1, sizeof(Node));
     Node **pp;
     n->f = f;
@@ -236,7 +225,7 @@ static void combinator_progress(dream_ptr w, dream_ptr child) {
         for (i = 0; i < n; i++) {
             dream_ptr c = arr_get(kids, i);
             dream_ptr res = c ? ptr_at(c, F_RESULT)[0] : 0;
-            memcpy((char *)dream_p(out) + 4 + (size_t)i * (size_t)es, &res, (size_t)es);
+            memcpy((char *)dream_p(out) + LEN_PREFIX_SIZE + (size_t)i * (size_t)es, &res, (size_t)es);
             dream_release(c);
         }
     }
@@ -246,7 +235,7 @@ static void combinator_progress(dream_ptr w, dream_ptr child) {
 static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize) {
     int32_t n = arr ? dream_i32(arr)[0] : 0;
     int32_t i;
-    dream_ptr w = dream_new_future(64, -1, kind);
+    dream_ptr w = dream_new_future((int32_t)F_SLOTS, HOST_POLL_INDEX, kind);
     ptr_at(w, F_CHILDREN)[0] = arr;
     i32_at(w, F_COUNT)[0] = n;
     i32_at(w, F_REMAINING)[0] = n;

@@ -10,7 +10,7 @@ static dream_ptr mk_ascii(const char *s) {
     size_t i;
     dream_i32(p)[0] = (int32_t)n;
     dream_i32(p)[1] = 0;
-    u = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    u = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     for (i = 0; i < n; i++) {
         u[i] = (uint16_t)(unsigned char)s[i];
     }

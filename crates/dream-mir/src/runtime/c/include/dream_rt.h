@@ -98,9 +98,9 @@ static inline int32_t str_data(int32_t p) {
     if (p == 0) {
         return 0;
     }
-    d = i32_load(p + 4);
-    if (d == 0) {
-        return p + 8;
+    d = i32_load(p + (int32_t)STRING_SCALAR_LEN_OFFSET);
+    if (d == DREAM_STR_PAD_INLINE) {
+        return p + (int32_t)STRING_UNITS_OFFSET;
     }
     return d;
 }
@@ -109,7 +109,7 @@ static inline void str_init_owned(int32_t p) {
     if (p == 0) {
         return;
     }
-    i32_store(p + 4, p + 8);
+    i32_store(p + (int32_t)STRING_SCALAR_LEN_OFFSET, p + (int32_t)STRING_UNITS_OFFSET);
 }
 
 #endif

@@ -38,13 +38,10 @@ impl NativeLayouts {
                 break;
             }
             if !progress {
-                for (ty, wasm) in rest {
-                    structs.insert(
-                        ty,
-                        force_struct(interner, &structs, &mir.layouts.unions, &wasm),
-                    );
-                }
-                break;
+                crate::internal_error!(
+                    "native struct relayout did not converge ({} types still pending)",
+                    rest.len()
+                );
             }
             pending = rest;
         }
@@ -98,7 +95,9 @@ fn union_native_size(
     for v in &wasm.variants {
         let mut offset = 4u32;
         for f in &v.fields {
-            let (fsz, fal) = native_scalar(interner, structs, unions, f.ty).unwrap_or((8, 8));
+            let (fsz, fal) = native_scalar(interner, structs, unions, f.ty).unwrap_or_else(|| {
+                crate::internal_error!("native scalar size missing during union relayout")
+            });
             offset = align_up(offset, fal);
             offset += fsz;
             align = align.max(fal);
@@ -168,15 +167,6 @@ fn pack_struct(
     })
 }
 
-fn force_struct(
-    interner: &TypeInterner,
-    structs: &IndexMap<TypeId, TypeLayout>,
-    unions: &IndexMap<TypeId, UnionLayout>,
-    wasm: &TypeLayout,
-) -> TypeLayout {
-    relayout_struct(interner, structs, unions, wasm).unwrap_or_else(|| wasm.clone())
-}
-
 fn relayout_union(
     interner: &TypeInterner,
     structs: &IndexMap<TypeId, TypeLayout>,
@@ -189,7 +179,10 @@ fn relayout_union(
         let mut offset = 4u32;
         let mut fields = Vec::with_capacity(v.fields.len());
         for f in &v.fields {
-            let (fsz, align) = native_scalar(interner, structs, unions, f.ty).unwrap_or((8, 8));
+            let (fsz, align) =
+                native_scalar(interner, structs, unions, f.ty).unwrap_or_else(|| {
+                    crate::internal_error!("native scalar size missing during union field relayout")
+                });
             offset = align_up(offset, align);
             fields.push(FieldLayout {
                 offset,

@@ -7,7 +7,7 @@ static dream_ptr from_utf8(const char *s) {
     size_t n = strlen(s);
     size_t i;
     dream_ptr p = dream_string_alloc((int32_t)n);
-    uint16_t *u = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    uint16_t *u = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     for (i = 0; i < n; i++) {
         u[i] = (uint16_t)(unsigned char)s[i];
     }
@@ -25,7 +25,7 @@ dream_ptr dream_uint_to_string(int32_t v) {
     uint16_t *out;
     dream_i32(p)[0] = n;
     dream_str_init_owned(p);
-    out = (uint16_t *)((char *)dream_p(p) + STRING_UTF8_OFFSET);
+    out = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     if (u == 0) {
         out[0] = 48;
         return p;

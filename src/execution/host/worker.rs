@@ -58,7 +58,7 @@ fn worker_debug() -> Option<Arc<dyn WorkerDebug>> {
 const TAG_STRING: i32 = abi::TAG_STRING;
 const LEN_PREFIX: i32 = abi::LEN_PREFIX_SIZE as i32;
 const STRING_HEADER: i32 = abi::STRING_HEADER_SIZE as i32;
-const STRING_UTF8: usize = abi::STRING_UTF8_OFFSET as usize;
+const STRING_UNITS: usize = abi::STRING_UNITS_OFFSET as usize;
 
 /// A unit of work sent from the owner to a worker thread: which `fun(string): string` body to
 /// run (its function-table index plus closure environment word) and the message to run it with.
@@ -167,14 +167,14 @@ fn store_write_string(
         .ok()?;
     let base = ptr as usize;
     let data = super::memory::shared_bytes_mut(memory);
-    if base + STRING_UTF8 + nbytes > data.len() {
+    if base + STRING_UNITS + nbytes > data.len() {
         return None;
     }
     data[base..base + LEN_PREFIX as usize].copy_from_slice(&(units.len() as i32).to_le_bytes());
     data[base + LEN_PREFIX as usize..base + STRING_HEADER as usize]
         .copy_from_slice(&0_i32.to_le_bytes());
     for (i, u) in units.iter().enumerate() {
-        let o = base + STRING_UTF8 + i * 2;
+        let o = base + STRING_UNITS + i * 2;
         data[o..o + 2].copy_from_slice(&u.to_le_bytes());
     }
     Some(ptr)

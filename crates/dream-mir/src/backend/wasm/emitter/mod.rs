@@ -251,7 +251,13 @@ impl Emitter<'_> {
             .get(&(callee.def, callee.args.clone()))
             .cloned()
             .or_else(|| self.symbols.get(&(callee.def, vec![])).cloned())
-            .unwrap_or_else(|| format!("def{}", callee.def.0))
+            .unwrap_or_else(|| {
+                crate::internal_error!(
+                    "no WASM symbol for def{} instance {:?}",
+                    callee.def.0,
+                    callee.args
+                )
+            })
     }
 
     fn emit(&mut self) {
@@ -318,8 +324,11 @@ impl Emitter<'_> {
 
     /// The runtime tag to stamp into a newly allocated value of `ty`: its assigned struct/union tag,
     /// or the `DefId` as a last-resort fallback (only when no layout/tag is registered).
-    fn type_tag(&self, ty: TypeId, fallback: DefId) -> i32 {
-        self.tags.get(&ty).copied().unwrap_or(fallback.0 as i32)
+    fn type_tag(&self, ty: TypeId, _fallback: DefId) -> i32 {
+        self.tags
+            .get(&ty)
+            .copied()
+            .unwrap_or_else(|| crate::internal_error!("no runtime tag registered for type {ty:?}"))
     }
 
     /// The heap address of an interned string. Every string literal reachable in codegen is
@@ -401,7 +410,7 @@ impl Emitter<'_> {
             self.emit_bounds_check(|s| s.f.local_get(&(base.0).to_string()), index);
         }
         self.f.local_get(&(base.0).to_string());
-        self.f.i32_const(4);
+        self.f.i32_const(crate::abi::LEN_PREFIX_SIZE as i32);
         self.f.i32_add();
         self.emit_operand(index);
         self.f.i32_const((size) as i32);
@@ -422,7 +431,8 @@ impl Emitter<'_> {
             self.f.end();
         }
         self.emit_operand(s);
-        self.f.load(LoadKind::I32, 4);
+        self.f
+            .load(LoadKind::I32, crate::abi::STRING_SCALAR_LEN_OFFSET);
         self.emit_operand(i);
         self.f.i32_const(1);
         self.f.i32_shl();
@@ -444,7 +454,8 @@ impl Emitter<'_> {
             self.f.end();
         }
         self.emit_operand(s);
-        self.f.load(LoadKind::I32, 4);
+        self.f
+            .load(LoadKind::I32, crate::abi::STRING_SCALAR_LEN_OFFSET);
         self.emit_operand(i);
         self.f.i32_add();
         self.f.load(LoadKind::I32_8U, 0);

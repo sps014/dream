@@ -3,7 +3,7 @@ use super::builder::{FuncBuilder, ModuleBuilder};
 use super::ctx::Cx;
 use super::statements::value_ref_stmts;
 use super::types::{c_ident, elem_size};
-use crate::backend::wasm::func_symbol;
+use crate::backend::shared::func_symbol;
 use crate::Mir;
 use dream_types::{TyKind, TypeId, TypeInterner};
 
@@ -47,7 +47,7 @@ fn rc_header() -> Stmt {
             "rc",
             Some(Expr::cast(
                 CTy::ptr_to(CTy::I32),
-                Expr::add(Expr::char_p(Expr::id("p")), Expr::i(-4)),
+                Expr::add(Expr::char_p(Expr::id("p")), super::types::rc_delta()),
             )),
         ),
         Stmt::decl(CTy::I32, "old", Some(Expr::deref(Expr::id("rc")))),
@@ -101,10 +101,18 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         );
     }
     for layout in cx.native.structs.values() {
-        m.static_proto(CTy::Void, c_ident(&format!("release_{}", layout.name)), p.clone());
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("release_{}", layout.name)),
+            p.clone(),
+        );
     }
     for layout in cx.native.unions.values() {
-        m.static_proto(CTy::Void, c_ident(&format!("release_{}", layout.name)), p.clone());
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("release_{}", layout.name)),
+            p.clone(),
+        );
     }
     for elem in array_elems {
         let name = c_ident(&format!("release_array_t{}", elem.0));
@@ -119,14 +127,20 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             Stmt::Return(None),
         ));
         b.stmt(rc_header());
-        b.assign(Expr::id("n"), Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))));
+        b.assign(
+            Expr::id("n"),
+            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+        );
         let mut body = Vec::new();
         if interner.is_value_type(elem) {
             let at = Expr::cast(
                 CTy::Ptr,
                 Expr::add(
-                    Expr::ptr_add(Expr::id("p"), Expr::i(4)),
-                    Expr::mul(Expr::cast(CTy::Named("size_t"), Expr::id("i")), Expr::i(es as i64)),
+                    Expr::ptr_add(Expr::id("p"), super::types::len_prefix()),
+                    Expr::mul(
+                        Expr::cast(CTy::Named("size_t"), Expr::id("i")),
+                        Expr::i(es as i64),
+                    ),
                 ),
             );
             body.extend(value_ref_stmts(cx, elem, at, false));
@@ -137,8 +151,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 vec![Expr::load(
                     CTy::Ptr,
                     Expr::add(
-                        Expr::ptr_add(Expr::id("p"), Expr::i(4)),
-                        Expr::mul(Expr::cast(CTy::Named("size_t"), Expr::id("i")), Expr::i(es as i64)),
+                        Expr::ptr_add(Expr::id("p"), super::types::len_prefix()),
+                        Expr::mul(
+                            Expr::cast(CTy::Named("size_t"), Expr::id("i")),
+                            Expr::i(es as i64),
+                        ),
                     ),
                 )],
             ));
@@ -170,7 +187,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         {
             b.stmt(Stmt::store(
                 CTy::I32,
-                Expr::add(Expr::char_p(Expr::id("p")), Expr::i(-4)),
+                Expr::add(Expr::char_p(Expr::id("p")), super::types::rc_delta()),
                 Expr::i(1),
             ));
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
@@ -180,7 +197,10 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 continue;
             }
             if interner.is_value_type(f.ty) {
-                let at = Expr::cast(CTy::Ptr, Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)));
+                let at = Expr::cast(
+                    CTy::Ptr,
+                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+                );
                 for s in value_ref_stmts(cx, f.ty, at, false) {
                     b.stmt(s);
                 }

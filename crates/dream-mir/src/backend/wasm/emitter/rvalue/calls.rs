@@ -71,7 +71,9 @@ impl Emitter<'_> {
         self.emit_operand(target);
         let (sig_name, ret) = func_sig(self.interner, sig)
             .map(|(name, _, ret)| (name, ret))
-            .unwrap_or_else(|| ("$sig___v".to_string(), None));
+            .unwrap_or_else(|| {
+                crate::internal_error!("indirect call has no WASM signature for {sig:?}")
+            });
         self.f.call_indirect(&sig_name, "__ft");
         ret
     }
@@ -151,7 +153,9 @@ impl Emitter<'_> {
         self.emit_operand(target);
         let sig_name = func_sig(self.interner, sig)
             .map(|(name, _, _)| name)
-            .unwrap_or_else(|| "$sig___v".to_string());
+            .unwrap_or_else(|| {
+                crate::internal_error!("sret indirect call has no WASM signature for {sig:?}")
+            });
         self.f.call_indirect(&sig_name, "__ft");
     }
 }

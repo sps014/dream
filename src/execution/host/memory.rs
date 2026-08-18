@@ -49,7 +49,7 @@ const LEN_PREFIX: usize = abi::LEN_PREFIX_SIZE as usize;
 const STRING_HEADER: usize = abi::STRING_HEADER_SIZE as usize;
 
 /// Offset of UTF-16 payload from a string data pointer.
-const STRING_UTF8: usize = abi::STRING_UTF8_OFFSET as usize;
+const STRING_UNITS: usize = abi::STRING_UNITS_OFFSET as usize;
 
 /// Reads the little-endian length/count prefix at `base` in `data`, returning `None` if `base` is
 /// out of range or the prefix is negative. Shared by the string and byte-array readers so a
@@ -63,11 +63,8 @@ fn read_len_prefix(data: &[u8], base: usize) -> Option<usize> {
     (len >= 0).then_some(len as usize)
 }
 
-/// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout:
-/// `[unit_len: i32][pad: i32][utf16le...]`. When `pad` is non-zero it is the UTF-16
-/// payload address (substring slice); `0` means units live at `ptr+8`.
-pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
-    let data = shared_bytes(memory);
+/// Reads a Dream `string` from linear memory at data pointer `ptr`.
+pub fn decode_string(data: &[u8], ptr: i32) -> String {
     if ptr < 0 {
         return String::new();
     }
@@ -76,11 +73,7 @@ pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
         return String::new();
     };
     let pad = read_len_prefix(data, base + LEN_PREFIX).unwrap_or(0);
-    let start = if pad == 0 {
-        base + STRING_UTF8
-    } else {
-        pad
-    };
+    let start = if pad == 0 { base + STRING_UNITS } else { pad };
     let nbytes = units.saturating_mul(2);
     if start >= data.len() {
         return String::new();
@@ -96,13 +89,42 @@ pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
     String::from_utf16_lossy(&u16s)
 }
 
-/// Resolves the caller module's exported linear `memory`, or a wasm trap (`Err`) if it is absent —
-/// so a malformed/foreign module traps the calling task instead of aborting the whole host process.
-pub(crate) fn required_memory(caller: &mut Caller<'_, ()>) -> Result<SharedMemory> {
-    caller
+pub fn with_guest_bytes<T, R>(caller: &mut Caller<'_, T>, f: impl FnOnce(&[u8]) -> R) -> Result<R> {
+    if let Some(m) = caller
         .get_export(abi::EXPORT_MEMORY)
         .and_then(Extern::into_shared_memory)
-        .ok_or_else(|| Error::msg("module must export `memory`"))
+    {
+        return Ok(f(shared_bytes(&m)));
+    }
+    let mem = caller
+        .get_export(abi::EXPORT_MEMORY)
+        .and_then(Extern::into_memory)
+        .ok_or_else(|| Error::msg("module must export `memory`"))?;
+    Ok(f(mem.data(&*caller)))
+}
+
+pub fn with_guest_bytes_mut<T, R>(
+    caller: &mut Caller<'_, T>,
+    f: impl FnOnce(&mut [u8]) -> R,
+) -> Result<R> {
+    if let Some(m) = caller
+        .get_export(abi::EXPORT_MEMORY)
+        .and_then(Extern::into_shared_memory)
+    {
+        return Ok(f(shared_bytes_mut(&m)));
+    }
+    let mem = caller
+        .get_export(abi::EXPORT_MEMORY)
+        .and_then(Extern::into_memory)
+        .ok_or_else(|| Error::msg("module must export `memory`"))?;
+    Ok(f(mem.data_mut(caller)))
+}
+
+/// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout:
+/// `[unit_len: i32][pad: i32][utf16le...]`. When `pad` is non-zero it is the UTF-16
+/// payload address (substring slice); `0` means units live at `ptr+8`.
+pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
+    decode_string(shared_bytes(memory), ptr)
 }
 
 /// Resolves the caller module's exported `malloc` with the expected `(size, tag) -> ptr` signature,
@@ -119,8 +141,7 @@ pub(crate) fn required_malloc(caller: &mut Caller<'_, ()>) -> Result<TypedFunc<(
 /// Reads the caller's exported `memory` and returns the length-prefixed string at `ptr`. Traps
 /// (`Err`) only if the module does not export `memory`.
 pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<String> {
-    let memory = required_memory(caller)?;
-    Ok(read_string_from_memory(&memory, ptr))
+    with_guest_bytes(caller, |data| decode_string(data, ptr))
 }
 
 /// Allocates `s` as a Dream `string` inside the module's linear memory by calling its exported
@@ -134,47 +155,46 @@ pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i3
         &mut *caller,
         (STRING_HEADER as i32 + nbytes as i32, TAG_STRING),
     )?;
-    let memory = required_memory(caller)?;
-    let start = ptr as usize;
-    let data = shared_bytes_mut(&memory);
-    data[start..start + LEN_PREFIX].copy_from_slice(&(units.len() as i32).to_le_bytes());
-    // Pad is the UTF-16 payload address (`ptr+8`). Inlined `char_at` loads through it.
-    let pad = ptr.wrapping_add(STRING_UTF8 as i32);
-    data[start + LEN_PREFIX..start + STRING_HEADER].copy_from_slice(&pad.to_le_bytes());
-    for (i, u) in units.iter().enumerate() {
-        let o = start + STRING_UTF8 + i * 2;
-        data[o..o + 2].copy_from_slice(&u.to_le_bytes());
-    }
+    with_guest_bytes_mut(caller, |data| {
+        let start = ptr as usize;
+        data[start..start + LEN_PREFIX].copy_from_slice(&(units.len() as i32).to_le_bytes());
+        let pad = ptr.wrapping_add(STRING_UNITS as i32);
+        data[start + LEN_PREFIX..start + STRING_HEADER].copy_from_slice(&pad.to_le_bytes());
+        for (i, u) in units.iter().enumerate() {
+            let o = start + STRING_UNITS + i * 2;
+            data[o..o + 2].copy_from_slice(&u.to_le_bytes());
+        }
+    })?;
     Ok(ptr)
 }
 
 /// Reads a Dream `int[]` at data pointer `ptr` into a `Vec<i32>`.
 /// Layout: `[count: i32][i32…]` (same prefix as `char[]`, 4-byte elements).
 pub(crate) fn read_arg_i32_array(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<Vec<i32>> {
-    let memory = required_memory(caller)?;
-    let data = shared_bytes(&memory);
-    if ptr < 0 {
-        return Ok(Vec::new());
-    }
-    let base = ptr as usize;
-    let Some(count) = read_len_prefix(data, base) else {
-        return Ok(Vec::new());
-    };
-    let start = base + LEN_PREFIX;
-    let need = count.saturating_mul(4);
-    let end = start.saturating_add(need).min(data.len());
-    let mut out = Vec::with_capacity(count);
-    let mut i = start;
-    while i + 4 <= end && out.len() < count {
-        out.push(i32::from_le_bytes([
-            data[i],
-            data[i + 1],
-            data[i + 2],
-            data[i + 3],
-        ]));
-        i += 4;
-    }
-    Ok(out)
+    with_guest_bytes(caller, |data| {
+        if ptr < 0 {
+            return Vec::new();
+        }
+        let base = ptr as usize;
+        let Some(count) = read_len_prefix(data, base) else {
+            return Vec::new();
+        };
+        let start = base + LEN_PREFIX;
+        let need = count.saturating_mul(4);
+        let end = start.saturating_add(need).min(data.len());
+        let mut out = Vec::with_capacity(count);
+        let mut i = start;
+        while i + 4 <= end && out.len() < count {
+            out.push(i32::from_le_bytes([
+                data[i],
+                data[i + 1],
+                data[i + 2],
+                data[i + 3],
+            ]));
+            i += 4;
+        }
+        out
+    })
 }
 
 /// Allocates a Dream `int[]` holding `values` via the module's exported `malloc`.
@@ -186,14 +206,14 @@ pub(crate) fn write_i32_array_to_memory(
     let count = values.len() as i32;
     let nbytes = LEN_PREFIX as i32 + count.saturating_mul(4);
     let ptr = malloc.call(&mut *caller, (nbytes, TAG_ARRAY))?;
-    let memory = required_memory(caller)?;
-    let base = ptr as usize;
-    let data = shared_bytes_mut(&memory);
-    data[base..base + LEN_PREFIX].copy_from_slice(&count.to_le_bytes());
-    for (i, v) in values.iter().enumerate() {
-        let o = base + LEN_PREFIX + i * 4;
-        data[o..o + 4].copy_from_slice(&v.to_le_bytes());
-    }
+    with_guest_bytes_mut(caller, |data| {
+        let base = ptr as usize;
+        data[base..base + LEN_PREFIX].copy_from_slice(&count.to_le_bytes());
+        for (i, v) in values.iter().enumerate() {
+            let o = base + LEN_PREFIX + i * 4;
+            data[o..o + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    })?;
     Ok(ptr)
 }
 
@@ -201,18 +221,18 @@ pub(crate) fn write_i32_array_to_memory(
 /// copy. Layout: `[count: i32][bytes...]` (char elements are 1 byte). No string round-trip, so
 /// this is binary-safe.
 pub(crate) fn read_arg_bytes(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<Vec<u8>> {
-    let memory = required_memory(caller)?;
-    let data = shared_bytes(&memory);
-    if ptr < 0 {
-        return Ok(Vec::new());
-    }
-    let base = ptr as usize;
-    let Some(count) = read_len_prefix(data, base) else {
-        return Ok(Vec::new());
-    };
-    let start = base + LEN_PREFIX;
-    let end = start.saturating_add(count).min(data.len());
-    Ok(data[start..end].to_vec())
+    with_guest_bytes(caller, |data| {
+        if ptr < 0 {
+            return Vec::new();
+        }
+        let base = ptr as usize;
+        let Some(count) = read_len_prefix(data, base) else {
+            return Vec::new();
+        };
+        let start = base + LEN_PREFIX;
+        let end = start.saturating_add(count).min(data.len());
+        data[start..end].to_vec()
+    })
 }
 
 /// Allocates a Dream `char[]` (byte array) holding `bytes` via the module's exported `malloc`,
@@ -222,11 +242,11 @@ pub fn write_bytes_to_memory(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Resul
     let malloc = required_malloc(caller)?;
     let count = bytes.len() as i32;
     let ptr = malloc.call(&mut *caller, (LEN_PREFIX as i32 + count, TAG_ARRAY))?;
-    let memory = required_memory(caller)?;
-    let base = ptr as usize;
-    let data = shared_bytes_mut(&memory);
-    data[base..base + LEN_PREFIX].copy_from_slice(&count.to_le_bytes());
-    data[base + LEN_PREFIX..base + LEN_PREFIX + bytes.len()].copy_from_slice(bytes);
+    with_guest_bytes_mut(caller, |data| {
+        let base = ptr as usize;
+        data[base..base + LEN_PREFIX].copy_from_slice(&count.to_le_bytes());
+        data[base + LEN_PREFIX..base + LEN_PREFIX + bytes.len()].copy_from_slice(bytes);
+    })?;
     Ok(ptr)
 }
 

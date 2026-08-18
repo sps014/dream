@@ -50,17 +50,22 @@ unsafe fn read_string(p: usize) -> String {
     if n <= 0 {
         return String::new();
     }
-    const DREAM_STR_SLICE: i32 = 1;
+    const DREAM_STR_SLICE: i32 = dream_mir::abi::DREAM_STR_SLICE;
     let pad = *((p as *const i32).add(1));
     let units = if pad == DREAM_STR_SLICE {
         let d = std::ptr::read(
             (p as *const u8)
-                .add(8 + std::mem::size_of::<usize>())
+                .add(dream_mir::abi::STRING_HEADER_SIZE as usize + std::mem::size_of::<usize>())
                 .cast::<*const u16>(),
         );
         std::slice::from_raw_parts(d, n as usize)
     } else {
-        std::slice::from_raw_parts((p as *const u8).add(8).cast::<u16>(), n as usize)
+        std::slice::from_raw_parts(
+            (p as *const u8)
+                .add(dream_mir::abi::STRING_UNITS_OFFSET as usize)
+                .cast::<u16>(),
+            n as usize,
+        )
     };
     String::from_utf16_lossy(units)
 }
@@ -98,7 +103,9 @@ fn alloc_string(s: &str) -> usize {
         if p == 0 {
             return 0;
         }
-        let dst = (p as *mut u8).add(8).cast::<u16>();
+        let dst = (p as *mut u8)
+            .add(dream_mir::abi::STRING_UNITS_OFFSET as usize)
+            .cast::<u16>();
         std::ptr::copy_nonoverlapping(units.as_ptr(), dst, units.len());
         p
     }

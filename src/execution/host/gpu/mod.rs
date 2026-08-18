@@ -27,8 +27,9 @@ use std::time::Instant;
 use wasmtime::*;
 
 use super::memory::{
-    read_arg_bytes, read_arg_i32_array, read_arg_string, required_malloc, required_memory,
-    resolve_host_future_bytes, shared_bytes_mut, write_i32_array_to_memory, write_string_to_memory,
+    read_arg_bytes, read_arg_i32_array, read_arg_string, required_malloc,
+    resolve_host_future_bytes, with_guest_bytes_mut, write_i32_array_to_memory,
+    write_string_to_memory,
 };
 use dream_mir::abi as mir_abi;
 use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
@@ -73,12 +74,10 @@ fn resolve_host_future_void(caller: &mut Caller<'_, ()>) -> Result<i32> {
 fn resolve_host_future_long(caller: &mut Caller<'_, ()>, value: i64) -> Result<i32> {
     let malloc = required_malloc(caller)?;
     let ptr = malloc.call(&mut *caller, (8, mir_abi::TAG_LONG))?;
-    {
-        let memory = required_memory(caller)?;
-        let data = shared_bytes_mut(&memory);
+    with_guest_bytes_mut(caller, |data| {
         let base = ptr as usize;
         data[base..base + 8].copy_from_slice(&value.to_le_bytes());
-    }
+    })?;
     resolve_host_future_i32(caller, ptr)
 }
 

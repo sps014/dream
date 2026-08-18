@@ -17,10 +17,11 @@ mod tables;
 mod terminator;
 mod types;
 
-pub use module::{
-    emit_c_module, native_pcre2_include_dir, native_runtime_c_files, native_runtime_include_dir,
-    pcre2_interpreter_c_names, PCRE2_JIT_C, WASM_PCRE2_WRAPPER_C,
+pub use crate::runtime::{
+    native_pcre2_include_dir, native_runtime_c_files, native_runtime_include_dir,
+    native_runtime_units,
 };
+pub use module::emit_c_module;
 
 #[cfg(test)]
 mod tests {
@@ -145,7 +146,8 @@ mod tests {
             ..Default::default()
         };
         let c = emit_c_module(&mir, &i);
-        assert!(c.contains("goto *__jt"), "{}", c);
+        assert!(!c.contains("65536"), "{}", c);
+        assert!(c.contains("dream_fn_"), "{}", c);
     }
 
     #[test]
@@ -162,6 +164,16 @@ mod tests {
         assert!(strings.contains("concat_strings"));
         assert!(object.contains("int_to_string"));
         assert!(format.contains("double_to_string"));
+    }
+
+    #[test]
+    fn future_layout_wide_not_alias_remaining() {
+        let n = crate::abi::FutureLayout::native();
+        assert_ne!(n.wide, n.remaining);
+        assert!(n.awaiting != n.wide);
+        let src = include_str!("../../runtime/c/native/async.c");
+        assert!(!src.contains("#define F_POLL"), "{}", src);
+        assert!(src.contains("F_SLOTS"), "{}", src);
     }
 
     #[test]

@@ -151,6 +151,13 @@ pub const ATTR_FORCE_FREE: &str = "force_free";
 pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
 /// `Bytes.fromWire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
 pub const ATTR_WIRE_DECODE: &str = "wire_decode";
+pub const ATTR_REGEX_COMPILE: &str = "regex_compile";
+pub const ATTR_REGEX_FREE: &str = "regex_free";
+pub const ATTR_REGEX_FIND: &str = "regex_find";
+pub const ATTR_REGEX_GROUP_COUNT: &str = "regex_group_count";
+pub const ATTR_REGEX_NAME_COUNT: &str = "regex_name_count";
+pub const ATTR_REGEX_NAME_AT: &str = "regex_name_at";
+pub const ATTR_REGEX_NAME_NUMBER: &str = "regex_name_number";
 /// `Vector<T>.lane_count()` — number of `T` lanes in a `v128`.
 pub const ATTR_SIMD_LANE_COUNT: &str = "simd_lane_count";
 pub const ATTR_SIMD_V128_SPLAT: &str = "simd_v128_splat";
@@ -196,6 +203,13 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_FORCE_FREE,
     ATTR_WIRE_ENCODE,
     ATTR_WIRE_DECODE,
+    ATTR_REGEX_COMPILE,
+    ATTR_REGEX_FREE,
+    ATTR_REGEX_FIND,
+    ATTR_REGEX_GROUP_COUNT,
+    ATTR_REGEX_NAME_COUNT,
+    ATTR_REGEX_NAME_AT,
+    ATTR_REGEX_NAME_NUMBER,
     ATTR_SIMD_LANE_COUNT,
     ATTR_SIMD_V128_SPLAT,
     ATTR_SIMD_V128_LOAD,
@@ -276,6 +290,8 @@ pub enum IntrinsicOp {
     WireEncode,
     /// `Bytes.fromWire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].
     WireDecode,
+    /// `system.text` PCRE2 helpers (`regex_compile` / `regex_find` / …).
+    Regex,
     SimdLaneCount,
     SimdV128Splat,
     SimdV128Load,
@@ -323,6 +339,13 @@ impl IntrinsicOp {
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,
+            ATTR_REGEX_COMPILE
+            | ATTR_REGEX_FREE
+            | ATTR_REGEX_FIND
+            | ATTR_REGEX_GROUP_COUNT
+            | ATTR_REGEX_NAME_COUNT
+            | ATTR_REGEX_NAME_AT
+            | ATTR_REGEX_NAME_NUMBER => IntrinsicOp::Regex,
             ATTR_SIMD_LANE_COUNT => IntrinsicOp::SimdLaneCount,
             ATTR_SIMD_V128_SPLAT => IntrinsicOp::SimdV128Splat,
             ATTR_SIMD_V128_LOAD => IntrinsicOp::SimdV128Load,

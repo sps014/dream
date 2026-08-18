@@ -43,12 +43,11 @@ fn run_wasm_binary(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let config = dream::execution::host::threaded_wasm_config();
     let engine = wasmtime::Engine::new(&config)?;
     let module = wasmtime::Module::new(&engine, bytes)?;
-    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)?;
     let mut store = wasmtime::Store::new(&engine, ());
     store.set_epoch_deadline(u64::MAX);
     let mut linker = wasmtime::Linker::new(&engine);
     link_host_functions(&mut linker)?;
-    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
+    dream::execution::host::define_env_memory(&engine, &mut store, &mut linker, &module)?;
     linker.define_unknown_imports_as_traps(&module)?;
     let instance = linker.instantiate(&mut store, &module)?;
     if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "main") {

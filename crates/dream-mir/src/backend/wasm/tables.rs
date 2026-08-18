@@ -1,15 +1,5 @@
 use super::*;
-
-/// The emitted symbol for a function (or generic instance): the source name, suffixed with the
-/// instance's interned type-arg ids so each monomorphization stays distinct.
-pub(crate) fn func_symbol(func: &MirFunction) -> String {
-    if func.instance.is_empty() {
-        func.name.clone()
-    } else {
-        let args: Vec<String> = func.instance.iter().map(|t| t.0.to_string()).collect();
-        format!("{}__{}", func.name, args.join("_"))
-    }
-}
+use crate::backend::shared::{func_symbol, poll_symbol};
 
 /// Maps each function's `(DefId, instance args)` to its emitted symbol, so call sites (which carry
 /// the callee's def + monomorphization args) resolve to the same symbol the header uses. Keying by
@@ -203,10 +193,6 @@ pub(super) fn func_sig_is_sret(interner: &TypeInterner, ty: TypeId) -> bool {
         TyKind::Func(_, ret) => interner.is_value_type(*ret),
         _ => false,
     }
-}
-
-pub(crate) fn poll_symbol(func: &MirFunction) -> String {
-    format!("poll_{}", func_symbol(func))
 }
 
 /// Assigns each struct and (discriminated) union a distinct runtime tag, starting at

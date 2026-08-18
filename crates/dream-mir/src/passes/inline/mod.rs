@@ -270,17 +270,17 @@ fn cfg_has_cycle(func: &crate::MirFunction) -> bool {
 /// owns teardown (caller frame exit must not drop them again).
 fn remap_local_decl(
     decl: &LocalDecl,
-    kind: Option<crate::backend::wasm::ValueLocalKind>,
+    kind: Option<crate::backend::shared::ValueLocalKind>,
 ) -> LocalDecl {
     let mut d = decl.clone();
     match kind {
-        Some(crate::backend::wasm::ValueLocalKind::Borrow) => {
+        Some(crate::backend::shared::ValueLocalKind::Borrow) => {
             d.is_ref = true;
             d.manual_drop = false;
         }
         Some(
-            crate::backend::wasm::ValueLocalKind::Param
-            | crate::backend::wasm::ValueLocalKind::Owning,
+            crate::backend::shared::ValueLocalKind::Param
+            | crate::backend::shared::ValueLocalKind::Owning,
         ) => {
             d.manual_drop = true;
             d.is_ref = false;
@@ -310,7 +310,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // reclassified as owning in the caller. Locals already marked `manual_drop` (from a prior
     // inline into this callee) keep their existing `ValueDrop` in the remapped body; do not drop
     // them again at this site's continuation.
-    let callee_frame = crate::backend::wasm::ValueFrame::compute(
+    let callee_frame = crate::backend::shared::ValueFrame::compute(
         &mir.functions[site.callee],
         interner,
         &mir.layouts,
@@ -324,8 +324,8 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
                 && matches!(
                     callee_frame.kind(Local(*i as u32)),
                     Some(
-                        crate::backend::wasm::ValueLocalKind::Param
-                            | crate::backend::wasm::ValueLocalKind::Owning
+                        crate::backend::shared::ValueLocalKind::Param
+                            | crate::backend::shared::ValueLocalKind::Owning
                     )
                 )
         })

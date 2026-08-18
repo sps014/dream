@@ -139,7 +139,7 @@ pub(super) fn string_table(
     for s in found {
         if !map.contains_key(&s) {
             // 12-byte heap header + 8-byte string header (unit_len + pad) + UTF-16 LE units.
-            let total = HEAP_HEADER_SIZE + 8 + utf16_byte_len(&s);
+            let total = HEAP_HEADER_SIZE + crate::abi::STRING_HEADER_SIZE + utf16_byte_len(&s);
             map.insert(s, block + HEAP_HEADER_SIZE);
             block += (total + 3) & !3;
         }
@@ -522,7 +522,13 @@ fn utf16_byte_len(s: &str) -> u32 {
 pub(super) fn string_block_bytes(s: &str, mapped_ptr: u32) -> Vec<u8> {
     let units: Vec<u16> = s.encode_utf16().collect();
     let mut out = Vec::new();
-    for word in [0_i32, STRING_TAG, 1, units.len() as i32, (mapped_ptr + 8) as i32] {
+    for word in [
+        0_i32,
+        STRING_TAG,
+        1,
+        units.len() as i32,
+        (mapped_ptr + crate::abi::STRING_UNITS_OFFSET) as i32,
+    ] {
         out.extend_from_slice(&word.to_le_bytes());
     }
     for u in units {

@@ -3,14 +3,14 @@
 This directory is **PCRE2 10.45** (16-bit library only), vendored so both backends share one
 engine:
 
-- **Native C** (`../native/regex.c`, `dream --native-c`): `SUPPORT_JIT` in `config.h` unless
-  `PCRE2_WASM` is defined. JIT uses sljit under [`../deps/sljit/`](../deps/sljit/README.md).
-- **WASM guest**: `scripts/build-runtime.sh` compiles the same `.c` files with
+- **Native C** (`../regex.c` with `-DDREAM_NATIVE`, `dream --native-c`): `SUPPORT_JIT` in
+  `config.h` unless `PCRE2_WASM` is defined. JIT uses sljit under [`../deps/sljit/`](../deps/sljit/README.md).
+- **WASM guest**: `scripts/build-runtime.sh` compiles the catalog `regex` link module with
   `-DPCRE2_WASM` (no JIT sources), links with wasi-sdk `wasm-ld`, and writes
   [`../../regex.wat`](../../regex.wat).
 
-Edit `../regex.c` (WASM wrapper) or `../native/regex.c` (host). **Do not hand-edit
-`regex.wat`.**
+Edit `../regex.c` (one wrapper). **Do not hand-edit `regex.wat`.** Native no longer has a
+second `native/regex.c`.
 
 Licence: see [`COPYING`](COPYING) (upstream PCRE2 BSD). JIT pieces follow sljit’s licence
 in `../deps/sljit`.
@@ -26,24 +26,19 @@ export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"  # or y
 scripts/build-runtime.sh
 ```
 
-That also promotes `strings.wat` / `object.wat` / `format.wat` from guest C. Allocator WAT
-stays handwritten.
-
-Flags used for PCRE2 wasm:
-
-- `--target=wasm32-wasi`, `--sysroot=…/share/wasi-sysroot`
-- `-DHAVE_CONFIG_H -DPCRE2_CODE_UNIT_WIDTH=16 -DPCRE2_STATIC -DPCRE2_WASM`
-- Source list: [`SOURCES`](SOURCES) (same files native compiles, minus JIT)
-- Wrappers: `../regex.c`, `../regex_wasm_libc.c` (`WASM_PCRE2_WRAPPER_C` in `backend/c/module.rs`)
-- `wasm-ld --import-memory --wrap=malloc,free,realloc,memcpy,memmove,memset,memcmp,strlen,abort`
-- `--global-base=2097152` (`abi::LINKED_RT_BASE`) `-z stack-size=131072`
+That also promotes extract modules (`strings.wat` / `object.wat` / `format.wat`) from the
+catalog. Allocator WAT stays handwritten. Flags, source lists, `wasm-ld` wrap/exports, and
+`--global-base` come from [`../../modules.rs`](../../modules.rs) (JSON via
+`dream-runtime-manifest`), including [`SOURCES`](SOURCES). Do not add a one-off PCRE2 block
+to the shell script.
 
 The linked WAT is spliced as-is. Dream’s WAT ingest skips `env` memory/`malloc`/`free` when those
-symbols already exist, gives the library its own funcref table, and relocates `$__stack_pointer`
-off interned strings. Do not add a one-off WAT rewriter.
+symbols already exist, gives the library its own funcref table, and relocates that object’s
+`$__stack_pointer` (renamed `$__stack_pointer_<id>`) into the catalog-allocated region. Do not
+add a one-off WAT rewriter.
 
 Do not compile `pcre2_jit_match.c` / `pcre2_jit_misc.c` as their own wasm objects; JIT is
-included from `pcre2_jit_compile.c` on native only.
+included from `pcre2_jit_compile.c` on native only (`native_extra_c` in the catalog).
 
 ## How to refresh this vendor tree
 
@@ -56,8 +51,8 @@ included from `pcre2_jit_compile.c` on native only.
    - `SUPPORT_PCRE2_16`, `SUPPORT_UNICODE`, `HAVE_MEMMOVE` / stdlib + string headers
    - `#ifndef PCRE2_WASM` → `#define SUPPORT_JIT 1`
    - no `SUPPORT_PCRE2_8` / `_32`
-5. Native: `dream --native-c` links `../native/regex.c` plus these sources
-   (`-DHAVE_CONFIG_H -DPCRE2_CODE_UNIT_WIDTH=16`).
+5. Native: `dream --native-c` links catalog `shared_c` + `SOURCES` + `native_extra_c` when
+   `RuntimeNeed::REGEX` is set (`-DDREAM_NATIVE -DHAVE_CONFIG_H -DPCRE2_CODE_UNIT_WIDTH=16`).
 6. WASM: `scripts/build-runtime.sh` as above; run regex goldens
    (`tests/cases/regex_*.dream`).
 

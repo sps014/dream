@@ -78,8 +78,8 @@ impl<'a> Emitter<'a> {
                 let e = self.iface_expr(receiver, *iface_id, *method_slot, args);
                 self.b.expr_stmt(Expr::cast(CTy::Void, e));
             }
-            Statement::IndirectCall { target, args, .. } => {
-                let e = self.indirect_expr(target, args);
+            Statement::IndirectCall { target, args, sig } => {
+                let e = self.indirect_expr(target, args, *sig);
                 self.b.expr_stmt(Expr::cast(CTy::Void, e));
             }
             Statement::ArrayElemsCopy {
@@ -99,8 +99,20 @@ impl<'a> Emitter<'a> {
                 self.b.call(
                     "dream_mem_copy",
                     vec![
-                        Expr::add(d, Expr::add(Expr::i(4), Expr::mul(doff, Expr::i(es as i64)))),
-                        Expr::add(s, Expr::add(Expr::i(4), Expr::mul(soff, Expr::i(es as i64)))),
+                        Expr::add(
+                            d,
+                            Expr::add(
+                                super::types::len_prefix(),
+                                Expr::mul(doff, Expr::i(es as i64)),
+                            ),
+                        ),
+                        Expr::add(
+                            s,
+                            Expr::add(
+                                super::types::len_prefix(),
+                                Expr::mul(soff, Expr::i(es as i64)),
+                            ),
+                        ),
                         Expr::cast(CTy::Named("size_t"), Expr::mul(n, Expr::i(es as i64))),
                     ],
                 );
@@ -119,7 +131,7 @@ impl<'a> Emitter<'a> {
                     "memset",
                     vec![
                         Expr::add(
-                            Expr::ptr_add(d, Expr::i(4)),
+                            Expr::ptr_add(d, super::types::len_prefix()),
                             Expr::mul(doff, Expr::i(es as i64)),
                         ),
                         Expr::i(0),
@@ -161,10 +173,7 @@ impl<'a> Emitter<'a> {
                     crate::BinOp::Div => 3,
                     _ => 0,
                 };
-                let raddr = splat_rhs
-                    .as_ref()
-                    .map(|s| self.operand(s))
-                    .unwrap_or(r);
+                let raddr = splat_rhs.as_ref().map(|s| self.operand(s)).unwrap_or(r);
                 let call = if *ptr_addr {
                     Expr::call(
                         "dream_simd_binop",
@@ -172,17 +181,17 @@ impl<'a> Emitter<'a> {
                     )
                 } else {
                     let off = |base: Expr| {
-                        Expr::add(base, Expr::add(Expr::i(4), Expr::mul(i.clone(), Expr::i(es as i64))))
+                        Expr::add(
+                            base,
+                            Expr::add(
+                                super::types::len_prefix(),
+                                Expr::mul(i.clone(), Expr::i(es as i64)),
+                            ),
+                        )
                     };
                     Expr::call(
                         "dream_simd_binop",
-                        vec![
-                            off(d),
-                            off(l),
-                            off(raddr),
-                            Expr::i(es as i64),
-                            Expr::i(opi),
-                        ],
+                        vec![off(d), off(l), off(raddr), Expr::i(es as i64), Expr::i(opi)],
                     )
                 };
                 self.b.expr_stmt(call);
@@ -375,7 +384,7 @@ impl<'a> Emitter<'a> {
                     vec![
                         dest,
                         Expr::add(
-                            Expr::ptr_add(a[0].clone(), Expr::i(4)),
+                            Expr::ptr_add(a[0].clone(), super::types::len_prefix()),
                             Expr::mul(
                                 Expr::cast(CTy::Named("size_t"), a[1].clone()),
                                 Expr::i(es as i64),
@@ -396,35 +405,60 @@ impl<'a> Emitter<'a> {
             "simd_v128_add" if a.len() >= 2 => {
                 self.b.call(
                     "dream_v128_f32_bin",
-                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(0)],
+                    vec![
+                        dest,
+                        Expr::dream_p(a[0].clone()),
+                        Expr::dream_p(a[1].clone()),
+                        Expr::i(0),
+                    ],
                 );
                 true
             }
             "simd_v128_sub" if a.len() >= 2 => {
                 self.b.call(
                     "dream_v128_f32_bin",
-                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(1)],
+                    vec![
+                        dest,
+                        Expr::dream_p(a[0].clone()),
+                        Expr::dream_p(a[1].clone()),
+                        Expr::i(1),
+                    ],
                 );
                 true
             }
             "simd_v128_mul" if a.len() >= 2 => {
                 self.b.call(
                     "dream_v128_f32_bin",
-                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(2)],
+                    vec![
+                        dest,
+                        Expr::dream_p(a[0].clone()),
+                        Expr::dream_p(a[1].clone()),
+                        Expr::i(2),
+                    ],
                 );
                 true
             }
             "simd_v128_min" if a.len() >= 2 => {
                 self.b.call(
                     "dream_v128_f32_bin",
-                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(3)],
+                    vec![
+                        dest,
+                        Expr::dream_p(a[0].clone()),
+                        Expr::dream_p(a[1].clone()),
+                        Expr::i(3),
+                    ],
                 );
                 true
             }
             "simd_v128_max" if a.len() >= 2 => {
                 self.b.call(
                     "dream_v128_f32_bin",
-                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(4)],
+                    vec![
+                        dest,
+                        Expr::dream_p(a[0].clone()),
+                        Expr::dream_p(a[1].clone()),
+                        Expr::i(4),
+                    ],
                 );
                 true
             }
@@ -445,7 +479,7 @@ impl<'a> Emitter<'a> {
             "memcpy",
             vec![
                 Expr::add(
-                    Expr::ptr_add(a1, Expr::i(4)),
+                    Expr::ptr_add(a1, super::types::len_prefix()),
                     Expr::mul(Expr::cast(CTy::Named("size_t"), a2), Expr::i(es as i64)),
                 ),
                 Expr::dream_p(a0),

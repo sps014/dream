@@ -62,6 +62,13 @@ const RUNTIME_STRINGS: &str = include_str!("../../runtime/strings.wat");
 const RUNTIME_REGEX: &str = include_str!("../../runtime/regex.wat");
 const RUNTIME_SIMD: &str = include_str!("../../runtime/simd.wat");
 
+fn linked_runtime_wat(id: &str) -> &'static str {
+    match id {
+        "regex" => RUNTIME_REGEX,
+        other => crate::internal_error!("no WAT for linked runtime module {other}"),
+    }
+}
+
 /// The object runtime: box/unbox/hash plus the integer-family `*_to_string` formatters
 /// (`$int_to_string`/`$long_to_string`/`$byte_to_string`/…). `{TAG_*}` placeholders are substituted.
 const RUNTIME_OBJECT: &str = include_str!("../../runtime/object.wat");
@@ -86,60 +93,8 @@ const RUNTIME_SYNC: &str = include_str!("../../runtime/sync.wat");
 /// always self-contained, regardless of which literals the program itself uses.
 const RUNTIME_STR_CONSTS: [&str; 4] = ["", "true", "false", "-"];
 
-/// The fixed, compile-time-constant panic messages for the automatic runtime checks (bounds,
-/// division by zero, bad cast). v1 does not interpolate the actual out-of-range index/length or
-/// the failing type name — see [`crate::backend::wasm::emitter::mod::Emitter::emit_panic`]. Each is
-/// *located*: [`located`] appends the declaring function's source file + name (carried inertly on
-/// [`crate::MirFunction`] as `file`/`name`, for debug-info) plus the precise 1-based source
-/// line of the checked construct, Rust-style. The line comes from `Statement::SourceLine` markers
-/// interleaved into MIR unconditionally (see [`dream_hir::HStmt::SourceLine`]): the backend tracks
-/// "the most recent one seen" as `Emitter::current_line` while it walks a function's statements, and
-/// [`crate::backend::wasm::strings::string_table`] tracks the identical value while pre-scanning the same
-/// (already fully-optimized) MIR for every call site that will need a located string interned, so
-/// the two stay in lockstep with no `TextSpan` plumbing through the rest of MIR. The one exception is
-/// `$char_at`'s own internal bounds check has been moved to each call site (see `emit_char_at`), so
-/// even string indexing gets a precise, located message rather than the single shared, unlocated one
-/// a truly shared runtime helper would be stuck with.
-pub(crate) mod panic_msgs {
-    pub const INDEX_OUT_OF_BOUNDS: &str = "panic: index out of bounds";
-    pub const DIVIDE_BY_ZERO: &str = "panic: attempt to divide by zero";
-    pub const INVALID_CAST: &str = "panic: invalid cast";
-    /// Reading an `unowned` field whose referent has already been deallocated (poisoned to `0` by
-    /// `$weak_clear_all` — see `src/mir/runtime/weak.wat` and `docs/language/memory.md`).
-    pub const UNOWNED_NULL_DEREF: &str = "panic: access to deallocated 'unowned' reference";
-
-    /// Every located panic message base, in a fixed order matching [`located_all`].
-    pub const ALL: [&str; 4] = [
-        INDEX_OUT_OF_BOUNDS,
-        DIVIDE_BY_ZERO,
-        INVALID_CAST,
-        UNOWNED_NULL_DEREF,
-    ];
-
-    /// Appends `(at <file or "<unknown>">:<line>, in <function>)` to a fixed base message (`line ==
-    /// 0`, meaning no `SourceLine` marker preceded this check, renders as `?` rather than a
-    /// misleading `0`), so a bounds check inside `fun foo` in `a.dream` reports a different,
-    /// distinguishable string than the same check on a different line, or inside a different
-    /// function/file. Used both to seed the string table ([`crate::backend::wasm::strings::string_table`]
-    /// pre-computes exactly which `(base, file, func_name, line)` tuples will be looked up) and,
-    /// identically, at each check's call site (`Emitter::emit_panic`).
-    pub fn located(base: &str, file: Option<&str>, func_name: &str, line: u32) -> String {
-        let line = if line == 0 {
-            "?".to_string()
-        } else {
-            line.to_string()
-        };
-        format!(
-            "{base} (at {}:{line}, in {func_name})",
-            file.unwrap_or("<unknown>")
-        )
-    }
-
-    /// All located messages for one function at `line`, in [`ALL`] order.
-    pub fn located_all(file: Option<&str>, func_name: &str, line: u32) -> [String; 4] {
-        ALL.map(|base| located(base, file, func_name, line))
-    }
-}
+/// Located panic intern strings — see [`crate::backend::shared::panic_msgs`].
+pub(crate) use crate::backend::shared::panic_msgs;
 
 mod builder;
 pub mod debug_map;
@@ -168,7 +123,8 @@ use types::*;
 use valuetype::*;
 use wasm_types::*;
 
-pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym, ValueFrame, ValueLocalKind};
+pub(crate) use crate::backend::shared::{func_symbol, poll_symbol};
+pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym};
 
 // The external API of the backend, at the historical `crate::backend::wasm::…` paths.
 pub use builder::print_wasm;
@@ -177,7 +133,6 @@ pub use debug_map::DebugModule;
 pub(crate) use emitter::emit_async_poll;
 pub use emitter::emit_function;
 pub use module::{emit_module, emit_module_bytes, emit_module_with_debug, emit_program};
-pub(crate) use tables::{func_symbol, poll_symbol};
 pub(crate) use wasm_types::wasm_ty_of;
 
 #[cfg(test)]

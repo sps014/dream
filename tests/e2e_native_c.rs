@@ -27,11 +27,14 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
     let expected_trap_file = dream_file.with_extension("expected_trap");
-    let c_path = dream_file.with_extension(if release {
-        "native_c.release.c"
+    let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();
+    let dest_dir = Path::new("target").join(if release {
+        "e2e-native-c-release"
     } else {
-        "native_c.c"
+        "e2e-native-c"
     });
+    fs::create_dir_all(&dest_dir).unwrap();
+    let c_path = dest_dir.join(format!("{stem}.c"));
     let compiler = Compiler::new(Target::NativeC).with_release(release);
     let src = dream_file.to_str().unwrap().to_string();
     let dest = c_path.to_str().unwrap().to_string();
@@ -44,6 +47,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
             dream_file
         );
         let _ = fs::remove_file(&c_path);
+        let _ = fs::remove_file(c_path.with_extension("o"));
         return;
     }
     compile_result.unwrap_or_else(|e| panic!("compile failed for {:?}: {e}", dream_file));
@@ -62,6 +66,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
         if release { OptLevel::O3 } else { OptLevel::O0 },
     );
     let _ = fs::remove_file(&c_path);
+    let _ = fs::remove_file(c_path.with_extension("o"));
     let _ = fs::remove_file(c_path.with_extension("bin"));
 
     if expects_trap {

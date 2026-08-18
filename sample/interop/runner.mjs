@@ -1,6 +1,6 @@
 // Node runner for the Dream interop sample.
 //
-//   node sample/interop/runner.mjs            # defaults to interop.wasm beside this file
+//   node sample/interop/runner.mjs            # defaults to target/debug/interop.wasm
 //   node sample/interop/runner.mjs other.wasm
 //
 // `alert` and `console.log` auto-bind to Node globals, so we only supply `square`.
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 globalThis.alert ??= (msg) => console.log(`[alert] ${msg}`);
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const wasmPath = process.argv[2] || here + "interop.wasm";
+const wasmPath = process.argv[2] || here + "target/debug/interop.wasm";
 
 await run(wasmPath, {
   imports: { square: (n) => n * n },

@@ -14,7 +14,7 @@ Same MIR, two emitters. There is **no LLVM backend**.
 Opt-in compile-to-C:
 
 ```bash
-dream --native-c file.dream              # writes .c
+dream --native-c file.dream              # writes target/debug/*.c, *.o, *.bin
 dream --backend c file.dream
 dream run --backend c --release file.dream
 ```

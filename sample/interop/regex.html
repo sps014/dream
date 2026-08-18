@@ -32,8 +32,8 @@
     <p class="muted">
       A Dream program using the stdlib <code>Regex</code> class, which is backed by JavaScript's
       <code>RegExp</code> through the <code>Dream</code> host module. First build the module:
-      <code>cargo run -- sample/interop/regex.dream</code> (writes <code>regex.wasm</code> +
-      <code>regex.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
+      <code>cargo run -- sample/interop/regex.dream</code> (writes <code>target/debug/regex.wasm</code> +
+      <code>target/debug/regex.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
       over HTTP (e.g. <code>npx serve .</code>) and open <code>/sample/interop/regex.html</code>.
     </p>
     <div id="log"></div>
@@ -52,7 +52,7 @@
       };
 
       // No custom imports needed: regex helpers are built in to dream.js.
-      await run("regex.wasm");
+      await run("target/debug/regex.wasm");
     </script>
   </body>
 </html>

@@ -67,7 +67,7 @@ Without a project folder you can still run a single file:
 dream run hello.dream
 ```
 
-Compile without running (writes `.wat`, `.wasm`, and `.abi.json` next to the source):
+Compile without running (writes `.wat`, `.wasm`, and `.abi.json` under `target/debug/`):
 
 ```bash
 dream hello.dream
@@ -91,8 +91,8 @@ dream --runtime --node hello.dream
 ```
 
 ```javascript
-import { run } from "./hello.web.runtime.js";
-await run("hello.wasm");
+import { run } from "./target/debug/hello.web.runtime.js";
+await run("target/debug/hello.wasm");
 ```
 
 See [JavaScript interop](../reference/language/interop.md).

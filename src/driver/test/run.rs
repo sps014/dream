@@ -1,4 +1,4 @@
-//! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/`, compile+run.
+//! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/{debug,release}/`, compile+run.
 
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
 use crate::driver::compiler::{Compiler, Target};
@@ -129,7 +129,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     }
 
     let runner_source = synthesize_runner(&source, &tests);
-    let out_dir = test_cache_dir(path);
+    let out_dir = test_cache_dir(path, opts.release);
     fs::create_dir_all(&out_dir).map_err(|e| format!("create {}: {}", out_dir.display(), e))?;
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("tests");
     let runner_path = out_dir.join(format!("{stem}.runner.dream"));
@@ -222,23 +222,20 @@ fn escape_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn test_cache_dir(test_file: &Path) -> PathBuf {
-    // Prefer project `target/test/` when a dream.toml is nearby; else beside the file.
-    let mut dir = test_file
+fn test_cache_dir(test_file: &Path, release: bool) -> PathBuf {
+    let source_dir = test_file
         .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf();
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let profile = if release { "release" } else { "debug" };
+    let mut dir = source_dir.to_path_buf();
     loop {
         if dir.join("dream.toml").is_file() {
-            return dir.join("target").join("test");
+            return dir.join("target").join("test").join(profile);
         }
         if !dir.pop() {
             break;
         }
     }
-    test_file
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("target")
-        .join("test")
+    source_dir.join("target").join("test").join(profile)
 }

@@ -75,8 +75,8 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`). Binaries require `entry` and a top-level `main`.
 - `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler (**bin only**).
 - Package builds emit under `target/debug/` (default) or `target/release/` (`--release`), not beside
-  sources. Bare `dream file.dream` compiles without a `dream.toml` still emit siblings next to the
-  source file.
+  sources. Bare `dream file.dream` (no enclosing `dream.toml`) still uses
+  `<source-dir>/target/debug/` or `target/release/` — never siblings next to the `.dream` file.
 - **Web/Node hosts use stable aliases** `target/web/` and `target/node/` (refreshed by
   `dreamer build` / `dreamer run` from the active profile). Scaffolded `index.html` / `run.mjs`
   always import those paths — no need to edit them when switching debug ↔ release. Existing

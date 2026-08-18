@@ -47,7 +47,7 @@
       });
 
       try {
-        await run("./fluid.wasm");
+        await run("./target/debug/fluid.wasm");
         setHud("drag to paint · auto swirl");
       } catch (e) {
         console.error(e);

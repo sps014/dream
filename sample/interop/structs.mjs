@@ -7,7 +7,7 @@ import { run } from "../../runtime/dream.js";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const wasmPath = process.argv[2] || here + "structs.wasm";
+const wasmPath = process.argv[2] || here + "target/debug/structs.wasm";
 
 globalThis.receiveUser = (u) => {
   console.log("received:", JSON.stringify(u));

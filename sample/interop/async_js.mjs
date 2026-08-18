@@ -11,7 +11,7 @@ import { run } from "../../runtime/dream.js";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const wasmPath = process.argv[2] || here + "async_js.wasm";
+const wasmPath = process.argv[2] || here + "target/debug/async_js.wasm";
 
 globalThis.fetchUser = (id) =>
   new Promise((resolve) => setTimeout(() => resolve({ id, name: `user#${id}` }), 20));

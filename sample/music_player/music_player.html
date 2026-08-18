@@ -362,11 +362,11 @@
     <script type="module">
       let run;
       try {
-        ({ run } = await import("./music_player.web.runtime.js"));
+        ({ run } = await import("./target/release/music_player.web.runtime.js"));
       } catch (_) {
         ({ run } = await import("../../runtime/dream.js"));
       }
-      await run("music_player.wasm");
+      await run("target/release/music_player.wasm");
     </script>
   </body>
 </html>

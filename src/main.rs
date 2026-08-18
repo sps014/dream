@@ -378,8 +378,12 @@ fn main() -> ExitCode {
 
             if native_c {
                 let cc_opt = OptLevel::from_cli(release, optimize);
-                match compile_native_c(std::path::Path::new(&out_path), cc_opt) {
+                match compile_native_c(Path::new(&out_path), cc_opt) {
                     Ok(bin) => {
+                        info!(
+                            "created file: {}",
+                            Path::new(&out_path).with_extension("o").display()
+                        );
                         info!("created file: {}", bin.display());
                         if run_after_compile {
                             info!("Executing native C...");
@@ -463,6 +467,9 @@ fn print_usage(program: &str) {
         r"Example: {} --runtime --web --node sample/interop/js.dream",
         program
     );
+    error!(
+        "  Artifacts land in target/debug/ (or target/release/ with --release), never beside the source"
+    );
 }
 
 /// Walk upward from a file's directory looking for `dream.toml`.
@@ -478,19 +485,20 @@ fn find_project_root(file_path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Derives the output `.wat` path.
+/// Derives the output `.wat` / `.c` path under `target/debug/` or `target/release/`.
 ///
-/// When a `dream.toml` encloses the source file, artifacts go under
-/// `target/debug/` or `target/release/` at the project root. Otherwise they sit beside the source.
+/// Uses the enclosing `dream.toml` directory when one exists; otherwise the source file's
+/// directory. Never writes siblings next to the `.dream` file.
 fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Option<String> {
     let path = Path::new(file_path);
     let file_stem = path.file_stem()?.to_str()?;
-    let out_dir = if let Some(root) = find_project_root(path) {
-        let profile = if release { "release" } else { "debug" };
-        root.join("target").join(profile)
-    } else {
-        path.parent().unwrap_or_else(|| Path::new("")).to_path_buf()
-    };
+    let source_dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let root = find_project_root(path).unwrap_or_else(|| source_dir.to_path_buf());
+    let profile = if release { "release" } else { "debug" };
+    let out_dir = root.join("target").join(profile);
     let ext = if native_c { "c" } else { "wat" };
     let result = out_dir.join(format!("{file_stem}.{ext}"));
     Some(result.to_str()?.to_string())

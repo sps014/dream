@@ -34,7 +34,7 @@
       // Prefer the per-module runtime emitted next to the .wasm (`--runtime --web`).
       let run;
       try {
-        ({ run } = await import("./ocean.web.runtime.js"));
+        ({ run } = await import("./target/debug/ocean.web.runtime.js"));
       } catch (_) {
         ({ run } = await import("../../../runtime/dream.js"));
       }
@@ -50,7 +50,7 @@
       });
 
       try {
-        await run("./ocean.wasm");
+        await run("./target/debug/ocean.wasm");
         setHud("gerstner ocean · webgpu");
       } catch (e) {
         console.error(e);

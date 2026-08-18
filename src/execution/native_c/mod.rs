@@ -186,34 +186,47 @@ pub fn compile_native_c(
     c_path: &Path,
     opt: OptLevel,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let obj = c_path.with_extension("o");
     let bin = c_path.with_extension("bin");
     let src = std::fs::read_to_string(c_path)?;
     let need = runtime_need_from_c_source(&src);
     let toolchain = cc::resolve_cc()?;
     let rt = runtime_archive(opt, need)?;
-    let mut cmd = toolchain.cc_command();
-    cmd.args(opt.cc_flags());
-    cmd.args([
+    let warn = [
         "-std=gnu11",
         "-pthread",
         "-w",
         "-Wno-unused-function",
         "-Wno-unused-variable",
         "-Wno-unused-parameter",
-    ]);
-    cmd.arg(format!("-I{}", native_runtime_include_dir().display()));
-    cmd.arg(c_path);
-    cmd.arg(&rt);
-    cmd.args(["-lm", "-lpthread"]);
-    if let Some(dir) = libdream_dir() {
-        cmd.arg(format!("-L{}", dir.display()));
-        cmd.arg("-ldream");
-        cmd.arg(format!("-Wl,-rpath,{}", dir.display()));
-    }
-    cmd.arg("-o").arg(&bin);
-    let status = cmd.status()?;
+    ];
+    let include = format!("-I{}", native_runtime_include_dir().display());
+
+    let mut ccmd = toolchain.cc_command();
+    ccmd.args(opt.cc_flags());
+    ccmd.args(warn);
+    ccmd.arg(&include);
+    ccmd.arg("-c").arg(c_path).arg("-o").arg(&obj);
+    let status = ccmd.status()?;
     if !status.success() {
-        return Err(format!("cc failed for {}", c_path.display()).into());
+        return Err(format!("cc -c failed for {}", c_path.display()).into());
+    }
+
+    let mut lcmd = toolchain.cc_command();
+    lcmd.args(opt.cc_flags());
+    lcmd.args(warn);
+    lcmd.arg(&obj);
+    lcmd.arg(&rt);
+    lcmd.args(["-lm", "-lpthread"]);
+    if let Some(dir) = libdream_dir() {
+        lcmd.arg(format!("-L{}", dir.display()));
+        lcmd.arg("-ldream");
+        lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
+    }
+    lcmd.arg("-o").arg(&bin);
+    let status = lcmd.status()?;
+    if !status.success() {
+        return Err(format!("cc link failed for {}", obj.display()).into());
     }
     Ok(bin)
 }

@@ -33,7 +33,7 @@
     <script type="module">
       let run;
       try {
-        ({ run } = await import("./elevated.web.runtime.js"));
+        ({ run } = await import("./target/debug/elevated.web.runtime.js"));
       } catch (_) {
         ({ run } = await import("../../../runtime/dream.js"));
       }
@@ -49,7 +49,7 @@
       });
 
       try {
-        await run("./elevated.wasm");
+        await run("./target/debug/elevated.wasm");
         setHud("elevated · webgpu");
       } catch (e) {
         console.error(e);

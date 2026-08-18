@@ -7,7 +7,9 @@
 //! and arithmetic are emitted directly. Memory-backed places (struct fields, array elements) and
 //! allocation reuse the existing runtime/object/string layers.
 
-pub(crate) use crate::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp};
+pub(crate) use crate::{
+    BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp,
+};
 use dream_hir::{scalar_size, LayoutTable};
 use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
@@ -168,8 +170,8 @@ use wasm_types::*;
 pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym, ValueFrame, ValueLocalKind};
 
 // The external API of the backend, at the historical `crate::backend::wasm::…` paths.
-pub(crate) use builder::FuncBuilder;
 pub use builder::print_wasm;
+pub(crate) use builder::FuncBuilder;
 pub use debug_map::DebugModule;
 pub(crate) use emitter::emit_async_poll;
 pub use emitter::emit_function;

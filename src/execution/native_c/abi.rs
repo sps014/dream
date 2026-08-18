@@ -1,9 +1,11 @@
 //! C ABI for the native-C guest: GPU/time/print helpers live in the `dream` cdylib
 //! and are resolved when `cc` links the generated program with `-ldream`.
+//!
+//! Pointer arguments are guest heap addresses from the C runtime, not Rust references.
+#![allow(clippy::missing_safety_doc)]
 
 use crate::execution::host::gpu::{
-    attach_abi_from_wat_path,
-    buffers, compute, device, error, render, surface, textures,
+    attach_abi_from_wat_path, buffers, compute, device, error, render, surface, textures,
 };
 use std::sync::{Mutex, Once};
 
@@ -564,7 +566,13 @@ pub unsafe extern "C" fn cryptoAesGcmEncrypt(
         return alloc_bytes(&[]);
     }
     let nonce = Nonce::from_slice(&nonce_bytes);
-    match cipher.encrypt(nonce, Payload { msg: &plaintext, aad: &aad }) {
+    match cipher.encrypt(
+        nonce,
+        Payload {
+            msg: &plaintext,
+            aad: &aad,
+        },
+    ) {
         Ok(out) => alloc_bytes(&out),
         Err(_) => alloc_bytes(&[]),
     }
@@ -590,7 +598,13 @@ pub unsafe extern "C" fn cryptoAesGcmDecrypt(
         return alloc_bytes(&[0u8]);
     }
     let nonce = Nonce::from_slice(&nonce_bytes);
-    match cipher.decrypt(nonce, Payload { msg: &ciphertext, aad: &aad }) {
+    match cipher.decrypt(
+        nonce,
+        Payload {
+            msg: &ciphertext,
+            aad: &aad,
+        },
+    ) {
         Ok(plain) => {
             let mut tagged = Vec::with_capacity(1 + plain.len());
             tagged.push(1u8);
@@ -683,7 +697,9 @@ pub unsafe extern "C" fn httpRequestStreamBytes(
 
 #[no_mangle]
 pub extern "C" fn httpReadChunk(handle: i32, max_bytes: i32) -> usize {
-    alloc_bytes(&crate::execution::host::http::http_read_chunk(handle, max_bytes))
+    alloc_bytes(&crate::execution::host::http::http_read_chunk(
+        handle, max_bytes,
+    ))
 }
 
 #[no_mangle]

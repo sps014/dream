@@ -17,10 +17,7 @@ pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, s
             if let (
                 Place::Local(l),
                 crate::Rvalue::UnionNew {
-                    ty,
-                    variant,
-                    args,
-                    ..
+                    ty, variant, args, ..
                 },
             ) = (place, rv)
             {
@@ -367,7 +364,8 @@ pub(super) fn emit_value_refs(
                 if retain {
                     out.push_str(&format!("  dream_retain({value});\n"));
                 } else {
-                    let release = crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
+                    let release =
+                        crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
                     out.push_str(&format!("  {release}({value});\n"));
                 }
             }
@@ -384,10 +382,7 @@ pub(super) fn emit_value_refs(
             if field.is_weak || field.is_unowned {
                 continue;
             }
-            let at = format!(
-                "((dream_ptr)((char *)dream_p({base}) + {}))",
-                field.offset
-            );
+            let at = format!("((dream_ptr)((char *)dream_p({base}) + {}))", field.offset);
             if cx.interner.is_value_type(field.ty) {
                 emit_value_refs(out, cx, field.ty, &at, retain);
             } else if cx.interner.is_rc_tracked(field.ty) {
@@ -406,11 +401,7 @@ pub(super) fn emit_value_refs(
     out.push_str("    default: break;\n  }\n");
 }
 
-fn operand_ty(
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    o: &crate::Operand,
-) -> dream_types::TypeId {
+fn operand_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &crate::Operand) -> dream_types::TypeId {
     match o {
         crate::Operand::Copy(Place::Local(l)) => f.local_ty(*l),
         crate::Operand::Copy(Place::Global(g)) => cx

@@ -190,9 +190,9 @@ mod abi_h_lockstep {
                     // SHADOW_STACK_SIZE (16 * WASM_PAGE_SIZE) — skip compound forms.
                     continue;
                 }
-                return rest.parse().unwrap_or_else(|_| {
-                    panic!("bad #define {}: {}", name, rest)
-                });
+                return rest
+                    .parse()
+                    .unwrap_or_else(|_| panic!("bad #define {}: {}", name, rest));
             }
         }
         panic!("missing #define {} in dream_abi.h", name);
@@ -213,22 +213,40 @@ mod abi_h_lockstep {
         assert_eq!(header_define(h, "TAG_ULONG"), TAG_ULONG as i64);
         assert_eq!(header_define(h, "TAG_BYTE"), TAG_BYTE as i64);
         assert_eq!(header_define(h, "TAG_STRUCT_BASE"), TAG_STRUCT_BASE as i64);
-        assert_eq!(header_define(h, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);
-        assert_eq!(header_define(h, "HEADER_TAG_OFFSET"), HEADER_TAG_OFFSET as i64);
+        assert_eq!(
+            header_define(h, "HEAP_HEADER_SIZE"),
+            HEAP_HEADER_SIZE as i64
+        );
+        assert_eq!(
+            header_define(h, "HEADER_TAG_OFFSET"),
+            HEADER_TAG_OFFSET as i64
+        );
         assert_eq!(
             header_define(h, "HEADER_REFCOUNT_OFFSET"),
             HEADER_REFCOUNT_OFFSET as i64
         );
         assert_eq!(header_define(h, "LEN_PREFIX_SIZE"), LEN_PREFIX_SIZE as i64);
-        assert_eq!(header_define(h, "STRING_HEADER_SIZE"), STRING_HEADER_SIZE as i64);
-        assert_eq!(header_define(h, "STRING_UTF8_OFFSET"), STRING_UTF8_OFFSET as i64);
+        assert_eq!(
+            header_define(h, "STRING_HEADER_SIZE"),
+            STRING_HEADER_SIZE as i64
+        );
+        assert_eq!(
+            header_define(h, "STRING_UTF8_OFFSET"),
+            STRING_UTF8_OFFSET as i64
+        );
         assert_eq!(
             header_define(h, "STRING_SCALAR_LEN_OFFSET"),
             STRING_SCALAR_LEN_OFFSET as i64
         );
         assert_eq!(header_define(h, "WASM_PAGE_SIZE"), WASM_PAGE_SIZE as i64);
-        assert_eq!(header_define(h, "INITIAL_HEAP_PAGES"), INITIAL_HEAP_PAGES as i64);
-        assert_eq!(header_define(h, "MAX_MEMORY_PAGES"), MAX_MEMORY_PAGES as i64);
+        assert_eq!(
+            header_define(h, "INITIAL_HEAP_PAGES"),
+            INITIAL_HEAP_PAGES as i64
+        );
+        assert_eq!(
+            header_define(h, "MAX_MEMORY_PAGES"),
+            MAX_MEMORY_PAGES as i64
+        );
         assert_eq!(header_define(h, "STRING_BASE"), STRING_BASE as i64);
         assert_eq!(header_define(h, "ALLOC_LOCK_ADDR"), ALLOC_LOCK_ADDR as i64);
         assert_eq!(header_define(h, "HEAP_PTR_ADDR"), HEAP_PTR_ADDR as i64);
@@ -236,13 +254,22 @@ mod abi_h_lockstep {
             header_define(h, "THREAD_ID_COUNTER_ADDR"),
             THREAD_ID_COUNTER_ADDR as i64
         );
-        assert_eq!(header_define(h, "ASYNC_RQ_HEAD_ADDR"), ASYNC_RQ_HEAD_ADDR as i64);
-        assert_eq!(header_define(h, "ASYNC_RQ_TAIL_ADDR"), ASYNC_RQ_TAIL_ADDR as i64);
+        assert_eq!(
+            header_define(h, "ASYNC_RQ_HEAD_ADDR"),
+            ASYNC_RQ_HEAD_ADDR as i64
+        );
+        assert_eq!(
+            header_define(h, "ASYNC_RQ_TAIL_ADDR"),
+            ASYNC_RQ_TAIL_ADDR as i64
+        );
         assert_eq!(
             header_define(h, "ASYNC_TIMER_HEAD_ADDR"),
             ASYNC_TIMER_HEAD_ADDR as i64
         );
-        assert_eq!(header_define(h, "ASYNC_VCLOCK_ADDR"), ASYNC_VCLOCK_ADDR as i64);
+        assert_eq!(
+            header_define(h, "ASYNC_VCLOCK_ADDR"),
+            ASYNC_VCLOCK_ADDR as i64
+        );
         assert_eq!(
             header_define(h, "HEADER_LOCK_WORD_SIZE"),
             HEADER_LOCK_WORD_SIZE as i64

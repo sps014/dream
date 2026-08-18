@@ -999,9 +999,9 @@ mod tests {
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &ctx.interner));
-        let has_retain = func.blocks[0].stmts.iter().any(|st| {
-            matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == rec.0)
-        });
+        let has_retain = func.blocks[0].stmts.iter().any(
+            |st| matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == rec.0),
+        );
         assert!(has_retain, "still-live interface arg should Retain");
     }
 }

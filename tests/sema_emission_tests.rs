@@ -84,11 +84,7 @@ fn test_hir_emission_while_loop() {
         "missing loop comparison:\n{}",
         wat
     );
-    assert!(
-        wat.contains("loop"),
-        "missing structured loop:\n{}",
-        wat
-    );
+    assert!(wat.contains("loop"), "missing structured loop:\n{}", wat);
     assert!(
         !wat.contains("br_table"),
         "sync while should not use br_table dispatch:\n{}",
@@ -1082,11 +1078,7 @@ fn test_indirect_call_emits_table_and_signature() {
         "function table missing:\n{}",
         wat
     );
-    assert!(
-        wat.contains("$add"),
-        "elem section missing:\n{}",
-        wat
-    );
+    assert!(wat.contains("$add"), "elem section missing:\n{}", wat);
     assert!(
         wat.contains("(type $sig_i32_i32__i32"),
         "call_indirect signature missing:\n{}",
@@ -1898,7 +1890,8 @@ fn test_js_fuses_get_as_string_at_typed_boundary() {
         wat
     );
     assert!(
-        !wat.replace("call $js_get_as_string", "").contains("call $js_get"),
+        !wat.replace("call $js_get_as_string", "")
+            .contains("call $js_get"),
         "should not emit plain js.get:\n{}",
         wat
     );

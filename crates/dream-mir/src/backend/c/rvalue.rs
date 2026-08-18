@@ -351,9 +351,8 @@ fn emit_concat_parts(cx: &Cx<'_>, f: &crate::MirFunction, parts: &[crate::Operan
     if parts.len() == 2 {
         return format!("dream_concat_strings({first}, {second})");
     }
-    let mut s = format!(
-        "({{ dream_ptr __r = dream_concat_strings({first}, {second}); dream_ptr __n; "
-    );
+    let mut s =
+        format!("({{ dream_ptr __r = dream_concat_strings({first}, {second}); dream_ptr __n; ");
     for p in &parts[2..] {
         s.push_str(&format!(
             "__n = dream_concat_strings(__r, {}); dream_release(__r); __r = __n; ",
@@ -381,9 +380,8 @@ pub(super) fn emit_union_new_at(
         .find(|v| v.discriminant as usize == variant)
         .unwrap_or_else(|| crate::internal_error!("missing variant {variant}"));
     let size = u.size;
-    let mut s = format!(
-        "memset(dream_p({dest}), 0, {size}); *(int32_t*)dream_p({dest}) = {variant}; "
-    );
+    let mut s =
+        format!("memset(dream_p({dest}), 0, {size}); *(int32_t*)dream_p({dest}) = {variant}; ");
     for (i, arg) in args.iter().enumerate() {
         let fld = &var.fields[i];
         if cx.interner.is_value_type(fld.ty) {

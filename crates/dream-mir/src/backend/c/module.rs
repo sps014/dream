@@ -429,10 +429,7 @@ fn emit_func(out: &mut String, cx: &Cx<'_>, f: &MirFunction) {
                 "  _Alignas(8) unsigned char __vs{i}[{size}] = {{0}};\n  dream_ptr l{i} = (dream_ptr)(uintptr_t)__vs{i};\n"
             ));
         } else {
-            out.push_str(&format!(
-                "  {} l{i} = 0;\n",
-                c_ty(cx.interner, decl.ty)
-            ));
+            out.push_str(&format!("  {} l{i} = 0;\n", c_ty(cx.interner, decl.ty)));
         }
     }
     out.push_str(&format!("  goto L{};\n", f.entry.0));

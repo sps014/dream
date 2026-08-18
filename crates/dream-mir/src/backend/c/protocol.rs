@@ -274,7 +274,9 @@ fn emit_struct_hash_code(
     layout: &dream_hir::TypeLayout,
 ) {
     let fn_name = c_ident(&format!("{}_hash_code", layout.name));
-    out.push_str(&format!("int32_t {fn_name}(dream_ptr p) {{\n  int32_t h = 17;\n"));
+    out.push_str(&format!(
+        "int32_t {fn_name}(dream_ptr p) {{\n  int32_t h = 17;\n"
+    ));
     for f in &layout.fields {
         emit_hash_field(out, cx, f);
     }
@@ -309,9 +311,13 @@ fn emit_hash_field(out: &mut String, cx: &Cx<'_>, f: &dream_hir::FieldLayout) {
 
 fn emit_object_hash_code_router(out: &mut String, cx: &Cx<'_>) {
     out.push_str("int32_t dream_object_hash_code(dream_ptr p) {\n");
-    out.push_str("  int32_t tag;\n  if (!p) return 0;\n  tag = dream_object_tag(p);\n  switch (tag) {\n");
+    out.push_str(
+        "  int32_t tag;\n  if (!p) return 0;\n  tag = dream_object_tag(p);\n  switch (tag) {\n",
+    );
     out.push_str("    case TAG_INT: case TAG_UINT: case TAG_BOOL: case TAG_CHAR: case TAG_BYTE: return *(int32_t *)dream_p(p);\n");
-    out.push_str("    case TAG_LONG: case TAG_ULONG: return dream_hash_long(*(int64_t *)dream_p(p));\n");
+    out.push_str(
+        "    case TAG_LONG: case TAG_ULONG: return dream_hash_long(*(int64_t *)dream_p(p));\n",
+    );
     out.push_str("    case TAG_FLOAT: return dream_bitcast_f32(*(float *)dream_p(p));\n");
     out.push_str("    case TAG_DOUBLE: return dream_hash_double(*(double *)dream_p(p));\n");
     out.push_str("    case TAG_STRING: return dream_string_hash(p);\n");

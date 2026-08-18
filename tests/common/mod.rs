@@ -65,7 +65,10 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        (dream_mir::backend::wasm::emit_program(&mir, interner), count)
+        (
+            dream_mir::backend::wasm::emit_program(&mir, interner),
+            count,
+        )
     })
 }
 

@@ -1,5 +1,6 @@
 //! `dreamer test`: install (incl. dev-deps), then invoke `dream test` on the project's `tests/`.
 
+use crate::compile_flags::CompileFlags;
 use crate::workspace::Workspace;
 use anyhow::{bail, Result};
 use std::path::Path;
@@ -8,6 +9,23 @@ use std::process::Command;
 pub fn run(
     start_dir: &Path,
     release: bool,
+    filter: Option<String>,
+    package: Option<&str>,
+) -> Result<()> {
+    run_with(
+        start_dir,
+        CompileFlags {
+            release,
+            ..CompileFlags::default()
+        },
+        filter,
+        package,
+    )
+}
+
+pub fn run_with(
+    start_dir: &Path,
+    flags: CompileFlags,
     filter: Option<String>,
     package: Option<&str>,
 ) -> Result<()> {
@@ -23,10 +41,8 @@ pub fn run(
 
     let dream_bin = crate::dream_bin::locate()?;
     let mut cmd = Command::new(&dream_bin);
+    flags.apply(&mut cmd);
     cmd.arg("test");
-    if release {
-        cmd.arg("--release");
-    }
     if let Some(f) = filter {
         cmd.arg("--filter").arg(f);
     }

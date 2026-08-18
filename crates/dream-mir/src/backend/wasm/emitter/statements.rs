@@ -421,7 +421,12 @@ impl Emitter<'_> {
 
     /// Spills one named local into its `i64` pool global, widening/reinterpreting to preserve the
     /// exact bits so the host can decode the value back using the variable's declared kind.
-    fn emit_var_spill(&mut self, local: u32, global: u32, kind: crate::backend::wasm::debug_map::SpillKind) {
+    fn emit_var_spill(
+        &mut self,
+        local: u32,
+        global: u32,
+        kind: crate::backend::wasm::debug_map::SpillKind,
+    ) {
         use crate::backend::wasm::debug_map::SpillKind as K;
         self.f.local_get(&local.to_string());
         match kind {

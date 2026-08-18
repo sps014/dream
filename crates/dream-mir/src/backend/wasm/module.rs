@@ -55,7 +55,10 @@ pub fn emit_module_bytes(
     debug: bool,
     debug_info: bool,
     export_user_fns: bool,
-) -> (Vec<u8>, Option<crate::backend::wasm::debug_map::DebugModule>) {
+) -> (
+    Vec<u8>,
+    Option<crate::backend::wasm::debug_map::DebugModule>,
+) {
     emit_module_encoded(mir, interner, debug, debug_info, export_user_fns)
 }
 
@@ -81,7 +84,10 @@ fn emit_module_encoded(
     debug: bool,
     debug_info: bool,
     export_user_fns: bool,
-) -> (Vec<u8>, Option<crate::backend::wasm::debug_map::DebugModule>) {
+) -> (
+    Vec<u8>,
+    Option<crate::backend::wasm::debug_map::DebugModule>,
+) {
     let locate_panics = debug || debug_info;
     let ModuleTables {
         symbols,

@@ -1,7 +1,7 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::compile_and_run;
+use dream::execution::native_c::{compile_native_c, run_native_bin};
 use dream::execution::wasm_runner::execute_wasm;
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
@@ -210,7 +210,7 @@ fn main() -> ExitCode {
     }
     let _ = crate_type_explicit;
 
-    if (release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
+    if !native_c && (release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
         error!(
             "--release / -O/--optimize requires the compiler to be built with the `wasm-opt` feature \
              (enabled by default); this build was compiled without it"
@@ -294,6 +294,8 @@ fn main() -> ExitCode {
         };
         let opts = dream::driver::test::TestOptions {
             release,
+            optimize,
+            native_c,
             filter: test_filter,
             verbose,
         };
@@ -329,13 +331,13 @@ fn main() -> ExitCode {
     } else {
         Target::Wasm
     })
-        .with_release(release)
-        .with_debug_info(debug_info)
-        .with_runtimes(runtimes)
-        .with_compile_targets(compile_targets)
-        .with_emit_abi(emit_abi)
-        .with_crate_type(crate_type)
-        .with_emit_cwasm(release && compile_targets.native && !native_c);
+    .with_release(release)
+    .with_debug_info(debug_info)
+    .with_runtimes(runtimes)
+    .with_compile_targets(compile_targets)
+    .with_emit_abi(emit_abi)
+    .with_crate_type(crate_type)
+    .with_emit_cwasm(release && compile_targets.native && !native_c);
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
@@ -374,19 +376,29 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
 
-            if run_after_compile {
-                if native_c {
-                    info!("Executing native C...");
-                    if let Err(e) = compile_and_run(&out_path, release) {
-                        error!("Execution failed: {}", e);
+            if native_c {
+                let cc_opt = OptLevel::from_cli(release, optimize);
+                match compile_native_c(std::path::Path::new(&out_path), cc_opt) {
+                    Ok(bin) => {
+                        info!("created file: {}", bin.display());
+                        if run_after_compile {
+                            info!("Executing native C...");
+                            if let Err(e) = run_native_bin(&bin, &out_path) {
+                                error!("Execution failed: {}", e);
+                                return ExitCode::FAILURE;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("cc failed: {}", e);
                         return ExitCode::FAILURE;
                     }
-                } else {
-                    info!("Executing via Wasmtime...");
-                    if let Err(e) = execute_wasm(&out_path) {
-                        error!("Execution failed: {}", e);
-                        return ExitCode::FAILURE;
-                    }
+                }
+            } else if run_after_compile {
+                info!("Executing via Wasmtime...");
+                if let Err(e) = execute_wasm(&out_path) {
+                    error!("Execution failed: {}", e);
+                    return ExitCode::FAILURE;
                 }
             }
             ExitCode::SUCCESS
@@ -406,18 +418,16 @@ fn print_usage(program: &str) {
     );
     error!("  -v, --verbose         Print progress information");
     error!(
-        "  --release             Trimmed build + wasm-opt (-O3; -Os with --web); native also emits .cwasm"
+        "  --release             Trimmed build; wasm-opt / cc default -O3 (-Os with --web); native wasm also emits .cwasm"
     );
     error!(
         "  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)"
     );
     error!(
-        "  -O, --optimize[=LVL]  wasm-opt level (LVL: 0-4, s, z; default: s); overrides --release"
+        "  -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z; default: s); overrides --release"
     );
     error!("  --backend wasm|c     Codegen backend (default: wasm / Wasmtime)");
-    error!(
-        "  --native-c           Same as --backend c. `run --backend c` compiles with cc and execs"
-    );
+    error!("  --native-c           Same as --backend c. Compiles with cc to .bin; `run` execs it");
     error!(
         "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
     );

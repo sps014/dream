@@ -139,9 +139,9 @@ pub(super) fn emit_store(
             if let crate::Rvalue::Use(Operand::Copy(Place::Local(src))) = rv {
                 let src_ty = f.local_ty(*src);
                 if !cx.interner.is_value_type(src_ty)
-                    && cx.nstruct(src_ty).is_some_and(|layout| {
-                        layout.size == elem_size(cx, f.local_ty(*l))
-                    })
+                    && cx
+                        .nstruct(src_ty)
+                        .is_some_and(|layout| layout.size == elem_size(cx, f.local_ty(*l)))
                 {
                     return format!("l{} = l{}", l.0, src.0);
                 }
@@ -195,7 +195,10 @@ pub(super) fn emit_store(
                     rhs,
                     fld.ty,
                     &format!("(char*)dream_p(l{}) + {}", base.0, fld.offset),
-                    &format!("((dream_ptr)((char*)dream_p(l{}) + {}))", base.0, fld.offset),
+                    &format!(
+                        "((dream_ptr)((char*)dream_p(l{}) + {}))",
+                        base.0, fld.offset
+                    ),
                     true,
                 );
             }
@@ -309,7 +312,9 @@ fn memcpy_value(
 ) -> String {
     let size = elem_size(cx, ty);
     let mut s = if value_rvalue_allocates(rv) {
-        format!("({{ dream_ptr __v = {rhs}; memcpy({dest}, dream_p(__v), {size}); dream_free(__v); ")
+        format!(
+            "({{ dream_ptr __v = {rhs}; memcpy({dest}, dream_p(__v), {size}); dream_free(__v); "
+        )
     } else {
         format!("memcpy({dest}, dream_p({rhs}), {size}); ")
     };
@@ -386,9 +391,9 @@ pub(super) fn is_moved_into_union(f: &crate::MirFunction, local: crate::Local) -
         let crate::Rvalue::UnionNew { args, .. } = rv else {
             return false;
         };
-        args.iter().any(|arg| {
-            matches!(arg, crate::Operand::Copy(crate::Place::Local(src)) if *src == local)
-        })
+        args.iter().any(
+            |arg| matches!(arg, crate::Operand::Copy(crate::Place::Local(src)) if *src == local),
+        )
     })
 }
 

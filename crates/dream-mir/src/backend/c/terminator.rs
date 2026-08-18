@@ -4,12 +4,7 @@ use crate::backend::c::places::emit_operand;
 use crate::{BlockId, Local, Operand, Place, Terminator};
 use dream_types::TyKind;
 
-pub(super) fn emit_term(
-    out: &mut String,
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    t: &Terminator,
-) {
+pub(super) fn emit_term(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, t: &Terminator) {
     match t {
         Terminator::Goto(b) => out.push_str(&format!("  goto L{};\n", b.0)),
         Terminator::If {
@@ -148,12 +143,7 @@ fn emit_switch(
     out.push_str("  }\n");
 }
 
-fn emit_value_teardown(
-    out: &mut String,
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    skip: Option<Local>,
-) {
+fn emit_value_teardown(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, skip: Option<Local>) {
     if f.is_async
         || f.blocks
             .iter()

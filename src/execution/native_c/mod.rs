@@ -2,6 +2,7 @@
 
 pub mod abi;
 
+use crate::driver::wasm_opt::OptLevel;
 use dream_mir::backend::c::{native_runtime_c_files, native_runtime_include_dir};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -9,22 +10,16 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-pub fn compile_and_run(c_path: &str, release: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let bin = compile_native_c(Path::new(c_path), release)?;
-    let mut cmd = Command::new(&bin);
-    apply_native_run_env(&mut cmd, c_path);
-    let status = cmd.status()?;
-    if !status.success() {
-        return Err(format!("native C program failed (status {status:?})").into());
-    }
-    Ok(())
+pub fn compile_and_run(c_path: &str, opt: OptLevel) -> Result<(), Box<dyn std::error::Error>> {
+    let bin = compile_native_c(Path::new(c_path), opt)?;
+    run_native_bin(&bin, c_path)
 }
 
 pub fn compile_and_capture(
     c_path: &str,
-    release: bool,
+    opt: OptLevel,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_native_c(Path::new(c_path), release)?;
+    let bin = compile_native_c(Path::new(c_path), opt)?;
     let mut cmd = Command::new(&bin);
     apply_native_run_env(&mut cmd, c_path);
     cmd.stdout(Stdio::piped());
@@ -55,6 +50,16 @@ pub fn compile_and_capture(
         .into());
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+pub fn run_native_bin(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::new(bin);
+    apply_native_run_env(&mut cmd, c_path);
+    let status = cmd.status()?;
+    if !status.success() {
+        return Err(format!("native C program failed (status {status:?})").into());
+    }
+    Ok(())
 }
 
 fn apply_native_run_env(cmd: &mut Command, c_path: &str) {
@@ -105,13 +110,14 @@ fn libdream_dir() -> Option<PathBuf> {
     dirs.into_iter().find(|d| d.join(name).exists())
 }
 
-fn runtime_archive(release: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn runtime_archive(opt: OptLevel) -> Result<PathBuf, Box<dyn std::error::Error>> {
     static LOCK: Mutex<()> = Mutex::new(());
-    let dir = PathBuf::from("target/dream-native-rt").join(if release { "release" } else { "debug" });
+    let dir = PathBuf::from("target/dream-native-rt").join(opt.native_rt_subdir());
     std::fs::create_dir_all(&dir)?;
     // Cross-process: each `dream` PID has its own Mutex, so parallel probe jobs can race `ar`.
     let lock_file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(dir.join(".lock"))?;
@@ -123,7 +129,12 @@ fn runtime_archive(release: bool) -> Result<PathBuf, Box<dyn std::error::Error>>
         .into_iter()
         .filter_map(|p| std::fs::metadata(p).ok()?.modified().ok())
         .max();
-    let stale = match (newest, std::fs::metadata(&stamp).ok().and_then(|m| m.modified().ok())) {
+    let stale = match (
+        newest,
+        std::fs::metadata(&stamp)
+            .ok()
+            .and_then(|m| m.modified().ok()),
+    ) {
         (Some(src), Some(st)) => src > st,
         _ => true,
     };
@@ -131,11 +142,7 @@ fn runtime_archive(release: bool) -> Result<PathBuf, Box<dyn std::error::Error>>
         return Ok(archive);
     }
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
-    if release {
-        cflags.extend(["-O3", "-flto", "-march=native"]);
-    } else {
-        cflags.push("-O2");
-    }
+    cflags.extend(opt.cc_flags());
     let mut objs = Vec::new();
     for f in native_runtime_c_files() {
         let obj = dir.join(f.file_name().unwrap()).with_extension("o");
@@ -164,20 +171,14 @@ fn runtime_archive(release: bool) -> Result<PathBuf, Box<dyn std::error::Error>>
     Ok(archive)
 }
 
-pub fn compile_native_c(c_path: &Path, release: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn compile_native_c(
+    c_path: &Path,
+    opt: OptLevel,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let bin = c_path.with_extension("bin");
-    let rt = runtime_archive(release)?;
+    let rt = runtime_archive(opt)?;
     let mut cmd = Command::new("cc");
-    if release {
-        cmd.args(["-O3", "-flto", "-march=native"]);
-    } else {
-        cmd.args([
-            "-O0",
-            "-pipe",
-            "-fno-asynchronous-unwind-tables",
-            "-fno-unwind-tables",
-        ]);
-    }
+    cmd.args(opt.cc_flags());
     cmd.args([
         "-std=gnu11",
         "-pthread",

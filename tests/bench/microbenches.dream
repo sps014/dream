@@ -85,7 +85,8 @@ fun bench_string_eq(iters: int): void {
     let lit = "abcdefghijklmnopqrstuvwxyz0123456789";
     let a = lit.substring(0, lit.length);
     let b = lit.substring(0, lit.length);
-    let c = "abcdefghijklmnopqrstuvwxyz0123456780".substring(0, 36);
+    let other = "abcdefghijklmnopqrstuvwxyz0123456780";
+    let c = other.substring(0, other.length);
     let sw = Stopwatch();
     let hits = 0;
     let i = 0;

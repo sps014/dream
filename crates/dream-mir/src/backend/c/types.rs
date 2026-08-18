@@ -4,8 +4,7 @@ use dream_types::{PrimTy, TyKind, TypeId};
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
-const NATIVE_RT_HEADER: &str =
-    include_str!("../../runtime/c/native/include/dream_rt_native.h");
+const NATIVE_RT_HEADER: &str = include_str!("../../runtime/c/native/include/dream_rt_native.h");
 
 /// Names declared in `dream_rt_native.h` (including `static inline` helpers).
 pub(super) fn native_header_declares(name: &str) -> bool {
@@ -17,7 +16,10 @@ fn parse_native_header_fns() -> HashSet<String> {
     let mut names = HashSet::new();
     for raw in NATIVE_RT_HEADER.lines() {
         let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with("//") || line.starts_with('*')
+        if line.is_empty()
+            || line.starts_with('#')
+            || line.starts_with("//")
+            || line.starts_with('*')
         {
             continue;
         }
@@ -30,11 +32,7 @@ fn parse_native_header_fns() -> HashSet<String> {
             .last()
             .unwrap_or("")
             .trim_start_matches('*');
-        if !ident.is_empty()
-            && ident
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        if !ident.is_empty() && ident.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             names.insert(ident.to_string());
         }
     }
@@ -75,9 +73,7 @@ pub(super) fn c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> &'static
         TyKind::Prim(PrimTy::Double) => "double",
         TyKind::Prim(PrimTy::Float) => "float",
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "int64_t",
-        TyKind::Prim(
-            PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte,
-        )
+        TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte)
         | TyKind::Enum(_) => "int32_t",
         _ => "dream_ptr",
     }

@@ -70,9 +70,6 @@ impl<'a> Cx<'a> {
     }
 
     pub(super) fn func_index(&self, f: &MirFunction) -> usize {
-        *self
-            .ft
-            .get(&(f.def, f.instance.clone()))
-            .unwrap_or(&0)
+        *self.ft.get(&(f.def, f.instance.clone())).unwrap_or(&0)
     }
 }

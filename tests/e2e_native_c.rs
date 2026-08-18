@@ -1,6 +1,7 @@
 //! Native C golden lane: same `tests/cases` fixtures as Wasmtime, via `Target::NativeC` + `cc`.
 
 use dream::driver::compiler::{Compiler, Target};
+use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native_c::compile_and_capture;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -56,7 +57,10 @@ fn run_native_case(dream_file: &Path, release: bool) {
         String::new()
     };
 
-    let run = compile_and_capture(c_path.to_str().unwrap(), release);
+    let run = compile_and_capture(
+        c_path.to_str().unwrap(),
+        if release { OptLevel::O3 } else { OptLevel::O0 },
+    );
     let _ = fs::remove_file(&c_path);
     let _ = fs::remove_file(c_path.with_extension("bin"));
 

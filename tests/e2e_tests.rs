@@ -590,6 +590,7 @@ fn dream_test_runs_attr_marked_functions() {
             release: false,
             filter: None,
             verbose: false,
+            ..Default::default()
         },
     )
     .expect("dream test should succeed");

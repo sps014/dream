@@ -39,7 +39,10 @@ impl NativeLayouts {
             }
             if !progress {
                 for (ty, wasm) in rest {
-                    structs.insert(ty, force_struct(interner, &structs, &mir.layouts.unions, &wasm));
+                    structs.insert(
+                        ty,
+                        force_struct(interner, &structs, &mir.layouts.unions, &wasm),
+                    );
                 }
                 break;
             }
@@ -47,7 +50,10 @@ impl NativeLayouts {
         }
         let mut unions = IndexMap::new();
         for (ty, wasm) in &mir.layouts.unions {
-            unions.insert(*ty, relayout_union(interner, &structs, &mir.layouts.unions, wasm));
+            unions.insert(
+                *ty,
+                relayout_union(interner, &structs, &mir.layouts.unions, wasm),
+            );
         }
         Self { structs, unions }
     }

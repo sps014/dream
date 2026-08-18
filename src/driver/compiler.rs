@@ -371,13 +371,7 @@ impl Compiler {
         if matches!(self.target, Target::NativeC) {
             fs::write(out_path, &bytes)?;
             info!("created file: {}", out_path);
-            emit_wasm_and_abi(
-                out_path,
-                ast.get_root(),
-                &gpu,
-                &live_imports,
-                self.emit_abi,
-            )?;
+            emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
             return Ok(());
         }
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
@@ -396,13 +390,7 @@ impl Compiler {
         }
 
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        emit_wasm_and_abi(
-            out_path,
-            ast.get_root(),
-            &gpu,
-            &live_imports,
-            self.emit_abi,
-        )?;
+        emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
 
         // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`).
         if !self.runtimes.is_empty() {

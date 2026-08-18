@@ -29,7 +29,14 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
     }
 
     let triples = resolve_pack_targets(target_args)?;
-    super::build::compile_entry(&workspace, true, Some(RunTarget::Native))?;
+    super::build::compile_entry(
+        &workspace,
+        &crate::compile_flags::CompileFlags {
+            release: true,
+            ..crate::compile_flags::CompileFlags::default()
+        },
+        Some(RunTarget::Native),
+    )?;
 
     let wasm_path = artifact_wasm_path(&workspace)?;
     if !wasm_path.is_file() {

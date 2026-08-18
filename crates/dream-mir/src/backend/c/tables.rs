@@ -1,7 +1,7 @@
+use crate::abi::TAG_STRUCT_BASE;
 use crate::backend::c::types::c_ident;
 use crate::backend::wasm::func_symbol;
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
-use crate::abi::TAG_STRUCT_BASE;
 use dream_types::{DefId, TypeId};
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -34,7 +34,10 @@ pub(super) fn struct_tags(mir: &Mir) -> HashMap<TypeId, i32> {
         .collect()
 }
 
-pub(super) fn intern_strings(mir: &Mir, interner: &dream_types::TypeInterner) -> IndexMap<String, String> {
+pub(super) fn intern_strings(
+    mir: &Mir,
+    interner: &dream_types::TypeInterner,
+) -> IndexMap<String, String> {
     let mut found = Vec::new();
     for f in &mir.functions {
         scan_func(f, &mut found);
@@ -124,9 +127,7 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
                 strings_in_op(a, out);
             }
         }
-        Statement::InterfaceCall {
-            receiver, args, ..
-        } => {
+        Statement::InterfaceCall { receiver, args, .. } => {
             strings_in_op(receiver, out);
             for a in args {
                 strings_in_op(a, out);
@@ -210,9 +211,7 @@ fn strings_in_term(t: &Terminator, out: &mut Vec<String>) {
     match t {
         Terminator::If { cond, .. } => strings_in_op(cond, out),
         Terminator::Switch { value, .. } => strings_in_op(value, out),
-        Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
-            strings_in_op(o, out)
-        }
+        Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => strings_in_op(o, out),
         Terminator::TailCall { args, .. } => {
             for a in args {
                 strings_in_op(a, out);
@@ -275,9 +274,7 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
                 strings_in_op(a, out);
             }
         }
-        Rvalue::InterfaceCall {
-            receiver, args, ..
-        } => {
+        Rvalue::InterfaceCall { receiver, args, .. } => {
             strings_in_op(receiver, out);
             for a in args {
                 strings_in_op(a, out);

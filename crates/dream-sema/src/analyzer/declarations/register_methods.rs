@@ -98,11 +98,7 @@ impl<'a> Analyzer<'a> {
                 generic_param_names(&method.generic_parameters),
             );
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) {
-                if let Some(def) = self
-                    .type_ctx
-                    .defs
-                    .lookup(DefKind::Function, &mangled_name)
-                {
+                if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled_name) {
                     self.intrinsic_defs.push((def, key));
                 }
             }

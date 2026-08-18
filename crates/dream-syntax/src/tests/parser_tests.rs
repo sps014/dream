@@ -1627,6 +1627,119 @@ fn test_parse_interpolated_string_with_inner_string() {
 }
 
 #[test]
+fn test_parse_method_call_on_string_literal() {
+    let code = "fun f(): string { return \"hi\".substring(0, 1); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MethodCall(recv, method, _, args))) => {
+            assert_eq!(method.text, "substring");
+            assert!(matches!(**recv, ExpressionNode::Literal(Type::String(_))));
+            assert_eq!(args.len(), 2);
+        }
+        other => panic!("expected method call on string literal, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_method_call_on_number_literal() {
+    let code = "fun f(): int { return 15.clamp(0, 10); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MethodCall(recv, method, _, args))) => {
+            assert_eq!(method.text, "clamp");
+            assert!(matches!(**recv, ExpressionNode::Literal(Type::Integer(_))));
+            assert_eq!(args.len(), 2);
+        }
+        other => panic!("expected method call on int literal, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_method_call_on_bool_literal() {
+    let code = "fun f(): int { return true.to_int(); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MethodCall(recv, method, _, args))) => {
+            assert_eq!(method.text, "to_int");
+            assert!(matches!(**recv, ExpressionNode::Literal(Type::Boolean(_))));
+            assert!(args.is_empty());
+        }
+        other => panic!("expected method call on bool literal, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_method_call_on_char_literal() {
+    let code = "fun f(): bool { return 'A'.is_alpha(); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MethodCall(recv, method, _, args))) => {
+            assert_eq!(method.text, "is_alpha");
+            assert!(matches!(**recv, ExpressionNode::Literal(Type::Char(_))));
+            assert!(args.is_empty());
+        }
+        other => panic!("expected method call on char literal, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_member_access_on_array_literal() {
+    let code = "fun f(): int { return [1, 2].length; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MemberAccess(recv, member))) => {
+            assert_eq!(member.text, "length");
+            assert!(matches!(**recv, ExpressionNode::ArrayLiteral(_, _)));
+        }
+        other => panic!("expected member access on array literal, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_method_call_on_interpolated_string() {
+    let code = "fun f(y: string): int { return $\"x{y}\".byte_size(); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MethodCall(recv, method, _, args))) => {
+            assert_eq!(method.text, "byte_size");
+            assert!(matches!(**recv, ExpressionNode::Binary(_, _, _)));
+            assert!(args.is_empty());
+        }
+        other => panic!(
+            "expected method call on interpolated string, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_parse_member_access_on_set_literal() {
+    let code = "fun f(): int { return {1, 2}.length; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    match &program.functions[0].body[0] {
+        StatementNode::Return(Some(ExpressionNode::MemberAccess(recv, member))) => {
+            assert_eq!(member.text, "length");
+            assert!(matches!(**recv, ExpressionNode::SetLiteral(_, _)));
+        }
+        other => panic!("expected member access on set literal, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_hex_literal() {
     let code = "fun main(): int { return 0xFF; }";
     let arena = bumpalo::Bump::new();

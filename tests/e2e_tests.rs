@@ -272,6 +272,7 @@ const SMOKE_CASES: &[&str] = &[
     "map_basics",
     "interfaces",
     "object_protocol",
+    "literal_methods",
     "diagnostics",
     "last_use_destroy",
     "struct_last_use_move",

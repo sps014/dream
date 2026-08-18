@@ -1,0 +1,12 @@
+import system;
+import system.text;
+
+fun main(): void {
+    System.println("Hello, World".substring(0, 5));
+    System.println(15.clamp(0, 10));
+    System.println(true.to_int());
+    System.println('A'.is_alpha());
+    System.println([1, 2, 3].length);
+    let y = "hi";
+    System.println($"x{y}".byte_size());
+}

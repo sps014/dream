@@ -13,6 +13,7 @@
 
 #[cfg(feature = "c-ffi")]
 mod c_ffi;
+mod c_link;
 mod console;
 mod crypto;
 mod datetime;
@@ -33,6 +34,7 @@ mod worker;
 
 #[cfg(feature = "c-ffi")]
 pub use c_ffi::{attach_c_abi_from_json, attach_c_abi_from_wat_path, link_c_ffi_imports};
+pub use c_link::{cc_link_flags, find_library_path, read_c_libs_from_abi, search_roots_for_artifact};
 pub use console::{enable_ansi_support, link_console_functions};
 pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;

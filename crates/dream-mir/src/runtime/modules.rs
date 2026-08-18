@@ -142,6 +142,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
 const NATIVE_CORE_C: &[&str] = &[
     "heap.c",
     "strings.c",
+    "ffi.c",
     "object.c",
     "format.c",
     "panic.c",

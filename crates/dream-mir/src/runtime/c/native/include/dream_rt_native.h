@@ -497,6 +497,12 @@ dream_ptr dream_object_to_string(dream_ptr p);
 void dream_print_object(dream_ptr p);
 void dream_panic(dream_ptr msg);
 
+char *dream_string_to_utf8(dream_ptr s);
+uint16_t *dream_string_to_utf16z(dream_ptr s);
+dream_ptr dream_utf8_to_string(const char *s);
+int64_t dream_ffi_read_ptr(int64_t base, int32_t index);
+dream_ptr dream_ffi_read_cstring(int64_t ptr);
+
 dream_ptr dream_int_to_string(int32_t v);
 dream_ptr dream_uint_to_string(int32_t v);
 dream_ptr dream_long_to_string(int64_t v);

@@ -111,7 +111,7 @@ sqlite3_exec(db, "SELECT 1", row_cb, 0L, ref err);
 
 ## Auto-linking libraries
 
-The runtime searches for the requested library in this order:
+Wasmtime (`dream run`) **dlopens** those libraries at runtime. `--native-c` / `--backend c` **links** the same `c_libs` list from the sibling `.abi.json` (`-L` / `-l` / `-rpath`). Search order:
 
 1. `native/<lib>` **next to** the source (perfect for vendored copies).
 2. The directory containing the source.
@@ -144,17 +144,18 @@ The `sample/sqlite/` folder contains two runnable samples:
 - `raw.dream` — direct `@c` bindings to libsqlite3, opening an
   in-memory database and executing DDL/DML.
 - `db.dream` — a small `Database` class that creates `./demo.db` in
-  the process working directory, inserts rows, and prints `SELECT` results via a C callback that
-  uses `dream_ffi.read_ptr` / `dream_ffi.read_cstring` to read host `char**` values.
+  the process working directory and runs DDL/DML/`SELECT` through `@c` sqlite3
+  (null C callback is `0L`).
 
 Run either with:
 
 ```bash
 dream run sample/sqlite/raw.dream
 dream run sample/sqlite/db.dream
+dream run --native-c sample/sqlite/db.dream
 ```
 
-Expected `db.dream` / packed `sqlite-demo` output includes the selected rows:
+Expected `db.dream` / packed `sqlite-demo` output:
 
 ```text
 opened demo.db (cwd=…)
@@ -162,9 +163,6 @@ DROP rc=0
 CREATE rc=0
 INSERT rc=0
 --- SELECT ---
-1 | apple
-2 | pear
-3 | kiwi
 SELECT rc=0
 done
 ```
@@ -180,7 +178,8 @@ dreamer pack                 # → target/pack/sqlite-demo-<os>-<arch>
 Both work out-of-the-box on macOS and on Linux distributions that ship libsqlite3 in a standard
 library dir; on hosts that don't, drop a `native/libsqlite3.*` into `sample/sqlite/` (or set
 `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`). The packed binary still needs the system sqlite3
-shared library at run time unless you vendor it.
+shared library at run time unless you vendor it. `dream run --native-c` uses the same library
+search when linking.
 
 ## Host helpers for C pointers
 

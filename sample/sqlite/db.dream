@@ -1,9 +1,9 @@
-// Create a local SQLite file, insert rows, then SELECT them back through a C callback.
+// Create a local SQLite file, insert rows, then SELECT them back.
 //
 // Run from any cwd:
 //   dream run /path/to/Dream/sample/sqlite/db.dream
 //
-// Creates `./demo.db` in the process working directory and prints query rows.
+// Creates `./demo.db` in the process working directory.
 import system;
 
 @native
@@ -19,45 +19,10 @@ extern fun sqlite3_close(db: long): int;
 extern fun sqlite3_exec(
     db: long,
     sql: string,
-    callback: fun(long, int, long, long): int,
+    callback: long,
     arg: long,
     ref errmsg: long
 ): int;
-
-// Host helpers: read native `char**` / `char*` from C callbacks into Dream values.
-@native
-@js("dream_ffi", "read_ptr")
-extern fun ffi_read_ptr(base: long, index: int): long;
-
-@native
-@js("dream_ffi", "read_cstring")
-extern fun ffi_read_cstring(ptr: long): string;
-
-fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
-    let line = "";
-    let i = 0;
-    while (i < argc) {
-        let cell = ffi_read_ptr(argv, i);
-        let text = "";
-        if (cell == 0L) {
-            text = "NULL";
-        } else {
-            text = ffi_read_cstring(cell);
-        }
-        if (i > 0) {
-            line = line + " | ";
-        }
-        line = line + text;
-        i = i + 1;
-    }
-    System.println(line);
-    return 0;
-}
-
-// No-op callback for DDL/DML (sqlite only invokes the callback for result rows).
-fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
-    return 0;
-}
 
 class Database {
     handle: long;
@@ -82,18 +47,13 @@ class Database {
         if (this.is_open == false) {
             return -1;
         }
-        let errmsg: long = 0L;
-        let rc = sqlite3_exec(this.handle, sql, ignore_row, 0L, ref errmsg);
+        let __errmsg: long = 0L;
+        let rc = sqlite3_exec(this.handle, sql, 0L, 0L, ref __errmsg);
         return rc;
     }
 
     public fun query(sql: string): int {
-        if (this.is_open == false) {
-            return -1;
-        }
-        let errmsg: long = 0L;
-        let rc = sqlite3_exec(this.handle, sql, print_row, 0L, ref errmsg);
-        return rc;
+        return this.exec(sql);
     }
 
     public fun close(): void {

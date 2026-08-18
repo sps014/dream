@@ -287,6 +287,10 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
 
 fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     for imp in &cx.mir.imports {
+        if super::c_imports::is_c_import(imp) {
+            super::c_imports::emit_c_import(m, cx, imp);
+            continue;
+        }
         let host = super::types::import_host_name(imp);
         let async_wrap = super::types::import_is_async_future(cx.mir, imp);
         if !async_wrap && super::types::native_header_declares(&host) {

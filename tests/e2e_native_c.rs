@@ -131,3 +131,30 @@ fn run_all_native_c_cases() {
 fn run_all_native_c_cases_release() {
     run_corpus(true, None);
 }
+
+fn sqlite_lib_available() -> bool {
+    dream::execution::host::find_library_path("sqlite3", &[]).is_some() || cfg!(target_os = "macos")
+}
+
+#[test]
+fn sqlite_raw_sample_when_lib_present() {
+    if !sqlite_lib_available() {
+        return;
+    }
+    let dest_dir = Path::new("target").join("e2e-native-c-sqlite");
+    fs::create_dir_all(&dest_dir).unwrap();
+    let c_path = dest_dir.join("raw.c");
+    let compiler = Compiler::new(Target::NativeC);
+    let src = "sample/sqlite/raw.dream".to_string();
+    let dest = c_path.to_string_lossy().into_owned();
+    compiler
+        .compile(&src, &dest)
+        .unwrap_or_else(|e| panic!("compile sqlite raw sample: {}", e));
+    let out = compile_and_capture(&dest, OptLevel::O0)
+        .unwrap_or_else(|e| panic!("run sqlite raw sample: {}", e));
+    assert!(
+        out.contains("exec ok"),
+        "unexpected sqlite sample output: {}",
+        out
+    );
+}

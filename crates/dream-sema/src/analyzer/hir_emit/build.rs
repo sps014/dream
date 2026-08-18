@@ -338,6 +338,8 @@ impl<'a> Analyzer<'a> {
             };
             let (module, field) = extern_import_target(func);
             let param_by_ref: Vec<bool> = func.parameters.iter().map(|p| p.is_ref).collect();
+            let c_wide_strings =
+                dream_abi::attributes::c_marshal_charset(&func.attributes) == Some("lpwstr");
             let params = func
                 .parameters
                 .iter()
@@ -363,6 +365,7 @@ impl<'a> Analyzer<'a> {
                 param_by_ref,
                 ret,
                 is_async: func.is_async,
+                c_wide_strings,
             });
         }
         imports

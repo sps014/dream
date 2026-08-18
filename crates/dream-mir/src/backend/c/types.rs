@@ -250,6 +250,14 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
 }
 
 pub(super) fn import_host_name(imp: &dream_hir::HImport) -> String {
+    if imp.module == "dream_ffi" {
+        let field = if imp.field.is_empty() {
+            c_ident(&imp.name)
+        } else {
+            c_ident(&imp.field)
+        };
+        return format!("dream_ffi_{field}");
+    }
     if !imp.field.is_empty() {
         runtime_c_name(&imp.field)
     } else {
@@ -262,10 +270,24 @@ pub(super) fn import_is_async_future(_mir: &crate::Mir, imp: &dream_hir::HImport
 }
 
 pub(super) fn import_call_name(mir: &crate::Mir, imp: &dream_hir::HImport) -> String {
-    let host = import_host_name(imp);
-    if import_is_async_future(mir, imp) {
-        format!("__async_{host}")
+    if imp.module.starts_with("c/") {
+        let field = if imp.field.is_empty() {
+            c_ident(&imp.name)
+        } else {
+            c_ident(&imp.field)
+        };
+        let wrap = format!("dream_c_{field}");
+        if import_is_async_future(mir, imp) {
+            format!("__async_{wrap}")
+        } else {
+            wrap
+        }
     } else {
-        host
+        let host = import_host_name(imp);
+        if import_is_async_future(mir, imp) {
+            format!("__async_{host}")
+        } else {
+            host
+        }
     }
 }

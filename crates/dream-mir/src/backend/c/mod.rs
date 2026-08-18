@@ -2,6 +2,7 @@
 
 mod ast;
 mod builder;
+mod c_imports;
 mod calls;
 mod ctx;
 mod emit;
@@ -191,6 +192,36 @@ mod tests {
         assert!(super::types::native_header_declares("print_int"));
         assert!(super::types::native_header_declares("simd_lane_count"));
         assert!(super::types::native_header_declares("dream_malloc"));
+        assert!(super::types::native_header_declares("dream_ffi_read_ptr"));
+        assert!(super::types::native_header_declares("dream_ffi_read_cstring"));
         assert!(!super::types::native_header_declares("not_a_real_host_fn"));
+    }
+
+    #[test]
+    fn c_import_emits_named_wrapper() {
+        use dream_hir::HImport;
+        use dream_types::DefId;
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("main", i.void());
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            imports: vec![HImport {
+                def: DefId(99),
+                name: "sqlite3_open".into(),
+                module: "c/sqlite3".into(),
+                field: "sqlite3_open".into(),
+                params: vec![i.string(), i.long()],
+                param_by_ref: vec![false, true],
+                ret: Some(i.int()),
+                is_async: false,
+                c_wide_strings: false,
+            }],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_c_sqlite3_open"), "{}", c);
+        assert!(c.contains("dream_string_to_utf8"), "{}", c);
+        assert!(c.contains("sqlite3_open("), "{}", c);
     }
 }

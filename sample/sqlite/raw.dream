@@ -39,9 +39,9 @@ fun main(): void {
     }
     System.println("opened in-memory database");
 
-    let errmsg: long = 0L;
+    let __errmsg: long = 0L;
     let ddl = "CREATE TABLE t(x INT); INSERT INTO t VALUES (1), (2);";
-    let ok = sqlite3_exec(db, ddl, ignore_row, 0L, ref errmsg);
+    let ok = sqlite3_exec(db, ddl, ignore_row, 0L, ref __errmsg);
     if (ok != 0) {
         System.println("exec failed with rc=" + ok);
     } else {

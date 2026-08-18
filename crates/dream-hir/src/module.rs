@@ -97,6 +97,8 @@ pub struct HImport {
     pub param_by_ref: Vec<bool>,
     pub ret: Option<TypeId>,
     pub is_async: bool,
+    /// `@marshal("lpwstr")` on a `@c` extern: string args become UTF-16 rather than UTF-8.
+    pub c_wide_strings: bool,
 }
 
 /// One monomorphized instance of a generic def, keyed by `(DefId, args)` — never a mangled string.

@@ -1,5 +1,7 @@
 #include "include/dream_rt_native.h"
 
+#include <stdlib.h>
+
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
     if (units < 0) {
@@ -244,4 +246,56 @@ int32_t string_compare(dream_ptr a, dream_ptr b) {
         }
     }
     return na - nb;
+}
+
+dream_ptr dream_utf8_to_string(const char *s) {
+    if (!s) {
+        return dream_string_alloc(0);
+    }
+    return utf8_to_utf16((const uint8_t *)s, (int32_t)strlen(s));
+}
+
+char *dream_string_to_utf8(dream_ptr s) {
+    int32_t n = dream_str_len(s);
+    const uint16_t *u = dream_str_units(s);
+    size_t cap = (size_t)(n > 0 ? n : 0) * 3 + 1;
+    char *out = (char *)malloc(cap);
+    size_t o = 0;
+    int32_t i;
+    if (!out) {
+        return NULL;
+    }
+    if (!u) {
+        out[0] = 0;
+        return out;
+    }
+    for (i = 0; i < n; i++) {
+        uint32_t c = u[i];
+        if (c < 0x80) {
+            out[o++] = (char)c;
+        } else if (c < 0x800) {
+            out[o++] = (char)(0xc0 | (c >> 6));
+            out[o++] = (char)(0x80 | (c & 0x3f));
+        } else {
+            out[o++] = (char)(0xe0 | (c >> 12));
+            out[o++] = (char)(0x80 | ((c >> 6) & 0x3f));
+            out[o++] = (char)(0x80 | (c & 0x3f));
+        }
+    }
+    out[o] = 0;
+    return out;
+}
+
+uint16_t *dream_string_to_utf16z(dream_ptr s) {
+    int32_t n = dream_str_len(s);
+    const uint16_t *u = dream_str_units(s);
+    uint16_t *out = (uint16_t *)malloc(((size_t)n + 1) * sizeof(uint16_t));
+    if (!out) {
+        return NULL;
+    }
+    if (u && n > 0) {
+        memcpy(out, u, (size_t)n * sizeof(uint16_t));
+    }
+    out[n] = 0;
+    return out;
 }

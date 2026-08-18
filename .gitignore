@@ -21,6 +21,7 @@ sample/**/*.c
 sample/**/*.bin
 sample/**/*.o
 
+*.db
 *.tmp
 *.dSYM/
 

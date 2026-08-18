@@ -182,7 +182,7 @@ fn resolve_symbol(
 ) -> Result<*mut std::ffi::c_void> {
     with_abi_mut(|abi| -> Result<*mut std::ffi::c_void> {
         if !abi.libraries.contains_key(lib_name) {
-            let path = find_library_path(lib_name, search_roots).ok_or_else(|| {
+            let path = resolve_library_path(lib_name, search_roots).ok_or_else(|| {
                 Error::msg(format!(
                     "could not locate native library '{lib_name}' (searched {:?})",
                     search_roots
@@ -209,106 +209,27 @@ fn resolve_symbol(
     })
 }
 
-fn find_library_path(lib_name: &str, search_roots: &[PathBuf]) -> Option<PathBuf> {
-    let file_names = library_file_names(lib_name);
-    // 1. Program-local `native/` folder or the WAT's directory (dev / packaged binary).
+fn resolve_library_path(lib_name: &str, search_roots: &[PathBuf]) -> Option<PathBuf> {
+    let mut roots = Vec::new();
     for root in search_roots {
-        for name in &file_names {
-            let native = root.join("native").join(name);
-            if native.exists() {
-                return Some(native);
+        let mut cur = Some(root.clone());
+        while let Some(dir) = cur {
+            if !roots.iter().any(|r| r == &dir) {
+                roots.push(dir.clone());
             }
-            let direct = root.join(name);
-            if direct.exists() {
-                return Some(direct);
-            }
+            cur = dir.parent().map(|p| p.to_path_buf());
         }
     }
-    // 2. CWD (may differ from the WAT's parent when `dream run` is invoked elsewhere).
-    for name in &file_names {
-        let path = PathBuf::from(name);
-        if path.exists() {
-            return Some(path);
-        }
+    if let Some(found) = super::c_link::find_library_path(lib_name, &roots) {
+        return Some(found);
     }
-    // 3. Common system library dirs by absolute path (skips `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`
-    // shadowing, and gives a stable answer even on hosts without the loader configured).
-    for dir in system_library_dirs() {
-        for name in &file_names {
-            let candidate = dir.join(name);
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-    // 4. Last resort: hand a bare `libX.dylib`/`X.dll`/... to libloading and let the OS loader
-    // walk its own search path (`DYLD_FALLBACK_LIBRARY_PATH`, `LD_LIBRARY_PATH`, system dirs).
-    for name in &file_names {
+    for name in super::c_link::library_file_names(lib_name) {
         let candidate = PathBuf::from(name);
         if unsafe { Library::new(&candidate) }.is_ok() {
             return Some(candidate);
         }
     }
     None
-}
-
-/// OS-standard directories `find_library_path` walks after program-local + CWD lookups have
-/// failed. Kept small on purpose: order is Homebrew/macOS-standard first on darwin, then
-/// distro-standard on linux, then Windows-typical. Missing directories are silently skipped.
-fn system_library_dirs() -> Vec<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        vec![
-            PathBuf::from("/opt/homebrew/lib"),
-            PathBuf::from("/usr/local/lib"),
-            PathBuf::from("/opt/local/lib"),
-            PathBuf::from("/usr/lib"),
-        ]
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        vec![
-            PathBuf::from("/usr/local/lib"),
-            PathBuf::from("/usr/lib/x86_64-linux-gnu"),
-            PathBuf::from("/usr/lib/aarch64-linux-gnu"),
-            PathBuf::from("/usr/lib64"),
-            PathBuf::from("/usr/lib"),
-            PathBuf::from("/lib"),
-        ]
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let mut dirs = Vec::new();
-        if let Ok(win) = std::env::var("WINDIR") {
-            dirs.push(PathBuf::from(win).join("System32"));
-        } else {
-            dirs.push(PathBuf::from("C:\\Windows\\System32"));
-        }
-        dirs
-    }
-}
-
-fn library_file_names(lib_name: &str) -> Vec<String> {
-    #[cfg(target_os = "windows")]
-    {
-        vec![format!("{lib_name}.dll"), format!("lib{lib_name}.dll")]
-    }
-    #[cfg(target_os = "macos")]
-    {
-        vec![
-            format!("lib{lib_name}.dylib"),
-            format!("lib{lib_name}.a"),
-            format!("{lib_name}.dylib"),
-        ]
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        vec![
-            format!("lib{lib_name}.so"),
-            format!("lib{lib_name}.a"),
-            format!("{lib_name}.so"),
-        ]
-    }
 }
 
 fn ffi_arg_type(tag: &str) -> Type {

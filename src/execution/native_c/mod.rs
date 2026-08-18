@@ -4,6 +4,7 @@ pub mod abi;
 mod cc;
 
 use crate::driver::wasm_opt::OptLevel;
+use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};
 use dream_mir::backend::c::{native_runtime_include_dir, native_runtime_units};
 use dream_mir::runtime::runtime_need_from_c_source;
 use std::fs::OpenOptions;
@@ -222,6 +223,14 @@ pub fn compile_native_c(
         lcmd.arg(format!("-L{}", dir.display()));
         lcmd.arg("-ldream");
         lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
+    }
+    let abi_path = c_path.with_extension("abi.json");
+    let c_libs = read_c_libs_from_abi(&abi_path);
+    if !c_libs.is_empty() {
+        let roots = search_roots_for_artifact(c_path);
+        for flag in cc_link_flags(&c_libs, &roots) {
+            lcmd.arg(flag);
+        }
     }
     lcmd.arg("-o").arg(&bin);
     let status = lcmd.status()?;

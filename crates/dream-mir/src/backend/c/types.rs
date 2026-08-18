@@ -1,5 +1,5 @@
+use crate::backend::c::ast::CTy;
 use crate::backend::c::ctx::Cx;
-use crate::BinOp;
 use dream_types::{PrimTy, TyKind, TypeId};
 use std::collections::HashSet;
 use std::sync::OnceLock;
@@ -60,22 +60,22 @@ pub(super) fn c_ident(name: &str) -> String {
     s
 }
 
-pub(super) fn local_c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> &'static str {
+pub(super) fn local_c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> CTy {
     match interner.kind(ty) {
-        TyKind::Prim(PrimTy::Int | PrimTy::UInt) => "int64_t",
+        TyKind::Prim(PrimTy::Int | PrimTy::UInt) => CTy::I64,
         _ => c_ty(interner, ty),
     }
 }
 
-pub(super) fn c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> &'static str {
+pub(super) fn c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> CTy {
     match interner.kind(ty) {
-        TyKind::Void => "void",
-        TyKind::Prim(PrimTy::Double) => "double",
-        TyKind::Prim(PrimTy::Float) => "float",
-        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "int64_t",
+        TyKind::Void => CTy::Void,
+        TyKind::Prim(PrimTy::Double) => CTy::F64,
+        TyKind::Prim(PrimTy::Float) => CTy::F32,
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => CTy::I64,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte)
-        | TyKind::Enum(_) => "int32_t",
-        _ => "dream_ptr",
+        | TyKind::Enum(_) => CTy::I32,
+        _ => CTy::Ptr,
     }
 }
 
@@ -107,38 +107,15 @@ pub(super) fn array_elem_ty(interner: &dream_types::TypeInterner, arr_ty: TypeId
     }
 }
 
-pub(super) fn load_cast(cx: &Cx<'_>, ty: TypeId) -> &'static str {
+pub(super) fn load_cast(cx: &Cx<'_>, ty: TypeId) -> CTy {
     match cx.interner.kind(ty) {
-        TyKind::Prim(PrimTy::Double) => "double",
-        TyKind::Prim(PrimTy::Float) => "float",
-        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "int64_t",
-        TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::Char) => "uint8_t",
-        TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => "int32_t",
-        _ if cx.interner.is_value_type(ty) => "int32_t",
-        _ => "dream_ptr",
-    }
-}
-
-pub(super) fn bin(op: BinOp) -> &'static str {
-    match op {
-        BinOp::Add => "+",
-        BinOp::Sub => "-",
-        BinOp::Mul => "*",
-        BinOp::Div => "/",
-        BinOp::Rem => "%",
-        BinOp::Eq => "==",
-        BinOp::Ne => "!=",
-        BinOp::Lt => "<",
-        BinOp::Le => "<=",
-        BinOp::Gt => ">",
-        BinOp::Ge => ">=",
-        BinOp::And => "&&",
-        BinOp::Or => "||",
-        BinOp::BitAnd => "&",
-        BinOp::BitOr => "|",
-        BinOp::BitXor => "^",
-        BinOp::Shl => "<<",
-        BinOp::Shr => ">>",
+        TyKind::Prim(PrimTy::Double) => CTy::F64,
+        TyKind::Prim(PrimTy::Float) => CTy::F32,
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => CTy::I64,
+        TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::Char) => CTy::U8,
+        TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => CTy::I32,
+        _ if cx.interner.is_value_type(ty) => CTy::I32,
+        _ => CTy::Ptr,
     }
 }
 

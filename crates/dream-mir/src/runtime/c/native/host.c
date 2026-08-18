@@ -272,6 +272,16 @@ int64_t fileAppend(dream_ptr path, dream_ptr contents) {
     return written;
 }
 
+int32_t fileDelete(dream_ptr path) {
+    char *p = dream_str_utf8(path);
+    int32_t ok = 0;
+    if (p) {
+        ok = remove(p) == 0;
+        free(p);
+    }
+    return ok;
+}
+
 int32_t fileExists(dream_ptr path) {
     char *p = dream_str_utf8(path);
     int32_t ok = 0;
@@ -827,13 +837,25 @@ dream_ptr wsConnect(dream_ptr url, int32_t timeout_ms) {
     char *text = dream_str_utf8(url);
     dream_ptr result;
     (void)timeout_ms;
-    if (text && strncmp(text, "ws://", 5) != 0) {
+    if (text && strncmp(text, "ws://", 5) != 0 && strncmp(text, "wss://", 6) != 0) {
         result = dream_chars_from_utf8("-2\nunsupported WebSocket scheme");
     } else {
         result = dream_chars_from_utf8("-1\nnative C WebSocket connections are unsupported");
     }
     free(text);
     return result;
+}
+
+int32_t tcpClose(int32_t handle) {
+    (void)handle;
+    return 0;
+}
+
+int32_t wsClose(int32_t handle, int32_t code, dream_ptr reason) {
+    (void)handle;
+    (void)code;
+    (void)reason;
+    return 0;
 }
 
 void consoleExit(int32_t code) { exit(code); }

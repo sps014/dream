@@ -1,187 +1,246 @@
-use crate::backend::c::calls::emit_call;
-use crate::backend::c::ctx::Cx;
-use crate::backend::c::places::emit_operand;
+use super::ast::{CTy, CaseKey, Expr, Stmt, SwitchArm};
+use super::emit::Emitter;
+use super::places::{is_alias_value_local, is_moved_into_union, is_value_copy_local};
 use crate::{BlockId, Local, Operand, Place, Terminator};
 use dream_types::TyKind;
 
-pub(super) fn emit_term(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, t: &Terminator) {
-    match t {
-        Terminator::Goto(b) => out.push_str(&format!("  goto L{};\n", b.0)),
-        Terminator::If {
-            cond,
-            then_blk,
-            else_blk,
-        } => {
-            out.push_str(&format!(
-                "  if ({}) goto L{}; else goto L{};\n",
-                emit_operand(cx, f, cond),
-                then_blk.0,
-                else_blk.0
-            ));
-        }
-        Terminator::Switch {
-            value,
-            targets,
-            default,
-        } => emit_switch(out, cx, f, value, targets, *default),
-        Terminator::Return(None) => {
-            emit_value_teardown(out, cx, f, None);
-            if f.is_async || !matches!(cx.interner.kind(f.ret), TyKind::Void) {
-                out.push_str("  return 0;\n");
-            } else {
-                out.push_str("  return;\n");
-            }
-        }
-        Terminator::Return(Some(o)) => {
-            let skip = match o {
-                Operand::Copy(Place::Local(l)) if cx.interner.is_value_type(f.local_ty(*l)) => {
-                    Some(*l)
-                }
-                _ => None,
-            };
-            emit_value_teardown(out, cx, f, skip);
-            if !f.is_async && cx.interner.is_value_type(f.ret) {
-                let size = crate::backend::c::types::elem_size(cx, f.ret);
-                let tag = cx.type_tag(f.ret, dream_types::DefId(0));
-                out.push_str(&format!(
-                    "  {{ dream_ptr __r = dream_malloc({size}, {tag}); memcpy(dream_p(__r), dream_p({}), {size}); return __r; }}\n",
-                    emit_operand(cx, f, o)
+impl<'a> Emitter<'a> {
+    pub(super) fn term(&mut self, t: &Terminator) {
+        match t {
+            Terminator::Goto(b) => self.b.goto(format!("L{}", b.0)),
+            Terminator::If {
+                cond,
+                then_blk,
+                else_blk,
+            } => {
+                let c = self.operand(cond);
+                self.b.stmt(Stmt::if_else(
+                    c,
+                    Stmt::Goto(format!("L{}", then_blk.0)),
+                    Stmt::Goto(format!("L{}", else_blk.0)),
                 ));
-            } else {
-                out.push_str(&format!("  return {};\n", emit_operand(cx, f, o)));
             }
-        }
-        Terminator::Unreachable => out.push_str("  abort();\n"),
-        Terminator::TailCall { callee, args } => {
-            emit_value_teardown(out, cx, f, None);
-            let call = emit_call(cx, f, callee, args);
-            if matches!(cx.interner.kind(f.ret), TyKind::Void) {
-                out.push_str(&format!("  {call}; return;\n"));
-            } else {
-                out.push_str(&format!("  return {call};\n"));
+            Terminator::Switch {
+                value,
+                targets,
+                default,
+            } => self.switch(value, targets, *default),
+            Terminator::Return(None) => {
+                self.value_teardown(None);
+                if self.f.is_async || !matches!(self.cx.interner.kind(self.f.ret), TyKind::Void) {
+                    self.b.ret(Some(Expr::i(0)));
+                } else {
+                    self.b.ret(None);
+                }
             }
-        }
-        Terminator::AsyncComplete(None) => {
-            out.push_str("  dream_async_complete(__self, 0); return 0;\n");
-        }
-        Terminator::AsyncComplete(Some(o)) => {
-            let result = emit_operand(cx, f, o);
-            match cx.interner.kind(f.ret) {
-                TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
-                    out.push_str(&format!(
-                        "  *(int64_t *)((char *)dream_p(__self) + 56) = (int64_t)({result});\n  dream_async_complete(__self, 0); return 0;\n"
-                    ));
+            Terminator::Return(Some(o)) => {
+                let skip = match o {
+                    Operand::Copy(Place::Local(l))
+                        if self.cx.interner.is_value_type(self.f.local_ty(*l)) =>
+                    {
+                        Some(*l)
+                    }
+                    _ => None,
+                };
+                self.value_teardown(skip);
+                if !self.f.is_async && self.cx.interner.is_value_type(self.f.ret) {
+                    let size = super::types::elem_size(self.cx, self.f.ret);
+                    let tag = self.cx.type_tag(self.f.ret, dream_types::DefId(0));
+                    let src = self.operand(o);
+                    self.b.stmt(Stmt::block(vec![
+                        Stmt::decl(
+                            CTy::Ptr,
+                            "__r",
+                            Some(Expr::call(
+                                "dream_malloc",
+                                vec![Expr::i(size as i64), Expr::i(tag as i64)],
+                            )),
+                        ),
+                        Stmt::call(
+                            "memcpy",
+                            vec![
+                                Expr::dream_p(Expr::id("__r")),
+                                Expr::dream_p(src),
+                                Expr::i(size as i64),
+                            ],
+                        ),
+                        Stmt::Return(Some(Expr::id("__r"))),
+                    ]));
+                } else {
+                    let v = self.operand(o);
+                    self.b.ret(Some(v));
                 }
-                TyKind::Prim(dream_types::PrimTy::Float) => {
-                    out.push_str(&format!(
-                        "  *(float *)((char *)dream_p(__self) + 56) = (float)({result});\n  dream_async_complete(__self, 0); return 0;\n"
-                    ));
-                }
-                TyKind::Prim(dream_types::PrimTy::Double) => {
-                    out.push_str(&format!(
-                        "  *(double *)((char *)dream_p(__self) + 56) = (double)({result});\n  dream_async_complete(__self, 0); return 0;\n"
-                    ));
-                }
-                _ => out.push_str(&format!(
-                    "  dream_async_complete(__self, (dream_ptr){result}); return 0;\n"
-                )),
             }
-        }
-        Terminator::Await {
-            future,
-            dest: _,
-            resume,
-        } => {
-            let fut = emit_operand(cx, f, future);
-            out.push_str(&format!("  *(int32_t *)dream_p(__self) = {};\n", resume.0));
-            out.push_str(&format!("  dream_await(__self, {fut});\n"));
-            out.push_str("  return 0;\n");
+            Terminator::Unreachable => self.b.call("abort", vec![]),
+            Terminator::TailCall { callee, args } => {
+                self.value_teardown(None);
+                let call = self.call_expr(callee, args);
+                if matches!(self.cx.interner.kind(self.f.ret), TyKind::Void) {
+                    self.b.expr_stmt(call);
+                    self.b.ret(None);
+                } else {
+                    self.b.ret(Some(call));
+                }
+            }
+            Terminator::AsyncComplete(None) => {
+                self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                self.b.ret(Some(Expr::i(0)));
+            }
+            Terminator::AsyncComplete(Some(o)) => {
+                let result = self.operand(o);
+                match self.cx.interner.kind(self.f.ret) {
+                    TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
+                        self.b.stmt(Stmt::store(
+                            CTy::I64,
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(56)),
+                            result,
+                        ));
+                        self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                        self.b.ret(Some(Expr::i(0)));
+                    }
+                    TyKind::Prim(dream_types::PrimTy::Float) => {
+                        self.b.stmt(Stmt::store(
+                            CTy::F32,
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(56)),
+                            result,
+                        ));
+                        self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                        self.b.ret(Some(Expr::i(0)));
+                    }
+                    TyKind::Prim(dream_types::PrimTy::Double) => {
+                        self.b.stmt(Stmt::store(
+                            CTy::F64,
+                            Expr::ptr_add(Expr::id("__self"), Expr::i(56)),
+                            result,
+                        ));
+                        self.b.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
+                        self.b.ret(Some(Expr::i(0)));
+                    }
+                    _ => {
+                        self.b.call(
+                            "dream_async_complete",
+                            vec![Expr::id("__self"), Expr::cast(CTy::Ptr, result)],
+                        );
+                        self.b.ret(Some(Expr::i(0)));
+                    }
+                }
+            }
+            Terminator::Await {
+                future,
+                dest: _,
+                resume,
+            } => {
+                let fut = self.operand(future);
+                self.b.stmt(Stmt::store(
+                    CTy::I32,
+                    Expr::dream_p(Expr::id("__self")),
+                    Expr::i(resume.0 as i64),
+                ));
+                self.b.call("dream_await", vec![Expr::id("__self"), fut]);
+                self.b.ret(Some(Expr::i(0)));
+            }
         }
     }
-}
 
-fn emit_switch(
-    out: &mut String,
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    value: &Operand,
-    targets: &[(i64, BlockId)],
-    default: BlockId,
-) {
-    let v = emit_operand(cx, f, value);
-    let mut keys: Vec<i64> = targets.iter().map(|(k, _)| *k).collect();
-    keys.sort_unstable();
-    let dense = !keys.is_empty()
-        && keys[0] == 0
-        && keys.windows(2).all(|w| w[1] == w[0] + 1)
-        && keys.len() >= 2;
-    if dense {
-        out.push_str("  {\n");
-        out.push_str("    static void *const __jt[] = {\n");
-        let max = keys.last().copied().unwrap() as usize;
-        let mut map = vec![default; max + 1];
+    fn switch(&mut self, value: &Operand, targets: &[(i64, BlockId)], default: BlockId) {
+        let v = self.operand(value);
+        let mut keys: Vec<i64> = targets.iter().map(|(k, _)| *k).collect();
+        keys.sort_unstable();
+        let dense = !keys.is_empty()
+            && keys[0] == 0
+            && keys.windows(2).all(|w| w[1] == w[0] + 1)
+            && keys.len() >= 2;
+        if dense {
+            let max = keys.last().copied().unwrap() as usize;
+            let mut map = vec![default; max + 1];
+            for (k, b) in targets {
+                map[*k as usize] = *b;
+            }
+            let labels: Vec<Expr> = map
+                .iter()
+                .map(|b| Expr::LabelAddr(format!("L{}", b.0)))
+                .collect();
+            let n = map.len();
+            self.b.stmt(Stmt::block(vec![
+                Stmt::Decl {
+                    align: None,
+                    static_: true,
+                    const_: true,
+                    ty: CTy::Array {
+                        elem: Box::new(CTy::VoidPtr),
+                        len: n,
+                    },
+                    name: "__jt".into(),
+                    init: Some(Expr::Compound(labels)),
+                },
+                Stmt::decl(CTy::Unsigned, "__k", Some(Expr::cast(CTy::Unsigned, v))),
+                Stmt::if_else(
+                    Expr::lt(Expr::id("__k"), Expr::i(n as i64)),
+                    Stmt::GotoIndirect(Expr::index(Expr::id("__jt"), Expr::id("__k"))),
+                    Stmt::Goto(format!("L{}", default.0)),
+                ),
+            ]));
+            return;
+        }
+        let mut arms = Vec::new();
         for (k, b) in targets {
-            map[*k as usize] = *b;
+            arms.push(SwitchArm {
+                keys: vec![CaseKey::Int(*k)],
+                body: vec![Stmt::Goto(format!("L{}", b.0))],
+            });
         }
-        for b in &map {
-            out.push_str(&format!("      &&L{},\n", b.0));
-        }
-        out.push_str("    };\n");
-        out.push_str(&format!(
-            "    unsigned __k = (unsigned)({v}); if (__k < {}) goto *__jt[__k]; goto L{};\n",
-            map.len(),
-            default.0
-        ));
-        out.push_str("  }\n");
-        return;
+        arms.push(SwitchArm {
+            keys: vec![],
+            body: vec![Stmt::Goto(format!("L{}", default.0))],
+        });
+        self.b.stmt(Stmt::Switch {
+            expr: Expr::cast(CTy::I64, v),
+            arms,
+        });
     }
-    out.push_str(&format!("  switch ((int64_t)({v})) {{\n"));
-    for (k, b) in targets {
-        out.push_str(&format!("    case {k}: goto L{};\n", b.0));
-    }
-    out.push_str(&format!("    default: goto L{};\n", default.0));
-    out.push_str("  }\n");
-}
 
-fn emit_value_teardown(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, skip: Option<Local>) {
-    if f.is_async
-        || f.blocks
-            .iter()
-            .any(|b| matches!(b.terminator, Terminator::Await { .. }))
-    {
-        return;
-    }
-    let dropped: Vec<bool> = {
-        let mut d = vec![false; f.locals.len()];
-        for stmt in f.blocks.iter().flat_map(|block| &block.stmts) {
-            if let crate::Statement::ValueDrop(l) = stmt {
-                if !f.locals[l.0 as usize].is_ref {
-                    d[l.0 as usize] = true;
+    fn value_teardown(&mut self, skip: Option<Local>) {
+        if self.f.is_async
+            || self
+                .f
+                .blocks
+                .iter()
+                .any(|b| matches!(b.terminator, Terminator::Await { .. }))
+        {
+            return;
+        }
+        let dropped: Vec<bool> = {
+            let mut d = vec![false; self.f.locals.len()];
+            for stmt in self.f.blocks.iter().flat_map(|block| &block.stmts) {
+                if let crate::Statement::ValueDrop(l) = stmt {
+                    if !self.f.locals[l.0 as usize].is_ref {
+                        d[l.0 as usize] = true;
+                    }
                 }
             }
+            d
+        };
+        for (i, decl) in self.f.locals.iter().enumerate() {
+            let local = Local(i as u32);
+            if skip == Some(local)
+                || decl.manual_drop
+                || decl.is_ref
+                || dropped[i]
+                || is_alias_value_local(self.f, local)
+                || is_value_copy_local(self.f, local)
+                || is_moved_into_union(self.f, local)
+            {
+                continue;
+            }
+            if !self.cx.interner.is_value_type(decl.ty) {
+                continue;
+            }
+            if self.f.params.iter().any(|p| p.0 == local.0)
+                && (decl.is_ref || decl.name.as_deref() == Some("this"))
+            {
+                continue;
+            }
+            self.value_refs(decl.ty, Expr::local(i as u32), false);
         }
-        d
-    };
-    for (i, decl) in f.locals.iter().enumerate() {
-        let local = Local(i as u32);
-        if skip == Some(local)
-            || decl.manual_drop
-            || decl.is_ref
-            || dropped[i]
-            || crate::backend::c::places::is_alias_value_local(f, local)
-            || crate::backend::c::places::is_value_copy_local(f, local)
-            || crate::backend::c::places::is_moved_into_union(f, local)
-        {
-            continue;
-        }
-        if !cx.interner.is_value_type(decl.ty) {
-            continue;
-        }
-        if f.params.iter().any(|p| p.0 == local.0)
-            && (decl.is_ref || decl.name.as_deref() == Some("this"))
-        {
-            continue;
-        }
-        crate::backend::c::statements::emit_value_refs(out, cx, decl.ty, &format!("l{i}"), false);
     }
 }

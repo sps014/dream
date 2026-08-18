@@ -1,10 +1,14 @@
 //! MIR → C99 for the native clang path (`runtime/c/native`).
 
+mod ast;
+mod builder;
 mod calls;
 mod ctx;
+mod emit;
 mod module;
 mod native_layout;
 mod places;
+mod print;
 mod protocol;
 mod release;
 mod rvalue;
@@ -13,9 +17,7 @@ mod tables;
 mod terminator;
 mod types;
 
-pub use module::{
-    emit_c_module, emit_c_module_ex, native_runtime_c_files, native_runtime_include_dir,
-};
+pub use module::{emit_c_module, native_runtime_c_files, native_runtime_include_dir};
 
 #[cfg(test)]
 mod tests {

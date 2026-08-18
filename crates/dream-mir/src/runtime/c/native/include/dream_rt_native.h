@@ -536,6 +536,7 @@ void print_float(float v);
 void print_double(double v);
 
 int32_t fileOpen(dream_ptr path, dream_ptr mode);
+int32_t fileDelete(dream_ptr path);
 int64_t fileSize(dream_ptr path);
 dream_ptr fileHandleRead(int32_t fd, int32_t count);
 int64_t fileHandleWrite(int32_t fd, dream_ptr data);
@@ -554,7 +555,9 @@ dream_ptr httpRequestStream(
     dream_ptr url, dream_ptr method, dream_ptr headers, dream_ptr body, int32_t timeout_ms,
     int32_t http_version);
 dream_ptr tcpConnect(dream_ptr host, int32_t port, int32_t timeout_ms);
+int32_t tcpClose(int32_t handle);
 dream_ptr wsConnect(dream_ptr url, int32_t timeout_ms);
+int32_t wsClose(int32_t handle, int32_t code, dream_ptr reason);
 
 void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t));
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);

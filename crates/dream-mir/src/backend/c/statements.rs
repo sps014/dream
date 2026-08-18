@@ -1,472 +1,493 @@
-use crate::backend::c::calls::{emit_call, emit_iface, emit_indirect, emit_js_call};
-use crate::backend::c::ctx::Cx;
-use crate::backend::c::places::{emit_operand, emit_store};
-use crate::backend::c::rvalue::{emit_rvalue, emit_union_new_at, to_string_fn};
-use crate::backend::c::types::{elem_size, runtime_c_name};
+use super::ast::{CTy, CaseKey, Expr, Stmt, SwitchArm};
+use super::emit::Emitter;
+use super::places::{is_alias_value_local, is_value_place_alias};
+use super::types::{elem_size, runtime_c_name};
 use crate::{Callee, Operand, Place, Statement};
 use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::{PrimTy, TyKind};
 
-pub(super) fn emit_stmt(out: &mut String, cx: &Cx<'_>, f: &crate::MirFunction, stmt: &Statement) {
-    match stmt {
-        Statement::Nop | Statement::SourceLine(_) | Statement::DebugLine(_) => {}
-        Statement::Assign(place, rv) => {
-            if emit_simd_assign(out, cx, f, place, rv) {
-                return;
-            }
-            if let (
-                Place::Local(l),
-                crate::Rvalue::UnionNew {
-                    ty, variant, args, ..
-                },
-            ) = (place, rv)
-            {
-                if cx.interner.is_value_type(f.local_ty(*l))
-                    && !crate::backend::c::places::is_value_place_alias(f, *l, rv)
-                {
-                    out.push_str("  ");
-                    out.push_str(&emit_union_new_at(
-                        cx,
-                        f,
-                        &format!("l{}", l.0),
-                        *ty,
-                        *variant,
-                        args,
-                    ));
-                    out.push('\n');
+impl<'a> Emitter<'a> {
+    pub(super) fn stmt(&mut self, stmt: &Statement) {
+        match stmt {
+            Statement::Nop | Statement::SourceLine(_) | Statement::DebugLine(_) => {}
+            Statement::Assign(place, rv) => {
+                if self.simd_assign(place, rv) {
                     return;
                 }
+                if let (
+                    Place::Local(l),
+                    crate::Rvalue::UnionNew {
+                        ty, variant, args, ..
+                    },
+                ) = (place, rv)
+                {
+                    if self.cx.interner.is_value_type(self.f.local_ty(*l))
+                        && !is_value_place_alias(self.f, *l, rv)
+                    {
+                        self.union_new_at(Expr::local(l.0), *ty, *variant, args);
+                        return;
+                    }
+                }
+                let rhs = self.rvalue(rv);
+                let stored = self.store(place, rv, rhs);
+                self.b.expr_stmt(stored);
             }
-            let rhs = emit_rvalue(cx, f, rv);
-            out.push_str("  ");
-            out.push_str(&emit_store(cx, f, place, rv, &rhs));
-            out.push_str(";\n");
-        }
-        Statement::Retain(o) => {
-            out.push_str(&format!("  dream_retain({});\n", emit_operand(cx, f, o)));
-        }
-        Statement::Release(o) => {
-            let ty = operand_ty(cx, f, o);
-            let release = if cx.interner.is_rc_tracked(ty) {
-                crate::backend::c::release::release_sym(cx.interner, cx.mir, ty)
-            } else {
-                "dream_release".into()
-            };
-            out.push_str(&format!("  {release}({});\n", emit_operand(cx, f, o)));
-        }
-        Statement::Panic(o) => {
-            out.push_str(&format!("  dream_panic({});\n", emit_operand(cx, f, o)));
-        }
-        Statement::Print { arg, ty, newline } => {
-            emit_print(out, cx, f, arg, *ty, *newline);
-        }
-        Statement::Call { callee, args } => {
-            if emit_simd_call(out, cx, f, callee, args) {
-                return;
+            Statement::Retain(o) => {
+                let a = self.operand(o);
+                self.b.call("dream_retain", vec![a]);
             }
-            out.push_str(&format!("  {};\n", emit_call(cx, f, callee, args)));
-        }
-        Statement::JsCall {
-            target,
-            via,
-            method,
-            args,
-            ..
-        } => {
-            out.push_str(&format!(
-                "  (void){};\n",
-                emit_js_call(cx, f, target, via, method, args)
-            ));
-        }
-        Statement::InterfaceCall {
-            receiver,
-            iface_id,
-            method_slot,
-            args,
-            ..
-        } => {
-            out.push_str(&format!(
-                "  (void){};\n",
-                emit_iface(cx, f, receiver, *iface_id, *method_slot, args)
-            ));
-        }
-        Statement::IndirectCall { target, args, .. } => {
-            out.push_str(&format!(
-                "  (void){};\n",
-                emit_indirect(cx, f, target, args)
-            ));
-        }
-        Statement::ArrayElemsCopy {
-            dst,
-            dst_off,
-            src,
-            src_off,
-            count,
-            elem_ty,
-        } => {
-            let es = elem_size(cx, *elem_ty);
-            out.push_str(&format!(
-                "  dream_mem_copy({}+4+({})*{es}, {}+4+({})*{es}, (size_t)({})*{es});\n",
-                emit_operand(cx, f, dst),
-                emit_operand(cx, f, dst_off),
-                emit_operand(cx, f, src),
-                emit_operand(cx, f, src_off),
-                emit_operand(cx, f, count),
-            ));
-        }
-        Statement::ArrayElemsFill {
-            dst,
-            dst_off,
-            count,
-            elem_ty,
-        } => {
-            let es = elem_size(cx, *elem_ty);
-            out.push_str(&format!(
-                "  memset((char*)dream_p({}) + 4 + ({})*{es}, 0, (size_t)({})*{es});\n",
-                emit_operand(cx, f, dst),
-                emit_operand(cx, f, dst_off),
-                emit_operand(cx, f, count),
-            ));
-        }
-        Statement::ForceFree(o) => {
-            out.push_str(&format!("  dream_free({});\n", emit_operand(cx, f, o)));
-        }
-        Statement::LockAcquire(o) => {
-            out.push_str(&format!(
-                "  dream_lock_acquire({});\n",
-                emit_operand(cx, f, o)
-            ));
-        }
-        Statement::LockRelease(o) => {
-            out.push_str(&format!(
-                "  dream_lock_release({});\n",
-                emit_operand(cx, f, o)
-            ));
-        }
-        Statement::SimdV128 {
-            dest,
-            lhs,
-            rhs,
-            index,
-            splat_rhs,
-            ptr_addr,
-            op,
-            lane,
-        } => {
-            let d = emit_operand(cx, f, dest);
-            let l = emit_operand(cx, f, lhs);
-            let r = emit_operand(cx, f, rhs);
-            let i = emit_operand(cx, f, index);
-            let es = lane.esize();
-            let opi = match op {
-                crate::BinOp::Add => 0,
-                crate::BinOp::Sub => 1,
-                crate::BinOp::Mul => 2,
-                crate::BinOp::Div => 3,
-                _ => 0,
-            };
-            let raddr = splat_rhs
-                .as_ref()
-                .map(|s| emit_operand(cx, f, s))
-                .unwrap_or_else(|| r.clone());
-            let call = if *ptr_addr {
-                format!("dream_simd_binop({d}, {l}, {raddr}, {es}, {opi})")
-            } else {
-                format!(
-                    "dream_simd_binop({d}+4+({i})*{es}, {l}+4+({i})*{es}, {raddr}+4+({i})*{es}, {es}, {opi})"
-                )
-            };
-            out.push_str(&format!("  {call};\n"));
-        }
-        Statement::ValueDrop(l) => {
-            if !f.locals[l.0 as usize].is_ref
-                && !crate::backend::c::places::is_alias_value_local(f, *l)
-            {
-                emit_value_refs(out, cx, f.local_ty(*l), &format!("l{}", l.0), false);
+            Statement::Release(o) => {
+                let ty = self.operand_ty(o);
+                let release = if self.cx.interner.is_rc_tracked(ty) {
+                    crate::backend::c::release::release_sym(self.cx.interner, self.cx.mir, ty)
+                } else {
+                    "dream_release".into()
+                };
+                let a = self.operand(o);
+                self.b.call(release, vec![a]);
             }
-        }
-        Statement::ValueRetain(l) => {
-            if !crate::backend::c::places::is_alias_value_local(f, *l) {
-                emit_value_refs(out, cx, f.local_ty(*l), &format!("l{}", l.0), true);
+            Statement::Panic(o) => {
+                let a = self.operand(o);
+                self.b.call("dream_panic", vec![a]);
             }
-        }
-        Statement::ValueKill(l) => {
-            let size = elem_size(cx, f.local_ty(*l));
-            out.push_str(&format!("  memset(dream_p(l{}), 0, {size});\n", l.0));
-        }
-    }
-}
-
-fn simd_call_name(cx: &Cx<'_>, callee: &Callee) -> String {
-    let raw = cx.callee_c(callee.def, &callee.args);
-    let mapped = runtime_c_name(&raw);
-    if mapped.starts_with("simd_") {
-        return mapped;
-    }
-    match IntrinsicOp::from_key(&raw).or_else(|| IntrinsicOp::from_key(&mapped)) {
-        Some(IntrinsicOp::SimdLaneCount) => "simd_lane_count".into(),
-        Some(IntrinsicOp::SimdV128Load) => "simd_v128_load".into(),
-        Some(IntrinsicOp::SimdV128Store) => "simd_v128_store".into(),
-        Some(IntrinsicOp::SimdV128Splat) => "simd_v128_splat".into(),
-        Some(IntrinsicOp::SimdV128Add) => "simd_v128_add".into(),
-        Some(IntrinsicOp::SimdV128Sub) => "simd_v128_sub".into(),
-        Some(IntrinsicOp::SimdV128Mul) => "simd_v128_mul".into(),
-        Some(IntrinsicOp::SimdV128Min) => "simd_v128_min".into(),
-        Some(IntrinsicOp::SimdV128Max) => "simd_v128_max".into(),
-        Some(IntrinsicOp::SimdV128Sum) => "simd_v128_sum".into(),
-        _ => mapped,
-    }
-}
-
-fn simd_es(cx: &Cx<'_>, callee: &Callee) -> u32 {
-    callee
-        .args
-        .first()
-        .map(|ty| elem_size(cx, *ty))
-        .unwrap_or(4)
-        .max(1)
-}
-
-fn value_dest(cx: &Cx<'_>, f: &crate::MirFunction, place: &Place) -> Option<String> {
-    match place {
-        Place::Local(l) if cx.interner.is_value_type(f.local_ty(*l)) => {
-            Some(format!("dream_p(l{})", l.0))
-        }
-        Place::Field { base, field } => {
-            let layout = cx.nstruct(f.local_ty(*base))?;
-            let fld = layout.fields.get(*field)?;
-            if cx.interner.is_value_type(fld.ty) {
-                Some(format!("(char *)dream_p(l{}) + {}", base.0, fld.offset))
-            } else {
-                None
+            Statement::Print { arg, ty, newline } => self.print(arg, *ty, *newline),
+            Statement::Call { callee, args } => {
+                if self.simd_call(callee, args) {
+                    return;
+                }
+                let e = self.call_expr(callee, args);
+                self.b.expr_stmt(e);
+            }
+            Statement::JsCall {
+                target,
+                via,
+                method,
+                args,
+                ..
+            } => {
+                let e = self.js_call_expr(target, via, method, args);
+                self.b.expr_stmt(Expr::cast(CTy::Void, e));
+            }
+            Statement::InterfaceCall {
+                receiver,
+                iface_id,
+                method_slot,
+                args,
+                ..
+            } => {
+                let e = self.iface_expr(receiver, *iface_id, *method_slot, args);
+                self.b.expr_stmt(Expr::cast(CTy::Void, e));
+            }
+            Statement::IndirectCall { target, args, .. } => {
+                let e = self.indirect_expr(target, args);
+                self.b.expr_stmt(Expr::cast(CTy::Void, e));
+            }
+            Statement::ArrayElemsCopy {
+                dst,
+                dst_off,
+                src,
+                src_off,
+                count,
+                elem_ty,
+            } => {
+                let es = elem_size(self.cx, *elem_ty);
+                let d = self.operand(dst);
+                let doff = self.operand(dst_off);
+                let s = self.operand(src);
+                let soff = self.operand(src_off);
+                let n = self.operand(count);
+                self.b.call(
+                    "dream_mem_copy",
+                    vec![
+                        Expr::add(d, Expr::add(Expr::i(4), Expr::mul(doff, Expr::i(es as i64)))),
+                        Expr::add(s, Expr::add(Expr::i(4), Expr::mul(soff, Expr::i(es as i64)))),
+                        Expr::cast(CTy::Named("size_t"), Expr::mul(n, Expr::i(es as i64))),
+                    ],
+                );
+            }
+            Statement::ArrayElemsFill {
+                dst,
+                dst_off,
+                count,
+                elem_ty,
+            } => {
+                let es = elem_size(self.cx, *elem_ty);
+                let d = self.operand(dst);
+                let doff = self.operand(dst_off);
+                let n = self.operand(count);
+                self.b.call(
+                    "memset",
+                    vec![
+                        Expr::add(
+                            Expr::ptr_add(d, Expr::i(4)),
+                            Expr::mul(doff, Expr::i(es as i64)),
+                        ),
+                        Expr::i(0),
+                        Expr::cast(CTy::Named("size_t"), Expr::mul(n, Expr::i(es as i64))),
+                    ],
+                );
+            }
+            Statement::ForceFree(o) => {
+                let a = self.operand(o);
+                self.b.call("dream_free", vec![a]);
+            }
+            Statement::LockAcquire(o) => {
+                let a = self.operand(o);
+                self.b.call("dream_lock_acquire", vec![a]);
+            }
+            Statement::LockRelease(o) => {
+                let a = self.operand(o);
+                self.b.call("dream_lock_release", vec![a]);
+            }
+            Statement::SimdV128 {
+                dest,
+                lhs,
+                rhs,
+                index,
+                splat_rhs,
+                ptr_addr,
+                op,
+                lane,
+            } => {
+                let d = self.operand(dest);
+                let l = self.operand(lhs);
+                let r = self.operand(rhs);
+                let i = self.operand(index);
+                let es = lane.esize();
+                let opi = match op {
+                    crate::BinOp::Add => 0,
+                    crate::BinOp::Sub => 1,
+                    crate::BinOp::Mul => 2,
+                    crate::BinOp::Div => 3,
+                    _ => 0,
+                };
+                let raddr = splat_rhs
+                    .as_ref()
+                    .map(|s| self.operand(s))
+                    .unwrap_or(r);
+                let call = if *ptr_addr {
+                    Expr::call(
+                        "dream_simd_binop",
+                        vec![d, l, raddr, Expr::i(es as i64), Expr::i(opi)],
+                    )
+                } else {
+                    let off = |base: Expr| {
+                        Expr::add(base, Expr::add(Expr::i(4), Expr::mul(i.clone(), Expr::i(es as i64))))
+                    };
+                    Expr::call(
+                        "dream_simd_binop",
+                        vec![
+                            off(d),
+                            off(l),
+                            off(raddr),
+                            Expr::i(es as i64),
+                            Expr::i(opi),
+                        ],
+                    )
+                };
+                self.b.expr_stmt(call);
+            }
+            Statement::ValueDrop(l) => {
+                if !self.f.locals[l.0 as usize].is_ref && !is_alias_value_local(self.f, *l) {
+                    self.value_refs(self.f.local_ty(*l), Expr::local(l.0), false);
+                }
+            }
+            Statement::ValueRetain(l) => {
+                if !is_alias_value_local(self.f, *l) {
+                    self.value_refs(self.f.local_ty(*l), Expr::local(l.0), true);
+                }
+            }
+            Statement::ValueKill(l) => {
+                let size = elem_size(self.cx, self.f.local_ty(*l));
+                self.b.call(
+                    "memset",
+                    vec![
+                        Expr::dream_p(Expr::local(l.0)),
+                        Expr::i(0),
+                        Expr::i(size as i64),
+                    ],
+                );
             }
         }
-        _ => None,
+    }
+
+    pub(super) fn value_refs(&mut self, ty: dream_types::TypeId, base: Expr, retain: bool) {
+        for s in value_ref_stmts(self.cx, ty, base, retain) {
+            self.b.stmt(s);
+        }
     }
 }
 
-fn emit_simd_assign(
-    out: &mut String,
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    place: &Place,
-    rv: &crate::Rvalue,
-) -> bool {
-    let crate::Rvalue::Call { callee, args } = rv else {
-        return false;
-    };
-    let name = simd_call_name(cx, callee);
-    if name == "simd_lane_count" {
-        let Place::Local(l) = place else {
-            return false;
-        };
-        out.push_str(&format!("  l{} = 4;\n", l.0));
-        return true;
-    }
-    if name == "simd_v128_sum" {
-        let Place::Local(l) = place else {
-            return false;
-        };
-        out.push_str(&format!(
-            "  l{} = simd_v128_sum({});\n",
-            l.0,
-            emit_operand(cx, f, &args[0])
-        ));
-        return true;
-    }
-    let Some(dest) = value_dest(cx, f, place) else {
-        return false;
-    };
-    let es = simd_es(cx, callee);
-    let a: Vec<String> = args.iter().map(|o| emit_operand(cx, f, o)).collect();
-    let line = match name.as_str() {
-        "simd_v128_load" if a.len() >= 2 => format!(
-            "  memcpy({dest}, (char *)dream_p({}) + 4 + (size_t)({}) * {es}, 16);\n",
-            a[0], a[1]
-        ),
-        "simd_v128_splat" if a.len() == 1 => {
-            format!("  dream_v128_splat_f32({dest}, (float)({}));\n", a[0])
-        }
-        "simd_v128_add" if a.len() >= 2 => {
-            format!(
-                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 0);\n",
-                a[0], a[1]
-            )
-        }
-        "simd_v128_sub" if a.len() >= 2 => {
-            format!(
-                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 1);\n",
-                a[0], a[1]
-            )
-        }
-        "simd_v128_mul" if a.len() >= 2 => {
-            format!(
-                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 2);\n",
-                a[0], a[1]
-            )
-        }
-        "simd_v128_min" if a.len() >= 2 => {
-            format!(
-                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 3);\n",
-                a[0], a[1]
-            )
-        }
-        "simd_v128_max" if a.len() >= 2 => {
-            format!(
-                "  dream_v128_f32_bin({dest}, dream_p({}), dream_p({}), 4);\n",
-                a[0], a[1]
-            )
-        }
-        _ => return false,
-    };
-    out.push_str(&line);
-    true
-}
-
-fn emit_simd_call(
-    out: &mut String,
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    callee: &Callee,
-    args: &[Operand],
-) -> bool {
-    let name = simd_call_name(cx, callee);
-    if name != "simd_v128_store" || args.len() < 3 {
-        return false;
-    }
-    let es = simd_es(cx, callee);
-    out.push_str(&format!(
-        "  memcpy((char *)dream_p({}) + 4 + (size_t)({}) * {es}, dream_p({}), 16);\n",
-        emit_operand(cx, f, &args[1]),
-        emit_operand(cx, f, &args[2]),
-        emit_operand(cx, f, &args[0]),
-    ));
-    true
-}
-
-pub(super) fn emit_value_refs(
-    out: &mut String,
-    cx: &Cx<'_>,
+pub(super) fn value_ref_stmts(
+    cx: &super::ctx::Cx<'_>,
     ty: dream_types::TypeId,
-    base: &str,
+    base: Expr,
     retain: bool,
-) {
+) -> Vec<Stmt> {
+    let mut out = Vec::new();
     if let Some(layout) = cx.nstruct(ty) {
         for field in &layout.fields {
             if field.is_weak || field.is_unowned {
                 continue;
             }
-            let at = format!("((dream_ptr)((char *)dream_p({base}) + {}))", field.offset);
+            let at = Expr::cast(
+                CTy::Ptr,
+                Expr::ptr_add(base.clone(), Expr::i(field.offset as i64)),
+            );
             if cx.interner.is_value_type(field.ty) {
-                emit_value_refs(out, cx, field.ty, &at, retain);
+                out.extend(value_ref_stmts(cx, field.ty, at, retain));
             } else if cx.interner.is_rc_tracked(field.ty) {
-                let value = format!("*(dream_ptr *)dream_p({at})");
+                let value = Expr::load(CTy::Ptr, Expr::dream_p(at));
                 if retain {
-                    out.push_str(&format!("  dream_retain({value});\n"));
+                    out.push(Stmt::call("dream_retain", vec![value]));
                 } else {
                     let release =
                         crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
-                    out.push_str(&format!("  {release}({value});\n"));
+                    out.push(Stmt::call(release, vec![value]));
                 }
             }
         }
-        return;
+        return out;
     }
     let Some(u) = cx.nunion(ty) else {
-        return;
+        return out;
     };
-    out.push_str(&format!("  switch (*(int32_t *)dream_p({base})) {{\n"));
+    let mut arms = Vec::new();
     for variant in &u.variants {
-        out.push_str(&format!("    case {}:\n", variant.discriminant));
+        let mut body = Vec::new();
         for field in &variant.fields {
             if field.is_weak || field.is_unowned {
                 continue;
             }
-            let at = format!("((dream_ptr)((char *)dream_p({base}) + {}))", field.offset);
+            let at = Expr::cast(
+                CTy::Ptr,
+                Expr::ptr_add(base.clone(), Expr::i(field.offset as i64)),
+            );
             if cx.interner.is_value_type(field.ty) {
-                emit_value_refs(out, cx, field.ty, &at, retain);
+                body.extend(value_ref_stmts(cx, field.ty, at, retain));
             } else if cx.interner.is_rc_tracked(field.ty) {
-                let value = format!("*(dream_ptr *)dream_p({at})");
+                let value = Expr::load(CTy::Ptr, Expr::dream_p(at));
                 if retain {
-                    out.push_str(&format!("      dream_retain({value});\n"));
+                    body.push(Stmt::call("dream_retain", vec![value]));
                 } else {
                     let release =
                         crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
-                    out.push_str(&format!("      {release}({value});\n"));
+                    body.push(Stmt::call(release, vec![value]));
                 }
             }
         }
-        out.push_str("      break;\n");
+        body.push(Stmt::Expr(Expr::id("break")));
+        arms.push(SwitchArm {
+            keys: vec![CaseKey::Int(variant.discriminant as i64)],
+            body,
+        });
     }
-    out.push_str("    default: break;\n  }\n");
+    arms.push(SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Expr(Expr::id("break"))],
+    });
+    out.push(Stmt::Switch {
+        expr: Expr::load(CTy::I32, Expr::dream_p(base)),
+        arms,
+    });
+    out
 }
 
-fn operand_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &crate::Operand) -> dream_types::TypeId {
-    match o {
-        crate::Operand::Copy(Place::Local(l)) => f.local_ty(*l),
-        crate::Operand::Copy(Place::Global(g)) => cx
-            .mir
-            .globals
-            .iter()
-            .find(|global| global.id == *g)
-            .map(|global| global.ty)
-            .unwrap_or_else(|| cx.interner.int()),
-        crate::Operand::Copy(Place::Field { base, field }) => cx
-            .nstruct(f.local_ty(*base))
-            .and_then(|layout| layout.fields.get(*field))
-            .map(|field| field.ty)
-            .unwrap_or_else(|| f.local_ty(*base)),
-        crate::Operand::Copy(Place::Index { base, .. }) => {
-            crate::backend::c::types::array_elem_ty(cx.interner, f.local_ty(*base))
+impl<'a> Emitter<'a> {
+    fn simd_call_name(&self, callee: &Callee) -> String {
+        let raw = self.cx.callee_c(callee.def, &callee.args);
+        let mapped = runtime_c_name(&raw);
+        if mapped.starts_with("simd_") {
+            return mapped;
         }
-        crate::Operand::Copy(Place::Deref { elem_ty, .. }) => *elem_ty,
-        crate::Operand::Const(crate::Const::Str(_)) => cx.interner.string(),
-        crate::Operand::Const(crate::Const::Long(_)) => cx.interner.long(),
-        crate::Operand::Const(crate::Const::Float(_)) => cx.interner.double(),
-        crate::Operand::Const(crate::Const::F32(_)) => cx.interner.float(),
-        crate::Operand::Const(crate::Const::Bool(_)) => cx.interner.bool(),
-        crate::Operand::Const(crate::Const::Char(_)) => cx.interner.char(),
-        crate::Operand::Const(_) => cx.interner.int(),
+        match IntrinsicOp::from_key(&raw).or_else(|| IntrinsicOp::from_key(&mapped)) {
+            Some(IntrinsicOp::SimdLaneCount) => "simd_lane_count".into(),
+            Some(IntrinsicOp::SimdV128Load) => "simd_v128_load".into(),
+            Some(IntrinsicOp::SimdV128Store) => "simd_v128_store".into(),
+            Some(IntrinsicOp::SimdV128Splat) => "simd_v128_splat".into(),
+            Some(IntrinsicOp::SimdV128Add) => "simd_v128_add".into(),
+            Some(IntrinsicOp::SimdV128Sub) => "simd_v128_sub".into(),
+            Some(IntrinsicOp::SimdV128Mul) => "simd_v128_mul".into(),
+            Some(IntrinsicOp::SimdV128Min) => "simd_v128_min".into(),
+            Some(IntrinsicOp::SimdV128Max) => "simd_v128_max".into(),
+            Some(IntrinsicOp::SimdV128Sum) => "simd_v128_sum".into(),
+            _ => mapped,
+        }
     }
-}
 
-fn emit_print(
-    out: &mut String,
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    arg: &crate::Operand,
-    ty: dream_types::TypeId,
-    newline: bool,
-) {
-    let a = emit_operand(cx, f, arg);
-    match cx.interner.kind(ty) {
-        TyKind::Prim(PrimTy::Int) | TyKind::Enum(_) => {
-            out.push_str(&format!("  print_int((int32_t)({a}));\n"));
+    fn simd_es(&self, callee: &Callee) -> u32 {
+        callee
+            .args
+            .first()
+            .map(|ty| elem_size(self.cx, *ty))
+            .unwrap_or(4)
+            .max(1)
+    }
+
+    fn value_dest(&self, place: &Place) -> Option<Expr> {
+        match place {
+            Place::Local(l) if self.cx.interner.is_value_type(self.f.local_ty(*l)) => {
+                Some(Expr::dream_p(Expr::local(l.0)))
+            }
+            Place::Field { base, field } => {
+                let layout = self.cx.nstruct(self.f.local_ty(*base))?;
+                let fld = layout.fields.get(*field)?;
+                if self.cx.interner.is_value_type(fld.ty) {
+                    Some(Expr::field_ptr(base.0, fld.offset))
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
-        TyKind::Prim(PrimTy::Char) => {
-            out.push_str(&format!("  print_char((int32_t)({a}));\n"));
+    }
+
+    fn simd_assign(&mut self, place: &Place, rv: &crate::Rvalue) -> bool {
+        let crate::Rvalue::Call { callee, args } = rv else {
+            return false;
+        };
+        let name = self.simd_call_name(callee);
+        if name == "simd_lane_count" {
+            let Place::Local(l) = place else {
+                return false;
+            };
+            self.b.assign(Expr::local(l.0), Expr::i(4));
+            return true;
         }
-        TyKind::Prim(PrimTy::String) => {
-            out.push_str(&format!("  print_string({a});\n"));
+        if name == "simd_v128_sum" {
+            let Place::Local(l) = place else {
+                return false;
+            };
+            let a = self.operand(&args[0]);
+            self.b
+                .assign(Expr::local(l.0), Expr::call("simd_v128_sum", vec![a]));
+            return true;
         }
-        TyKind::Prim(PrimTy::Float) => {
-            out.push_str(&format!("  print_float((float)({a}));\n"));
+        let Some(dest) = self.value_dest(place) else {
+            return false;
+        };
+        let es = self.simd_es(callee);
+        let a: Vec<Expr> = args.iter().map(|o| self.operand(o)).collect();
+        match name.as_str() {
+            "simd_v128_load" if a.len() >= 2 => {
+                self.b.call(
+                    "memcpy",
+                    vec![
+                        dest,
+                        Expr::add(
+                            Expr::ptr_add(a[0].clone(), Expr::i(4)),
+                            Expr::mul(
+                                Expr::cast(CTy::Named("size_t"), a[1].clone()),
+                                Expr::i(es as i64),
+                            ),
+                        ),
+                        Expr::i(16),
+                    ],
+                );
+                true
+            }
+            "simd_v128_splat" if a.len() == 1 => {
+                self.b.call(
+                    "dream_v128_splat_f32",
+                    vec![dest, Expr::cast(CTy::F32, a[0].clone())],
+                );
+                true
+            }
+            "simd_v128_add" if a.len() >= 2 => {
+                self.b.call(
+                    "dream_v128_f32_bin",
+                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(0)],
+                );
+                true
+            }
+            "simd_v128_sub" if a.len() >= 2 => {
+                self.b.call(
+                    "dream_v128_f32_bin",
+                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(1)],
+                );
+                true
+            }
+            "simd_v128_mul" if a.len() >= 2 => {
+                self.b.call(
+                    "dream_v128_f32_bin",
+                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(2)],
+                );
+                true
+            }
+            "simd_v128_min" if a.len() >= 2 => {
+                self.b.call(
+                    "dream_v128_f32_bin",
+                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(3)],
+                );
+                true
+            }
+            "simd_v128_max" if a.len() >= 2 => {
+                self.b.call(
+                    "dream_v128_f32_bin",
+                    vec![dest, Expr::dream_p(a[0].clone()), Expr::dream_p(a[1].clone()), Expr::i(4)],
+                );
+                true
+            }
+            _ => false,
         }
-        TyKind::Prim(PrimTy::Double) => {
-            out.push_str(&format!("  print_double((double)({a}));\n"));
+    }
+
+    fn simd_call(&mut self, callee: &Callee, args: &[Operand]) -> bool {
+        let name = self.simd_call_name(callee);
+        if name != "simd_v128_store" || args.len() < 3 {
+            return false;
         }
-        _ => {
-            let conv = to_string_fn(cx, ty);
-            if conv.is_empty() {
-                out.push_str(&format!("  print_string({a});\n"));
-            } else {
-                out.push_str(&format!(
-                    "  {{ dream_ptr __ps = {conv}({a}); print_string(__ps); dream_release(__ps); }}\n"
-                ));
+        let es = self.simd_es(callee);
+        let a1 = self.operand(&args[1]);
+        let a2 = self.operand(&args[2]);
+        let a0 = self.operand(&args[0]);
+        self.b.call(
+            "memcpy",
+            vec![
+                Expr::add(
+                    Expr::ptr_add(a1, Expr::i(4)),
+                    Expr::mul(Expr::cast(CTy::Named("size_t"), a2), Expr::i(es as i64)),
+                ),
+                Expr::dream_p(a0),
+                Expr::i(16),
+            ],
+        );
+        true
+    }
+
+    fn print(&mut self, arg: &crate::Operand, ty: dream_types::TypeId, newline: bool) {
+        let a = self.operand(arg);
+        match self.cx.interner.kind(ty) {
+            TyKind::Prim(PrimTy::Int) | TyKind::Enum(_) => {
+                self.b.call("print_int", vec![Expr::cast(CTy::I32, a)]);
+            }
+            TyKind::Prim(PrimTy::Char) => {
+                self.b.call("print_char", vec![Expr::cast(CTy::I32, a)]);
+            }
+            TyKind::Prim(PrimTy::String) => {
+                self.b.call("print_string", vec![a]);
+            }
+            TyKind::Prim(PrimTy::Float) => {
+                self.b.call("print_float", vec![Expr::cast(CTy::F32, a)]);
+            }
+            TyKind::Prim(PrimTy::Double) => {
+                self.b.call("print_double", vec![Expr::cast(CTy::F64, a)]);
+            }
+            _ => {
+                let conv = self.to_string_fn(ty);
+                if conv.is_empty() {
+                    self.b.call("print_string", vec![a]);
+                } else {
+                    self.b.stmt(Stmt::block(vec![
+                        Stmt::decl(CTy::Ptr, "__ps", Some(Expr::call(conv, vec![a]))),
+                        Stmt::call("print_string", vec![Expr::id("__ps")]),
+                        Stmt::call("dream_release", vec![Expr::id("__ps")]),
+                    ]));
+                }
             }
         }
-    }
-    if newline {
-        out.push_str("  print_char(10);\n");
+        if newline {
+            self.b.call("print_char", vec![Expr::i(10)]);
+        }
     }
 }

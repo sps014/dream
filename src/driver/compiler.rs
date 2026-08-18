@@ -352,7 +352,7 @@ impl Compiler {
                         || matches!(self.crate_type, dream_sema::analyzer::CrateType::Lib),
                 ),
                 Target::NativeC => {
-                    let c = dream_mir::backend::c::emit_c_module_ex(&mir, interner, !self.debug);
+                    let c = dream_mir::backend::c::emit_c_module(&mir, interner);
                     (c.into_bytes(), None)
                 }
             };

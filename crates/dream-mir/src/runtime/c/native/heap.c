@@ -30,13 +30,13 @@ int dream_rt_mt;
 
 static void heap_lock(void) {
     if (dream_rt_mt) {
-        heap_lock();
+        pthread_mutex_lock(&heap_mu);
     }
 }
 
 static void heap_unlock(void) {
     if (dream_rt_mt) {
-        heap_unlock();
+        pthread_mutex_unlock(&heap_mu);
     }
 }
 

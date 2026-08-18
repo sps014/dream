@@ -1,5 +1,8 @@
-use crate::backend::c::ctx::Cx;
-use crate::backend::c::types::c_ident;
+use super::ast::{CTy, CaseKey, Expr, Param, Stmt, SwitchArm, UnOp};
+use super::builder::{FuncBuilder, ModuleBuilder};
+use super::ctx::Cx;
+use super::statements::value_ref_stmts;
+use super::types::{c_ident, elem_size};
 use crate::backend::wasm::func_symbol;
 use crate::Mir;
 use dream_types::{TyKind, TypeId, TypeInterner};
@@ -37,7 +40,34 @@ fn collect_array_elems(
     }
 }
 
-pub(super) fn emit_release_helpers(out: &mut String, cx: &Cx<'_>) {
+fn rc_header() -> Stmt {
+    Stmt::block(vec![
+        Stmt::decl(
+            CTy::ptr_to(CTy::I32),
+            "rc",
+            Some(Expr::cast(
+                CTy::ptr_to(CTy::I32),
+                Expr::add(Expr::char_p(Expr::id("p")), Expr::i(-4)),
+            )),
+        ),
+        Stmt::decl(CTy::I32, "old", Some(Expr::deref(Expr::id("rc")))),
+        Stmt::if_(
+            Expr::bin(
+                crate::BinOp::Or,
+                Expr::bin(crate::BinOp::Le, Expr::id("old"), Expr::i(0)),
+                Expr::eq(Expr::id("old"), Expr::id("INT32_MAX")),
+            ),
+            Stmt::Return(None),
+        ),
+        Stmt::assign(
+            Expr::deref(Expr::id("rc")),
+            Expr::bin(crate::BinOp::Sub, Expr::id("old"), Expr::i(1)),
+        ),
+        Stmt::if_(Expr::ne(Expr::id("old"), Expr::i(1)), Stmt::Return(None)),
+    ])
+}
+
+pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let mir = cx.mir;
     let interner = cx.interner;
     let mut array_elems = std::collections::BTreeSet::new();
@@ -59,98 +89,164 @@ pub(super) fn emit_release_helpers(out: &mut String, cx: &Cx<'_>) {
             }
         }
     }
+    let p = vec![Param {
+        ty: CTy::Ptr,
+        name: "p".into(),
+    }];
     for elem in &array_elems {
-        let name = c_ident(&format!("release_array_t{}", elem.0));
-        out.push_str(&format!("static void {name}(dream_ptr p);\n"));
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("release_array_t{}", elem.0)),
+            p.clone(),
+        );
     }
     for layout in cx.native.structs.values() {
-        let name = c_ident(&format!("release_{}", layout.name));
-        out.push_str(&format!("static void {name}(dream_ptr p);\n"));
+        m.static_proto(CTy::Void, c_ident(&format!("release_{}", layout.name)), p.clone());
     }
     for layout in cx.native.unions.values() {
-        let name = c_ident(&format!("release_{}", layout.name));
-        out.push_str(&format!("static void {name}(dream_ptr p);\n"));
+        m.static_proto(CTy::Void, c_ident(&format!("release_{}", layout.name)), p.clone());
     }
-    out.push('\n');
     for elem in array_elems {
         let name = c_ident(&format!("release_array_t{}", elem.0));
-        let es = crate::backend::c::types::elem_size(cx, elem);
-        out.push_str(&format!("static void {name}(dream_ptr p) {{\n"));
-        out.push_str("  int32_t n; int32_t i;\n");
-        out.push_str("  if (!p) return;\n");
-        out.push_str("  { int32_t *rc = (int32_t *)((char *)dream_p(p) - 4); int32_t old = *rc; if (old <= 0 || old == INT32_MAX) return; *rc = old - 1; if (old != 1) return; }\n");
-        out.push_str("  n = *(int32_t *)dream_p(p);\n");
-        out.push_str("  for (i = 0; i < n; i++) {\n");
+        let es = elem_size(cx, elem);
+        let mut b = FuncBuilder::new(CTy::Void, name);
+        b.static_ = true;
+        b.param(CTy::Ptr, "p");
+        b.stmt(Stmt::decl(CTy::I32, "n", None));
+        b.stmt(Stmt::decl(CTy::I32, "i", None));
+        b.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(None),
+        ));
+        b.stmt(rc_header());
+        b.assign(Expr::id("n"), Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))));
+        let mut body = Vec::new();
         if interner.is_value_type(elem) {
-            let at = format!("((dream_ptr)((char *)dream_p(p) + 4 + (size_t)i * {es}))");
-            crate::backend::c::statements::emit_value_refs(out, cx, elem, &at, false);
+            let at = Expr::cast(
+                CTy::Ptr,
+                Expr::add(
+                    Expr::ptr_add(Expr::id("p"), Expr::i(4)),
+                    Expr::mul(Expr::cast(CTy::Named("size_t"), Expr::id("i")), Expr::i(es as i64)),
+                ),
+            );
+            body.extend(value_ref_stmts(cx, elem, at, false));
         } else if interner.is_rc_tracked(elem) {
             let rel = release_sym(interner, mir, elem);
-            out.push_str(&format!(
-                "    {rel}(*(dream_ptr *)((char *)dream_p(p) + 4 + (size_t)i * {es}));\n"
+            body.push(Stmt::call(
+                rel,
+                vec![Expr::load(
+                    CTy::Ptr,
+                    Expr::add(
+                        Expr::ptr_add(Expr::id("p"), Expr::i(4)),
+                        Expr::mul(Expr::cast(CTy::Named("size_t"), Expr::id("i")), Expr::i(es as i64)),
+                    ),
+                )],
             ));
         }
-        out.push_str("  }\n  dream_free(p);\n}\n\n");
+        b.stmt(Stmt::For {
+            init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
+            cond: Expr::lt(Expr::id("i"), Expr::id("n")),
+            step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
+            body: Box::new(Stmt::block(body)),
+        });
+        b.call("dream_free", vec![Expr::id("p")]);
+        m.push_func(b);
     }
-    for (ty, layout) in &cx.native.structs {
+    for (_ty, layout) in &cx.native.structs {
         let name = c_ident(&format!("release_{}", layout.name));
-        out.push_str(&format!("static void {name}(dream_ptr p) {{\n"));
-        out.push_str("  if (!p) return;\n");
-        out.push_str("  { int32_t *rc = (int32_t *)((char *)dream_p(p) - 4); int32_t old = *rc; if (old <= 0 || old == INT32_MAX) return; *rc = old - 1; if (old != 1) return; }\n");
+        let mut b = FuncBuilder::new(CTy::Void, name);
+        b.static_ = true;
+        b.param(CTy::Ptr, "p");
+        b.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(None),
+        ));
+        b.stmt(rc_header());
         if let Some(del) = cx
             .mir
             .functions
             .iter()
             .find(|f| f.name == format!("{}_del", layout.name))
         {
-            out.push_str("  *(int32_t *)((char *)dream_p(p) - 4) = 1;\n");
-            out.push_str(&format!("  {}(p);\n", c_ident(&func_symbol(del))));
+            b.stmt(Stmt::store(
+                CTy::I32,
+                Expr::add(Expr::char_p(Expr::id("p")), Expr::i(-4)),
+                Expr::i(1),
+            ));
+            b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
         for f in &layout.fields {
             if f.is_weak || f.is_unowned {
                 continue;
             }
             if interner.is_value_type(f.ty) {
-                let at = format!("((dream_ptr)((char *)dream_p(p) + {}))", f.offset);
-                crate::backend::c::statements::emit_value_refs(out, cx, f.ty, &at, false);
+                let at = Expr::cast(CTy::Ptr, Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)));
+                for s in value_ref_stmts(cx, f.ty, at, false) {
+                    b.stmt(s);
+                }
             } else if interner.is_rc_tracked(f.ty) {
                 let rel = release_sym(interner, mir, f.ty);
-                out.push_str(&format!(
-                    "  {rel}(*(dream_ptr *)((char *)dream_p(p) + {}));\n",
-                    f.offset
-                ));
+                b.call(
+                    rel,
+                    vec![Expr::load(
+                        CTy::Ptr,
+                        Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+                    )],
+                );
             }
         }
-        out.push_str("  dream_free(p);\n}\n\n");
-        let _ = ty;
+        b.call("dream_free", vec![Expr::id("p")]);
+        m.push_func(b);
     }
-    for (ty, layout) in &cx.native.unions {
+    for (_ty, layout) in &cx.native.unions {
         let name = c_ident(&format!("release_{}", layout.name));
-        out.push_str(&format!("static void {name}(dream_ptr p) {{\n"));
-        out.push_str("  if (!p) return;\n");
-        out.push_str("  { int32_t *rc = (int32_t *)((char *)dream_p(p) - 4); int32_t old = *rc; if (old <= 0 || old == INT32_MAX) return; *rc = old - 1; if (old != 1) return; }\n");
-        out.push_str("  switch (*(int32_t *)dream_p(p)) {\n");
+        let mut b = FuncBuilder::new(CTy::Void, name);
+        b.static_ = true;
+        b.param(CTy::Ptr, "p");
+        b.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(None),
+        ));
+        b.stmt(rc_header());
+        let mut arms = Vec::new();
         for variant in &layout.variants {
-            out.push_str(&format!("    case {}:\n", variant.discriminant));
+            let mut body = Vec::new();
             for field in &variant.fields {
                 if field.is_weak || field.is_unowned {
                     continue;
                 }
                 if interner.is_value_type(field.ty) {
-                    let at = format!("((dream_ptr)((char *)dream_p(p) + {}))", field.offset);
-                    crate::backend::c::statements::emit_value_refs(out, cx, field.ty, &at, false);
+                    let at = Expr::cast(
+                        CTy::Ptr,
+                        Expr::ptr_add(Expr::id("p"), Expr::i(field.offset as i64)),
+                    );
+                    body.extend(value_ref_stmts(cx, field.ty, at, false));
                 } else if interner.is_rc_tracked(field.ty) {
                     let rel = release_sym(interner, mir, field.ty);
-                    out.push_str(&format!(
-                        "      {rel}(*(dream_ptr *)((char *)dream_p(p) + {}));\n",
-                        field.offset
+                    body.push(Stmt::call(
+                        rel,
+                        vec![Expr::load(
+                            CTy::Ptr,
+                            Expr::ptr_add(Expr::id("p"), Expr::i(field.offset as i64)),
+                        )],
                     ));
                 }
             }
-            out.push_str("      break;\n");
+            body.push(Stmt::Expr(Expr::id("break")));
+            arms.push(SwitchArm {
+                keys: vec![CaseKey::Int(variant.discriminant as i64)],
+                body,
+            });
         }
-        out.push_str("    default: break;\n  }\n");
-        out.push_str("  dream_free(p);\n}\n\n");
-        let _ = ty;
+        arms.push(SwitchArm {
+            keys: vec![],
+            body: vec![Stmt::Expr(Expr::id("break"))],
+        });
+        b.stmt(Stmt::Switch {
+            expr: Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+            arms,
+        });
+        b.call("dream_free", vec![Expr::id("p")]);
+        m.push_func(b);
     }
 }

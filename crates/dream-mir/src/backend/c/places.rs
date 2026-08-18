@@ -1,102 +1,504 @@
-use crate::backend::c::ctx::Cx;
-use crate::backend::c::types::{array_elem_ty, elem_size, load_cast};
+use super::ast::{CTy, Expr, Stmt, UnOp};
+use super::emit::Emitter;
+use super::types::{array_elem_ty, elem_size, load_cast};
 use crate::{Operand, Place};
 
-pub(super) fn emit_operand(cx: &Cx<'_>, f: &crate::MirFunction, o: &Operand) -> String {
-    match o {
-        Operand::Copy(p) => emit_load(cx, f, p),
-        Operand::Const(c) => match c {
-            crate::Const::Int(v) => format!("{v}"),
-            crate::Const::Long(v) => format!("{v}LL"),
-            crate::Const::Float(v) => {
-                if v.is_nan() {
-                    "(double)NAN".into()
-                } else if v.is_infinite() {
-                    if *v > 0.0 {
-                        "(double)INFINITY".into()
+impl<'a> Emitter<'a> {
+    pub(super) fn operand(&mut self, o: &Operand) -> Expr {
+        match o {
+            Operand::Copy(p) => self.load(p),
+            Operand::Const(c) => match c {
+                crate::Const::Int(v) => Expr::i(*v),
+                crate::Const::Long(v) => Expr::Long(*v),
+                crate::Const::Float(v) => {
+                    if v.is_nan() {
+                        Expr::Nan { double: true }
+                    } else if v.is_infinite() {
+                        Expr::Inf {
+                            double: true,
+                            neg: *v < 0.0,
+                        }
                     } else {
-                        "(-(double)INFINITY)".into()
+                        Expr::Float(*v)
                     }
-                } else {
-                    format!("{v}")
                 }
-            }
-            crate::Const::F32(v) => {
-                if v.is_nan() {
-                    "NAN".into()
-                } else if v.is_infinite() {
-                    if *v > 0.0 {
-                        "INFINITY".into()
+                crate::Const::F32(v) => {
+                    if v.is_nan() {
+                        Expr::Nan { double: false }
+                    } else if v.is_infinite() {
+                        Expr::Inf {
+                            double: false,
+                            neg: *v < 0.0,
+                        }
                     } else {
-                        "(-INFINITY)".into()
+                        Expr::F32(*v)
                     }
-                } else {
-                    let mut s = format!("{v}");
-                    if !s.contains('.') && !s.contains('e') && !s.contains('E') {
-                        s.push_str(".0");
-                    }
-                    s.push('f');
-                    s
                 }
-            }
-            crate::Const::Bool(b) => if *b { "1" } else { "0" }.into(),
-            crate::Const::Char(ch) => format!("{}", *ch as u32),
-            crate::Const::Str(s) => cx.str_sym(s).to_string(),
-            crate::Const::Null => "0".into(),
-        },
+                crate::Const::Bool(b) => Expr::i(if *b { 1 } else { 0 }),
+                crate::Const::Char(ch) => Expr::i(*ch as i64),
+                crate::Const::Str(s) => Expr::id(self.cx.str_sym(s)),
+                crate::Const::Null => Expr::Null,
+            },
+        }
     }
-}
 
-pub(super) fn emit_load(cx: &Cx<'_>, f: &crate::MirFunction, place: &Place) -> String {
-    match place {
-        Place::Local(l) => format!("l{}", l.0),
-        Place::Global(g) => format!("g{}", g.0),
-        Place::Field { base, field } => {
-            let ty = f.local_ty(*base);
-            let Some(layout) = cx.nstruct(ty) else {
-                return format!("((dream_ptr*)l{})[{field}]", base.0);
-            };
-            let fld = layout
-                .fields
-                .get(*field)
-                .unwrap_or_else(|| crate::internal_error!("missing field {field} on type {ty:?}"));
-            if cx.interner.is_value_type(fld.ty) {
-                return format!(
-                    "((dream_ptr)((char*)dream_p(l{}) + {}))",
-                    base.0, fld.offset
+    pub(super) fn load(&mut self, place: &Place) -> Expr {
+        match place {
+            Place::Local(l) => Expr::local(l.0),
+            Place::Global(g) => Expr::global(g.0),
+            Place::Field { base, field } => {
+                let ty = self.f.local_ty(*base);
+                let Some(layout) = self.cx.nstruct(ty) else {
+                    return Expr::index(Expr::cast(CTy::ptr_to(CTy::Ptr), Expr::local(base.0)), Expr::i(*field as i64));
+                };
+                let fld = layout.fields.get(*field).unwrap_or_else(|| {
+                    crate::internal_error!("missing field {field} on type {ty:?}")
+                });
+                if self.cx.interner.is_value_type(fld.ty) {
+                    return Expr::cast(CTy::Ptr, Expr::field_ptr(base.0, fld.offset));
+                }
+                let cast = load_cast(self.cx, fld.ty);
+                let load = Expr::load(cast.clone(), Expr::field_ptr(base.0, fld.offset));
+                if fld.is_unowned {
+                    let panic = Expr::id(self.cx.str_sym(crate::backend::wasm::panic_msgs::UNOWNED_NULL_DEREF));
+                    self.b.expr_block(|b| {
+                        let t = b.temp(cast.clone(), Some(load.clone()));
+                        b.stmt(Stmt::if_(
+                            Expr::unary(UnOp::Not, t.clone()),
+                            Stmt::call("dream_panic", vec![panic.clone()]),
+                        ));
+                        t
+                    })
+                } else {
+                    load
+                }
+            }
+            Place::Index {
+                base,
+                index,
+                unchecked,
+            } => {
+                let ety = array_elem_ty(self.cx.interner, self.f.local_ty(*base));
+                let addr = self.index_addr(*base, index, elem_size(self.cx, ety), *unchecked);
+                if self.cx.interner.is_value_type(ety) {
+                    Expr::cast(CTy::Ptr, addr)
+                } else {
+                    Expr::load(load_cast(self.cx, ety), addr)
+                }
+            }
+            Place::Deref { ptr, elem_ty } => {
+                if self.cx.interner.is_value_type(*elem_ty) {
+                    Expr::local(ptr.0)
+                } else {
+                    Expr::load(load_cast(self.cx, *elem_ty), Expr::dream_p(Expr::local(ptr.0)))
+                }
+            }
+        }
+    }
+
+    pub(super) fn store(&mut self, place: &Place, rv: &crate::Rvalue, rhs: Expr) -> Expr {
+        match place {
+            Place::Local(l) if self.cx.interner.is_value_type(self.f.local_ty(*l)) => {
+                if is_value_place_alias(self.f, *l, rv) {
+                    return self.b.expr_block(|b| {
+                        b.assign(Expr::local(l.0), Expr::cast(CTy::Ptr, rhs.clone()));
+                        Expr::local(l.0)
+                    });
+                }
+                if let crate::Rvalue::Use(Operand::Copy(Place::Local(src))) = rv {
+                    let src_ty = self.f.local_ty(*src);
+                    if !self.cx.interner.is_value_type(src_ty)
+                        && self
+                            .cx
+                            .nstruct(src_ty)
+                            .is_some_and(|layout| layout.size == elem_size(self.cx, self.f.local_ty(*l)))
+                    {
+                        return self.b.expr_block(|b| {
+                            b.assign(Expr::local(l.0), Expr::local(src.0));
+                            Expr::local(l.0)
+                        });
+                    }
+                }
+                let retain_copy = matches!(
+                    rv,
+                    crate::Rvalue::Use(Operand::Copy(Place::Field { .. }))
+                        | crate::Rvalue::Use(Operand::Copy(Place::Index { .. }))
+                        | crate::Rvalue::Use(Operand::Copy(Place::Deref { .. }))
+                        | crate::Rvalue::UnionField { .. }
                 );
-            }
-            let cast = load_cast(cx, fld.ty);
-            let load = format!("(*({cast}*)((char*)dream_p(l{}) + {}))", base.0, fld.offset);
-            if fld.is_unowned {
-                let panic = cx.str_sym(crate::backend::wasm::panic_msgs::UNOWNED_NULL_DEREF);
-                format!(
-                    "({{ {cast} __unowned = {load}; if (!__unowned) dream_panic({panic}); __unowned; }})"
+                self.memcpy_value(
+                    rv,
+                    rhs,
+                    self.f.local_ty(*l),
+                    Expr::dream_p(Expr::local(l.0)),
+                    Expr::local(l.0),
+                    retain_copy,
                 )
+            }
+            Place::Local(l) => self.b.expr_block(|b| {
+                b.assign(Expr::local(l.0), rhs.clone());
+                Expr::local(l.0)
+            }),
+            Place::Global(g) => {
+                let value_ty = self
+                    .cx
+                    .mir
+                    .globals
+                    .iter()
+                    .find(|global| global.id == *g)
+                    .map(|global| global.ty)
+                    .filter(|ty| self.cx.interner.is_value_type(*ty));
+                if let Some(ty) = value_ty {
+                    let size = elem_size(self.cx, ty);
+                    self.b.expr_block(|b| {
+                        b.call(
+                            "memcpy",
+                            vec![
+                                Expr::dream_p(Expr::global(g.0)),
+                                Expr::dream_p(rhs.clone()),
+                                Expr::i(size as i64),
+                            ],
+                        );
+                        Expr::global(g.0)
+                    })
+                } else {
+                    self.b.expr_block(|b| {
+                        b.assign(Expr::global(g.0), rhs.clone());
+                        Expr::global(g.0)
+                    })
+                }
+            }
+            Place::Field { base, field } => {
+                let ty = self.f.local_ty(*base);
+                let Some(layout) = self.cx.nstruct(ty) else {
+                    let dest = Expr::index(
+                        Expr::cast(CTy::ptr_to(CTy::Ptr), Expr::local(base.0)),
+                        Expr::i(*field as i64),
+                    );
+                    return self.b.expr_block(|b| {
+                        b.assign(dest.clone(), Expr::cast(CTy::Ptr, rhs.clone()));
+                        dest
+                    });
+                };
+                let fld = layout.fields.get(*field).unwrap_or_else(|| {
+                    crate::internal_error!("missing field {field} on type {ty:?}")
+                });
+                if self.cx.interner.is_value_type(fld.ty) {
+                    return self.memcpy_value(
+                        rv,
+                        rhs,
+                        fld.ty,
+                        Expr::field_ptr(base.0, fld.offset),
+                        Expr::cast(CTy::Ptr, Expr::field_ptr(base.0, fld.offset)),
+                        true,
+                    );
+                }
+                let cast = load_cast(self.cx, fld.ty);
+                let slot = Expr::field_ptr(base.0, fld.offset);
+                if realloc_self_store(place, rv) {
+                    return self.b.expr_block(|b| {
+                        b.stmt(Stmt::store(cast.clone(), slot.clone(), rhs.clone()));
+                        rhs.clone()
+                    });
+                }
+                if fld.is_unowned {
+                    return self.unowned_store(slot, rhs);
+                }
+                if fld.is_weak {
+                    return self.weak_option_store(*base, fld, rv, rhs);
+                }
+                if self.cx.interner.is_reference(fld.ty) && !fld.is_weak {
+                    let release = crate::backend::c::release::release_sym(
+                        self.cx.interner,
+                        self.cx.mir,
+                        fld.ty,
+                    );
+                    return self.rc_store(cast, slot, rhs, release, borrowed_ref_store(rv));
+                }
+                self.b.expr_block(|b| {
+                    b.stmt(Stmt::store(cast.clone(), slot.clone(), rhs.clone()));
+                    rhs.clone()
+                })
+            }
+            Place::Index {
+                base,
+                index,
+                unchecked,
+            } => {
+                let ety = array_elem_ty(self.cx.interner, self.f.local_ty(*base));
+                let es = elem_size(self.cx, ety);
+                let addr = self.index_addr(*base, index, es, *unchecked);
+                if self.cx.interner.is_value_type(ety) {
+                    return self.b.expr_block(|b| {
+                        b.call(
+                            "memcpy",
+                            vec![addr.clone(), Expr::dream_p(rhs.clone()), Expr::i(es as i64)],
+                        );
+                        rhs.clone()
+                    });
+                }
+                let cast = load_cast(self.cx, ety);
+                if realloc_self_store(place, rv) {
+                    return self.b.expr_block(|b| {
+                        b.stmt(Stmt::store(cast.clone(), addr.clone(), rhs.clone()));
+                        rhs.clone()
+                    });
+                }
+                if self.cx.interner.is_reference(ety) {
+                    let release =
+                        crate::backend::c::release::release_sym(self.cx.interner, self.cx.mir, ety);
+                    return self.rc_store(cast, addr, rhs, release, borrowed_ref_store(rv));
+                }
+                self.b.expr_block(|b| {
+                    b.stmt(Stmt::store(cast.clone(), addr.clone(), rhs.clone()));
+                    rhs.clone()
+                })
+            }
+            Place::Deref { ptr, elem_ty } => {
+                if self.cx.interner.is_value_type(*elem_ty) {
+                    let size = elem_size(self.cx, *elem_ty);
+                    return self.b.expr_block(|b| {
+                        b.call(
+                            "memcpy",
+                            vec![
+                                Expr::dream_p(Expr::local(ptr.0)),
+                                Expr::dream_p(rhs.clone()),
+                                Expr::i(size as i64),
+                            ],
+                        );
+                        rhs.clone()
+                    });
+                }
+                let cast = load_cast(self.cx, *elem_ty);
+                self.b.expr_block(|b| {
+                    b.stmt(Stmt::store(
+                        cast.clone(),
+                        Expr::dream_p(Expr::local(ptr.0)),
+                        rhs.clone(),
+                    ));
+                    rhs.clone()
+                })
+            }
+        }
+    }
+
+    fn unowned_store(&mut self, slot: Expr, rhs: Expr) -> Expr {
+        self.b.expr_block(|b| {
+            let old = b.temp(
+                CTy::Ptr,
+                Some(Expr::load(CTy::Ptr, slot.clone())),
+            );
+            b.stmt(Stmt::if_(
+                old.clone(),
+                Stmt::call("dream_weak_unregister", vec![old.clone(), Expr::cast(CTy::Ptr, slot.clone())]),
+            ));
+            let new = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
+            b.stmt(Stmt::store(CTy::Ptr, slot.clone(), new.clone()));
+            b.stmt(Stmt::if_(
+                new.clone(),
+                Stmt::call(
+                    "dream_weak_register",
+                    vec![
+                        new.clone(),
+                        Expr::cast(CTy::Ptr, slot.clone()),
+                        Expr::i(1),
+                        Expr::i(0),
+                    ],
+                ),
+            ));
+            new
+        })
+    }
+
+    fn rc_store(&mut self, cast: CTy, slot: Expr, rhs: Expr, release: String, borrowed: bool) -> Expr {
+        self.b.expr_block(|b| {
+            let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
+            let v = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
+            if borrowed {
+                b.stmt(Stmt::if_(
+                    Expr::ne(old.clone(), v.clone()),
+                    Stmt::block(vec![
+                        Stmt::call("dream_retain", vec![v.clone()]),
+                        Stmt::store(cast.clone(), slot.clone(), v.clone()),
+                        Stmt::call(release.clone(), vec![old.clone()]),
+                    ]),
+                ));
             } else {
-                load
+                b.stmt(Stmt::store(cast.clone(), slot.clone(), v.clone()));
+                b.call(release.clone(), vec![old.clone()]);
             }
+            v
+        })
+    }
+
+    fn index_addr(
+        &mut self,
+        base: crate::Local,
+        index: &Operand,
+        elem_size: u32,
+        unchecked: bool,
+    ) -> Expr {
+        let idx = self.operand(index);
+        if unchecked
+            || !matches!(
+                self.cx.interner.kind(self.f.local_ty(base)),
+                dream_types::TyKind::Array(_)
+            )
+        {
+            return Expr::add(
+                Expr::ptr_add(Expr::local(base.0), Expr::i(4)),
+                Expr::mul(idx, Expr::i(elem_size as i64)),
+            );
         }
-        Place::Index {
-            base,
-            index,
-            unchecked,
-        } => {
-            let ety = array_elem_ty(cx.interner, f.local_ty(*base));
-            let addr = index_addr(cx, f, *base, index, elem_size(cx, ety), *unchecked);
-            if cx.interner.is_value_type(ety) {
-                return format!("((dream_ptr)({addr}))");
+        let panic = Expr::id(self.cx.str_sym(crate::backend::wasm::panic_msgs::INDEX_OUT_OF_BOUNDS));
+        let idx_e = idx.clone();
+        self.b.expr_block(move |b| {
+            let t_idx = b.temp(CTy::I32, Some(Expr::cast(CTy::I32, idx_e.clone())));
+            let t_len = b.temp(
+                CTy::I32,
+                Some(Expr::ternary(
+                    Expr::local(base.0),
+                    Expr::load(CTy::I32, Expr::dream_p(Expr::local(base.0))),
+                    Expr::i(0),
+                )),
+            );
+            let in_i32 = Expr::eq(Expr::cast(CTy::I64, idx_e.clone()), Expr::cast(CTy::I64, t_idx.clone()));
+            let oob = Expr::ge(Expr::cast(CTy::U32, t_idx.clone()), Expr::cast(CTy::U32, t_len));
+            b.stmt(Stmt::if_(
+                Expr::and(in_i32, oob),
+                Stmt::call("dream_panic", vec![panic.clone()]),
+            ));
+            Expr::add(
+                Expr::ptr_add(Expr::local(base.0), Expr::i(4)),
+                Expr::mul(Expr::cast(CTy::I64, idx_e.clone()), Expr::i(elem_size as i64)),
+            )
+        })
+    }
+
+    fn memcpy_value(
+        &mut self,
+        rv: &crate::Rvalue,
+        rhs: Expr,
+        ty: dream_types::TypeId,
+        dest: Expr,
+        dest_ptr: Expr,
+        retain_copy: bool,
+    ) -> Expr {
+        let size = elem_size(self.cx, ty);
+        if value_rvalue_allocates(rv) {
+            self.b.expr_block(move |b| {
+                let v = b.temp(CTy::Ptr, Some(rhs.clone()));
+                b.call(
+                    "memcpy",
+                    vec![dest.clone(), Expr::dream_p(v.clone()), Expr::i(size as i64)],
+                );
+                b.call("dream_free", vec![v.clone()]);
+                dest_ptr.clone()
+            })
+        } else {
+            let cx = self.cx;
+            let func = self.f;
+            self.b.expr_block(|b| {
+                b.call(
+                    "memcpy",
+                    vec![dest.clone(), Expr::dream_p(rhs.clone()), Expr::i(size as i64)],
+                );
+                if retain_copy {
+                    let mut e = Emitter::new(cx, func, b);
+                    e.value_refs(ty, dest_ptr.clone(), true);
+                }
+                dest_ptr.clone()
+            })
+        }
+    }
+
+    fn weak_option_store(
+        &mut self,
+        base: crate::Local,
+        fld: &dream_hir::FieldLayout,
+        rv: &crate::Rvalue,
+        rhs: Expr,
+    ) -> Expr {
+        let Some(u) = self.cx.nunion(fld.ty) else {
+            let slot = Expr::field_ptr(base.0, fld.offset);
+            return self.b.expr_block(|b| {
+                b.stmt(Stmt::store(CTy::Ptr, slot.clone(), rhs.clone()));
+                rhs.clone()
+            });
+        };
+        let some = u.variant("Some").map(|v| v.discriminant).unwrap_or(0);
+        let none = u.variant("None").map(|v| v.discriminant).unwrap_or(1);
+        let poff = u
+            .variant("Some")
+            .and_then(|v| v.fields.first())
+            .map(|f| f.offset)
+            .unwrap_or(8);
+        let size = u.size.max(16);
+        let slot = Expr::field_ptr(base.0, fld.offset);
+        let drop_src = if value_rvalue_allocates(rv) {
+            Some(crate::backend::c::release::release_sym(
+                self.cx.interner,
+                self.cx.mir,
+                fld.ty,
+            ))
+        } else {
+            None
+        };
+        self.b.expr_block(|b| {
+            let src = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
+            let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
+            let box_ = b.temp(
+                CTy::Ptr,
+                Some(Expr::call("dream_malloc", vec![Expr::i(size as i64), Expr::i(0)])),
+            );
+            b.call(
+                "memcpy",
+                vec![
+                    Expr::dream_p(box_.clone()),
+                    Expr::dream_p(src.clone()),
+                    Expr::i(size as i64),
+                ],
+            );
+            b.stmt(Stmt::if_(
+                Expr::eq(
+                    Expr::load(CTy::I32, Expr::dream_p(src.clone())),
+                    Expr::i(some as i64),
+                ),
+                Stmt::call(
+                    "dream_weak_register",
+                    vec![
+                        Expr::load(CTy::Ptr, Expr::ptr_add(src.clone(), Expr::i(poff as i64))),
+                        box_.clone(),
+                        Expr::i(0),
+                        Expr::cast(CTy::Ptr, Expr::cast(CTy::Named("intptr_t"), Expr::i(none as i64))),
+                    ],
+                ),
+            ));
+            b.stmt(Stmt::store(CTy::Ptr, slot.clone(), box_.clone()));
+            if let Some(rel) = &drop_src {
+                b.call(rel.clone(), vec![src.clone()]);
             }
-            let cast = load_cast(cx, ety);
-            format!("(*({cast}*)({addr}))")
-        }
-        Place::Deref { ptr, elem_ty } => {
-            if cx.interner.is_value_type(*elem_ty) {
-                return format!("l{}", ptr.0);
-            }
-            let cast = load_cast(cx, *elem_ty);
-            format!("(*({cast}*)dream_p(l{}))", ptr.0)
-        }
+            b.stmt(Stmt::if_(
+                old.clone(),
+                Stmt::block(vec![
+                    Stmt::if_(
+                        Expr::eq(
+                            Expr::load(CTy::I32, Expr::dream_p(old.clone())),
+                            Expr::i(some as i64),
+                        ),
+                        Stmt::call(
+                            "dream_weak_unregister",
+                            vec![
+                                Expr::load(CTy::Ptr, Expr::ptr_add(old.clone(), Expr::i(poff as i64))),
+                                old.clone(),
+                            ],
+                        ),
+                    ),
+                    Stmt::call("dream_free", vec![old.clone()]),
+                ]),
+            ));
+            box_
+        })
     }
 }
 
@@ -122,209 +524,6 @@ fn realloc_self_store(place: &Place, rv: &crate::Rvalue) -> bool {
         (Place::Global(g1), Place::Global(g2)) => g1 == g2,
         _ => false,
     }
-}
-
-pub(super) fn emit_store(
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    place: &Place,
-    rv: &crate::Rvalue,
-    rhs: &str,
-) -> String {
-    match place {
-        Place::Local(l) if cx.interner.is_value_type(f.local_ty(*l)) => {
-            if is_value_place_alias(f, *l, rv) {
-                return format!("l{} = (dream_ptr)({rhs})", l.0);
-            }
-            if let crate::Rvalue::Use(Operand::Copy(Place::Local(src))) = rv {
-                let src_ty = f.local_ty(*src);
-                if !cx.interner.is_value_type(src_ty)
-                    && cx
-                        .nstruct(src_ty)
-                        .is_some_and(|layout| layout.size == elem_size(cx, f.local_ty(*l)))
-                {
-                    return format!("l{} = l{}", l.0, src.0);
-                }
-            }
-            let retain_copy = matches!(
-                rv,
-                crate::Rvalue::Use(Operand::Copy(Place::Field { .. }))
-                    | crate::Rvalue::Use(Operand::Copy(Place::Index { .. }))
-                    | crate::Rvalue::Use(Operand::Copy(Place::Deref { .. }))
-                    | crate::Rvalue::UnionField { .. }
-            );
-            memcpy_value(
-                cx,
-                rv,
-                rhs,
-                f.local_ty(*l),
-                &format!("dream_p(l{})", l.0),
-                &format!("l{}", l.0),
-                retain_copy,
-            )
-        }
-        Place::Local(l) => format!("l{} = ({rhs})", l.0),
-        Place::Global(g) => {
-            let value_ty = cx
-                .mir
-                .globals
-                .iter()
-                .find(|global| global.id == *g)
-                .map(|global| global.ty)
-                .filter(|ty| cx.interner.is_value_type(*ty));
-            if let Some(ty) = value_ty {
-                let size = elem_size(cx, ty);
-                format!("memcpy(dream_p(g{}), dream_p({rhs}), {size})", g.0)
-            } else {
-                format!("g{} = ({rhs})", g.0)
-            }
-        }
-        Place::Field { base, field } => {
-            let ty = f.local_ty(*base);
-            let Some(layout) = cx.nstruct(ty) else {
-                return format!("((dream_ptr*)l{})[{field}] = (dream_ptr)({rhs})", base.0);
-            };
-            let fld = layout
-                .fields
-                .get(*field)
-                .unwrap_or_else(|| crate::internal_error!("missing field {field} on type {ty:?}"));
-            if cx.interner.is_value_type(fld.ty) {
-                return memcpy_value(
-                    cx,
-                    rv,
-                    rhs,
-                    fld.ty,
-                    &format!("(char*)dream_p(l{}) + {}", base.0, fld.offset),
-                    &format!(
-                        "((dream_ptr)((char*)dream_p(l{}) + {}))",
-                        base.0, fld.offset
-                    ),
-                    true,
-                );
-            }
-            let cast = load_cast(cx, fld.ty);
-            if realloc_self_store(place, rv) {
-                return format!(
-                    "*({cast}*)((char*)dream_p(l{}) + {}) = ({cast})({rhs})",
-                    base.0, fld.offset
-                );
-            }
-            if fld.is_unowned {
-                let slot = format!("((char*)dream_p(l{}) + {})", base.0, fld.offset);
-                return format!(
-                    "({{ dream_ptr __old = *(dream_ptr*){slot}; if (__old) dream_weak_unregister(__old, (dream_ptr){slot}); dream_ptr __new = (dream_ptr)({rhs}); *(dream_ptr*){slot} = __new; if (__new) dream_weak_register(__new, (dream_ptr){slot}, 1, 0); }})"
-                );
-            }
-            if fld.is_weak {
-                return emit_weak_option_store(cx, *base, fld, rv, rhs);
-            }
-            if cx.interner.is_reference(fld.ty) && !fld.is_weak {
-                let release = crate::backend::c::release::release_sym(cx.interner, cx.mir, fld.ty);
-                let slot = format!("((char*)dream_p(l{}) + {})", base.0, fld.offset);
-                if borrowed_ref_store(rv) {
-                    return format!(
-                        "({{ dream_ptr __old = *(dream_ptr*){slot}; dream_ptr __v = (dream_ptr)({rhs}); if (__old != __v) {{ dream_retain(__v); *({cast}*){slot} = ({cast})__v; {release}(__old); }} }})"
-                    );
-                }
-                return format!(
-                    "({{ dream_ptr __old = *(dream_ptr*){slot}; dream_ptr __v = (dream_ptr)({rhs}); *({cast}*){slot} = ({cast})__v; {release}(__old); }})"
-                );
-            }
-            format!(
-                "*({cast}*)((char*)dream_p(l{}) + {}) = ({cast})({rhs})",
-                base.0, fld.offset
-            )
-        }
-        Place::Index {
-            base,
-            index,
-            unchecked,
-        } => {
-            let ety = array_elem_ty(cx.interner, f.local_ty(*base));
-            let es = elem_size(cx, ety);
-            let addr = index_addr(cx, f, *base, index, es, *unchecked);
-            if cx.interner.is_value_type(ety) {
-                return format!("memcpy({addr}, dream_p({rhs}), {es})",);
-            }
-            let cast = load_cast(cx, ety);
-            if realloc_self_store(place, rv) {
-                return format!("*({cast}*)({addr}) = ({cast})({rhs})");
-            }
-            if cx.interner.is_reference(ety) {
-                let release = crate::backend::c::release::release_sym(cx.interner, cx.mir, ety);
-                if borrowed_ref_store(rv) {
-                    return format!(
-                        "({{ dream_ptr __old = *(dream_ptr*)({addr}); dream_ptr __v = (dream_ptr)({rhs}); if (__old != __v) {{ dream_retain(__v); *({cast}*)({addr}) = ({cast})__v; {release}(__old); }} }})",
-                    );
-                }
-                return format!(
-                    "({{ dream_ptr __old = *(dream_ptr*)({addr}); dream_ptr __v = (dream_ptr)({rhs}); *({cast}*)({addr}) = ({cast})__v; {release}(__old); }})",
-                );
-            }
-            format!("*({cast}*)({addr}) = ({cast})({rhs})")
-        }
-        Place::Deref { ptr, elem_ty } => {
-            if cx.interner.is_value_type(*elem_ty) {
-                let size = elem_size(cx, *elem_ty);
-                return format!("memcpy(dream_p(l{}), dream_p({rhs}), {size})", ptr.0);
-            }
-            let cast = load_cast(cx, *elem_ty);
-            format!("*({cast}*)dream_p(l{}) = ({cast})({rhs})", ptr.0)
-        }
-    }
-}
-
-fn index_addr(
-    cx: &Cx<'_>,
-    f: &crate::MirFunction,
-    base: crate::Local,
-    index: &Operand,
-    elem_size: u32,
-    unchecked: bool,
-) -> String {
-    let idx = emit_operand(cx, f, index);
-    if cx.omit_bounds
-        || unchecked
-        || !matches!(
-            cx.interner.kind(f.local_ty(base)),
-            dream_types::TyKind::Array(_)
-        )
-    {
-        return format!("((char*)dream_p(l{}) + 4 + ({idx})*{elem_size})", base.0);
-    }
-    // Native `int` temps are i64 so IV/pointer values must not be treated as indices.
-    // Only trap when the index is a 32-bit in-range value (user `arr[i]`), matching wasm i32.
-    let panic = cx.str_sym(crate::backend::wasm::panic_msgs::INDEX_OUT_OF_BOUNDS);
-    format!(
-        "({{ int32_t __idx = (int32_t)({idx}); int32_t __len = l{} ? *(int32_t*)dream_p(l{}) : 0; if ((int64_t)({idx}) == (int64_t)__idx && (uint32_t)__idx >= (uint32_t)__len) dream_panic({panic}); (char*)dream_p(l{}) + 4 + (int64_t)({idx})*{elem_size}; }})",
-        base.0, base.0, base.0
-    )
-}
-
-fn memcpy_value(
-    cx: &Cx<'_>,
-    rv: &crate::Rvalue,
-    rhs: &str,
-    ty: dream_types::TypeId,
-    dest: &str,
-    dest_ptr: &str,
-    retain_copy: bool,
-) -> String {
-    let size = elem_size(cx, ty);
-    let mut s = if value_rvalue_allocates(rv) {
-        format!(
-            "({{ dream_ptr __v = {rhs}; memcpy({dest}, dream_p(__v), {size}); dream_free(__v); "
-        )
-    } else {
-        format!("memcpy({dest}, dream_p({rhs}), {size}); ")
-    };
-    if retain_copy && !value_rvalue_allocates(rv) {
-        crate::backend::c::statements::emit_value_refs(&mut s, cx, ty, dest_ptr, true);
-    }
-    if value_rvalue_allocates(rv) {
-        s.push_str("})");
-    }
-    s
 }
 
 fn borrowed_ref_store(rv: &crate::Rvalue) -> bool {
@@ -432,35 +631,4 @@ pub(super) fn is_value_place_alias(
             ) if *other == local
         )
     })
-}
-
-fn emit_weak_option_store(
-    cx: &Cx<'_>,
-    base: crate::Local,
-    fld: &dream_hir::FieldLayout,
-    rv: &crate::Rvalue,
-    rhs: &str,
-) -> String {
-    let Some(u) = cx.nunion(fld.ty) else {
-        let slot = format!("((char*)dream_p(l{}) + {})", base.0, fld.offset);
-        return format!("*(dream_ptr*){slot} = (dream_ptr)({rhs})");
-    };
-    let some = u.variant("Some").map(|v| v.discriminant).unwrap_or(0);
-    let none = u.variant("None").map(|v| v.discriminant).unwrap_or(1);
-    let poff = u
-        .variant("Some")
-        .and_then(|v| v.fields.first())
-        .map(|f| f.offset)
-        .unwrap_or(8);
-    let size = u.size.max(16);
-    let slot = format!("((char*)dream_p(l{}) + {})", base.0, fld.offset);
-    let drop_src = if value_rvalue_allocates(rv) {
-        let rel = crate::backend::c::release::release_sym(cx.interner, cx.mir, fld.ty);
-        format!("{rel}(__src); ")
-    } else {
-        String::new()
-    };
-    format!(
-        "({{ dream_ptr __src = (dream_ptr)({rhs}); dream_ptr __old = *(dream_ptr*){slot}; dream_ptr __box = dream_malloc({size}, 0); memcpy(dream_p(__box), dream_p(__src), {size}); if (*(int32_t*)dream_p(__src) == {some}) {{ dream_weak_register(*(dream_ptr*)((char*)dream_p(__src) + {poff}), __box, 0, (dream_ptr)(intptr_t){none}); }} *(dream_ptr*){slot} = __box; {drop_src}if (__old) {{ if (*(int32_t*)dream_p(__old) == {some}) dream_weak_unregister(*(dream_ptr*)((char*)dream_p(__old) + {poff}), __old); dream_free(__old); }} }})"
-    )
 }

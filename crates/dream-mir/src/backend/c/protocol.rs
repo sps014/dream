@@ -1,10 +1,12 @@
-use crate::backend::c::ctx::Cx;
-use crate::backend::c::rvalue::{hash_code_expr, to_string_fn};
-use crate::backend::c::types::c_ident;
+use super::ast::{CTy, CaseKey, Expr, Param, Stmt, SwitchArm, UnOp};
+use super::builder::{FuncBuilder, ModuleBuilder};
+use super::ctx::Cx;
+use super::rvalue::{hash_code_of, to_string_fn};
+use super::types::{c_ident, elem_size, load_cast};
 use crate::backend::wasm::func_symbol;
 use dream_types::{TyKind, TypeId};
 
-pub(super) fn emit_protocol(out: &mut String, cx: &Cx<'_>) {
+pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let mut array_elems: Vec<_> = cx
         .mir
         .functions
@@ -29,126 +31,186 @@ pub(super) fn emit_protocol(out: &mut String, cx: &Cx<'_>) {
     array_elems.dedup();
     let user: std::collections::HashSet<String> =
         cx.mir.functions.iter().map(func_symbol).collect();
+    let p = vec![Param {
+        ty: CTy::Ptr,
+        name: "p".into(),
+    }];
     for elem in &array_elems {
-        out.push_str(&format!(
-            "dream_ptr {}(dream_ptr p);\n",
-            c_ident(&format!("array_to_string_t{}", elem.0))
-        ));
+        m.proto(
+            CTy::Ptr,
+            c_ident(&format!("array_to_string_t{}", elem.0)),
+            p.clone(),
+        );
     }
     for layout in cx.native.structs.values() {
         let sym = format!("{}_to_string", layout.name);
         if !user.contains(&sym) {
-            out.push_str(&format!("dream_ptr {}(dream_ptr p);\n", c_ident(&sym)));
+            m.proto(CTy::Ptr, c_ident(&sym), p.clone());
         }
         let hash = format!("{}_hash_code", layout.name);
         if !user.contains(&hash) {
-            out.push_str(&format!("int32_t {}(dream_ptr p);\n", c_ident(&hash)));
+            m.proto(CTy::I32, c_ident(&hash), p.clone());
         }
     }
     for layout in cx.native.unions.values() {
         let sym = format!("{}_to_string", layout.name);
         if !user.contains(&sym) {
-            out.push_str(&format!("dream_ptr {}(dream_ptr p);\n", c_ident(&sym)));
+            m.proto(CTy::Ptr, c_ident(&sym), p.clone());
         }
         let hash = format!("{}_hash_code", layout.name);
         if !user.contains(&hash) {
-            out.push_str(&format!("int32_t {}(dream_ptr p);\n", c_ident(&hash)));
+            m.proto(CTy::I32, c_ident(&hash), p.clone());
         }
-    }
-    if !array_elems.is_empty() || !cx.native.structs.is_empty() || !cx.native.unions.is_empty() {
-        out.push('\n');
     }
     for elem in array_elems {
-        emit_array_to_string(out, cx, elem);
-    }
-    if !out.is_empty() {
-        out.push('\n');
+        emit_array_to_string(m, cx, elem);
     }
     for (ty, layout) in &cx.native.structs {
         let sym = format!("{}_to_string", layout.name);
         if user.contains(&sym) {
             continue;
         }
-        emit_struct_to_string(out, cx, *ty, &layout.name, &layout.fields);
+        emit_struct_to_string(m, cx, *ty, &layout.name, &layout.fields);
     }
     for (ty, layout) in &cx.native.unions {
         let sym = format!("{}_to_string", layout.name);
         if user.contains(&sym) {
             continue;
         }
-        emit_union_to_string(out, cx, *ty, &layout.name);
+        emit_union_to_string(m, cx, *ty, &layout.name);
     }
     for (ty, layout) in &cx.native.structs {
         let hash = format!("{}_hash_code", layout.name);
         if !user.contains(&hash) {
-            emit_struct_hash_code(out, cx, *ty, layout);
+            emit_struct_hash_code(m, cx, *ty, layout);
         }
     }
     for (ty, layout) in &cx.native.unions {
         let hash = format!("{}_hash_code", layout.name);
         if !user.contains(&hash) {
-            emit_union_hash_code(out, cx, *ty, layout);
+            emit_union_hash_code(m, cx, *ty, layout);
         }
     }
-    emit_object_to_string_router(out, cx);
-    emit_object_hash_code_router(out, cx);
+    emit_object_to_string_router(m, cx);
+    emit_object_hash_code_router(m, cx);
 }
 
-fn emit_array_to_string(out: &mut String, cx: &Cx<'_>, elem: TypeId) {
+fn concat_assign(r: &str, piece: Expr) -> Stmt {
+    Stmt::block(vec![
+        Stmt::decl(
+            CTy::Ptr,
+            "__c",
+            Some(Expr::call(
+                "dream_concat_strings",
+                vec![Expr::id(r), piece],
+            )),
+        ),
+        Stmt::call("dream_release", vec![Expr::id(r)]),
+        Stmt::assign(Expr::id(r), Expr::id("__c")),
+    ])
+}
+
+fn concat_conv(r: &str, conv: &str, value: Expr) -> Stmt {
+    Stmt::block(vec![
+        Stmt::decl(CTy::Ptr, "__p", Some(Expr::call(conv, vec![value]))),
+        Stmt::decl(
+            CTy::Ptr,
+            "__c",
+            Some(Expr::call(
+                "dream_concat_strings",
+                vec![Expr::id(r), Expr::id("__p")],
+            )),
+        ),
+        Stmt::call("dream_release", vec![Expr::id(r)]),
+        Stmt::call("dream_release", vec![Expr::id("__p")]),
+        Stmt::assign(Expr::id(r), Expr::id("__c")),
+    ])
+}
+
+fn emit_array_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, elem: TypeId) {
     let fn_name = c_ident(&format!("array_to_string_t{}", elem.0));
-    let es = crate::backend::c::types::elem_size(cx, elem);
-    let cast = crate::backend::c::types::load_cast(cx, elem);
+    let es = elem_size(cx, elem);
+    let cast = load_cast(cx, elem);
     let conv = to_string_fn(cx, elem);
-    out.push_str(&format!(
-        "dream_ptr {fn_name}(dream_ptr p) {{\n  int32_t n = p ? *(int32_t *)dream_p(p) : 0;\n  int32_t i;\n  dream_ptr r = {};\n",
-        cx.str_sym("[")
+    let mut b = FuncBuilder::new(CTy::Ptr, fn_name);
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::decl(
+        CTy::I32,
+        "n",
+        Some(Expr::ternary(
+            Expr::id("p"),
+            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+            Expr::i(0),
+        )),
     ));
-    out.push_str("  for (i = 0; i < n; i++) {\n");
-    out.push_str(&format!(
-        "    if (i) {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
-        cx.str_sym(", ")
+    b.stmt(Stmt::decl(CTy::I32, "i", None));
+    b.stmt(Stmt::decl(
+        CTy::Ptr,
+        "r",
+        Some(Expr::id(cx.str_sym("["))),
     ));
+    let elem_ptr = Expr::add(
+        Expr::ptr_add(Expr::id("p"), Expr::i(4)),
+        Expr::mul(Expr::cast(CTy::Named("size_t"), Expr::id("i")), Expr::i(es as i64)),
+    );
+    let mut loop_body = vec![Stmt::if_(
+        Expr::id("i"),
+        concat_assign("r", Expr::id(cx.str_sym(", "))),
+    )];
     if cx.interner.is_value_type(elem) {
-        out.push_str(&format!(
-            "    {{ dream_ptr __p = {conv}((dream_ptr)((char *)dream_p(p) + 4 + (size_t)i * {es})); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
+        loop_body.push(concat_conv(
+            "r",
+            &conv,
+            Expr::cast(CTy::Ptr, elem_ptr),
         ));
     } else if conv.is_empty() {
-        out.push_str(&format!(
-            "    {{ dream_ptr __c = dream_concat_strings(r, *({cast} *)((char *)dream_p(p) + 4 + (size_t)i * {es})); dream_release(r); r = __c; }}\n"
-        ));
+        loop_body.push(concat_assign("r", Expr::load(cast, elem_ptr)));
     } else {
-        out.push_str(&format!(
-            "    {{ dream_ptr __p = {conv}(*({cast} *)((char *)dream_p(p) + 4 + (size_t)i * {es})); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
-        ));
+        loop_body.push(concat_conv("r", &conv, Expr::load(cast, elem_ptr)));
     }
-    out.push_str("  }\n");
-    out.push_str(&format!(
-        "  {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); return __c; }}\n}}\n\n",
-        cx.str_sym("]")
-    ));
+    b.stmt(Stmt::For {
+        init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
+        cond: Expr::lt(Expr::id("i"), Expr::id("n")),
+        step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
+        body: Box::new(Stmt::block(loop_body)),
+    });
+    b.stmt(Stmt::block(vec![
+        Stmt::decl(
+            CTy::Ptr,
+            "__c",
+            Some(Expr::call(
+                "dream_concat_strings",
+                vec![Expr::id("r"), Expr::id(cx.str_sym("]"))],
+            )),
+        ),
+        Stmt::call("dream_release", vec![Expr::id("r")]),
+        Stmt::Return(Some(Expr::id("__c"))),
+    ]));
+    m.push_func(b);
 }
 
 fn emit_struct_to_string(
-    out: &mut String,
+    m: &mut ModuleBuilder,
     cx: &Cx<'_>,
-    _ty: TypeId,
+    ty: TypeId,
     name: &str,
     fields: &[dream_hir::FieldLayout],
 ) {
     let fn_name = c_ident(&format!("{name}_to_string"));
-    out.push_str(&format!("dream_ptr {fn_name}(dream_ptr p) {{\n"));
-    out.push_str("  if (!p) return ");
-    out.push_str(cx.str_sym("null"));
-    out.push_str(";\n  dream_ptr r = ");
-    let start = if matches!(cx.interner.kind(_ty), TyKind::Tuple(_)) {
+    let mut b = FuncBuilder::new(CTy::Ptr, fn_name);
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(Some(Expr::id(cx.str_sym("null")))),
+    ));
+    let start = if matches!(cx.interner.kind(ty), TyKind::Tuple(_)) {
         "(".into()
     } else {
         format!("{name} {{ ")
     };
-    out.push_str(cx.str_sym(&start));
-    out.push_str(";\n");
+    b.stmt(Stmt::decl(CTy::Ptr, "r", Some(Expr::id(cx.str_sym(&start)))));
     for (i, f) in fields.iter().enumerate() {
-        let label = if matches!(cx.interner.kind(_ty), TyKind::Tuple(_)) {
+        let label = if matches!(cx.interner.kind(ty), TyKind::Tuple(_)) {
             if i == 0 {
                 String::new()
             } else {
@@ -159,83 +221,86 @@ fn emit_struct_to_string(
         } else {
             format!(", {}: ", f.name)
         };
-        out.push_str(&format!(
-            "  {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
-            cx.str_sym(&label)
-        ));
-        let value = if cx.interner.is_value_type(f.ty) {
-            format!("(dream_ptr)((char *)dream_p(p) + {})", f.offset)
-        } else {
-            let cast = crate::backend::c::types::load_cast(cx, f.ty);
-            format!("*({cast} *)((char *)dream_p(p) + {})", f.offset)
-        };
+        b.stmt(concat_assign("r", Expr::id(cx.str_sym(&label))));
+        let value = field_value(cx, f);
         let text = to_string_fn(cx, f.ty);
         if text.is_empty() {
-            out.push_str(&format!(
-                "  {{ dream_ptr __c = dream_concat_strings(r, {value}); dream_release(r); r = __c; }}\n"
-            ));
+            b.stmt(concat_assign("r", value));
         } else {
-            out.push_str(&format!(
-                "  {{ dream_ptr __p = {text}({value}); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
-            ));
+            b.stmt(concat_conv("r", &text, value));
         }
     }
-    let end = if matches!(cx.interner.kind(_ty), TyKind::Tuple(_)) {
+    let end = if matches!(cx.interner.kind(ty), TyKind::Tuple(_)) {
         ")"
     } else {
         " }"
     };
-    out.push_str(&format!(
-        "  {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); return __c; }}\n}}\n\n",
-        cx.str_sym(end)
-    ));
+    b.stmt(Stmt::block(vec![
+        Stmt::decl(
+            CTy::Ptr,
+            "__c",
+            Some(Expr::call(
+                "dream_concat_strings",
+                vec![Expr::id("r"), Expr::id(cx.str_sym(end))],
+            )),
+        ),
+        Stmt::call("dream_release", vec![Expr::id("r")]),
+        Stmt::Return(Some(Expr::id("__c"))),
+    ]));
+    m.push_func(b);
 }
 
-fn emit_union_to_string(out: &mut String, cx: &Cx<'_>, ty: TypeId, name: &str) {
+fn emit_union_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, ty: TypeId, name: &str) {
     let fn_name = c_ident(&format!("{name}_to_string"));
+    let mut b = FuncBuilder::new(CTy::Ptr, fn_name);
+    b.param(CTy::Ptr, "p");
     let Some(layout) = cx.native.unions.get(&ty) else {
-        out.push_str(&format!(
-            "dream_ptr {fn_name}(dream_ptr p) {{\n  (void)p;\n  return {};\n}}\n\n",
-            cx.str_sym("<object>")
-        ));
+        b.stmt(Stmt::expr(Expr::cast(CTy::Void, Expr::id("p"))));
+        b.ret(Some(Expr::id(cx.str_sym("<object>"))));
+        m.push_func(b);
         return;
     };
-    out.push_str(&format!("dream_ptr {fn_name}(dream_ptr p) {{\n"));
-    out.push_str("  int32_t d;\n  dream_ptr r;\n  if (!p) return ");
-    out.push_str(cx.str_sym("null"));
-    out.push_str(";\n  d = *(int32_t *)dream_p(p);\n  r = ");
-    out.push_str(cx.str_sym("<object>"));
-    out.push_str(";\n  switch (d) {\n");
+    b.stmt(Stmt::decl(CTy::I32, "d", None));
+    b.stmt(Stmt::decl(CTy::Ptr, "r", None));
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(Some(Expr::id(cx.str_sym("null")))),
+    ));
+    b.assign(Expr::id("d"), Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))));
+    b.assign(Expr::id("r"), Expr::id(cx.str_sym("<object>")));
+    let mut arms = Vec::new();
     for variant in &layout.variants {
         let (prefix, labels, suffix) = union_variant_pieces(variant);
-        out.push_str(&format!("    case {}: {{\n", variant.discriminant));
-        out.push_str(&format!("      r = {};\n", cx.str_sym(&prefix)));
+        let mut body = vec![Stmt::assign(Expr::id("r"), Expr::id(cx.str_sym(&prefix)))];
         for (i, f) in variant.fields.iter().enumerate() {
-            out.push_str(&format!(
-                "      {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
-                cx.str_sym(&labels[i])
-            ));
-            let value = field_value_expr(cx, f);
+            body.push(concat_assign("r", Expr::id(cx.str_sym(&labels[i]))));
+            let value = field_value(cx, f);
             let text = to_string_fn(cx, f.ty);
             if text.is_empty() {
-                out.push_str(&format!(
-                    "      {{ dream_ptr __c = dream_concat_strings(r, {value}); dream_release(r); r = __c; }}\n"
-                ));
+                body.push(concat_assign("r", value));
             } else {
-                out.push_str(&format!(
-                    "      {{ dream_ptr __p = {text}({value}); dream_ptr __c = dream_concat_strings(r, __p); dream_release(r); dream_release(__p); r = __c; }}\n"
-                ));
+                body.push(concat_conv("r", &text, value));
             }
         }
         if !suffix.is_empty() {
-            out.push_str(&format!(
-                "      {{ dream_ptr __c = dream_concat_strings(r, {}); dream_release(r); r = __c; }}\n",
-                cx.str_sym(&suffix)
-            ));
+            body.push(concat_assign("r", Expr::id(cx.str_sym(&suffix))));
         }
-        out.push_str("      break;\n    }\n");
+        body.push(Stmt::Expr(Expr::id("break")));
+        arms.push(SwitchArm {
+            keys: vec![CaseKey::Int(variant.discriminant as i64)],
+            body: vec![Stmt::block(body)],
+        });
     }
-    out.push_str("    default: break;\n  }\n  return r;\n}\n\n");
+    arms.push(SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Expr(Expr::id("break"))],
+    });
+    b.stmt(Stmt::Switch {
+        expr: Expr::id("d"),
+        arms,
+    });
+    b.ret(Some(Expr::id("r")));
+    m.push_func(b);
 }
 
 fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<String>, String) {
@@ -258,69 +323,138 @@ fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<String>, St
     (prefix, labels, ")".to_string())
 }
 
-fn field_value_expr(cx: &Cx<'_>, f: &dream_hir::FieldLayout) -> String {
+fn field_value(cx: &Cx<'_>, f: &dream_hir::FieldLayout) -> Expr {
     if cx.interner.is_value_type(f.ty) {
-        format!("(dream_ptr)((char *)dream_p(p) + {})", f.offset)
+        Expr::cast(CTy::Ptr, Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)))
     } else {
-        let cast = crate::backend::c::types::load_cast(cx, f.ty);
-        format!("*({cast} *)((char *)dream_p(p) + {})", f.offset)
+        Expr::load(load_cast(cx, f.ty), Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)))
     }
 }
 
 fn emit_struct_hash_code(
-    out: &mut String,
+    m: &mut ModuleBuilder,
     cx: &Cx<'_>,
     _ty: TypeId,
     layout: &dream_hir::TypeLayout,
 ) {
     let fn_name = c_ident(&format!("{}_hash_code", layout.name));
-    out.push_str(&format!(
-        "int32_t {fn_name}(dream_ptr p) {{\n  int32_t h = 17;\n"
-    ));
+    let mut b = FuncBuilder::new(CTy::I32, fn_name);
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::decl(CTy::I32, "h", Some(Expr::i(17))));
     for f in &layout.fields {
-        emit_hash_field(out, cx, f);
+        let hashed = hash_code_of(cx, f.ty, field_value(cx, f));
+        b.assign(
+            Expr::id("h"),
+            Expr::add(Expr::mul(Expr::id("h"), Expr::i(31)), hashed),
+        );
     }
-    out.push_str("  return h;\n}\n\n");
+    b.ret(Some(Expr::id("h")));
+    m.push_func(b);
 }
 
 fn emit_union_hash_code(
-    out: &mut String,
+    m: &mut ModuleBuilder,
     cx: &Cx<'_>,
     _ty: TypeId,
     layout: &dream_hir::UnionLayout,
 ) {
     let fn_name = c_ident(&format!("{}_hash_code", layout.name));
-    out.push_str(&format!(
-        "int32_t {fn_name}(dream_ptr p) {{\n  int32_t d = p ? *(int32_t *)dream_p(p) : 0;\n  int32_t h = 17 * 31 + d;\n  switch (d) {{\n"
+    let mut b = FuncBuilder::new(CTy::I32, fn_name);
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::decl(
+        CTy::I32,
+        "d",
+        Some(Expr::ternary(
+            Expr::id("p"),
+            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+            Expr::i(0),
+        )),
     ));
+    b.stmt(Stmt::decl(
+        CTy::I32,
+        "h",
+        Some(Expr::add(Expr::mul(Expr::i(17), Expr::i(31)), Expr::id("d"))),
+    ));
+    let mut arms = Vec::new();
     for variant in &layout.variants {
-        out.push_str(&format!("    case {}: {{\n", variant.discriminant));
+        let mut body = Vec::new();
         for f in &variant.fields {
-            emit_hash_field(out, cx, f);
+            let hashed = hash_code_of(cx, f.ty, field_value(cx, f));
+            body.push(Stmt::assign(
+                Expr::id("h"),
+                Expr::add(Expr::mul(Expr::id("h"), Expr::i(31)), hashed),
+            ));
         }
-        out.push_str("      break;\n    }\n");
+        body.push(Stmt::Expr(Expr::id("break")));
+        arms.push(SwitchArm {
+            keys: vec![CaseKey::Int(variant.discriminant as i64)],
+            body: vec![Stmt::block(body)],
+        });
     }
-    out.push_str("    default: break;\n  }\n  return h;\n}\n\n");
+    arms.push(SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Expr(Expr::id("break"))],
+    });
+    b.stmt(Stmt::Switch {
+        expr: Expr::id("d"),
+        arms,
+    });
+    b.ret(Some(Expr::id("h")));
+    m.push_func(b);
 }
 
-fn emit_hash_field(out: &mut String, cx: &Cx<'_>, f: &dream_hir::FieldLayout) {
-    let value = field_value_expr(cx, f);
-    let hashed = hash_code_expr(cx, f.ty, &value);
-    out.push_str(&format!("      h = h * 31 + {hashed};\n"));
-}
-
-fn emit_object_hash_code_router(out: &mut String, cx: &Cx<'_>) {
-    out.push_str("int32_t dream_object_hash_code(dream_ptr p) {\n");
-    out.push_str(
-        "  int32_t tag;\n  if (!p) return 0;\n  tag = dream_object_tag(p);\n  switch (tag) {\n",
-    );
-    out.push_str("    case TAG_INT: case TAG_UINT: case TAG_BOOL: case TAG_CHAR: case TAG_BYTE: return *(int32_t *)dream_p(p);\n");
-    out.push_str(
-        "    case TAG_LONG: case TAG_ULONG: return dream_hash_long(*(int64_t *)dream_p(p));\n",
-    );
-    out.push_str("    case TAG_FLOAT: return dream_bitcast_f32(*(float *)dream_p(p));\n");
-    out.push_str("    case TAG_DOUBLE: return dream_hash_double(*(double *)dream_p(p));\n");
-    out.push_str("    case TAG_STRING: return dream_string_hash(p);\n");
+fn emit_object_hash_code_router(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let mut b = FuncBuilder::new(CTy::I32, "dream_object_hash_code");
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::decl(CTy::I32, "tag", None));
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(Some(Expr::i(0))),
+    ));
+    b.assign(Expr::id("tag"), Expr::call("dream_object_tag", vec![Expr::id("p")]));
+    let mut arms = vec![
+        SwitchArm {
+            keys: vec![
+                CaseKey::Ident("TAG_INT"),
+                CaseKey::Ident("TAG_UINT"),
+                CaseKey::Ident("TAG_BOOL"),
+                CaseKey::Ident("TAG_CHAR"),
+                CaseKey::Ident("TAG_BYTE"),
+            ],
+            body: vec![Stmt::Return(Some(Expr::load(
+                CTy::I32,
+                Expr::dream_p(Expr::id("p")),
+            )))],
+        },
+        SwitchArm {
+            keys: vec![CaseKey::Ident("TAG_LONG"), CaseKey::Ident("TAG_ULONG")],
+            body: vec![Stmt::Return(Some(Expr::call(
+                "dream_hash_long",
+                vec![Expr::load(CTy::I64, Expr::dream_p(Expr::id("p")))],
+            )))],
+        },
+        SwitchArm {
+            keys: vec![CaseKey::Ident("TAG_FLOAT")],
+            body: vec![Stmt::Return(Some(Expr::call(
+                "dream_bitcast_f32",
+                vec![Expr::load(CTy::F32, Expr::dream_p(Expr::id("p")))],
+            )))],
+        },
+        SwitchArm {
+            keys: vec![CaseKey::Ident("TAG_DOUBLE")],
+            body: vec![Stmt::Return(Some(Expr::call(
+                "dream_hash_double",
+                vec![Expr::load(CTy::F64, Expr::dream_p(Expr::id("p")))],
+            )))],
+        },
+        SwitchArm {
+            keys: vec![CaseKey::Ident("TAG_STRING")],
+            body: vec![Stmt::Return(Some(Expr::call(
+                "dream_string_hash",
+                vec![Expr::id("p")],
+            )))],
+        },
+    ];
     let mut tagged: Vec<_> = cx.tags.iter().collect();
     tagged.sort_by_key(|(_, t)| **t);
     for (ty, tag) in tagged {
@@ -329,31 +463,88 @@ fn emit_object_hash_code_router(out: &mut String, cx: &Cx<'_>) {
                 continue;
             }
             let fn_name = c_ident(&format!("{}_hash_code", l.name));
-            out.push_str(&format!("    case {tag}: return {fn_name}(p);\n"));
+            arms.push(SwitchArm {
+                keys: vec![CaseKey::Int(*tag as i64)],
+                body: vec![Stmt::Return(Some(Expr::call(fn_name, vec![Expr::id("p")])))],
+            });
         } else if let Some(l) = cx.native.unions.get(ty) {
             let fn_name = c_ident(&format!("{}_hash_code", l.name));
-            out.push_str(&format!("    case {tag}: return {fn_name}(p);\n"));
+            arms.push(SwitchArm {
+                keys: vec![CaseKey::Int(*tag as i64)],
+                body: vec![Stmt::Return(Some(Expr::call(fn_name, vec![Expr::id("p")])))],
+            });
         }
     }
-    out.push_str("    default: return (int32_t)(uintptr_t)p;\n  }\n}\n\n");
+    arms.push(SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Return(Some(Expr::cast(
+            CTy::I32,
+            Expr::cast(CTy::Named("uintptr_t"), Expr::id("p")),
+        )))],
+    });
+    b.stmt(Stmt::Switch {
+        expr: Expr::id("tag"),
+        arms,
+    });
+    m.push_func(b);
 }
 
-fn emit_object_to_string_router(out: &mut String, cx: &Cx<'_>) {
-    out.push_str("dream_ptr dream_object_to_string(dream_ptr p) {\n");
-    out.push_str("  int32_t tag;\n  if (!p) return ");
-    out.push_str(cx.str_sym("null"));
-    out.push_str(";\n  tag = dream_object_tag(p);\n  switch (tag) {\n");
-    out.push_str("    case TAG_INT: return dream_int_to_string(*(int32_t *)dream_p(p));\n");
-    out.push_str("    case TAG_UINT: return dream_uint_to_string(*(int32_t *)dream_p(p));\n");
-    out.push_str("    case TAG_LONG: return dream_long_to_string(*(int64_t *)dream_p(p));\n");
-    out.push_str("    case TAG_ULONG: return dream_ulong_to_string(*(int64_t *)dream_p(p));\n");
-    out.push_str("    case TAG_BYTE: return dream_byte_to_string(*(int32_t *)dream_p(p));\n");
-    out.push_str("    case TAG_BOOL: return dream_bool_to_string(*(int32_t *)dream_p(p));\n");
-    out.push_str("    case TAG_CHAR: return dream_char_to_string(*(int32_t *)dream_p(p));\n");
-    out.push_str("    case TAG_FLOAT: return dream_float_to_string(*(float *)dream_p(p));\n");
-    out.push_str("    case TAG_DOUBLE: return dream_double_to_string(*(double *)dream_p(p));\n");
-    out.push_str("    case TAG_STRING: dream_retain(p); return p;\n");
-    out.push_str("    case TAG_ARRAY: return dream_array_to_string(p);\n");
+fn emit_object_to_string_router(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let mut b = FuncBuilder::new(CTy::Ptr, "dream_object_to_string");
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::decl(CTy::I32, "tag", None));
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(Some(Expr::id(cx.str_sym("null")))),
+    ));
+    b.assign(Expr::id("tag"), Expr::call("dream_object_tag", vec![Expr::id("p")]));
+    let load_i32 = Expr::load(CTy::I32, Expr::dream_p(Expr::id("p")));
+    let mut arms = vec![
+        arm_ret("TAG_INT", Expr::call("dream_int_to_string", vec![load_i32.clone()])),
+        arm_ret("TAG_UINT", Expr::call("dream_uint_to_string", vec![load_i32.clone()])),
+        arm_ret(
+            "TAG_LONG",
+            Expr::call(
+                "dream_long_to_string",
+                vec![Expr::load(CTy::I64, Expr::dream_p(Expr::id("p")))],
+            ),
+        ),
+        arm_ret(
+            "TAG_ULONG",
+            Expr::call(
+                "dream_ulong_to_string",
+                vec![Expr::load(CTy::I64, Expr::dream_p(Expr::id("p")))],
+            ),
+        ),
+        arm_ret("TAG_BYTE", Expr::call("dream_byte_to_string", vec![load_i32.clone()])),
+        arm_ret("TAG_BOOL", Expr::call("dream_bool_to_string", vec![load_i32.clone()])),
+        arm_ret("TAG_CHAR", Expr::call("dream_char_to_string", vec![load_i32.clone()])),
+        arm_ret(
+            "TAG_FLOAT",
+            Expr::call(
+                "dream_float_to_string",
+                vec![Expr::load(CTy::F32, Expr::dream_p(Expr::id("p")))],
+            ),
+        ),
+        arm_ret(
+            "TAG_DOUBLE",
+            Expr::call(
+                "dream_double_to_string",
+                vec![Expr::load(CTy::F64, Expr::dream_p(Expr::id("p")))],
+            ),
+        ),
+        SwitchArm {
+            keys: vec![CaseKey::Ident("TAG_STRING")],
+            body: vec![
+                Stmt::call("dream_retain", vec![Expr::id("p")]),
+                Stmt::Return(Some(Expr::id("p"))),
+            ],
+        },
+        arm_ret(
+            "TAG_ARRAY",
+            Expr::call("dream_array_to_string", vec![Expr::id("p")]),
+        ),
+    ];
     let mut tagged: Vec<_> = cx.tags.iter().collect();
     tagged.sort_by_key(|(_, t)| **t);
     for (ty, tag) in tagged {
@@ -362,41 +553,104 @@ fn emit_object_to_string_router(out: &mut String, cx: &Cx<'_>) {
                 continue;
             }
             let fn_name = c_ident(&format!("{}_to_string", l.name));
-            out.push_str(&format!("    case {tag}: return {fn_name}(p);\n"));
+            arms.push(SwitchArm {
+                keys: vec![CaseKey::Int(*tag as i64)],
+                body: vec![Stmt::Return(Some(Expr::call(fn_name, vec![Expr::id("p")])))],
+            });
         } else if let Some(l) = cx.native.unions.get(ty) {
             let fn_name = c_ident(&format!("{}_to_string", l.name));
-            out.push_str(&format!("    case {tag}: return {fn_name}(p);\n"));
+            arms.push(SwitchArm {
+                keys: vec![CaseKey::Int(*tag as i64)],
+                body: vec![Stmt::Return(Some(Expr::call(fn_name, vec![Expr::id("p")])))],
+            });
         }
     }
-    out.push_str("    default: return ");
-    out.push_str(cx.str_sym("<object>"));
-    out.push_str(";\n  }\n}\n\n");
-    out.push_str(
-        "void dream_print_object(dream_ptr p) { print_string(dream_object_to_string(p)); }\n\n",
+    arms.push(SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Return(Some(Expr::id(cx.str_sym("<object>"))))],
+    });
+    b.stmt(Stmt::Switch {
+        expr: Expr::id("tag"),
+        arms,
+    });
+    m.push_func(b);
+    let mut print = FuncBuilder::new(CTy::Void, "dream_print_object");
+    print.param(CTy::Ptr, "p");
+    print.call(
+        "print_string",
+        vec![Expr::call("dream_object_to_string", vec![Expr::id("p")])],
     );
+    m.push_func(print);
 }
 
-pub(super) fn emit_iface_trampolines(out: &mut String, cx: &Cx<'_>) {
+fn arm_ret(tag: &'static str, e: Expr) -> SwitchArm {
+    SwitchArm {
+        keys: vec![CaseKey::Ident(tag)],
+        body: vec![Stmt::Return(Some(e))],
+    }
+}
+
+pub(super) fn emit_iface_trampolines(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let max_tag = cx.tags.values().copied().max().unwrap_or(12);
     let ntags = (max_tag as usize) + 1;
     for (iid, iface) in cx.mir.interfaces.interfaces.iter().enumerate() {
         for slot in 0..iface.method_count {
+            m.push(super::ast::Item::Global {
+                thread_local: false,
+                align: None,
+                static_: true,
+                const_: false,
+                ty: CTy::Array {
+                    elem: Box::new(CTy::VoidPtr),
+                    len: ntags,
+                },
+                name: format!("dream_iface_{iid}_{slot}"),
+                init: None,
+            });
             let name = c_ident(&format!("__iface_dispatch_{iid}_{slot}"));
-            out.push_str(&format!(
-                "static void *dream_iface_{iid}_{slot}[{ntags}];\n"
+            let mut b = FuncBuilder::new(CTy::Ptr, name);
+            b.param(CTy::Ptr, "this");
+            for i in 0..7 {
+                b.param(CTy::Ptr, format!("a{i}"));
+            }
+            b.stmt(Stmt::decl(
+                CTy::I32,
+                "tag",
+                Some(Expr::call("dream_object_tag", vec![Expr::id("this")])),
             ));
-            out.push_str(&format!(
-                "dream_ptr {name}(dream_ptr this, dream_ptr a0, dream_ptr a1, dream_ptr a2, dream_ptr a3, dream_ptr a4, dream_ptr a5, dream_ptr a6) {{\n"
+            b.stmt(Stmt::decl(
+                CTy::Ident("dream_fn".into()),
+                "fn",
+                Some(Expr::cast(
+                    CTy::Ident("dream_fn".into()),
+                    Expr::index(Expr::id(format!("dream_iface_{iid}_{slot}")), Expr::id("tag")),
+                )),
             ));
-            out.push_str(&format!(
-                "  int32_t tag = dream_object_tag(this);\n  dream_fn fn = (dream_fn)dream_iface_{iid}_{slot}[tag];\n  if (!fn) abort();\n  return fn(this, a0, a1, a2, a3, a4, a5, a6);\n}}\n\n"
+            b.stmt(Stmt::if_(
+                Expr::unary(UnOp::Not, Expr::id("fn")),
+                Stmt::call("abort", vec![]),
             ));
+            b.ret(Some(Expr::IndirectCall {
+                callee: Box::new(Expr::id("fn")),
+                args: vec![
+                    Expr::id("this"),
+                    Expr::id("a0"),
+                    Expr::id("a1"),
+                    Expr::id("a2"),
+                    Expr::id("a3"),
+                    Expr::id("a4"),
+                    Expr::id("a5"),
+                    Expr::id("a6"),
+                ],
+            }));
+            m.push_func(b);
         }
     }
 }
 
-pub(super) fn emit_iface_init(out: &mut String, cx: &Cx<'_>) {
-    out.push_str("static void dream_init_itables(void) {\n");
+pub(super) fn emit_iface_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let mut b = FuncBuilder::new(CTy::Void, "dream_init_itables");
+    b.static_ = true;
     for imp in &cx.mir.interfaces.impls {
         let Some(tag) = interface_tag(cx, imp.class_ty) else {
             continue;
@@ -407,13 +661,17 @@ pub(super) fn emit_iface_init(out: &mut String, cx: &Cx<'_>) {
                     continue;
                 };
                 let cname = c_ident(&func_symbol(f));
-                out.push_str(&format!(
-                    "  dream_iface_{iid}_{slot}[{tag}] = (void *){cname};\n"
-                ));
+                b.assign(
+                    Expr::index(
+                        Expr::id(format!("dream_iface_{iid}_{slot}")),
+                        Expr::i(tag as i64),
+                    ),
+                    Expr::cast(CTy::VoidPtr, Expr::id(cname)),
+                );
             }
         }
     }
-    out.push_str("}\n\n");
+    m.push_func(b);
 }
 
 fn interface_tag(cx: &Cx<'_>, ty: TypeId) -> Option<i32> {

@@ -77,7 +77,7 @@ Kind constraints include `struct`, `class`, `unmanaged`, and `shared` (Sendable 
 fun send<T : shared>(value: T): void { /* … */ }
 ```
 
-At each instantiation the compiler checks the concrete type satisfies the constraint, reporting an error otherwise (e.g. `List<int>().sort()` needs `int : Comparable<int>`). Because generics are monomorphized, a constrained call binds to the concrete method with **static dispatch and no boxing** — even for [value structs](classes-structs.md).
+At each instantiation Dream checks the concrete type satisfies the constraint, reporting an error otherwise (e.g. `List<int>().sort()` needs `int : Comparable<int>`). Each type gets its own copy of the generic, so a constrained call binds to the concrete method with **no boxing** — even for [value structs](classes-structs.md).
 
 ### Static methods on a generic class
 
@@ -101,8 +101,8 @@ As with any static member, the method must be `public` to be called from another
 ### Generic functions as first-class values
 
 A generic function can become a [first-class function value](functions.md). With a concrete
-`fun(...)` type at the use site, its type arguments are inferred and the function is
-monomorphized. A bare binding keeps a polymorphic item that instantiates independently at each
+`fun(...)` type at the use site, its type arguments are inferred and a separate copy is used
+for that type. A bare binding stays generic and picks a type independently at each
 later use (typed assignment, typed argument, or call):
 
 ```dream

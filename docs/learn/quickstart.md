@@ -1,6 +1,6 @@
 # Quickstart
 
-From a blank machine to a running program in a few minutes. You do **not** need to install Rust unless you are changing the compiler itself.
+From a blank machine to a running program in a few minutes.
 
 <div class="dream-steps" markdown>
 
@@ -24,7 +24,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh |
 irm https://sps014.github.io/dream/install.ps1 | iex
 ```
 
-That installs `dream` (compiler), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`.
+That installs `dream` (compile and run), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`.
 
 Open a **new terminal**, then check:
 
@@ -67,7 +67,7 @@ Without a project folder you can still run a single file:
 dream run hello.dream
 ```
 
-Compile without running (writes `.wat`, `.wasm`, and `.abi.json` under `target/web/`):
+Compile without running (writes a WebAssembly module under `target/web/`):
 
 ```bash
 dream hello.dream
@@ -83,7 +83,7 @@ dreamer run --target web
 dreamer run --target node
 ```
 
-Or with the compiler:
+Or with `dream`:
 
 ```bash
 dream --runtime --web hello.dream
@@ -96,16 +96,6 @@ await run("target/web/hello.wasm");
 ```
 
 See [JavaScript interop](../reference/language/interop.md).
-
-### Building the compiler from source
-
-Only if you are hacking on Dream itself. Needs [Rust](https://rustup.rs):
-
-```bash
-git clone https://github.com/sps014/dream
-cd dream
-source ./use-toolchain.sh
-```
 
 ## Next
 

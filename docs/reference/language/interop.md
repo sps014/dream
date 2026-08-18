@@ -1,23 +1,19 @@
 # JS Interop
 
-Dream compiles to WebAssembly, so it runs anywhere WASM does — including the browser and Node. Talking to that host is built on three pieces, each with its own page:
+Dream runs in the browser and Node as WebAssembly. Talking to JavaScript is built on three pieces, each with its own page:
 
 | Piece | What it's for | Docs |
 | --- | --- | --- |
 | `extern fun` | a typed, fixed-signature function that lives in JS (`Math.max`, your glue code) | this page |
 | `js` | a dynamic handle to *any* live JS value, used with native syntax | [The js type](js-type.md) |
 | function values | passing functions across the boundary in either direction | [Callbacks](callbacks.md) |
-| `@c(...)` | binds an extern to a native C library on the wasmtime host | [C Interop](c-interop.md) |
+| `@c(...)` | binds an extern to a native C library (`dream run` only) | [C Interop](c-interop.md) |
 
 This page covers `extern` functions.
 
-Native `--release` also writes a sibling `.cwasm` (Wasmtime Cranelift AOT of the `.wasm`). The
-wasmtime host (`dream run`, `dreamer pack`) deserializes that blob at startup; browser and Node
-always load `.wasm`.
-
 ## Declaring an extern function
 
-An `extern fun` has a signature but no body. The compiler lowers it to a WebAssembly *import* and records it in the auto-generated `*.abi.json`. Call it like any other function:
+An `extern fun` has a signature but no body. Call it like any other function:
 
 ```dream
 extern fun alert(msg: string): void;
@@ -27,18 +23,18 @@ fun main(): void {
 }
 ```
 
-By default the import comes from the `env` module under the function's own name. Three things cooperate:
+By default it binds to a JS global of the same name (`alert`). Three things cooperate:
 
 - `extern fun` declares the signature on the Dream side.
-- `@js("module", "field")` optionally remaps which import module and field it binds to.
-- The runtime (`runtime/dream.js`) reads the ABI, marshals values, binds externs to JS globals, and bridges Promises for `extern async fun`.
+- `@js("module", "field")` optionally remaps which JS object and property it binds to.
+- The runtime marshals values, binds externs to JS globals, and bridges Promises for `extern async fun`.
 
 !!! note "Restrictions"
     Extern functions cannot have a body, cannot be generic, and cannot be combined with `public`.
 
 ## Remapping the import name
 
-`@js(module, name)` controls which import module and field the extern binds to:
+`@js(module, name)` controls which JS object and property the extern binds to:
 
 ```dream
 @js("dom", "setText")            // binds to importObject["dom"]["setText"]
@@ -50,32 +46,25 @@ extern fun log(msg: string): void;
 
 ## Running it from JavaScript
 
-Compiling a `.dream` file produces a `.wasm` module and a sibling `.abi.json` the runtime uses to
-marshal values. Load with the full shared host:
+Compile a `.dream` file, then load the `.wasm` with the Dream runtime:
 
 ```javascript
 import { run } from "./runtime/dream.js";
-await run("hello.wasm");   // loads hello.abi.json, binds externs, calls main
+await run("hello.wasm");   // binds externs, calls main
 ```
 
-Optionally emit tree-shaken sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host chunks
-that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does
-**not** write a selective runtime — use the full shared host instead.
+Optionally emit a smaller sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host pieces that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does **not** write a selective runtime — use the full shared host instead.
 
 ```bash
-dream --runtime --web hello.dream           # hello.web.runtime.js (fetch, isNode=false)
-dream --runtime --node hello.dream          # hello.node.runtime.js (fs/crypto preloads)
-dream --runtime --web --node hello.dream    # both siblings in one compile
+dream --runtime --web hello.dream           # hello.web.runtime.js
+dream --runtime --node hello.dream          # hello.node.runtime.js
+dream --runtime --web --node hello.dream    # both in one compile
 ```
 
 ```javascript
 import { run } from "./hello.web.runtime.js";
 await run("hello.wasm");
 ```
-
-The full runtime is assembled from modular sources under `runtime/src/` via
-`node scripts/bundle-runtime.mjs` (regenerate after editing those files; `node scripts/bundle-runtime.mjs --check`
-fails if `runtime/dream.js` is stale).
 
 ### Auto-binding to JS globals
 
@@ -94,24 +83,24 @@ await run("hello.wasm", {
 });
 ```
 
-If an extern matches no global and you don't provide it, the runtime installs a stub that throws only if actually called — so the module still instantiates. For full control, use `load(source, options)` instead of `run`; it returns the instance without calling `main`.
+If an extern matches no global and you don't provide it, the runtime installs a stub that throws only if actually called — so the module still loads. For full control, use `load(source, options)` instead of `run`; it returns the instance without calling `main`.
 
 ## Value marshaling
 
-With the ABI loaded, arguments and returns convert between Dream's heap layout and JavaScript:
+Arguments and returns convert between Dream and JavaScript:
 
 | Dream type | As argument | As return value |
 |------------|-------------|-----------------|
 | `int`, `float`, `double` | `number` | `number` |
 | `bool` | `boolean` | `boolean` |
-| `string` | `string` (UTF-16 in linear memory) | return a `string` |
+| `string` | `string` | return a `string` |
 | `T[]` | `Array` of marshaled elements | (pointer) |
 | `object`, classes, `List<T>` | opaque pointer (`number`) | (pointer) |
 
 For reference types, read the underlying data with the instance helpers:
 
 ```javascript
-mod.readString(ptr);          // length-prefixed UTF-16 LE string
+mod.readString(ptr);          // UTF-16 string
 mod.readArray(ptr, "int");    // -> number[]
 mod.readList(ptr, "string");  // List<string> -> string[]
 mod.readStruct(ptr, [         // class by field schema (declaration order)
@@ -120,7 +109,7 @@ mod.readStruct(ptr, [         // class by field schema (declaration order)
 ]);
 ```
 
-To hand a string back to Dream, the runtime calls the exported `malloc` for you (or call `mod.writeString(str)` directly).
+To hand a string back to Dream, call `mod.writeString(str)` (the runtime also does this for you when a return value is a `string`).
 
 ## Beyond fixed signatures
 
@@ -135,30 +124,12 @@ Functions cross the boundary in both directions too — see [Callbacks](callback
 
 ## Built on interop
 
-Several standard-library features are interop wrappers and serve as worked examples:
-
-- [Regex](../stdlib/regex.md) — a pure-Dream regex engine (ASCII subset; no host/`RegExp` dependency).
-- [HttpClient](../stdlib/http.md) — a cross-runtime HTTP client over `extern async fun`.
+- [Regex](../stdlib/regex.md) — `Regex` in `system.text` (not a JS `RegExp`).
+- [HttpClient](../stdlib/http.md) — HTTP over `extern async fun`.
 
 ## Host feature matrix
 
-Every `@js("Dream", "…")` import needs a matching implementation on **each** host: native
-(`src/execution/host/*.rs`, wasmtime) and JS (`runtime/src/hosts/*.js`, shared by Node and the
-browser). Most stdlib packages behave identically everywhere; where a host genuinely can't support
-a feature (no raw sockets in the browser, no process model in the browser, …) that package's own
-stdlib doc has a "Platform notes" table — check
+Most stdlib packages behave identically on `dream run`, in the browser, and in Node. Where a host can't support a feature (no raw sockets in the browser, no process model in the browser, …) that package's own page has a "Platform notes" table — check
 [HTTP](../stdlib/http.md), [Raw sockets](../stdlib/net.md), [File I/O](../stdlib/file.md),
 [Process](../stdlib/process.md), [Crypto](../stdlib/crypto.md), [DateTime](../stdlib/datetime.md),
-and [`system.gpu`](../stdlib/gpu.md) for the specifics. Unicode helpers (`Strings`/`Unicode` — see
-[Strings](../stdlib/string.md)) and `System.read_line`/`read_key` (see [Built-ins](../stdlib/builtins.md))
-are backed on both native and JS hosts today; only the interactive input fallback differs (browser
-has no stdin, so it uses a blocking `prompt()` dialog).
-
-`src/execution/host/mod.rs`'s `contract_tests` guard the `@js("Dream", …)` link contract both ways:
-
-- `every_native_dream_host_fn_is_declared_in_the_prelude` — every native `Dream`-module registration
-  has a matching prelude declaration (the reverse is intentionally unchecked: dynamic `js*` bridges
-  exist only on the JS host and trap under wasmtime).
-- `js_dream_host_keys_match_prelude_js_declarations` — JS host export keys
-  (`runtime/src/hosts/*.js` + `workers.js`, minus internal hooks like `__attachGpuAbi`) and prelude
-  `@js("Dream", …)` names are the same set.
+and [`system.gpu`](../stdlib/gpu.md). Unicode helpers ([Strings](../stdlib/string.md)) and `System.read_line` / `read_key` ([Built-ins](../stdlib/builtins.md)) work on both native and JS hosts; in the browser, interactive input uses a `prompt()` dialog because there is no stdin.

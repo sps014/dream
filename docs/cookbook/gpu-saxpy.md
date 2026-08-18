@@ -41,7 +41,7 @@ async fun main(): void {
 ```bash
 dream run saxpy.dream
 # in this repo:
-cargo run -- run sample/compute/saxpy.dream
+dream run sample/compute/saxpy.dream
 ```
 
 - `@compute(64)` — workgroup size 64; the body becomes WGSL.

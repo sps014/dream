@@ -18,4 +18,4 @@ When you need the browser or Node, read [JavaScript interop](../reference/langua
 - Discussions: coming soon
 - Discord: coming soon
 
-Compiler contributors: [Internals](../internals/README.md).
+Changing Dream itself: [Internals](../internals/README.md).

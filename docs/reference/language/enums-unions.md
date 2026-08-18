@@ -19,7 +19,7 @@ println(c);              // 1
 println(c.to_string());  // Green
 ```
 
-C-style enums also take bitwise `&`, `|`, `^`, and prefix `~` (same `i32` lowering as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<`/`>>`) stay integer-only.
+C-style enums also take bitwise `&`, `|`, `^`, and prefix `~` (same as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<`/`>>`) stay integer-only.
 
 ```dream
 enum Flags { None = 0, Read = 1, Write = 2, Exec = 4 }

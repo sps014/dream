@@ -352,7 +352,7 @@ nums.push(2);
 nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
 ```
 
-A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with a diagnostic asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which monomorphize like a generic function — from a `fun(...)` context or by binding a polymorphic item and instantiating at each use.
+A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with an error asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which get a separate copy per type — from a `fun(...)` context or by binding a generic item and using it at each site.
 
 #### Async lambdas
 

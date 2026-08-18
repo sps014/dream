@@ -29,7 +29,7 @@ fun main() {
 ```
 
 ```bash
-cargo run -- run sample/generators/quote/app.dream
+dream run sample/generators/quote/app.dream
 ```
 
 Expected stdout: `Hello generators`
@@ -133,7 +133,7 @@ fun main() {
 ```
 
 ```bash
-cargo run -- run sample/generators/html/app.dream
+dream run sample/generators/html/app.dream
 ```
 
 HTML is **not** a language builtin. The sample's `gen.dream` calls `HtmlCompiler` (in

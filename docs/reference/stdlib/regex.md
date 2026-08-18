@@ -2,26 +2,7 @@
 
 **Import:** `import system.text;`
 
-Dream uses **one** vendored [PCRE2](https://github.com/PCRE2Project/pcre2) **16-bit** engine
-(version 10.45 under `crates/dream-mir/src/runtime/c/pcre2/`).
-
-| Backend | How it runs |
-| --- | --- |
-| Native C (`dream --native-c`) | PCRE2-16 with **JIT** (sljit) |
-| WASM (`dream run` / `.wasm`) | Same sources, **interpreter only** (`-DPCRE2_WASM`, no W^X in linear memory) |
-
-Invalid patterns compile to a dead engine (handle `0`) that never matches. The stdlib
-`Regex` type is a thin `@intrinsic` wrapper; there is no in-language Pike/backtracker.
-
-Do **not** hand-edit `crates/dream-mir/src/runtime/regex.wat`. Change
-`crates/dream-mir/src/runtime/c/regex.c` (and/or vendored PCRE2), then:
-
-```bash
-scripts/build-runtime.sh   # wasi-sdk 33 via `dreamer toolchain install wasi-sdk`
-```
-
-That compiles PCRE2 + the wrapper and writes `runtime/regex.wat`. The emitter splices that file
-only when the program uses `regex_*` intrinsics.
+Compile a pattern once, then test, replace, or extract matches. Patterns use the usual Perl-style syntax (`\d`, groups, lookaround). An invalid pattern never matches.
 
 ```dream
 import system;
@@ -32,6 +13,11 @@ fun main() {
     System.println(digits.test("abc123"));
     System.println(digits.replace("a1b2c3", "#"));
 }
+```
+
+```
+true
+a#b#c#
 ```
 
 ## Flags
@@ -45,16 +31,40 @@ Combine with `|`. Default is `RegexFlags.None`.
 | `Multiline` | `^` / `$` at line edges |
 | `DotAll` | `.` matches newlines |
 
+```dream
+let re = Regex("hello", RegexFlags.IgnoreCase | RegexFlags.Global);
+```
+
 ## Methods
 
 | Call | Meaning |
 | --- | --- |
-| `Regex(pattern, flags)` | compile |
+| `Regex(pattern)` / `Regex(pattern, flags)` | compile |
 | `test(input)` | any match? |
 | `replace(input, replacement)` | substitute (`$&`, `$1`, `${name}`, `$$`) |
 | `match(input)` | `string[]` of matches |
 | `match_info(input)` | `Option<RegexMatchInfo>` with groups and names |
 
-The `regex_find` microbench uses Global `[a-z]+\d+` (not a dedicated digit-run fast path).
+`Global` changes `match`: without it, the array is the whole match plus each capturing group; with it, every full match is one element.
+
+```dream
+let digits = Regex("\\d+", RegexFlags.Global);
+let parts = digits.match("a1b2c3");   // ["1", "2", "3"]
+```
+
+## Groups
+
+`match_info` returns the first match, or `None`. `full` is the whole match. `groups` is each capturing group in order (`groups[0]` is group 1). Named groups `(?<name>...)` are looked up with `named`:
+
+```dream
+let re = Regex("(?<area>\\d{3})-(?<num>\\d{4})");
+switch (re.match_info("555-1234")) {
+    Some(info) => {
+        System.println(info.full);                    // 555-1234
+        System.println(info.named("area").unwrap());  // 555
+    }
+    None => System.println("no match"),
+}
+```
 
 A full example: [`sample/interop/regex.dream`](https://github.com/sps014/dream/blob/main/sample/interop/regex.dream).

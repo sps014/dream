@@ -8,8 +8,8 @@ hide:
   <h1 class="dream-gradient-text">Dream</h1>
   <p class="dream-hero-subtitle">
     A typed language with familiar <code>fun</code> / <code>let</code> syntax.
-    Write once, compile to WebAssembly, and run on your computer, in the browser, or in Node.
-    Memory is automatic reference counting (ARC).
+    Write once, run on your computer, in the browser, or in Node.
+    Memory is automatic.
   </p>
   <div class="dream-hero-actions">
     <a href="learn/quickstart/" class="md-button md-button--primary">Get started</a>

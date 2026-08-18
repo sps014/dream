@@ -274,26 +274,25 @@ Neither name is a reserved keyword. Written as a call, they are compile-time for
 ```dream
 struct Point { public x: int; public y: int; }
 
-let bytes: int = sizeof(Point);     // 8 — value-struct ABI size
-let ptr_w: int = sizeof(string);    // 4 — refs / classes / arrays are i32 handles
+let bytes: int = sizeof(Point);     // 8 — byte size of the struct
+let ptr_w: int = sizeof(string);    // 4 — heap refs / classes / arrays are handles
 let name: string = nameof(Point.x); // "x" — last path segment; operand is not evaluated
 ```
 
 - **`sizeof(T)`** yields an `int` equal to Dream's storage size for `T`: primitives and value
-  `struct`s use their layout size; class instances, arrays, `string`, and other heap refs are `4`
-  (WASM `i32` pointer). Folded to a constant in the analyzer — no runtime call.
+  `struct`s use their layout size; class instances, arrays, `string`, and other heap refs are `4`.
+  The result is a compile-time constant.
 - **`nameof(a.b.c)`** yields a `string` of the last identifier in a dotted path. The path is not
   type-checked or evaluated (you can write `nameof(future_api)`).
 
 ### GPU shaders (`@compute` / `@vertex` / `@fragment` / `@gpu`)
 
-Shader bodies are lowered from the AST to WGSL (they skip the host HIR→MIR path), so these forms
-are handled specially:
+These forms work differently inside shader bodies:
 
 | Form | In shaders |
 |------|------------|
-| `sizeof(T)` | Emitted as a WGSL integer literal (same Dream ABI sizes as host `sizeof` for scalars and `GpuVec*` / `GpuMat*` / `GpuId3`; user value structs use the shader field map). Useful for strides and byte offsets inside a kernel. |
-| `nameof(...)` | **Compile error.** It produces a `string`, and strings are forbidden in GPU code — keep `nameof` on the CPU host (or hard-code a constant in the shader if you only need a fixed name). |
+| `sizeof(T)` | Becomes a number (same sizes as host `sizeof` for scalars and `GpuVec*` / `GpuMat*` / `GpuId3`). Useful for strides and byte offsets inside a kernel. |
+| `nameof(...)` | **Compile error.** It produces a `string`, and strings are forbidden in GPU code — keep `nameof` on the CPU (or hard-code a constant in the shader if you only need a fixed name). |
 
 ## Precedence
 

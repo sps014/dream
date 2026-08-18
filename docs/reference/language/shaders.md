@@ -115,7 +115,7 @@ fun fs(v: VsOut): FsOut {
 `GpuMath.mix` / `min` / `max` / `abs` / `clamp` / `saturate` / `sign` / `floor` /
 `ceil` / `fract` / `sqrt` / `exp` / `pow` take `float` or `GpuVecN`. `normalize` /
 `length` / `dot` use the same name for vec2/3/4. `GpuVecN.splat(s)` is WGSL `vecN(s)`.
-`GpuMat2.of(c0, c1)` lowers to `mat2x2<f32>(c0, c1)`. `GpuMath.transpose` maps to WGSL
+`GpuMat2.of(c0, c1)` becomes WGSL `mat2x2<f32>(c0, c1)`. `GpuMath.transpose` maps to WGSL
 `transpose` (overloaded for `GpuMat2` / `GpuMat3` / `GpuMat4`). Shader `let` is inferred
 from the initializer — `let s = GpuMath.sin(t)` needs no `: float`.
 
@@ -148,12 +148,12 @@ Rules: top-level only; not generic/async/extern; explicit non-void return type.
 
 ## Rules
 
-- Top-level only; not async, generic, or extern; body skipped for MIR/WASM (emitted as WGSL).
+- Top-level only; not async, generic, or extern; the body becomes a WGSL shader.
 - `@vertex` returns a value struct with a position builtin plus varyings.
 - `@fragment` first parameter is usually that interface struct; return `GpuVec4` or an output struct.
-- When names passed to `create` / `create_ex` are **string literals**, the compiler checks stages
+- When names passed to `create` / `create_ex` are **string literals**, Dream checks stages
   and matching interface types.
-- `sizeof(T)` lowers to a WGSL integer literal; `nameof(...)` is not available in shader bodies
+- `sizeof(T)` becomes a number in the shader; `nameof(...)` is not available in shader bodies
   (it produces `string`). Details: [Operators — sizeof and nameof](operators.md#sizeof-and-nameof).
 
 ## Related

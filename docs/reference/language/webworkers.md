@@ -167,7 +167,7 @@ src.cancel();
 let _ = await w;
 ```
 
-**Hard abort:** `Promise.cancel(w)` (or dropping the Future) kills the worker thread. Browser uses `Worker.terminate()`; native uses wasmtime epoch interruption so a busy body aborts. Hard abort does **not** run Dream `finally` / orderly ARC unwind — prefer the token when `@shared` state must stay consistent.
+**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the worker immediately. The browser terminates the worker; native `dream run` does the same. Hard abort does **not** run Dream `finally` — prefer the token when `@shared` state must stay consistent.
 
 ## Async worker bodies
 

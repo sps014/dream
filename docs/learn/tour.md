@@ -20,7 +20,7 @@ fun main() {                   // (2)
 
 1. Bring in console I/O (`System.println`).
 2. Every program starts in `main`.
-3. `let` — the compiler sees `"Ada"` and treats `name` as text (`string`).
+3. `let` — Dream infers `name` is a `string` from `"Ada"`.
 4. `const` — `n` is locked after this line.
 5. Reassign a `let` with `=`.
 6. Print a line to the terminal.

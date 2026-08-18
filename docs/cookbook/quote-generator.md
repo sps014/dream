@@ -49,7 +49,7 @@ Hello generators
 ```bash
 dreamer run
 # in this repo:
-cargo run -- run sample/generators/quote/app.dream
+dream run sample/generators/quote/app.dream
 ```
 
 - `@syntax_block("quote")` — the compiler hands you every `quote { … }` site.

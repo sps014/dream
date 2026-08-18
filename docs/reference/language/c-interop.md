@@ -1,13 +1,6 @@
 # C Interop
 
-Dream can call native C libraries directly on the wasmtime host through the `@c(...)` attribute.
-The compiler emits a WebAssembly `import` for every `@c` extern, and the CLI runtime resolves the
-symbol at instantiation time via `libloading` + `libffi`, marshalling arguments and returns
-without any hand-written trampoline.
-
-C interop is **native-only**: a program that carries a `@c` extern will not run on Node or in the
-browser (there is no libc to call). The `@c` attribute automatically restricts the enclosing
-extern to the `native` runtime target — you don't need to spell `@native` yourself.
+Dream can call native C libraries through the `@c(...)` attribute. This is **native-only**: a program with a `@c` extern will not run on Node or in the browser. `@c` automatically restricts the extern to the native target — you don't need to spell `@native` yourself.
 
 ## Declaring an extern
 
@@ -21,7 +14,7 @@ extern fun sqlite3_open(path: string, ref db: long): int;
 - The second is the exported C symbol.
 - Parameters and returns use ordinary Dream types (`int`, `long`, `float`, `double`, `bool`,
   `byte`, `string`, `byte[]`, or an `@unmanaged` value struct).
-- **Do not** combine `@c` with `@js` on the same declaration — the compiler will reject it.
+- **Do not** combine `@c` with `@js` on the same declaration.
 
 ## Out-parameters use `ref`
 
@@ -39,13 +32,7 @@ fun main(): void {
 }
 ```
 
-The compiler encodes the parameter as `out_long` / `out_int` in the `.abi.json`, and the WASM
-import receives an `i32` linear-memory address. On the way in, the host trampoline hands the C
-function a real host pointer; on the way out, it copies the C-written value back to the Dream box
-so the callee's assignment to `ref db` becomes visible.
-
-Value-struct out-params are supported the same way (`out_struct:Name`), backed by a per-call
-scratch buffer sized from the ABI's `structs` map.
+After the call, `db` holds the value C wrote. Value-struct out-params work the same way.
 
 ## String marshaling
 
@@ -73,12 +60,11 @@ Cdecl is the default on all supported hosts. Use `@c_call("stdcall")` for Win32 
 extern fun GetSystemMetrics(index: int): int;
 ```
 
-Both `@marshal` and `@c_call` require `@c` on the same declaration; the compiler rejects them
-otherwise.
+Both `@marshal` and `@c_call` require `@c` on the same declaration.
 
 ## Passing structs
 
-C-ABI structs are declared as `@unmanaged` value structs and marked `@packed` when the C header
+Pass C structs as `@unmanaged` value structs. Mark them `@packed` when the C header
 uses `#pragma pack(1)` / `__attribute__((packed))`:
 
 ```dream
@@ -93,26 +79,13 @@ struct Point {
 extern fun point_distance(a: Point, b: Point): double;
 ```
 
-The `.abi.json` `structs` map records the layout the host needs to marshal the value:
-
-```json
-"structs": {
-  "Point": { "size": 8, "align": 1, "packed": true, "fields": [
-    { "name": "x", "offset": 0, "ty": "int" },
-    { "name": "y", "offset": 4, "ty": "int" }
-  ]}
-}
-```
-
-Only `@unmanaged` value structs may appear in `@c` signatures — the compiler rejects a class or a
-union in a `@c` signature, because heap references carry ARC headers the C ABI knows nothing
-about.
+Only `@unmanaged` value structs may appear in `@c` signatures — classes and unions are rejected,
+because they are heap references C does not understand.
 
 ## Callbacks
 
 Captureless Dream `fun` values passed to `@c` parameters become native function pointers for the
-duration of the call. The host installs a libffi trampoline that re-enters the WebAssembly module
-through `__indirect_function_table`.
+duration of the call:
 
 ```dream
 fun row_cb(arg: long, argc: int, argv: long, cols: long): int {
@@ -140,16 +113,15 @@ sqlite3_exec(db, "SELECT 1", row_cb, 0L, ref err);
 
 The runtime searches for the requested library in this order:
 
-1. `native/<lib>` **next to** the `.dream` / `.wat` source (perfect for vendored copies).
-2. The directory containing the `.wat` itself.
+1. `native/<lib>` **next to** the source (perfect for vendored copies).
+2. The directory containing the source.
 3. The current working directory.
 4. Standard system directories:
    - macOS — `/opt/homebrew/lib`, `/usr/local/lib`, `/opt/local/lib`, `/usr/lib`
    - Linux — `/usr/local/lib`, `/usr/lib/x86_64-linux-gnu`, `/usr/lib/aarch64-linux-gnu`,
      `/usr/lib64`, `/usr/lib`, `/lib`
    - Windows — `%WINDIR%\System32`
-5. As a last resort, `libloading::Library::new("lib<name>.dylib")` (etc.) lets the OS loader walk
-   its own search path (`DYLD_FALLBACK_LIBRARY_PATH` / `LD_LIBRARY_PATH` / system stubs).
+5. The OS loader's own search path (`DYLD_FALLBACK_LIBRARY_PATH` / `LD_LIBRARY_PATH` / system stubs).
 
 To ship a self-contained program, drop the platform-appropriate shared library into a `native/`
 folder next to the source:
@@ -163,9 +135,7 @@ sample/sqlite/
     └── sqlite3.dll        # Windows
 ```
 
-The `.abi.json` also emits a `c_libs` array listing every library referenced by a live `@c`
-extern, so packaging tooling (`dreamer pack`, custom scripts) can copy the exact set of native
-dependencies without re-parsing sources.
+`dreamer pack` copies the libraries your `@c` externs need.
 
 ## End-to-end example
 
@@ -199,8 +169,7 @@ SELECT rc=0
 done
 ```
 
-To ship a single native executable (embeds the `.wasm` + `.abi.json`, and links `sqlite3`
-via `c_libs`):
+To ship a single native executable:
 
 ```bash
 cd sample/sqlite
@@ -210,13 +179,13 @@ dreamer pack                 # → target/pack/sqlite-demo-<os>-<arch>
 
 Both work out-of-the-box on macOS and on Linux distributions that ship libsqlite3 in a standard
 library dir; on hosts that don't, drop a `native/libsqlite3.*` into `sample/sqlite/` (or set
-`DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`). The packed binary still needs the system/`-lsqlite3`
+`DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`). The packed binary still needs the system sqlite3
 shared library at run time unless you vendor it.
 
 ## Host helpers for C pointers
 
 SQLite (and most C libraries) pass `char*` / `T*` that live in the **host** address space, not
-Dream linear memory. From a Dream callback, use:
+inside the Dream program. From a Dream callback, use:
 
 ```dream
 @native
@@ -238,11 +207,11 @@ share the same *shape* on the Dream side:
 
 | Concern                   | `@js("mod", "field")`               | `@c("lib", "symbol")`                     |
 |---------------------------|-------------------------------------|-------------------------------------------|
-| Host                      | JS (Node / browser)                 | Native (wasmtime + `libloading` + `libffi`) |
+| Host                      | JS (Node / browser)                 | Native (`dream run`)                      |
 | Fixed signature           | Yes                                 | Yes                                        |
-| Automatic marshaling      | Yes, via `.abi.json`                | Yes, via `.abi.json` (`kind: "c"`)         |
+| Automatic marshaling      | Yes                                 | Yes                                        |
 | Async                     | `async` + `Promise` bridge          | Not supported (call C on the caller thread) |
 | Out-params                | Return a wrapper struct / tuple     | Dream `ref` parameter                      |
-| Callbacks (into Dream)    | `fun(...)` values marshalled to JS  | Captureless `fun(...)` → native trampoline |
+| Callbacks (into Dream)    | `fun(...)` values marshalled to JS  | Captureless `fun(...)` → native callback   |
 
 See [JS Interop](interop.md) for the JS side.

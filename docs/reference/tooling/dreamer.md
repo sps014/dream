@@ -1,39 +1,24 @@
 # Package Manager (`dreamer`)
 
-`dreamer` is Dream's package manager: it reads/writes the `dream.toml` project manifest, resolves
-dependencies into a `dream.lock` lockfile, materializes them into a project's `dream_packages/`
-directory, and wraps the `dream` compiler for `build`/`run`. It lives at
-[`tooling/dreamer`](https://github.com/sps014/dream/tree/main/tooling/dreamer) as its own Rust
-crate/binary, separate from the compiler itself.
+`dreamer` manages Dream projects: it reads `dream.toml`, pins dependencies in `dream.lock`,
+installs them into `dream_packages/`, and wraps `build` / `run` / `test` / `pack`.
+
+Install it with the [quickstart](../../learn/quickstart.md) installer — you get `dream` and
+`dreamer` together. Then:
+
+```bash
+dreamer init hello
+cd hello
+dreamer run
+```
 
 ## Installing `dreamer`
 
-From a checkout of the Dream repo:
+The installer puts `dream` and `dreamer` on your PATH (`~/.dream/bin`). Open a new terminal and
+check with `dreamer --help`.
 
-```bash
-cargo install --path tooling/dreamer
-```
-
-This installs a `dreamer` binary onto your `PATH`. `dreamer build`/`dreamer run` also need the
-`dream` compiler binary discoverable. Resolution order:
-
-1. `DREAM_BIN` — exact path to the `dream` binary
-2. `DREAM_HOME` — directory containing `dream` (typical dev value: `<repo>/target/debug`)
-3. `dream` on `PATH`
-4. Sibling of the `dreamer` executable / walk for `target/{debug,release}/dream`
-
-For tooling that needs to invoke the package manager itself, set `DREAMER_HOME` to the directory
-containing `dreamer` (often the same `target/debug` or `target/release` folder). From the Dream
-repo root you can do both the build and the exports in one step:
-
-```bash
-source ./use-toolchain.sh          # release (default)
-# source ./use-toolchain.sh --debug
-```
-
-The VS Code extension mirrors these via settings `dream.home` and `dreamer.home`. The `.vsix`
-does not ship compiler binaries — launch the editor from a shell that has sourced
-`./use-toolchain.sh`, or set those settings explicitly.
+If an editor cannot find them, set `dream.home` / `dreamer.home` to the directory that contains
+the binaries (the VS Code extension uses those settings).
 
 ## The manifest: `dream.toml`
 
@@ -73,7 +58,7 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 - `[package].type` is `bin` (default) or `lib`. Libraries omit `entry`, are not runnable (`dreamer run` /
   `dreamer pack` error), and are typechecked via the conventional `src/<import_segment>.dream` root
   (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`). Binaries require `entry` and a top-level `main`.
-- `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler (**bin only**).
+- `[package].entry` is the file `dreamer build` / `dreamer run` compile (**bin only**).
 - Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native C
   under `target/debug/` or `target/release/`. Bare `dream file.dream` (no enclosing `dream.toml`)
   still uses `<source-dir>/target/web/` (wasm) or `target/debug|release/` (native C) — never siblings
@@ -82,8 +67,8 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   when `targets` includes `node`). Scaffolded `index.html` / `run.mjs` import `target/web/` /
   `target/node/` — no need to edit them when switching debug ↔ release. Existing projects that
   hardcode `target/debug/…` should retarget once to `target/web/` / `target/node/`.
-- `[package].targets` is an optional list of hosts this project supports: `native` (wasmtime via
-  `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
+- `[package].targets` is an optional list of hosts this project supports: `native`
+  (`dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
   Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
   native. Combinations are allowed; see `dreamer run` below for how the host is chosen.
 - `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory).
@@ -136,7 +121,7 @@ and git dependencies are copied from a shared, checksum-verified download cache 
 `~/.dream/registry/`. `dream_packages/` is never committed (`dreamer init` adds it to
 `.gitignore`); it's fully reproducible from `dream.toml` + `dream.lock`.
 
-When a plain `import` doesn't resolve to a local file, the compiler looks under `dream_packages/`:
+When a plain `import` doesn't resolve to a local file, Dream looks under `dream_packages/`:
 
 - `import json_tools;` (no dot) looks for `dream_packages/json_tools/src/json_tools.dream` — a
   package's self-named entry file.
@@ -224,26 +209,24 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer remove <name> [-p <name>]` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. In a `[workspace]`, installs all members into the root lock/`dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release] [-p <name>]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. |
-| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` still applies wasm-opt / cc; wasm files stay in `target/web/`. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
+| `dreamer build [--release] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. |
+| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package, Cranelift-AOT the `.wasm` to `.cwasm`, and embed that in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
-| `dreamer toolchain install [cc\|wasi-sdk]` | Download a pinned **Zig** (`cc` → `zig cc` for `--backend c`) and/or **wasi-sdk 33** (rebuild `regex.wat`) into `~/.dream/toolchains/`. Omit the name to install both. |
+| `dreamer toolchain install [cc]` | Download a pinned C compiler (Zig) for native C builds into `~/.dream/toolchains/`. |
 | `dreamer toolchain list` | Show which of those components are installed. |
-| `dreamer toolchain uninstall cc\|wasi-sdk` | Remove a component directory. |
+| `dreamer toolchain uninstall cc` | Remove that component. |
 
-`dreamer toolchain install` is **not** `dreamer install` (packages). It fetches pinned **Zig 0.16.0** (`zig cc` / `zig ar`) and/or **wasi-sdk 33** into `~/.dream/toolchains/`, verifies SHA-256, and writes `~/.dream/toolchains.env` (`DREAM_ZIG`, `WASI_SDK_PATH`). `dream --backend c` uses `DREAM_CC` / `CC`, then that Zig, then `cc`/`clang` on `PATH`. Rebuilding `regex.wat` still needs wasi-sdk; `cargo test` / Windows CI do not.
+`dreamer toolchain install` is **not** `dreamer install` (packages). It is optional: `dream --backend c` uses `DREAM_CC` / `CC`, then the installed Zig, then `cc` / `clang` on `PATH`.
 
 ### Native `dreamer pack`
 
-Produces a single native executable per selected platform by Cranelift-AOT compiling the release
-`.wasm` to a Wasmtime `.cwasm` (host ISA, or `Config::target` for a cross triple) and embedding that
-blob (plus `[package].icon` PNG when set) in the workspace `dream-runner` crate (wasmtime + the same
-host ABI as `dream run`). Startup deserializes the precompiled module instead of JIT-compiling.
-Browser/Node still load `.wasm`. No project `assets/` folder is required next to the packed binary.
+Produces a single native executable per selected platform and writes it to
+`target/pack/<name>-<os>-<arch>`. Browser and Node still load `.wasm`. No project `assets/`
+folder is required next to the packed binary.
 
 ```bash
 dreamer pack                         # host → target/pack/<name>-<os>-<arch>
@@ -252,9 +235,8 @@ dreamer pack --target macos-arm64 --target windows-x64
 dreamer pack --target all            # linux/macos/windows × x64/arm64
 ```
 
-Cross-compiling non-host triples requires `rustup target add <triple>` and a working linker; failures
-are reported (targets are never silently skipped). Pack needs the Dream workspace (set `DREAM_REPO`
-if the compiler binary is installed outside a checkout). Libraries cannot be packed.
+Cross-compiling to another OS/arch needs a working linker for that target; failures
+are reported (targets are never silently skipped). Libraries cannot be packed.
 
 ### How `dreamer run` picks a host
 
@@ -266,7 +248,7 @@ if the compiler binary is installed outside a checkout). Libraries cannot be pac
 
 Per host:
 
-- **native** — `dream run [--release] <entry> [args…]` (wasmtime).
+- **native** — `dream run [--release] <entry> [args…]`.
 - **node** — compile with `--runtime --node` (refreshing `target/node/`), then `node run.mjs`.
 - **web** — compile with `--runtime --web` (wasm in `target/web/`), then serve the project root on
   `http://127.0.0.1:8787/index.html` by default (colored log; Ctrl-C to stop). A later
@@ -305,7 +287,7 @@ Behavior:
 
 - One `dream.lock` and one `dream_packages/` at the **workspace root**.
 - `dreamer install` (from the root or any member) resolves **all** members’ deps into that shared
-  install, then symlinks each member’s `dream_packages/` → the root so the compiler/LSP keep
+  install, then symlinks each member’s `dream_packages/` → the root so imports keep
   working with no special config.
 - Package selection: inside a member directory, commands target that package; at the virtual
   workspace root, pass `-p` / `--package <name>` for `build` / `run` / `test` / `pack` / `publish`
@@ -402,8 +384,6 @@ mkdir -p /tmp/my-registry
 # default = "file:///tmp/my-registry"
 dreamer add that-package
 ```
-
-This is exactly the fixture setup exercised by `tooling/dreamer`'s own integration tests.
 
 ## For contributors
 

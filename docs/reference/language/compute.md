@@ -11,8 +11,6 @@ Headless environments without an adapter print `gpu unavailable` from `Gpu.try_i
 
 ## Quick start
 
-User-facing code — a kernel plus a tiny host dispatch:
-
 ```dream
 import system;
 import system.gpu;
@@ -37,9 +35,6 @@ async fun main(): void {
     System.println((int)vals[0]); // 11 when a GPU adapter is available
 }
 ```
-
-Compiling emits a sibling `.wgsl` file and a `"gpu"` section in `.abi.json`. The browser
-runtime (`runtime/dream.js`) loads both and drives `navigator.gpu`.
 
 ## Simple sample: SAXPY
 
@@ -71,7 +66,7 @@ async fun main(): void {
 ```
 
 ```bash
-cargo run -- run sample/compute/saxpy.dream
+dream run sample/compute/saxpy.dream
 ```
 
 ## Complex sample: reaction–diffusion
@@ -122,8 +117,8 @@ await GpuRenderPass.blit(surface, tex);
 ```
 
 ```bash
-cargo run -- sample/compute/life/life.dream
-# serve repo root → sample/compute/life/life.html
+dream run sample/compute/life/life.dream
+# serve the folder → sample/compute/life/life.html
 ```
 
 ## Larger demo: fluid
@@ -156,8 +151,8 @@ let _ = await pass.submit();
 ```
 
 ```bash
-cargo run -- run sample/fluid/fluid.dream
-# or serve repo root → sample/fluid/fluid.html
+dream run sample/fluid/fluid.dream
+# or serve the folder → sample/fluid/fluid.html
 ```
 
 ## Attribute
@@ -240,8 +235,8 @@ fun reduce(data: GpuBuffer<float>, out: GpuBuffer<float>): void {
 
 ### `@shared` is not GPU shared memory
 
-Dream's existing `@shared` attribute marks **CPU / WebWorker** heap classes (lock word +
-atomic RC). It is illegal inside `@compute`. GPU scratch uses `@workgroup`, not `@shared`.
+Dream's `@shared` attribute marks **CPU / WebWorker** classes that can be shared across threads.
+It is illegal inside `@compute`. GPU scratch uses `@workgroup`, not `@shared`.
 
 ## Multi-pass sync
 

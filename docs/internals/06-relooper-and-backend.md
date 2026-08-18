@@ -15,7 +15,7 @@ flowchart TD
 ```
 
 - `relooper::reloop(func) -> Option<Shape>` recovers structured shapes.
-- `backend::wasm::emit_program / emit_function` walks the function into builder ops, consulting the type interner for WASM value types. Runtime helpers stay as handwritten WAT and are parsed into the same module.
+- `backend::wasm::emit_program / emit_function` walks the function into builder ops, consulting the type interner for WASM value types. Same-module runtime helpers are `runtime/*.wat` (wast merge by name). Linked PCRE2 is `runtime/regex.wat` from C.
 
 ## The relooper
 

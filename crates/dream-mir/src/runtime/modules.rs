@@ -1,7 +1,7 @@
-//! Shared C runtime module catalog: one declaration for wasm extract/link and native compile.
+//! Linked C libraries (today: PCRE2 regex) plus native compile file lists.
 //!
-//! `scripts/build-runtime.sh` consumes [`manifest_json`] via `dream-runtime-manifest`.
-//! WASM emit and native file lists use the same [`RUNTIME_MODULES`] table.
+//! Guest same-module helpers are authored as `runtime/*.wat`. `scripts/build-runtime.sh` only
+//! rebuilds linked `wat_out` (regex). Native `--native-c` uses `runtime/c/native/`.
 
 use indexmap::IndexMap;
 use std::path::{Path, PathBuf};
@@ -49,17 +49,10 @@ impl RuntimeNeed {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ModuleKind {
-    Extract,
-    Link,
-}
-
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeModule {
     pub id: &'static str,
     pub need: RuntimeNeed,
-    pub kind: ModuleKind,
     pub shared_c: &'static [&'static str],
     pub wasm_extra_c: &'static [&'static str],
     pub native_extra_c: &'static [&'static str],
@@ -73,7 +66,6 @@ pub struct RuntimeModule {
     pub stack_size: u32,
     pub data_span: u32,
     pub wat_out: &'static str,
-    pub promote: bool,
     pub intrinsic_keys: &'static [&'static str],
 }
 
@@ -102,66 +94,8 @@ impl LinkedLayout {
 
 pub const RUNTIME_MODULES: &[RuntimeModule] = &[
     RuntimeModule {
-        id: "strings",
-        need: RuntimeNeed::CORE,
-        kind: ModuleKind::Extract,
-        shared_c: &["strings.c"],
-        wasm_extra_c: &[],
-        native_extra_c: &[],
-        vendor_sources: None,
-        wasm_defines: &[],
-        native_defines: &[],
-        include_dirs: &["include"],
-        exports: &[],
-        wrap: &[],
-        stack_size: 0,
-        data_span: 0,
-        wat_out: "strings.wat",
-        promote: true,
-        intrinsic_keys: &[],
-    },
-    RuntimeModule {
-        id: "object",
-        need: RuntimeNeed::CORE,
-        kind: ModuleKind::Extract,
-        shared_c: &["object.c"],
-        wasm_extra_c: &[],
-        native_extra_c: &[],
-        vendor_sources: None,
-        wasm_defines: &[],
-        native_defines: &[],
-        include_dirs: &["include"],
-        exports: &[],
-        wrap: &[],
-        stack_size: 0,
-        data_span: 0,
-        wat_out: "object.wat",
-        promote: true,
-        intrinsic_keys: &[],
-    },
-    RuntimeModule {
-        id: "format",
-        need: RuntimeNeed::CORE,
-        kind: ModuleKind::Extract,
-        shared_c: &["format.c"],
-        wasm_extra_c: &[],
-        native_extra_c: &[],
-        vendor_sources: None,
-        wasm_defines: &[],
-        native_defines: &[],
-        include_dirs: &["include"],
-        exports: &[],
-        wrap: &[],
-        stack_size: 0,
-        data_span: 0,
-        wat_out: "format.wat",
-        promote: true,
-        intrinsic_keys: &[],
-    },
-    RuntimeModule {
         id: "regex",
         need: RuntimeNeed::REGEX,
-        kind: ModuleKind::Link,
         shared_c: &["regex.c"],
         wasm_extra_c: &["regex_wasm_libc.c"],
         native_extra_c: &["pcre2/pcre2_jit_compile.c"],
@@ -195,7 +129,6 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         stack_size: 131072,
         data_span: 512 * 1024,
         wat_out: "regex.wat",
-        promote: true,
         intrinsic_keys: &[
             ATTR_REGEX_COMPILE,
             ATTR_REGEX_FREE,
@@ -287,13 +220,13 @@ pub fn runtime_need_from_c_source(src: &str) -> RuntimeNeed {
     need
 }
 
-/// Bump-allocate a data window per live [`ModuleKind::Link`] module, starting at
+/// Bump-allocate a data window per live catalog module, starting at
 /// [`LINKED_REGION_ORIGIN`]. Deterministic catalog order.
 pub fn allocate_linked_layouts(need: RuntimeNeed) -> IndexMap<&'static str, LinkedLayout> {
     let mut cursor = LINKED_REGION_ORIGIN;
     let mut out = IndexMap::new();
     for m in RUNTIME_MODULES {
-        if m.kind != ModuleKind::Link || !need.contains(m.need) {
+        if !need.contains(m.need) {
             continue;
         }
         let layout = LinkedLayout {
@@ -337,7 +270,7 @@ fn push_unit(units: &mut Vec<NativeCompileUnit>, path: PathBuf, m: &RuntimeModul
 }
 
 /// Native objects for `need`: always-on host C plus catalog `shared_c`/`native_extra_c`/`SOURCES`
-/// for live [`ModuleKind::Link`] modules.
+/// for live linked modules.
 pub fn native_runtime_units(need: RuntimeNeed) -> Vec<NativeCompileUnit> {
     let native = runtime_c_dir().join("native");
     let native_inc = native_runtime_include_dir();
@@ -351,7 +284,7 @@ pub fn native_runtime_units(need: RuntimeNeed) -> Vec<NativeCompileUnit> {
     }
     let c = runtime_c_dir();
     for m in RUNTIME_MODULES {
-        if m.kind != ModuleKind::Link || !need.contains(m.need) {
+        if !need.contains(m.need) {
             continue;
         }
         for rel in m.shared_c {
@@ -437,16 +370,11 @@ pub fn manifest_json() -> String {
             }
         }
         let layout = layouts.get(m.id);
-        let kind = match m.kind {
-            ModuleKind::Extract => "extract",
-            ModuleKind::Link => "link",
-        };
         let global_base = layout.map(|l| l.base).unwrap_or(0);
         let stack_size = m.stack_size;
         modules.push(format!(
-            "{{\"id\":{id},\"kind\":{kind},\"need\":{need},\"wasm_c\":{wasm_c},\"native_extra_c\":{native_extra},\"wasm_defines\":{wasm_def},\"native_defines\":{nat_def},\"include_dirs\":{inc},\"exports\":{exp},\"wrap\":{wrap},\"stack_size\":{stack},\"data_span\":{span},\"global_base\":{base},\"wat_out\":{wat},\"promote\":{promote}}}",
+            "{{\"id\":{id},\"kind\":\"link\",\"need\":{need},\"wasm_c\":{wasm_c},\"native_extra_c\":{native_extra},\"wasm_defines\":{wasm_def},\"native_defines\":{nat_def},\"include_dirs\":{inc},\"exports\":{exp},\"wrap\":{wrap},\"stack_size\":{stack},\"data_span\":{span},\"global_base\":{base},\"wat_out\":{wat}}}",
             id = json_str(m.id),
-            kind = json_str(kind),
             need = json_str(m.need.name()),
             wasm_c = json_string_arr(&wasm_c),
             native_extra = json_str_arr(m.native_extra_c),
@@ -459,7 +387,6 @@ pub fn manifest_json() -> String {
             span = m.data_span,
             base = global_base,
             wat = json_str(m.wat_out),
-            promote = if m.promote { "true" } else { "false" },
         ));
     }
     format!(
@@ -509,14 +436,13 @@ mod tests {
     }
 
     #[test]
-    fn manifest_json_has_regex_and_extract() {
+    fn manifest_json_has_regex_link() {
         let j = manifest_json();
         assert!(j.contains("\"id\":\"regex\""), "{}", j);
         assert!(j.contains("\"kind\":\"link\""), "{}", j);
         assert!(j.contains("regex.c"), "{}", j);
         assert!(j.contains("pcre2_compile.c"), "{}", j);
-        assert!(j.contains("\"id\":\"strings\""), "{}", j);
-        assert!(j.contains("\"kind\":\"extract\""), "{}", j);
+        assert!(!j.contains("\"kind\":\"extract\""), "{}", j);
         assert!(
             j.contains(&format!("\"global_base\":{}", LINKED_REGION_ORIGIN)),
             "{}",

@@ -152,18 +152,18 @@ mod tests {
 
     #[test]
     fn runtime_c_sources_exist() {
-        let panic = include_str!("../../runtime/c/panic.c");
-        let closure = include_str!("../../runtime/c/closure.c");
-        let alloc = include_str!("../../runtime/c/allocator.c");
-        let strings = include_str!("../../runtime/c/strings.c");
-        let object = include_str!("../../runtime/c/object.c");
-        let format = include_str!("../../runtime/c/format.c");
+        let panic = include_str!("../../runtime/c/native/panic.c");
+        let closure = include_str!("../../runtime/c/native/closure.c");
+        let heap = include_str!("../../runtime/c/native/heap.c");
+        let strings = include_str!("../../runtime/c/native/strings.c");
+        let object = include_str!("../../runtime/c/native/object.c");
+        let format = include_str!("../../runtime/c/native/format.c");
         assert!(panic.contains("dream_panic"));
-        assert!(closure.contains("funcbox_new"));
-        assert!(alloc.contains("__malloc_locked"));
-        assert!(strings.contains("concat_strings"));
-        assert!(object.contains("int_to_string"));
-        assert!(format.contains("double_to_string"));
+        assert!(closure.contains("dream_funcbox_new"));
+        assert!(heap.contains("dream_malloc"));
+        assert!(strings.contains("dream_string_alloc"));
+        assert!(object.contains("dream_box_int"));
+        assert!(format.contains("dream_double_to_string"));
     }
 
     #[test]

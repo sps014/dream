@@ -2,21 +2,23 @@
 
 Dream splices `*.wat` in this directory into the **same module** as user code (`include_str!` in `dream-mir`). That is what `dream` / `cargo test` / Windows CI use. They never run clang.
 
-C under [`c/`](c/) is the **authoring** source for the same helpers. The module catalog in [`modules.rs`](modules.rs) is the source of truth for which `.c` files extract or link, include dirs, `-D` flags, exports, and `wasm-ld --global-base`. `scripts/build-runtime.sh` reads that catalog as JSON from `dream-runtime-manifest`. Until a generated file is copied over after extract gates + golden checks, **handwritten `*.wat` remains the emit artifact** (hybrid). `--release` still runs fused `wasm-opt -O3` on the whole module.
+**Same-module helpers** (`allocator.wat`, `strings.wat`, `object.wat`, `format.wat`, `panic.wat`, `weak.wat`, `closure.wat`, `sync.wat`, `async.wat`, `alloc_lock.wat`, `simd.wat`) are **authored WAT**. Edit those files.
 
-See [`c/README.md`](c/README.md) for C do/don't.
+**Linked libraries** (PCRE2 regex) are too large for that. C under [`c/regex.c`](c/regex.c) + [`c/pcre2/`](c/pcre2/) is compiled by `scripts/build-runtime.sh` (wasi-sdk 33) to [`regex.wat`](regex.wat). Do not hand-edit `regex.wat`.
 
-## Build on macOS and Linux
+Native `--native-c` is a **separate** ABI under [`c/native/`](c/native/) (`uintptr_t`, `memcpy`, mmap heap). It does not go through WAT.
 
-`cargo build` / `dream` do **not** need this. Only run it when you change `c/*.c` or `c/include/*.h`.
+`--release` still runs fused `wasm-opt -O3` on the whole guest module.
 
-**Do not use Apple/Xcode `clang`.** It has no `wasm32` target. Pin **wasi-sdk 33** from [wasi-sdk releases](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-33).
+See [`c/README.md`](c/README.md) for C (regex + native).
 
-You also need `wasm2wat` (from [WABT](https://github.com/WebAssembly/wabt/releases)) or `wasm-tools print` on `PATH` so the script can dump relocatable `.o` files to WAT.
+## Rebuild `regex.wat` (macOS / Linux)
+
+`cargo build` / `dream` do **not** need this. Only run it when you change `c/regex.c`, `c/regex_wasm_libc.c`, or vendored PCRE2.
+
+**Do not use Apple/Xcode `clang`.** Pin **wasi-sdk 33** from [wasi-sdk releases](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-33). You also need `wasm2wat` (WABT) or `wasm-tools print` on `PATH`.
 
 ### 1. Install wasi-sdk 33
-
-Pick the tarball for your OS and CPU:
 
 | Host | Asset |
 |---|---|
@@ -34,55 +36,32 @@ tar -xzf /tmp/wasi-sdk.tar.gz -C ~/.dream/toolchains
 export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"
 ```
 
-On Linux x86_64 the last two lines are:
-
-```bash
-tar -xzf /tmp/wasi-sdk.tar.gz -C ~/.dream/toolchains
-export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-x86_64-linux"
-```
-
 `scripts/build-runtime.sh` also finds `~/.dream/toolchains/wasi-sdk-*/bin/clang` if `WASI_SDK_PATH` is unset.
 
 ### 2. Install `wasm2wat` (if you do not already have `wasm-tools`)
 
-**macOS (Homebrew):**
-
 ```bash
-brew install wabt
+brew install wabt   # macOS
 ```
 
-**Linux:** install the `wabt` package (`sudo apt install wabt` on Debian/Ubuntu) or unpack a WABT release and put `wasm2wat` on `PATH`.
+Linux: `wabt` package or a WABT release on `PATH`.
 
-### 3. Compile C → `c/generated/*.wat`
-
-From the repo root:
+### 3. Link PCRE2 → `regex.wat`
 
 ```bash
-export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"  # or the linux dir from step 1
+export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"
 scripts/build-runtime.sh
-scripts/build-runtime.sh --check   # same compile; exit 1 if extract gates fail
+scripts/build-runtime.sh --check
 ```
 
-Apple clang without wasm32: `--check` **skips** (so `cargo test` stays green). A machine that has wasi-sdk must pass `--check`.
-
-### 4. Promote generated WAT
-
-`scripts/build-runtime.sh` writes `c/generated/*.wat` and then **promotes** each catalog module with `promote: true`:
-
-- Extract modules (`strings` / `object` / `format`) from matching `c/*.c`
-- Link modules (`regex`) from `c/regex.c` + `wasm_extra_c` + `pcre2/SOURCES` ([`c/pcre2/README.md`](c/pcre2/README.md))
-
-**Do not hand-edit those files.** Allocator debug/thread placeholders (`;;@DEBUG_*@` /
-`;;@ALLOC_LOCK_*@`) stay in handwritten `allocator.wat` until C can express them.
+Apple clang without wasm32: `--check` **skips**. A machine that has wasi-sdk must pass `--check`.
 
 **Windows:** do not install wasi-sdk on `windows-latest` CI. Shipping `dream.exe` embeds the checked-in `.wat` files.
 
-`TAG_*` / heap offsets / `DREAM_REGEX_*` live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and [`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`). Portable wrappers include [`c/include/dream_guest.h`](c/include/dream_guest.h).
+`TAG_*` / heap offsets / `DREAM_REGEX_*` live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and [`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`).
 
-Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empty` / `_true` / `_false` / `_minus`, not baked addresses.
+Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empty` / `_true` / `_false` / `_minus`.
 
 ## Native C (host clang, not WAT)
 
-[`c/native/`](c/native/) is a **separate** ABI: `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Shared wrappers (today: `c/regex.c`) compile with `-DDREAM_NATIVE`. Linked C libraries (PCRE2) are pulled from the catalog only when `RuntimeNeed` is set. Default `dream run` stays wasmtime until `scripts/bench-native-c.sh` plus `microbenches.dream` beat `--release` wasm. See [`c/native/README.md`](c/native/README.md).
-
-WASM regex is the same PCRE2 sources compiled without JIT (`runtime/regex.wat`), spliced only when the program uses `Regex`.
+[`c/native/`](c/native/) : `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Linked C libraries (PCRE2) come from the catalog only when `RuntimeNeed` is set. Default `dream run` stays wasmtime. See [`c/native/README.md`](c/native/README.md).

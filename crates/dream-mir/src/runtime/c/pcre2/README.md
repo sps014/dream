@@ -26,8 +26,7 @@ export WASI_SDK_PATH="$HOME/.dream/toolchains/wasi-sdk-33.0-arm64-macos"  # or y
 scripts/build-runtime.sh
 ```
 
-That also promotes extract modules (`strings.wat` / `object.wat` / `format.wat`) from the
-catalog. Allocator WAT stays handwritten. Flags, source lists, `wasm-ld` wrap/exports, and
+That writes [`../../regex.wat`](../../regex.wat) only. Flags, source lists, `wasm-ld` wrap/exports, and
 `--global-base` come from [`../../modules.rs`](../../modules.rs) (JSON via
 `dream-runtime-manifest`), including [`SOURCES`](SOURCES). Do not add a one-off PCRE2 block
 to the shell script.

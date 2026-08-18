@@ -8,7 +8,7 @@ Not used by `cargo test` / WAT splice. Companion to wasm `../include/dream_rt.h`
 - `retain`/`release` are `always_inline` in [`include/dream_rt_native.h`](include/dream_rt_native.h).
 - SIMD helpers use platform vector width (`DREAM_F32_LANES` is 8 on AVX2).
 - Regex is vendored PCRE2-16 with JIT (`../regex.c` `-DDREAM_NATIVE` + [`../pcre2/README.md`](../pcre2/README.md)), linked only when the program uses `Regex`.
-- Guest helpers: `strings.c`, `object.c`, `format.c`, `panic.c`, `weak.c`, `closure.c`, `async.c`, `sync.c`.
+- Core runtime: `heap.c`, `strings.c`, `object.c`, `format.c`, `panic.c`, `weak.c`, `closure.c`, `async.c`, `sync.c`.
 - Host print/math/file stubs: `host.c`. Linked by `dream run --backend c` and `tests/e2e_native_c.rs`.
 
 ```bash

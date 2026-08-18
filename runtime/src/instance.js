@@ -111,7 +111,7 @@ export class DreamInstance {
     const units = str.length;
     const ptr = this.exports.malloc(8 + units * 2, TAGS.STRING);
     this.view.setInt32(ptr, units, true);
-    this.view.setInt32(ptr + 4, 0, true);
+    this.view.setInt32(ptr + 4, ptr + 8, true);
     for (let i = 0; i < units; i++) {
       this.view.setUint16(ptr + 8 + i * 2, str.charCodeAt(i), true);
     }

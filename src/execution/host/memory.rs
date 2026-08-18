@@ -124,7 +124,7 @@ pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<S
 }
 
 /// Allocates `s` as a Dream `string` inside the module's linear memory by calling its exported
-/// `malloc`, storing `[unit_len][pad]`, and copying UTF-16 LE units at `ptr+8`. Returns the
+/// `malloc`, storing `[unit_len][payload_ptr]`, and copying UTF-16 LE units at `ptr+8`. Returns the
 /// data pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`).
 pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i32> {
     let malloc = required_malloc(caller)?;
@@ -138,7 +138,9 @@ pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i3
     let start = ptr as usize;
     let data = shared_bytes_mut(&memory);
     data[start..start + LEN_PREFIX].copy_from_slice(&(units.len() as i32).to_le_bytes());
-    data[start + LEN_PREFIX..start + STRING_HEADER].copy_from_slice(&0_i32.to_le_bytes());
+    // Pad is the UTF-16 payload address (`ptr+8`). Inlined `char_at` loads through it.
+    let pad = ptr.wrapping_add(STRING_UTF8 as i32);
+    data[start + LEN_PREFIX..start + STRING_HEADER].copy_from_slice(&pad.to_le_bytes());
     for (i, u) in units.iter().enumerate() {
         let o = start + STRING_UTF8 + i * 2;
         data[o..o + 2].copy_from_slice(&u.to_le_bytes());

@@ -129,15 +129,26 @@ More syntax: [Language tour](https://sps014.github.io/dream/learn/tour/).
 
 ## Contributors
 
+**Prerequisites**
+
+| You want | Need |
+| --- | --- |
+| Installer / `dreamer run` | Nothing besides the [install script](#5-minute-quickstart) (no Rust) |
+| Build and test the compiler | [Rust](https://rustup.rs/) (stable `rustc` + `cargo`) |
+| `dream run --backend c` / native-C e2e | Host C compiler on `PATH` (`cc`: Apple clang, gcc, or MSVC via clang) |
+| Rebuild guest `regex.wat` | [wasi-sdk 33](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-33) and `wasm-tools` or `wasm2wat` — [runtime README](crates/dream-mir/src/runtime/README.md). Not used by `cargo test` or Windows CI |
+| JS runtime bundle | Node.js (`node scripts/bundle-runtime.mjs`) |
+| Docs site | Python 3; `python3 -m venv .venv && .venv/bin/pip install -r docs/requirements-docs.txt` then `mkdocs build --strict` |
+
 ```bash
 git clone https://github.com/sps014/dream
 cd dream
-source ./use-toolchain.sh
+source ./use-toolchain.sh   # builds release dream / dream-lsp / dreamer into ~/.dream/bin
 ```
 
 ```bash
 cargo test --workspace                 # fast gate
-cargo test --workspace -- --ignored    # full corpus
+cargo test --workspace -- --ignored    # full corpus, DAP, wasm-opt, native-C goldens
 ```
 
 Compiler internals: [docs/internals](https://sps014.github.io/dream/internals/).

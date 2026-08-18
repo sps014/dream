@@ -165,3 +165,4 @@ nav:
       - Nullable purge: internals/09-nullable-purge-design-note.md
       - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
       - Swift-like ARC: internals/11-swift-like-arc-roadmap.md
+      - Dual backend (Wasm + native C): internals/14-dual-backend-plan.md

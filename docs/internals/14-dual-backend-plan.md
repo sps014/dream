@@ -1,36 +1,45 @@
-# 14 — Perf backends: Wasm first (LLVM branch is not the path)
+# 14 — Dual backend: Wasm (default) and native C (opt-in)
 
-## Status
+Same MIR, two emitters. There is **no LLVM backend**. An old `llvm` branch that deleted WAT
+and emitted textual LLVM IR is abandoned; do not merge or revive it.
 
-Branch **`llvm`** was an experiment that **deleted WAT emit**, shipped a textual LLVM IR +
-`dream-rt` stack, and then stalled. On that tip, microbenches were **slower than current
-Wasm/wasmtime on `main`** for most rows (e.g. `arc_locals` ~166 vs ~44, `string_concat` ~212 vs
-~50, `alloc_churn` ~46 vs ~21, `scratch_arena` ~43 vs ~5), with IR typing bugs (`dream_store_i64`),
-drop/RC crashes, and other host gaps. **Do not merge or “revive” that branch as the perf plan.**
+## What ships
 
-A worktree at `../Dream-llvm` may still exist for archaeology only.
+| | Wasm (`Target::Wasm`, default) | Native C (`Target::NativeC`) |
+|---|---|---|
+| Emit | Relooper → WAT/WASM (`backend/wasm`) | MIR → C99 (`backend/c`) |
+| Runtime | Same-module `runtime/*.wat`; PCRE2 interpreter in `regex.wat` | `runtime/c/native/` (`uintptr_t`, `memcpy`, mmap heap, platform SIMD); PCRE2-16 **JIT** |
+| Run | `dream run` → wasmtime | `dream run --backend c` → host `cc` then exec |
+| Web / Node | `--runtime --web` / `--node` | Rejected (no WASM module) |
 
-## Active plan
+Opt-in compile-to-C:
 
-1. **Wasm hotpath on `main`** — keep WAT → wasmtime; grind list/map/string/allocator without
-   benchmax. Honest `regex_find` stays `[a-z]+\d+` (PCRE2 interpreter in-module).
-2. **Native codegen** — MIR → C lives in [`crates/dream-mir/src/backend/c`](../../crates/dream-mir/src/backend/c)
-   with host runtime [`crates/dream-mir/src/runtime/c/native`](../../crates/dream-mir/src/runtime/c/native)
-   (`uintptr_t`, `memcpy`, mmap heap, platform SIMD). Shared C libs (PCRE2-16 JIT) are declared in
-   [`crates/dream-mir/src/runtime/modules.rs`](../../crates/dream-mir/src/runtime/modules.rs)
-   and compiled from `runtime/c/regex.c` with `-DDREAM_NATIVE`. `dream run` stays
-   WAT → wasmtime until `scripts/bench-native-c.sh` and `microbenches.dream` beat `--release` wasm.
-   `Target::NativeC` is opt-in; do not merge branch `llvm`.
+```bash
+dream --native-c file.dream              # writes .c
+dream --backend c file.dream
+dream run --backend c --release file.dream
+```
 
-Opt-in: `dream --native-c file.dream` or `dream --backend c file.dream` writes `.c`.
-`dream run --backend c` compiles with `cc` and execs. Default `dream run` is still
-WAT → Wasmtime. Web/node stay WAT + JS (`--runtime --web` is rejected with `--native-c`).
+`dream run` with no `--backend` stays WAT → Wasmtime until native C wins
+`scripts/bench-native-c.sh` / `microbenches.dream` against `--release` wasm. Do not
+switch the default while native is slower.
 
-Until then, “C#-like ns on scan / substring / regex” is acknowledged as a **substrate floor** under
-wasmtime, not something the current `llvm` branch fixes.
+Numeric ABI (`TAG_*`, string header, future slots) is shared in
+`crates/dream-mir/src/abi.rs` and `crates/dream-mir/src/runtime/c/include/dream_abi.h`
+(lockstep test `dream_abi_h_matches_abi_rs`).
+
+## Layout
+
+- Wasm helpers: authored WAT under `crates/dream-mir/src/runtime/*.wat`.
+- Native helpers: `crates/dream-mir/src/runtime/c/native/`.
+- Shared regex wrapper: `crates/dream-mir/src/runtime/c/regex.c` (`-DDREAM_NATIVE` on the host path).
+- Catalog (link lists, PCRE2 sources, `--global-base`): `crates/dream-mir/src/runtime/modules.rs`.
+- Rebuild `regex.wat` only: `scripts/build-runtime.sh` (wasi-sdk 33; not cargo / Windows CI).
 
 ## Non-goals
 
-- Merging `llvm` tip into `main`.
+- LLVM IR, libLLVM, or merging branch `llvm`.
+- Deleting the Wasm backend.
 - Benchmax (`\d+`-only regex scoreboard).
 - Claiming native parity while native is slower than Wasm.
+- Generating guest `$malloc` / strings WAT from C (guest core stays WAT).

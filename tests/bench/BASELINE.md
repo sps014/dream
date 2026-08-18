@@ -173,9 +173,9 @@ arrays use `List.take_array`. Serialize starts `StringBuilder` at 256 bytes; `wr
 | vec_add | 259 | 77 | ~260 (WASM 4-wide vs AVX `Vector.Count` often 8; C# 3.4×) |
 | string_builder | 23 | 15 | ~24 → 23 (C# 1.5×) |
 
-Native LLVM path (floor for scan/substring/regex): see
-[`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md)
-(branch `llvm` / worktree). Do not revive that backend for this scoreboard.
+Native C path (opt-in `dream --native-c`; Wasm stays default): see
+[`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).
+Do not revive the abandoned LLVM branch for this scoreboard.
 
 Raw logs: `out/native.txt`, `out/csharp.txt`, `out/compare.txt`.
 

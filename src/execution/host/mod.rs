@@ -19,7 +19,7 @@ mod datetime;
 #[cfg(feature = "c-ffi")]
 mod ffi_helpers;
 mod file;
-mod gpu;
+pub(crate) mod gpu;
 mod http;
 mod math;
 mod memory;

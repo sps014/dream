@@ -13,6 +13,11 @@ site/
 *.abi.json
 *.runtime.js
 
+tests/*/*.C
+tests/*/*.bin
+*.tmp
+*.dSYM/
+
 *.wgsl
 
 # Keep the hand-written runtime WAT assets that the codegen embeds via include_str!.

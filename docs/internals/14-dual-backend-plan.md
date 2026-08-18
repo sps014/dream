@@ -14,10 +14,15 @@ A worktree at `../Dream-llvm` may still exist for archaeology only.
 
 1. **Wasm hotpath on `main`** — keep WAT → wasmtime; grind list/map/string/allocator without
    benchmax. Honest `regex_find` stays `[a-z]+\d+` (Pike VM).
-2. **Native codegen** — only if restarted as a **new** design that:
-   - keeps WAT as a first-class backend (dual emit, not replace),
-   - proves **faster than Wasm** on `microbenches.dream` before any default switch,
-   - does not land half-broken IR / drop paths.
+2. **Native codegen** — MIR → C lives in [`crates/dream-mir/src/backend/c`](../../crates/dream-mir/src/backend/c)
+   with host runtime [`crates/dream-mir/src/runtime/c/native`](../../crates/dream-mir/src/runtime/c/native)
+   (`uintptr_t`, `memcpy`, mmap heap, platform SIMD, Pike computed goto). `dream run` stays
+   WAT → wasmtime until `scripts/bench-native-c.sh` and `microbenches.dream` beat `--release` wasm.
+   `Target::NativeC` is opt-in; do not merge branch `llvm`.
+
+Opt-in: `dream --native-c file.dream` or `dream --backend c file.dream` writes `.c`.
+`dream run --backend c` compiles with `cc` and execs. Default `dream run` is still
+WAT → Wasmtime. Web/node stay WAT + JS (`--runtime --web` is rejected with `--native-c`).
 
 Until then, “C#-like ns on scan / substring / regex” is acknowledged as a **substrate floor** under
 wasmtime, not something the current `llvm` branch fixes.

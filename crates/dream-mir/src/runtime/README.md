@@ -74,3 +74,7 @@ If extract gates pass **and** `--release` goldens are not slower, copy `c/genera
 `TAG_*` / heap offsets live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and [`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`).
 
 Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empty` / `_true` / `_false` / `_minus`, not baked addresses.
+
+## Native C (host clang, not WAT)
+
+[`c/native/`](c/native/) is a **separate** ABI: `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width, Pike computed goto. It is not spliced into WASM. Default `dream run` stays wasmtime until `scripts/bench-native-c.sh` plus `microbenches.dream` beat `--release` wasm. See [`c/native/README.md`](c/native/README.md).

@@ -7,4 +7,5 @@
 pub mod cwasm;
 pub mod debugger;
 pub mod host;
+pub mod native_c;
 pub mod wasm_runner;

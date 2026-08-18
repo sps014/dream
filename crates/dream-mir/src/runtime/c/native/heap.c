@@ -1,0 +1,159 @@
+#include "include/dream_rt_native.h"
+
+#include <pthread.h>
+#include <stdlib.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
+#define NCLASS 13
+#define CHUNK (1u << 22)
+
+static dream_ptr freelist[NCLASS];
+static char *arena;
+static size_t arena_off;
+static size_t arena_len;
+static int32_t live_objects;
+static int32_t total_allocations;
+static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static int size_class(int32_t size) {
+    int32_t s = size;
+    if (s < 16) {
+        s = 16;
+    }
+    return 28 - __builtin_clz((unsigned)(s - 1));
+}
+
+static int32_t class_bytes(int idx) {
+    if (idx > 12) {
+        return 0;
+    }
+    return 1 << (idx + 4);
+}
+
+static void *map_chunk(size_t n) {
+#if defined(_WIN32)
+    void *p = VirtualAlloc(NULL, n, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    return p;
+#else
+    void *p = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) {
+        return NULL;
+    }
+    return p;
+#endif
+}
+
+static char *bump(size_t n) {
+    size_t aligned = (n + 15u) & ~15u;
+    if (arena == NULL || arena_off + aligned > arena_len) {
+        arena = (char *)map_chunk(CHUNK);
+        arena_off = 0;
+        arena_len = CHUNK;
+        if (arena == NULL) {
+            abort();
+        }
+    }
+    {
+        char *p = arena + arena_off;
+        arena_off += aligned;
+        return p;
+    }
+}
+
+dream_ptr dream_malloc(int32_t size, int32_t tag) {
+    int32_t total = ((size + 15) & -16) + 16;
+    int idx = size_class(total);
+    char *block = NULL;
+    int32_t alloc_size = total;
+    pthread_mutex_lock(&heap_mu);
+    if (idx <= 12) {
+        alloc_size = class_bytes(idx);
+        if (freelist[idx] != 0) {
+            block = (char *)dream_p(freelist[idx]);
+            freelist[idx] = (dream_ptr)(uintptr_t)(*(void **)(block + 4));
+        }
+    }
+    if (block == NULL) {
+        block = bump((size_t)alloc_size);
+        ((int32_t *)block)[0] = alloc_size;
+    }
+    ((int32_t *)block)[2] = tag;
+    ((int32_t *)block)[3] = 1;
+    live_objects += 1;
+    total_allocations += 1;
+    pthread_mutex_unlock(&heap_mu);
+    return (dream_ptr)(block + 16);
+}
+
+int32_t debug_get_live_objects(void) { return live_objects; }
+int32_t debug_get_total_allocations(void) { return total_allocations; }
+int32_t debug_get_ref_count(dream_ptr ptr) {
+    return ptr ? __atomic_load_n((int32_t *)((char *)dream_p(ptr) - 4), __ATOMIC_RELAXED) : 0;
+}
+int32_t debug_get_heap_ptr(void) { return (int32_t)arena_off; }
+int32_t debug_get_free_list_head(void) {
+    int i;
+    for (i = 0; i < NCLASS; i++) {
+        if (freelist[i]) {
+            return (int32_t)(uintptr_t)freelist[i];
+        }
+    }
+    return 0;
+}
+
+void dream_free(dream_ptr ptr) {
+    char *block;
+    int32_t sz;
+    int idx;
+    if (ptr == 0) {
+        return;
+    }
+    pthread_mutex_lock(&heap_mu);
+    block = (char *)dream_p(ptr) - 16;
+    sz = ((int32_t *)block)[0];
+    if (sz == 0) {
+        pthread_mutex_unlock(&heap_mu);
+        return;
+    }
+    idx = size_class(sz);
+    if (idx > 12) {
+        idx = 12;
+    }
+    *(void **)(block + 4) = dream_p(freelist[idx]);
+    freelist[idx] = (dream_ptr)block;
+    if (live_objects > 0) {
+        live_objects -= 1;
+    }
+    pthread_mutex_unlock(&heap_mu);
+}
+
+dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
+    char *block;
+    int32_t old_total;
+    int32_t new_total;
+    dream_ptr np;
+    int32_t copy;
+    if (ptr == 0) {
+        return dream_malloc(new_size, tag);
+    }
+    block = (char *)dream_p(ptr) - 16;
+    old_total = ((int32_t *)block)[0];
+    new_total = ((new_size + 15) & -16) + 16;
+    if ((uint32_t)new_total <= (uint32_t)old_total) {
+        return ptr;
+    }
+    np = dream_malloc(new_size, tag);
+    copy = old_total - 16;
+    if (copy > new_size) {
+        copy = new_size;
+    }
+    dream_mem_copy(np, ptr, (size_t)copy);
+    dream_free(ptr);
+    return np;
+}

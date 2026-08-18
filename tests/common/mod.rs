@@ -65,7 +65,7 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        (dream_mir::emit::emit_program(&mir, interner), count)
+        (dream_mir::backend::wasm::emit_program(&mir, interner), count)
     })
 }
 
@@ -189,7 +189,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_mir::backend::wasm::emit_module(&mir, interner, false)
     })
 }
 
@@ -198,7 +198,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
 pub fn emit_hir_to_module(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_mir::backend::wasm::emit_module(&mir, interner, false)
     })
 }
 
@@ -213,7 +213,7 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
         for f in &mut mir.functions {
             dream_mir::passes::RcInsertion.run(f, interner);
         }
-        dream_mir::emit::emit_module(&mir, interner, false)
+        dream_mir::backend::wasm::emit_module(&mir, interner, false)
     })
 }
 

@@ -1,4 +1,4 @@
-# 06 — Relooper & WAT Backend (`src/mir/relooper.rs`, `src/mir/emit/`)
+# 06 — Relooper & WAT Backend (`relooper.rs`, `backend/wasm/`)
 
 The backend turns optimized MIR into WebAssembly **binary** (then pretty-prints `.wat` with `wasmprinter`). The hard part is control flow: MIR is a reducible CFG, but WASM has **no `goto`** — only structured `block`/`loop`/`if` and relative branches (`br`/`br_if`/`br_table`). The relooper bridges that gap.
 
@@ -8,14 +8,14 @@ The backend turns optimized MIR into WebAssembly **binary** (then pretty-prints 
 flowchart TD
     mir[Optimized MIR function] --> rl[relooper::reloop]
     rl --> shape["Shape tree\n(Simple / Loop / Multiple)"]
-    shape --> emit[emit::FuncBuilder]
+    shape --> emit[backend::wasm::FuncBuilder]
     mir --> emit
     emit --> wasm[".wasm via wasm-encoder"]
     emit -. parses .-> rt["runtime/*.wat (wast merge by name)"]
 ```
 
 - `relooper::reloop(func) -> Option<Shape>` recovers structured shapes.
-- `emit::emit_program / emit_function` walks the function into builder ops, consulting the type interner for WASM value types. Runtime helpers stay as handwritten WAT and are parsed into the same module.
+- `backend::wasm::emit_program / emit_function` walks the function into builder ops, consulting the type interner for WASM value types. Runtime helpers stay as handwritten WAT and are parsed into the same module.
 
 ## The relooper
 

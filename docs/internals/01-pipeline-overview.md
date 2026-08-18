@@ -19,7 +19,7 @@ flowchart TD
     hir --> mir["mir::lower\nHIR → CFG MIR"]
     mir --> rc["RcInsertion pass\n(make ownership explicit)"]
     rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
-    opt --> emit["mir::emit\nMIR → WASM bytes (wasm-encoder)"]
+    opt --> emit["backend::wasm\nMIR → WASM bytes (wasm-encoder)"]
 
     emit --> wasm[".wasm"]
     wasm --> wat["pretty-print .wat (wasmprinter)"]

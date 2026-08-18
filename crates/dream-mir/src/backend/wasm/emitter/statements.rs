@@ -406,7 +406,7 @@ impl Emitter<'_> {
         };
         let file_id = dbg.file;
         // Snapshot the spill descriptors so we can borrow `self` mutably while emitting.
-        let vars: Vec<(u32, u32, crate::emit::debug_map::SpillKind)> = dbg
+        let vars: Vec<(u32, u32, crate::backend::wasm::debug_map::SpillKind)> = dbg
             .vars
             .iter()
             .map(|v| (v.local, v.global, v.spill))
@@ -421,8 +421,8 @@ impl Emitter<'_> {
 
     /// Spills one named local into its `i64` pool global, widening/reinterpreting to preserve the
     /// exact bits so the host can decode the value back using the variable's declared kind.
-    fn emit_var_spill(&mut self, local: u32, global: u32, kind: crate::emit::debug_map::SpillKind) {
-        use crate::emit::debug_map::SpillKind as K;
+    fn emit_var_spill(&mut self, local: u32, global: u32, kind: crate::backend::wasm::debug_map::SpillKind) {
+        use crate::backend::wasm::debug_map::SpillKind as K;
         self.f.local_get(&local.to_string());
         match kind {
             K::I64 => {}

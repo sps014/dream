@@ -84,7 +84,7 @@ impl MirPass for Dse {
                     // `Statement::SourceLine`), so it observes no memory and is not a barrier: DSE may
                     // freely eliminate stores across it. It also never moves (DSE only nulls out dead
                     // statements in place), so this cannot desync it from the pre-emission scan in
-                    // `mir::emit::strings::string_table`.
+                    // `mir::backend::wasm::strings::string_table`.
                     Statement::SourceLine(_) | Statement::Nop => {}
                 }
             }

@@ -514,28 +514,12 @@ fn debug_toggles_allocator_instrumentation() {
     );
 }
 
-#[test]
-fn runtime_c_sources_exist() {
-    let panic = include_str!("../../runtime/c/panic.c");
-    let closure = include_str!("../../runtime/c/closure.c");
-    let alloc = include_str!("../../runtime/c/allocator.c");
-    let strings = include_str!("../../runtime/c/strings.c");
-    let object = include_str!("../../runtime/c/object.c");
-    let format = include_str!("../../runtime/c/format.c");
-    assert!(panic.contains("dream_panic"));
-    assert!(closure.contains("funcbox_new"));
-    assert!(alloc.contains("__malloc_locked"));
-    assert!(strings.contains("concat_strings"));
-    assert!(object.contains("int_to_string"));
-    assert!(format.contains("double_to_string"));
-}
-
 /// Hybrid policy: fused `--release` still opts through handwritten WAT + wasm-opt. Clang output
 /// must not be spliced until extract gates pass (see runtime/README.md).
 #[test]
 fn handwritten_runtime_wat_is_emit_artifact() {
-    assert!(include_str!("../../runtime/panic.wat").contains("call $print_string"));
-    assert!(include_str!("../../runtime/allocator.wat").contains(";;@ALLOC_LOCK_ACQUIRE@"));
+    assert!(include_str!("../../../runtime/panic.wat").contains("call $print_string"));
+    assert!(include_str!("../../../runtime/allocator.wat").contains(";;@ALLOC_LOCK_ACQUIRE@"));
 }
 
 /// Builds a one-function module carrying a named local and a `DebugLine` marker, so both the

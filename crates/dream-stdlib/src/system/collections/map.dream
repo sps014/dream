@@ -1,30 +1,22 @@
 module system.collections;
 
-// A generic open-addressing hash map.
+// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 public class Map<K, V> : Collection<KeyValuePair<K, V>> {
-    keys: K[];
-    values: V[];
-    states: int[];
+    slots: MapSlot<K, V>[];
     defaults: V[];
-    // Reused zero key for `clear` (same role as `defaults` for values).
     empty_keys: K[];
     count: int;
     used: int;
     cap: int;
-    // Occupied slots store this stamp; tombstones store `-epoch`. Clear bumps the stamp so
-    // stale slots look empty without filling the table (overflow still zeroes `states`).
     epoch: int;
 
-    // Allocates an empty map with an initial capacity (defaults to 8, rounded up to power of 2).
     public constructor(capacity: int = 8) {
         let c = hash_min_capacity();
         while (c < capacity) {
             c = c * 2;
         }
         this.cap = c;
-        this.keys = Buffer.alloc<K>(c);
-        this.values = Buffer.alloc<V>(c);
-        this.states = Buffer.alloc<int>(c);
+        this.slots = Buffer.alloc<MapSlot<K, V>>(c);
         this.defaults = Buffer.alloc<V>(1);
         this.empty_keys = Buffer.alloc<K>(1);
         this.count = 0;
@@ -35,34 +27,27 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     fun bump_epoch(): void {
         let e = this.epoch + 1;
         if (e <= 0) {
-            Buffer.elems_fill<int>(this.states, 0, this.cap);
+            let i = 0;
+            while (i < this.cap) {
+                this.slots[i].state = 0;
+                i = i + 1;
+            }
             e = hash_epoch_initial();
         }
         this.epoch = e;
     }
 
-    // Number of key/value pairs currently stored.
     public get length(): int {
         return this.count;
     }
 
-    // Current capacity of the backing buffer.
     @inline
     public fun capacity(): int {
         return this.cap;
     }
 
-    // Initial probe index for a key.
-    fun home(borrow key: K): int {
-        let h = key.hash_code();
-        return h & (this.cap - 1);
-    }
-
-    // Index of an occupied slot holding a key, or -1.
-    // Flag-controlled loop (no `break`/`return` inside) so relooper keeps a single-header `loop`.
     fun find(borrow key: K): int {
-        let keys = this.keys;
-        let states = this.states;
+        let slots = this.slots;
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
@@ -70,12 +55,12 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let result = -1;
         let done = false;
         while (done == false) {
-            let s = states[idx];
+            let s = slots[idx].state;
             if ((s != epoch) && (s != tomb)) {
                 done = true;
             } else {
                 if (s == epoch) {
-                    if (keys[idx] == key) {
+                    if (slots[idx].key == key) {
                         result = idx;
                         done = true;
                     }
@@ -91,12 +76,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
-    // Probe and insert/update without checking load factor. Used by `set` and `rehash` so those two
-    // are not mutually recursive (a cycle would block the whole-module inliner).
     fun insert_no_grow(key: K, value: V): void {
-        let keys = this.keys;
-        let values = this.values;
-        let states = this.states;
+        let slots = this.slots;
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
@@ -104,23 +85,23 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let first_tomb = -1;
         let done = false;
         while (done == false) {
-            let s = states[idx];
+            let s = slots[idx].state;
             if ((s != epoch) && (s != tomb)) {
                 let target = idx;
                 if (first_tomb >= 0) {
                     target = first_tomb;
                 }
-                keys[target] = key;
-                values[target] = value;
-                states[target] = epoch;
+                slots[target].key = key;
+                slots[target].value = value;
+                slots[target].state = epoch;
                 this.count = this.count + 1;
                 if (first_tomb < 0) {
                     this.used = this.used + 1;
                 }
                 done = true;
             } else {
-                if ((s == epoch) && (keys[idx] == key)) {
-                    values[idx] = value;
+                if ((s == epoch) && (slots[idx].key == key)) {
+                    slots[idx].value = value;
                     done = true;
                 } else {
                     if ((s == tomb) && (first_tomb < 0)) {
@@ -135,32 +116,26 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
-    // Grows and rehashes the map when it gets too full.
     fun rehash(): void {
-        let old_keys = this.keys;
-        let old_values = this.values;
-        let old_states = this.states;
+        let old = this.slots;
         let old_cap = this.cap;
         let new_cap = old_cap * 2;
         if (new_cap < hash_min_capacity()) {
             new_cap = hash_min_capacity();
         }
-        this.keys = Buffer.alloc<K>(new_cap);
-        this.values = Buffer.alloc<V>(new_cap);
-        this.states = Buffer.alloc<int>(new_cap);
+        this.slots = Buffer.alloc<MapSlot<K, V>>(new_cap);
         this.cap = new_cap;
         this.count = 0;
         this.used = 0;
         let i = 0;
         while (i < old_cap) {
-            if (old_states[i] == this.epoch) {
-                this.insert_no_grow(old_keys[i], old_values[i]);
+            if (old[i].state == this.epoch) {
+                this.insert_no_grow(old[i].key, old[i].value);
             }
             i = i + 1;
         }
     }
 
-    // Inserts or updates the value for a key.
     @set_indexer
     public fun set(key: K, value: V): void {
         if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
@@ -169,15 +144,10 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.insert_no_grow(key, value);
     }
 
-    // True if the map contains the key.
     public fun contains(borrow key: K): bool {
         return this.find(key) >= 0;
     }
 
-    // Inserts or updates a value for every `keys[i] -> values[i]` pair. If the two arrays differ in
-    // length, the extra tail of the longer one is ignored. Also what the `{k1: v1, ...}`
-    // map-literal syntax lowers to via `from_arrays`, so a literal with N entries costs one call to
-    // build each backing array plus one call here, not N `set` calls.
     public fun set_all(borrow keys: K[], borrow values: V[]): void {
         let n = keys.length;
         if (values.length < n) {
@@ -190,54 +160,46 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
-    // Builds a map from parallel `keys`/`values` arrays. The `{k1: v1, k2: v2, ...}` map-literal
-    // syntax (e.g. `let m: Map<string, int> = {"a": 1, "b": 2};`) desugars to this.
     public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V> {
         let result = Map<K, V>(keys.length);
         result.set_all(keys, values);
         return result;
     }
 
-    // Gets the value for a key, or None.
     @get_indexer
     public fun get(borrow key: K): Option<V> {
         let i = this.find(key);
         if (i >= 0) {
-            return Option.Some(this.values[i]);
+            return Option.Some(this.slots[i].value);
         }
         return Option.None;
     }
 
-    // Gets the value for a key, or a fallback.
     @inline
     public fun get_or(borrow key: K, fallback: V): V {
         let i = this.find(key);
         if (i >= 0) {
-            return this.values[i];
+            return this.slots[i].value;
         }
         return fallback;
     }
 
-    // Removes a key and returns true if it was removed.
     public fun remove(borrow key: K): bool {
         let i = this.find(key);
         if (i >= 0) {
-            this.states[i] = 0 - this.epoch;
-            this.values[i] = this.defaults[0];
+            this.slots[i].state = 0 - this.epoch;
+            this.slots[i].value = this.defaults[0];
             this.count = this.count - 1;
             return true;
         }
         return false;
     }
 
-    // True if the map is empty.
     @inline
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Removes all entries, keeping the current capacity. Occupied key/value slots are zeroed so
-    // managed entries release; then the epoch stamp advances so probes skip stale slots.
     @inline
     public fun clear(): void {
         let c = this.cap;
@@ -246,9 +208,9 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let zv = this.defaults[0];
         let i = 0;
         while (i < c) {
-            if (this.states[i] == e) {
-                this.keys[i] = zk;
-                this.values[i] = zv;
+            if (this.slots[i].state == e) {
+                this.slots[i].key = zk;
+                this.slots[i].value = zv;
             }
             i = i + 1;
         }
@@ -257,7 +219,6 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.bump_epoch();
     }
 
-    // Unmanaged keys/values: bump the occupancy stamp (no table fill).
     @inline
     public fun clear(): void where K : unmanaged, V : unmanaged {
         this.count = 0;
@@ -265,14 +226,13 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.bump_epoch();
     }
 
-    // Gets all keys.
     public fun keys(): K[] {
         let result = Buffer.alloc<K>(this.count);
         let i = 0;
         let j = 0;
         while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                result[j] = this.keys[i];
+            if (this.slots[i].state == this.epoch) {
+                result[j] = this.slots[i].key;
                 j = j + 1;
             }
             i = i + 1;
@@ -280,14 +240,13 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
-    // Gets all values.
     public fun values(): V[] {
         let result = Buffer.alloc<V>(this.count);
         let i = 0;
         let j = 0;
         while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                result[j] = this.values[i];
+            if (this.slots[i].state == this.epoch) {
+                result[j] = this.slots[i].value;
                 j = j + 1;
             }
             i = i + 1;
@@ -295,22 +254,20 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
-    // Gets an iterator for the map.
     @iterator
     public fun iterator(): MapIterator<K, V> {
         return MapIterator<K, V>(this);
     }
 
-    // Slot helpers for `MapIterator` (same-module).
     internal fun slot_occupied(i: int): bool {
-        return this.states[i] == this.epoch;
+        return this.slots[i].state == this.epoch;
     }
 
     internal fun slot_key(i: int): K {
-        return this.keys[i];
+        return this.slots[i].key;
     }
 
     internal fun slot_value(i: int): V {
-        return this.values[i];
+        return this.slots[i].value;
     }
 }

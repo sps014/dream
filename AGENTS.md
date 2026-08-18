@@ -31,7 +31,7 @@ Dream/
 │   ├── dream-abi/                  Shared constants: attributes, intrinsics, JS ABI names
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
-│   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit, runtime/*.wat
+│   └── dream-mir/                  CFG MIR, passes, relooper, backend/{wasm,c}, runtime/*.wat
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
@@ -163,6 +163,8 @@ scripts/build-runtime.sh
 scripts/build-runtime.sh --check           # skips if clang has no wasm32
 
 # Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
+# Native C hotpath (does not change `dream run`): scripts/bench-native-c.sh
+
 cargo test --workspace
 cargo test --workspace -- --ignored
 
@@ -220,7 +222,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 3. `crates/dream-sema/`: type-check + validate; emit HIR via `hir_emit/`.
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
-6. `crates/dream-mir/src/emit/`: emit WAT if new runtime behavior is needed; extend `runtime/*.wat` for new intrinsics.
+6. `crates/dream-mir/src/backend/wasm/`: emit WAT if new runtime behavior is needed; extend `runtime/*.wat` for new intrinsics. Native C emit is `backend/c/` (`--native-c`).
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
 9. Run the full pre-commit gate above. See `docs/internals/07-adding-a-language-feature.md` for a worked example.

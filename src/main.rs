@@ -1,6 +1,7 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
+use dream::execution::native_c::compile_and_run;
 use dream::execution::wasm_runner::execute_wasm;
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
@@ -39,6 +40,7 @@ fn main() -> ExitCode {
     let mut explicit_target: Option<CompileTargets> = None;
     let mut crate_type = CrateType::Bin;
     let mut crate_type_explicit = false;
+    let mut native_c = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -137,6 +139,24 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             });
+        } else if arg == "--native-c" || arg == "--backend=c" {
+            native_c = true;
+        } else if arg == "--backend=wasm" {
+            native_c = false;
+        } else if arg == "--backend" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--backend requires wasm or c");
+                return ExitCode::FAILURE;
+            };
+            match val.as_str() {
+                "wasm" => native_c = false,
+                "c" => native_c = true,
+                other => {
+                    error!("unknown --backend '{}': expected wasm or c", other);
+                    return ExitCode::FAILURE;
+                }
+            }
         } else if arg == "--crate-type" {
             i += 1;
             let Some(val) = args.get(i) else {
@@ -214,6 +234,15 @@ fn main() -> ExitCode {
     if !runtimes.is_empty() && !want_runtime {
         error!("--web / --node require --runtime");
         print_usage(&program);
+        return ExitCode::FAILURE;
+    }
+
+    if native_c && debug_adapter {
+        error!("debug-adapter requires the wasm backend (omit --native-c)");
+        return ExitCode::FAILURE;
+    }
+    if native_c && !runtimes.is_empty() {
+        error!("--runtime --web/--node requires the wasm backend (omit --native-c)");
         return ExitCode::FAILURE;
     }
 
@@ -295,18 +324,22 @@ fn main() -> ExitCode {
     // Always emit `.abi.json`: JS hosts need imports/exports, and native `run` / `debug-adapter`
     // load `abi.gpu` for `@compute` / shader metadata.
     let emit_abi = true;
-    let mut compiler = Compiler::new(Target::Wasm)
+    let mut compiler = Compiler::new(if native_c {
+        Target::NativeC
+    } else {
+        Target::Wasm
+    })
         .with_release(release)
         .with_debug_info(debug_info)
         .with_runtimes(runtimes)
         .with_compile_targets(compile_targets)
         .with_emit_abi(emit_abi)
         .with_crate_type(crate_type)
-        .with_emit_cwasm(release && compile_targets.native);
+        .with_emit_cwasm(release && compile_targets.native && !native_c);
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
-    let out_path = match get_path_from_file_path(file_name, release) {
+    let out_path = match get_path_from_file_path(file_name, release, native_c) {
         Some(path) => path,
         None => {
             error!("Invalid source file path: {}", file_name);
@@ -342,10 +375,18 @@ fn main() -> ExitCode {
             }
 
             if run_after_compile {
-                info!("Executing via Wasmtime...");
-                if let Err(e) = execute_wasm(&out_path) {
-                    error!("Execution failed: {}", e);
-                    return ExitCode::FAILURE;
+                if native_c {
+                    info!("Executing native C...");
+                    if let Err(e) = compile_and_run(&out_path, release) {
+                        error!("Execution failed: {}", e);
+                        return ExitCode::FAILURE;
+                    }
+                } else {
+                    info!("Executing via Wasmtime...");
+                    if let Err(e) = execute_wasm(&out_path) {
+                        error!("Execution failed: {}", e);
+                        return ExitCode::FAILURE;
+                    }
                 }
             }
             ExitCode::SUCCESS
@@ -360,7 +401,7 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter|aot] <file|dir>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--native-c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter|aot] <file|dir>",
         program
     );
     error!("  -v, --verbose         Print progress information");
@@ -373,7 +414,10 @@ fn print_usage(program: &str) {
     error!(
         "  -O, --optimize[=LVL]  wasm-opt level (LVL: 0-4, s, z; default: s); overrides --release"
     );
-    error!("  --crate-type lib|bin  Library (no primary main) or binary (default: bin)");
+    error!("  --backend wasm|c     Codegen backend (default: wasm / Wasmtime)");
+    error!(
+        "  --native-c           Same as --backend c. `run --backend c` compiles with cc and execs"
+    );
     error!(
         "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
     );
@@ -428,7 +472,7 @@ fn find_project_root(file_path: &Path) -> Option<PathBuf> {
 ///
 /// When a `dream.toml` encloses the source file, artifacts go under
 /// `target/debug/` or `target/release/` at the project root. Otherwise they sit beside the source.
-fn get_path_from_file_path(file_path: &str, release: bool) -> Option<String> {
+fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Option<String> {
     let path = Path::new(file_path);
     let file_stem = path.file_stem()?.to_str()?;
     let out_dir = if let Some(root) = find_project_root(path) {
@@ -437,7 +481,8 @@ fn get_path_from_file_path(file_path: &str, release: bool) -> Option<String> {
     } else {
         path.parent().unwrap_or_else(|| Path::new("")).to_path_buf()
     };
-    let result = out_dir.join(format!("{}.wat", file_stem));
+    let ext = if native_c { "c" } else { "wat" };
+    let result = out_dir.join(format!("{file_stem}.{ext}"));
     Some(result.to_str()?.to_string())
 }
 

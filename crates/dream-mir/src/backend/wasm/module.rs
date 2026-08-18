@@ -55,7 +55,7 @@ pub fn emit_module_bytes(
     debug: bool,
     debug_info: bool,
     export_user_fns: bool,
-) -> (Vec<u8>, Option<crate::emit::debug_map::DebugModule>) {
+) -> (Vec<u8>, Option<crate::backend::wasm::debug_map::DebugModule>) {
     emit_module_encoded(mir, interner, debug, debug_info, export_user_fns)
 }
 
@@ -70,7 +70,7 @@ pub fn emit_module_with_debug(
     debug: bool,
     debug_info: bool,
     export_user_fns: bool,
-) -> (String, Option<crate::emit::debug_map::DebugModule>) {
+) -> (String, Option<crate::backend::wasm::debug_map::DebugModule>) {
     let (bytes, map) = emit_module_encoded(mir, interner, debug, debug_info, export_user_fns);
     (super::builder::print_wasm(&bytes), map)
 }
@@ -81,7 +81,7 @@ fn emit_module_encoded(
     debug: bool,
     debug_info: bool,
     export_user_fns: bool,
-) -> (Vec<u8>, Option<crate::emit::debug_map::DebugModule>) {
+) -> (Vec<u8>, Option<crate::backend::wasm::debug_map::DebugModule>) {
     let locate_panics = debug || debug_info;
     let ModuleTables {
         symbols,
@@ -96,13 +96,13 @@ fn emit_module_encoded(
     let defined = defined_functions(mir);
 
     let dbg_module = if debug_info {
-        Some(crate::emit::debug_map::DebugModule::build(
+        Some(crate::backend::wasm::debug_map::DebugModule::build(
             mir, interner, &symbols,
         ))
     } else {
         None
     };
-    let dbg_by_symbol: HashMap<&str, &crate::emit::debug_map::DebugFunction> = dbg_module
+    let dbg_by_symbol: HashMap<&str, &crate::backend::wasm::debug_map::DebugFunction> = dbg_module
         .as_ref()
         .map(|m| m.functions.iter().map(|f| (f.symbol.as_str(), f)).collect())
         .unwrap_or_default();
@@ -112,7 +112,7 @@ fn emit_module_encoded(
 
     emit_imports_builder(&mut m, mir, interner);
     if debug_info {
-        let dm = crate::emit::debug_map::DEBUG_MODULE;
+        let dm = crate::backend::wasm::debug_map::DEBUG_MODULE;
         m.import_func(
             dm,
             "line",

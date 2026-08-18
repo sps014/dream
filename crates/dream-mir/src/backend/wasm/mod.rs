@@ -1,13 +1,13 @@
 //! MIR -> WAT (text WebAssembly) backend.
 //!
-//! The relooper ([`super::relooper`]) recovers structured shapes from the CFG. Sync functions walk
+//! The relooper ([`crate::relooper`]) recovers structured shapes from the CFG. Sync functions walk
 //! that shape tree into nested WASM `block`/`loop`/`if` when every edge can be labeled; otherwise
 //! they fall back to a `$__pc` + `br_table` dispatch loop. Async poll functions always keep PC
 //! dispatch (suspend/resume needs a durable program counter). Straight-line statements, operands,
 //! and arithmetic are emitted directly. Memory-backed places (struct fields, array elements) and
 //! allocation reuse the existing runtime/object/string layers.
 
-use super::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp};
+pub(crate) use crate::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp};
 use dream_hir::{scalar_size, LayoutTable};
 use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
@@ -15,68 +15,68 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 /// Runtime type tag for arrays passed to `$malloc`, matching the object protocol's `$object_tag`
-/// dispatch (see [`super::abi::TAG_ARRAY`]).
-const ARRAY_TAG: i32 = super::abi::TAG_ARRAY;
+/// dispatch (see [`crate::abi::TAG_ARRAY`]).
+const ARRAY_TAG: i32 = crate::abi::TAG_ARRAY;
 
 /// The first tag assigned to a user struct/union; consecutive types get consecutive tags, so the
-/// shared runtime's dispatch tables agree (see [`super::abi::TAG_STRUCT_BASE`]).
-const STRUCT_TAG_BASE: i32 = super::abi::TAG_STRUCT_BASE;
+/// shared runtime's dispatch tables agree (see [`crate::abi::TAG_STRUCT_BASE`]).
+const STRUCT_TAG_BASE: i32 = crate::abi::TAG_STRUCT_BASE;
 
-/// The heap-block tag for strings (see [`super::abi::TAG_STRING`]), written into the header of
+/// The heap-block tag for strings (see [`crate::abi::TAG_STRING`]), written into the header of
 /// interned string blocks so the runtime treats them as strings.
-const STRING_TAG: i32 = super::abi::TAG_STRING;
+const STRING_TAG: i32 = crate::abi::TAG_STRING;
 
 /// Byte size of the universal heap-block header `[size:i32][tag:i32][ref_count:i32]` that precedes
 /// every allocated value; a value's pointer points at `block_start + HEAP_HEADER_SIZE`.
-const HEAP_HEADER_SIZE: u32 = super::abi::HEAP_HEADER_SIZE;
+const HEAP_HEADER_SIZE: u32 = crate::abi::HEAP_HEADER_SIZE;
 
 /// Base address (block start) of the interned string data segment. Each string is a heap-object
 /// block `[size=0][tag=STRING][ref_count=1][unit_len:i32][pad:i32][utf16le]`; the mapped address
 /// points at the unit_len word (block start + header), with UTF-16 units at `ptr+8`. `$str_byte_size`
 /// is `unit_len * 2`; `$str_scalar_len` loads `unit_len` at `ptr`. There is no NUL terminator (the length
 /// prefix makes it redundant). The heap starts above.
-const STRING_BASE: u32 = super::abi::STRING_BASE;
+const STRING_BASE: u32 = crate::abi::STRING_BASE;
 
 /// Bytes reserved for the shadow stack (inline value-`struct` locals). It grows *downward* from its
 /// region top (which is also the heap base); the heap grows *upward* from there via `memory.grow`.
 /// Each function with value locals reserves its frame by subtracting from `$__sp` in its prologue
-/// and restores `$__sp` before every return. See [`super::abi`] for the full memory layout.
-const SHADOW_STACK_SIZE: u32 = super::abi::SHADOW_STACK_SIZE;
+/// and restores `$__sp` before every return. See [`crate::abi`] for the full memory layout.
+const SHADOW_STACK_SIZE: u32 = crate::abi::SHADOW_STACK_SIZE;
 
 /// Pages of heap mapped in the initial linear memory beyond the shadow-stack region.
-const INITIAL_HEAP_PAGES: u32 = super::abi::INITIAL_HEAP_PAGES;
+const INITIAL_HEAP_PAGES: u32 = crate::abi::INITIAL_HEAP_PAGES;
 
 /// WASM linear-memory page size, in bytes.
-const WASM_PAGE_SIZE: u32 = super::abi::WASM_PAGE_SIZE;
+const WASM_PAGE_SIZE: u32 = crate::abi::WASM_PAGE_SIZE;
 
 /// The fixed allocator runtime (`$malloc`/`$free`/`$retain`/`$release_generic`/`$object_tag`), the
 /// single source of truth for the heap ABI. Its debug-counter placeholders are filled in by
 /// [`runtime_prelude`] (instrumentation on in debug builds, the default; off under `--release`).
-const RUNTIME_ALLOCATOR: &str = include_str!("../runtime/allocator.wat");
+const RUNTIME_ALLOCATOR: &str = include_str!("../../runtime/allocator.wat");
 
 /// The fixed string runtime (`$str_scalar_len`/`$str_byte_size`/`$char_at`/`$byte_at`/`$string_eq`/`$concat_strings`/…).
 /// Self-contained given the allocator + memory.
-const RUNTIME_STRINGS: &str = include_str!("../runtime/strings.wat");
-const RUNTIME_SIMD: &str = include_str!("../runtime/simd.wat");
+const RUNTIME_STRINGS: &str = include_str!("../../runtime/strings.wat");
+const RUNTIME_SIMD: &str = include_str!("../../runtime/simd.wat");
 
 /// The object runtime: box/unbox/hash plus the integer-family `*_to_string` formatters
 /// (`$int_to_string`/`$long_to_string`/`$byte_to_string`/…). `{TAG_*}` placeholders are substituted.
-const RUNTIME_OBJECT: &str = include_str!("../runtime/object.wat");
+const RUNTIME_OBJECT: &str = include_str!("../../runtime/object.wat");
 
 /// The decimal `float`/`double` formatter (`$float_to_string`/`$double_to_string`). `{TAG_STRING}`
 /// is substituted; the interned `"-"` pointer is `$__rt_str_minus` (defined by the emitter).
-const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
+const RUNTIME_FORMAT: &str = include_str!("../../runtime/format.wat");
 
 /// The shared `$dream_panic(msg)` runtime helper (print message + trap). Self-contained given only
 /// the always-present `$print_string`/`$print_char` imports.
-const RUNTIME_PANIC: &str = include_str!("../runtime/panic.wat");
-const RUNTIME_WEAK: &str = include_str!("../runtime/weak.wat");
-const RUNTIME_CLOSURE: &str = include_str!("../runtime/closure.wat");
+const RUNTIME_PANIC: &str = include_str!("../../runtime/panic.wat");
+const RUNTIME_WEAK: &str = include_str!("../../runtime/weak.wat");
+const RUNTIME_CLOSURE: &str = include_str!("../../runtime/closure.wat");
 
 /// Cross-thread synchronization primitives (`$__thread_id`/`$__lock_acquire`/`$__lock_release`/
 /// `$retain_shared`) backing `@shared class`, `lock (obj) { ... }`, and `Lock`. `{THREAD_ID_COUNTER_ADDR}`
 /// is substituted in `module.rs` alongside the other fixed shared-memory address constants.
-const RUNTIME_SYNC: &str = include_str!("../runtime/sync.wat");
+const RUNTIME_SYNC: &str = include_str!("../../runtime/sync.wat");
 
 /// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
 /// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is
@@ -85,13 +85,13 @@ const RUNTIME_STR_CONSTS: [&str; 4] = ["", "true", "false", "-"];
 
 /// The fixed, compile-time-constant panic messages for the automatic runtime checks (bounds,
 /// division by zero, bad cast). v1 does not interpolate the actual out-of-range index/length or
-/// the failing type name — see [`crate::emit::emitter::mod::Emitter::emit_panic`]. Each is
+/// the failing type name — see [`crate::backend::wasm::emitter::mod::Emitter::emit_panic`]. Each is
 /// *located*: [`located`] appends the declaring function's source file + name (carried inertly on
 /// [`crate::MirFunction`] as `file`/`name`, for debug-info) plus the precise 1-based source
 /// line of the checked construct, Rust-style. The line comes from `Statement::SourceLine` markers
 /// interleaved into MIR unconditionally (see [`dream_hir::HStmt::SourceLine`]): the backend tracks
 /// "the most recent one seen" as `Emitter::current_line` while it walks a function's statements, and
-/// [`crate::emit::strings::string_table`] tracks the identical value while pre-scanning the same
+/// [`crate::backend::wasm::strings::string_table`] tracks the identical value while pre-scanning the same
 /// (already fully-optimized) MIR for every call site that will need a located string interned, so
 /// the two stay in lockstep with no `TextSpan` plumbing through the rest of MIR. The one exception is
 /// `$char_at`'s own internal bounds check has been moved to each call site (see `emit_char_at`), so
@@ -117,7 +117,7 @@ pub(crate) mod panic_msgs {
     /// 0`, meaning no `SourceLine` marker preceded this check, renders as `?` rather than a
     /// misleading `0`), so a bounds check inside `fun foo` in `a.dream` reports a different,
     /// distinguishable string than the same check on a different line, or inside a different
-    /// function/file. Used both to seed the string table ([`crate::emit::strings::string_table`]
+    /// function/file. Used both to seed the string table ([`crate::backend::wasm::strings::string_table`]
     /// pre-computes exactly which `(base, file, func_name, line)` tuples will be looked up) and,
     /// identically, at each check's call site (`Emitter::emit_panic`).
     pub fn located(base: &str, file: Option<&str>, func_name: &str, line: u32) -> String {
@@ -167,7 +167,7 @@ use wasm_types::*;
 
 pub(crate) use valuetype::{vs_drop_sym, vs_retain_sym, ValueFrame, ValueLocalKind};
 
-// The external API of the backend, at the historical `crate::emit::…` paths.
+// The external API of the backend, at the historical `crate::backend::wasm::…` paths.
 pub(crate) use builder::FuncBuilder;
 pub use builder::print_wasm;
 pub use debug_map::DebugModule;

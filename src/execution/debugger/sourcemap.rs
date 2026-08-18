@@ -1,5 +1,5 @@
 //! Loader for the `.dbg.json` debug source map emitted by the compiler (see
-//! [`dream_mir::emit::debug_map`]). Turns the on-disk JSON into lookup structures the debug adapter
+//! [`dream_mir::backend::wasm::debug_map`]). Turns the on-disk JSON into lookup structures the debug adapter
 //! uses to map hook ids/file ids back to source paths, function names, variable tables, and the
 //! recursive **type table** that lets it decode live aggregate values from linear memory.
 

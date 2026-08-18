@@ -9,9 +9,9 @@
 
 pub mod abi;
 pub mod async_emit;
+pub mod backend;
 pub mod build;
 pub mod debug_schema;
-pub mod emit;
 pub mod lower;
 pub mod passes;
 pub mod print;
@@ -226,7 +226,7 @@ pub enum Statement {
     /// always present (unlike [`Statement::DebugLine`], which requires `-g`). Emits no WAT at all:
     /// the backend just records it as "the current line" so a following automatic runtime check
     /// (bounds/division/cast) can attribute its panic message to a real line (see
-    /// [`crate::emit::panic_msgs`]). Treated identically to [`Statement::DebugLine`] by every
+    /// [`crate::backend::wasm::panic_msgs`]). Treated identically to [`Statement::DebugLine`] by every
     /// pass — an inert, order-preserving barrier — purely so scanning the pre-emission MIR for panic
     /// call sites (which tracks the same marker) sees the same line the backend will.
     SourceLine(u32),
@@ -650,7 +650,7 @@ mod tests {
 
         let mut mir = lower_function(&func, &ctx.interner);
         PassManager::default_pipeline().run(&mut mir, &ctx.interner);
-        let wat = super::emit::emit_function(&mir, &ctx.interner);
+        let wat = super::backend::wasm::emit_function(&mir, &ctx.interner);
         assert!(wat.contains("(func $add"));
         assert!(wat.contains("i32.add"), "pipeline output:\n{}", wat);
         assert!(wat.contains("return"));

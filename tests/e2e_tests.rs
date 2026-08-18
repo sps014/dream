@@ -269,6 +269,7 @@ const SMOKE_CASES: &[&str] = &[
     "async_basic",
     "async_generic_sink_reuse",
     "collection_literals",
+    "map_basics",
     "interfaces",
     "object_protocol",
     "diagnostics",

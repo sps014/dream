@@ -1,6 +1,6 @@
 //! `.wasm` post-processing via Binaryen's `wasm-opt` (the `wasm-opt` crate), driven by `--release`
 //! (default level [`OptLevel::RELEASE_DEFAULT`]) and/or an explicit `-O`/`--optimize` level. This
-//! runs *after* the MIR pass pipeline and builder DCE (`crates/dream-mir/src/emit/builder`) already
+//! runs *after* the MIR pass pipeline and builder DCE (`crates/dream-mir/src/backend/wasm/builder`) already
 //! applied — it is an independent, coarser-grained shrink/speed pass over the assembled binary, not
 //! a replacement for either.
 

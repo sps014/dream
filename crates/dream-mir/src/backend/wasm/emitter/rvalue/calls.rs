@@ -14,7 +14,7 @@ impl Emitter<'_> {
     /// for an in-module call would pass a table index as a heap address and dispatch the wrong
     /// function (see `List.sort` + `sort_by(desc)` in the same function). Falls back to a plain push
     /// when the callee's parameter types are unknown (intrinsics without a sig entry).
-    pub(in crate::emit::emitter) fn emit_call_args(
+    pub(in crate::backend::wasm::emitter) fn emit_call_args(
         &mut self,
         callee: &crate::Callee,
         args: &[Operand],
@@ -41,7 +41,7 @@ impl Emitter<'_> {
 
     /// Pushes a call argument: a `Vector<T>` `v128` local is spilled so the callee sees an `i32`
     /// pointer, matching the value-struct ABI used by wrapper methods that were not SIMD-lowered.
-    pub(in crate::emit::emitter) fn emit_call_arg(&mut self, a: &Operand) {
+    pub(in crate::backend::wasm::emitter) fn emit_call_arg(&mut self, a: &Operand) {
         if let Operand::Copy(Place::Local(l)) = a {
             if self.is_v128_local(*l) {
                 self.emit_v128_as_ptr(*l);
@@ -58,7 +58,7 @@ impl Emitter<'_> {
     /// signature), so callers know whether the trampoline left a value on the stack to consume or
     /// discard. Shared by [`Rvalue::IndirectCall`] (leaves the result on the stack) and
     /// [`Statement::IndirectCall`] (drops it — see `emit_stmt`).
-    pub(in crate::emit::emitter) fn emit_indirect_call(
+    pub(in crate::backend::wasm::emitter) fn emit_indirect_call(
         &mut self,
         target: &Operand,
         sig: dream_types::TypeId,
@@ -81,7 +81,7 @@ impl Emitter<'_> {
     /// to the per-`(interface, method)` dispatch trampoline which looks the concrete implementation up
     /// in the tag-indexed itable and forwards through `$__ft`. The trampoline leaves the result (if
     /// any) on the stack.
-    pub(in crate::emit::emitter) fn emit_interface_call(
+    pub(in crate::backend::wasm::emitter) fn emit_interface_call(
         &mut self,
         receiver: &Operand,
         iface_id: usize,
@@ -98,7 +98,7 @@ impl Emitter<'_> {
     /// then the receiver and real arguments, then control transfers to the dispatch trampoline
     /// (which forwards the sret pointer through to the concrete implementation). Mirrors
     /// [`emit_value_sret_call`](Self::emit_value_sret_call) for direct calls.
-    pub(in crate::emit::emitter) fn emit_interface_sret_call(
+    pub(in crate::backend::wasm::emitter) fn emit_interface_sret_call(
         &mut self,
         dst: impl Fn(&mut Self),
         receiver: &Operand,
@@ -136,7 +136,7 @@ impl Emitter<'_> {
     /// arguments, then the table index dispatched through `$__ft` with `sig`'s sret signature.
     /// Mirrors [`emit_value_sret_call`](Self::emit_value_sret_call) for first-class function values
     /// (e.g. a worker body funcref of type `fun(): TOut` where `TOut` is a struct).
-    pub(in crate::emit::emitter) fn emit_indirect_sret_call(
+    pub(in crate::backend::wasm::emitter) fn emit_indirect_sret_call(
         &mut self,
         dst: impl Fn(&mut Self),
         target: &Operand,

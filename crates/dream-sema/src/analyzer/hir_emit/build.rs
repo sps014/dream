@@ -362,6 +362,7 @@ impl<'a> Analyzer<'a> {
                 params,
                 param_by_ref,
                 ret,
+                is_async: func.is_async,
             });
         }
         imports

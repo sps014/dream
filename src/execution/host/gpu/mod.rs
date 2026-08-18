@@ -1,20 +1,24 @@
 //! Native wgpu host for `system.gpu` (`Dream` wasm imports).
 
 mod abi;
-mod buffers;
-mod compute;
-mod device;
-mod error;
+pub(crate) mod buffers;
+pub(crate) mod compute;
+pub(crate) mod device;
+pub(crate) mod error;
 mod gamepad;
 mod icon;
 mod input;
 mod profile;
-mod render;
+pub(crate) mod render;
 mod state;
-mod surface;
-mod textures;
+pub(crate) mod surface;
+pub(crate) mod textures;
 
 pub use icon::set_packaged_app_icon;
+
+pub(crate) fn is_ready() -> bool {
+    state::lock_state().ready
+}
 
 use std::path::Path;
 use std::sync::OnceLock;

@@ -201,6 +201,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/collections/list_iterator.dream"),
             ),
             (
+                "<std>/system/collections/map_slot.dream",
+                include_str!("system/collections/map_slot.dream"),
+            ),
+            (
                 "<std>/system/collections/map.dream",
                 include_str!("system/collections/map.dream"),
             ),

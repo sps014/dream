@@ -20,3 +20,4 @@ Compile with `scripts/build-runtime.sh`. **macOS and Linux install steps** (wasi
 - Do not rename `$malloc` / `$retain` / `$print_string`.
 - Do not hand-edit `generated/*.wat` as source; edit `.c`. Handwritten `../allocator.wat` (placeholders) and `../sync.wat` / `../async.wat` are still emit source until replaced.
 - Do not use clang `-O4` / wasm-opt `-O4`.
+- Native host C (real pointers / memcpy / mmap) lives in [`native/`](native/), not this wasm extract tree.

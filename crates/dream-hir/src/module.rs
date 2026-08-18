@@ -96,6 +96,7 @@ pub struct HImport {
     /// receives as an `i32` address into linear memory (not the value's native WASM type).
     pub param_by_ref: Vec<bool>,
     pub ret: Option<TypeId>,
+    pub is_async: bool,
 }
 
 /// One monomorphized instance of a generic def, keyed by `(DefId, args)` — never a mangled string.

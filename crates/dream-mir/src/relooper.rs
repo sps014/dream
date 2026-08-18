@@ -3,7 +3,7 @@
 //! Dream's surface language only produces reducible CFGs, so the classic Relooper shapes suffice:
 //! [`Shape::Simple`] (a basic block followed by the structured remainder), [`Shape::Loop`] (a
 //! cyclic region wrapped in a `loop`), and [`Shape::Multiple`] (independent branch arms joined by a
-//! following region). The backend ([`super::emit`]) walks this tree to place `block`/`loop` scopes
+//! following region). The WAT backend ([`crate::backend::wasm`]) walks this tree to place `block`/`loop` scopes
 //! and turn CFG edges into `br`/`br_if`.
 
 use super::{BlockId, MirFunction};

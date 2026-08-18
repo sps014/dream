@@ -17,7 +17,7 @@ use super::builder::{
 };
 use super::*;
 use crate::async_emit::{AsyncSlots, F_AWAITING, F_RESULT, F_STATE, F_WIDE};
-use crate::emit::valuetype::{is_simd_vector, ValueFrame, ValueLocalKind};
+use crate::backend::wasm::valuetype::{is_simd_vector, ValueFrame, ValueLocalKind};
 use dream_abi::intrinsics::IntrinsicOp;
 use std::collections::HashSet;
 
@@ -67,7 +67,7 @@ pub(super) fn emit_function_with(
     defined_funcs: &HashSet<(DefId, Vec<TypeId>)>,
     debug: bool,
     locate_panics: bool,
-    debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
+    debug_fn: Option<&crate::backend::wasm::debug_map::DebugFunction>,
     intrinsics: &HashMap<DefId, IntrinsicOp>,
 ) -> FuncBuilder {
     let mut e = Emitter::new(
@@ -112,7 +112,7 @@ pub(crate) fn emit_async_poll(
     user_local_count: usize,
     debug: bool,
     locate_panics: bool,
-    debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
+    debug_fn: Option<&crate::backend::wasm::debug_map::DebugFunction>,
     intrinsics: &HashMap<DefId, IntrinsicOp>,
 ) -> FuncBuilder {
     // Async bodies do not apply call-argument widening or value-struct shadow frames (frame storage
@@ -178,10 +178,10 @@ struct Emitter<'a> {
     locate_panics: bool,
     /// Debug-info metadata for this function when compiled with source-level debug-info (line hooks
     /// + local spilling). `None` disables all instrumentation (release builds, async bodies).
-    debug_fn: Option<&'a crate::emit::debug_map::DebugFunction>,
+    debug_fn: Option<&'a crate::backend::wasm::debug_map::DebugFunction>,
     /// The most recent [`Statement::SourceLine`] seen while emitting this function's statements (0
     /// before the first one). Read by [`Self::emit_panic`] to attribute an automatic runtime check to
-    /// a real source line; see [`crate::emit::panic_msgs`]. `mir::emit::strings::string_table`
+    /// a real source line; see [`crate::backend::wasm::panic_msgs`]. `mir::backend::wasm::strings::string_table`
     /// tracks this identically while scanning the same (already fully-optimized) MIR, so the two
     /// stay in lockstep and every message `emit_panic` looks up is guaranteed pre-interned.
     current_line: u32,
@@ -212,7 +212,7 @@ impl<'a> Emitter<'a> {
         async_user_locals: usize,
         debug: bool,
         locate_panics: bool,
-        debug_fn: Option<&'a crate::emit::debug_map::DebugFunction>,
+        debug_fn: Option<&'a crate::backend::wasm::debug_map::DebugFunction>,
         intrinsics: &'a HashMap<DefId, IntrinsicOp>,
     ) -> Self {
         let frame = ValueFrame::compute(func, interner, layouts);

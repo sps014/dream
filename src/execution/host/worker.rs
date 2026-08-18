@@ -362,8 +362,8 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "workerSpawn",
-        |_caller: Caller<'_, ()>, fn_idx: i32, env: i32| -> Result<i32> {
-            spawn_worker_thread(fn_idx, env)
+        |_caller: Caller<'_, ()>, fn_idx: i32, env: i64| -> Result<i32> {
+            spawn_worker_thread(fn_idx, env as i32)
         },
     )?;
 
@@ -426,7 +426,7 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "workerPoolDispatch",
-        |mut caller: Caller<'_, ()>, id: i32, fn_idx: i32, env: i32, msg_ptr: i32| -> Result<i32> {
+        |mut caller: Caller<'_, ()>, id: i32, fn_idx: i32, env: i64, msg_ptr: i32| -> Result<i32> {
             let msg = read_arg_string(&mut caller, msg_ptr)?;
             let handle = workers()
                 .lock()
@@ -435,7 +435,7 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
                 .map(|h| (h.to_worker.clone(), h.from_worker.clone()));
             let reply = match handle {
                 Some((tx, rx)) => {
-                    let _ = tx.send(Job::Message(fn_idx, env, msg));
+                    let _ = tx.send(Job::Message(fn_idx, env as i32, msg));
                     let guard = rx.lock().unwrap();
                     guard.recv().unwrap_or_default()
                 }

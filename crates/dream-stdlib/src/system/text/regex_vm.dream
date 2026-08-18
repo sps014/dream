@@ -103,6 +103,11 @@ internal class RegexVM {
         this.cap_ids = Buffer.alloc<int>(0);
         this.negs = Buffer.alloc<int>(0);
         this.cap_pool = Buffer.alloc<int[]>(32);
+        let pool_slot = 0;
+        while (pool_slot < this.cap_pool.length) {
+            this.cap_pool[pool_slot] = Buffer.alloc<int>(0);
+            pool_slot = pool_slot + 1;
+        }
         this.pool_used = 0;
         this.analyze_skip_hint();
         this.flatten_prog();

@@ -4,7 +4,7 @@
 //! (byte-identical output).
 
 use dream_hir::{BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId};
-use dream_mir::emit::emit_program;
+use dream_mir::backend::wasm::emit_program;
 use dream_mir::lower::lower_program;
 use dream_mir::passes::{
     ConstFold, CopyConstProp, Dce, PassManager, RcElision, RcInsertion, SimplifyCfg,

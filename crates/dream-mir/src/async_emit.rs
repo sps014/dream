@@ -4,7 +4,7 @@
 //! the first poll, returns the frame pointer) and a **poll** function (resumable state machine between
 //! `await` points). The cooperative scheduler runtime lives in `mir/runtime/async.wat`.
 
-use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of, FuncBuilder};
+use crate::backend::wasm::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of, FuncBuilder};
 use super::lower::lower_async_poll_body;
 use super::passes::MirPass;
 use super::MirFunction;
@@ -168,7 +168,7 @@ pub(crate) fn emit_async_function_parts(
     poll_idx: usize,
     debug: bool,
     locate_panics: bool,
-    debug_fn: Option<&crate::emit::debug_map::DebugFunction>,
+    debug_fn: Option<&crate::backend::wasm::debug_map::DebugFunction>,
     intrinsics: &HashMap<dream_types::DefId, dream_abi::intrinsics::IntrinsicOp>,
 ) -> (String, FuncBuilder) {
     let hir = func.hir_fn.as_ref().unwrap_or_else(|| {

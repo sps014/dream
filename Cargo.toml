@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
 edition = "2018"
 
+[lib]
+name = "dream"
+crate-type = ["rlib", "cdylib"]
+
 # Dream runtime defaults (read by `build.rs` → `DREAM_DEFAULT_STACK_SIZE`).
 # Override at run time with env `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`, `33554432`).
 # Host Rust thread stack for the compiler/tests is separate: set `RUST_MIN_STACK` (or

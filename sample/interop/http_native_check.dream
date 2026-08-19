@@ -1,14 +1,18 @@
-// Temporary native smoke check: exercises the c HTTP future bridge end to end.
+// Temporary native smoke check: exercises the C HTTP future bridge end to end.
 import system;
 import system.text;
 import system.net;
 async fun main(): void {
     let http = HttpClient();
-    let res = await http.get("https://example.com");
-    System.println("status:");
-    System.println(res.status());
-    System.println("len:");
-    System.println(res.bytes().length);
-    System.println("has-html:");
-    System.println(res.text().contains("html"));
+    switch (await http.get("https://example.com")) {
+        Ok(res) => {
+            System.println("status:");
+            System.println(res.status());
+            System.println("len:");
+            System.println(res.bytes().length);
+            System.println("has-html:");
+            System.println(res.text().contains("html"));
+        },
+        Err(e) => System.println(e.message()),
+    }
 }

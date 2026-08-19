@@ -1,0 +1,5 @@
+import system;
+
+fun main(): void {
+    System.println(System.read_line());
+}

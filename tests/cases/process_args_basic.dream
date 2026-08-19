@@ -1,0 +1,10 @@
+import system;
+
+fun main(): void {
+    System.println(System.os_family() == OsFamily.Unix || System.os_family() == OsFamily.Windows);
+    System.println(System.exe_path().unwrap_or("").length > 0);
+    let args = System.args();
+    System.println(args.length);
+    System.println(args[0]);
+    System.println(args[1]);
+}

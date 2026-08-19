@@ -1,0 +1,30 @@
+// Directory File.create_dir / create_dir_all / is_dir / list on native C.
+import system;
+import system.io;
+
+async fun main(): void {
+    let root = "dream_file_dir_e2e";
+    switch (await File.create_dir(root)) {
+        Ok(_) => System.println(File.is_dir(root)),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await File.create_dir_all(root + "/nested/leaf")) {
+        Ok(_) => System.println(File.is_dir(root + "/nested/leaf")),
+        Err(e) => System.println(e.message()),
+    }
+
+    let marker = Buffer.alloc<byte>(1);
+    marker[0] = (byte)1;
+    await File.write_bytes(root + "/a.bin", marker);
+
+    let names = await File.list(root);
+    System.println(names.length);
+    System.println(names[0]);
+    System.println(names[1]);
+
+    await File.delete(root + "/a.bin");
+    await File.delete(root + "/nested/leaf");
+    await File.delete(root + "/nested");
+    await File.delete(root);
+}

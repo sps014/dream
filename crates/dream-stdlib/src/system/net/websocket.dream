@@ -1,9 +1,7 @@
 module system.net;
 
-// A WebSocket client. Native connects via a plain TCP socket + WebSocket handshake (`ws://`
-// only — `wss://` resolves `Err(NetError.unsupported(...))`; see the `tungstenite` dependency
-// note in `Cargo.toml`). The browser/Node hosts use the standard `WebSocket` API and support
-// both schemes.
+// A WebSocket client. Native uses tungstenite (`ws://` and `wss://`). The browser/Node hosts
+// use the standard `WebSocket` API.
 public class WebSocket {
     handle: int;
     is_closed: bool;

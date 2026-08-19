@@ -325,7 +325,7 @@ async function pickDreamerRunTarget(
     }
 
     const labels: Record<RuntimeTarget, string> = {
-        native: 'Native (C / lldb)',
+        native: 'Native',
         web: 'Web (browser)',
         node: 'Node'
     };

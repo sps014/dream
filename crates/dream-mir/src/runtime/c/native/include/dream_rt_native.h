@@ -837,9 +837,6 @@ int64_t timeNowNanos(void);
 int64_t Time_nano_time(void);
 int64_t dateNowMillis(void);
 int32_t dateLocalOffsetMinutes(int64_t epoch_millis);
-int32_t dateZoneOffsetMinutes(dream_ptr zone_name, int64_t epoch_millis);
-dream_ptr dateLocalZoneName(void);
-
 void print_int(int32_t v);
 void print_string(dream_ptr s);
 void print_char(int32_t c);
@@ -849,26 +846,23 @@ void print_double(double v);
 int32_t fileOpen(dream_ptr path, dream_ptr mode);
 int32_t fileDelete(dream_ptr path);
 int64_t fileSize(dream_ptr path);
+dream_ptr fileReadBytes(dream_ptr path);
+int64_t fileWriteBytes(dream_ptr path, dream_ptr data);
+int32_t fileIsDir(dream_ptr path);
+dream_ptr dirList(dream_ptr path);
+int32_t dirCreate(dream_ptr path);
+int32_t dirCreateAll(dream_ptr path);
 dream_ptr fileHandleRead(int32_t fd, int32_t count);
 int64_t fileHandleWrite(int32_t fd, dream_ptr data);
 int32_t fileHandleSeek(int32_t fd, int64_t position);
 void fileHandleClose(int32_t fd);
 
-dream_ptr processRun(dream_ptr command, dream_ptr joined_args, dream_ptr cwd);
-dream_ptr processSpawn(dream_ptr command, dream_ptr joined_args, dream_ptr cwd);
-int32_t processWriteStdin(int32_t handle, dream_ptr data);
-dream_ptr processReadStream(int32_t handle, int32_t stream, int32_t max_bytes);
-dream_ptr processReadStreamLine(int32_t handle, int32_t stream);
-dream_ptr processWait(int32_t handle);
-int32_t processKill(int32_t handle);
-
-dream_ptr httpRequestStream(
-    dream_ptr url, dream_ptr method, dream_ptr headers, dream_ptr body, int32_t timeout_ms,
-    int32_t http_version);
-dream_ptr tcpConnect(dream_ptr host, int32_t port, int32_t timeout_ms);
-int32_t tcpClose(int32_t handle);
-dream_ptr wsConnect(dream_ptr url, int32_t timeout_ms);
-int32_t wsClose(int32_t handle, int32_t code, dream_ptr reason);
+void dream_process_capture_args(int32_t argc, char **argv);
+int32_t processOsFamily(void);
+dream_ptr processArgs(void);
+dream_ptr processExePath(void);
+dream_ptr consoleReadLine(void);
+int32_t consoleReadKey(void);
 
 void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t));
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);

@@ -1,0 +1,21 @@
+// Live GET against JSONPlaceholder (https://jsonplaceholder.typicode.com/guide/).
+import system;
+import system.net;
+import system.json;
+
+async fun main(): void {
+    let api = HttpClient("https://jsonplaceholder.typicode.com");
+    switch (await api.get("/posts/1")) {
+        Ok(r) => {
+            System.println(r.status());
+            switch (r.json()) {
+                Ok(v) => {
+                    System.println(v.get("userId").unwrap_or(JsonValue.none()).as_int().unwrap_or(0));
+                    System.println(v.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0));
+                },
+                Err(e) => System.println(e.message()),
+            }
+        },
+        Err(e) => System.println(e.message()),
+    }
+}

@@ -1,0 +1,30 @@
+// Binary File.read_bytes / write_bytes on native C (NUL-safe, no string round-trip).
+import system;
+import system.io;
+
+async fun main(): void {
+    let path = "dream_file_bytes_e2e.bin";
+    let data = Buffer.alloc<byte>(4);
+    data[0] = (byte)1;
+    data[1] = (byte)0;
+    data[2] = (byte)255;
+    data[3] = (byte)2;
+
+    switch (await File.write_bytes(path, data)) {
+        Ok(n) => System.println(n),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await File.read_bytes(path)) {
+        Ok(got) => {
+            System.println(got.length);
+            System.println((int)got[0]);
+            System.println((int)got[1]);
+            System.println((int)got[2]);
+            System.println((int)got[3]);
+        },
+        Err(e) => System.println(e.message()),
+    }
+
+    await File.delete(path);
+}

@@ -67,8 +67,7 @@ wasm-opt = { version = "0.116", optional = true }
 chrono-tz = { version = "0.10.4", optional = true }
 # Detects the OS's configured IANA timezone name, backing `TimeZone.local()`.
 iana-time-zone = { version = "0.1.65", optional = true }
-# Blocking WebSocket client backing `system.net.WebSocket`. No TLS
-# feature enabled: native `wss://` is unsupported for now (documented limitation), only `ws://`.
+# Blocking WebSocket client backing `system.net.WebSocket` (`ws://` and `wss://`).
 # Native WebGPU host (`src/execution/host/gpu/`) for `dream run` compute/render.
 wgpu = { version = "24", optional = true }
 pollster = { version = "0.4", optional = true }

@@ -1,9 +1,14 @@
-//! Host implementations for the native C runtime (`libdream`): GPU, HTTP, WebView, `@c` link flags.
-//! File/console/math/crypto-in-guest live in `runtime/c/native/`; GPU/HTTP/WebView stay here.
+//! Host implementations for the native C runtime (`libdream`): GPU, HTTP, net, process, crypto, tz, WebView.
+//! Guest file/console helpers live in `runtime/c/native/`; GPU/HTTP/net/process stay here so they are
+//! the same on every OS (`-ldream`).
 
 mod c_link;
+pub(crate) mod crypto;
 pub(crate) mod gpu;
 pub(crate) mod http;
+pub(crate) mod net;
+pub(crate) mod process_host;
+pub(crate) mod tz;
 pub(crate) mod webview;
 
 pub use c_link::{cc_link_flags, find_library_path, read_c_libs_from_abi, search_roots_for_artifact};

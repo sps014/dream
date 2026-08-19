@@ -13,6 +13,7 @@ use indexmap::IndexMap;
 
 fn build_http_client(http2: bool) -> reqwest::blocking::Client {
     let mut builder = reqwest::blocking::Client::builder()
+        .user_agent("Dream")
         .pool_max_idle_per_host(0)
         .pool_idle_timeout(Duration::from_secs(0))
         .tcp_keepalive(None)
@@ -229,4 +230,58 @@ pub(crate) fn http_read_chunk(handle: i32, max_bytes: i32) -> Vec<u8> {
 pub(crate) fn http_close_stream(handle: i32) -> i32 {
     let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
     table.shift_remove(&(handle as u32)).is_some() as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::perform_http;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    fn serve_once(status_line: &str, body: &[u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let addr = listener.local_addr().expect("local addr");
+        let body = body.to_vec();
+        let status_line = status_line.to_string();
+        thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let head = format!(
+                "{status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body);
+        });
+        format!("http://{addr}/")
+    }
+
+    fn split_body(wire: &[u8]) -> &[u8] {
+        let sep = wire.windows(2).position(|w| w == b"\n\n").expect("head/body");
+        &wire[sep + 2..]
+    }
+
+    #[test]
+    fn perform_http_get_text() {
+        let url = serve_once("HTTP/1.1 200 OK", b"hello");
+        let out = perform_http("GET", &url, "", Vec::new(), 5_000, 1);
+        assert!(
+            out.starts_with(b"200\n"),
+            "status head: {:?}",
+            String::from_utf8_lossy(&out)
+        );
+        assert_eq!(split_body(&out), b"hello");
+    }
+
+    #[test]
+    fn perform_http_get_binary_with_nuls() {
+        let url = serve_once("HTTP/1.1 200 OK", b"a\0b\0c");
+        let out = perform_http("GET", &url, "", Vec::new(), 5_000, 1);
+        assert!(out.starts_with(b"200\n"));
+        assert_eq!(split_body(&out), b"a\0b\0c");
+    }
 }

@@ -104,6 +104,12 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
         entry.ret(Some(Expr::i(0)));
         m.push_func(entry);
         let mut main_fn = FuncBuilder::new(CTy::I32, "main");
+        main_fn.param(CTy::I32, "argc");
+        main_fn.param(CTy::ptr_to(CTy::CharPtr), "argv");
+        main_fn.call(
+            "dream_process_capture_args",
+            vec![Expr::id("argc"), Expr::id("argv")],
+        );
         main_fn.ret(Some(Expr::call("dream_guest_entry", vec![])));
         m.push_func(main_fn);
     }

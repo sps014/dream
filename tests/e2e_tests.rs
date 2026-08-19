@@ -2,12 +2,15 @@
 
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::compile_and_capture;
+use dream::execution::native_c::{compile_and_capture, compile_and_capture_ex};
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::thread;
 
 const SMOKE_CASES: &[&str] = &[
     "arithmetic",
@@ -39,6 +42,21 @@ fn collect_case_paths() -> Vec<PathBuf> {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("dream"))
         .collect()
+}
+
+fn spawn_tcp_echo() -> (u16, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback tcp");
+    let port = listener.local_addr().expect("tcp local addr").port();
+    let handle = thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        let mut buf = [0u8; 64];
+        if let Ok(n) = stream.read(&mut buf) {
+            let _ = stream.write_all(&buf[..n]);
+        }
+    });
+    (port, handle)
 }
 
 fn run_native_case(dream_file: &Path, release: bool) {
@@ -79,10 +97,35 @@ fn run_native_case(dream_file: &Path, release: bool) {
         String::new()
     };
 
-    let run = compile_and_capture(
-        c_path.to_str().unwrap(),
-        if release { OptLevel::O3 } else { OptLevel::O0 },
-    );
+    let opt = if release { OptLevel::O3 } else { OptLevel::O0 };
+    let c_str = c_path.to_str().unwrap();
+    let tcp = if stem == "tcp_echo_local" {
+        Some(spawn_tcp_echo())
+    } else {
+        None
+    };
+    let timeout_secs = if stem == "http_get_local" { 20 } else { 8 };
+    let extra_args: &[&str] = if stem == "process_args_basic" {
+        &["alpha", "beta"]
+    } else {
+        &[]
+    };
+    let stdin = if stem == "console_read_line" {
+        Some(&b"hello-line\n"[..])
+    } else {
+        None
+    };
+    let mut env: Vec<(&str, String)> = Vec::new();
+    if let Some((port, _)) = tcp.as_ref() {
+        env.push(("DREAM_E2E_TCP_PORT", port.to_string()));
+    }
+    let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let run = if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty()
+    {
+        compile_and_capture_ex(c_str, opt, &env_refs, extra_args, stdin, timeout_secs)
+    } else {
+        compile_and_capture(c_str, opt)
+    };
     let _ = fs::remove_file(&c_path);
     let _ = fs::remove_file(c_path.with_extension("o"));
     let _ = fs::remove_file(c_path.with_extension("bin"));
@@ -136,6 +179,28 @@ fn run_corpus(release: bool, only: Option<&[&str]>) {
 #[test]
 fn run_smoke_e2e_cases() {
     run_corpus(false, Some(SMOKE_CASES));
+}
+
+#[test]
+fn run_file_http_parity_e2e() {
+    run_corpus(
+        false,
+        Some(&[
+            "file_bytes",
+            "file_dir",
+            "http_get_local",
+            "tcp_echo_local",
+            "process_args_basic",
+            "console_read_line",
+            "crypto_basic",
+            "process_run_basic",
+            "process_spawn_basic",
+            "timezone_basic",
+            "tcp_client_connect_fail",
+            "websocket_unsupported_scheme",
+            "websocket_connect_fail",
+        ]),
+    );
 }
 
 #[test]

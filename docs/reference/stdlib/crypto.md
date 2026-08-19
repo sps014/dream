@@ -2,7 +2,7 @@
 
 **Import:** `import system.crypto;`
 
-Host-backed hashes, a secure RNG, and AES-256-GCM. APIs return raw `byte[]` — format with [encoding](encoding.md). Not TLS.
+Host-backed hashes, a secure RNG, and AES-256-GCM. Native digests and the CSPRNG use RustCrypto (`sha2` / `hmac` / `getrandom`) on every OS. APIs return raw `byte[]` — format with [encoding](encoding.md). Not TLS.
 
 ```dream
 import system;

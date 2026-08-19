@@ -23,15 +23,48 @@ pub fn compile_and_capture(
     c_path: &str,
     opt: OptLevel,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    compile_and_capture_with_env(c_path, opt, &[])
+}
+
+pub fn compile_and_capture_with_env(
+    c_path: &str,
+    opt: OptLevel,
+    extra_env: &[(&str, &str)],
+) -> Result<String, Box<dyn std::error::Error>> {
+    compile_and_capture_ex(c_path, opt, extra_env, &[], None, 8)
+}
+
+pub fn compile_and_capture_ex(
+    c_path: &str,
+    opt: OptLevel,
+    extra_env: &[(&str, &str)],
+    extra_args: &[&str],
+    stdin: Option<&[u8]>,
+    timeout_secs: u64,
+) -> Result<String, Box<dyn std::error::Error>> {
     let bin = compile_native_c(Path::new(c_path), opt, false)?;
     let mut cmd = Command::new(&bin);
     apply_native_run_env(&mut cmd, c_path);
+    for (k, v) in extra_env {
+        cmd.env(k, v);
+    }
+    cmd.args(extra_args);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    let child = cmd.spawn()?;
+    if stdin.is_some() {
+        cmd.stdin(Stdio::piped());
+    } else {
+        cmd.stdin(Stdio::null());
+    }
+    let mut child = cmd.spawn()?;
+    if let Some(bytes) = stdin {
+        if let Some(mut sin) = child.stdin.take() {
+            let _ = std::io::Write::write_all(&mut sin, bytes);
+        }
+    }
     let pid = child.id();
     let waiter = std::thread::spawn(move || child.wait_with_output());
-    let limit = Duration::from_secs(8);
+    let limit = Duration::from_secs(timeout_secs);
     let start = Instant::now();
     while !waiter.is_finished() {
         if start.elapsed() > limit {

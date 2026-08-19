@@ -914,3 +914,165 @@ pub extern "C" fn httpReadChunk(handle: i32, max_bytes: i32) -> usize {
 pub extern "C" fn httpCloseStream(handle: i32) -> i32 {
     crate::execution::host::http::http_close_stream(handle)
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn tcpConnect(host: usize, port: i32, timeout_ms: i32) -> usize {
+    alloc_bytes(&crate::execution::host::net::tcp_connect(
+        &read_string(host),
+        port,
+        timeout_ms,
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tcpSend(handle: i32, data: usize) -> usize {
+    alloc_bytes(&crate::execution::host::net::tcp_send(
+        handle,
+        &read_bytes(data),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tcpSendText(handle: i32, text: usize) -> usize {
+    alloc_bytes(&crate::execution::host::net::tcp_send(
+        handle,
+        read_string(text).as_bytes(),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tcpReceive(handle: i32, max_bytes: i32) -> usize {
+    alloc_bytes(&crate::execution::host::net::tcp_receive(handle, max_bytes))
+}
+
+#[no_mangle]
+pub extern "C" fn tcpClose(handle: i32) -> i32 {
+    crate::execution::host::net::tcp_close(handle)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wsConnect(url: usize, timeout_ms: i32) -> usize {
+    alloc_bytes(&crate::execution::host::net::ws_connect(
+        &read_string(url),
+        timeout_ms,
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wsSendText(handle: i32, text: usize) -> usize {
+    alloc_bytes(&crate::execution::host::net::ws_send_text(
+        handle,
+        &read_string(text),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wsSendBinary(handle: i32, data: usize) -> usize {
+    alloc_bytes(&crate::execution::host::net::ws_send_binary(
+        handle,
+        &read_bytes(data),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wsReceive(handle: i32) -> usize {
+    alloc_bytes(&crate::execution::host::net::ws_receive(handle))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wsClose(handle: i32, code: i32, reason: usize) -> i32 {
+    crate::execution::host::net::ws_close(handle, code, &read_string(reason))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cryptoSha256(input: usize) -> usize {
+    alloc_bytes(&crate::execution::host::crypto::sha256(&read_bytes(input)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cryptoSha512(input: usize) -> usize {
+    alloc_bytes(&crate::execution::host::crypto::sha512(&read_bytes(input)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cryptoHmacSha256(key: usize, input: usize) -> usize {
+    alloc_bytes(&crate::execution::host::crypto::hmac_sha256(
+        &read_bytes(key),
+        &read_bytes(input),
+    ))
+}
+
+#[no_mangle]
+pub extern "C" fn cryptoSecureRandomBytes(len: i32) -> usize {
+    alloc_bytes(&crate::execution::host::crypto::secure_random(len))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cryptoSecureRandomFill(bytes: usize) {
+    if bytes == 0 {
+        return;
+    }
+    let n = *(bytes as *const i32);
+    if n <= 0 {
+        return;
+    }
+    let dest = std::slice::from_raw_parts_mut((bytes as *mut u8).add(4), n as usize);
+    crate::execution::host::crypto::secure_random_fill(dest);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn processRun(command: usize, joined_args: usize, cwd: usize) -> usize {
+    alloc_bytes(&crate::execution::host::process_host::process_run(
+        &read_string(command),
+        &read_string(joined_args),
+        &read_string(cwd),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn processSpawn(command: usize, joined_args: usize, cwd: usize) -> usize {
+    alloc_bytes(&crate::execution::host::process_host::process_spawn(
+        &read_string(command),
+        &read_string(joined_args),
+        &read_string(cwd),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn processWriteStdin(handle: i32, data: usize) -> i32 {
+    crate::execution::host::process_host::process_write_stdin(handle, &read_bytes(data))
+}
+
+#[no_mangle]
+pub extern "C" fn processReadStream(handle: i32, stream: i32, max_bytes: i32) -> usize {
+    alloc_bytes(&crate::execution::host::process_host::process_read_stream(
+        handle, stream, max_bytes,
+    ))
+}
+
+#[no_mangle]
+pub extern "C" fn processReadStreamLine(handle: i32, stream: i32) -> usize {
+    alloc_bytes(&crate::execution::host::process_host::process_read_stream_line(
+        handle, stream,
+    ))
+}
+
+#[no_mangle]
+pub extern "C" fn processWait(handle: i32) -> usize {
+    alloc_bytes(&crate::execution::host::process_host::process_wait(handle))
+}
+
+#[no_mangle]
+pub extern "C" fn processKill(handle: i32) -> i32 {
+    crate::execution::host::process_host::process_kill(handle)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn dateZoneOffsetMinutes(zone_name: usize, epoch_millis: i64) -> i32 {
+    crate::execution::host::tz::zone_offset_minutes(&read_string(zone_name), epoch_millis)
+}
+
+#[no_mangle]
+pub extern "C" fn dateLocalZoneName() -> usize {
+    alloc_string(&crate::execution::host::tz::local_zone_name())
+}

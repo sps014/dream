@@ -40,6 +40,21 @@ fn main() -> ExitCode {
     let mut program_args: Vec<String> = Vec::new();
     let mut after_program_args = false;
 
+    // Install before any `error!()` so bad flags are not a silent exit 1. Route to stderr so
+    // `debug-adapter` stdout stays a clean DAP stream.
+    let verbose_early = args.iter().any(|a| a == "-v" || a == "--verbose");
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(if verbose_early {
+            Level::INFO
+        } else {
+            Level::WARN
+        })
+        .without_time()
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let mut i = 1;
     while i < args.len() {
         let arg = &args[i];
@@ -67,6 +82,8 @@ fn main() -> ExitCode {
             show_help = true;
         } else if arg == "run" {
             run_after_compile = true;
+        } else if arg == "build" {
+            // Compile only (the default). So `dream build --web file.dream` is not treated as a path.
         } else if arg == "test" {
             run_tests = true;
         } else if arg == "--filter" {
@@ -236,12 +253,7 @@ fn main() -> ExitCode {
         print_usage(&program);
         return ExitCode::FAILURE;
     }
-    if !runtimes.is_empty() && !want_runtime {
-        error!("--web / --node require --runtime");
-        print_usage(&program);
-        return ExitCode::FAILURE;
-    }
-
+    // `--web` / `--node` select a JS host and imply the tree-shaken runtime sidecar.
     if !runtimes.is_empty() {
         native_c = false;
     }
@@ -261,16 +273,6 @@ fn main() -> ExitCode {
             }
         }
     });
-
-    // Route logs to stderr so they never corrupt stdout — critical in `debug-adapter` mode, where
-    // stdout carries the framed DAP protocol stream (and harmless/conventional for other modes).
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(if verbose { Level::INFO } else { Level::WARN })
-        .without_time()
-        .with_target(false)
-        .with_writer(std::io::stderr)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     if show_help {
         print_usage(&program);
@@ -414,60 +416,35 @@ fn main() -> ExitCode {
     }
 }
 
-/// Prints CLI usage to stderr via the tracing subscriber's error channel.
+/// Prints CLI usage to stderr. Not `error!()`: that prefixes every line with `ERROR`.
 fn print_usage(program: &str) {
-    error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir> [-- program-args...]",
-        program
-    );
-    error!("  -v, --verbose         Print progress information");
-    error!(
-        "  --release             Trimmed build; cc default -O3; wasm-opt -O3 (or -Os with --web)"
-    );
-    error!(
-        "  -g, --debug-info      C `#line` + clang -g -O0 for lldb-dap (`debug-adapter` implies this)"
-    );
-    error!(
-        "  -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z; default: s); overrides --release"
-    );
-    error!("  --backend wasm|c     Codegen backend (default: c / native). WAT only with --runtime --web/--node");
-    error!(
-        "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
-    );
-    error!(
-        "  --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)"
-    );
-    error!("  --web                 With --runtime: browser-targeted *.web.runtime.js");
-    error!("  --node                With --runtime: Node-targeted *.node.runtime.js");
-    error!(
-        "  --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR"
-    );
-    error!("  -h, --help            Show this help message");
-    error!("  run                   Compile native C and execute the .bin");
-    error!("  test                  Discover and run @test functions in a file or directory");
-    error!("  debug-adapter         DAP over stdio via lldb-dap on the native .bin (implies -g)");
-    error!(r"Example: {} run src/sample/test_arrays.dream", program);
-    error!(r"Example: {} run tests/cases/process_args_basic.dream -- alpha beta", program);
-    error!(r"Example: {} test tests/", program);
-    error!(r"Example: {} --filter adds test tests/math.dream", program);
-    error!(
-        r"Example: {} --release run src/sample/test_arrays.dream",
-        program
-    );
-    error!(
-        r"Example: {} --runtime --web sample/interop/js.dream",
-        program
-    );
-    error!(
-        r"Example: {} --runtime --node sample/interop/js.dream",
-        program
-    );
-    error!(
-        r"Example: {} --runtime --web --node sample/interop/js.dream",
-        program
-    );
-    error!(
-        "  Wasm artifacts land in target/web/; native C in target/debug/ (or target/release/ with --release)"
+    eprintln!(
+        "\
+Usage: {program} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [build|run|test|debug-adapter] <file|dir> [-- program-args...]
+  -v, --verbose         Print progress information
+  --release             Trimmed build; cc default -O3; wasm-opt -O3 (or -Os with --web)
+  -g, --debug-info      C `#line` + clang -g -O0 for lldb-dap (`debug-adapter` implies this)
+  -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z, Os, Oz; default: s); overrides --release
+  --backend wasm|c     Codegen backend (default: c / native). WAT only with --web/--node
+  --target native|node|web  Compile-time runtime target for availability checks (default: native)
+  --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)
+  --web                 Browser-targeted *.web.runtime.js (implies --runtime, wasm backend)
+  --node                Node-targeted *.node.runtime.js (implies --runtime, wasm backend)
+  --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR
+  -h, --help            Show this help message
+  build                 Compile only (default; `dream build --web file.dream` is valid)
+  run                   Compile native C and execute the .bin
+  test                  Discover and run @test functions in a file or directory
+  debug-adapter         DAP over stdio via lldb-dap on the native .bin (implies -g)
+Example: {program} run src/sample/test_arrays.dream
+Example: {program} run tests/cases/process_args_basic.dream -- alpha beta
+Example: {program} test tests/
+Example: {program} --filter adds test tests/math.dream
+Example: {program} --release run src/sample/test_arrays.dream
+Example: {program} --web sample/interop/js.dream
+Example: {program} --node sample/interop/js.dream
+Example: {program} --web --node sample/interop/js.dream
+  Wasm artifacts land in target/web/; native C in target/debug/ (or target/release/ with --release)"
     );
 }
 

@@ -248,15 +248,32 @@ async function loadAbi(abi) {{
   return JSON.parse(new TextDecoder("utf-8").decode(bytes));
 }}
 
+function moduleWantsSharedMemory(wasmModule, desc) {{
+  if (desc && typeof desc.shared === "boolean") {{
+    return desc.shared;
+  }}
+  return WebAssembly.Module.imports(wasmModule).some(
+    (i) =>
+      i.kind === "function" &&
+      i.module === "Dream" &&
+      (i.name === "workerSpawn" ||
+        i.name === "workerPost" ||
+        i.name === "workerRecv" ||
+        i.name === "workerTerminate" ||
+        i.name === "workerPoolSpawn" ||
+        i.name === "workerPoolDispatch"),
+  );
+}}
+
 function makeLinearMemory(wasmModule) {{
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
   );
   const desc = memoryImport && memoryImport.type;
   return new WebAssembly.Memory({{
-    initial: desc ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
-    maximum: desc ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
-    shared: desc ? desc.shared : true,
+    initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
+    maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
+    shared: moduleWantsSharedMemory(wasmModule, desc),
   }});
 }}
 

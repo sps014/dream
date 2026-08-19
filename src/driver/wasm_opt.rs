@@ -86,7 +86,11 @@ impl FromStr for OptLevel {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        // `-O=Oz`, `-Oz`, `--optimize=Os` all appear on the CLI; keep the token after an optional
+        // `-` / `O` prefix so users can spell Binaryen's flag or just the level letter.
+        let t = s.trim().trim_start_matches('-');
+        let t = t.strip_prefix('O').or_else(|| t.strip_prefix('o')).unwrap_or(t);
+        match t {
             "0" => Ok(OptLevel::O0),
             "1" => Ok(OptLevel::O1),
             "2" => Ok(OptLevel::O2),
@@ -95,8 +99,7 @@ impl FromStr for OptLevel {
             "s" | "S" => Ok(OptLevel::Size),
             "z" | "Z" => Ok(OptLevel::SizeAggressive),
             other => Err(format!(
-                "invalid optimization level '{}' (expected one of: 0, 1, 2, 3, 4, s, z)",
-                other
+                "invalid optimization level '{other}' (expected one of: 0, 1, 2, 3, 4, s, z, Os, Oz)"
             )),
         }
     }
@@ -150,10 +153,8 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
         Feature::RelaxedSimd,
         Feature::TailCall,
         Feature::ExtendedConst,
-        // Linear memory is always emitted `shared` (`src/mir/emit/module.rs`) so every `WebWorker`
-        // instance can import the same shared memory — Binaryen needs the threads
-        // proposal ("Atomics" in its feature naming) enabled just to parse/validate that, even
-        // before any atomic instruction is actually emitted (Phase 2+).
+        // Threads proposal: modules with `WebWorker` emit shared memory + atomics; others emit
+        // a private memory. Binaryen still needs the feature enabled to parse either form.
         Feature::Atomics,
     ]);
 

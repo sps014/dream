@@ -101,5 +101,8 @@ fn opt_level_parses_expected_strings() {
     assert_eq!(OptLevel::from_str("s").unwrap(), OptLevel::Size);
     assert_eq!(OptLevel::from_str("z").unwrap(), OptLevel::SizeAggressive);
     assert_eq!(OptLevel::from_str("3").unwrap(), OptLevel::O3);
+    assert_eq!(OptLevel::from_str("Oz").unwrap(), OptLevel::SizeAggressive);
+    assert_eq!(OptLevel::from_str("-Oz").unwrap(), OptLevel::SizeAggressive);
+    assert_eq!(OptLevel::from_str("Os").unwrap(), OptLevel::Size);
     assert!(OptLevel::from_str("nope").is_err());
 }

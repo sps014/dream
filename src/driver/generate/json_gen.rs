@@ -1,5 +1,5 @@
 //! Builtin `@json` derive: builds a declaration snapshot, runs the Dream `JsonGenerator`
-//! harness (cached WASM), and `emit_file`s the resulting `extend` source.
+//! harness (cached native C), and `emit_file`s the resulting `extend` source.
 
 use super::context::GeneratorContext;
 use dream_diagnostics::DiagnosticBag;
@@ -922,38 +922,58 @@ fn lookup_json_error_span(
 }
 
 #[cfg(feature = "native")]
+fn fnv1a(parts: &[&str]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for p in parts {
+        for b in p.as_bytes() {
+            h ^= u64::from(*b);
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+        h ^= 0xff;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    h
+}
+
+#[cfg(feature = "native")]
 fn cached_harness_c() -> Result<String, String> {
-    let fingerprint = {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut h = DefaultHasher::new();
-        HARNESS_SOURCE.hash(&mut h);
-        dream_mir::abi::STRING_HEADER_SIZE.hash(&mut h);
-        dream_mir::abi::STRING_UNITS_OFFSET.hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
-            .hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_collection.dream")
-            .hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream")
-            .hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
-        include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/passes/rc/insertion.rs").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/backend/c/module.rs").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/backend/c/print.rs").hash(&mut h);
-        h.finish()
-    };
+    let fingerprint = fnv1a(&[
+        HARNESS_SOURCE,
+        include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_collection.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/json.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream"),
+        include_str!("../../../crates/dream-mir/src/passes/rc/insertion.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/c/module.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/c/print.rs"),
+        &format!(
+            "{}:{}",
+            dream_mir::abi::STRING_HEADER_SIZE,
+            dream_mir::abi::STRING_UNITS_OFFSET
+        ),
+    ]);
     let entry = super::current_entry_file();
     let dir = super::manifest::harness_cache_dir(entry.as_deref(), "json-gen-harness", fingerprint);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
+    let lock_path = dir.join(".lock");
+    let lock_file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|e| format!("@json generator: lock harness dir: {e}"))?;
+    lock_file
+        .lock()
+        .map_err(|e| format!("@json generator: lock harness dir: {e}"))?;
     let src_path = dir.join("harness.dream");
     let c_path = dir.join("harness.c");
     if !c_path.is_file() {

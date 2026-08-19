@@ -5,6 +5,7 @@
 # Env:
 #   $env:DREAM_VERSION  optional tag without leading v (default: latest)
 #   $env:DREAM_HOME     install prefix (default: $HOME\.dream)
+#   $env:DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
 
 $ErrorActionPreference = "Stop"
 $Repo = if ($env:DREAM_REPO) { $env:DREAM_REPO } else { "sps014/dream" }
@@ -107,11 +108,62 @@ DREAM_BIN=$BinDir\dream$Ext
     $env:DREAMER_HOME = $BinDir
     $env:DREAM_BIN = Join-Path $BinDir "dream$Ext"
 
+    function Test-EnvCompiler([string]$Value) {
+        if ([string]::IsNullOrEmpty($Value)) { return $false }
+        if (Test-Path -LiteralPath $Value -PathType Leaf) { return $true }
+        return $null -ne (Get-Command $Value -ErrorAction SilentlyContinue)
+    }
+
+    function Test-HasCc {
+        if (Test-EnvCompiler $env:DREAM_CC) { return $true }
+        if (Test-EnvCompiler $env:CC) { return $true }
+        if (Test-EnvCompiler $env:DREAM_ZIG) { return $true }
+        $tc = Join-Path $Prefix "toolchains"
+        if (Test-Path $tc) {
+            foreach ($dir in (Get-ChildItem -Path $tc -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "zig-*" })) {
+                if (Test-Path (Join-Path $dir.FullName "zig.exe")) { return $true }
+                if (Test-Path (Join-Path $dir.FullName "zig")) { return $true }
+            }
+        }
+        foreach ($name in @("cc", "clang", "zig")) {
+            if (Get-Command $name -ErrorAction SilentlyContinue) { return $true }
+        }
+        return $false
+    }
+
+    $CcNote = $null
+    if ($env:DREAM_SKIP_CC -eq "1") {
+        $CcNote = "Skipped C compiler install (DREAM_SKIP_CC=1)"
+        Write-Host $CcNote
+    } elseif (Test-HasCc) {
+        $CcNote = "C compiler already found; skipped dreamer toolchain install cc"
+        Write-Host $CcNote
+    } else {
+        Write-Host "No C compiler on PATH; installing via dreamer toolchain install cc"
+        $dreamer = Join-Path $BinDir "dreamer$Ext"
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $dreamer toolchain install cc
+            if ($LASTEXITCODE -eq 0) {
+                $CcNote = "Installed C compiler (Zig) via dreamer toolchain install cc"
+            } else {
+                $CcNote = "warning: could not install a C compiler; later run: dreamer toolchain install cc"
+                Write-Host $CcNote
+            }
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+    }
+
     Write-Host ""
     Write-Host "Installed:"
     Write-Host "  $BinDir\dream$Ext"
     Write-Host "  $BinDir\dreamer$Ext"
     Write-Host "  $BinDir\dream-lsp$Ext"
+    if ($CcNote) {
+        Write-Host "  $CcNote"
+    }
     Write-Host ""
     Write-Host "Open a new terminal, then: dreamer init hello"
 } finally {

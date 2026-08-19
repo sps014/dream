@@ -6,6 +6,7 @@
 # Env:
 #   DREAM_VERSION   optional tag without leading v (default: latest release)
 #   DREAM_HOME      install prefix (default: ~/.dream)
+#   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
 
 set -euo pipefail
 
@@ -151,6 +152,57 @@ case "$TARGET" in
   windows-*) EXT=.exe ;;
 esac
 
+env_compiler() {
+  local v="$1"
+  [ -n "$v" ] || return 1
+  if [ -f "$v" ]; then
+    return 0
+  fi
+  command -v "$v" >/dev/null 2>&1
+}
+
+has_toolchain_zig() {
+  local cand
+  for cand in "${PREFIX}/toolchains"/zig-*/zig "${PREFIX}/toolchains"/zig-*/zig.exe; do
+    if [ -f "$cand" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+has_cc() {
+  env_compiler "${DREAM_CC:-}" && return 0
+  env_compiler "${CC:-}" && return 0
+  env_compiler "${DREAM_ZIG:-}" && return 0
+  has_toolchain_zig && return 0
+  command -v cc >/dev/null 2>&1 && return 0
+  command -v clang >/dev/null 2>&1 && return 0
+  command -v zig >/dev/null 2>&1 && return 0
+  return 1
+}
+
+CC_NOTE=
+ensure_cc() {
+  if [ "${DREAM_SKIP_CC:-}" = "1" ]; then
+    CC_NOTE="Skipped C compiler install (DREAM_SKIP_CC=1)"
+    echo "${CC_NOTE}"
+    return 0
+  fi
+  if has_cc; then
+    CC_NOTE="C compiler already found; skipped dreamer toolchain install cc"
+    echo "${CC_NOTE}"
+    return 0
+  fi
+  echo "No C compiler on PATH; installing via dreamer toolchain install cc"
+  if "${BIN_DIR}/dreamer${EXT}" toolchain install cc; then
+    CC_NOTE="Installed C compiler (Zig) via dreamer toolchain install cc"
+  else
+    CC_NOTE="warning: could not install a C compiler; later run: dreamer toolchain install cc"
+    echo "${CC_NOTE}" >&2
+  fi
+}
+
 cat > "${PREFIX}/toolchain.env" <<EOF
 DREAM_HOME=${BIN_DIR}
 DREAMER_HOME=${BIN_DIR}
@@ -204,11 +256,16 @@ case ":${PATH}:" in
   *) export PATH="${BIN_DIR}:${PATH}" ;;
 esac
 
+ensure_cc
+
 echo
 echo "Installed:"
 echo "  ${BIN_DIR}/dream${EXT}"
 echo "  ${BIN_DIR}/dreamer${EXT}"
 echo "  ${BIN_DIR}/dream-lsp${EXT}"
+if [ -n "${CC_NOTE}" ]; then
+  echo "  ${CC_NOTE}"
+fi
 echo
 echo "Open a new terminal (or: source ${PREFIX}/env.sh), then:"
 echo "  dream --help"

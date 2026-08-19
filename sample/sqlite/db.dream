@@ -6,23 +6,43 @@
 // Creates `./demo.db` in the process working directory.
 import system;
 
-@native
 @c("sqlite3", "sqlite3_open")
 extern fun sqlite3_open(path: string, ref db: long): int;
 
-@native
 @c("sqlite3", "sqlite3_close")
 extern fun sqlite3_close(db: long): int;
 
-@native
 @c("sqlite3", "sqlite3_exec")
 extern fun sqlite3_exec(
     db: long,
     sql: string,
-    callback: long,
+    callback: fun(long, int, long, long): int,
     arg: long,
     ref errmsg: long
 ): int;
+
+fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
+    return 0;
+}
+
+fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
+    let line = "";
+    let i = 0;
+    while (i < argc) {
+        if (i > 0) {
+            line = line + "|";
+        }
+        let p = Ffi.read_ptr(argv, i);
+        if (p == 0L) {
+            line = line + "NULL";
+        } else {
+            line = line + Ffi.read_cstring(p);
+        }
+        i = i + 1;
+    }
+    System.println(line);
+    return 0;
+}
 
 class Database {
     handle: long;
@@ -48,12 +68,16 @@ class Database {
             return -1;
         }
         let __errmsg: long = 0L;
-        let rc = sqlite3_exec(this.handle, sql, 0L, 0L, ref __errmsg);
+        let rc = sqlite3_exec(this.handle, sql, ignore_row, 0L, ref __errmsg);
         return rc;
     }
 
     public fun query(sql: string): int {
-        return this.exec(sql);
+        if (this.is_open == false) {
+            return -1;
+        }
+        let __errmsg: long = 0L;
+        return sqlite3_exec(this.handle, sql, print_row, 0L, ref __errmsg);
     }
 
     public fun close(): void {

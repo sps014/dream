@@ -36,6 +36,7 @@ _dream_cleanup_locals() {
   unset _dream_home _dream_ext _dream_bin _dreamer_bin _dream_lsp_bin _need
   unset _dream_user_dir _dream_env_file _dream_bin_dir _dream_sh_file _dream_rc _dream_marker
   unset _dream_tmp _dream_new_path _dream_p _dream_name
+  unset _dream_has_cc _cand
   unset -f _dream_fail _dream_cleanup_locals _dream_remove_rc_hook _dream_strip_path 2>/dev/null || true
 }
 
@@ -281,6 +282,44 @@ echo "Ready: dream=$(command -v dream)  dreamer=$(command -v dreamer)  dream-lsp
 echo "New terminals pick this up automatically. This shell is already configured if you sourced the script."
 echo "Reload the Cursor/VS Code window if the LSP was already running."
 echo "To remove:  source ./use-toolchain.sh --unlink"
+
+if [ "${DREAM_SKIP_CC:-}" = "1" ]; then
+  echo "Skipped C compiler install (DREAM_SKIP_CC=1)"
+elif command -v dreamer >/dev/null 2>&1; then
+  _dream_has_cc=0
+  if [ -n "${DREAM_CC:-}" ] && { [ -f "${DREAM_CC}" ] || command -v "${DREAM_CC}" >/dev/null 2>&1; }; then
+    _dream_has_cc=1
+  elif [ -n "${CC:-}" ] && { [ -f "${CC}" ] || command -v "${CC}" >/dev/null 2>&1; }; then
+    _dream_has_cc=1
+  elif [ -n "${DREAM_ZIG:-}" ] && { [ -f "${DREAM_ZIG}" ] || command -v "${DREAM_ZIG}" >/dev/null 2>&1; }; then
+    _dream_has_cc=1
+  else
+    for _cand in "${_dream_user_dir}/toolchains"/zig-*/zig "${_dream_user_dir}/toolchains"/zig-*/zig.exe; do
+      if [ -f "$_cand" ]; then
+        _dream_has_cc=1
+        break
+      fi
+    done
+  fi
+  if [ "$_dream_has_cc" -eq 0 ]; then
+    command -v cc >/dev/null 2>&1 && _dream_has_cc=1
+  fi
+  if [ "$_dream_has_cc" -eq 0 ]; then
+    command -v clang >/dev/null 2>&1 && _dream_has_cc=1
+  fi
+  if [ "$_dream_has_cc" -eq 0 ]; then
+    command -v zig >/dev/null 2>&1 && _dream_has_cc=1
+  fi
+  if [ "$_dream_has_cc" -eq 1 ]; then
+    echo "C compiler already found; skipped dreamer toolchain install cc"
+  else
+    echo "No C compiler on PATH; installing via dreamer toolchain install cc"
+    if ! dreamer toolchain install cc; then
+      echo "warning: could not install a C compiler; later run: dreamer toolchain install cc" >&2
+    fi
+  fi
+  unset _dream_has_cc _cand
+fi
 
 if [ "$_dream_sourced" -eq 0 ]; then
   echo >&2

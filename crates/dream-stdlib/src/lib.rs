@@ -732,6 +732,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 "<std>/system/debug.dream",
                 include_str!("system/debug.dream"),
             ),
+            ("<std>/system/ffi.dream", include_str!("system/ffi.dream")),
         ],
     },
     StdPackage {

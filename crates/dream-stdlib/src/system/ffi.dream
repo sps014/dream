@@ -1,0 +1,24 @@
+module system;
+
+// Host-address-space pointers from `@c` callbacks (`char**`, `char*`). Native-only.
+public class Ffi {
+    @native
+    @intrinsic("dream_ffi_read_ptr")
+    static extern fun host_read_ptr(base: long, index: int): long;
+
+    @native
+    @intrinsic("dream_ffi_read_cstring")
+    static extern fun host_read_cstring(ptr: long): string;
+
+    // `*((void**)base + index)`. `base == 0` returns `0`.
+    @native
+    public static fun read_ptr(base: long, index: int): long {
+        return Ffi.host_read_ptr(base, index);
+    }
+
+    // Copies a NUL-terminated UTF-8 C string at `ptr` into a Dream `string`. `ptr == 0` is empty.
+    @native
+    public static fun read_cstring(ptr: long): string {
+        return Ffi.host_read_cstring(ptr);
+    }
+}

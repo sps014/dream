@@ -203,6 +203,9 @@ fn runtime_archive(
     if !ar.status()?.success() {
         return Err("ar failed for native runtime".into());
     }
+    for o in &objs {
+        let _ = std::fs::remove_file(o);
+    }
     std::fs::write(&stamp, b"ok")?;
     Ok(archive)
 }
@@ -214,10 +217,21 @@ pub fn compile_native_c(
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let obj = c_path.with_extension("o");
     let bin = c_path.with_extension("bin");
+    // Parallel `dream` processes (probe / json harness) share this path.
+    let lock_file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(bin.with_extension("cc.lock"))?;
+    lock_file.lock()?;
     let src = std::fs::read_to_string(c_path)?;
     let need = runtime_need_from_c_source(&src);
     let toolchain = cc::resolve_cc()?;
     let rt = runtime_archive(opt, need, debug)?;
+    if native_bin_fresh(&bin, c_path, &rt) {
+        return Ok(bin);
+    }
     let warn = [
         "-std=gnu11",
         "-pthread",
@@ -267,5 +281,17 @@ pub fn compile_native_c(
     if !status.success() {
         return Err(format!("cc link failed for {}", obj.display()).into());
     }
+    let _ = std::fs::remove_file(&obj);
     Ok(bin)
+}
+
+fn mtime(path: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(path).ok()?.modified().ok()
+}
+
+fn native_bin_fresh(bin: &Path, c_path: &Path, rt: &Path) -> bool {
+    let Some(bin_t) = mtime(bin) else {
+        return false;
+    };
+    mtime(c_path).is_some_and(|t| t <= bin_t) && mtime(rt).is_some_and(|t| t <= bin_t)
 }

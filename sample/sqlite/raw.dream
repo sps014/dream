@@ -1,4 +1,4 @@
-// Raw `@c` bindings to libsqlite3. Out-params use Dream `ref` (not a separate attribute).
+// Raw `@c` bindings to libsqlite3. Out-params use Dream `ref`.
 //
 // Run:
 //   dream run sample/sqlite/raw.dream
@@ -7,16 +7,13 @@
 // `sample/sqlite/native/libsqlite3.dylib` (macOS) / `.so` / `.dll`.
 import system;
 
-@native
 @c("sqlite3", "sqlite3_open")
 extern fun sqlite3_open(path: string, ref db: long): int;
 
-@native
 @c("sqlite3", "sqlite3_close")
 extern fun sqlite3_close(db: long): int;
 
 // sqlite3_exec callback: int (*)(void*, int, char**, char**)
-@native
 @c("sqlite3", "sqlite3_exec")
 extern fun sqlite3_exec(
     db: long,
@@ -27,6 +24,25 @@ extern fun sqlite3_exec(
 ): int;
 
 fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
+    return 0;
+}
+
+fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
+    let line = "";
+    let i = 0;
+    while (i < argc) {
+        if (i > 0) {
+            line = line + "|";
+        }
+        let p = Ffi.read_ptr(argv, i);
+        if (p == 0L) {
+            line = line + "NULL";
+        } else {
+            line = line + Ffi.read_cstring(p);
+        }
+        i = i + 1;
+    }
+    System.println(line);
     return 0;
 }
 
@@ -47,6 +63,10 @@ fun main(): void {
     } else {
         System.println("exec ok");
     }
+
+    let qerr: long = 0L;
+    let qrc = sqlite3_exec(db, "SELECT x FROM t ORDER BY x;", print_row, 0L, ref qerr);
+    System.println("SELECT rc=" + qrc);
 
     let closed = sqlite3_close(db);
     System.println("closed with rc=" + closed);

@@ -220,7 +220,7 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer toolchain list` | Show which of those components are installed. |
 | `dreamer toolchain uninstall cc` | Remove that component. |
 
-`dreamer toolchain install` is **not** `dreamer install` (packages). It is optional: `dream --backend c` uses `DREAM_CC` / `CC`, then the installed Zig, then `cc` / `clang` on `PATH`.
+`dreamer toolchain install` is **not** `dreamer install` (packages). `dream --backend c` uses `DREAM_CC` / `CC`, then the installed Zig, then `cc` / `clang` on `PATH`. The public installer (`install.sh` / `install.ps1`) and `use-toolchain.sh` run `dreamer toolchain install cc` when none of those are found (`DREAM_SKIP_CC=1` skips it).
 
 ### Native `dreamer pack`
 

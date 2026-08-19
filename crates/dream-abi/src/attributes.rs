@@ -537,7 +537,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
             max: 2,
         },
         repeatable: false,
-        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")` for auto-link on the native C host.",
+        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")`. Native-only (`@native` is optional; `@node`/`@web` are rejected).",
     },
     AttributeSpec {
         name: "c_call",
@@ -942,6 +942,7 @@ pub fn extern_import_target(attributes: &[AttributeNode], default_field: &str) -
 
 /// Reports `@c`-family placement errors on one extern's attribute list:
 /// - `@c` combined with `@js` (they name incompatible binding hosts),
+/// - `@c` combined with `@node` or `@web` (`@c` is native-only; `@native` is allowed),
 /// - `@marshal(...)` without `@c` (only meaningful for the C ABI),
 /// - `@c_call(...)` without `@c` (ditto).
 ///
@@ -956,6 +957,16 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
             "an extern function cannot carry both `@c` and `@js`".to_string(),
             pos,
         );
+    }
+    if has_c_attr(attrs) {
+        for name in ["node", "web"] {
+            if let Some(attr) = attrs.iter().find(|a| a.name.text == name) {
+                diagnostics.report_error(
+                    format!("'@c' is native-only and cannot be combined with '@{name}'"),
+                    Some(attr.name.position),
+                );
+            }
+        }
     }
     if !has_c_attr(attrs) {
         for name in ["marshal", "c_call"] {
@@ -1375,11 +1386,35 @@ mod tests {
 
     #[test]
     fn c_attr_implies_native_only_runtime() {
-        let attrs = &[attr("c", &["\"m\"", "\"f\""]), attr("web", &[])];
+        let attrs = &[attr("c", &["\"m\"", "\"f\""])];
         let support = RuntimeSupport::from_attributes(attrs);
         assert!(support.native);
         assert!(!support.node);
         assert!(!support.web);
+    }
+
+    #[test]
+    fn c_with_native_is_accepted() {
+        let attrs = &[attr("c", &["\"m\"", "\"f\""]), attr("native", &[])];
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
+        assert!(!diagnostics.has_errors());
+        let support = RuntimeSupport::from_attributes(attrs);
+        assert!(support.native);
+        assert!(!support.node);
+        assert!(!support.web);
+    }
+
+    #[test]
+    fn c_with_web_or_node_is_rejected() {
+        for host in ["web", "node"] {
+            let attrs = &[attr("c", &["\"m\"", "\"f\""]), attr(host, &[])];
+            let mut diagnostics = DiagnosticBag::new(None);
+            validate_c_extern_attrs(attrs, &mut diagnostics);
+            if !diagnostics.has_errors() {
+                panic!("expected '@c' + '@{}' to be rejected", host);
+            }
+        }
     }
 
     #[test]

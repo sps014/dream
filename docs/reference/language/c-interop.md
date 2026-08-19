@@ -5,7 +5,6 @@ Dream can call native C libraries through the `@c(...)` attribute. This is **nat
 ## Declaring an extern
 
 ```dream
-@native
 @c("sqlite3", "sqlite3_open")
 extern fun sqlite3_open(path: string, ref db: long): int;
 ```
@@ -22,7 +21,6 @@ C APIs often return values by writing through a pointer. Dream models that with 
 parameter — no separate attribute is needed:
 
 ```dream
-@native
 @c("sqlite3", "sqlite3_open")
 extern fun sqlite3_open(path: string, ref db: long): int;
 
@@ -40,7 +38,6 @@ By default, `string` parameters are copied into a fresh C `NUL`-terminated byte 
 released after the call. To pass UTF-16 (Windows `LPWSTR`, WinAPI-style) instead:
 
 ```dream
-@native
 @c("user32", "MessageBoxW")
 @marshal("lpwstr")
 extern fun MessageBoxW(hwnd: long, text: string, caption: string, flags: int): int;
@@ -54,7 +51,6 @@ Cdecl is the default on all supported hosts. Use `@c_call("stdcall")` for Win32 
 `stdcall` convention:
 
 ```dream
-@native
 @c("user32", "GetSystemMetrics")
 @c_call("stdcall")
 extern fun GetSystemMetrics(index: int): int;
@@ -74,7 +70,6 @@ struct Point {
     y: int;
 }
 
-@native
 @c("mylib", "point_distance")
 extern fun point_distance(a: Point, b: Point): double;
 ```
@@ -92,7 +87,6 @@ fun row_cb(arg: long, argc: int, argv: long, cols: long): int {
     return 0; // continue
 }
 
-@native
 @c("sqlite3", "sqlite3_exec")
 extern fun sqlite3_exec(
     db: long,
@@ -162,6 +156,9 @@ DROP rc=0
 CREATE rc=0
 INSERT rc=0
 --- SELECT ---
+1|apple
+2|pear
+3|kiwi
 SELECT rc=0
 done
 ```
@@ -183,20 +180,15 @@ search when linking.
 ## Host helpers for C pointers
 
 SQLite (and most C libraries) pass `char*` / `T*` that live in the **host** address space, not
-inside the Dream program. From a Dream callback, use:
+inside the Dream program. From a Dream callback, use `Ffi` (`import system;`, native-only):
 
 ```dream
-@native
-@js("dream_ffi", "read_ptr")
-extern fun ffi_read_ptr(base: long, index: int): long;
-
-@native
-@js("dream_ffi", "read_cstring")
-extern fun ffi_read_cstring(ptr: long): string;
+let p = Ffi.read_ptr(argv, i);       // *((void**)argv + i)
+let s = Ffi.read_cstring(p);         // NUL-terminated UTF-8 → string
 ```
 
-`read_ptr(base, i)` loads `*((void**)base + i)`; `read_cstring` copies a NUL-terminated UTF-8
-C string into a Dream `string`.
+`Ffi.read_ptr(base, i)` loads `*((void**)base + i)`; `Ffi.read_cstring` copies a NUL-terminated
+UTF-8 C string into a Dream `string`.
 
 ## Compared to `@js`
 

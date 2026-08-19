@@ -24,7 +24,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh |
 irm https://sps014.github.io/dream/install.ps1 | iex
 ```
 
-That installs `dream` (compile and run), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`.
+That installs `dream` (compile and run), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`. If no C compiler (`cc` / `clang` / Zig) is already on the machine, the installer also runs `dreamer toolchain install cc` (pinned Zig). Set `DREAM_SKIP_CC=1` to skip that download.
 
 Open a **new terminal**, then check:
 

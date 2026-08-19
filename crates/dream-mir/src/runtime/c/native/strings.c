@@ -1,5 +1,6 @@
 #include "include/dream_rt_native.h"
 
+#include <limits.h>
 #include <stdlib.h>
 
 dream_ptr dream_string_alloc(int32_t units) {
@@ -18,6 +19,12 @@ dream_ptr dream_array_new(int32_t len, int32_t esize) {
     dream_ptr p;
     if (len < 0) {
         len = 0;
+    }
+    if (esize < 1) {
+        esize = 1;
+    }
+    if (len > 0 && (uint32_t)esize > (uint32_t)(INT32_MAX - 4) / (uint32_t)len) {
+        abort();
     }
     size = 4 + len * esize;
     p = dream_malloc(size, TAG_ARRAY);

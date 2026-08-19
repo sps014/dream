@@ -1,5 +1,6 @@
 #include "include/dream_rt_native.h"
 
+#include <limits.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -17,6 +18,10 @@
 #define MAGIC_FREE 0x46524545u
 
 static dream_ptr freelist[NCLASS];
+/* First-fit list for blocks larger than the biggest size class (64KiB), matching
+ * wasm `$malloc`'s huge list. Oversized HTTP bodies / `byte[]`s must not be stuffed
+ * into class 12 or bump-allocated past a 4MiB mmap. */
+static dream_ptr large_freelist;
 static char *arena;
 static size_t arena_off;
 static size_t arena_len;
@@ -72,12 +77,43 @@ static void *map_chunk(size_t n) {
 #endif
 }
 
+static void *large_next(char *block) {
+    void *next = NULL;
+    memcpy(&next, block + 8, sizeof(next));
+    return next;
+}
+
+static void large_set_next(char *block, void *next) {
+    memcpy(block + 8, &next, sizeof(next));
+}
+
+static char *large_try_take(int32_t need) {
+    dream_ptr prev = 0;
+    dream_ptr curr = large_freelist;
+    while (curr != 0) {
+        char *block = (char *)dream_p(curr);
+        void *next = large_next(block);
+        if (((uint32_t *)block)[1] == MAGIC_FREE && ((int32_t *)block)[0] >= need) {
+            if (prev == 0) {
+                large_freelist = (dream_ptr)(uintptr_t)next;
+            } else {
+                large_set_next((char *)dream_p(prev), next);
+            }
+            return block;
+        }
+        prev = curr;
+        curr = (dream_ptr)(uintptr_t)next;
+    }
+    return NULL;
+}
+
 static char *bump(size_t n) {
     size_t aligned = (n + 15u) & ~15u;
-    if (arena == NULL || arena_off + aligned > arena_len) {
-        arena = (char *)map_chunk(CHUNK);
+    if (arena == NULL || aligned > arena_len || arena_off > arena_len - aligned) {
+        size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
+        arena = (char *)map_chunk(map_len);
         arena_off = 0;
-        arena_len = CHUNK;
+        arena_len = map_len;
         if (arena == NULL) {
             abort();
         }
@@ -93,10 +129,16 @@ static char *bump(size_t n) {
 }
 
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
-    int32_t total = ((size + 15) & -16) + 16;
-    int idx = size_class(total);
+    int32_t total;
+    int idx;
     char *block = NULL;
-    int32_t alloc_size = total;
+    int32_t alloc_size;
+    if (size < 0 || size > (INT32_MAX - 31)) {
+        abort();
+    }
+    total = ((size + 15) & -16) + 16;
+    idx = size_class(total);
+    alloc_size = total;
     if (idx >= 0 && idx <= 12) {
         alloc_size = class_bytes(idx);
         block = tls_free[idx];
@@ -111,7 +153,9 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
         }
     }
     heap_lock();
-    if (idx >= 0 && idx <= 12) {
+    if (idx > 12) {
+        block = large_try_take(alloc_size);
+    } else if (idx >= 0 && idx <= 12) {
         while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
             if (((uint32_t *)block)[1] != MAGIC_FREE) {
@@ -169,7 +213,16 @@ void dream_free(dream_ptr ptr) {
     }
     idx = size_class(sz);
     if (idx > 12) {
-        idx = 12;
+        heap_lock();
+        ((uint32_t *)block)[1] = MAGIC_FREE;
+        large_set_next(block, dream_p(large_freelist));
+        large_freelist = (dream_ptr)block;
+        last_freed += 1;
+        if (live_objects > 0) {
+            live_objects -= 1;
+        }
+        heap_unlock();
+        return;
     }
     if (tls_free[idx] == NULL) {
         ((uint32_t *)block)[1] = MAGIC_FREE;

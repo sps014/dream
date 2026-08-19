@@ -32,6 +32,7 @@ const SMOKE_CASES: &[&str] = &[
     "ui_render_tree",
     "simd_f32x4",
     "autovec_arr_add",
+    "heap_large_array",
 ];
 
 fn collect_case_paths() -> Vec<PathBuf> {

@@ -141,25 +141,50 @@ fn libdream_name() -> &'static str {
     }
 }
 
-fn libdream_dir() -> Option<PathBuf> {
-    let name = libdream_name();
-    let mut dirs = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(p) = exe.parent() {
-            dirs.push(p.to_path_buf());
-            if p.file_name().and_then(|s| s.to_str()) == Some("deps") {
-                if let Some(parent) = p.parent() {
-                    dirs.push(parent.to_path_buf());
-                }
+fn push_libdream_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
+    if !dir.as_os_str().is_empty() && !dirs.iter().any(|d| d == &dir) {
+        dirs.push(dir);
+    }
+}
+
+fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
+    if let Some(p) = exe.parent() {
+        push_libdream_dir(dirs, p.to_path_buf());
+        if p.file_name().and_then(|s| s.to_str()) == Some("deps") {
+            if let Some(parent) = p.parent() {
+                push_libdream_dir(dirs, parent.to_path_buf());
             }
         }
     }
-    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
-        dirs.push(PathBuf::from(&td).join("debug"));
-        dirs.push(PathBuf::from(&td).join("release"));
+}
+
+fn libdream_dir() -> Option<PathBuf> {
+    let name = libdream_name();
+    let mut dirs = Vec::new();
+    // `~/.dream/bin/dream` is a symlink; `current_exe` is often the link path, which does
+    // not contain libdream. Prefer DREAM_HOME / the canonical binary dir.
+    if let Ok(home) = std::env::var("DREAM_HOME") {
+        if !home.is_empty() {
+            push_libdream_dir(&mut dirs, PathBuf::from(home));
+        }
     }
-    dirs.push(PathBuf::from("target/debug"));
-    dirs.push(PathBuf::from("target/release"));
+    if let Ok(bin) = std::env::var("DREAM_BIN") {
+        if let Some(p) = Path::new(&bin).parent() {
+            push_libdream_dir(&mut dirs, p.to_path_buf());
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Ok(canon) = exe.canonicalize() {
+            push_exe_parent(&mut dirs, &canon);
+        }
+        push_exe_parent(&mut dirs, &exe);
+    }
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
+        push_libdream_dir(&mut dirs, PathBuf::from(&td).join("debug"));
+        push_libdream_dir(&mut dirs, PathBuf::from(&td).join("release"));
+    }
+    push_libdream_dir(&mut dirs, PathBuf::from("target/debug"));
+    push_libdream_dir(&mut dirs, PathBuf::from("target/release"));
     dirs.into_iter().find(|d| d.join(name).exists())
 }
 
@@ -301,11 +326,16 @@ pub fn compile_native_c(
     lcmd.arg(&obj);
     lcmd.arg(&rt);
     lcmd.args(["-lm", "-lpthread"]);
-    if let Some(dir) = libdream_dir() {
-        lcmd.arg(format!("-L{}", dir.display()));
-        lcmd.arg("-ldream");
-        lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
-    }
+    let Some(dir) = libdream_dir() else {
+        return Err(
+            "libdream not found next to the dream binary (needed to link host functions). \
+             Set DREAM_HOME or run `source ./use-toolchain.sh` from the Dream repo."
+                .into(),
+        );
+    };
+    lcmd.arg(format!("-L{}", dir.display()));
+    lcmd.arg("-ldream");
+    lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
     let abi_path = c_path.with_extension("abi.json");
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {

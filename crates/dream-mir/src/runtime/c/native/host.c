@@ -1,7 +1,8 @@
 #include "include/dream_rt_native.h"
 
-#include <math.h>
 #include <errno.h>
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -403,7 +404,7 @@ dream_ptr fileReadBytes(dream_ptr path) {
     fseek(f, 0, SEEK_END);
     sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (sz < 0) {
+    if (sz < 0 || sz > (long)(INT32_MAX - 4)) {
         fclose(f);
         return 0;
     }

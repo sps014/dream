@@ -1,0 +1,12 @@
+// Native bump used to mmap 4MiB chunks and still return a pointer for larger
+// payloads (HTTP bodies, `Buffer.alloc`), then memset walked off the mapping.
+import system;
+fun main(): void {
+    let n = 5000000;
+    let a = Buffer.alloc<byte>(n);
+    a[0] = (byte)1;
+    a[n - 1] = (byte)2;
+    System.println((int)a[0]);
+    System.println((int)a[n - 1]);
+    System.println(a.length);
+}

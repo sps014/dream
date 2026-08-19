@@ -25,6 +25,7 @@ async fun main(): void {
 | `load_url` / `load_html` / `load_file` | set the document |
 | `await run()` | event loop until closed |
 | `close()` | close the window |
+| `close_requested()` | true after the user asked to close |
 | `await eval(js)` | run JavaScript, get a string |
 
 Typed IPC uses `@json` types and `window.Dream` on the page (`on` / `serve` / `emit`). There is also a raw bytes path.

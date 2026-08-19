@@ -10,10 +10,10 @@ public class HttpStreamResponse {
     cancel_token: Option<CancellationToken>;
     closed: bool;
 
-    @js("Dream", "httpReadChunk")
+    @runtime("httpReadChunk")
     static extern async fun host_read_chunk(handle: int, max_bytes: int): char[];
 
-    @js("Dream", "httpCloseStream")
+    @runtime("httpCloseStream")
     static extern fun host_close_stream(handle: int): bool;
 
     public constructor(head: HttpResponse, handle: int, cancel_token: Option<CancellationToken>) {

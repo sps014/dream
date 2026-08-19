@@ -24,6 +24,8 @@ const SMOKE_CASES: &[&str] = &[
     "interfaces",
     "object_protocol",
     "literal_methods",
+    "path_helpers",
+    "stdlib_helpers",
     "diagnostics",
     "last_use_destroy",
     "struct_last_use_move",
@@ -188,6 +190,9 @@ fn run_file_http_parity_e2e() {
         Some(&[
             "file_bytes",
             "file_dir",
+            "file_stats",
+            "file_copy_rename",
+            "file_remove_dir",
             "http_get_local",
             "tcp_echo_local",
             "process_args_basic",

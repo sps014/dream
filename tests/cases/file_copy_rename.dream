@@ -1,0 +1,22 @@
+import system;
+import system.io;
+
+async fun main(): void {
+    let root = "dream_file_copy_rename_e2e";
+    await File.create_dir(root);
+    await File.write(root + "/src.txt", "abc");
+    switch (await File.copy(root + "/src.txt", root + "/dst.txt")) {
+        Ok(_) => System.println((await File.read(root + "/dst.txt")).unwrap_or("")),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await File.rename(root + "/dst.txt", root + "/renamed.txt")) {
+        Ok(_) => {
+            System.println(File.exists(root + "/dst.txt"));
+            System.println((await File.read(root + "/renamed.txt")).unwrap_or(""));
+        },
+        Err(e) => System.println(e.message()),
+    }
+    await File.delete(root + "/src.txt");
+    await File.delete(root + "/renamed.txt");
+    await File.remove_dir(root);
+}

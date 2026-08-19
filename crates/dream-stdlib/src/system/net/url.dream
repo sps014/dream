@@ -138,6 +138,40 @@ public class Url {
         return Url(this.scheme, this.host, this.port, path, this.query, this.fragment);
     }
 
+    public fun with_query(query: string): Url {
+        return Url(this.scheme, this.host, this.port, this.path, query, this.fragment);
+    }
+
+    public fun with_host(host: string): Url {
+        return Url(this.scheme, host, this.port, this.path, this.query, this.fragment);
+    }
+
+    public fun with_fragment(fragment: string): Url {
+        return Url(this.scheme, this.host, this.port, this.path, this.query, fragment);
+    }
+
+    public fun query_params(): Map<string, string> {
+        let map = Map<string, string>();
+        if (this.query.is_empty()) {
+            return map;
+        }
+        let pairs = this.query.split('&');
+        let i = 0;
+        while (i < pairs.length) {
+            let pair = pairs[i];
+            if (pair.is_empty() == false) {
+                let parts = pair.split_once('=');
+                if (parts.length == 2) {
+                    map.set(parts[0], parts[1]);
+                } else {
+                    map.set(pair, string.empty);
+                }
+            }
+            i = i + 1;
+        }
+        return map;
+    }
+
     // Resolves `relative` against this URL (absolute http(s) URLs replace entirely).
     public fun join(relative: string): Result<Url, ParseError> {
         if (relative.starts_with("http://") || relative.starts_with("https://")) {

@@ -12,19 +12,25 @@ public class FileHandle {
         this.path = path;
     }
 
-    @js("Dream", "fileOpen")
+    @runtime("fileOpen")
     static extern fun file_open(path: string, mode: string): int;
 
-    @js("Dream", "fileHandleRead")
+    @runtime("fileHandleRead")
     static extern fun file_handle_read(id: int, n: int): byte[];
 
-    @js("Dream", "fileHandleWrite")
+    @runtime("fileHandleWrite")
     static extern fun file_handle_write(id: int, data: byte[]): long;
 
-    @js("Dream", "fileHandleSeek")
+    @runtime("fileHandleSeek")
     static extern fun file_handle_seek(id: int, pos: long): int;
 
-    @js("Dream", "fileHandleClose")
+    @runtime("fileHandleTell")
+    static extern fun file_handle_tell(id: int): long;
+
+    @runtime("fileHandleSeekEnd")
+    static extern fun file_handle_seek_end(id: int, offset: long): int;
+
+    @runtime("fileHandleClose")
     static extern fun file_handle_close(id: int): void;
 
     static fun open_result(path: string, mode: string): Result<FileHandle, IoError> {
@@ -89,6 +95,57 @@ public class FileHandle {
     // Async wrapper around `seek`.
     public async fun seek_async(pos: long): Result<bool, IoError> {
         return this.seek(pos);
+    }
+
+    // Current cursor offset from the start of the file.
+    public fun tell(): Result<long, IoError> {
+        let pos = FileHandle.file_handle_tell(this._id);
+        if (pos < 0L) {
+            return Result.Err(IoError.other(this.path, "tell failed"));
+        }
+        return Result.Ok(pos);
+    }
+
+    // Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
+    public fun seek_from_end(offset: long): Result<bool, IoError> {
+        if (FileHandle.file_handle_seek_end(this._id, offset) < 0) {
+            return Result.Err(IoError.other(this.path, "seek failed"));
+        }
+        return Result.Ok(true);
+    }
+
+    // Moves the cursor to the end of the file.
+    public fun seek_end(): Result<bool, IoError> {
+        return this.seek_from_end(0L);
+    }
+
+    // Reads bytes until `\n` (not included) or EOF. `None` at EOF with no leftover bytes.
+    public fun read_line(): Result<Option<string>, IoError> {
+        let acc = List<byte>();
+        while (true) {
+            let bytes = this.read(1).unwrap_or(Buffer.alloc<byte>(0));
+            if (bytes.length == 0) {
+                if (acc.length == 0) {
+                    let none: Option<string> = Option.None;
+                    return Result.Ok(none);
+                }
+                return Result.Ok(Option.Some(Encoding.utf8_decode(acc.take_array())));
+            }
+            let b = bytes[0];
+            if ((int)b == 10) {
+                return Result.Ok(Option.Some(Encoding.utf8_decode(acc.take_array())));
+            }
+            if ((int)b != 13) {
+                acc.push(b);
+            }
+        }
+        let eof: Option<string> = Option.None;
+        return Result.Ok(eof);
+    }
+
+    // Writes UTF-8 bytes of `text` at the current position.
+    public fun write_text(text: string): Result<int, IoError> {
+        return this.write(Encoding.utf8_encode(text));
     }
 
     // Releases the OS handle (sync only).

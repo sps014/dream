@@ -371,10 +371,204 @@ dream_ptr __iface_dispatch_12_11(dream_ptr this) {
   return (fn)(this);
 }
 
-static void * dream_iface_13_0[13];
-dream_ptr __iface_dispatch_13_0(dream_ptr this) {
+static void * dream_iface_12_12[13];
+dream_ptr __iface_dispatch_12_12(dream_ptr this, dream_ptr a0) {
   int32_t tag = dream_object_tag(this);
-  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_13_0[tag];
+  dream_fn_ptr_ptr__ptr fn = (dream_fn_ptr_ptr__ptr)dream_iface_12_12[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_13_0[13];
+int32_t __iface_dispatch_13_0(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__i32 fn = (dream_fn_ptr__i32)dream_iface_13_0[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_13_1[13];
+dream_ptr __iface_dispatch_13_1(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_13_1[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_13_2[13];
+int32_t __iface_dispatch_13_2(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__i32 fn = (dream_fn_ptr__i32)dream_iface_13_2[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_13_3[13];
+int32_t __iface_dispatch_13_3(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_13_3[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_13_4[13];
+int32_t __iface_dispatch_13_4(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_13_4[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_13_5[13];
+int32_t __iface_dispatch_13_5(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_13_5[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_13_6[13];
+int32_t __iface_dispatch_13_6(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_13_6[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_13_7[13];
+dream_ptr __iface_dispatch_13_7(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__ptr fn = (dream_fn_ptr_ptr__ptr)dream_iface_13_7[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_13_8[13];
+void __iface_dispatch_13_8(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__v fn = (dream_fn_ptr_ptr__v)dream_iface_13_8[tag];
+  if (!fn) abort();
+  (fn)(this, a0);
+  return;
+}
+
+static void * dream_iface_14_0[13];
+int32_t __iface_dispatch_14_0(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__i32 fn = (dream_fn_ptr__i32)dream_iface_14_0[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_14_1[13];
+dream_ptr __iface_dispatch_14_1(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_14_1[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_14_2[13];
+int32_t __iface_dispatch_14_2(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__i32 fn = (dream_fn_ptr__i32)dream_iface_14_2[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_14_3[13];
+int32_t __iface_dispatch_14_3(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_14_3[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_14_4[13];
+int32_t __iface_dispatch_14_4(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_14_4[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_14_5[13];
+int32_t __iface_dispatch_14_5(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_14_5[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_14_6[13];
+int32_t __iface_dispatch_14_6(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__i32 fn = (dream_fn_ptr_ptr__i32)dream_iface_14_6[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_14_7[13];
+dream_ptr __iface_dispatch_14_7(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__ptr fn = (dream_fn_ptr_ptr__ptr)dream_iface_14_7[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_14_8[13];
+void __iface_dispatch_14_8(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__v fn = (dream_fn_ptr_ptr__v)dream_iface_14_8[tag];
+  if (!fn) abort();
+  (fn)(this, a0);
+  return;
+}
+
+static void * dream_iface_14_9[13];
+int32_t __iface_dispatch_14_9(dream_ptr this, int32_t a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_i32__i32 fn = (dream_fn_ptr_i32__i32)dream_iface_14_9[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_14_10[13];
+dream_ptr __iface_dispatch_14_10(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_14_10[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_14_11[13];
+dream_ptr __iface_dispatch_14_11(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_14_11[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_14_12[13];
+dream_ptr __iface_dispatch_14_12(dream_ptr this, dream_ptr a0) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr_ptr__ptr fn = (dream_fn_ptr_ptr__ptr)dream_iface_14_12[tag];
+  if (!fn) abort();
+  return (fn)(this, a0);
+}
+
+static void * dream_iface_15_0[13];
+dream_ptr __iface_dispatch_15_0(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_15_0[tag];
+  if (!fn) abort();
+  return (fn)(this);
+}
+
+static void * dream_iface_16_0[13];
+dream_ptr __iface_dispatch_16_0(dream_ptr this) {
+  int32_t tag = dream_object_tag(this);
+  dream_fn_ptr__ptr fn = (dream_fn_ptr__ptr)dream_iface_16_0[tag];
   if (!fn) abort();
   return (fn)(this);
 }
@@ -444,7 +638,8 @@ int32_t dream_guest_entry(void) {
   return 0;
 }
 
-int32_t main(void) {
+int32_t main(int32_t argc, char * *argv) {
+  dream_process_capture_args(argc, argv);
   return dream_guest_entry();
 }
 

@@ -238,6 +238,80 @@ public class Set<T> : Collection<T> {
         return result;
     }
 
+    // Elements present in this set or `other`.
+    public fun union(borrow other: Set<T>): Set<T> {
+        let result = Set<T>(this.count + other.length);
+        let i = 0;
+        while (i < this.cap) {
+            if (this.states[i] == this.epoch) {
+                result.add(this.keys[i]);
+            }
+            i = i + 1;
+        }
+        for (let x in other) {
+            result.add(x);
+        }
+        return result;
+    }
+
+    // Elements present in both sets.
+    public fun intersection(borrow other: Set<T>): Set<T> {
+        let result = Set<T>();
+        let i = 0;
+        while (i < this.cap) {
+            if (this.states[i] == this.epoch) {
+                if (other.contains(this.keys[i])) {
+                    result.add(this.keys[i]);
+                }
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // Elements in this set but not in `other`.
+    public fun difference(borrow other: Set<T>): Set<T> {
+        let result = Set<T>();
+        let i = 0;
+        while (i < this.cap) {
+            if (this.states[i] == this.epoch) {
+                if (other.contains(this.keys[i]) == false) {
+                    result.add(this.keys[i]);
+                }
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // True when every element of this set is in `other`.
+    public fun is_subset(borrow other: Set<T>): bool {
+        let i = 0;
+        while (i < this.cap) {
+            if (this.states[i] == this.epoch) {
+                if (other.contains(this.keys[i]) == false) {
+                    return false;
+                }
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // True when the sets share no elements.
+    public fun is_disjoint(borrow other: Set<T>): bool {
+        let i = 0;
+        while (i < this.cap) {
+            if (this.states[i] == this.epoch) {
+                if (other.contains(this.keys[i])) {
+                    return false;
+                }
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
     // Gets an iterator for the set.
     @iterator
     public fun iterator(): SetIterator<T> {

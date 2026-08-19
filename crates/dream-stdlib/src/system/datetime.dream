@@ -1,11 +1,44 @@
 module system;
 
+// A signed span of time stored as milliseconds.
+public struct Duration {
+    public millis: long;
+
+    public constructor(millis: long) {
+        this.millis = millis;
+    }
+
+    public static fun from_millis(ms: long): Duration {
+        return Duration(ms);
+    }
+
+    public static fun from_seconds(seconds: long): Duration {
+        return Duration(seconds * 1000L);
+    }
+
+    public fun as_millis(): long {
+        return this.millis;
+    }
+
+    public fun as_seconds(): long {
+        return this.millis / 1000L;
+    }
+
+    public fun add(other: Duration): Duration {
+        return Duration(this.millis + other.millis);
+    }
+
+    public fun sub(other: Duration): Duration {
+        return Duration(this.millis - other.millis);
+    }
+}
+
 // A calendar date and time of day.
 public struct DateTime {
-    @js("Dream", "dateNowMillis")
+    @runtime("dateNowMillis")
     static extern fun now_millis(): long;
 
-    @js("Dream", "dateLocalOffsetMinutes")
+    @runtime("dateLocalOffsetMinutes")
     static extern fun local_offset_minutes(epoch_millis: long): int;
 
     // The instant this value represents, as UTC epoch milliseconds.
@@ -48,6 +81,14 @@ public struct DateTime {
     // Wraps a raw UTC epoch millisecond instant.
     public static fun from_epoch_millis(millis: long): DateTime {
         return DateTime(millis, 0);
+    }
+
+    public fun epoch_seconds(): long {
+        return this._epoch_millis / 1000L;
+    }
+
+    public static fun from_epoch_seconds(seconds: long): DateTime {
+        return DateTime.from_epoch_millis(seconds * 1000L);
     }
 
     // Builds a UTC instant from calendar fields.
@@ -179,6 +220,18 @@ public struct DateTime {
         return this.add_millis(amount * 86400000L);
     }
 
+    public fun add(d: Duration): DateTime {
+        return this.add_millis(d.millis);
+    }
+
+    public fun until(other: DateTime): Duration {
+        return Duration(other.epoch_millis - this._epoch_millis);
+    }
+
+    public fun start_of_day(): DateTime {
+        return this.add_millis(0L - this._millis_of_day());
+    }
+
     // Compares to another DateTime.
     public fun compare_to(other: DateTime): int {
         if (this._epoch_millis < other.epoch_millis) {
@@ -253,6 +306,11 @@ public struct DateTime {
             sb.append(DateTime._offset_suffix(this._offset_minutes));
         }
         return sb.build();
+    }
+
+    // Alias of `parse_iso8601`.
+    public static fun parse(text: string): Result<DateTime, ParseError> {
+        return DateTime.parse_iso8601(text);
     }
 
     // Parses an ISO-8601 datetime.
@@ -457,6 +515,18 @@ public struct DateTime {
             i = i + 1;
         }
         return Option.Some(result);
+    }
+}
+
+extend FileStats {
+    // `mtime` as a UTC `DateTime`.
+    public fun modified(): DateTime {
+        return DateTime.from_epoch_millis(this.mtime_millis);
+    }
+
+    // `ctime` as a UTC `DateTime` (inode change time on Unix, not birth time).
+    public fun created(): DateTime {
+        return DateTime.from_epoch_millis(this.ctime_millis);
     }
 }
 

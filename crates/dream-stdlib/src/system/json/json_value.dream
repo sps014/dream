@@ -148,6 +148,49 @@ public class JsonValue {
         return Option.Some(this.str_val);
     }
 
+    public fun as_array(): Option<List<JsonValue>> {
+        if (this.kind != 4) {
+            return Option.None;
+        }
+        return this.items;
+    }
+
+    public fun as_map(): Option<Map<string, JsonValue>> {
+        if (this.kind != 5) {
+            return Option.None;
+        }
+        return this.obj_map;
+    }
+
+    public fun get_or(borrow key: string, fallback: JsonValue): JsonValue {
+        return this.get(key).unwrap_or(fallback);
+    }
+
+    public fun remove(borrow key: string): bool {
+        let mopt = this.obj_map;
+        if (mopt.is_none()) {
+            return false;
+        }
+        let m = mopt.unwrap_or(Map<string, JsonValue>());
+        if (m.contains(key) == false) {
+            return false;
+        }
+        m.remove(key);
+        let keys_opt = this.obj_keys;
+        let vals_opt = this.obj_vals;
+        if (keys_opt.is_some() && vals_opt.is_some()) {
+            let keys = keys_opt.unwrap_or(List<string>());
+            let vals = vals_opt.unwrap_or(List<JsonValue>());
+            let idx = keys.index_of(key);
+            if (idx.is_some()) {
+                let i = idx.unwrap_or(0);
+                keys.remove_at(i);
+                vals.remove_at(i);
+            }
+        }
+        return true;
+    }
+
     // True if the object has the given key.
     public fun has(borrow key: string): bool {
         return switch (this.obj_map) {

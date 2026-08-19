@@ -17,17 +17,10 @@ public class FileStream {
         return bytes;
     }
 
-    // Reads up to `n` bytes from the current position as text, advancing the cursor.
+    // Reads up to `n` bytes from the current position as UTF-8 text, advancing the cursor.
     public fun read(n: int): string {
         let bytes = this.read_bytes(n);
-        let count = bytes.length;
-        let out = string.alloc(count);
-        let i = 0;
-        while (i < count) {
-            string.set(out, i, (char)bytes[i]);
-            i = i + 1;
-        }
-        return out;
+        return Encoding.utf8_decode(bytes);
     }
 
     // Reads everything remaining from the current position as text.
@@ -41,6 +34,25 @@ public class FileStream {
             remaining = 0;
         }
         return this.read(remaining);
+    }
+
+    // Reads one line (without the trailing newline), or `None` at EOF.
+    public fun read_line(): Option<string> {
+        let none: Option<string> = Option.None;
+        let line = this.handle.read_line().unwrap_or(none);
+        let told = this.handle.tell();
+        if (told.is_ok()) {
+            this.pos = (int)told.unwrap_or(0L);
+        }
+        return line;
+    }
+
+    public fun write_text(text: string): Result<int, IoError> {
+        let n = this.handle.write_text(text);
+        if (n.is_ok()) {
+            this.pos = this.pos + n.unwrap_or(0);
+        }
+        return n;
     }
 
     // True while the cursor has not reached the end of the file.
@@ -70,6 +82,20 @@ public class FileStream {
     public fun seek(offset: int): void {
         this.handle.seek((long)offset);
         this.pos = offset;
+    }
+
+    // Moves the cursor to the end of the file.
+    public fun seek_end(): void {
+        this.handle.seek_end();
+        let told = this.handle.tell();
+        if (told.is_ok()) {
+            this.pos = (int)told.unwrap_or(0L);
+        }
+    }
+
+    // Current cursor as a `long` (same as `position()`, for `FileHandle.tell` parity).
+    public fun tell(): long {
+        return (long)this.pos;
     }
 
     // Rewinds the cursor to the start.

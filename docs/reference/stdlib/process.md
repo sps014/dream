@@ -19,12 +19,14 @@ async fun main(): void {
 | Call | Meaning |
 | --- | --- |
 | `await Process.run(cmd, args)` | run to completion, capture output |
+| `await Process.run_checked(...)` | same, `Err` when the exit code is not 0 |
 | `await Process.run_in(cmd, args, cwd)` | same, with a working directory |
+| `Process.which(cmd)` | first matching executable on `PATH` |
 | `await Process.spawn(cmd, args)` | start a child, keep a handle |
 | `await Process.spawn_in(...)` | spawn with `cwd` |
 
 `ProcessOutput`: `.success()`, `.stdout`, `.stderr`, exit code.
 
-`ChildProcess`: `write_stdin` / `write_stdin_text`, `read_stdout` / `read_stderr` (bytes or a line), `wait()`, `kill()`.
+`ChildProcess`: `write_stdin` / `write_stdin_text`, `read_stdout` / `read_stderr` (bytes, a line, or `*_all`), `wait()`, `kill()`.
 
 Failures are `ProcessError` (`message()` / `code()`).

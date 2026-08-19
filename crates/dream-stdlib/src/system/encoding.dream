@@ -94,7 +94,7 @@ public static class Encoding {
 
     // Interprets `bytes` as UTF-8 and builds a Dream string.
     public static fun utf8_decode(bytes: byte[]): string {
-        return Bytes.toWireString(bytes);
+        return string.from_utf8(bytes);
     }
 
     // Encodes `bytes` as lowercase hexadecimal text.
@@ -248,5 +248,142 @@ public static class Encoding {
             i = i + 4;
         }
         return Result.Ok(out);
+    }
+
+    // Base64url alphabet map (`-`/`_` instead of `+`/`/`).
+    static fun b64url_value(c: char): int {
+        if (c == '-') {
+            return 62;
+        }
+        if (c == '_') {
+            return 63;
+        }
+        return b64_value(c);
+    }
+
+    // Encodes `bytes` as Base64url without padding.
+    public static fun base64url_encode(bytes: byte[]): string {
+        let padded = Encoding.base64_encode(bytes);
+        let n = padded.length;
+        while ((n > 0) && (padded.char_at(n - 1) == '=')) {
+            n = n - 1;
+        }
+        let out = string.alloc(n);
+        let i = 0;
+        while (i < n) {
+            let c = padded.char_at(i);
+            if (c == '+') {
+                c = '-';
+            } else if (c == '/') {
+                c = '_';
+            }
+            string.set(out, i, c);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Decodes Base64url text (`-`/`_`, padding optional).
+    public static fun base64url_decode(text: string): Result<byte[], ParseError> {
+        let n = text.length;
+        let pad = 0;
+        let rem = n % 4;
+        if (rem == 1) {
+            return Result.Err(ParseError.invalid("invalid base64url length"));
+        }
+        if (rem == 2) {
+            pad = 2;
+        } else if (rem == 3) {
+            pad = 1;
+        }
+        let std = string.alloc(n + pad);
+        let i = 0;
+        while (i < n) {
+            let c = text.char_at(i);
+            if (c == '-') {
+                c = '+';
+            } else if (c == '_') {
+                c = '/';
+            }
+            string.set(std, i, c);
+            i = i + 1;
+        }
+        while (i < n + pad) {
+            string.set(std, i, '=');
+            i = i + 1;
+        }
+        return Encoding.base64_decode(std);
+    }
+
+    static fun url_unreserved(c: char): bool {
+        if ((c >= 'A') && (c <= 'Z')) {
+            return true;
+        }
+        if ((c >= 'a') && (c <= 'z')) {
+            return true;
+        }
+        if ((c >= '0') && (c <= '9')) {
+            return true;
+        }
+        return (c == '-') || (c == '_') || (c == '.') || (c == '~');
+    }
+
+    // Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).
+    public static fun url_encode(text: string): string {
+        let bytes = Encoding.utf8_encode(text);
+        let sb = StringBuilder();
+        let i = 0;
+        while (i < bytes.length) {
+            let b = (int)bytes[i];
+            let c = (char)b;
+            if (Encoding.url_unreserved(c)) {
+                sb.append_char(c);
+            } else {
+                sb.append_char('%');
+                sb.append_char(hex_digit(b / 16));
+                sb.append_char(hex_digit(b % 16));
+            }
+            i = i + 1;
+        }
+        return sb.build();
+    }
+
+    // Decodes a percent-encoded URL component.
+    public static fun url_decode(text: string): Result<string, ParseError> {
+        let n = text.length;
+        let out = Buffer.alloc<byte>(n);
+        let w = 0;
+        let i = 0;
+        while (i < n) {
+            let c = text.char_at(i);
+            if (c == '%') {
+                if (i + 2 >= n) {
+                    return Result.Err(ParseError.invalid("truncated percent-encoding"));
+                }
+                let hi = hex_value(text.char_at(i + 1));
+                let lo = hex_value(text.char_at(i + 2));
+                if ((hi < 0) || (lo < 0)) {
+                    return Result.Err(ParseError.invalid("invalid percent-encoding"));
+                }
+                out[w] = (byte)(hi * 16 + lo);
+                w = w + 1;
+                i = i + 3;
+            } else if (c == '+') {
+                out[w] = (byte)32;
+                w = w + 1;
+                i = i + 1;
+            } else {
+                out[w] = (byte)c.to_int();
+                w = w + 1;
+                i = i + 1;
+            }
+        }
+        let exact = Buffer.alloc<byte>(w);
+        let j = 0;
+        while (j < w) {
+            exact[j] = out[j];
+            j = j + 1;
+        }
+        return Result.Ok(Encoding.utf8_decode(exact));
     }
 }

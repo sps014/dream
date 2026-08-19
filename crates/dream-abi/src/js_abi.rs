@@ -12,8 +12,8 @@
 
 use dream_types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
 
-/// The host module every `@js` bridge is imported from: matches the first argument of the
-/// `@js("Dream", …)` attributes in `stdlib/core/js.dream` and the module object installed by
+/// The host module Dream runtime bridges are imported from: `@runtime("fileRead")` and the
+/// `@js("Dream", …)` attributes in `stdlib/core/js.dream`, matching the module object installed by
 /// `runtime/dream.js`.
 pub const HOST_MODULE: &str = "Dream";
 

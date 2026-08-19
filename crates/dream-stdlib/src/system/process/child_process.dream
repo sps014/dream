@@ -9,24 +9,24 @@ public class ChildProcess {
     }
 
     @native @node
-    @js("Dream", "processWriteStdin")
+    @runtime("processWriteStdin")
     static extern fun host_write_stdin(handle: int, data: byte[]): bool;
 
     // `stream`: 0 = stdout, 1 = stderr.
     @native @node
-    @js("Dream", "processReadStream")
+    @runtime("processReadStream")
     static extern async fun host_read_stream(handle: int, stream: int, max_bytes: int): char[];
 
     @native @node
-    @js("Dream", "processReadStreamLine")
+    @runtime("processReadStreamLine")
     static extern async fun host_read_stream_line(handle: int, stream: int): char[];
 
     @native @node
-    @js("Dream", "processWait")
+    @runtime("processWait")
     static extern async fun host_wait(handle: int): char[];
 
     @native @node
-    @js("Dream", "processKill")
+    @runtime("processKill")
     static extern fun host_kill(handle: int): bool;
 
     // Copies `data[start..]` into a fresh `byte[]` (byte-exact; each `char` is one raw byte).
@@ -74,6 +74,11 @@ public class ChildProcess {
         return ChildProcess.slice_to_bytes(raw, 0);
     }
 
+    @native @node
+    public async fun read_stdout_all(): byte[] {
+        return await this.read_stream_all(0);
+    }
+
     // Reads one line from stdout (without the trailing newline), or `None` at end-of-file.
     @native @node
     public async fun read_stdout_line(): Option<string> {
@@ -85,6 +90,11 @@ public class ChildProcess {
     public async fun read_stderr(max_bytes: int): byte[] {
         let raw = await ChildProcess.host_read_stream(this._handle, 1, max_bytes);
         return ChildProcess.slice_to_bytes(raw, 0);
+    }
+
+    @native @node
+    public async fun read_stderr_all(): byte[] {
+        return await this.read_stream_all(1);
     }
 
     // Reads one line from stderr (without the trailing newline), or `None` at end-of-file.
@@ -106,5 +116,42 @@ public class ChildProcess {
     @native @node
     public fun kill(): bool {
         return ChildProcess.host_kill(this._handle);
+    }
+
+    @native @node
+    async fun read_stream_all(stream: int): byte[] {
+        let acc = Buffer.alloc<byte>(0);
+        let n = 0;
+        while (true) {
+            let raw = await ChildProcess.host_read_stream(this._handle, stream, 65536);
+            let chunk = ChildProcess.slice_to_bytes(raw, 0);
+            if (chunk.length == 0) {
+                break;
+            }
+            let need = n + chunk.length;
+            if (need > acc.length) {
+                let cap = acc.length;
+                if (cap < 1) {
+                    cap = chunk.length;
+                }
+                while (cap < need) {
+                    cap = cap * 2;
+                }
+                acc = Buffer.realloc<byte>(acc, cap);
+            }
+            let i = 0;
+            while (i < chunk.length) {
+                acc[n] = chunk[i];
+                n = n + 1;
+                i = i + 1;
+            }
+        }
+        let out = Buffer.alloc<byte>(n);
+        let j = 0;
+        while (j < n) {
+            out[j] = acc[j];
+            j = j + 1;
+        }
+        return out;
     }
 }

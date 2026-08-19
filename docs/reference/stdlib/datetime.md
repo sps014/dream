@@ -28,7 +28,7 @@ Convert with `.to_utc()` / zone methods. Add or subtract with arithmetic helpers
 
 ## Format and parse
 
-`to_string()` for a default rendering; parse helpers return `Result`.
+`to_string()` for a default rendering; `parse` / `parse_iso8601` return `Result`. `Duration` is a millisecond span (`from_seconds`, `as_millis`, `add` / `sub`); `DateTime.add(d)` and `until(other)` use it.
 
 ## `TimeZone`
 

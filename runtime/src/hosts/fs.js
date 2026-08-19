@@ -7,6 +7,35 @@ import { getNodeFs } from "../platform.js";
  */
 const memFiles = new Map(); // path -> Uint8Array
 const memDirs = new Set(); // explicit directory markers
+const memTimes = new Map(); // path -> epoch millis
+
+function memTouch(path) {
+  memTimes.set(path, Date.now());
+}
+
+function memStatWire(path) {
+  if (!memFs.exists(path)) return "";
+  const isDir = memFs.isDir(path);
+  const size = isDir ? 0 : memFs.size(path);
+  const t = Math.trunc(memTimes.get(path) || 0);
+  const kind = isDir ? 1 : 0;
+  return `${size}\n${t}\n${t}\n${t}\n0\n${kind}`;
+}
+
+function nodeStatWire(path) {
+  try {
+    const st = getNodeFs().statSync(path);
+    let kind = 3;
+    if (st.isFile()) kind = 0;
+    else if (st.isDirectory()) kind = 1;
+    else if (st.isSymbolicLink()) kind = 2;
+    const mode = typeof process !== "undefined" && process.platform === "win32" ? 0 : (st.mode & 0xffff);
+    const ms = (v) => Math.trunc(Number(v) || 0);
+    return `${Number(st.size)}\n${ms(st.mtimeMs)}\n${ms(st.ctimeMs)}\n${ms(st.atimeMs)}\n${mode}\n${kind}`;
+  } catch (_) {
+    return "";
+  }
+}
 const memFs = {
   readBytes(path) {
     const bytes = memFiles.get(path);
@@ -15,6 +44,7 @@ const memFs = {
   },
   write(path, bytes) {
     memFiles.set(path, Uint8Array.from(bytes));
+    memTouch(path);
   },
   append(path, bytes) {
     const prev = memFiles.get(path) || new Uint8Array(0);
@@ -22,12 +52,14 @@ const memFs = {
     next.set(prev, 0);
     next.set(bytes, prev.length);
     memFiles.set(path, next);
+    memTouch(path);
   },
   exists(path) {
     return memFiles.has(path) || memDirs.has(path) || this.isDir(path);
   },
   remove(path) {
     memDirs.delete(path);
+    memTimes.delete(path);
     return memFiles.delete(path);
   },
   size(path) {
@@ -63,13 +95,87 @@ const memFs = {
   mkdir(path) {
     if (memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
     memDirs.add(path);
+    memTouch(path);
   },
   mkdirAll(path) {
     const parts = path.split("/").filter(Boolean);
     let cur = path.startsWith("/") ? "" : "";
     for (const part of parts) {
       cur = cur === "" ? (path.startsWith("/") ? "/" + part : part) : cur + "/" + part;
-      if (!memDirs.has(cur) && !memFiles.has(cur)) memDirs.add(cur);
+      if (!memDirs.has(cur) && !memFiles.has(cur)) {
+        memDirs.add(cur);
+        memTouch(cur);
+      }
+    }
+  },
+  copy(from, to) {
+    if (this.isDir(from)) throw new Error(`EISDIR: '${from}'`);
+    this.write(to, this.readBytes(from));
+  },
+  rename(from, to) {
+    if (memFiles.has(from)) {
+      memFiles.set(to, memFiles.get(from));
+      memFiles.delete(from);
+      if (memTimes.has(from)) {
+        memTimes.set(to, memTimes.get(from));
+        memTimes.delete(from);
+      }
+      return;
+    }
+    if (!this.isDir(from)) throw new Error(`ENOENT: '${from}'`);
+    const prefix = from.endsWith("/") ? from : from + "/";
+    const movedFiles = [];
+    for (const key of memFiles.keys()) {
+      if (key === from || key.startsWith(prefix)) movedFiles.push(key);
+    }
+    for (const key of movedFiles) {
+      const next = key === from ? to : to + key.slice(from.length);
+      memFiles.set(next, memFiles.get(key));
+      memFiles.delete(key);
+      if (memTimes.has(key)) {
+        memTimes.set(next, memTimes.get(key));
+        memTimes.delete(key);
+      }
+    }
+    const movedDirs = [];
+    for (const dir of memDirs) {
+      if (dir === from || dir.startsWith(prefix)) movedDirs.push(dir);
+    }
+    for (const dir of movedDirs) {
+      const next = dir === from ? to : to + dir.slice(from.length);
+      memDirs.delete(dir);
+      memDirs.add(next);
+      if (memTimes.has(dir)) {
+        memTimes.set(next, memTimes.get(dir));
+        memTimes.delete(dir);
+      }
+    }
+  },
+  rmdir(path) {
+    if (!this.isDir(path)) throw new Error(`ENOTDIR: '${path}'`);
+    const names = this.list(path);
+    if (names.length > 0) throw new Error(`ENOTEMPTY: '${path}'`);
+    memDirs.delete(path);
+    memTimes.delete(path);
+  },
+  rmAll(path) {
+    if (memFiles.has(path)) {
+      this.remove(path);
+      return;
+    }
+    if (!this.exists(path)) throw new Error(`ENOENT: '${path}'`);
+    const prefix = path.endsWith("/") ? path : path + "/";
+    for (const key of Array.from(memFiles.keys())) {
+      if (key === path || key.startsWith(prefix)) {
+        memFiles.delete(key);
+        memTimes.delete(key);
+      }
+    }
+    for (const dir of Array.from(memDirs)) {
+      if (dir === path || dir.startsWith(prefix)) {
+        memDirs.delete(dir);
+        memTimes.delete(dir);
+      }
     }
   },
 };
@@ -90,6 +196,10 @@ function nodeFsBackend() {
     list: (p) => { try { return fs.readdirSync(p).sort(); } catch (_) { return []; } },
     mkdir: (p) => { fs.mkdirSync(p); },
     mkdirAll: (p) => { fs.mkdirSync(p, { recursive: true }); },
+    copy: (from, to) => { fs.copyFileSync(from, to); },
+    rename: (from, to) => { fs.renameSync(from, to); },
+    rmdir: (p) => { fs.rmdirSync(p); },
+    rmAll: (p) => { fs.rmSync(p, { recursive: true, force: false }); },
   };
   return _nodeFsBackend;
 }
@@ -207,6 +317,28 @@ function fileHandleSeekHost(id, pos) {
   return 0;
 }
 
+function fileHandleTellHost(id) {
+  const h = fileHandles.get(id);
+  if (!h) return BigInt(-1);
+  return BigInt(h.pos);
+}
+
+function fileHandleSeekEndHost(id, offset) {
+  const h = fileHandles.get(id);
+  if (!h) return -1;
+  let size = 0;
+  if (h.kind === "node") {
+    try { size = Number(getNodeFs().fstatSync(h.fd).size); } catch (_) { return -1; }
+  } else {
+    const bytes = memFiles.get(h.path);
+    size = bytes ? bytes.length : 0;
+  }
+  const target = size + Number(offset);
+  if (target < 0) return -1;
+  h.pos = target;
+  return 0;
+}
+
 function fileHandleCloseHost(id) {
   const h = fileHandles.get(id);
   if (!h) return;
@@ -237,6 +369,19 @@ export function makeFsHost() {
     fileDelete: (path) => fsBackend().remove(path),
     fileSize: (path) => BigInt(fsBackend().size(path)),
     fileIsDir: (path) => fsBackend().isDir(path),
+    fileStat: (path) => getNodeFs() ? nodeStatWire(path) : memStatWire(path),
+    fileCopy: (from, to) => {
+      try { fsBackend().copy(from, to); return true; } catch (_) { return false; }
+    },
+    fileRename: (from, to) => {
+      try { fsBackend().rename(from, to); return true; } catch (_) { return false; }
+    },
+    dirRemove: (path) => {
+      try { fsBackend().rmdir(path); return true; } catch (_) { return false; }
+    },
+    dirRemoveAll: (path) => {
+      try { fsBackend().rmAll(path); return true; } catch (_) { return false; }
+    },
     dirList: (path) => fsBackend().list(path).join("\n"),
     dirCreate: (path) => {
       try { fsBackend().mkdir(path); return true; } catch (_) { return false; }
@@ -248,6 +393,8 @@ export function makeFsHost() {
     fileHandleRead: (id, n) => fileHandleReadHost(id, n),
     fileHandleWrite: (id, data) => fileHandleWriteHost(id, data),
     fileHandleSeek: (id, pos) => fileHandleSeekHost(id, pos),
+    fileHandleTell: (id) => fileHandleTellHost(id),
+    fileHandleSeekEnd: (id, offset) => fileHandleSeekEndHost(id, offset),
     fileHandleClose: (id) => { fileHandleCloseHost(id); },
   };
 }

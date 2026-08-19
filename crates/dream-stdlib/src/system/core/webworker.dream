@@ -14,7 +14,7 @@ module system.core;
 //       System.println(square.to_string());
 //   }
 public class WebWorker {
-    @js("Dream", "workerSpawn")
+    @runtime("workerSpawn")
     static extern fun spawn_host(funcidx: int, env: long): int;
 
     @intrinsic("funcbox_funcidx")
@@ -29,13 +29,13 @@ public class WebWorker {
     @intrinsic("funcbox_env")
     static extern fun env_async(body: fun(string): Future<string>): long;
 
-    @js("Dream", "workerPost")
+    @runtime("workerPost")
     static extern fun post_host(id: int, borrow msg: string): void;
 
-    @js("Dream", "workerRecv")
+    @runtime("workerRecv")
     static extern async fun recv_host(id: int): string;
 
-    @js("Dream", "workerTerminate")
+    @runtime("workerTerminate")
     static extern fun terminate_host(id: int): void;
 
     public static async fun spawn<TOut : shared>(body: fun(): TOut): TOut {

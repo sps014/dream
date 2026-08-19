@@ -35,4 +35,8 @@ public class ProcessError : Error {
     public static fun unsupported(message: string): ProcessError {
         return ProcessError("EUNSUPPORTED", message);
     }
+
+    public static fun failed(message: string): ProcessError {
+        return ProcessError("EEXIT", message);
+    }
 }

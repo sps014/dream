@@ -38,9 +38,9 @@ Need this package: `filter`, `map`, and related helpers that return a `List`.
 | Area | Calls |
 | --- | --- |
 | Size | `.length`, `is_empty()` |
-| Change | `push`, `pop`, `insert`, `remove_at`, `clear`, `set` |
-| Read | `get`, `[]`, `index_of`, `contains` |
-| Order | `sort`, `reverse`, `binary_search` |
+| Change | `push`, `pop`, `insert`, `remove_at`, `clear`, `set`, `reverse`, `concat`, `slice` |
+| Read | `get`, `[]`, `index_of`, `last_index_of`, `contains`, `join` |
+| Order | `sort`, `binary_search` |
 
 ### Sorting and search
 
@@ -54,7 +54,7 @@ Typed `{k: v, …}` literal, or `Map<K, V>()`.
 | --- | --- |
 | Size | `.length`, `is_empty()` |
 | Change | `set`, `remove`, `clear` |
-| Read | `get` → `Option<V>`, `contains_key`, `keys`, `values` |
+| Read | `get` → `Option<V>`, `contains`, `get_or`, `get_or_insert`, `keys`, `values`, `entries` |
 
 `for (let pair in map)` yields `KeyValuePair<K, V>` (`.key`, `.value`).
 
@@ -62,7 +62,7 @@ Typed `{k: v, …}` literal, or `Map<K, V>()`.
 
 Typed `{e, …}` literal, or `Set<T>()`.
 
-`add`, `remove`, `contains`, `clear`, `.length`, `is_empty()`.
+`add`, `remove`, `contains`, `clear`, `.length`, `is_empty()`, plus `union` / `intersection` / `difference` / `is_subset` / `is_disjoint`.
 
 ## `Queue<T>` / `Stack<T>`
 

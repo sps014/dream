@@ -241,6 +241,21 @@ export function makeConsoleProcessHost() {
     processEnvSet: (name, value) => {
       if (isNode) process.env[name] = value;
     },
+    processEnvUnset: (name) => {
+      if (isNode) delete process.env[name];
+    },
+    processEnvKeys: () => {
+      if (!isNode) return "";
+      return Object.keys(process.env).sort().join("\n");
+    },
+    processTempDir: () => {
+      if (!isNode) return "/tmp";
+      return process.env.TMPDIR || process.env.TEMP || process.env.TMP || "/tmp";
+    },
+    processHomeDir: () => {
+      if (!isNode) return "";
+      return process.env.HOME || process.env.USERPROFILE || "";
+    },
     processCwd: () => (isNode ? process.cwd() : "/"),
     processSetCwd: (path) => {
       if (!isNode) return false;

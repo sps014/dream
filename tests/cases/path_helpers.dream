@@ -1,0 +1,17 @@
+import system;
+import system.io;
+
+fun main(): void {
+    System.println(Path.stem("a.tar.gz"));
+    System.println(Path.with_extension("a/b.txt", "md"));
+    System.println(Path.with_file_name("a/b.txt", "c.txt"));
+    System.println(Path.is_relative("foo"));
+    System.println(Path.has_extension("a.txt", "txt"));
+    let parts = Path.components("a/b\\c");
+    System.println(parts.join(","));
+    switch (Path.relative_to("a/b/c", "a/b")) {
+        Some(rel) => System.println(rel),
+        None => System.println("none"),
+    }
+    System.println(Path.absolute("/x").starts_with("/"));
+}

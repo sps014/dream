@@ -1,0 +1,44 @@
+module system.io;
+
+// Metadata from a single `stat` of a filesystem path. Times are UTC epoch milliseconds.
+// `mode` is Unix `st_mode` (0 on Windows and in the browser memfs). `kind` is 0 file, 1 directory,
+// 2 symlink, 3 other. `File.stat` follows symlinks, so `kind == 2` is uncommon.
+public class FileStats {
+    public size: long;
+    public mtime_millis: long;
+    public ctime_millis: long;
+    public atime_millis: long;
+    public mode: int;
+    public kind: int;
+
+    public constructor(
+        size: long,
+        mtime_millis: long,
+        ctime_millis: long,
+        atime_millis: long,
+        mode: int,
+        kind: int
+    ) {
+        this.size = size;
+        this.mtime_millis = mtime_millis;
+        this.ctime_millis = ctime_millis;
+        this.atime_millis = atime_millis;
+        this.mode = mode;
+        this.kind = kind;
+    }
+
+    // True when `kind` is a regular file.
+    public fun is_file(): bool {
+        return this.kind == 0;
+    }
+
+    // True when `kind` is a directory.
+    public fun is_dir(): bool {
+        return this.kind == 1;
+    }
+
+    // True when `kind` is a symlink (not used when `File.stat` follows links).
+    public fun is_symlink(): bool {
+        return this.kind == 2;
+    }
+}

@@ -310,6 +310,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
+        name: "system.encoding",
+        deps: &["system.core", "system.primitives", "system.text"],
+        files: &[(
+            "<std>/system/encoding.dream",
+            include_str!("system/encoding.dream"),
+        )],
+    },
+    StdPackage {
         name: "system.json",
         deps: &[
             "system.core",
@@ -483,6 +491,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             "system.primitives",
             "system.collections",
             "system.text",
+            "system.encoding",
         ],
         files: &[
             (
@@ -500,6 +509,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/io/file_stream.dream",
                 include_str!("system/io/file_stream.dream"),
+            ),
+            (
+                "<std>/system/io/file_stats.dream",
+                include_str!("system/io/file_stats.dream"),
             ),
             (
                 "<std>/system/io/file.dream",
@@ -580,14 +593,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
-        name: "system.encoding",
-        deps: &["system.core", "system.primitives", "system.text"],
-        files: &[(
-            "<std>/system/encoding.dream",
-            include_str!("system/encoding.dream"),
-        )],
-    },
-    StdPackage {
         name: "system.crypto",
         deps: &["system.core", "system.primitives"],
         files: &[
@@ -628,6 +633,9 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             "system.primitives",
             "system.text",
             "system.encoding",
+            "system.collections",
+            "system.io",
+            "system",
         ],
         files: &[
             (

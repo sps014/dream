@@ -105,6 +105,11 @@ public class HttpResponse {
         return this.headers.get(name).unwrap_or(string.empty);
     }
 
+    public fun headers(): HttpHeaders {
+        this.scan();
+        return this.headers;
+    }
+
     // The response body as UTF-8 text.
     public fun text(): string {
         this.scan();

@@ -57,6 +57,6 @@ public class GpuError : Error {
         return GpuError.other(msg);
     }
 
-    @js("Dream", "gpuLastError")
+    @runtime("gpuLastError")
     static extern fun last_error_host(): string;
 }

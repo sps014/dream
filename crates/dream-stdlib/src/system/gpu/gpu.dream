@@ -2,19 +2,19 @@ module system.gpu;
 
 // Device lifecycle, host bridges, kernel barriers / atomics / texture builtins.
 public static class Gpu {
-    @js("Dream", "gpuIsAvailable")
+    @runtime("gpuIsAvailable")
     static extern fun is_available_host(): bool;
 
-    @js("Dream", "gpuTryInit")
+    @runtime("gpuTryInit")
     static extern async fun try_init_host(): int;
 
-    @js("Dream", "gpuReady")
+    @runtime("gpuReady")
     static extern fun ready_host(): bool;
 
-    @js("Dream", "gpuFrame")
+    @runtime("gpuFrame")
     static extern async fun frame_host(): void;
 
-    @js("Dream", "gpuTimestamp")
+    @runtime("gpuTimestamp")
     static extern async fun timestamp_host(): long;
 
     // True when a WebGPU/native GPU backend is present.
@@ -44,22 +44,22 @@ public static class Gpu {
         return await Gpu.timestamp_host();
     }
 
-    @js("Dream", "gpuBufferAllocBytes")
+    @runtime("gpuBufferAllocBytes")
     static extern fun buffer_alloc_bytes(n: int): int;
 
-    @js("Dream", "gpuBufferWriteBytes")
+    @runtime("gpuBufferWriteBytes")
     static extern fun buffer_write_bytes(id: int, data: byte[]): void;
 
-    @js("Dream", "gpuBufferWriteBytesAt")
+    @runtime("gpuBufferWriteBytesAt")
     static extern fun buffer_write_bytes_at(id: int, byte_offset: int, data: byte[]): void;
 
-    @js("Dream", "gpuBufferReadBytes")
+    @runtime("gpuBufferReadBytes")
     static extern async fun buffer_read_bytes(id: int, n: int): byte[];
 
-    @js("Dream", "gpuBufferReadBytesAt")
+    @runtime("gpuBufferReadBytesAt")
     static extern async fun buffer_read_bytes_at(id: int, byte_offset: int, n: int): byte[];
 
-    @js("Dream", "gpuBufferCopy")
+    @runtime("gpuBufferCopy")
     static extern fun buffer_copy(
         src_id: int,
         dst_id: int,
@@ -68,7 +68,7 @@ public static class Gpu {
         size: int
     ): void;
 
-    @js("Dream", "gpuDispatch")
+    @runtime("gpuDispatch")
     static extern async fun dispatch(
         kernel: string,
         buffer_ids: int[],
@@ -80,7 +80,7 @@ public static class Gpu {
         uniforms: byte[]
     ): int;
 
-    @js("Dream", "gpuDispatchIndirect")
+    @runtime("gpuDispatchIndirect")
     static extern async fun dispatch_indirect(
         kernel: string,
         buffer_ids: int[],
@@ -90,10 +90,10 @@ public static class Gpu {
         indirect_offset: int
     ): int;
 
-    @js("Dream", "gpuShaderFromWgsl")
+    @runtime("gpuShaderFromWgsl")
     static extern fun shader_from_wgsl(source: string, entry: string): int;
 
-    @js("Dream", "gpuDispatchShader")
+    @runtime("gpuDispatchShader")
     static extern async fun dispatch_shader(
         shader_id: int,
         buffer_ids: int[],
@@ -102,25 +102,25 @@ public static class Gpu {
         wz: int
     ): int;
 
-    @js("Dream", "gpuSamplerCreate")
+    @runtime("gpuSamplerCreate")
     static extern fun sampler_create(filter: int): int;
 
-    @js("Dream", "gpuSamplerCreateEx")
+    @runtime("gpuSamplerCreateEx")
     static extern fun sampler_create_ex(filter: int, address: int, mip_filter: int): int;
 
-    @js("Dream", "gpuTextureCreateRgba8")
+    @runtime("gpuTextureCreateRgba8")
     static extern fun texture_create_rgba8(width: int, height: int): int;
 
-    @js("Dream", "gpuTextureCreateDepth")
+    @runtime("gpuTextureCreateDepth")
     static extern fun texture_create_depth(width: int, height: int): int;
 
-    @js("Dream", "gpuTextureCreateRgba16Float")
+    @runtime("gpuTextureCreateRgba16Float")
     static extern fun texture_create_rgba16float(width: int, height: int): int;
 
-    @js("Dream", "gpuTextureCreateCubeRgba8")
+    @runtime("gpuTextureCreateCubeRgba8")
     static extern fun texture_create_cube_rgba8(size: int): int;
 
-    @js("Dream", "gpuTextureWriteRgba")
+    @runtime("gpuTextureWriteRgba")
     static extern async fun texture_write_rgba(
         id: int,
         pixels: byte[],
@@ -130,10 +130,10 @@ public static class Gpu {
         h: int
     ): int;
 
-    @js("Dream", "gpuTextureReadRgba")
+    @runtime("gpuTextureReadRgba")
     static extern async fun texture_read_rgba(id: int): byte[];
 
-    @js("Dream", "gpuTextureCopyFromBuffer")
+    @runtime("gpuTextureCopyFromBuffer")
     static extern fun texture_copy_from_buffer(
         tex_id: int,
         buf_id: int,
@@ -144,7 +144,7 @@ public static class Gpu {
         h: int
     ): void;
 
-    @js("Dream", "gpuTextureCopyToBuffer")
+    @runtime("gpuTextureCopyToBuffer")
     static extern fun texture_copy_to_buffer(
         tex_id: int,
         buf_id: int,
@@ -156,77 +156,77 @@ public static class Gpu {
     ): void;
 
     @web @native
-    @js("Dream", "gpuSurfaceFromCanvas")
+    @runtime("gpuSurfaceFromCanvas")
     static extern fun surface_from_canvas(canvas_id: string): int;
 
     @web @native
-    @js("Dream", "gpuSurfaceCreate")
+    @runtime("gpuSurfaceCreate")
     static extern fun surface_create(title: string, width: int, height: int): int;
 
     @web @native
-    @js("Dream", "gpuSurfaceConfigure")
+    @runtime("gpuSurfaceConfigure")
     static extern fun surface_configure(id: int, width: int, height: int): void;
 
     @web @native
-    @js("Dream", "gpuSurfacePresent")
+    @runtime("gpuSurfacePresent")
     static extern async fun surface_present(id: int): int;
 
     @web @native
-    @js("Dream", "gpuSurfacePointer")
+    @runtime("gpuSurfacePointer")
     static extern fun surface_pointer(id: int): byte[];
 
     @web @native
-    @js("Dream", "gpuSurfaceMods")
+    @runtime("gpuSurfaceMods")
     static extern fun surface_mods(id: int): byte[];
 
     @web @native
-    @js("Dream", "gpuSurfaceKeyDown")
+    @runtime("gpuSurfaceKeyDown")
     static extern fun surface_key_down(id: int, code: string): bool;
 
     @web @native
-    @js("Dream", "gpuSurfaceGamepads")
+    @runtime("gpuSurfaceGamepads")
     static extern fun surface_gamepads(id: int): int[];
 
     @web @native
-    @js("Dream", "gpuSurfaceGamepadConnected")
+    @runtime("gpuSurfaceGamepadConnected")
     static extern fun surface_gamepad_connected(id: int, pad: int): bool;
 
     @web @native
-    @js("Dream", "gpuSurfaceGamepadButtonDown")
+    @runtime("gpuSurfaceGamepadButtonDown")
     static extern fun surface_gamepad_button_down(id: int, pad: int, button: int): bool;
 
     @web @native
-    @js("Dream", "gpuSurfaceGamepadAxis")
+    @runtime("gpuSurfaceGamepadAxis")
     static extern fun surface_gamepad_axis(id: int, pad: int, axis: int): float;
 
     @web @native
-    @js("Dream", "gpuSurfaceFocused")
+    @runtime("gpuSurfaceFocused")
     static extern fun surface_focused(id: int): bool;
 
     @web @native
-    @js("Dream", "gpuSurfaceCloseRequested")
+    @runtime("gpuSurfaceCloseRequested")
     static extern fun surface_close_requested(id: int): bool;
 
     @web @native
-    @js("Dream", "gpuSurfacePollEvents")
+    @runtime("gpuSurfacePollEvents")
     static extern fun surface_poll_events(id: int): byte[];
 
     @web @native
-    @js("Dream", "gpuSurfaceWidth")
+    @runtime("gpuSurfaceWidth")
     static extern fun surface_width(id: int): int;
 
     @web @native
-    @js("Dream", "gpuSurfaceHeight")
+    @runtime("gpuSurfaceHeight")
     static extern fun surface_height(id: int): int;
 
     @web @native
-    @js("Dream", "gpuRenderBlit")
+    @runtime("gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
-    @js("Dream", "gpuRenderPipelineCreate")
+    @runtime("gpuRenderPipelineCreate")
     static extern async fun render_pipeline_create(vertex: string, fragment: string): int;
 
-    @js("Dream", "gpuRenderPipelineCreateEx")
+    @runtime("gpuRenderPipelineCreateEx")
     static extern async fun render_pipeline_create_ex(
         vertex: string,
         fragment: string,
@@ -241,7 +241,7 @@ public static class Gpu {
     ): int;
 
     @web @native
-    @js("Dream", "gpuRenderDraw")
+    @runtime("gpuRenderDraw")
     static extern async fun render_draw(
         surface_id: int,
         pipeline_id: int,
@@ -255,7 +255,7 @@ public static class Gpu {
     ): int;
 
     @web @native
-    @js("Dream", "gpuRenderDrawEx")
+    @runtime("gpuRenderDrawEx")
     static extern async fun render_draw_ex(
         surface_id: int,
         pipeline_id: int,
@@ -272,7 +272,7 @@ public static class Gpu {
     ): int;
 
     @web @native
-    @js("Dream", "gpuRenderDrawIndexed")
+    @runtime("gpuRenderDrawIndexed")
     static extern async fun render_draw_indexed(
         surface_id: int,
         pipeline_id: int,
@@ -287,7 +287,7 @@ public static class Gpu {
     ): int;
 
     @web @native
-    @js("Dream", "gpuRenderDrawIndexedEx")
+    @runtime("gpuRenderDrawIndexedEx")
     static extern async fun render_draw_indexed_ex(
         surface_id: int,
         pipeline_id: int,
@@ -306,7 +306,7 @@ public static class Gpu {
 
     // Draws into an offscreen color texture (not the swapchain).
     @web @native
-    @js("Dream", "gpuRenderDrawTo")
+    @runtime("gpuRenderDrawTo")
     static extern async fun render_draw_to(
         color_texture_id: int,
         pipeline_id: int,
@@ -322,23 +322,23 @@ public static class Gpu {
         load_op: int
     ): int;
 
-    @js("Dream", "gpuBufferDestroy")
+    @runtime("gpuBufferDestroy")
     static extern fun buffer_destroy(id: int): void;
 
-    @js("Dream", "gpuTextureDestroy")
+    @runtime("gpuTextureDestroy")
     static extern fun texture_destroy(id: int): void;
 
-    @js("Dream", "gpuSamplerDestroy")
+    @runtime("gpuSamplerDestroy")
     static extern fun sampler_destroy(id: int): void;
 
-    @js("Dream", "gpuRenderPipelineDestroy")
+    @runtime("gpuRenderPipelineDestroy")
     static extern fun render_pipeline_destroy(id: int): void;
 
     @web @native
-    @js("Dream", "gpuSurfaceDestroy")
+    @runtime("gpuSurfaceDestroy")
     static extern fun surface_destroy(id: int): void;
 
-    @js("Dream", "gpuTextureCopy")
+    @runtime("gpuTextureCopy")
     static extern fun texture_copy(
         src_id: int,
         dst_id: int,
@@ -350,16 +350,16 @@ public static class Gpu {
         height: int
     ): void;
 
-    @js("Dream", "gpuTextureGenerateMipmaps")
+    @runtime("gpuTextureGenerateMipmaps")
     static extern fun texture_generate_mipmaps(id: int): int;
 
-    @js("Dream", "gpuBufferAllocVertexBytes")
+    @runtime("gpuBufferAllocVertexBytes")
     static extern fun buffer_alloc_vertex_bytes(n: int): int;
 
-    @js("Dream", "gpuPassBegin")
+    @runtime("gpuPassBegin")
     static extern fun pass_begin(): int;
 
-    @js("Dream", "gpuPassDispatch")
+    @runtime("gpuPassDispatch")
     static extern fun pass_dispatch(
         pass_id: int,
         kernel: string,
@@ -372,7 +372,7 @@ public static class Gpu {
         uniforms: byte[]
     ): void;
 
-    @js("Dream", "gpuPassDispatchIndirect")
+    @runtime("gpuPassDispatchIndirect")
     static extern fun pass_dispatch_indirect(
         pass_id: int,
         kernel: string,
@@ -383,7 +383,7 @@ public static class Gpu {
         indirect_offset: int
     ): void;
 
-    @js("Dream", "gpuPassSubmit")
+    @runtime("gpuPassSubmit")
     static extern async fun pass_submit(pass_id: int): int;
 
     // Workgroup barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).

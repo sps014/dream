@@ -23,5 +23,7 @@ fun main() {
 | `Encoding.hex_decode(text)` | `Result<byte[], ParseError>` |
 | `Encoding.base64_encode(bytes)` | Base64 |
 | `Encoding.base64_decode(text)` | `Result<byte[], ParseError>` |
+| `Encoding.base64url_encode` / `decode` | URL-safe Base64 |
+| `Encoding.url_encode` / `url_decode` | percent-encoding |
 
 Use this before [crypto](crypto.md) hashes, which take `byte[]`.

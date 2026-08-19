@@ -246,6 +246,10 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
         "debug_get_heap_ptr" => "debug_get_heap_ptr".into(),
         "debug_get_free_list_head" => "debug_get_free_list_head".into(),
         "abs" => "dream_host_abs".into(),
+        "log" => "dream_host_log".into(),
+        "log10" => "dream_host_log10".into(),
+        "exp" => "dream_host_exp".into(),
+        "hypot" => "dream_host_hypot".into(),
         other => c_ident(other),
     }
 }

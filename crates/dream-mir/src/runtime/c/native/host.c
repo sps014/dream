@@ -183,6 +183,10 @@ void print_float(float v) { print_float_shortest(v); }
 void print_double(double v) { printf("%.16g", v); }
 
 double dream_host_abs(double v) { return fabs(v); }
+double dream_host_log(double v) { return log(v); }
+double dream_host_log10(double v) { return log10(v); }
+double dream_host_exp(double v) { return exp(v); }
+double dream_host_hypot(double x, double y) { return hypot(x, y); }
 
 dream_ptr fileRead(dream_ptr path) {
     char *p = dream_str_utf8(path);
@@ -278,11 +282,13 @@ int32_t fileExists(dream_ptr path) {
     char *p = dream_str_utf8(path);
     int32_t ok = 0;
     if (p) {
-        FILE *f = fopen(p, "rb");
-        if (f) {
-            ok = 1;
-            fclose(f);
-        }
+#ifndef _WIN32
+        struct stat st;
+        ok = stat(p, &st) == 0;
+#else
+        struct _stat st;
+        ok = _stat(p, &st) == 0;
+#endif
         free(p);
     }
     return ok;
@@ -429,6 +435,216 @@ int64_t fileWriteBytes(dream_ptr path, dream_ptr data) {
 int32_t fileIsDir(dream_ptr path) {
     char *p = dream_str_utf8(path);
     int32_t ok = p && path_is_dir(p);
+    free(p);
+    return ok;
+}
+
+static int32_t path_kind_and_times(
+    const char *path,
+    int64_t *size,
+    int64_t *mtime_ms,
+    int64_t *ctime_ms,
+    int64_t *atime_ms,
+    int32_t *mode,
+    int32_t *kind
+) {
+#ifdef _WIN32
+    struct _stat st;
+    if (!path || _stat(path, &st) != 0) {
+        return 0;
+    }
+    *size = (int64_t)st.st_size;
+    *mtime_ms = (int64_t)st.st_mtime * 1000;
+    *ctime_ms = (int64_t)st.st_ctime * 1000;
+    *atime_ms = (int64_t)st.st_atime * 1000;
+    *mode = 0;
+    if (st.st_mode & _S_IFDIR) {
+        *kind = 1;
+    } else if (st.st_mode & _S_IFREG) {
+        *kind = 0;
+    } else {
+        *kind = 3;
+    }
+#else
+    struct stat st;
+    if (!path || stat(path, &st) != 0) {
+        return 0;
+    }
+    *size = (int64_t)st.st_size;
+#if defined(__APPLE__)
+    *mtime_ms = (int64_t)st.st_mtimespec.tv_sec * 1000 + (int64_t)st.st_mtimespec.tv_nsec / 1000000;
+    *ctime_ms = (int64_t)st.st_ctimespec.tv_sec * 1000 + (int64_t)st.st_ctimespec.tv_nsec / 1000000;
+    *atime_ms = (int64_t)st.st_atimespec.tv_sec * 1000 + (int64_t)st.st_atimespec.tv_nsec / 1000000;
+#else
+    *mtime_ms = (int64_t)st.st_mtim.tv_sec * 1000 + (int64_t)st.st_mtim.tv_nsec / 1000000;
+    *ctime_ms = (int64_t)st.st_ctim.tv_sec * 1000 + (int64_t)st.st_ctim.tv_nsec / 1000000;
+    *atime_ms = (int64_t)st.st_atim.tv_sec * 1000 + (int64_t)st.st_atim.tv_nsec / 1000000;
+#endif
+    *mode = (int32_t)st.st_mode;
+    if (S_ISREG(st.st_mode)) {
+        *kind = 0;
+    } else if (S_ISDIR(st.st_mode)) {
+        *kind = 1;
+    } else if (S_ISLNK(st.st_mode)) {
+        *kind = 2;
+    } else {
+        *kind = 3;
+    }
+#endif
+    return 1;
+}
+
+dream_ptr fileStat(dream_ptr path) {
+    char *p = dream_str_utf8(path);
+    char buf[192];
+    int64_t size = 0;
+    int64_t mtime_ms = 0;
+    int64_t ctime_ms = 0;
+    int64_t atime_ms = 0;
+    int32_t mode = 0;
+    int32_t kind = 3;
+    dream_ptr out;
+    if (!p || !path_kind_and_times(p, &size, &mtime_ms, &ctime_ms, &atime_ms, &mode, &kind)) {
+        free(p);
+        return dream_str_from_utf8("");
+    }
+    free(p);
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%lld\n%lld\n%lld\n%lld\n%d\n%d",
+        (long long)size,
+        (long long)mtime_ms,
+        (long long)ctime_ms,
+        (long long)atime_ms,
+        mode,
+        kind
+    );
+    out = dream_str_from_utf8(buf);
+    return out;
+}
+
+int32_t fileCopy(dream_ptr from, dream_ptr to) {
+    char *src = dream_str_utf8(from);
+    char *dst = dream_str_utf8(to);
+    FILE *in;
+    FILE *out;
+    char buf[8192];
+    size_t n;
+    int32_t ok = 0;
+    if (!src || !dst || path_is_dir(src)) {
+        free(src);
+        free(dst);
+        return 0;
+    }
+    in = fopen(src, "rb");
+    if (!in) {
+        free(src);
+        free(dst);
+        return 0;
+    }
+    out = fopen(dst, "wb");
+    if (!out) {
+        fclose(in);
+        free(src);
+        free(dst);
+        return 0;
+    }
+    ok = 1;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            ok = 0;
+            break;
+        }
+    }
+    fclose(in);
+    fclose(out);
+    free(src);
+    free(dst);
+    return ok;
+}
+
+int32_t fileRename(dream_ptr from, dream_ptr to) {
+    char *src = dream_str_utf8(from);
+    char *dst = dream_str_utf8(to);
+    int32_t ok = src && dst && rename(src, dst) == 0;
+    free(src);
+    free(dst);
+    return ok;
+}
+
+int32_t dirRemove(dream_ptr path) {
+    char *p = dream_str_utf8(path);
+    int32_t ok = 0;
+    if (p) {
+#ifdef _WIN32
+        ok = _rmdir(p) == 0;
+#else
+        ok = rmdir(p) == 0;
+#endif
+        free(p);
+    }
+    return ok;
+}
+
+static int32_t dir_remove_all_path(const char *path);
+
+#ifdef _WIN32
+static int32_t dir_remove_all_path(const char *path) {
+    char pattern[4096];
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    if (!path_is_dir(path)) {
+        return remove(path) == 0;
+    }
+    snprintf(pattern, sizeof(pattern), "%s\\*", path);
+    h = FindFirstFileA(pattern, &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            char child[4096];
+            if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0) {
+                continue;
+            }
+            snprintf(child, sizeof(child), "%s\\%s", path, fd.cFileName);
+            if (!dir_remove_all_path(child)) {
+                FindClose(h);
+                return 0;
+            }
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+    return _rmdir(path) == 0;
+}
+#else
+static int32_t dir_remove_all_path(const char *path) {
+    DIR *dir;
+    struct dirent *ent;
+    if (!path_is_dir(path)) {
+        return remove(path) == 0;
+    }
+    dir = opendir(path);
+    if (!dir) {
+        return 0;
+    }
+    while ((ent = readdir(dir)) != NULL) {
+        char child[4096];
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+            continue;
+        }
+        snprintf(child, sizeof(child), "%s/%s", path, ent->d_name);
+        if (!dir_remove_all_path(child)) {
+            closedir(dir);
+            return 0;
+        }
+    }
+    closedir(dir);
+    return rmdir(path) == 0;
+}
+#endif
+
+int32_t dirRemoveAll(dream_ptr path) {
+    char *p = dream_str_utf8(path);
+    int32_t ok = p && dir_remove_all_path(p);
     free(p);
     return ok;
 }
@@ -682,6 +898,86 @@ void processEnvSet(dream_ptr name, dream_ptr value) {
     free(text);
 }
 
+void processEnvUnset(dream_ptr name) {
+    char *key = dream_str_utf8(name);
+    if (key) {
+#ifdef _WIN32
+        _putenv_s(key, "");
+#else
+        unsetenv(key);
+#endif
+        free(key);
+    }
+}
+
+dream_ptr processEnvKeys(void) {
+#ifdef _WIN32
+    char **env = _environ;
+#else
+    extern char **environ;
+    char **env = environ;
+#endif
+    char **names = NULL;
+    size_t n = 0;
+    size_t cap = 0;
+    size_t i;
+    dream_ptr out;
+    if (!env) {
+        return dream_str_from_utf8("");
+    }
+    for (i = 0; env[i]; i++) {
+        const char *eq = strchr(env[i], '=');
+        char key[512];
+        size_t len = eq ? (size_t)(eq - env[i]) : strlen(env[i]);
+        if (len >= sizeof(key)) {
+            len = sizeof(key) - 1;
+        }
+        memcpy(key, env[i], len);
+        key[len] = 0;
+        if (!names_push(&names, &n, &cap, key)) {
+            names_free(names, n);
+            return dream_str_from_utf8("");
+        }
+    }
+    out = names_join_lines(names, n);
+    names_free(names, n);
+    return out;
+}
+
+dream_ptr processTempDir(void) {
+#ifdef _WIN32
+    char path[MAX_PATH];
+    DWORD len = GetTempPathA(MAX_PATH, path);
+    if (len == 0 || len >= MAX_PATH) {
+        return dream_str_from_utf8("");
+    }
+    if (len > 0 && (path[len - 1] == '\\' || path[len - 1] == '/')) {
+        path[len - 1] = 0;
+    }
+    return dream_str_from_utf8(path);
+#else
+    const char *t = getenv("TMPDIR");
+    if (!t || !*t) {
+        t = getenv("TMP");
+    }
+    if (!t || !*t) {
+        t = "/tmp";
+    }
+    return dream_str_from_utf8(t);
+#endif
+}
+
+dream_ptr processHomeDir(void) {
+    const char *h = getenv("HOME");
+    if (!h || !*h) {
+        h = getenv("USERPROFILE");
+    }
+    if (!h || !*h) {
+        return dream_str_from_utf8("");
+    }
+    return dream_str_from_utf8(h);
+}
+
 dream_ptr processCwd(void) {
     char path[4096];
     if (!getcwd(path, sizeof(path))) {
@@ -742,6 +1038,15 @@ int64_t fileHandleWrite(int32_t fd, dream_ptr data) {
 
 int32_t fileHandleSeek(int32_t fd, int64_t position) {
     return lseek(fd, (off_t)position, SEEK_SET) < 0 ? -1 : 0;
+}
+
+int64_t fileHandleTell(int32_t fd) {
+    off_t pos = lseek(fd, 0, SEEK_CUR);
+    return pos < 0 ? -1 : (int64_t)pos;
+}
+
+int32_t fileHandleSeekEnd(int32_t fd, int64_t offset) {
+    return lseek(fd, (off_t)offset, SEEK_END) < 0 ? -1 : 0;
 }
 
 void fileHandleClose(int32_t fd) {

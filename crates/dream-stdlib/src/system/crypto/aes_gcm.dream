@@ -19,14 +19,14 @@ public static class AesGcm {
     }
 
     @native @node
-    @js("Dream", "cryptoAesGcmEncrypt")
+    @runtime("cryptoAesGcmEncrypt")
     static extern fun encrypt_host(key: byte[], nonce: byte[], plaintext: byte[], aad: byte[]): byte[];
 
     // Host returns `[ok_flag, ...payload]` (see `decrypt_host`'s doc) so a hard authentication
     // failure can be distinguished from a genuinely empty plaintext without throwing across the
     // host boundary.
     @native @node
-    @js("Dream", "cryptoAesGcmDecrypt")
+    @runtime("cryptoAesGcmDecrypt")
     static extern fun decrypt_host(key: byte[], nonce: byte[], ciphertext: byte[], aad: byte[]): byte[];
 
     // Encrypts `plaintext` under `key`/`nonce`, authenticating `aad` (additional authenticated

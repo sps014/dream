@@ -237,7 +237,18 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
             max: 2,
         },
         repeatable: false,
-        doc: "Binds an extern function to a JavaScript host import: `@js(\"module\", \"export\")`.",
+        doc: "Binds an extern function to a JavaScript host import: `@js(\"module\", \"export\")`. JS-only (user interop, `js` type, WASM `env`/libm). Dream runtime hosts that exist on native and WASM use `@runtime` instead.",
+    },
+    AttributeSpec {
+        name: "runtime",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Binds an extern to the Dream runtime host on WASM and native: `@runtime(\"fileRead\")` imports `Dream.fileRead` and calls the C symbol `fileRead`.",
     },
     AttributeSpec {
         name: "allow_cycle",
@@ -902,6 +913,17 @@ pub fn js_import_target(attributes: &[AttributeNode]) -> Option<(String, String)
     Some((module, field))
 }
 
+/// Host field from `@runtime("fileRead")`, or `None` when the attribute is absent.
+pub fn runtime_import_field(attributes: &[AttributeNode]) -> Option<String> {
+    let attr = attributes.iter().find(|a| a.name.text == "runtime")?;
+    attr.args.first()?.as_string().map(|s| s.to_string())
+}
+
+/// True when the declaration carries `@runtime`.
+pub fn has_runtime_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "runtime")
+}
+
 /// Extracts the `(lib, symbol)` pair from `@c("lib", "symbol")`, or `None` when absent.
 pub fn c_import_target(attributes: &[AttributeNode]) -> Option<(String, String)> {
     let c = attributes.iter().find(|a| a.name.text == "c")?;
@@ -932,15 +954,23 @@ pub fn c_marshal_charset(attributes: &[AttributeNode]) -> Option<&str> {
     attr.args.first()?.as_string()
 }
 
-/// True when both `@c` and `@js` are present on the same extern declaration.
+/// True when more than one of `@c`, `@js`, `@runtime`, or `@intrinsic` is on the same extern.
 pub fn extern_binding_conflict(attributes: &[AttributeNode]) -> bool {
-    has_c_attr(attributes) && js_import_target(attributes).is_some()
+    let n = u8::from(has_c_attr(attributes))
+        + u8::from(js_import_target(attributes).is_some())
+        + u8::from(has_runtime_attr(attributes))
+        + u8::from(attributes.iter().any(|a| a.name.text == "intrinsic"));
+    n > 1
 }
 
-/// WASM import `(module, field)`: `@c` → `("c/<lib>", symbol)`; else `@js`; else `("env", default_field)`.
+/// WASM import `(module, field)`: `@c` → `("c/<lib>", symbol)`; `@runtime` → `("Dream", name)`;
+/// else `@js`; else `("env", default_field)`.
 pub fn extern_import_target(attributes: &[AttributeNode], default_field: &str) -> (String, String) {
     if let Some((lib, symbol)) = c_import_target(attributes) {
         return (format!("c/{lib}"), symbol);
+    }
+    if let Some(field) = runtime_import_field(attributes) {
+        return (crate::js_abi::HOST_MODULE.to_string(), field);
     }
     if let Some((module, field)) = js_import_target(attributes) {
         return (module, field);
@@ -949,7 +979,8 @@ pub fn extern_import_target(attributes: &[AttributeNode], default_field: &str) -
 }
 
 /// Reports `@c`-family placement errors on one extern's attribute list:
-/// - `@c` combined with `@js` (they name incompatible binding hosts),
+/// - `@c` combined with `@js` / `@runtime` / `@intrinsic` (incompatible binding hosts),
+/// - `@runtime` combined with `@js` / `@c` / `@intrinsic`,
 /// - `@c` combined with `@node` or `@web` (`@c` is native-only; `@native` is allowed),
 /// - `@marshal(...)` without `@c` (only meaningful for the C ABI),
 /// - `@c_call(...)` without `@c` (ditto).
@@ -959,10 +990,16 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
     if extern_binding_conflict(attrs) {
         let pos = attrs
             .iter()
-            .find(|a| a.name.text == "c" || a.name.text == "js")
+            .find(|a| {
+                matches!(
+                    a.name.text.as_str(),
+                    "c" | "js" | "runtime" | "intrinsic"
+                )
+            })
             .map(|a| a.name.position);
         diagnostics.report_error(
-            "an extern function cannot carry both `@c` and `@js`".to_string(),
+            "an extern function cannot combine `@c`, `@js`, `@runtime`, or `@intrinsic`"
+                .to_string(),
             pos,
         );
     }
@@ -1385,6 +1422,29 @@ mod tests {
         let attrs = &[
             attr("c", &["\"sqlite3\"", "\"sqlite3_open\""]),
             attr("js", &["\"Dream\"", "\"open\""]),
+        ];
+        assert!(extern_binding_conflict(attrs));
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
+        assert!(diagnostics.has_errors());
+    }
+
+    #[test]
+    fn runtime_import_targets_dream_module() {
+        let attrs = &[attr("runtime", &["\"fileRead\""])];
+        assert_eq!(runtime_import_field(attrs).as_deref(), Some("fileRead"));
+        assert_eq!(
+            extern_import_target(attrs, "fallback"),
+            ("Dream".to_string(), "fileRead".to_string())
+        );
+        assert!(!extern_binding_conflict(attrs));
+    }
+
+    #[test]
+    fn runtime_conflicts_with_js() {
+        let attrs = &[
+            attr("runtime", &["\"fileRead\""]),
+            attr("js", &["\"Dream\"", "\"fileRead\""]),
         ];
         assert!(extern_binding_conflict(attrs));
         let mut diagnostics = DiagnosticBag::new(None);

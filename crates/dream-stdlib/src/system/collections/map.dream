@@ -184,6 +184,34 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return fallback;
     }
 
+    public fun get_or_insert(key: K, borrow factory: fun(): V): V {
+        let i = this.find(key);
+        if (i >= 0) {
+            return this.slots[i].value;
+        }
+        let value = factory();
+        this.set(key, value);
+        return value;
+    }
+
+    public fun merge(borrow other: Map<K, V>): void {
+        for (let pair in other) {
+            this.set(pair.key, pair.value);
+        }
+    }
+
+    public fun entries(): List<KeyValuePair<K, V>> {
+        let result = List<KeyValuePair<K, V>>(this.count);
+        let i = 0;
+        while (i < this.cap) {
+            if (this.slots[i].state == this.epoch) {
+                result.push(KeyValuePair<K, V>(this.slots[i].key, this.slots[i].value));
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
     public fun remove(borrow key: K): bool {
         let i = this.find(key);
         if (i >= 0) {

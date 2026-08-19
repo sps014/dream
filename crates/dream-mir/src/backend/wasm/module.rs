@@ -421,10 +421,9 @@ fn parse_val(t: &str) -> ValType {
 }
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which
-/// `print`/`println` lower to) followed by user `extern fun` interop imports. When any Dream `js*`
-/// bridge or GPU import is live, also emit `$js_retain` / `$js_release` for host-side handle RC
-/// (compiler-emitted — not declared in the stdlib prelude). Call sites reference each import's
-/// internal `$name`; the `module`/`field` pair names the host binding.
+/// `print`/`println` lower to) followed by user `extern fun` interop imports, then compiler-emitted
+/// `$js_retain` / `$js_release` for host-side handle RC (not declared in the stdlib prelude). Call
+/// sites reference each import's internal `$name`; the `module`/`field` pair names the host binding.
 pub(super) fn emit_imports_builder(
     m: &mut ModuleBuilder,
     mir: &crate::Mir,
@@ -439,10 +438,6 @@ pub(super) fn emit_imports_builder(
     ] {
         m.import_func(crate::abi::ENV_MODULE, name, name, vec![param], vec![]);
     }
-    let needs_js_rc = mir
-        .imports
-        .iter()
-        .any(|imp| imp.field.starts_with("js") || imp.field.starts_with("gpu"));
     for imp in &mir.imports {
         if imp.field == "jsRelease" || imp.field == "jsRetain" {
             continue;
@@ -466,14 +461,14 @@ pub(super) fn emit_imports_builder(
         };
         m.import_func(&imp.module, &imp.field, &imp.name, params, results);
     }
-    if needs_js_rc {
-        m.import_func("Dream", "jsRetain", "js_retain", vec![ValType::I32], vec![]);
-        m.import_func(
-            "Dream",
-            "jsRelease",
-            "js_release",
-            vec![ValType::I32],
-            vec![],
+    // Host-side JS handle RC. `$js_release` is called from generated `$release_array` glue for
+    // `js[]` (e.g. `Option<js>.unwrap`'s dummy slot) even when no `js*`/`gpu*` import survived DCE.
+    m.import_func("Dream", "jsRetain", "js_retain", vec![ValType::I32], vec![]);
+    m.import_func(
+        "Dream",
+        "jsRelease",
+        "js_release",
+        vec![ValType::I32],
+        vec![],
         );
-    }
 }

@@ -1,0 +1,30 @@
+import system;
+import system.io;
+
+async fun main(): void {
+    let root = "dream_file_stats_e2e";
+    await File.create_dir(root);
+    await File.write(root + "/a.txt", "hi");
+
+    System.println(File.exists(root));
+    System.println(File.is_dir(root));
+    System.println(File.is_file(root + "/a.txt"));
+    System.println(File.is_file(root));
+
+    switch (File.stat(root + "/a.txt")) {
+        Ok(st) => {
+            System.println(st.is_file());
+            System.println(st.size == 2L);
+            System.println(st.mtime_millis > 0L);
+        },
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (File.stat(root)) {
+        Ok(st) => System.println(st.is_dir()),
+        Err(e) => System.println(e.message()),
+    }
+
+    await File.delete(root + "/a.txt");
+    await File.remove_dir(root);
+}

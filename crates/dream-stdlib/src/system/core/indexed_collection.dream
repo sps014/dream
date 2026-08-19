@@ -22,4 +22,17 @@ public interface IndexedCollection<T> : Collection<T> {
         }
         return Option.Some(this.get(n - 1));
     }
+
+    // Index of the first element matching `pred`, or `None`.
+    public fun find_index_where(borrow pred: fun(T): bool): Option<int> {
+        let i = 0;
+        let n = this.length;
+        while (i < n) {
+            if (pred(this.get(i))) {
+                return Option.Some(i);
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
 }

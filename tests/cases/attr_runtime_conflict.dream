@@ -1,0 +1,11 @@
+// `@runtime` cannot be combined with `@js` on the same extern.
+import system;
+class Bridge {
+    @runtime("fileRead")
+    @js("Dream", "fileRead")
+    static extern fun read(): string;
+}
+
+fun main() {
+    System.print(Bridge.read());
+}

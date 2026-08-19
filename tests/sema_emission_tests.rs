@@ -616,6 +616,22 @@ fn test_hir_emission_extern_import_and_call() {
 }
 
 #[test]
+fn test_hir_emission_runtime_import_and_call() {
+    let code = "
+        @runtime(\"fileRead\")
+        extern fun file_read(path: string): string;
+        fun run(): string { return file_read(\"x\"); }
+    ";
+    let wat = emit_hir_to_module(code);
+    assert!(
+        wat.contains("(import \"Dream\" \"fileRead\""),
+        "runtime extern should import from Dream:\n{}",
+        wat
+    );
+    wat::parse_str(&wat).expect("module importing a @runtime extern should assemble");
+}
+
+#[test]
 fn test_hir_emission_extern_import_with_result() {
     // A defaulted extern (no `@js`) imports from `("env", <name>)` and carries its result type.
     let code = "

@@ -132,6 +132,39 @@ public class StringBuilder {
         }
     }
 
+    // Appends a decimal long without allocating an intermediate string.
+    public fun append_long(n: long): void {
+        if (n == 0L) {
+            this.append_char('0');
+            return;
+        }
+        if (n < 0L) {
+            this.append_char('-');
+            if (n == (0L - 9223372036854775807L) - 1L) {
+                this.append("9223372036854775808");
+                return;
+            }
+            n = 0L - n;
+        }
+        let buf = Buffer.alloc<int>(20);
+        let i = 0;
+        while (n > 0L) {
+            buf[i] = 48 + (int)(n % 10L);
+            n = n / 10L;
+            i = i + 1;
+        }
+        let j = i - 1;
+        while (j >= 0) {
+            this.write_unit(buf[j]);
+            j = j - 1;
+        }
+    }
+
+    // Appends a double via `to_string`.
+    public fun append_double(n: double): void {
+        this.append(n.to_string());
+    }
+
     // Appends `text` followed by a newline character.
     public fun append_line(borrow text: string): void {
         this.append(text);

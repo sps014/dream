@@ -11,39 +11,39 @@ public static class System {
     @intrinsic("println")
     static extern fun println<T>(borrow value: T): void;
 
-    @js("Dream", "consoleReadLine")
+    @runtime("consoleReadLine")
     static extern fun host_read_line(): string;
 
-    @js("Dream", "consoleReadKey")
+    @runtime("consoleReadKey")
     static extern fun host_read_key(): char;
 
     @native @node
-    @js("Dream", "consoleExit")
+    @runtime("consoleExit")
     static extern fun host_exit(code: int): void;
 
-    @js("Dream", "processPlatform")
+    @runtime("processPlatform")
     static extern fun host_platform(): int;
 
-    @js("Dream", "processOsFamily")
+    @runtime("processOsFamily")
     static extern fun host_os_family(): int;
 
-    @js("Dream", "processArgs")
+    @runtime("processArgs")
     static extern fun host_args(): string;
 
-    @js("Dream", "processExePath")
+    @runtime("processExePath")
     static extern fun host_exe_path(): string;
 
     // Tagged: leading '1' + value when set, empty / other when unset.
-    @js("Dream", "processEnvGet")
+    @runtime("processEnvGet")
     static extern fun host_env_get(borrow name: string): string;
 
-    @js("Dream", "processEnvSet")
+    @runtime("processEnvSet")
     static extern fun host_env_set(borrow name: string, borrow value: string): void;
 
-    @js("Dream", "processCwd")
+    @runtime("processCwd")
     static extern fun host_cwd(): string;
 
-    @js("Dream", "processSetCwd")
+    @runtime("processSetCwd")
     static extern fun host_set_cwd(borrow path: string): bool;
 
     // Halts the program immediately with `message`, after printing it to standard output. Fatal
@@ -157,6 +157,59 @@ public static class System {
         }
         System.host_env_set(name, value);
         return Result.Ok(true);
+    }
+
+    @runtime("processEnvUnset")
+    static extern fun host_env_unset(borrow name: string): void;
+
+    @runtime("processEnvKeys")
+    static extern fun host_env_keys(): string;
+
+    @runtime("processTempDir")
+    static extern fun host_temp_dir(): string;
+
+    @runtime("processHomeDir")
+    static extern fun host_home_dir(): string;
+
+    // True when environment variable `name` is set.
+    public static fun has_env(borrow name: string): bool {
+        return System.env(name).is_some();
+    }
+
+    // Unsets environment variable `name`.
+    public static fun unset_env(borrow name: string): Result<bool, ArgError> {
+        if (name.is_empty()) {
+            return Result.Err(ArgError.invalid("environment variable name must not be empty"));
+        }
+        System.host_env_unset(name);
+        return Result.Ok(true);
+    }
+
+    // Names of all environment variables (empty on hosts without an env block).
+    public static fun env_keys(): string[] {
+        let joined = System.host_env_keys();
+        if (joined.is_empty()) {
+            return Buffer.alloc<string>(0);
+        }
+        return joined.split('\n');
+    }
+
+    // Process temp directory (`TMPDIR` / `GetTempPath` / `"/tmp"` in the browser).
+    public static fun temp_dir(): string {
+        let path = System.host_temp_dir();
+        if (path.is_empty()) {
+            return "/tmp";
+        }
+        return path;
+    }
+
+    // User home directory when the host provides one.
+    public static fun home_dir(): Option<string> {
+        let path = System.host_home_dir();
+        if (path.is_empty()) {
+            return Option.None;
+        }
+        return Option.Some(path);
     }
 
     // Current working directory.

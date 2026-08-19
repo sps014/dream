@@ -1,0 +1,44 @@
+import system;
+import system.collections;
+import system.encoding;
+import system.json;
+import system.net;
+
+fun main(): void {
+    let xs: List<int> = [1, 2, 3];
+    xs.reverse();
+    System.println(xs.join(","));
+    System.println(xs.slice(0, 2).join(","));
+    System.println("  hi ".trim_start() + "|");
+    System.println("ab-cd".split_once('-')[1]);
+    System.println("a,b,c".split(",", 2).join("|"));
+    System.println(Option.Some(3).unwrap());
+    let s: Set<int> = {1, 2};
+    let t: Set<int> = {2, 3};
+    System.println(s.union(t).contains(3));
+    let m: Map<string, int> = {"a": 1};
+    m.get_or_insert("b", () => 2);
+    System.println(m.get_or("b", 0));
+    System.println(Math.log(Math.E) > 0.9d && Math.log(Math.E) < 1.1d);
+    System.println((int)Math.clamp(5.0d, 0.0d, 3.0d));
+    let rng = Random(1u);
+    let bytes = rng.next_bytes(4);
+    System.println(bytes.length);
+    let j = Json.parse("{\"k\":[1]}").unwrap();
+    System.println(j.as_map().is_some());
+    switch (j.get("k")) {
+        Some(arr) => System.println(arr.as_array().unwrap().length),
+        None => System.println(0),
+    }
+    j.remove("k");
+    System.println(j.has("k"));
+    let u = Url.parse("https://ex.com/p?a=1#f").unwrap();
+    System.println(u.with_host("y.com").host);
+    System.println(u.query_params().get_or("a", ""));
+    System.println(Encoding.utf8_encode("é").length);
+    let d = Duration.from_seconds(2L);
+    System.println(d.as_millis());
+    let dt = DateTime.from_epoch_millis(0L);
+    System.println(dt.epoch_seconds());
+    System.println(System.has_env("PATH") || System.temp_dir().is_empty() == false);
+}

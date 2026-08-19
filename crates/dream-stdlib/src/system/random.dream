@@ -41,4 +41,43 @@ public class Random {
     public fun next_bool(): bool {
         return (this.next_u32() & 1u) == 1u;
     }
+
+    public fun next_long(): long {
+        let hi = (long)this.next_int(2000000000);
+        let lo = (long)this.next_int(2000000000);
+        return hi * 2000000000L + lo;
+    }
+
+    public fun next_bytes(n: int): byte[] {
+        let count = n;
+        if (count < 0) {
+            count = 0;
+        }
+        let out = Buffer.alloc<byte>(count);
+        let i = 0;
+        while (i < count) {
+            out[i] = (byte)this.next_int(256);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public fun choice<T>(list: List<T>): Option<T> {
+        if (list.length == 0) {
+            return Option.None;
+        }
+        return Option.Some(list.get(this.next_int(list.length)));
+    }
+
+    public fun shuffle<T>(list: List<T>): void {
+        let i = list.length - 1;
+        while (i > 0) {
+            let j = this.next_int(i + 1);
+            let a = list.get(i);
+            let b = list.get(j);
+            list.set(i, b);
+            list.set(j, a);
+            i = i - 1;
+        }
+    }
 }

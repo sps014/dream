@@ -4,10 +4,10 @@ module system;
 // offsets from the host's timezone database — including historical DST rules, unlike a plain
 // fixed offset. Use with `DateTime.now_in`/`DateTime.of_zoned`/`DateTime.to_zone`.
 public struct TimeZone {
-    @js("Dream", "dateZoneOffsetMinutes")
+    @runtime("dateZoneOffsetMinutes")
     static extern fun host_zone_offset_minutes(zone_name: string, epoch_millis: long): int;
 
-    @js("Dream", "dateLocalZoneName")
+    @runtime("dateLocalZoneName")
     static extern fun host_local_zone_name(): string;
 
     // Sentinel `host_zone_offset_minutes` returns for a name the host doesn't recognize. Real

@@ -6,19 +6,19 @@ public class WebSocket {
     handle: int;
     is_closed: bool;
 
-    @js("Dream", "wsConnect")
+    @runtime("wsConnect")
     static extern async fun ws_connect(url: string, timeout_ms: int): char[];
 
-    @js("Dream", "wsSendText")
+    @runtime("wsSendText")
     static extern async fun ws_send_text(handle: int, text: string): char[];
 
-    @js("Dream", "wsSendBinary")
+    @runtime("wsSendBinary")
     static extern async fun ws_send_binary(handle: int, data: byte[]): char[];
 
-    @js("Dream", "wsReceive")
+    @runtime("wsReceive")
     static extern async fun ws_receive(handle: int): char[];
 
-    @js("Dream", "wsClose")
+    @runtime("wsClose")
     static extern fun ws_close(handle: int, code: int, reason: string): bool;
 
     constructor(handle: int) {

@@ -65,4 +65,52 @@ public static class Math {
     public static fun atan2(y: double, x: double): double {
         return Math.atan2_host(y, x);
     }
+
+    @js("env", "log")
+    static extern fun log_host(x: double): double;
+    public static fun log(x: double): double { return Math.log_host(x); }
+
+    @js("env", "log10")
+    static extern fun log10_host(x: double): double;
+    public static fun log10(x: double): double { return Math.log10_host(x); }
+
+    @js("env", "exp")
+    static extern fun exp_host(x: double): double;
+    public static fun exp(x: double): double { return Math.exp_host(x); }
+
+    @js("env", "hypot")
+    static extern fun hypot_host(x: double, y: double): double;
+    public static fun hypot(x: double, y: double): double { return Math.hypot_host(x, y); }
+
+    public static get PI(): double {
+        return 3.141592653589793d;
+    }
+
+    public static get E(): double {
+        return 2.718281828459045d;
+    }
+
+    public static fun min(a: double, b: double): double {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+
+    public static fun max(a: double, b: double): double {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+
+    public static fun clamp(x: double, lo: double, hi: double): double {
+        if (x < lo) {
+            return lo;
+        }
+        if (x > hi) {
+            return hi;
+        }
+        return x;
+    }
 }

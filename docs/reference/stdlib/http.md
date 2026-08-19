@@ -28,7 +28,7 @@ Native uses the host HTTP client (reqwest in `libdream`); browser and Node use `
 | `with_cookie_jar(jar)` | cookies |
 | `with_cancellation(token)` | cooperative cancel |
 | `await text(path)` | GET, body as string |
-| `await get` / `post` / `put` / `patch` / `delete` / `head` | full response |
+| `await get` / `get_with` / `get_json` / `post` / `post_json` / `put` / `patch` / `delete` / `head` | full response |
 | `await request(method, path, body, headers)` | custom |
 | `await post_bytes` / `put_bytes` / `request_bytes` | binary body |
 | `await post_multipart(path, form)` | multipart |
@@ -36,7 +36,7 @@ Native uses the host HTTP client (reqwest in `libdream`); browser and Node use `
 
 ## Response and helpers
 
-`HttpResponse`: `status()`, `ok()`, `header(name)`, `text()`, `bytes()`, `json()`.
+`HttpResponse`: `status()`, `ok()`, `header(name)`, `headers()`, `text()`, `bytes()`, `json()`.
 
 `HttpHeaders`: `set` / `get` / `contains` / `remove` / `.length` / `to_wire` / `from_wire`.
 

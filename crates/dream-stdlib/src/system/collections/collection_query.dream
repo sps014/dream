@@ -118,4 +118,40 @@ extend Collection<T> {
         }
         return Seq<T>(items);
     }
+
+    // Smallest element by `compare`, or `None` when empty.
+    public fun min(): Option<T> where T : Comparable<T> {
+        let seen = false;
+        let best = Buffer.alloc<T>(1)[0];
+        for (let x in this) {
+            if (seen == false) {
+                best = x;
+                seen = true;
+            } else if (x.compare(best) < 0) {
+                best = x;
+            }
+        }
+        if (seen == false) {
+            return Option.None;
+        }
+        return Option.Some(best);
+    }
+
+    // Largest element by `compare`, or `None` when empty.
+    public fun max(): Option<T> where T : Comparable<T> {
+        let seen = false;
+        let best = Buffer.alloc<T>(1)[0];
+        for (let x in this) {
+            if (seen == false) {
+                best = x;
+                seen = true;
+            } else if (x.compare(best) > 0) {
+                best = x;
+            }
+        }
+        if (seen == false) {
+            return Option.None;
+        }
+        return Option.Some(best);
+    }
 }

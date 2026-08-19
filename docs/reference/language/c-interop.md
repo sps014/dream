@@ -190,18 +190,17 @@ let s = Ffi.read_cstring(p);         // NUL-terminated UTF-8 → string
 `Ffi.read_ptr(base, i)` loads `*((void**)base + i)`; `Ffi.read_cstring` copies a NUL-terminated
 UTF-8 C string into a Dream `string`.
 
-## Compared to `@js`
+## Compared to `@js` and `@runtime`
 
-`@c` and `@js` are mutually exclusive on a single extern (they name incompatible hosts), but they
-share the same *shape* on the Dream side:
+`@c`, `@js`, `@runtime`, and `@intrinsic` are mutually exclusive on a single extern (they name incompatible hosts), but `@c` and `@js` share the same *shape* on the Dream side:
 
-| Concern                   | `@js("mod", "field")`               | `@c("lib", "symbol")`                     |
-|---------------------------|-------------------------------------|-------------------------------------------|
-| Host                      | JS (Node / browser)                 | Native (`dream run`)                      |
-| Fixed signature           | Yes                                 | Yes                                        |
-| Automatic marshaling      | Yes                                 | Yes                                        |
-| Async                     | `async` + `Promise` bridge          | Not supported (call C on the caller thread) |
-| Out-params                | Return a wrapper struct / tuple     | Dream `ref` parameter                      |
-| Callbacks (into Dream)    | `fun(...)` values marshalled to JS  | Captureless `fun(...)` → native callback   |
+| Concern                   | `@js("mod", "field")`               | `@runtime("name")`                    | `@c("lib", "symbol")`                     |
+|---------------------------|-------------------------------------|---------------------------------------|-------------------------------------------|
+| Host                      | JS (Node / browser)                 | Dream runtime (WASM + native)         | Native (`dream run`)                      |
+| Fixed signature           | Yes                                 | Yes                                   | Yes                                        |
+| Automatic marshaling      | Yes                                 | Yes                                   | Yes                                        |
+| Async                     | `async` + `Promise` bridge          | `async` + host future                 | Not supported (call C on the caller thread) |
+| Out-params                | Return a wrapper struct / tuple     | Return a wrapper struct / tuple       | Dream `ref` parameter                      |
+| Callbacks (into Dream)    | `fun(...)` values marshalled to JS  | host-defined                          | Captureless `fun(...)` → native callback   |
 
 See [JS Interop](interop.md) for the JS side.

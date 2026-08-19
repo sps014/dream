@@ -7,23 +7,23 @@ public class TcpClient {
     is_closed: bool;
 
     @native @node
-    @js("Dream", "tcpConnect")
+    @runtime("tcpConnect")
     static extern async fun tcp_connect(host: string, port: int, timeout_ms: int): char[];
 
     @native @node
-    @js("Dream", "tcpSend")
+    @runtime("tcpSend")
     static extern async fun tcp_send(handle: int, data: byte[]): char[];
 
     @native @node
-    @js("Dream", "tcpSendText")
+    @runtime("tcpSendText")
     static extern async fun tcp_send_text(handle: int, text: string): char[];
 
     @native @node
-    @js("Dream", "tcpReceive")
+    @runtime("tcpReceive")
     static extern async fun tcp_receive(handle: int, max_bytes: int): char[];
 
     @native @node
-    @js("Dream", "tcpClose")
+    @runtime("tcpClose")
     static extern fun tcp_close(handle: int): bool;
 
     constructor(handle: int) {

@@ -34,13 +34,14 @@ fun main() {
 | `System.is_browser()` | running in a page? |
 | `System.args()` | command-line arguments |
 | `System.exe_path()` | path of this executable, if any |
-| `System.env(name)` / `env_or(name, fallback)` | environment variables |
-| `System.set_env(name, value)` | set an env var |
+| `System.env(name)` / `env_or(name, fallback)` / `has_env` / `env_keys` | environment variables |
+| `System.set_env(name, value)` / `unset_env(name)` | set or clear an env var |
 | `System.cwd()` / `set_cwd(path)` | working directory |
+| `System.temp_dir()` / `home_dir()` | temp and home paths |
 
 ## Math (no import)
 
-`Math.abs`, `floor`, `ceil`, `round`, `sqrt` (returns `Option`), `pow`, `sin` / `cos` / `tan`, `asin` / `acos` / `atan` / `atan2`. Angles are radians.
+`Math.abs`, `floor`, `ceil`, `round`, `sqrt` (returns `Option`), `pow`, `sin` / `cos` / `tan`, `asin` / `acos` / `atan` / `atan2`, `log` / `log10` / `exp` / `hypot`, `min` / `max` / `clamp`, and `Math.PI` / `Math.E`. Angles are radians.
 
 ## Timing
 

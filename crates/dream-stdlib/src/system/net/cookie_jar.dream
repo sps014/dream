@@ -35,6 +35,23 @@ public class CookieJar {
         return none;
     }
 
+    public fun remove(name: string): bool {
+        let existing = this.index.get(name);
+        if (existing.is_none()) {
+            return false;
+        }
+        let i = existing.unwrap_or(0);
+        this.names.remove_at(i);
+        this.values.remove_at(i);
+        this.index.remove(name);
+        let j = i;
+        while (j < this.names.length) {
+            this.index.set(this.names.get(j), j);
+            j = j + 1;
+        }
+        return true;
+    }
+
     // Removes every cookie.
     public fun clear(): void {
         this.names.clear();

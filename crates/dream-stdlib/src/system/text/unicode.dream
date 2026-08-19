@@ -3,16 +3,16 @@ module system.text;
 // ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
 
 public static class Unicode {
-    @js("Dream", "unicodeNormalize")
+    @runtime("unicodeNormalize")
     static extern fun normalize_host(text: string, form: int): string;
 
-    @js("Dream", "unicodeToLower")
+    @runtime("unicodeToLower")
     static extern fun to_lower_host(text: string): string;
 
-    @js("Dream", "unicodeToUpper")
+    @runtime("unicodeToUpper")
     static extern fun to_upper_host(text: string): string;
 
-    @js("Dream", "unicodeGraphemes")
+    @runtime("unicodeGraphemes")
     static extern fun graphemes_host(text: string): string[];
 
     // Normalizes `text` to the requested Unicode form.

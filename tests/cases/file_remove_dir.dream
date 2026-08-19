@@ -1,0 +1,16 @@
+import system;
+import system.io;
+
+async fun main(): void {
+    let root = "dream_file_remove_dir_e2e";
+    await File.create_dir_all(root + "/nested/leaf");
+    await File.write(root + "/nested/leaf/x.txt", "x");
+    switch (await File.remove_dir(root + "/nested/leaf")) {
+        Ok(_) => System.println("removed nonempty"),
+        Err(_) => System.println("nonempty kept"),
+    }
+    switch (await File.remove_dir_all(root)) {
+        Ok(_) => System.println(File.exists(root)),
+        Err(e) => System.println(e.message()),
+    }
+}

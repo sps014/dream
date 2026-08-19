@@ -29,6 +29,58 @@ public enum Option<T> {
         };
     }
 
+    // The contained value, or panics if `None`.
+    public fun unwrap(): T {
+        if (this.is_none()) {
+            System.panic("unwrap() called on Option.None");
+        }
+        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+    }
+
+    // The contained value, or panics with `msg` if `None`.
+    public fun expect(borrow msg: string): T {
+        if (this.is_none()) {
+            System.panic(msg);
+        }
+        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+    }
+
+    // The contained value, or `f()` when `None`.
+    public fun unwrap_or_else(borrow f: fun(): T): T {
+        return switch (this) {
+            Some(v) => v,
+            None    => f(),
+        };
+    }
+
+    // `Some` when the value is present and `pred` is true, otherwise `None`.
+    public fun filter(borrow pred: fun(T): bool): Option<T> {
+        if (this.is_none()) {
+            return Option.None;
+        }
+        let v = this.unwrap_or(Buffer.alloc<T>(1)[0]);
+        if (pred(v)) {
+            return Option.Some(v);
+        }
+        return Option.None;
+    }
+
+    // `Ok` when `Some`, otherwise `Err(err)`.
+    public fun ok_or<E>(err: E): Result<T, E> {
+        return switch (this) {
+            Some(v) => Result.Ok(v),
+            None    => Result.Err(err),
+        };
+    }
+
+    // Collapses `Option<Option<U>>`.
+    public static fun flatten<U>(opt: Option<Option<U>>): Option<U> {
+        return switch (opt) {
+            Some(inner) => inner,
+            None        => Option.None,
+        };
+    }
+
     // Maps the contained value when `Some`, otherwise `None`.
     public fun map<U>(borrow f: fun(T): U): Option<U> {
         return switch (this) {

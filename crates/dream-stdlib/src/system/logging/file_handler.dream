@@ -4,7 +4,7 @@ module system.logging;
 public class FileHandler : LogHandler {
     path: string;
 
-    @js("Dream", "fileAppend")
+    @runtime("fileAppend")
     static extern fun file_append(path: string, content: string): long;
 
     // Creates a handler that appends to `path`.

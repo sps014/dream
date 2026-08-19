@@ -58,59 +58,59 @@ public class WebView {
     }
 
     @native
-    @js("Dream", "webviewCreate")
+    @runtime("webviewCreate")
     static extern fun host_create(title: string, width: int, height: int): int;
 
     @native
-    @js("Dream", "webviewLoadUrl")
+    @runtime("webviewLoadUrl")
     static extern fun host_load_url(id: int, url: string): int;
 
     @native
-    @js("Dream", "webviewLoadHtml")
+    @runtime("webviewLoadHtml")
     static extern fun host_load_html(id: int, html: string): int;
 
     @native
-    @js("Dream", "webviewLoadFile")
+    @runtime("webviewLoadFile")
     static extern fun host_load_file(id: int, path: string): int;
 
     @native
-    @js("Dream", "webviewClose")
+    @runtime("webviewClose")
     static extern fun host_close(id: int): void;
 
     @native
-    @js("Dream", "webviewCloseRequested")
+    @runtime("webviewCloseRequested")
     static extern fun host_close_requested(id: int): bool;
 
     @native
-    @js("Dream", "webviewTick")
+    @runtime("webviewTick")
     static extern fun host_tick(id: int): char[];
 
     @native
-    @js("Dream", "webviewPoll")
+    @runtime("webviewPoll")
     static extern fun host_poll(id: int): char[];
 
     @native
-    @js("Dream", "webviewReply")
+    @runtime("webviewReply")
     static extern fun host_reply(id: int, reply_id: int, body: string): void;
 
     @native
-    @js("Dream", "webviewReplyErr")
+    @runtime("webviewReplyErr")
     static extern fun host_reply_err(id: int, reply_id: int, message: string): void;
 
     @native
-    @js("Dream", "webviewReplyBytes")
+    @runtime("webviewReplyBytes")
     static extern fun host_reply_bytes(id: int, reply_id: int, body: byte[]): void;
 
     @native
-    @js("Dream", "webviewEmit")
+    @runtime("webviewEmit")
     static extern fun host_emit(id: int, channel: string, body: string): void;
 
     @native
-    @js("Dream", "webviewEmitBytes")
+    @runtime("webviewEmitBytes")
     static extern fun host_emit_bytes(id: int, channel: string, body: byte[]): void;
 
     @native
-    @js("Dream", "webviewEval")
+    @runtime("webviewEval")
     static extern async fun host_eval(id: int, js: string): char[];
 
     @native
@@ -391,6 +391,11 @@ public class WebView {
     @native
     public fun close(): void {
         WebView.host_close(this.id);
+    }
+
+    @native
+    public fun close_requested(): bool {
+        return WebView.host_close_requested(this.id);
     }
 
     @native

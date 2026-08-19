@@ -16,7 +16,7 @@ pub use gpu::{attach_abi_from_wat_path, set_packaged_app_icon};
 
 #[cfg(test)]
 mod contract_tests {
-    //! Native C ABI (`native_c/abi.rs` + `webview.rs`) vs stdlib `@js("Dream", …)` names.
+    //! Native C ABI (`native_c/abi.rs` + `webview.rs`) vs stdlib `@runtime("…")` names.
 
     use dream_abi::js_abi::HOST_MODULE;
     use std::collections::HashSet;
@@ -43,6 +43,35 @@ mod contract_tests {
         out
     }
 
+    fn runtime_attr_names(src: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = src;
+        while let Some(pos) = rest.find("@runtime(") {
+            let after = &rest[pos + "@runtime(".len()..];
+            let trimmed = after.trim_start();
+            if let Some(field) = trimmed.strip_prefix('"') {
+                if let Some(end) = field.find('"') {
+                    out.push(field[..end].to_string());
+                }
+            }
+            rest = after;
+        }
+        out
+    }
+
+    fn prelude_dream_host_names() -> HashSet<String> {
+        let mut declared: HashSet<String> = HashSet::new();
+        for (_, src) in dream_stdlib::all_prelude_files() {
+            for name in names_after_module(src, HOST_MODULE) {
+                declared.insert(name);
+            }
+            for name in runtime_attr_names(src) {
+                declared.insert(name);
+            }
+        }
+        declared
+    }
+
     fn c_abi_fn_names(src: &str) -> Vec<String> {
         let mut out = Vec::new();
         for line in src.lines() {
@@ -63,13 +92,7 @@ mod contract_tests {
 
     #[test]
     fn every_native_dream_host_fn_is_declared_in_the_prelude() {
-        let mut declared: HashSet<String> = HashSet::new();
-        for (_, src) in dream_stdlib::all_prelude_files() {
-            for name in names_after_module(src, HOST_MODULE) {
-                declared.insert(name);
-            }
-        }
-
+        let declared = prelude_dream_host_names();
         let mut registered: HashSet<String> = HashSet::new();
         for src in HOST_SOURCES {
             registered.extend(c_abi_fn_names(src));
@@ -83,7 +106,7 @@ mod contract_tests {
         let orphaned: Vec<&String> = registered.difference(&declared).collect();
         assert!(
             orphaned.is_empty(),
-            "native C host functions have no matching `@js(\"Dream\", …)` declaration in the stdlib prelude: {:?}",
+            "native C host functions have no matching `@runtime(\"…\")` / `@js(\"Dream\", …)` declaration in the stdlib prelude: {:?}",
             orphaned
         );
     }
@@ -158,13 +181,7 @@ mod contract_tests {
 
     #[test]
     fn js_dream_host_keys_match_prelude_js_declarations() {
-        let mut declared: HashSet<String> = HashSet::new();
-        for (_, src) in dream_stdlib::all_prelude_files() {
-            for name in names_after_module(src, HOST_MODULE) {
-                declared.insert(name);
-            }
-        }
-
+        let declared = prelude_dream_host_names();
         let mut js_keys: HashSet<String> = HashSet::new();
         for src in JS_HOST_SOURCES {
             js_keys.extend(js_host_export_keys(src));
@@ -186,7 +203,7 @@ mod contract_tests {
         prelude_only.retain(|n| !COMPILER_EMITTED_JS_RC.contains(&n.as_str()));
         assert!(
             js_only.is_empty() && prelude_only.is_empty(),
-            "JS Dream host keys and prelude `@js(\"Dream\", …)` declarations have drifted.\n\
+            "JS Dream host keys and prelude `@runtime` / `@js(\"Dream\", …)` declarations have drifted.\n\
              JS-only (missing from prelude): {:?}\n\
              prelude-only (missing from JS hosts): {:?}",
             js_only,

@@ -222,6 +222,9 @@ impl<'a> Analyzer<'a> {
                 )
             }
             ExpressionNode::IndexAccess(array_expr, index_expr) => {
+                // Don't leak an outer expected type (e.g. `double` from `unwrap(): T`) into the
+                // index: `Buffer.alloc<T>(1)[0]` would retarget the literal `0` to `double`.
+                let saved_expected = self.current_expected_type.take();
                 let array_type = self.analyze_expression(
                     array_expr,
                     parent_function,
@@ -247,6 +250,7 @@ impl<'a> Analyzer<'a> {
                         index_expr.position(),
                         diagnostics,
                     );
+                    self.current_expected_type = saved_expected;
                     return Ok(Self::js_type());
                 }
 
@@ -270,7 +274,7 @@ impl<'a> Analyzer<'a> {
                 {
                     // The synthesized call re-evaluates the receiver, so drop the base HIR taken above.
                     let _ = array_hir;
-                    return self.analyze_index_get(
+                    let result = self.analyze_index_get(
                         array_expr,
                         index_expr,
                         &array_type,
@@ -278,6 +282,8 @@ impl<'a> Analyzer<'a> {
                         symbol_table,
                         diagnostics,
                     );
+                    self.current_expected_type = saved_expected;
+                    return result;
                 }
 
                 let inner_type = match (gpu_elem, array_type) {
@@ -312,6 +318,7 @@ impl<'a> Analyzer<'a> {
                 }
 
                 self.hir_set_index(array_hir, index_hir, &inner_type);
+                self.current_expected_type = saved_expected;
                 Ok(inner_type)
             }
             ExpressionNode::Unary(opr, right) => {

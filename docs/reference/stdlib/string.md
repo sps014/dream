@@ -30,13 +30,15 @@ fun main() {
 | Call | Meaning |
 | --- | --- |
 | `contains` / `starts_with` / `ends_with` | tests |
-| `index_of(char or string)` | `Option<int>` |
-| `split(sep)` | `string[]` |
-| `replace(old, new)` | new string |
+| `index_of(char or string)` / `last_index_of` | `Option<int>` |
+| `split(sep)` / `split(sep, limit)` / `split_once` / `lines` | `string[]` |
+| `replace(old, new)` / `replace_first` | new string |
+| `trim` / `trim_start` / `trim_end` / `is_blank` / `repeat(n)` | whitespace / repeat |
+| `pad_start` / `pad_end` | pad to a width |
+| `strip_prefix` / `strip_suffix` | `Option<string>` |
 | `substring(start, end)` | slice |
 | `to_lower` / `to_upper` | ASCII case |
 | `to_lower_unicode` / `to_upper_unicode` | full Unicode case |
-| `trim` / `repeat(n)` | whitespace / repeat |
 | `normalize(form)` / `graphemes()` | Unicode normalize / grapheme clusters |
 | `equals` / `compare` | equality / ordering |
 
@@ -53,4 +55,4 @@ b.append_line(" world");
 System.println(b.build());
 ```
 
-Also: `append_char`, `append_int`, `append_bool`, `.length`, `is_empty()`, `clear()`, `to_string()`. `append_int` writes decimal digits into the builder (no intermediate `to_string()` allocation).
+Also: `append_char`, `append_int`, `append_long`, `append_double`, `append_bool`, `.length`, `is_empty()`, `clear()`, `to_string()`. `append_int` writes decimal digits into the builder (no intermediate `to_string()` allocation).

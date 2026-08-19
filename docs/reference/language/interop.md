@@ -28,7 +28,8 @@ fun main(): void {
 By default it binds to a JS global of the same name (`alert`). Three things cooperate:
 
 - `extern fun` declares the signature on the Dream side.
-- `@js("module", "field")` optionally remaps which JS object and property it binds to.
+- `@js("module", "field")` optionally remaps which JS object and property it binds to (JS-only).
+- Dream stdlib hosts that exist on **native and WASM** use `@runtime("name")` instead of `@js`.
 - The runtime marshals values, binds externs to JS globals, and bridges Promises for `extern async fun`.
 
 !!! note "Restrictions"
@@ -45,6 +46,17 @@ extern fun set_text(value: string): void;
 @js("console")                   // module only -> field defaults to the function name
 extern fun log(msg: string): void;
 ```
+
+## Dream runtime hosts (`@runtime`)
+
+Stdlib functions implemented by the Dream runtime (files, process, HTTP, GPU, …) bind with `@runtime("name")`. That is **not** JavaScript-only: WASM imports `Dream.name` and native `dream run` calls the C symbol `name`.
+
+```dream
+@runtime("fileRead")
+static extern fun file_read(borrow path: string): string;
+```
+
+`@runtime` cannot be combined with `@js`, `@c`, or `@intrinsic` on the same extern. `@native` / `@node` / `@web` still restrict *which* targets may mention the API (`@native @node @runtime("processRun")`).
 
 ## Running it from JavaScript
 

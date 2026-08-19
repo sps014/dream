@@ -30,6 +30,57 @@ public enum Result<T, E> {
         };
     }
 
+    // The success value, or panics if `Err`.
+    public fun unwrap(): T {
+        if (this.is_err()) {
+            System.panic("unwrap() called on Result.Err");
+        }
+        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+    }
+
+    // The success value, or panics with `msg` if `Err`.
+    public fun expect(borrow msg: string): T {
+        if (this.is_err()) {
+            System.panic(msg);
+        }
+        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+    }
+
+    // The success value, or `f(error)` when `Err`.
+    public fun unwrap_or_else(borrow f: fun(E): T): T {
+        return switch (this) {
+            Ok(v)  => v,
+            Err(e) => f(e),
+        };
+    }
+
+    // The error value, or panics if `Ok`.
+    public fun unwrap_err(): E {
+        if (this.is_ok()) {
+            System.panic("unwrap_err() called on Result.Ok");
+        }
+        return switch (this) {
+            Ok(v)  => Buffer.alloc<E>(1)[0],
+            Err(e) => e,
+        };
+    }
+
+    // `Some` when `Ok`, otherwise `None`.
+    public fun ok(): Option<T> {
+        return switch (this) {
+            Ok(v)  => Option.Some(v),
+            Err(e) => Option.None,
+        };
+    }
+
+    // Maps `Err` through `f`, otherwise preserves `Ok`.
+    public fun or_else<F>(borrow f: fun(E): Result<T, F>): Result<T, F> {
+        return switch (this) {
+            Ok(v)  => Result.Ok(v),
+            Err(e) => f(e),
+        };
+    }
+
     // Maps the success value when `Ok`, otherwise preserves the error.
     public fun map<U>(borrow f: fun(T): U): Result<U, E> {
         return switch (this) {

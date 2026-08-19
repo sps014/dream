@@ -32,7 +32,7 @@ Fields may be primitives, `string`, arrays, other `@json` types, tuples (JSON ar
 
 `Json.parse` / `Json.stringify` / `Json.stringify_pretty` when you do not have a class.
 
-Accessors: `as_bool` / `as_int` / `as_double` / `as_string`, `is_null` / `is_array` / `is_object`, `get` / `has` / `set` / `keys` on objects, `at` / `push` / `.length` on arrays.
+Accessors: `as_bool` / `as_int` / `as_double` / `as_string` / `as_array` / `as_map`, `is_null` / `is_array` / `is_object`, `get` / `get_or` / `has` / `set` / `remove` / `keys` on objects, `at` / `push` / `.length` on arrays.
 
 ## `GenResult`
 

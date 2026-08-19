@@ -23,6 +23,9 @@ fun main() {
 | --- | --- |
 | `is_some()` / `is_none()` | which arm? |
 | `unwrap_or(fallback)` | value, or a default |
+| `unwrap()` / `expect(msg)` | value, or panic |
+| `unwrap_or_else(f)` | value, or call `f` |
+| `filter(pred)` / `ok_or(err)` | keep / lift into `Result` |
 | `map(f)` | transform the inner value |
 | `and_then(f)` | chain another `Option` |
 | `or(other)` | this, or `other` if `None` |
@@ -35,6 +38,8 @@ Unpack with `switch` when both arms matter.
 | --- | --- |
 | `is_ok()` / `is_err()` | which arm? |
 | `unwrap_or(fallback)` | value, or a default |
+| `unwrap()` / `expect(msg)` / `unwrap_err()` | panic on the other arm |
+| `ok()` | `Option` of the success value |
 | `map(f)` / `map_err(f)` | transform success or error |
 | `and_then(f)` | chain another `Result` |
 

@@ -21,3 +21,5 @@ fun main() {
 | `next_int(bound)` | `0 .. bound-1` |
 | `next_double()` | `0.0 .. 1.0` |
 | `next_bool()` | coin flip |
+| `next_long()` / `next_bytes(n)` | extra draws |
+| `choice(list)` / `shuffle(list)` | pick / Fisher–Yates |

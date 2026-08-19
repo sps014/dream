@@ -11,16 +11,16 @@ public class HttpClient {
     cookie_jar: Option<CookieJar>;
     cancel_token: Option<CancellationToken>;
 
-    @js("Dream", "httpRequest")
+    @runtime("httpRequest")
     static extern async fun http_request(url: string, method: string, headers: string, body: string, timeout_ms: int, http_version: int): char[];
 
-    @js("Dream", "httpRequestBytes")
+    @runtime("httpRequestBytes")
     static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int, http_version: int): char[];
 
-    @js("Dream", "httpRequestStream")
+    @runtime("httpRequestStream")
     static extern async fun http_request_stream(url: string, method: string, headers: string, body: string, timeout_ms: int, http_version: int): char[];
 
-    @js("Dream", "httpRequestStreamBytes")
+    @runtime("httpRequestStreamBytes")
     static extern async fun http_request_stream_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int, http_version: int): char[];
 
     // Creates an HTTP client with a base URL.
@@ -158,6 +158,28 @@ public class HttpClient {
     // Performs a GET request.
     public async fun get(path: string): Result<HttpResponse, HttpError> {
         return await this.request("GET", path, "", HttpHeaders());
+    }
+
+    public async fun get_with(path: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
+        return await this.request("GET", path, "", headers);
+    }
+
+    public async fun get_json(path: string): Result<JsonValue, HttpError> {
+        let res = await this.get(path);
+        if (res.is_err()) {
+            return Result.Err(res.unwrap_err());
+        }
+        let body = res.unwrap_or(HttpResponse(Buffer.alloc<char>(0))).json();
+        if (body.is_err()) {
+            return Result.Err(HttpError.transport(body.unwrap_err().message()));
+        }
+        return Result.Ok(body.unwrap_or(JsonValue.none()));
+    }
+
+    public async fun post_json(path: string, body: JsonValue): Result<HttpResponse, HttpError> {
+        let headers = HttpHeaders();
+        headers.set("Content-Type", "application/json");
+        return await this.request("POST", path, Json.stringify(body), headers);
     }
 
     // Performs a POST request.

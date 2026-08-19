@@ -168,6 +168,170 @@ extend string : Comparable<string> {
         return this.substring(start, end);
     }
 
+    // A new string with leading whitespace removed.
+    public fun trim_start(): string {
+        let n = this.length;
+        let start = 0;
+        while ((start < n) && (this._is_space_at(start) == true)) {
+            start = start + 1;
+        }
+        return this.substring(start, n);
+    }
+
+    // A new string with trailing whitespace removed.
+    public fun trim_end(): string {
+        let n = this.length;
+        let end = n;
+        while ((end > 0) && (this._is_space_at(end - 1) == true)) {
+            end = end - 1;
+        }
+        return this.substring(0, end);
+    }
+
+    // True when `trim()` is empty.
+    public fun is_blank(): bool {
+        return this.trim().is_empty();
+    }
+
+    // Left-pads this string with `pad` until `width` code units (no-op when `pad` is empty).
+    public fun pad_start(width: int, pad: string): string {
+        if ((pad.is_empty()) || (this.length >= width)) {
+            return this;
+        }
+        let sb = StringBuilder();
+        while (sb.length + this.length < width) {
+            sb.append(pad);
+        }
+        sb.append(this);
+        let out = sb.build();
+        if (out.length > width) {
+            return out.substring(out.length - width, out.length);
+        }
+        return out;
+    }
+
+    // Right-pads this string with `pad` until `width` code units (no-op when `pad` is empty).
+    public fun pad_end(width: int, pad: string): string {
+        if ((pad.is_empty()) || (this.length >= width)) {
+            return this;
+        }
+        let sb = StringBuilder();
+        sb.append(this);
+        while (sb.length < width) {
+            sb.append(pad);
+        }
+        let out = sb.build();
+        if (out.length > width) {
+            return out.substring(0, width);
+        }
+        return out;
+    }
+
+    // The index of the last occurrence of `target`, or `None`.
+    public fun last_index_of(target: char): Option<int> {
+        let i = this.length - 1;
+        while (i >= 0) {
+            if (this.char_at(i) == target) {
+                return Option.Some(i);
+            }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+
+    // The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`.
+    public fun last_index_of(borrow sub: string): Option<int> {
+        let needle = sub.length;
+        if (needle == 0) {
+            return Option.Some(this.length);
+        }
+        let i = this.length - needle;
+        while (i >= 0) {
+            if (this.substring(i, i + needle) == sub) {
+                return Option.Some(i);
+            }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+
+    // Replaces the first occurrence of `old` with `replacement`.
+    public fun replace_first(borrow old: string, borrow replacement: string): string {
+        let at = this.index_of(old);
+        if (at.is_none()) {
+            return this;
+        }
+        let i = at.unwrap_or(0);
+        return this.substring(0, i) + replacement + this.substring(i + old.length, this.length);
+    }
+
+    public fun split_once(sep: char): string[] {
+        let at = this.index_of(sep);
+        if (at.is_none()) {
+            return Buffer.alloc<string>(0);
+        }
+        let i = at.unwrap_or(0);
+        let out = Buffer.alloc<string>(2);
+        out[0] = this.substring(0, i);
+        out[1] = this.substring(i + 1, this.length);
+        return out;
+    }
+
+    public fun split_once(borrow sep: string): string[] {
+        if (sep.is_empty()) {
+            return Buffer.alloc<string>(0);
+        }
+        let at = this.index_of(sep);
+        if (at.is_none()) {
+            return Buffer.alloc<string>(0);
+        }
+        let i = at.unwrap_or(0);
+        let out = Buffer.alloc<string>(2);
+        out[0] = this.substring(0, i);
+        out[1] = this.substring(i + sep.length, this.length);
+        return out;
+    }
+
+    // `Some` remainder when this starts with `prefix`.
+    public fun strip_prefix(borrow prefix: string): Option<string> {
+        if (this.starts_with(prefix) == false) {
+            return Option.None;
+        }
+        return Option.Some(this.substring(prefix.length, this.length));
+    }
+
+    // `Some` remainder when this ends with `suffix`.
+    public fun strip_suffix(borrow suffix: string): Option<string> {
+        if (this.ends_with(suffix) == false) {
+            return Option.None;
+        }
+        return Option.Some(this.substring(0, this.length - suffix.length));
+    }
+
+    // Splits on `\n` and strips a trailing `\r` from each part.
+    public fun lines(): string[] {
+        let parts = this.split('\n');
+        let i = 0;
+        while (i < parts.length) {
+            let line = parts[i];
+            if (line.ends_with("\r")) {
+                parts[i] = line.substring(0, line.length - 1);
+            }
+            i = i + 1;
+        }
+        if ((parts.length > 0) && parts[parts.length - 1].is_empty() && this.ends_with("\n")) {
+            let n = parts.length - 1;
+            let out = Buffer.alloc<string>(n);
+            i = 0;
+            while (i < n) {
+                out[i] = parts[i];
+                i = i + 1;
+            }
+            return out;
+        }
+        return parts;
+    }
+
     // A new string repeated `times` times.
     public fun repeat(times: int): string {
         if (times <= 0) {
@@ -262,6 +426,70 @@ extend string : Comparable<string> {
         return result;
     }
 
+    // Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
+    public fun split(sep: char, limit: int): string[] {
+        if (limit < 1) {
+            return this.split(sep);
+        }
+        if (limit == 1) {
+            let one = Buffer.alloc<string>(1);
+            one[0] = this;
+            return one;
+        }
+        let all = this.split(sep);
+        if (all.length <= limit) {
+            return all;
+        }
+        let out = Buffer.alloc<string>(limit);
+        let i = 0;
+        while (i < limit - 1) {
+            out[i] = all[i];
+            i = i + 1;
+        }
+        let sb = StringBuilder();
+        while (i < all.length) {
+            if (sb.is_empty() == false) {
+                sb.append_char(sep);
+            }
+            sb.append(all[i]);
+            i = i + 1;
+        }
+        out[limit - 1] = sb.build();
+        return out;
+    }
+
+    // Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
+    public fun split(borrow sep: string, limit: int): string[] {
+        if (limit < 1) {
+            return this.split(sep);
+        }
+        if (limit == 1) {
+            let one = Buffer.alloc<string>(1);
+            one[0] = this;
+            return one;
+        }
+        let all = this.split(sep);
+        if (all.length <= limit) {
+            return all;
+        }
+        let out = Buffer.alloc<string>(limit);
+        let i = 0;
+        while (i < limit - 1) {
+            out[i] = all[i];
+            i = i + 1;
+        }
+        let sb = StringBuilder();
+        while (i < all.length) {
+            if (sb.is_empty() == false) {
+                sb.append(sep);
+            }
+            sb.append(all[i]);
+            i = i + 1;
+        }
+        out[limit - 1] = sb.build();
+        return out;
+    }
+
     // A new string with every occurrence of `old` replaced by `replacement`.
     public fun replace(borrow old: string, borrow replacement: string): string {
         let needle = old.byte_size();
@@ -297,5 +525,21 @@ extend string : Comparable<string> {
             i = i + 1;
         }
         return true;
+    }
+}
+
+extend string[] {
+    // Joins elements with `sep` between them.
+    public fun join(sep: string): string {
+        let sb = StringBuilder();
+        let i = 0;
+        while (i < this.length) {
+            if (i > 0) {
+                sb.append(sep);
+            }
+            sb.append(this[i]);
+            i = i + 1;
+        }
+        return sb.build();
     }
 }

@@ -24,6 +24,11 @@ public class List<T> : IndexedCollection<T> {
         this.count = 0;
     }
 
+    // Allocates an empty list with backing capacity `capacity`.
+    public static fun with_capacity(capacity: int): List<T> {
+        return List<T>(capacity);
+    }
+
     // Number of elements currently stored.
     @inline
     public get length(): int {
@@ -154,6 +159,95 @@ public class List<T> : IndexedCollection<T> {
             i = i + 1;
         }
         return Option.None;
+    }
+
+    // Index of the last matching element (by value equality), or `None` if absent.
+    public fun last_index_of(borrow value: T): Option<int> {
+        let i = this.count - 1;
+        while (i >= 0) {
+            if (this.items[i] == value) {
+                return Option.Some(i);
+            }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+
+    // Grows the backing buffer until `capacity()` is at least `n`.
+    public fun reserve(n: int): void {
+        while (this.items.length < n) {
+            this.grow();
+        }
+    }
+
+    // Reverses the live prefix in place.
+    public fun reverse(): void {
+        let lo = 0;
+        let hi = this.count - 1;
+        while (lo < hi) {
+            let a = this.items[lo];
+            this.items[lo] = this.items[hi];
+            this.items[hi] = a;
+            lo = lo + 1;
+            hi = hi - 1;
+        }
+    }
+
+    // A new list of `this[start .. end)` (clamped; empty when the span is inverted).
+    public fun slice(start: int, end: int): List<T> {
+        let lo = start;
+        let hi = end;
+        if (lo < 0) {
+            lo = 0;
+        }
+        if (hi > this.count) {
+            hi = this.count;
+        }
+        if (lo > hi) {
+            lo = hi;
+        }
+        let result = List<T>(hi - lo);
+        let i = lo;
+        while (i < hi) {
+            result.push(this.items[i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // A new list with this list's elements followed by `other`.
+    public fun concat(borrow other: List<T>): List<T> {
+        let result = List<T>(this.count + other.length);
+        let i = 0;
+        while (i < this.count) {
+            result.push(this.items[i]);
+            i = i + 1;
+        }
+        i = 0;
+        while (i < other.length) {
+            result.push(other.get(i));
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // A shallow copy of the live elements.
+    public fun clone(): List<T> {
+        return this.slice(0, this.count);
+    }
+
+    // Joins stringifiable elements with `sep` (same conversion as `to_string` uses).
+    public fun join(sep: string): string {
+        let s = string.empty;
+        let i = 0;
+        while (i < this.count) {
+            if (i > 0) {
+                s = s + sep;
+            }
+            s = s + this.items[i];
+            i = i + 1;
+        }
+        return s;
     }
 
     // Empties the list while keeping the backing buffer. Live slots are overwritten with a zero

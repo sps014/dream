@@ -201,7 +201,7 @@ pub struct PackageMeta {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
     /// Optional host list (`native`, `web`, `node`). Empty means no preference — `dreamer run`
-    /// defaults to native wasmtime execution.
+    /// defaults to native C execution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<String>,
     /// Optional app icon path relative to the manifest directory (PNG).

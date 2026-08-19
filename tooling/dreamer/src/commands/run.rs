@@ -44,8 +44,8 @@ pub fn run_with(
         );
     }
     let host = resolve_run_target(&pkg.targets, target.as_deref())?;
-    if flags.native_c && host != RunTarget::Native {
-        bail!("--native-c / --backend c is only valid with the native host");
+    if !flags.native_c && host == RunTarget::Native {
+        bail!("--backend wasm is only valid with web/node hosts (native run uses C)");
     }
 
     match host {

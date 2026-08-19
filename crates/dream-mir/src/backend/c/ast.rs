@@ -301,6 +301,8 @@ pub enum Stmt {
     Label(String),
     Return(Option<Expr>),
     Block(Vec<Stmt>),
+    /// `#line N "path.dream"` for DWARF (from MIR `DebugLine` when `-g`).
+    Line { file: String, line: u32 },
 }
 
 impl Stmt {

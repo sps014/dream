@@ -40,7 +40,7 @@ function cryptoSha512Bytes(data) {
  * AES-256-GCM encrypt/decrypt for the `system.crypto.AesGcm` host ABI. Node uses `node:crypto`
  * (sync `createCipheriv`/`createDecipheriv`); browsers use the async Web Crypto `subtle` API
  * wrapped in a busy-wait on its result since the extern signature is synchronous (matches the
- * native/wasmtime host, which is also synchronous).
+ * native C host, which is also synchronous).
  */
 function cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad) {
   const keyBytes = Uint8Array.from(key || []);

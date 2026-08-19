@@ -36,28 +36,25 @@ indexmap = "2"
 logos = "0.16.1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
-wasmtime = { version = "45.0.2", optional = true }
 wat = "1.252.0"
-# Parse + validate emitted WGSL at compile time (same frontend WebGPU/naga use).
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }
-# HTTP client backing the native (wasmtime) `HttpClient` host functions (src/execution/host.rs).
+# HTTP client backing native `HttpClient` (libdream).
 # Blocking so it fits the synchronous host-call model; `serde_json` parses the header object.
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
 serde_json = { version = "1", optional = true }
-# Cross-platform raw-mode terminal input backing `System.readKey` (src/execution/host/console.rs)
-# and Windows ANSI virtual-terminal setup for `System.setForeground`/`setBackground`.
+# Cross-platform raw-mode terminal input backing `System.readKey` (native C runtime / libdream).
 crossterm = { version = "0.28", optional = true }
 # Resolves the local system timezone's UTC offset (including DST) for an arbitrary instant,
-# backing `DateTime.now()`/`DateTime.to_local()` (src/execution/host/datetime.rs). Calendar math
-# itself is implemented in pure Dream; chrono is only used for OS timezone-database lookups.
+# backing `DateTime.now()`/`DateTime.to_local()`. Calendar math itself is implemented in
+# Dream; chrono is only used for OS timezone-database lookups.
 chrono = { version = "0.4", optional = true }
 unicode-normalization = { version = "0.1", optional = true }
 unicode-segmentation = { version = "1.12", optional = true }
-# Host-backed digests and CSPRNG for `system.crypto` (src/execution/host/crypto.rs).
+# Host-backed digests and CSPRNG for `system.crypto`.
 sha2 = { version = "0.10", optional = true }
 hmac = { version = "0.12", optional = true }
 getrandom = { version = "0.2", optional = true }
-# AES-256-GCM AEAD for `system.crypto.AesGcm` (src/execution/host/crypto.rs).
+# AES-256-GCM AEAD for `system.crypto.AesGcm`.
 aes-gcm = { version = "0.10", optional = true }
 # Rust bindings to Binaryen's `wasm-opt`, backing the CLI's opt-in `-O`/`--optimize` post-processing
 # pass (src/driver/wasm_opt.rs) that shrinks/optimizes the emitted `.wasm` beyond what the MIR pass
@@ -65,12 +62,12 @@ aes-gcm = { version = "0.10", optional = true }
 # the wasm32 analyzer build (see the `wasm-opt` feature below) like the other native-only deps.
 wasm-opt = { version = "0.116", optional = true }
 # IANA timezone database (offsets/DST rules by zone name, e.g. "America/New_York"), backing
-# `TimeZone.of`/`DateTime.now_in`/`of_zoned` (src/execution/host/datetime.rs). `chrono` above only
+# `TimeZone.of`/`DateTime.now_in`/`of_zoned`. `chrono` above only
 # resolves the *local* system offset; this resolves any named zone at an arbitrary instant.
 chrono-tz = { version = "0.10.4", optional = true }
 # Detects the OS's configured IANA timezone name, backing `TimeZone.local()`.
 iana-time-zone = { version = "0.1.65", optional = true }
-# Blocking WebSocket client backing `system.net.WebSocket` (src/execution/host/net.rs). No TLS
+# Blocking WebSocket client backing `system.net.WebSocket`. No TLS
 # feature enabled: native `wss://` is unsupported for now (documented limitation), only `ws://`.
 # Native WebGPU host (`src/execution/host/gpu/`) for `dream run` compute/render.
 wgpu = { version = "24", optional = true }
@@ -82,16 +79,13 @@ gilrs = { version = "0.11", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 tungstenite = { version = "0.24", optional = true, default-features = false, features = ["handshake", "native-tls"] }
-libloading = { version = "0.8", optional = true }
-libffi = { version = "3.2", optional = true, features = ["system"] }
 
 [features]
 default = ["native", "wasm-opt"]
-# `native` pulls in the wasmtime-backed WASM runtime used by the `dream` CLI to
-# execute compiled programs. It is excluded from the wasm32 analyzer build, whose
-# only need is the lexer/parser/analyzer front-end.
-native = ["wasmtime", "reqwest", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "wry", "gilrs", "image", "c-ffi"]
-c-ffi = ["libloading", "libffi"]
+# `native` pulls in libdream (GPU/HTTP/console) used by the `dream` CLI to
+# execute compiled native C programs. It is excluded from the wasm32 analyzer
+# build, whose only need is the lexer/parser/analyzer front-end.
+native = ["reqwest", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "wry", "gilrs", "image"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
 # since it's a build-time optimization concern rather than a runtime-execution one, but excluded
 # from the wasm32 analyzer build the same way.
@@ -126,5 +120,5 @@ members = [
     "tooling/dream-runner",
 ]
 # v2 resolver so the wasm32 analyzer build does not inherit the root crate's default
-# `native` feature (and therefore never tries to compile wasmtime for wasm).
+# wasm32 analyzer build does not inherit the root crate's default `native` feature.
 resolver = "2"

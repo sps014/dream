@@ -1099,10 +1099,13 @@ fn test_indirect_call_emits_table_and_signature() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_indirect_call_through_function_table() {
-    // End-to-end: `f(2, 3)` dispatches through the table to `add`, printing `5`.
-    let (mir, interner) = indirect_call_demo();
-    let wat = dream_mir::backend::wasm::emit_module(&mir, &interner, false);
-    assert_eq!(run_wat(&wat, "main"), "5");
+    let code = format!(
+        "{SYSTEM_STUB}
+        {CLOSURE_STUB}
+        fun add(a: int, b: int): int {{ return a + b; }}
+        fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
+    );
+    assert_eq!(run_and_capture(&code, "main"), "5");
 }
 
 #[test]

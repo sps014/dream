@@ -300,7 +300,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         ],
         args: ArgShape::None,
         repeatable: false,
-        doc: "Marks a function/method as available on the native (wasmtime) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.",
+        doc: "Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.",
     },
     AttributeSpec {
         name: "node",
@@ -537,7 +537,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
             max: 2,
         },
         repeatable: false,
-        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")` for auto-link on the wasmtime host.",
+        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")` for auto-link on the native C host.",
     },
     AttributeSpec {
         name: "c_call",

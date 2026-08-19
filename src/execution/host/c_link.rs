@@ -1,8 +1,7 @@
 //! Locate `@c("lib", …)` shared libraries and emit `cc` link flags.
 //!
-//! Search order matches the wasmtime host (`native/` next to the artifact / source, CWD, then
-//! Homebrew/system dirs). Native-C uses the same paths with `-L` / `-l` / `-rpath` instead of
-//! `dlopen`.
+//! Search order: `native/` next to the artifact / source, CWD, then Homebrew/system dirs.
+//! Native C links with `-L` / `-l` / `-rpath`.
 
 use serde::Deserialize;
 use std::collections::BTreeSet;

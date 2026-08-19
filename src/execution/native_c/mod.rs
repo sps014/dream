@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub fn compile_and_run(c_path: &str, opt: OptLevel) -> Result<(), Box<dyn std::error::Error>> {
-    let bin = compile_native_c(Path::new(c_path), opt)?;
+    let bin = compile_native_c(Path::new(c_path), opt, false)?;
     run_native_bin(&bin, c_path)
 }
 
@@ -23,7 +23,7 @@ pub fn compile_and_capture(
     c_path: &str,
     opt: OptLevel,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_native_c(Path::new(c_path), opt)?;
+    let bin = compile_native_c(Path::new(c_path), opt, false)?;
     let mut cmd = Command::new(&bin);
     apply_native_run_env(&mut cmd, c_path);
     cmd.stdout(Stdio::piped());
@@ -66,11 +66,21 @@ pub fn run_native_bin(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-fn apply_native_run_env(cmd: &mut Command, c_path: &str) {
-    cmd.env("DREAM_NATIVE_C", c_path);
+pub(crate) fn apply_native_run_env(cmd: &mut Command, c_path: &str) {
+    for (k, v) in native_run_env_pairs(c_path) {
+        cmd.env(k, v);
+    }
+}
+
+/// Env vars the native guest needs (`DREAM_NATIVE_C`, dylib search path). Used by `dream run`
+/// and the lldb-dap debug adapter.
+pub(crate) fn native_run_env_pairs(c_path: &str) -> Vec<(String, String)> {
+    let mut out = vec![("DREAM_NATIVE_C".to_string(), c_path.to_string())];
     if let Some(dir) = libdream_dir() {
         let key = if cfg!(target_os = "macos") {
             "DYLD_LIBRARY_PATH"
+        } else if cfg!(target_os = "windows") {
+            "PATH"
         } else {
             "LD_LIBRARY_PATH"
         };
@@ -78,8 +88,9 @@ fn apply_native_run_env(cmd: &mut Command, c_path: &str) {
         if let Ok(prev) = std::env::var(key) {
             paths = format!("{paths}:{prev}");
         }
-        cmd.env(key, paths);
+        out.push((key.to_string(), paths));
     }
+    out
 }
 
 fn libdream_name() -> &'static str {
@@ -114,13 +125,21 @@ fn libdream_dir() -> Option<PathBuf> {
     dirs.into_iter().find(|d| d.join(name).exists())
 }
 
+const DEBUG_CC_FLAGS: &[&str] = &["-g", "-O0", "-fno-omit-frame-pointer"];
+
 fn runtime_archive(
     opt: OptLevel,
     need: dream_mir::runtime::RuntimeNeed,
+    debug: bool,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     static LOCK: Mutex<()> = Mutex::new(());
+    let sub = if debug {
+        "O0-g"
+    } else {
+        opt.native_rt_subdir()
+    };
     let dir = cc::native_rt_cache_root()
-        .join(opt.native_rt_subdir())
+        .join(sub)
         .join(format!("need_{:x}", need.bits()));
     std::fs::create_dir_all(&dir)?;
     // Cross-process: each `dream` PID has its own Mutex, so parallel probe jobs can race `ar`.
@@ -152,7 +171,11 @@ fn runtime_archive(
         return Ok(archive);
     }
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
-    cflags.extend(opt.cc_flags());
+    if debug {
+        cflags.extend(DEBUG_CC_FLAGS);
+    } else {
+        cflags.extend(opt.cc_flags());
+    }
     let toolchain = cc::resolve_cc()?;
     let mut objs = Vec::new();
     for (i, u) in units.iter().enumerate() {
@@ -187,13 +210,14 @@ fn runtime_archive(
 pub fn compile_native_c(
     c_path: &Path,
     opt: OptLevel,
+    debug: bool,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let obj = c_path.with_extension("o");
     let bin = c_path.with_extension("bin");
     let src = std::fs::read_to_string(c_path)?;
     let need = runtime_need_from_c_source(&src);
     let toolchain = cc::resolve_cc()?;
-    let rt = runtime_archive(opt, need)?;
+    let rt = runtime_archive(opt, need, debug)?;
     let warn = [
         "-std=gnu11",
         "-pthread",
@@ -203,9 +227,14 @@ pub fn compile_native_c(
         "-Wno-unused-parameter",
     ];
     let include = format!("-I{}", native_runtime_include_dir().display());
+    let opt_flags: &[&str] = if debug {
+        DEBUG_CC_FLAGS
+    } else {
+        opt.cc_flags()
+    };
 
     let mut ccmd = toolchain.cc_command();
-    ccmd.args(opt.cc_flags());
+    ccmd.args(opt_flags);
     ccmd.args(warn);
     ccmd.arg(&include);
     ccmd.arg("-c").arg(c_path).arg("-o").arg(&obj);
@@ -215,7 +244,7 @@ pub fn compile_native_c(
     }
 
     let mut lcmd = toolchain.cc_command();
-    lcmd.args(opt.cc_flags());
+    lcmd.args(opt_flags);
     lcmd.args(warn);
     lcmd.arg(&obj);
     lcmd.arg(&rt);

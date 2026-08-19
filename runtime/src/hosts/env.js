@@ -1,4 +1,4 @@
-/** Default `env` builtins every Dream module imports (mirrors src/.../wasm_runner.rs). */
+/** Default `env` builtins every Dream module imports (mirrors the WASM guest ABI). */
 function defaultEnv(getInstance, options) {
   const writeOut = options.stdout || ((s) => (typeof process !== "undefined" ? process.stdout.write(s) : console.log(s)));
   const writeLine = options.stdout

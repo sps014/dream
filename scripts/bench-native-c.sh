@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compile the native C hotpath (uintptr + memcpy + mmap). Does not change `dream run` (wasmtime).
+# Compile the native C runtime hotpath (uintptr + memcpy + mmap).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CC="${CC:-cc}"
@@ -9,4 +9,4 @@ NATIVE="$ROOT/crates/dream-mir/src/runtime/c/native"
   "$NATIVE/heap.c" "$NATIVE/weak.c" "$NATIVE/strings.c" "$NATIVE/bench_hotpath.c"
 echo "== native C runtime hotpath ($OUT) =="
 "$OUT"
-echo "(compare to wasmtime via ./scripts/run-microbenches.sh; do not switch default dream run until these beat --release wasm)"
+echo "(language-level benches: ./scripts/run-microbenches.sh)"

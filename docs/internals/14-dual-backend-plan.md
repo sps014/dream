@@ -1,27 +1,22 @@
-# 14 — Dual backend: Wasm (default) and native C (opt-in)
+# 14 — Dual backend: native C (default run) and Wasm (web)
 
-Same MIR, two emitters. There is **no LLVM backend**.
+Same MIR, two emitters. There is **no LLVM backend**. `dream run` / `test` / `debug-adapter` compile MIR → C → `cc` → `.bin`. WAT/WASM is for `--runtime --web` / `--node` (and explicit `--backend wasm` compile-only).
 
 ## What ships
 
-| | Wasm (`Target::Wasm`, default) | Native C (`Target::NativeC`) |
+| | Native C (`Target::NativeC`, default run) | Wasm (`Target::Wasm`) |
 |---|---|---|
-| Emit | Relooper → WAT/WASM (`backend/wasm`) | MIR → C99 (`backend/c`) |
-| Runtime | Same-module `runtime/*.wat`; PCRE2 interpreter in `regex.wat` | `runtime/c/native/` (`uintptr_t`, `memcpy`, mmap heap, platform SIMD); PCRE2-16 **JIT** |
-| Run | `dream run` → wasmtime | `dream run --backend c` → `zig cc` or `CC`, then exec |
-| Web / Node | `--runtime --web` / `--node` | Rejected (no WASM module) |
-
-Opt-in compile-to-C:
+| Emit | MIR → C99 (`backend/c`) | Relooper → WAT/WASM (`backend/wasm`) |
+| Runtime | `runtime/c/native/` (`uintptr_t`, `memcpy`, mmap heap, platform SIMD); PCRE2-16 **JIT** | Same-module `runtime/*.wat`; PCRE2 interpreter in `regex.wat` |
+| Run | `dream run` → clang/zig cc, then exec the `.bin` | Not used for `dream run` |
+| Debug | `#line` + clang `-g` + `lldb-dap` | Browser later; not the CLI DAP |
+| Web / Node | Rejected | `--runtime --web` / `--node` |
 
 ```bash
-dream --native-c file.dream              # writes target/debug/*.c, *.o, *.bin
-dream --backend c file.dream
-dream run --backend c --release file.dream
+dream run file.dream                     # native C .bin
+dream --backend wasm file.dream          # compile WAT/WASM only
+dream --runtime --web file.dream         # browser artifacts under target/web/
 ```
-
-`dream run` with no `--backend` stays WAT → Wasmtime until native C wins
-`scripts/bench-native-c.sh` / `microbenches.dream` against `--release` wasm. Do not
-switch the default while native is slower.
 
 Numeric ABI (`TAG_*`, string header, future slots) is shared in
 `crates/dream-mir/src/abi.rs` and `crates/dream-mir/src/runtime/c/include/dream_abi.h`
@@ -38,7 +33,5 @@ Numeric ABI (`TAG_*`, string header, future slots) is shared in
 ## Non-goals
 
 - LLVM IR, libLLVM, or merging branch `llvm`.
-- Deleting the Wasm backend.
-- Benchmax (`\d+`-only regex scoreboard).
-- Claiming native parity while native is slower than Wasm.
-- Generating guest `$malloc` / strings WAT from C (guest core stays WAT).
+- Deleting the Wasm backend (browser still needs it).
+- Wasmtime as a native runner.

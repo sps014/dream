@@ -1,4 +1,4 @@
-//! C ABI for `system.webview` host functions (`--native-c` / `-ldream`).
+//! C ABI for `system.webview` host functions (`-ldream`).
 
 #![allow(clippy::missing_safety_doc)]
 

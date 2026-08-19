@@ -1,11 +1,5 @@
-//! Native execution of compiled Dream modules under wasmtime. [`wasm_runner`] instantiates a `.wat`
-//! / `.wasm` / `.cwasm` module, wires the `env` print imports and the [`host`] function modules
-//! (file/http/regex/console/datetime/math), and runs its entry point; [`host`] holds those host
-//! functions and the linear-memory marshaling they share. The browser/Node hosts mirror the same
-//! function names in `runtime/dream.js`, so a program behaves identically across runtimes.
+//! Native execution of compiled Dream modules: C guest + libdream host (`native_c`), DAP via lldb.
 
-pub mod cwasm;
 pub mod debugger;
 pub mod host;
 pub mod native_c;
-pub mod wasm_runner;

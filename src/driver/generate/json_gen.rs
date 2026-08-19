@@ -77,7 +77,7 @@ pub fn expand_from_acc(
     {
         let _ = (ctx, structs, enums);
         diagnostics.report_error(
-            "@json derive requires the native compiler feature (wasmtime host)".to_string(),
+            "@json derive requires the native compiler feature".to_string(),
             None,
         );
     }
@@ -741,15 +741,18 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
     let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
-    let wat_path = cached_harness_wat().map_err(|e| JsonGenError {
+    let c_path = cached_harness_c().map_err(|e| JsonGenError {
         message: e,
         type_name: None,
         field_name: None,
     })?;
-    let snap_path = write_unique_snapshot(&wat_path, snapshot)?;
+    let snap_path = write_unique_snapshot(&c_path, snapshot)?;
 
     std::env::set_var(SNAPSHOT_ENV, snap_path.as_os_str());
-    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path);
+    let output = crate::execution::native_c::compile_and_capture(
+        &c_path,
+        crate::driver::wasm_opt::OptLevel::O3,
+    );
     std::env::remove_var(SNAPSHOT_ENV);
     let _ = std::fs::remove_file(&snap_path);
 
@@ -764,11 +767,11 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
 
 #[cfg(feature = "native")]
 fn write_unique_snapshot(
-    wat_path: &str,
+    c_path: &str,
     snapshot: &str,
 ) -> Result<std::path::PathBuf, JsonGenError> {
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let dir = std::path::Path::new(wat_path)
+    let dir = std::path::Path::new(c_path)
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
     let nanos = std::time::SystemTime::now()
@@ -919,10 +922,7 @@ fn lookup_json_error_span(
 }
 
 #[cfg(feature = "native")]
-fn cached_harness_wat() -> Result<String, String> {
-    // Fingerprint harness + generator Dream sources so a stdlib edit invalidates the cache.
-    // Also fold string ABI constants + StringBuilder: a stale harness WAT with the old
-    // `[len][utf8@+4]` layout will fail host `read_string` after a string-layout change.
+fn cached_harness_c() -> Result<String, String> {
     let fingerprint = {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -942,18 +942,12 @@ fn cached_harness_wat() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream")
             .hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/runtime/strings.wat").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/runtime/allocator.wat").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream").hash(&mut h);
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream").hash(&mut h);
-        // RC insertion policy (sink `New` args, cursors, …) changes emitted harness WAT without
-        // touching the Dream sources above — fold it in so the cache cannot go stale.
         include_str!("../../../crates/dream-mir/src/passes/rc/insertion.rs").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/backend/wasm/emitter/rvalue/mod.rs")
-            .hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/backend/wasm/emitter/mod.rs").hash(&mut h);
-        include_str!("../../../crates/dream-mir/src/backend/wasm/runtime.rs").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/backend/c/module.rs").hash(&mut h);
+        include_str!("../../../crates/dream-mir/src/backend/c/print.rs").hash(&mut h);
         h.finish()
     };
     let entry = super::current_entry_file();
@@ -961,14 +955,14 @@ fn cached_harness_wat() -> Result<String, String> {
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
     let src_path = dir.join("harness.dream");
-    let wat_path = dir.join("harness.wat");
-    if !wat_path.is_file() {
+    let c_path = dir.join("harness.c");
+    if !c_path.is_file() {
         std::fs::write(&src_path, HARNESS_SOURCE)
             .map_err(|e| format!("@json generator: write harness source: {e}"))?;
         let src = src_path.to_string_lossy().into_owned();
-        let out = wat_path.to_string_lossy().into_owned();
+        let out = c_path.to_string_lossy().into_owned();
         let compiler =
-            crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+            crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::NativeC)
                 .with_skip_generators(true)
                 .with_release(true)
                 .with_optimize(None);
@@ -976,5 +970,5 @@ fn cached_harness_wat() -> Result<String, String> {
             .compile(&src, &out)
             .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;
     }
-    Ok(wat_path.to_string_lossy().into_owned())
+    Ok(c_path.to_string_lossy().into_owned())
 }

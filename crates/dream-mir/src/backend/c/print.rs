@@ -199,8 +199,27 @@ fn indent(out: &mut String, n: usize) {
     }
 }
 
+fn print_line_directive(out: &mut String, file: &str, line: u32) {
+    out.push_str("#line ");
+    out.push_str(&line.to_string());
+    if !file.is_empty() {
+        out.push_str(" \"");
+        for c in file.chars() {
+            if c == '\\' || c == '"' {
+                out.push('\\');
+            }
+            out.push(c);
+        }
+        out.push('"');
+    }
+    out.push('\n');
+}
+
 fn print_stmt(out: &mut String, stmt: &Stmt, ind: usize, nl: bool) {
     match stmt {
+        Stmt::Line { file, line } => {
+            print_line_directive(out, file, *line);
+        }
         Stmt::Label(name) => {
             out.push_str(name);
             out.push_str(":;\n");
@@ -643,6 +662,7 @@ fn print_expr(out: &mut String, expr: &Expr, prec: u8) {
 
 fn print_stmt_compact(out: &mut String, stmt: &Stmt) {
     match stmt {
+        Stmt::Line { file, line } => print_line_directive(out, file, *line),
         Stmt::Decl { ty, name, init, .. } => {
             print_decl_ty(out, ty, name);
             if let Some(e) = init {

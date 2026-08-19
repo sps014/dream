@@ -5,7 +5,9 @@
 
 #![allow(dead_code)]
 
-use dream::execution::host;
+use dream::driver::compiler::{Compiler, Target};
+use dream::driver::wasm_opt::OptLevel;
+use dream::execution::native_c::compile_and_capture;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::Hir;
 use dream_sema::analyzer::Analyzer;
@@ -72,12 +74,61 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
     })
 }
 
-/// Compiles `code` through the MIR backend, instantiates the module under wasmtime with the host
-/// `print_*` imports wired to a capture buffer, runs the exported `entry`, and returns everything it
-/// printed. This exercises the *runtime* — allocator, string ABI, and `*_to_string` — for real,
-/// rather than only asserting the emitted text assembles.
-pub fn run_and_capture(code: &str, entry: &str) -> String {
-    run_wat(&emit_hir_to_module(code), entry)
+/// Compiles `code` through the native C backend and returns stdout from `main`.
+pub fn run_and_capture(code: &str, _entry: &str) -> String {
+    run_native_main(code)
+}
+
+pub fn run_and_capture_rc(code: &str, _entry: &str) -> String {
+    run_native_main(code)
+}
+
+fn run_native_main(code: &str) -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("dream_cap_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let src = dir.join("t.dream");
+    // Unit-test HIR stubs duplicate the real prelude; the driver merges stdlib itself.
+    let source = [ASYNC_STUB, JS_STUB, CLOSURE_STUB, SYSTEM_STUB]
+        .iter()
+        .fold(code.to_string(), |s, stub| s.replace(stub, ""));
+    let source = dedent_dream_source(&source);
+    let source = if source.contains("import system") {
+        source
+    } else {
+        format!("import system;\n{}", source)
+    };
+    std::fs::write(&src, &source).expect("write source");
+    let c = dir.join("t.c");
+    let src_s = src.to_string_lossy().into_owned();
+    let c_s = c.to_string_lossy().into_owned();
+    Compiler::new(Target::NativeC)
+        .compile(&src_s, &c_s)
+        .unwrap_or_else(|e| panic!("native C compile failed: {}", e));
+    compile_and_capture(&c_s, OptLevel::O0).unwrap_or_else(|e| panic!("native C run failed: {}", e))
+}
+
+fn dedent_dream_source(s: &str) -> String {
+    let lines: Vec<&str> = s.lines().collect();
+    let min = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    lines
+        .iter()
+        .map(|l| {
+            if l.len() >= min {
+                l[min..].to_string()
+            } else {
+                (*l).to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Like [`emit_hir_to_module`] but runs [`RcInsertion`] first, so `Retain`/`Release` statements are
@@ -86,91 +137,6 @@ pub fn run_and_capture(code: &str, entry: &str) -> String {
 /// optimizing passes are skipped so they cannot elide the release we are testing.
 pub fn emit_hir_to_module_rc(code: &str) -> String {
     emit_hir_to_module_rc_only(code)
-}
-
-/// Compiles `code` with RC insertion enabled and runs it, capturing output (see [`run_and_capture`]).
-pub fn run_and_capture_rc(code: &str, entry: &str) -> String {
-    run_wat(&emit_hir_to_module_rc(code), entry)
-}
-
-/// Instantiates a WAT module under wasmtime with the host `print_*` imports wired to a capture
-/// buffer, runs the exported `entry`, and returns everything it printed. This exercises the *runtime*
-/// — allocator, string ABI, `*_to_string`, and deep release — for real, not just that it assembles.
-pub fn run_wat(wat: &str, entry: &str) -> String {
-    use std::sync::{Arc, Mutex};
-    use wasmtime::*;
-
-    let wasm = wat::parse_str(wat).expect("module should assemble");
-    let config = host::threaded_wasm_config();
-    let engine = Engine::new(&config).expect("engine should build");
-    let module = Module::new(&engine, &wasm).expect("module should compile");
-    let out = Arc::new(Mutex::new(String::new()));
-    let mut store = Store::new(&engine, out.clone());
-    store.set_epoch_deadline(u64::MAX);
-    let mut linker = Linker::new(&engine);
-    host::define_env_memory(&engine, &mut store, &mut linker, &module)
-        .expect("module should import env.memory");
-
-    linker
-        .func_wrap(
-            "env",
-            "print_int",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: i32| {
-                c.data().lock().unwrap().push_str(&v.to_string());
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_char",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: i32| {
-                if let Some(ch) = char::from_u32(v as u32) {
-                    c.data().lock().unwrap().push(ch);
-                }
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_float",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: f32| {
-                c.data().lock().unwrap().push_str(&v.to_string());
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_double",
-            |c: Caller<'_, Arc<Mutex<String>>>, v: f64| {
-                c.data().lock().unwrap().push_str(&v.to_string());
-            },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "env",
-            "print_string",
-            |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
-                let s =
-                    host::with_guest_bytes(&mut c, |data| host::decode_string(data, ptr)).unwrap();
-                c.data().lock().unwrap().push_str(&s);
-            },
-        )
-        .unwrap();
-
-    let instance = linker
-        .instantiate(&mut store, &module)
-        .expect("module should instantiate");
-    let func = instance
-        .get_typed_func::<(), ()>(&mut store, entry)
-        .unwrap_or_else(|_| panic!("module should export `{}`", entry));
-    func.call(&mut store, ())
-        .expect("entry should run without trapping");
-    let captured = out.lock().unwrap().clone();
-    captured
 }
 
 /// Compiles through the production-like MIR pipeline: RC insertion, module optimize (inline), then

@@ -23,7 +23,7 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
 | 11 | [Nim-hard ARC](./11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
-| 14 | [Dual backend](./14-dual-backend-plan.md) | Default WAT → wasmtime; opt-in MIR → C (`--native-c`). No LLVM. |
+| 14 | [Dual backend](./14-dual-backend-plan.md) | Default native C for `dream run`; WAT for `--runtime --web/--node`. |
 
 ## Why a multi-pass architecture
 
@@ -71,7 +71,7 @@ Dream/
 │   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit + runtime/
 ├── src/                            Root `dream`: driver, CLI, execution only
 │   ├── driver/                     Pipeline orchestration, source loading, errors
-│   └── execution/                  (feature "native") wasmtime runner
+│   └── execution/                  (feature "native") C guest + libdream + lldb-dap
 └── docs/internals/                 ← you are here
 ```
 

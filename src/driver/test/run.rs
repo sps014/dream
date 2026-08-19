@@ -3,7 +3,6 @@
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
 use crate::driver::compiler::{Compiler, Target};
 use crate::driver::wasm_opt::OptLevel;
-use crate::execution::wasm_runner::execute_wasm;
 use dream_sema::analyzer::CrateType;
 use std::fs;
 use std::io::{self, Write};
@@ -13,7 +12,6 @@ use std::path::{Path, PathBuf};
 pub struct TestOptions {
     pub release: bool,
     pub optimize: Option<OptLevel>,
-    pub native_c: bool,
     pub filter: Option<String>,
     pub verbose: bool,
 }
@@ -86,7 +84,6 @@ fn collect_dream_files_rec(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Str
         let p = entry.path();
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        // Skip build caches and previously synthesized runners.
         if name == "target" || name.starts_with('.') {
             continue;
         }
@@ -129,21 +126,17 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     }
 
     let runner_source = synthesize_runner(&source, &tests);
-    let out_dir = test_cache_dir(path, opts.release, opts.native_c);
+    let out_dir = test_cache_dir(path, opts.release);
     fs::create_dir_all(&out_dir).map_err(|e| format!("create {}: {}", out_dir.display(), e))?;
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("tests");
     let runner_path = out_dir.join(format!("{stem}.runner.dream"));
     fs::write(&runner_path, &runner_source)
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
 
-    let mut compiler = Compiler::new(if opts.native_c {
-        Target::NativeC
-    } else {
-        Target::Wasm
-    })
-    .with_release(opts.release)
-    .with_crate_type(CrateType::Bin)
-    .with_emit_abi(false);
+    let mut compiler = Compiler::new(Target::NativeC)
+        .with_release(opts.release)
+        .with_crate_type(CrateType::Bin)
+        .with_emit_abi(false);
     if let Some(level) = opts.optimize {
         compiler = compiler.with_optimize(Some(level));
     }
@@ -157,30 +150,20 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         );
     }
     let _ = writeln!(io::stderr(), "running {}:", path.display());
-    if opts.native_c {
-        let c_path = out_dir.join(format!("{stem}.c"));
-        let c_str = c_path.to_string_lossy().into_owned();
-        compiler
-            .compile(&runner_str, &c_str)
-            .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
-        let cc_opt = OptLevel::from_cli(opts.release, opts.optimize);
-        let bin = crate::execution::native_c::compile_native_c(&c_path, cc_opt)
-            .map_err(|e| format!("cc '{}': {}", path.display(), e))?;
-        crate::execution::native_c::run_native_bin(&bin, &c_str)
-            .map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
-    } else {
-        let wat_path = out_dir.join(format!("{stem}.wat"));
-        let wat_str = wat_path.to_string_lossy().into_owned();
-        compiler
-            .compile(&runner_str, &wat_str)
-            .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
-        execute_wasm(&wat_str).map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
-    }
+    let c_path = out_dir.join(format!("{stem}.c"));
+    let c_str = c_path.to_string_lossy().into_owned();
+    compiler
+        .compile(&runner_str, &c_str)
+        .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
+    let cc_opt = OptLevel::from_cli(opts.release, opts.optimize);
+    let bin = crate::execution::native_c::compile_native_c(&c_path, cc_opt, false)
+        .map_err(|e| format!("cc '{}': {}", path.display(), e))?;
+    crate::execution::native_c::run_native_bin(&bin, &c_str)
+        .map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
     Ok(tests.len())
 }
 
 fn source_has_main(source: &str) -> bool {
-    // Cheap lexical check: a top-level `fun main` / `async fun main`. Avoids a second full parse.
     for line in source.lines() {
         let t = line.trim_start();
         if t.starts_with("fun main(") || t.starts_with("async fun main(") {
@@ -222,20 +205,12 @@ fn escape_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn test_cache_dir(test_file: &Path, release: bool, native_c: bool) -> PathBuf {
+fn test_cache_dir(test_file: &Path, release: bool) -> PathBuf {
     let source_dir = test_file
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let sub = if native_c {
-        if release {
-            "release"
-        } else {
-            "debug"
-        }
-    } else {
-        "web"
-    };
+    let sub = if release { "release" } else { "debug" };
     let mut dir = source_dir.to_path_buf();
     loop {
         if dir.join("dream.toml").is_file() {

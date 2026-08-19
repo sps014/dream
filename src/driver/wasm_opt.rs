@@ -132,14 +132,11 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
     // `src/mir/emit/emitter/`) and other post-MVP instructions, so `wasm-opt`'s narrow default
     // feature baseline (sign-extension + mutable-globals only) mis-validates them as errors.
     // `FeatureBaseline::All` looked like the obvious fix, but it over-shoots: it also licenses
-    // Binaryen to *emit* far newer proposals (e.g. typed function references) that this project's
-    // `wasmtime::Config` (`src/execution/wasm_runner.rs`) never opts into, silently producing a
-    // `.wasm` that fails to parse at runtime (`-Oz` was observed doing exactly this). Instead,
-    // start from the MVP baseline and enable precisely the proposals `threaded_wasm_config`
-    // opts into (WASM 2.0 plus multi-memory/relaxed-simd/tail-call/extended-const/threads).
-    // `Feature::Memory64` is omitted: wasmtime 45 leaves `wasm_memory64` off and Dream emits
-    // i32 memories. Never use `FeatureBaseline::All` / `Feature::Gc` / `ExceptionHandling` /
-    // `Strings` — Binaryen may emit opcodes this runtime will not load.
+    // Binaryen to *emit* far newer proposals (e.g. typed function references) that browsers
+    // and the WAT emitter's feature set do not use. Instead, start from the MVP baseline and
+    // enable precisely the proposals Dream's WAT module needs (WASM 2.0 plus
+    // multi-memory/relaxed-simd/tail-call/extended-const/threads).
+    // `Feature::Memory64` is omitted: Dream emits i32 memories.
     options.features.baseline = FeatureBaseline::MvpOnly;
     options.features.enabled.extend([
         Feature::MutableGlobals,
@@ -154,7 +151,7 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
         Feature::TailCall,
         Feature::ExtendedConst,
         // Linear memory is always emitted `shared` (`src/mir/emit/module.rs`) so every `WebWorker`
-        // instance can import the same `wasmtime::SharedMemory` — Binaryen needs the threads
+        // instance can import the same shared memory — Binaryen needs the threads
         // proposal ("Atomics" in its feature naming) enabled just to parse/validate that, even
         // before any atomic instruction is actually emitted (Phase 2+).
         Feature::Atomics,

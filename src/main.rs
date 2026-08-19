@@ -2,7 +2,6 @@ use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native_c::{compile_native_c, run_native_bin};
-use dream::execution::wasm_runner::execute_wasm;
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
@@ -15,9 +14,6 @@ use tracing_subscriber::FmtSubscriber;
 /// prints usage and exits successfully.
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some("aot") {
-        return aot_command(&args);
-    }
     let program = args
         .first()
         .map(String::as_str)
@@ -40,7 +36,7 @@ fn main() -> ExitCode {
     let mut explicit_target: Option<CompileTargets> = None;
     let mut crate_type = CrateType::Bin;
     let mut crate_type_explicit = false;
-    let mut native_c = false;
+    let mut native_c = true;
 
     let mut i = 1;
     while i < args.len() {
@@ -53,10 +49,7 @@ fn main() -> ExitCode {
             // Default (no flag) keeps allocator probes and the full runtime.
             release = true;
         } else if arg == "-g" || arg == "--debug-info" {
-            // Enable source-level debug-info: line hooks + a `.dbg.json` source map for the
-            // interactive debugger. Off by default (zero overhead in normal builds). Combined with
-            // `--release`, allocator instrumentation is still off, but WAT DCE stays disabled
-            // because the debugger needs the full module.
+            // Source-level debug: MIR DebugLine → C `#line`, clang `-g -O0` for lldb-dap.
             debug_info = true;
         } else if arg == "-h" || arg == "--help" {
             show_help = true;
@@ -139,7 +132,7 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             });
-        } else if arg == "--native-c" || arg == "--backend=c" {
+        } else if arg == "--backend=c" {
             native_c = true;
         } else if arg == "--backend=wasm" {
             native_c = false;
@@ -237,12 +230,11 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if native_c && debug_adapter {
-        error!("debug-adapter requires the wasm backend (omit --native-c)");
-        return ExitCode::FAILURE;
+    if !runtimes.is_empty() {
+        native_c = false;
     }
-    if native_c && !runtimes.is_empty() {
-        error!("--runtime --web/--node requires the wasm backend (omit --native-c)");
+    if !native_c && (debug_adapter || run_after_compile || run_tests) {
+        error!("`run`, `test`, and `debug-adapter` use the native C backend; WAT is only emitted with `--runtime --web` and/or `--node` (or `--backend wasm` to compile without running)");
         return ExitCode::FAILURE;
     }
 
@@ -295,7 +287,6 @@ fn main() -> ExitCode {
         let opts = dream::driver::test::TestOptions {
             release,
             optimize,
-            native_c,
             filter: test_filter,
             verbose,
         };
@@ -336,8 +327,7 @@ fn main() -> ExitCode {
     .with_runtimes(runtimes)
     .with_compile_targets(compile_targets)
     .with_emit_abi(emit_abi)
-    .with_crate_type(crate_type)
-    .with_emit_cwasm(release && compile_targets.native && !native_c);
+    .with_crate_type(crate_type);
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
@@ -366,25 +356,24 @@ fn main() -> ExitCode {
         Ok(_) => {
             info!("Compilation successful");
 
-            if debug_adapter {
-                // Hand control to the Debug Adapter Protocol server, which loads the just-emitted
-                // `.wat` + `.dbg.json` and drives execution under the debugger over stdio.
-                if let Err(e) = dream::execution::debugger::run_debug_adapter(&out_path) {
-                    error!("Debug adapter failed: {}", e);
-                    return ExitCode::FAILURE;
-                }
-                return ExitCode::SUCCESS;
-            }
-
             if native_c {
                 let cc_opt = OptLevel::from_cli(release, optimize);
-                match compile_native_c(Path::new(&out_path), cc_opt) {
+                match compile_native_c(Path::new(&out_path), cc_opt, debug_info) {
                     Ok(bin) => {
                         info!(
                             "created file: {}",
                             Path::new(&out_path).with_extension("o").display()
                         );
                         info!("created file: {}", bin.display());
+                        if debug_adapter {
+                            if let Err(e) =
+                                dream::execution::debugger::run_debug_adapter(&bin, &out_path)
+                            {
+                                error!("Debug adapter failed: {}", e);
+                                return ExitCode::FAILURE;
+                            }
+                            return ExitCode::SUCCESS;
+                        }
                         if run_after_compile {
                             info!("Executing native C...");
                             if let Err(e) = run_native_bin(&bin, &out_path) {
@@ -397,12 +386,6 @@ fn main() -> ExitCode {
                         error!("cc failed: {}", e);
                         return ExitCode::FAILURE;
                     }
-                }
-            } else if run_after_compile {
-                info!("Executing via Wasmtime...");
-                if let Err(e) = execute_wasm(&out_path) {
-                    error!("Execution failed: {}", e);
-                    return ExitCode::FAILURE;
                 }
             }
             ExitCode::SUCCESS
@@ -417,21 +400,20 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--native-c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter|aot] <file|dir>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir>",
         program
     );
     error!("  -v, --verbose         Print progress information");
     error!(
-        "  --release             Trimmed build; wasm-opt / cc default -O3 (-Os with --web); native wasm also emits .cwasm"
+        "  --release             Trimmed build; cc default -O3; wasm-opt -O3 (or -Os with --web)"
     );
     error!(
-        "  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)"
+        "  -g, --debug-info      C `#line` + clang -g -O0 for lldb-dap (`debug-adapter` implies this)"
     );
     error!(
         "  -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z; default: s); overrides --release"
     );
-    error!("  --backend wasm|c     Codegen backend (default: wasm / Wasmtime)");
-    error!("  --native-c           Same as --backend c. Compiles with zig cc / CC to .bin; `run` execs it");
+    error!("  --backend wasm|c     Codegen backend (default: c / native). WAT only with --runtime --web/--node");
     error!(
         "  --target native|node|web  Compile-time runtime target for availability checks (default: native)"
     );
@@ -444,10 +426,9 @@ fn print_usage(program: &str) {
         "  --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR"
     );
     error!("  -h, --help            Show this help message");
-    error!("  run                   Execute the compiled module after a successful build");
+    error!("  run                   Compile native C and execute the .bin");
     error!("  test                  Discover and run @test functions in a file or directory");
-    error!("  debug-adapter         Run the Debug Adapter Protocol server over stdio (implies -g)");
-    error!("  aot <in.wasm> [out.cwasm] [--target TRIPLE]  Cranelift-precompile wasm for Wasmtime");
+    error!("  debug-adapter         DAP over stdio via lldb-dap on the native .bin (implies -g)");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
     error!(r"Example: {} test tests/", program);
     error!(r"Example: {} --filter adds test tests/math.dream", program);
@@ -513,59 +494,4 @@ fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Op
     let ext = if native_c { "c" } else { "wat" };
     let result = out_dir.join(format!("{file_stem}.{ext}"));
     Some(result.to_str()?.to_string())
-}
-
-/// `dream aot <in.wasm> [out.cwasm] [--target <rustc-triple>]` — Cranelift-precompile for Wasmtime.
-fn aot_command(args: &[String]) -> ExitCode {
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::WARN)
-        .without_time()
-        .with_target(false)
-        .with_writer(std::io::stderr)
-        .finish();
-    let _ = tracing::subscriber::set_global_default(subscriber);
-
-    let mut target: Option<String> = None;
-    let mut positionals: Vec<&str> = Vec::new();
-    let mut i = 2;
-    while i < args.len() {
-        let arg = &args[i];
-        if arg == "--target" {
-            i += 1;
-            let Some(val) = args.get(i) else {
-                error!("aot --target requires a rustc/Wasmtime triple");
-                return ExitCode::FAILURE;
-            };
-            target = Some(val.clone());
-        } else if let Some(val) = arg.strip_prefix("--target=") {
-            target = Some(val.to_string());
-        } else if arg == "-h" || arg == "--help" {
-            error!("Usage: dream aot <in.wasm> [out.cwasm] [--target TRIPLE]");
-            return ExitCode::SUCCESS;
-        } else if arg.starts_with('-') {
-            error!("unknown aot flag '{}'", arg);
-            return ExitCode::FAILURE;
-        } else {
-            positionals.push(arg.as_str());
-        }
-        i += 1;
-    }
-
-    let Some(wasm_path) = positionals.first() else {
-        error!("Usage: dream aot <in.wasm> [out.cwasm] [--target TRIPLE]");
-        return ExitCode::FAILURE;
-    };
-    let wasm_path = PathBuf::from(wasm_path);
-    let cwasm_path = match positionals.get(1) {
-        Some(p) => PathBuf::from(*p),
-        None => wasm_path.with_extension("cwasm"),
-    };
-
-    match dream::execution::cwasm::write_cwasm_file(&wasm_path, &cwasm_path, target.as_deref()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            error!("{}", e);
-            ExitCode::FAILURE
-        }
-    }
 }

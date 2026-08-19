@@ -3,7 +3,7 @@
 This directory is **PCRE2 10.45** (16-bit library only), vendored so both backends share one
 engine:
 
-- **Native C** (`../regex.c` with `-DDREAM_NATIVE`, `dream --native-c`): `SUPPORT_JIT` in
+- **Native C** (`../regex.c` with `-DDREAM_NATIVE`, `dream run`): `SUPPORT_JIT` in
   `config.h` unless `PCRE2_WASM` is defined. JIT uses sljit under [`../deps/sljit/`](../deps/sljit/README.md).
 - **WASM guest**: `scripts/build-runtime.sh` compiles the catalog `regex` link module with
   `-DPCRE2_WASM` (no JIT sources), links with wasi-sdk `wasm-ld`, and writes
@@ -50,7 +50,7 @@ included from `pcre2_jit_compile.c` on native only (`native_extra_c` in the cata
    - `SUPPORT_PCRE2_16`, `SUPPORT_UNICODE`, `HAVE_MEMMOVE` / stdlib + string headers
    - `#ifndef PCRE2_WASM` → `#define SUPPORT_JIT 1`
    - no `SUPPORT_PCRE2_8` / `_32`
-5. Native: `dream --native-c` links catalog `shared_c` + `SOURCES` + `native_extra_c` when
+5. Native: `dream run` links catalog `shared_c` + `SOURCES` + `native_extra_c` when
    `RuntimeNeed::REGEX` is set (`-DDREAM_NATIVE -DHAVE_CONFIG_H -DPCRE2_CODE_UNIT_WIDTH=16`).
 6. WASM: `scripts/build-runtime.sh` as above; run regex goldens
    (`tests/cases/regex_*.dream`).

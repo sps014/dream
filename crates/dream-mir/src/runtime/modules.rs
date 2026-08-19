@@ -1,7 +1,7 @@
 //! Linked C libraries (today: PCRE2 regex) plus native compile file lists.
 //!
 //! Guest same-module helpers are authored as `runtime/*.wat`. `scripts/build-runtime.sh` only
-//! rebuilds linked `wat_out` (regex). Native `--native-c` uses `runtime/c/native/`.
+//! rebuilds linked `wat_out` (regex). Native C uses `runtime/c/native/`.
 
 use indexmap::IndexMap;
 use std::path::{Path, PathBuf};

@@ -704,7 +704,7 @@ function getNodeChildProcess() { return _nodeChildProcess; }
 function getNodeNet() { return _nodeNet; }
 
 // ----- hosts/env.js -----
-/** Default `env` builtins every Dream module imports (mirrors src/.../wasm_runner.rs). */
+/** Default `env` builtins every Dream module imports (mirrors the WASM guest ABI). */
 function defaultEnv(getInstance, options) {
   const writeOut = options.stdout || ((s) => (typeof process !== "undefined" ? process.stdout.write(s) : console.log(s)));
   const writeLine = options.stdout
@@ -1361,7 +1361,7 @@ function cryptoSha512Bytes(data) {
  * AES-256-GCM encrypt/decrypt for the `system.crypto.AesGcm` host ABI. Node uses `node:crypto`
  * (sync `createCipheriv`/`createDecipheriv`); browsers use the async Web Crypto `subtle` API
  * wrapped in a busy-wait on its result since the extern signature is synchronous (matches the
- * native/wasmtime host, which is also synchronous).
+ * native C host, which is also synchronous).
  */
 function cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad) {
   const keyBytes = Uint8Array.from(key || []);

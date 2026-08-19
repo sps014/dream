@@ -62,6 +62,25 @@ mod tests {
     }
 
     #[test]
+    fn debug_line_emits_hash_line() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        b.set_file(Some("/tmp/prog.dream".into()));
+        b.push(Statement::DebugLine(7));
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(
+            c.contains("#line 7 \"/tmp/prog.dream\""),
+            "expected #line from DebugLine:\n{}",
+            c
+        );
+    }
+
+    #[test]
     fn funcbox_env_temp_is_pointer_width() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("call_it", i.void());

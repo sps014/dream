@@ -1,6 +1,6 @@
 # Microbench baseline and C# parity notes
 
-Recorded with `./scripts/run-microbenches.sh` (Dream `--release` under wasmtime, optional
+Recorded with `./scripts/run-microbenches.sh` (Dream `--release` native C, optional
 `dotnet run -c Release` from `tests/bench/csharp`). Absolute values vary by host — use
 relative deltas. Dream and C# are **different substrates** (Wasm+ARC vs native JIT+GC);
 ratios are not an ARC-only scoreboard.
@@ -173,7 +173,7 @@ arrays use `List.take_array`. Serialize starts `StringBuilder` at 256 bytes; `wr
 | vec_add | 259 | 77 | ~260 (WASM 4-wide vs AVX `Vector.Count` often 8; C# 3.4×) |
 | string_builder | 23 | 15 | ~24 → 23 (C# 1.5×) |
 
-Native C path (opt-in `dream --native-c`; Wasm stays default): see
+Native C is the default `dream run` path: see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).
 Do not revive the abandoned LLVM branch for this scoreboard.
 

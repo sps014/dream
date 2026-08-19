@@ -3,7 +3,7 @@
 Same-module WASM helpers are **WAT** (`../allocator.wat`, `../strings.wat`, …). This directory is:
 
 - **Linked wasm32 libraries** — today PCRE2 (`regex.c`, `regex_wasm_libc.c`, `pcre2/`). Rebuild with `scripts/build-runtime.sh`.
-- **Native host runtime** — [`native/`](native/) for `dream --native-c`.
+- **Native host runtime** — [`native/`](native/) for `dream run`.
 
 Modules are declared in [`../modules.rs`](../modules.rs). The shell script compiles catalog `wasm_c` with `wasm-ld` (`wrap` / `exports` / `global_base` / `stack_size`) and writes `wat_out`. It does not extract or rewrite helper bodies.
 

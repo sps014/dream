@@ -17,7 +17,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 A statically typed language that compiles to WebAssembly (`.wasm` + pretty-printed `.wat` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
 
-Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in `wasmtime`.
+Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in native host deps.
 
 ## Repository layout
 
@@ -38,7 +38,7 @@ Dream/
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
 │   ├── driver/                     Pipeline orchestration (parse → analyze → HIR → MIR → emit)
 │   │   ├── source_loader.rs, prelude.rs, generate/, error.rs, compiler.rs, …
-│   ├── execution/                  (feature "native") wasmtime runner, host fns, DAP debugger
+│   ├── execution/                  (feature "native") libdream C ABI, lldb-dap
 │   └── debug_schema.rs             Debug info schema
 ├── tooling/
 │   ├── dream-lsp/                  LSP (depends on `dream` with default-features=false)
@@ -141,8 +141,9 @@ Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll 
 cargo build --release            # binary at target/release/dream
 
 # Run a program
-cargo run -- run path/to/file.dream        # compile + execute (wasmtime)
-cargo run -- path/to/file.dream            # compile to .wat / .wasm / .abi.json
+cargo run -- run path/to/file.dream        # compile native C + execute
+cargo run -- path/to/file.dream            # compile to .c (then .bin) / .abi.json
+cargo run -- --backend wasm path/to/file.dream  # compile WAT/WASM only
 cargo run -- -v run path/to/file.dream     # verbose
 
 # WASM guest stack for `dream run` / e2e (default from `[package.metadata.dream] stack-size`)
@@ -164,7 +165,7 @@ scripts/build-runtime.sh                   # PCRE2 only: writes regex.wat (wasi-
 scripts/build-runtime.sh --check           # skips if clang has no wasm32
 
 # Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
-# Native C hotpath (does not change `dream run`): scripts/bench-native-c.sh
+# Native C hotpath: scripts/bench-native-c.sh
 
 cargo test --workspace
 cargo test --workspace -- --ignored
@@ -223,7 +224,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 3. `crates/dream-sema/`: type-check + validate; emit HIR via `hir_emit/`.
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
-6. `crates/dream-mir/src/backend/wasm/`: emit if new lowering is needed. New **same-module runtime helpers** go in `runtime/*.wat`. Native C is `runtime/c/native/` + `backend/c/` (`--native-c`). Regex/PCRE2 is `runtime/c/regex.c` then `scripts/build-runtime.sh`.
+6. `crates/dream-mir/src/backend/wasm/`: emit if new lowering is needed. New **same-module runtime helpers** go in `runtime/*.wat`. Native C is `runtime/c/native/` + `backend/c/` (default `dream run`). Regex/PCRE2 is `runtime/c/regex.c` then `scripts/build-runtime.sh`.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
 9. Run the full pre-commit gate above. See `docs/internals/07-adding-a-language-feature.md` for a worked example.
@@ -232,5 +233,5 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 
 - Memory: AST uses `bumpalo` arena allocation — mind lifetimes tied to the `Bump` arena.
 - Avoid `unsafe` unless there's no idiomatic composition available.
-- Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat`/`wast` (WAT text assembly + structural DCE), `wasmtime` (native execution, feature `native`), `reqwest`+`serde_json` (HTTP host fn), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
-- `native` feature (`wasmtime`, `reqwest`, `serde_json`, `crossterm`, `chrono`) is excluded from the wasm32 analyzer-only build — keep new native-only deps behind it.
+- Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat`/`wast` (WAT text assembly + structural DCE), `reqwest`+`serde_json` (HTTP host fn), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
+- `native` feature (`reqwest`, `serde_json`, `crossterm`, `chrono`, wgpu, …) is excluded from the wasm32 analyzer-only build — keep new native-only deps behind it.

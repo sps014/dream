@@ -52,7 +52,7 @@ pub fn expand_context_generators(
         {
             let _ = &site_ids;
             diagnostics.report_error(
-                "@generator(ctx: GenContext) execution requires the native compiler feature (wasmtime host)"
+                "@generator(ctx: GenContext) execution requires the native compiler feature"
                     .to_string(),
                 None,
             );
@@ -120,21 +120,24 @@ fn run_context_body(
     let temp =
         write_temp_harness(dir, &gen.name, &harness_source).map_err(HarnessError::General)?;
 
-    let wat_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
+    let c_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
     let snap_file = write_snapshot_tempfile(&gen.name, snapshot).map_err(HarnessError::General)?;
 
     std::env::set_var(SNAPSHOT_ENV, snap_file.to_string_lossy().as_ref());
-    let wat_path_str = wat_path.to_string_lossy().into_owned();
-    let output =
-        crate::execution::wasm_runner::execute_wasm_capturing(&wat_path_str).map_err(|e| {
-            HarnessError::General(format!(
-                "generator '{}': failed to run generated harness: {e}",
-                gen.name
-            ))
-        });
+    let c_path_str = c_path.to_string_lossy().into_owned();
+    let output = crate::execution::native_c::compile_and_capture(
+        &c_path_str,
+        crate::driver::wasm_opt::OptLevel::O3,
+    )
+    .map_err(|e| {
+        HarnessError::General(format!(
+            "generator '{}': failed to run generated harness: {e}",
+            gen.name
+        ))
+    });
     std::env::remove_var(SNAPSHOT_ENV);
     let _ = std::fs::remove_file(&snap_file);
-    let _ = std::fs::remove_file(&wat_path);
+    let _ = std::fs::remove_file(&c_path);
 
     parse_harness_output(&output?)
 }
@@ -187,29 +190,29 @@ fn write_snapshot_tempfile(gen_name: &str, snapshot: &str) -> Result<PathBuf, St
 
 #[cfg(feature = "native")]
 fn compile_harness(src_path: &Path) -> Result<PathBuf, String> {
-    let mut wat_path = std::env::temp_dir();
+    let mut c_path = std::env::temp_dir();
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    wat_path.push(format!(
-        "dream-ctx-gen-{}-{}.wat",
+    c_path.push(format!(
+        "dream-ctx-gen-{}-{}.c",
         std::process::id(),
         unique
     ));
-    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
+    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::NativeC)
         .with_skip_generators(true)
         .with_release(true);
     let src = src_path
         .to_str()
         .ok_or_else(|| "generator: non-UTF-8 auto-harness path".to_string())?
         .to_string();
-    let out = wat_path
+    let out = c_path
         .to_str()
-        .ok_or_else(|| "generator: non-UTF-8 wat path".to_string())?
+        .ok_or_else(|| "generator: non-UTF-8 c path".to_string())?
         .to_string();
     compiler
         .compile(&src, &out)
         .map_err(|e| format!("generator: failed to compile auto-harness: {e:?}"))?;
-    Ok(wat_path)
+    Ok(c_path)
 }

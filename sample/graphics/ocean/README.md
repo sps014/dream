@@ -16,20 +16,13 @@ cargo run -- --release --runtime --web -Oz sample/graphics/ocean/ocean.dream
 
 ## Run
 
-### Native C (`--native-c` / `--backend c`)
+### Native (`dream run`)
 
 Compiles to C, links the native runtime with `cc`, and presents through wgpu / winit
-(same window path as wasmtime `dream run`, not the browser).
+(not the browser).
 
 ```sh
-cargo run -- --native-c --release run sample/graphics/ocean/ocean.dream
-# same as: cargo run -- --backend c --release run sample/graphics/ocean/ocean.dream
-```
-
-### Native wasm (Wasmtime)
-
-```sh
-cargo run -- run sample/graphics/ocean/ocean.dream
+cargo run -- --release run sample/graphics/ocean/ocean.dream
 ```
 
 ### Browser (WebGPU)

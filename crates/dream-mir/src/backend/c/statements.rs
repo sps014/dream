@@ -109,7 +109,13 @@ impl<'a> Emitter<'a> {
 
     pub(super) fn stmt(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Nop | Statement::SourceLine(_) | Statement::DebugLine(_) => {}
+            Statement::Nop | Statement::SourceLine(_) => {}
+            Statement::DebugLine(line) => {
+                self.b.stmt(Stmt::Line {
+                    file: self.f.file.clone().unwrap_or_default(),
+                    line: *line,
+                });
+            }
             Statement::Assign(place, rv) => {
                 if self.simd_assign(place, rv) {
                     return;

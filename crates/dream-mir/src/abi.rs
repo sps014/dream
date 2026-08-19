@@ -111,7 +111,7 @@ pub const DREAM_REGEX_DOTALL: i32 = 8;
 //
 // - `ALLOC_LOCK_ADDR`: a spinlock (0 = free, 1 = held) serializing every `$malloc`/`$free` body. The
 //   owner instance and every `WebWorker` instance of the same module import the *same*
-//   `wasmtime::SharedMemory`, so without this lock two threads racing the free-list/bump-pointer
+//   shared linear memory, so without this lock two threads racing the free-list/bump-pointer
 //   logic concurrently would corrupt the heap (lost updates, double-allocated blocks).
 // - `HEAP_PTR_ADDR`: the bump-pointer high-water mark, moved out of a WASM global (which is
 //   per-*instance*, not per-memory) into shared memory so every thread bumps the same pointer.
@@ -316,7 +316,7 @@ pub fn elem_base(array_ptr: u32) -> u32 {
 // -- Runtime export / import symbol names --------------------------------------------------------
 //
 // The names below form the contract between the emitted module and every host (`execution/host`,
-// `wasm_runner`, `runtime/dream.js`) plus the passes that special-case the entry point. Keeping
+// `runtime/dream.js`, native C) plus the passes that special-case the entry point. Keeping
 // them here means a rename is a single edit.
 
 /// The program entry point exported to, and invoked by, the host.

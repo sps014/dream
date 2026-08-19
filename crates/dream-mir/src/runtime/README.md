@@ -6,7 +6,7 @@ Dream splices `*.wat` in this directory into the **same module** as user code (`
 
 **Linked libraries** (PCRE2 regex) are too large for that. C under [`c/regex.c`](c/regex.c) + [`c/pcre2/`](c/pcre2/) is compiled by `scripts/build-runtime.sh` (wasi-sdk 33) to [`regex.wat`](regex.wat). Do not hand-edit `regex.wat`.
 
-Native `--native-c` is a **separate** ABI under [`c/native/`](c/native/) (`uintptr_t`, `memcpy`, mmap heap). It does not go through WAT.
+Native C (`dream run`) is a **separate** ABI under [`c/native/`](c/native/) (`uintptr_t`, `memcpy`, mmap heap). It does not go through WAT.
 
 `--release` still runs fused `wasm-opt -O3` on the whole guest module.
 
@@ -52,7 +52,7 @@ Interned `""` / `"true"` / `"false"` / `"-"` are emitter globals `$__rt_str_empt
 
 ## Native C (host `zig cc` / clang, not WAT)
 
-[`c/native/`](c/native/) : `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Linked C libraries (PCRE2) come from the catalog only when `RuntimeNeed` is set. Default `dream run` stays wasmtime. For `--backend c` without a system `cc`:
+[`c/native/`](c/native/) : `uintptr_t` pointers, `memcpy`, mmap size-class heap, platform SIMD width. Linked C libraries (PCRE2) come from the catalog only when `RuntimeNeed` is set. Default `dream run` compiles this runtime. Without a system `cc`:
 
 ```bash
 dreamer toolchain install cc    # pinned Zig → zig cc

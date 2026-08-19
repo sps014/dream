@@ -1,27 +1,20 @@
-//! End-to-end coverage gate for the MIR backend.
+//! End-to-end coverage gate for the MIR native-C backend.
 //!
 //! Compiles every `tests/cases/*.dream` through the **real driver** (prelude, json-derive, multi-file
-//! resolution, analysis, and the HIR → MIR → WAT backend), runs the result under `wasmtime`, and
-//! compares to the `.expected` output.
+//! resolution, analysis, HIR → MIR → C), runs the `.bin`, and compares to `.expected`.
 //!
 //! The assertion is a ratchet: every case **not** in `XFAIL` must pass, and `XFAIL` is currently
 //! empty (the backend covers the whole test corpus). Any regression that breaks a previously-passing
 //! case fails the suite.
 
 use dream::driver::compiler::{Compiler, Target};
-use dream::execution::host::{
-    attach_abi_from_wat_path, decode_string, link_console_functions, link_crypto_functions,
-    link_datetime_functions, link_file_functions, link_gpu_functions, link_http_functions,
-    link_math_functions, link_net_functions, link_process_functions, link_text_functions,
-    link_worker_functions, with_guest_bytes,
-};
+use dream::driver::wasm_opt::OptLevel;
+use dream::execution::native_c::compile_and_capture;
 use dream_abi::attributes::CompileTargets;
 use rayon::prelude::*;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use wasmtime::*;
 
 // Every case in `tests/cases` now compiles and runs through the MIR backend, so `XFAIL` is empty.
 // Keep it (rather than deleting the machinery) so a future regression re-adds an entry here with a
@@ -30,34 +23,19 @@ const XFAIL: &[(&str, &str)] = &[];
 
 const WEB_COMPILE_CASES: &[&str] = &["state_map"];
 
-#[derive(Clone)]
-struct TestEnv {
-    output: Arc<Mutex<String>>,
-}
-
-impl TestEnv {
-    fn new() -> Self {
-        Self {
-            output: Arc::new(Mutex::new(String::new())),
-        }
-    }
-    fn print(&self, s: &str) {
-        self.output.lock().unwrap().push_str(s);
-    }
-}
-
-/// Compiles one case through the MIR backend and runs it, returning `Ok(actual_output)` or an error
-/// describing the failure stage (compile / assemble / instantiate / execute).
+/// Compiles one case through native C and runs it.
 fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
-    let wat_path = dream_file.with_extension("mir.wat");
-    let dream_str = dream_file.to_str().unwrap().to_string();
-    let wat_str = wat_path.to_str().unwrap().to_string();
-
+    let dest_dir = Path::new("target").join("mir-e2e-native");
+    fs::create_dir_all(&dest_dir).map_err(|e| format!("mkdir: {e}"))?;
     let stem = dream_file
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("");
-    let mut compiler = Compiler::new(Target::Wasm);
+        .unwrap_or("case");
+    let c_path = dest_dir.join(format!("{stem}.c"));
+    let dream_str = dream_file.to_str().unwrap().to_string();
+    let c_str = c_path.to_string_lossy().into_owned();
+
+    let mut compiler = Compiler::new(Target::NativeC);
     if WEB_COMPILE_CASES.contains(&stem) {
         compiler = compiler.with_compile_targets(CompileTargets {
             native: true,
@@ -66,95 +44,16 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
         });
     }
     compiler
-        .compile(&dream_str, &wat_str)
+        .compile(&dream_str, &c_str)
         .map_err(|e| format!("compile: {e:?}"))?;
 
-    let wat = fs::read_to_string(&wat_path).map_err(|e| format!("read wat: {e}"))?;
-    attach_abi_from_wat_path(&wat_str);
-    let _ = fs::remove_file(&wat_path);
-    let _ = fs::remove_file(wat_path.with_extension("wasm"));
-    let _ = fs::remove_file(wat_path.with_extension("abi.json"));
-    let _ = fs::remove_file(dream_file.with_extension("mir.abi.json"));
-    let _ = fs::remove_file(dream_file.with_extension("mir.wgsl"));
-
-    let wasm = wat::parse_str(&wat).map_err(|e| format!("assemble: {e}"))?;
-    // Make the module bytes available to `WebWorker` spawns on this thread.
-    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
-    // recursive `Option<T>`-boxed data structures.
-    let config = dream::execution::host::threaded_wasm_config();
-    let engine = Engine::new(&config).map_err(|e| format!("engine: {e:#}"))?;
-    let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
-    let mut store = Store::new(&engine, ());
-    store.set_epoch_deadline(u64::MAX);
-    let mut linker = Linker::new(&engine);
-    if let Some(shared_mem) =
-        dream::execution::host::define_env_memory(&engine, &mut store, &mut linker, &module)
-            .map_err(|e| format!("env memory: {e:#}"))?
-    {
-        dream::execution::host::set_worker_runtime(engine.clone(), shared_mem, module.clone());
-    }
-    let env = TestEnv::new();
-
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_int", move |v: i32| e.print(&v.to_string()))
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_float", move |v: f32| e.print(&v.to_string()))
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_double", move |v: f64| e.print(&v.to_string()))
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap("env", "print_char", move |v: i32| {
-            if let Some(c) = char::from_u32(v as u32) {
-                e.print(&c.to_string());
-            }
-        })
-        .unwrap();
-    let e = env.clone();
-    linker
-        .func_wrap(
-            "env",
-            "print_string",
-            move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let s = with_guest_bytes(&mut caller, |data| decode_string(data, ptr)).unwrap();
-                e.print(&s);
-            },
-        )
-        .unwrap();
-
-    link_math_functions(&mut linker).unwrap();
-    link_file_functions(&mut linker).unwrap();
-    link_http_functions(&mut linker).unwrap();
-    link_crypto_functions(&mut linker).unwrap();
-    link_console_functions(&mut linker).unwrap();
-    link_datetime_functions(&mut linker).unwrap();
-    link_process_functions(&mut linker).unwrap();
-    link_net_functions(&mut linker).unwrap();
-    link_text_functions(&mut linker).unwrap();
-    link_worker_functions(&mut linker).unwrap();
-    link_gpu_functions(&mut linker).unwrap();
-
-    linker
-        .define_unknown_imports_as_traps(&module)
-        .map_err(|e| format!("stub imports: {e}"))?;
-    let instance = linker
-        .instantiate(&mut store, &module)
-        .map_err(|e| format!("instantiate: {e}"))?;
-    let main = instance
-        .get_typed_func::<(), ()>(&mut store, "main")
-        .map_err(|e| format!("no main: {e}"))?;
-    main.call(&mut store, ())
-        .map_err(|e| format!("execute: {e}"))?;
-
-    let out = env.output.lock().unwrap().clone();
+    let out = compile_and_capture(&c_str, OptLevel::O0).map_err(|e| format!("run: {e}"))?;
+    let _ = fs::remove_file(&c_path);
+    let _ = fs::remove_file(c_path.with_extension("o"));
+    let _ = fs::remove_file(c_path.with_extension("bin"));
+    let _ = fs::remove_file(c_path.with_extension("abi.json"));
     Ok(out)
 }
-
 #[test]
 #[ignore = "duplicates run_all_e2e_cases; cargo test --workspace -- --ignored"]
 fn mir_backend_e2e_coverage() {

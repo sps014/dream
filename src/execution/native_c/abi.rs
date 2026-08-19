@@ -165,6 +165,7 @@ pub extern "C" fn gpuTryInit() -> i32 {
 #[no_mangle]
 pub extern "C" fn gpuFrame() -> i32 {
     surface::wait_display_frame();
+    crate::execution::host::gpu::profile::end_frame();
     0
 }
 
@@ -513,6 +514,195 @@ pub extern "C" fn gpuSurfacePollEvents(id: i32) -> usize {
 #[no_mangle]
 pub extern "C" fn gpuRenderBlit(sid: i32, tid: i32) -> i32 {
     surface::blit(sid, tid)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuShaderFromWgsl(source: usize, entry: usize) -> i32 {
+    compute::shader_from_wgsl(read_string(source), read_string(entry))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuDispatchShader(
+    shader_id: i32,
+    bufs: usize,
+    wx: i32,
+    wy: i32,
+    wz: i32,
+) -> i32 {
+    compute::dispatch_shader(shader_id, &read_i32s(bufs), wx, wy, wz)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuTextureWriteRgba(
+    id: i32,
+    pixels: usize,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> i32 {
+    textures::texture_write_rgba(id, read_bytes(pixels), x, y, w, h)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureReadRgba(id: i32) -> usize {
+    alloc_bytes(&textures::texture_read_rgba(id))
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureCopyFromBuffer(
+    tex_id: i32,
+    buf_id: i32,
+    byte_offset: i32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) {
+    textures::texture_copy_from_buffer(tex_id, buf_id, byte_offset, x, y, w, h);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureCopyToBuffer(
+    tex_id: i32,
+    buf_id: i32,
+    byte_offset: i32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) {
+    textures::texture_copy_to_buffer(tex_id, buf_id, byte_offset, x, y, w, h);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSamplerDestroy(id: i32) {
+    textures::sampler_destroy(id);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureCopy(
+    src_id: i32,
+    dst_id: i32,
+    src_x: i32,
+    src_y: i32,
+    dst_x: i32,
+    dst_y: i32,
+    width: i32,
+    height: i32,
+) {
+    textures::texture_copy(src_id, dst_id, src_x, src_y, dst_x, dst_y, width, height);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTextureGenerateMipmaps(id: i32) -> i32 {
+    textures::texture_generate_mipmaps(id)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuPassDispatchIndirect(
+    pass: i32,
+    kernel: usize,
+    bufs: usize,
+    tex: usize,
+    samp: usize,
+    indirect: i32,
+    off: i32,
+) {
+    compute::pass_dispatch_indirect(
+        pass,
+        read_string(kernel),
+        read_i32s(bufs),
+        read_i32s(tex),
+        read_i32s(samp),
+        indirect,
+        off,
+    );
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuRenderDrawIndexed(
+    sid: i32,
+    pid: i32,
+    vb: i32,
+    ib: i32,
+    n: i32,
+    uniforms: usize,
+    cr: f32,
+    cg: f32,
+    cb: f32,
+    ca: f32,
+) -> i32 {
+    render::draw_ex(
+        sid,
+        pid,
+        vb,
+        n,
+        1,
+        &read_bytes(uniforms),
+        [cr, cg, cb, ca],
+        -1,
+        0,
+        Some((ib, n)),
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuRenderDrawIndexedEx(
+    sid: i32,
+    pid: i32,
+    vb: i32,
+    ib: i32,
+    n: i32,
+    inst: i32,
+    uniforms: usize,
+    cr: f32,
+    cg: f32,
+    cb: f32,
+    ca: f32,
+    depth: i32,
+    load: i32,
+) -> i32 {
+    render::draw_ex(
+        sid,
+        pid,
+        vb,
+        n,
+        inst,
+        &read_bytes(uniforms),
+        [cr, cg, cb, ca],
+        depth,
+        load,
+        Some((ib, n)),
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuRenderDrawTo(
+    color: i32,
+    pid: i32,
+    vb: i32,
+    n: i32,
+    inst: i32,
+    uniforms: usize,
+    cr: f32,
+    cg: f32,
+    cb: f32,
+    ca: f32,
+    depth: i32,
+    load: i32,
+) -> i32 {
+    render::draw_to(
+        color,
+        pid,
+        vb,
+        n,
+        inst,
+        &read_bytes(uniforms),
+        [cr, cg, cb, ca],
+        depth,
+        load,
+    )
 }
 
 #[no_mangle]

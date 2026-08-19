@@ -2,15 +2,9 @@
 name = "dream-runner"
 version = "0.1.0"
 edition = "2021"
-description = "Thin native host that embeds a Dream Cranelift .cwasm module for dreamer pack"
+description = "Unused; dreamer pack copies the native C .bin"
 publish = false
 
 [[bin]]
 name = "dream-runner"
 path = "src/main.rs"
-
-[dependencies]
-dream = { path = "../..", default-features = true }
-
-[build-dependencies]
-# none — build.rs only copies env-provided wasm bytes

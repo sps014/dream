@@ -1,9 +1,8 @@
 //! HTTP host functions (the `Dream` module behind `system.net` `HttpClient`). The buffered
 //! `httpRequest*` functions perform the whole request synchronously (blocking `reqwest`) and
 //! bridge the serialized response into Dream's async runtime. The streaming `httpRequestStream*`
-//! functions instead keep the `reqwest::blocking::Response` (which itself streams off the socket
-//! on demand) in a handle table — the same handle-table pattern `net.rs`/`process.rs` use — so
-//! `httpReadChunk` can pull the body incrementally without buffering it all in memory.
+//! functions keep the `reqwest::blocking::Response` in a handle table so `httpReadChunk` can
+//! pull the body incrementally without buffering it all in memory.
 
 use std::io::Read;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -11,9 +10,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use wasmtime::*;
-
-use super::memory::{read_arg_bytes, read_arg_string, resolve_host_future_bytes};
 
 fn build_http_client(http2: bool) -> reqwest::blocking::Client {
     let mut builder = reqwest::blocking::Client::builder()
@@ -233,110 +229,4 @@ pub(crate) fn http_read_chunk(handle: i32, max_bytes: i32) -> Vec<u8> {
 pub(crate) fn http_close_stream(handle: i32) -> i32 {
     let mut table = stream_handles().lock().unwrap_or_else(|e| e.into_inner());
     table.shift_remove(&(handle as u32)).is_some() as i32
-}
-
-/// Registers the HTTP host functions on `linker`. `httpRequest` takes a text body; `httpRequestBytes`
-/// takes a binary `char[]` body. Both take `timeout_ms` (`0` = none) and `http_version`
-/// (`1` = HTTP/1.1 default, `2` = HTTP/2). `httpRequestStream`/`httpRequestStreamBytes` open a
-/// stream handle instead of buffering the body; `httpReadChunk`/`httpCloseStream` operate on that
-/// handle.
-pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
-    linker.func_wrap(
-        "Dream",
-        "httpRequest",
-        |mut caller: Caller<'_, ()>,
-         url_ptr: i32,
-         method_ptr: i32,
-         headers_ptr: i32,
-         body_ptr: i32,
-         timeout_ms: i32,
-         http_version: i32|
-         -> Result<i32> {
-            let url = read_arg_string(&mut caller, url_ptr)?;
-            let method = read_arg_string(&mut caller, method_ptr)?;
-            let headers = read_arg_string(&mut caller, headers_ptr)?;
-            let body = read_arg_string(&mut caller, body_ptr)?.into_bytes();
-            let response = perform_http(&method, &url, &headers, body, timeout_ms, http_version);
-            resolve_host_future_bytes(&mut caller, &response)
-        },
-    )?;
-
-    linker.func_wrap(
-        "Dream",
-        "httpRequestBytes",
-        |mut caller: Caller<'_, ()>,
-         url_ptr: i32,
-         method_ptr: i32,
-         headers_ptr: i32,
-         body_ptr: i32,
-         timeout_ms: i32,
-         http_version: i32|
-         -> Result<i32> {
-            let url = read_arg_string(&mut caller, url_ptr)?;
-            let method = read_arg_string(&mut caller, method_ptr)?;
-            let headers = read_arg_string(&mut caller, headers_ptr)?;
-            let body = read_arg_bytes(&mut caller, body_ptr)?;
-            let response = perform_http(&method, &url, &headers, body, timeout_ms, http_version);
-            resolve_host_future_bytes(&mut caller, &response)
-        },
-    )?;
-
-    linker.func_wrap(
-        "Dream",
-        "httpRequestStream",
-        |mut caller: Caller<'_, ()>,
-         url_ptr: i32,
-         method_ptr: i32,
-         headers_ptr: i32,
-         body_ptr: i32,
-         timeout_ms: i32,
-         http_version: i32|
-         -> Result<i32> {
-            let url = read_arg_string(&mut caller, url_ptr)?;
-            let method = read_arg_string(&mut caller, method_ptr)?;
-            let headers = read_arg_string(&mut caller, headers_ptr)?;
-            let body = read_arg_string(&mut caller, body_ptr)?.into_bytes();
-            let response =
-                open_http_stream(&method, &url, &headers, body, timeout_ms, http_version);
-            resolve_host_future_bytes(&mut caller, &response)
-        },
-    )?;
-
-    linker.func_wrap(
-        "Dream",
-        "httpRequestStreamBytes",
-        |mut caller: Caller<'_, ()>,
-         url_ptr: i32,
-         method_ptr: i32,
-         headers_ptr: i32,
-         body_ptr: i32,
-         timeout_ms: i32,
-         http_version: i32|
-         -> Result<i32> {
-            let url = read_arg_string(&mut caller, url_ptr)?;
-            let method = read_arg_string(&mut caller, method_ptr)?;
-            let headers = read_arg_string(&mut caller, headers_ptr)?;
-            let body = read_arg_bytes(&mut caller, body_ptr)?;
-            let response =
-                open_http_stream(&method, &url, &headers, body, timeout_ms, http_version);
-            resolve_host_future_bytes(&mut caller, &response)
-        },
-    )?;
-
-    linker.func_wrap(
-        "Dream",
-        "httpReadChunk",
-        |mut caller: Caller<'_, ()>, handle: i32, max_bytes: i32| -> Result<i32> {
-            let response = http_read_chunk(handle, max_bytes);
-            resolve_host_future_bytes(&mut caller, &response)
-        },
-    )?;
-
-    linker.func_wrap(
-        "Dream",
-        "httpCloseStream",
-        |_: Caller<'_, ()>, handle: i32| -> i32 { http_close_stream(handle) },
-    )?;
-
-    Ok(())
 }

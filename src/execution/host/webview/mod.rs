@@ -14,7 +14,6 @@ use std::time::Duration;
 
 use indexmap::IndexMap;
 use serde_json::Value as JsonValue;
-use wasmtime::*;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -23,10 +22,6 @@ use winit::window::{Window, WindowId};
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
 use wry::{Rect, WebViewBuilder};
-
-use super::memory::{
-    read_arg_bytes, read_arg_string, resolve_host_future_bytes, write_bytes_to_memory,
-};
 
 thread_local! {
     static EVENT_LOOP: RefCell<Option<EventLoop<()>>> = const { RefCell::new(None) };
@@ -783,125 +778,4 @@ pub(crate) fn eval_js(id: i32, js: &str) -> Vec<u8> {
         }
     }
     encode_eval(false, "eval timed out")
-}
-
-pub fn link_webview_functions(linker: &mut Linker<()>) -> Result<()> {
-    linker.func_wrap(
-        "Dream",
-        "webviewCreate",
-        |mut caller: Caller<'_, ()>, title_ptr: i32, width: i32, height: i32| -> Result<i32> {
-            let title = read_arg_string(&mut caller, title_ptr)?;
-            Ok(create_webview(&title, width, height))
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewLoadUrl",
-        |mut caller: Caller<'_, ()>, id: i32, url_ptr: i32| -> Result<i32> {
-            let url = read_arg_string(&mut caller, url_ptr)?;
-            Ok(load_url(id, &url))
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewLoadHtml",
-        |mut caller: Caller<'_, ()>, id: i32, html_ptr: i32| -> Result<i32> {
-            let html = read_arg_string(&mut caller, html_ptr)?;
-            Ok(load_html(id, &html))
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewLoadFile",
-        |mut caller: Caller<'_, ()>, id: i32, path_ptr: i32| -> Result<i32> {
-            let path = read_arg_string(&mut caller, path_ptr)?;
-            Ok(load_file(id, &path))
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewClose",
-        |_caller: Caller<'_, ()>, id: i32| {
-            close(id);
-            Ok(())
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewCloseRequested",
-        |_caller: Caller<'_, ()>, id: i32| -> Result<i32> { Ok(i32::from(close_requested(id))) },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewTick",
-        |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
-            let bytes = tick(id);
-            write_bytes_to_memory(&mut caller, &bytes)
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewPoll",
-        |mut caller: Caller<'_, ()>, id: i32| -> Result<i32> {
-            let bytes = poll_messages(id);
-            write_bytes_to_memory(&mut caller, &bytes)
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewReply",
-        |mut caller: Caller<'_, ()>, id: i32, reply_id: i32, body_ptr: i32| -> Result<()> {
-            let body = read_arg_string(&mut caller, body_ptr)?;
-            reply(id, reply_id, &body);
-            Ok(())
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewReplyErr",
-        |mut caller: Caller<'_, ()>, id: i32, reply_id: i32, msg_ptr: i32| -> Result<()> {
-            let message = read_arg_string(&mut caller, msg_ptr)?;
-            reply_err(id, reply_id, &message);
-            Ok(())
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewEmit",
-        |mut caller: Caller<'_, ()>, id: i32, channel_ptr: i32, body_ptr: i32| -> Result<()> {
-            let channel = read_arg_string(&mut caller, channel_ptr)?;
-            let body = read_arg_string(&mut caller, body_ptr)?;
-            emit(id, &channel, &body);
-            Ok(())
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewEmitBytes",
-        |mut caller: Caller<'_, ()>, id: i32, channel_ptr: i32, body_ptr: i32| -> Result<()> {
-            let channel = read_arg_string(&mut caller, channel_ptr)?;
-            let body = read_arg_bytes(&mut caller, body_ptr)?;
-            emit_bytes(id, &channel, &body);
-            Ok(())
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewReplyBytes",
-        |mut caller: Caller<'_, ()>, id: i32, reply_id: i32, body_ptr: i32| -> Result<()> {
-            let body = read_arg_bytes(&mut caller, body_ptr)?;
-            reply_bytes(id, reply_id, &body);
-            Ok(())
-        },
-    )?;
-    linker.func_wrap(
-        "Dream",
-        "webviewEval",
-        |mut caller: Caller<'_, ()>, id: i32, js_ptr: i32| -> Result<i32> {
-            let js = read_arg_string(&mut caller, js_ptr)?;
-            let wire = eval_js(id, &js);
-            resolve_host_future_bytes(&mut caller, &wire)
-        },
-    )?;
-    Ok(())
 }

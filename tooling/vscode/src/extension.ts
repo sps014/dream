@@ -325,7 +325,7 @@ async function pickDreamerRunTarget(
     }
 
     const labels: Record<RuntimeTarget, string> = {
-        native: 'Native (wasmtime)',
+        native: 'Native (C / lldb)',
         web: 'Web (browser)',
         node: 'Node'
     };
@@ -369,7 +369,7 @@ async function interruptDreamTerminalIfBusy(): Promise<void> {
 
 /**
  * Run via `dreamer` when the workspace root has `dream.toml`; otherwise `dream run` /
- * compile-only for the open file. Debug stays native (DAP / wasmtime) elsewhere.
+ * compile-only for the open file. Debug stays native C + lldb-dap.
  */
 async function runProgramInTerminal(
     filePath: string,
@@ -448,7 +448,7 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
                 }
 
                 const settings = readBuildSettings();
-                // DAP debugging is always native wasmtime (ignores dream.toml targets / status bar).
+                // DAP debugging is native C + lldb-dap.
 
                 const uri = vscode.Uri.file(filePath);
                 const modeLabel = settings.buildMode === 'release' ? 'Release' : 'Debug';
@@ -555,7 +555,7 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
                 return undefined;
             }
 
-            // DAP / Debug is always native wasmtime — ignore package.targets / status-bar host.
+            // DAP / Debug: native C + lldb-dap (`dream debug-adapter`).
             return config;
         }
     };
@@ -758,7 +758,7 @@ async function pickRuntimeTarget(): Promise<void> {
             {
                 label: 'Native',
                 description: current === 'native' ? '(current)' : undefined,
-                detail: 'Run with wasmtime (dream run)',
+                detail: 'Run native C binary (dream run)',
                 value: 'native' as RuntimeTarget
             },
             {

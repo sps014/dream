@@ -63,7 +63,7 @@
             "node"
           ],
           "enumDescriptions": [
-            "Run with the native wasmtime host (dream run)",
+            "Run with the native C host (dream run)",
             "Emit a browser-targeted *.web.runtime.js (--runtime --web)",
             "Emit a Node ≥ 18 *.node.runtime.js (--runtime --node)"
           ],

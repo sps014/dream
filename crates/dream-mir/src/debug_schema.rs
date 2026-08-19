@@ -1,15 +1,8 @@
-//! The runtime-type schema shared by both sides of the `.dbg.json` debug source map: the writer
-//! ([`dream_mir::backend::wasm::debug_map`], built into every configuration of the compiler) and the reader
-//! ([`crate::execution::debugger::sourcemap`], native-only — it drives the wasmtime-based debug
-//! adapter). Both walked-and-decoded the same structural description of a runtime type (struct
-//! fields, union variants, array element/stride, scalar encoding) from two independently
-//! hand-maintained copies; this module is the single definition they now share.
+//! Runtime-type schema for the WAT `.dbg.json` debug source map writer
+//! ([`dream_mir::backend::wasm::debug_map`]). Native C debug uses DWARF `#line` + lldb, not this map.
 //!
-//! Deliberately dependency-free (no `serde`): the writer side must keep building in every build
-//! configuration, including ones without the `native` feature (and its `serde_json` dependency)
-//! enabled. Each side still owns its own serialization: the writer hand-renders compact JSON
-//! (see `debug_map::type_to_json`) and the reader parses `serde_json::Value` (see
-//! `sourcemap::parse_type`) — only the schema these mirror is unified here.
+//! Deliberately dependency-free (no `serde`): the writer must keep building without the `native`
+//! feature. It hand-renders compact JSON (`debug_map::type_to_json`).
 
 /// A scalar (non-aggregate, non-reference) value's runtime encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -72,7 +72,8 @@ impl<'a> Emitter<'a> {
     fn try_emit_into(&mut self, stmts: &[Statement], i: usize) -> Option<usize> {
         if i + 1 < stmts.len() {
             if let (
-                Statement::Release(Operand::Copy(Place::Local(rel))),
+                Statement::Release(Operand::Copy(Place::Local(rel)))
+                | Statement::ReleaseUnique(Operand::Copy(Place::Local(rel))),
                 Statement::Assign(Place::Local(dest), rv),
             ) = (&stmts[i], &stmts[i + 1])
             {
@@ -88,7 +89,8 @@ impl<'a> Emitter<'a> {
         if i + 2 < stmts.len() {
             if let (
                 Statement::Assign(Place::Local(tmp), rv),
-                Statement::Release(Operand::Copy(Place::Local(rel))),
+                Statement::Release(Operand::Copy(Place::Local(rel)))
+                | Statement::ReleaseUnique(Operand::Copy(Place::Local(rel))),
                 Statement::Assign(Place::Local(dest), Rvalue::Use(Operand::Copy(Place::Local(src)))),
             ) = (&stmts[i], &stmts[i + 1], &stmts[i + 2])
             {
@@ -148,6 +150,16 @@ impl<'a> Emitter<'a> {
                     crate::backend::c::release::release_sym(self.cx.interner, self.cx.mir, ty)
                 } else {
                     "dream_release".into()
+                };
+                let a = self.operand(o);
+                self.b.call(release, vec![a]);
+            }
+            Statement::ReleaseUnique(o) => {
+                let ty = self.operand_ty(o);
+                let release = if self.cx.interner.is_rc_tracked(ty) {
+                    crate::backend::c::release::destroy_sym(self.cx.interner, self.cx.mir, ty)
+                } else {
+                    "dream_destroy".into()
                 };
                 let a = self.operand(o);
                 self.b.call(release, vec![a]);

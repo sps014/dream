@@ -120,6 +120,18 @@ DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
     }
 }
 
+DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
+    int32_t *rc;
+    if (ptr == 0) {
+        return;
+    }
+    rc = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
+    if (*rc == INT32_MAX) {
+        return;
+    }
+    dream_free(ptr);
+}
+
 dream_ptr dream_malloc(int32_t size, int32_t tag);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
 

@@ -10,10 +10,15 @@ mod elision;
 mod insertion;
 mod liveness;
 mod tokens;
+mod uniqueness;
+
+#[cfg(test)]
+mod unique_tests;
 
 pub use elision::RcElision;
 pub use insertion::RcInsertion;
 pub(crate) use liveness::stmt_reads_local;
+pub(crate) use uniqueness::container_move_locals;
 
 use crate::{Global, Local, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;

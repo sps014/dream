@@ -163,6 +163,9 @@ pub enum Statement {
     Retain(Operand),
     /// Decrement the refcount of a reference operand (and free at zero).
     Release(Operand),
+    /// Last-use destroy of a compile-time **Unique** token: run `del` + nested releases + `free`
+    /// without the RC header decrement. Never used for `@shared`, `js`, or strings.
+    ReleaseUnique(Operand),
     /// Prints `Operand` (a `string`-typed panic message, always a compile-time-known literal built
     /// during HIR emission) via the shared `$dream_panic` runtime helper, then traps unconditionally.
     /// The single, shared halt point for every runtime failure: array/string bounds checks,

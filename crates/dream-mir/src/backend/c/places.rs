@@ -2,6 +2,7 @@ use super::ast::{CTy, Expr, Stmt, UnOp};
 use super::emit::Emitter;
 use super::types::{array_elem_ty, elem_size, load_cast, local_c_ty};
 use crate::{Operand, Place};
+use dream_types::TypeInterner;
 
 impl<'a> Emitter<'a> {
     pub(super) fn operand(&mut self, o: &Operand) -> Expr {
@@ -275,7 +276,15 @@ impl<'a> Emitter<'a> {
                         self.cx.mir,
                         fld.ty,
                     );
-                    return self.rc_store(cast, slot, rhs, release, borrowed_ref_store(rv));
+                    let move_id = unique_move_src(self.f, self.cx.interner, rv);
+                    let stored = self.rc_store(
+                        cast,
+                        slot,
+                        rhs,
+                        release,
+                        borrowed_ref_store(rv) && move_id.is_none(),
+                    );
+                    return self.after_unique_move(stored, move_id);
                 }
                 self.b.expr_block(|b| {
                     b.stmt(Stmt::store(cast.clone(), slot.clone(), rhs.clone()));
@@ -309,7 +318,15 @@ impl<'a> Emitter<'a> {
                 if self.cx.interner.is_reference(ety) {
                     let release =
                         crate::backend::c::release::release_sym(self.cx.interner, self.cx.mir, ety);
-                    return self.rc_store(cast, addr, rhs, release, borrowed_ref_store(rv));
+                    let move_id = unique_move_src(self.f, self.cx.interner, rv);
+                    let stored = self.rc_store(
+                        cast,
+                        addr,
+                        rhs,
+                        release,
+                        borrowed_ref_store(rv) && move_id.is_none(),
+                    );
+                    return self.after_unique_move(stored, move_id);
                 }
                 self.b.expr_block(|b| {
                     b.stmt(Stmt::store(cast.clone(), addr.clone(), rhs.clone()));
@@ -369,6 +386,18 @@ impl<'a> Emitter<'a> {
                 ),
             ));
             new
+        })
+    }
+
+    /// Store first, then null the moved local (nulling first stores 0 into the container).
+    fn after_unique_move(&mut self, stored: Expr, move_id: Option<u32>) -> Expr {
+        let Some(id) = move_id else {
+            return stored;
+        };
+        self.b.expr_block(|b| {
+            let v = b.temp(CTy::Ptr, Some(stored.clone()));
+            b.assign(Expr::local(id), Expr::i(0));
+            v
         })
     }
 
@@ -622,6 +651,19 @@ fn realloc_self_store(place: &Place, rv: &crate::Rvalue) -> bool {
 
 fn borrowed_ref_store(rv: &crate::Rvalue) -> bool {
     !value_rvalue_allocates(rv)
+}
+
+fn unique_move_src(
+    f: &crate::MirFunction,
+    interner: &TypeInterner,
+    rv: &crate::Rvalue,
+) -> Option<u32> {
+    match rv {
+        crate::Rvalue::Use(op) | crate::Rvalue::Cast(op, _, _) => {
+            crate::backend::shared::unique_container_move_local(f, interner, op)
+        }
+        _ => None,
+    }
 }
 
 fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {

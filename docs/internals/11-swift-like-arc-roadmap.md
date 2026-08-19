@@ -10,7 +10,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 
 ## Baseline
 
-- Implicit HIR ownership; explicit MIR `Retain` / `Release` / `New` after `RcInsertion`.
+- Implicit HIR ownership; explicit MIR `Retain` / `Release` / `ReleaseUnique` / `New` after `RcInsertion`.
 - Call ABI: **unmarked RC params sink; `borrow` shares; caller owns the result (`+1`)**.
   Implicit `this` is never a sink. Call sites **move on last use**, otherwise **retain a copy**
   (Nim sink semantics).
@@ -20,13 +20,17 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
   ([`weak.wat`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/runtime/weak.wat)).
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
-  (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow (last-use **move**, last-use
-  **destroy**, split-edge release when a token is dead on one successor). Sharing still emits `Retain`.
-  Rebind of an owned local through a call/`New` evaluates the RHS into a temp, then `Release`s the
-  old occupant (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of
-  loop-carried owned locals start **Owned** so the first dataflow pass does not treat a back-edge as
-  Empty. Strings/arrays/funcboxes/unions are not destroyed mid-block (hidden borrows); they wait
-  until return. Sink/take params still drop at callee return so inlining cannot copy-prop an early
+  (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
+  lattice (last-use **move**, last-use **destroy**, split-edge release when a token is dead on one
+  successor). Sharing still emits `Retain`. Unique last-use destroy of a class/array/union is
+  `ReleaseUnique` (typed `$destroy_*` / C `destroy_*`: `del` + nested release + `free`, no RC RMW).
+  `js`, `@shared`, and strings stay on ordinary `Release`. Last-use field/index/global stores of a
+  unique local transfer the +1 (both Wasm and C emitters skip retain). Rebind of an owned local
+  through a call/`New` evaluates the RHS into a temp, then `Release`s the old occupant
+  (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of loop-carried owned
+  locals start **Owned**/**Unique** so the first dataflow pass does not treat a back-edge as Empty.
+  Strings/arrays/funcboxes/unions are not destroyed mid-block (hidden borrows); they wait until
+  return. Sink/take params still drop at callee return so inlining cannot copy-prop an early
   `= null` onto a caller argument that is still live. After inlining, `RcElision` can cancel
   retain/release pairs that a call barrier would have kept.
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.

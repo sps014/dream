@@ -48,6 +48,18 @@ static const dream_ptr __ds14 = (dream_ptr)((char *)&__ds14_blk + 16);
 _Thread_local dream_ptr g0 = 0;
 static void * dream_ft[2];
 void main_dream(void);
+static void destroy_object(dream_ptr p);
+static void destroy_object(dream_ptr p) {
+  if (!p) return;
+  int32_t tag = dream_object_tag(p);
+  switch (tag) {
+    case TAG_STRING:
+      dream_release(p);
+      return;
+    default: dream_release(p);
+  }
+}
+
 dream_ptr dream_object_to_string(dream_ptr p) {
   int32_t tag;
   if (!p) return __ds0;

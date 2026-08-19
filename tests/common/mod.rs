@@ -153,6 +153,19 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
     })
 }
 
+/// Same pipeline as [`emit_hir_to_module_optimized`], native C text.
+pub fn emit_hir_to_c_optimized(code: &str) -> String {
+    compile_test_pipeline(code, |hir, interner| {
+        let mut mir = dream_mir::lower::lower_program(hir, interner);
+        dream_mir::passes::optimize_module(&mut mir, interner);
+        let pm = dream_mir::passes::PassManager::default_pipeline();
+        for f in &mut mir.functions {
+            pm.run(f, interner);
+        }
+        dream_mir::backend::c::emit_c_module(&mir, interner)
+    })
+}
+
 /// Like [`emit_hir_to_module`] but emits the full self-contained module (imports, memory, runtime,
 /// exports) via `emit_module`, so import/scaffold concerns can be asserted and assembled.
 pub fn emit_hir_to_module(code: &str) -> String {

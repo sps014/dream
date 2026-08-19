@@ -5,6 +5,7 @@
 //! This is CFG dataflow, not ownership-SSA.
 
 use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
+use super::uniqueness::{apply_stmt_unique, collect_container_moves, meet_unique};
 use super::{is_borrowed_copy, is_pure_rvalue, rvalue_reads_local};
 use crate::passes::cfg;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
@@ -74,6 +75,10 @@ pub(crate) struct TokenAnalysis {
     pub end_release: Vec<BTreeSet<u32>>,
     pub token_in: Vec<Vec<bool>>,
     pub token_out: Vec<Vec<bool>>,
+    pub unique_in: Vec<Vec<bool>>,
+    pub unique_out: Vec<Vec<bool>>,
+    /// Unique token on this block, Shared on a successor that still holds it: Retain before the join.
+    pub share_at_end: Vec<BTreeSet<u32>>,
     pub has_await: bool,
 }
 
@@ -93,7 +98,11 @@ struct TokenFlow<'a> {
 }
 
 impl TokenAnalysis {
-    pub fn analyze(func: &MirFunction, interner: &TypeInterner) -> TokenAnalysis {
+    pub fn analyze(
+        func: &MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> TokenAnalysis {
         let n = func.blocks.len();
         let nloc = func.locals.len();
         let live_out = liveness::live_out(func);
@@ -144,6 +153,7 @@ impl TokenAnalysis {
                 }
             }
         }
+        collect_container_moves(func, interner, &live_out, is_owned, layouts, &mut sink_move);
         transferred.extend(sink_move.iter().copied());
 
         let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
@@ -190,6 +200,8 @@ impl TokenAnalysis {
             .collect();
         let mut token_in = vec![vec![false; nloc]; n];
         let mut token_out: Vec<Vec<Option<bool>>> = vec![vec![None; nloc]; n];
+        let mut unique_in = vec![vec![false; nloc]; n];
+        let mut unique_out: Vec<Vec<Option<bool>>> = vec![vec![None; nloc]; n];
 
         let flow = TokenFlow {
             func,
@@ -215,10 +227,21 @@ impl TokenAnalysis {
                     token_in[bi] = inn;
                     changed = true;
                 }
-                let (out, start, end) = transfer_block(&flow, &token_in[bi], &token_out, bi);
+                let uin = join_unique(&flow, &unique_out, &token_out, bi, &token_in[bi]);
+                if uin != unique_in[bi] {
+                    unique_in[bi] = uin;
+                    changed = true;
+                }
+                let (out, uout, start, end) =
+                    transfer_block(&flow, &token_in[bi], &unique_in[bi], &token_out, bi);
                 let out_opt: Vec<Option<bool>> = out.into_iter().map(Some).collect();
+                let uout_opt: Vec<Option<bool>> = uout.into_iter().map(Some).collect();
                 if out_opt != token_out[bi] {
                     token_out[bi] = out_opt;
+                    changed = true;
+                }
+                if uout_opt != unique_out[bi] {
+                    unique_out[bi] = uout_opt;
                     changed = true;
                 }
                 if start != start_release[bi] {
@@ -239,6 +262,29 @@ impl TokenAnalysis {
             .into_iter()
             .map(|row| row.into_iter().map(|t| t.unwrap_or(false)).collect())
             .collect();
+        let mut unique_out: Vec<Vec<bool>> = unique_out
+            .into_iter()
+            .map(|row| row.into_iter().map(|t| t.unwrap_or(false)).collect())
+            .collect();
+
+        let mut share_at_end = vec![BTreeSet::new(); n];
+        for bi in 0..n {
+            for succ in func.blocks[bi].terminator.successors() {
+                let s = succ.0 as usize;
+                for local in 0..nloc {
+                    if token_out[bi][local]
+                        && unique_out[bi][local]
+                        && token_in[s][local]
+                        && !unique_in[s][local]
+                    {
+                        share_at_end[bi].insert(local as u32);
+                    }
+                }
+            }
+            for &local in &share_at_end[bi] {
+                unique_out[bi][local as usize] = false;
+            }
+        }
 
         TokenAnalysis {
             assign_move,
@@ -248,6 +294,9 @@ impl TokenAnalysis {
             end_release,
             token_in,
             token_out,
+            unique_in,
+            unique_out,
+            share_at_end,
             has_await,
         }
     }
@@ -291,6 +340,53 @@ fn join_tokens(flow: &TokenFlow<'_>, token_out: &[Vec<Option<bool>>], bi: usize)
     inn
 }
 
+fn join_unique(
+    flow: &TokenFlow<'_>,
+    unique_out: &[Vec<Option<bool>>],
+    token_out: &[Vec<Option<bool>>],
+    bi: usize,
+    token_in: &[bool],
+) -> Vec<bool> {
+    let nloc = flow.func.locals.len();
+    let mut inn = vec![false; nloc];
+    for local in 0..nloc as u32 {
+        if !token_in[local as usize] || !(flow.is_owned)(local) {
+            continue;
+        }
+        if flow.loop_headers.contains(&bi) {
+            let live_in = live_in_of(flow.func, flow.live_out, bi);
+            if live_in.contains(&local) {
+                let mut all_unique = true;
+                let mut saw = false;
+                for p in &flow.preds[bi] {
+                    if token_out[p.0 as usize][local as usize] == Some(true) {
+                        saw = true;
+                        all_unique = meet_unique(
+                            all_unique,
+                            unique_out[p.0 as usize][local as usize] != Some(false),
+                        );
+                    }
+                }
+                inn[local as usize] = if saw { all_unique } else { true };
+                continue;
+            }
+        }
+        let mut all_unique = true;
+        let mut saw = false;
+        for p in &flow.preds[bi] {
+            if token_out[p.0 as usize][local as usize] == Some(true) {
+                saw = true;
+                all_unique = meet_unique(
+                    all_unique,
+                    unique_out[p.0 as usize][local as usize] == Some(true),
+                );
+            }
+        }
+        inn[local as usize] = if saw { all_unique } else { true };
+    }
+    inn
+}
+
 fn pred_tokens_unbalanced(
     flow: &TokenFlow<'_>,
     token_out: &[Vec<Option<bool>>],
@@ -312,10 +408,12 @@ fn pred_tokens_unbalanced(
 fn transfer_block(
     flow: &TokenFlow<'_>,
     token_in: &[bool],
+    unique_in: &[bool],
     token_out: &[Vec<Option<bool>>],
     bi: usize,
-) -> (Vec<bool>, BTreeSet<u32>, BTreeSet<u32>) {
+) -> (Vec<bool>, Vec<bool>, BTreeSet<u32>, BTreeSet<u32>) {
     let mut tokens = token_in.to_vec();
+    let mut unique = unique_in.to_vec();
     let block = &flow.func.blocks[bi];
     let live_in = live_in_of(flow.func, flow.live_out, bi);
     let mut start = BTreeSet::new();
@@ -338,6 +436,7 @@ fn transfer_block(
             }
             start.insert(local);
             *slot = false;
+            unique[local as usize] = false;
         }
     }
     for (si, stmt) in block.stmts.iter().enumerate() {
@@ -349,9 +448,18 @@ fn transfer_block(
             |l| flow.sink_move.contains(&(bi, si, l)),
             &mut tokens,
         );
+        apply_stmt_unique(
+            stmt,
+            flow.interner,
+            flow.is_owned,
+            flow.assign_move.contains(&(bi, si)),
+            |l| flow.sink_move.contains(&(bi, si, l)),
+            &mut unique,
+        );
         for (local, slot) in tokens.iter_mut().enumerate() {
             if flow.die_after.contains(&(bi, si, local as u32)) {
                 *slot = false;
+                unique[local] = false;
             }
         }
     }
@@ -377,9 +485,10 @@ fn transfer_block(
             }
             end.insert(local);
             *slot = false;
+            unique[local as usize] = false;
         }
     }
-    (tokens, start, end)
+    (tokens, unique, start, end)
 }
 
 pub(crate) fn apply_stmt_tokens(
@@ -411,6 +520,11 @@ pub(crate) fn apply_stmt_tokens(
     for local in take_owned_arg_locals(stmt, is_owned) {
         if sink_is_move(local) {
             tokens[local as usize] = false;
+        }
+    }
+    for src in super::uniqueness::container_move_locals(stmt) {
+        if sink_is_move(src) {
+            tokens[src as usize] = false;
         }
     }
 }
@@ -454,9 +568,14 @@ fn add_op(op: &Operand, live: &mut HashSet<u32>) {
     }
 }
 
-pub(crate) fn release_and_null(local: u32) -> [Statement; 2] {
+pub(crate) fn release_and_null(local: u32, unique: bool) -> [Statement; 2] {
+    let op = Operand::Copy(Place::Local(Local(local)));
     [
-        Statement::Release(Operand::Copy(Place::Local(Local(local)))),
+        if unique {
+            Statement::ReleaseUnique(op)
+        } else {
+            Statement::Release(op)
+        },
         Statement::Assign(
             Place::Local(Local(local)),
             Rvalue::Use(Operand::Const(Const::Null)),
@@ -467,7 +586,8 @@ pub(crate) fn release_and_null(local: u32) -> [Statement; 2] {
 pub(crate) fn rc_op_on_local(stmt: &Statement, local: u32) -> bool {
     match stmt {
         Statement::Retain(Operand::Copy(Place::Local(l)))
-        | Statement::Release(Operand::Copy(Place::Local(l))) => l.0 == local,
+        | Statement::Release(Operand::Copy(Place::Local(l)))
+        | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) => l.0 == local,
         Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null))) => {
             l.0 == local
         }
@@ -597,6 +717,25 @@ pub(crate) fn take_owned_arg_locals(
         if !take_params.get(i).copied().unwrap_or(false) {
             continue;
         }
+        if let Operand::Copy(Place::Local(l)) = arg {
+            if is_owned_ref(l.0) {
+                out.push(l.0);
+            }
+        }
+    }
+    out
+}
+
+/// Borrowed or taken call arguments may be retained by the callee; Unique last-use destroy is unsound.
+pub(crate) fn call_escape_locals(
+    stmt: &Statement,
+    is_owned_ref: &dyn Fn(u32) -> bool,
+) -> Vec<u32> {
+    let Some((_, args)) = sink_call_args(stmt) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for arg in args {
         if let Operand::Copy(Place::Local(l)) = arg {
             if is_owned_ref(l.0) {
                 out.push(l.0);

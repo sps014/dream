@@ -73,7 +73,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             c |= subst_rvalue_reads(rvalue, known);
             c
         }
-        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+        Statement::Retain(o) | Statement::Release(o) | Statement::ReleaseUnique(o) | Statement::Panic(o) => {
             subst_operand(o, known)
         }
         Statement::Call { args, .. } => args

@@ -249,7 +249,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             }
             strings_in_rvalue(rv, out);
         }
-        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+        Statement::Retain(o) | Statement::Release(o) | Statement::ReleaseUnique(o) | Statement::Panic(o) => {
             strings_in_operand(o, out)
         }
         Statement::Call { args, .. } => args.iter().for_each(|a| strings_in_operand(a, out)),
@@ -451,7 +451,8 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
             in_rvalue(rv, out);
         }
         Statement::Retain(_)
-        | Statement::Release(_)
+                    | Statement::Release(_)
+                    | Statement::ReleaseUnique(_)
         | Statement::Panic(_)
         | Statement::Call { .. }
         | Statement::JsCall { .. }

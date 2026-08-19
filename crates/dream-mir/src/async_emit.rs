@@ -9,7 +9,6 @@
 //! pointer sizes from [`crate::abi::TargetAbi::native`].
 
 use super::lower::lower_async_poll_body;
-use super::passes::MirPass;
 use super::MirFunction;
 use crate::abi::{
     FutureLayout, FUTURE_KIND_ALL, FUTURE_KIND_ANY, FUTURE_KIND_HOST, FUTURE_KIND_TASK,
@@ -182,7 +181,7 @@ pub(crate) fn emit_async_function_parts(
             decl.is_take = true;
         }
     }
-    let _ = crate::passes::RcInsertion.run(&mut body, interner);
+    let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, interner, layouts);
     let slots = async_slots(&body, interner);
     let frame_size = slots.frame_size;
     let sym = func_symbol(func);

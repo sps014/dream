@@ -391,6 +391,9 @@ fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
                 // an object some *other* pending key aliases — not provably safe to ignore.
                 pending.clear();
             }
+            Statement::ReleaseUnique(_) => {
+                pending.clear();
+            }
             Statement::Assign(Place::Local(dst), rvalue) if is_pure_rvalue(rvalue) => {
                 let key = RcKey::Local(*dst);
                 pending.remove(&key);

@@ -27,6 +27,31 @@ fn retain_release_counts(wat: &str) -> (usize, usize) {
     (retains, releases)
 }
 
+/// Protocol `dream_object_to_string` retains interned strings; user paths use `main_dream` / ctors.
+fn c_user_retain_count(c: &str) -> usize {
+    let mut n = 0;
+    let mut in_user = false;
+    for line in c.lines() {
+        let t = line.trim();
+        if t.starts_with("void main_dream(") || (t.contains("_constructor(") && t.ends_with('{')) {
+            in_user = true;
+        } else if in_user
+            && (t.starts_with("void ")
+                || t.starts_with("static ")
+                || t.starts_with("dream_ptr ")
+                || t.starts_with("int32_t "))
+            && t.contains('(')
+            && !t.contains("_constructor(")
+        {
+            in_user = false;
+        }
+        if in_user && t.contains("dream_retain(") {
+            n += 1;
+        }
+    }
+    n
+}
+
 #[test]
 fn rc_golden_last_use_return_bounded() {
     let code = r#"
@@ -184,5 +209,97 @@ fn rc_golden_js_rebuild_emits_js_release() {
         "rebuild should js_release temps at last use (got {}):\n{}",
         js_rel,
         rebuild
+    );
+}
+
+#[test]
+fn rc_golden_unique_class_no_retain() {
+    let code = r#"
+        class Box {
+            public n: int;
+            public constructor(n: int) { this.n = n; }
+        }
+        fun main(): void {
+            let b = Box(1);
+            System.println(b.n);
+        }
+    "#;
+    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let (retains, _) = retain_release_counts(&wat);
+    assert_eq!(
+        retains, 0,
+        "unique Box should not retain:\n{}",
+        wat
+    );
+    let destroys = wat
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.starts_with(";;") && t.contains("call $destroy_")
+        })
+        .count();
+    assert!(
+        destroys >= 1,
+        "unique Box should unique-destroy:\n{}",
+        wat
+    );
+}
+
+#[test]
+fn rc_golden_unique_class_no_retain_native_c() {
+    let code = r#"
+        class Box {
+            public n: int;
+            public constructor(n: int) { this.n = n; }
+        }
+        fun main(): void {
+            let b = Box(1);
+            System.println(b.n);
+        }
+    "#;
+    let c = emit_hir_to_c_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    assert_eq!(
+        c_user_retain_count(&c),
+        0,
+        "unique Box should not dream_retain:\n{}",
+        c
+    );
+    assert!(
+        c.contains("destroy_Box("),
+        "unique Box should unique-destroy:\n{}",
+        c
+    );
+}
+
+#[test]
+fn rc_golden_last_use_field_store_both_backends_skip_retain() {
+    let code = r#"
+        class Inner {
+            public n: int;
+            public constructor(n: int) { this.n = n; }
+        }
+        class Wrap {
+            public inner: Inner;
+            public constructor(inner: Inner) { this.inner = inner; }
+        }
+        fun main(): void {
+            let w = Wrap(Inner(1));
+            System.println(w.inner.n);
+        }
+    "#;
+    let src = format!("{}\n{}", SYSTEM_STUB, code);
+    let wat = emit_hir_to_module_optimized(&src);
+    let c = emit_hir_to_c_optimized(&src);
+    let (wat_retains, _) = retain_release_counts(&wat);
+    let c_retains = c_user_retain_count(&c);
+    assert_eq!(
+        wat_retains, 0,
+        "Wasm last-use field store should not retain:\n{}",
+        wat
+    );
+    assert_eq!(
+        c_retains, 0,
+        "C last-use field store should not retain:\n{}",
+        c
     );
 }

@@ -434,7 +434,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         wat
     );
     assert!(
-        wat.contains("(func $release_object"),
+        wat.contains("(func $destroy_object") || wat.contains("(func $release_object"),
         "tag-dispatch router missing:\n{}",
         wat
     );
@@ -1222,7 +1222,7 @@ fn func_value_argument_is_reference_counted() {
     for block in &main.blocks {
         for stmt in &block.stmts {
             match stmt {
-                Statement::Retain(o) | Statement::Release(o) => {
+                Statement::Retain(o) | Statement::Release(o) | Statement::ReleaseUnique(o) => {
                     if let Operand::Copy(Place::Local(l)) = o {
                         let ty = main.locals[l.0 as usize].ty;
                         if matches!(interner.kind(ty), dream_types::TyKind::Func(_, _)) {

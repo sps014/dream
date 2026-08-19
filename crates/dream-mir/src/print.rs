@@ -28,6 +28,7 @@ fn stmt(s: &Statement) -> String {
         Statement::Assign(p, r) => format!("{} = {}", place(p), rvalue(r)),
         Statement::Retain(o) => format!("retain {}", operand(o)),
         Statement::Release(o) => format!("release {}", operand(o)),
+        Statement::ReleaseUnique(o) => format!("release_unique {}", operand(o)),
         Statement::Panic(o) => format!("panic {}", operand(o)),
         Statement::Call { callee, args } => {
             format!("call def{}({})", callee.def.0, ops(args))

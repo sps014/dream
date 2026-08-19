@@ -36,7 +36,7 @@ pub use iv::IvCanon;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
-pub(crate) use rc::{rvalue_reads_local, stmt_reads_local};
+pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
 pub use rc::{RcElision, RcInsertion};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
@@ -193,9 +193,9 @@ pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
 pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool) {
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
-    let rc = RcInsertion;
+    let layouts = mir.layouts.clone();
     for f in &mut mir.functions {
-        rc.run(f, interner);
+        RcInsertion::run_with_layouts(f, interner, &layouts);
     }
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
     // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag

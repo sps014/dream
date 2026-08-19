@@ -6,7 +6,6 @@ use super::protocol::{emit_iface_init, emit_iface_trampolines, emit_protocol};
 use super::release::emit_release_helpers;
 use super::types::{c_ident, c_ty, fn_ptr_abi, local_c_ty};
 use crate::backend::shared::func_symbol;
-use crate::passes::MirPass;
 use crate::{Mir, MirFunction, Rvalue, Statement};
 use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
@@ -431,7 +430,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
         return;
     };
     let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
-    let _ = crate::passes::RcInsertion.run(&mut body, cx.interner);
+    let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
     let fut = crate::abi::FutureLayout::native();
     let slots = crate::async_emit::layout_async_slots(
         &body,

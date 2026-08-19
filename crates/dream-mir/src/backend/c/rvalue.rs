@@ -424,7 +424,14 @@ impl<'a> Emitter<'a> {
                 Expr::ptr_add(dest.clone(), Expr::i(fld.offset as i64)),
                 val,
             ));
-            if self.cx.interner.is_rc_tracked(fld.ty) {
+            if self.cx.interner.is_rc_tracked(fld.ty)
+                && crate::backend::shared::unique_container_move_local(
+                    self.f,
+                    self.cx.interner,
+                    arg,
+                )
+                .is_none()
+            {
                 self.b.call(
                     "dream_retain",
                     vec![Expr::load(
@@ -472,6 +479,13 @@ impl<'a> Emitter<'a> {
         let size = 4 + es * n as u32;
         let cast = load_cast(self.cx, elem_ty);
         let values: Vec<Expr> = elems.iter().map(|e| self.operand(e)).collect();
+        let skip_retain: Vec<bool> = elems
+            .iter()
+            .map(|e| {
+                crate::backend::shared::unique_container_move_local(self.f, self.cx.interner, e)
+                    .is_some()
+            })
+            .collect();
         let is_val = self.cx.interner.is_value_type(elem_ty);
         let rc = self.cx.interner.is_rc_tracked(elem_ty);
         let cx = self.cx;
@@ -507,7 +521,7 @@ impl<'a> Emitter<'a> {
                     e.value_refs(elem_ty, Expr::cast(CTy::Ptr, at), true);
                 } else {
                     b.stmt(Stmt::store(cast.clone(), at.clone(), value.clone()));
-                    if rc {
+                    if rc && !skip_retain[i] {
                         b.call("dream_retain", vec![Expr::load(cast.clone(), at)]);
                     }
                 }
@@ -525,9 +539,20 @@ impl<'a> Emitter<'a> {
         let tag = self.cx.type_tag(ty, dream_types::DefId(0));
         let fields: Vec<_> = layout.fields.clone();
         let values: Vec<Expr> = elems.iter().map(|e| self.operand(e)).collect();
+        let skip_retain: Vec<bool> = elems
+            .iter()
+            .map(|e| {
+                crate::backend::shared::unique_container_move_local(self.f, self.cx.interner, e)
+                    .is_some()
+            })
+            .collect();
         let is_val: Vec<bool> = fields
             .iter()
             .map(|f| self.cx.interner.is_value_type(f.ty))
+            .collect();
+        let is_rc: Vec<bool> = fields
+            .iter()
+            .map(|f| self.cx.interner.is_rc_tracked(f.ty))
             .collect();
         let casts: Vec<CTy> = fields.iter().map(|f| load_cast(self.cx, f.ty)).collect();
         let sizes: Vec<u32> = fields.iter().map(|f| elem_size(self.cx, f.ty)).collect();
@@ -560,6 +585,15 @@ impl<'a> Emitter<'a> {
                             Expr::ptr_add(o.clone(), Expr::i(fld.offset as i64)),
                             value.clone(),
                         ));
+                        if is_rc[i] && !skip_retain[i] {
+                            b.call(
+                                "dream_retain",
+                                vec![Expr::load(
+                                    casts[i].clone(),
+                                    Expr::ptr_add(o.clone(), Expr::i(fld.offset as i64)),
+                                )],
+                            );
+                        }
                     }
                 }
             }

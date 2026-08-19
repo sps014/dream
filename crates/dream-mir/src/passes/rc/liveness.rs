@@ -78,7 +78,7 @@ fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
             add_place_base_reads(place, live);
             add_rvalue_reads(rv, live);
         }
-        Statement::Retain(op) | Statement::Release(op) | Statement::Panic(op) => {
+        Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op) | Statement::Panic(op) => {
             add_operand_reads(op, live)
         }
         Statement::Call { args, .. } => args.iter().for_each(|a| add_operand_reads(a, live)),

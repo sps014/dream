@@ -155,6 +155,7 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         | Statement::Panic(arg)
         | Statement::Retain(arg)
         | Statement::Release(arg)
+        | Statement::ReleaseUnique(arg)
         | Statement::ForceFree(arg)
         | Statement::LockAcquire(arg)
         | Statement::LockRelease(arg) => strings_in_op(arg, out),

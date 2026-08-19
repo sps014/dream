@@ -7,6 +7,9 @@ use super::tokens::{
     needs_rebind_temp, rc_op_on_local, release_and_null, sink_call_args, source_line_end,
     take_arg_effects, TokenAnalysis,
 };
+use super::uniqueness::{
+    apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
+};
 use crate::passes::MirPass;
 use crate::{Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
@@ -14,12 +17,21 @@ use std::collections::HashMap;
 
 pub struct RcInsertion;
 
-impl MirPass for RcInsertion {
-    fn name(&self) -> &'static str {
-        "rc-insertion"
+impl RcInsertion {
+    pub(crate) fn run_with_layouts(
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> bool {
+        RcInsertion.run_inner(func, interner, layouts)
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn run_inner(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> bool {
         super::cursor::infer_cursors(func, interner);
 
         let local_is_ref: Vec<bool> = func
@@ -27,7 +39,7 @@ impl MirPass for RcInsertion {
             .iter()
             .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
-        let analysis = TokenAnalysis::analyze(func, interner);
+        let analysis = TokenAnalysis::analyze(func, interner, layouts);
         let owned_flags: Vec<bool> = (0..func.locals.len() as u32)
             .map(|l| is_owned_local(func, interner, l))
             .collect();
@@ -35,15 +47,20 @@ impl MirPass for RcInsertion {
         let mut changed = false;
 
         let local_types: Vec<dream_types::TypeId> = func.locals.iter().map(|d| d.ty).collect();
+        let take_flags: Vec<bool> = func.locals.iter().map(|d| d.is_take).collect();
         let mut extra_locals: Vec<LocalDecl> = Vec::new();
         let temp_base = func.locals.len() as u32;
         for (bi, block) in func.blocks.iter_mut().enumerate() {
             let mut tokens = analysis.token_in[bi].clone();
+            let mut unique = analysis.unique_in[bi].clone();
             let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len() + 8);
             for &local in &analysis.start_release[bi] {
-                out.extend(release_and_null(local));
+                // Join/loop-header leftover: the other pred may have copied this pointer into a
+                // still-live container. Unique destroy ignores RC and would free that copy.
+                out.extend(release_and_null(local, false));
                 if (local as usize) < tokens.len() {
                     tokens[local as usize] = false;
+                    unique[local as usize] = false;
                 }
                 changed = true;
             }
@@ -61,6 +78,14 @@ impl MirPass for RcInsertion {
                     .as_ref()
                     .map(|(d, _, _, _)| dest_holds_token(&tokens, d.0))
                     .unwrap_or(false);
+                let had_unique = ref_dest
+                    .as_ref()
+                    .map(|(d, _, _, _)| {
+                        unique.get(d.0 as usize).copied().unwrap_or(false)
+                            && !constructed_payload_locals(&stmt).contains(&d.0)
+                    })
+                    .unwrap_or(false);
+                let container_srcs = container_move_locals(&stmt);
                 apply_stmt_tokens(
                     &stmt,
                     interner,
@@ -68,6 +93,14 @@ impl MirPass for RcInsertion {
                     analysis.assign_move.contains(&(bi, si)),
                     |l| analysis.sink_move.contains(&(bi, si, l)),
                     &mut tokens,
+                );
+                apply_stmt_unique(
+                    &stmt,
+                    interner,
+                    &is_owned,
+                    analysis.assign_move.contains(&(bi, si)),
+                    |l| analysis.sink_move.contains(&(bi, si, l)),
+                    &mut unique,
                 );
 
                 let (sink_retains, sink_nulls) =
@@ -94,7 +127,10 @@ impl MirPass for RcInsertion {
                             out.push(r);
                         }
                         out.push(Statement::Assign(Place::Local(tmp), rvalue));
-                        out.push(Statement::Release(Operand::Copy(Place::Local(dest))));
+                        out.push(release_one(
+                            dest.0,
+                            unique_destroy(interner, &local_types, &take_flags, dest.0, had_unique),
+                        ));
                         out.push(Statement::Assign(
                             Place::Local(dest),
                             Rvalue::Use(Operand::Copy(Place::Local(tmp))),
@@ -110,6 +146,14 @@ impl MirPass for RcInsertion {
                         }) {
                             out.push(n);
                         }
+                        for src in container_srcs {
+                            if analysis.sink_move.contains(&(bi, si, src)) && src != dest.0 {
+                                out.push(Statement::Assign(
+                                    Place::Local(Local(src)),
+                                    Rvalue::Use(Operand::Const(Const::Null)),
+                                ));
+                            }
+                        }
                         changed = true;
                     }
                     Some((dest, retain, true, _)) => {
@@ -123,11 +167,22 @@ impl MirPass for RcInsertion {
                         for n in sink_nulls {
                             out.push(n);
                         }
+                        for src in container_srcs {
+                            if analysis.sink_move.contains(&(bi, si, src)) && src != dest.0 {
+                                out.push(Statement::Assign(
+                                    Place::Local(Local(src)),
+                                    Rvalue::Use(Operand::Const(Const::Null)),
+                                ));
+                            }
+                        }
                         changed = true;
                     }
                     Some((dest, retain, false, move_from)) => {
                         if had_dest {
-                            out.push(Statement::Release(Operand::Copy(Place::Local(dest))));
+                            out.push(release_one(
+                                dest.0,
+                                unique_destroy(interner, &local_types, &take_flags, dest.0, had_unique),
+                            ));
                         }
                         for r in sink_retains {
                             out.push(r);
@@ -145,16 +200,33 @@ impl MirPass for RcInsertion {
                         for n in sink_nulls {
                             out.push(n);
                         }
+                        for src in container_srcs {
+                            if analysis.sink_move.contains(&(bi, si, src)) && src != dest.0 {
+                                out.push(Statement::Assign(
+                                    Place::Local(Local(src)),
+                                    Rvalue::Use(Operand::Const(Const::Null)),
+                                ));
+                            }
+                        }
                         changed = true;
                     }
                     None => {
-                        let had_sink = !sink_retains.is_empty() || !sink_nulls.is_empty();
+                        let mut had_sink = !sink_retains.is_empty() || !sink_nulls.is_empty();
                         for r in sink_retains {
                             out.push(r);
                         }
                         out.push(stmt);
                         for n in sink_nulls {
                             out.push(n);
+                        }
+                        for src in container_srcs {
+                            if analysis.sink_move.contains(&(bi, si, src)) {
+                                out.push(Statement::Assign(
+                                    Place::Local(Local(src)),
+                                    Rvalue::Use(Operand::Const(Const::Null)),
+                                ));
+                                had_sink = true;
+                            }
                         }
                         if had_sink {
                             changed = true;
@@ -164,16 +236,39 @@ impl MirPass for RcInsertion {
 
                 for local in 0..tokens.len() as u32 {
                     if analysis.die_after.contains(&(bi, si, local)) {
-                        out.extend(release_and_null(local));
+                        let u = unique_destroy(
+                            interner,
+                            &local_types,
+                            &take_flags,
+                            local,
+                            unique.get(local as usize).copied().unwrap_or(false),
+                        );
+                        out.extend(release_and_null(local, u));
                         tokens[local as usize] = false;
+                        unique[local as usize] = false;
                         changed = true;
                     }
                 }
             }
+            for &local in &analysis.share_at_end[bi] {
+                if dest_holds_token(&tokens, local) {
+                    out.push(Statement::Retain(Operand::Copy(Place::Local(Local(local)))));
+                    unique[local as usize] = false;
+                    changed = true;
+                }
+            }
             for &local in &analysis.end_release[bi] {
                 if dest_holds_token(&tokens, local) {
-                    out.extend(release_and_null(local));
+                    let u = unique_destroy(
+                        interner,
+                        &local_types,
+                        &take_flags,
+                        local,
+                        unique.get(local as usize).copied().unwrap_or(false),
+                    );
+                    out.extend(release_and_null(local, u));
                     tokens[local as usize] = false;
+                    unique[local as usize] = false;
                     changed = true;
                 }
             }
@@ -234,21 +329,56 @@ impl MirPass for RcInsertion {
                 skip
             };
             if let Some(tok) = analysis.token_out.get(bi) {
+                let uniq = analysis.unique_out.get(bi);
                 for (i, owned) in tok.iter().enumerate() {
                     if !*owned || Some(i as u32) == skip {
                         continue;
                     }
-                    block
-                        .stmts
-                        .push(Statement::Release(Operand::Copy(Place::Local(Local(
-                            i as u32,
-                        )))));
+                    let u = uniq.and_then(|row| row.get(i).copied()).unwrap_or(false)
+                        && take_flags.get(i).copied() != Some(true)
+                        && can_unique_destroy(interner, func.locals[i].ty);
+                    block.stmts.push(release_one(i as u32, u));
                     changed = true;
                 }
             }
         }
         func.locals.extend(spills);
         changed
+    }
+}
+
+impl MirPass for RcInsertion {
+    fn name(&self) -> &'static str {
+        "rc-insertion"
+    }
+
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        self.run_inner(func, interner, &dream_hir::LayoutTable::default())
+    }
+}
+
+/// Intra-procedural Unique is not object uniqueness: a take param may be a copy the caller
+/// still holds (field extract, still-live local). Unique-destroy would `free` under them.
+fn unique_destroy(
+    interner: &TypeInterner,
+    local_types: &[dream_types::TypeId],
+    take_flags: &[bool],
+    local: u32,
+    unique: bool,
+) -> bool {
+    unique
+        && take_flags.get(local as usize) != Some(&true)
+        && local_types
+            .get(local as usize)
+            .is_some_and(|ty| can_unique_destroy(interner, *ty))
+}
+
+fn release_one(local: u32, unique: bool) -> Statement {
+    let op = Operand::Copy(Place::Local(Local(local)));
+    if unique {
+        Statement::ReleaseUnique(op)
+    } else {
+        Statement::Release(op)
     }
 }
 
@@ -283,7 +413,7 @@ fn insert_await_resume_releases(
             continue;
         }
         let mut stmts = Vec::with_capacity(func.blocks[ri].stmts.len() + 2);
-        stmts.extend(release_and_null(local));
+        stmts.extend(release_and_null(local, false));
         stmts.append(&mut func.blocks[ri].stmts);
         func.blocks[ri].stmts = stmts;
         *changed = true;
@@ -726,7 +856,7 @@ mod tests {
             for s in &b.stmts {
                 match s {
                     Statement::Retain(_) => retains += 1,
-                    Statement::Release(_) => releases += 1,
+                    Statement::Release(_) | Statement::ReleaseUnique(_) => releases += 1,
                     _ => {}
                 }
             }
@@ -885,7 +1015,7 @@ mod tests {
         let else_rel = func.blocks[else_blk.0 as usize]
             .stmts
             .iter()
-            .any(|s| matches!(s, Statement::Release(_)));
+            .any(|s| matches!(s, Statement::Release(_) | Statement::ReleaseUnique(_)));
         assert!(else_rel, "release is on the arm that still held the token");
     }
 
@@ -991,7 +1121,7 @@ mod tests {
             .iter()
             .position(|s| matches!(s, Statement::Assign(_, Rvalue::Call { .. })));
         let rel_at = stmts.iter().position(
-            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == x),
+            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x),
         );
         assert!(call_at.is_some() && rel_at.is_some(), "{:?}", stmts);
         assert!(
@@ -1050,6 +1180,147 @@ mod tests {
             !mid,
             "string must not be released between hidden-borrow call and later work: {:?}",
             stmts
+        );
+    }
+
+    #[test]
+    fn unique_new_uses_release_unique() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let has_unique = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        let has_retain = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::Retain(_)));
+        assert!(
+            has_unique,
+            "unique birth should ReleaseUnique: {:?}",
+            func.blocks[0].stmts
+        );
+        assert!(!has_retain);
+    }
+
+    #[test]
+    fn last_use_field_store_nulls_without_retain() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let obj = b.new_local(ty, Some("obj".into()));
+        let x = b.new_local(ty, Some("x".into()));
+        b.assign(
+            Place::Local(obj),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Copy(Place::Local(x))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let (retains, _) = count_rc(&func);
+        assert_eq!(
+            retains, 0,
+            "last-use field store is a move: {:?}",
+            func.blocks[0].stmts
+        );
+        let null_x = func.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
+                    if *l == x
+            )
+        });
+        assert!(
+            null_x,
+            "source nulled after container move: {:?}",
+            func.blocks[0].stmts
+        );
+    }
+
+    #[test]
+    fn still_live_copy_is_shared_not_unique_destroy() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let y = b.new_local(ty, Some("y".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
+        b.assign(Place::Local(x), Rvalue::Use(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let (retains, _) = count_rc(&func);
+        assert!(
+            retains >= 1,
+            "still-live alias retains: {:?}",
+            func.blocks[0].stmts
+        );
+    }
+
+    #[test]
+    fn string_never_release_unique() {
+        let i = dream_types::TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let s = b.new_local(i.string(), Some("s".into()));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(Const::Str("x".into()))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &i));
+        let uniq = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|st| matches!(st, Statement::ReleaseUnique(_)));
+        assert!(
+            !uniq,
+            "strings stay on ordinary release: {:?}",
+            func.blocks[0].stmts
         );
     }
 }

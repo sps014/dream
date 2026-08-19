@@ -222,7 +222,7 @@ public static class Util {
 System.println(Util.twice(3));   // 6
 ```
 
-A static class cannot have instance fields, instance methods, constructors, or an `implements` clause. Members must be marked `static`. It cannot be instantiated (`Util()`), used as a type (`let x: Util`, `List<Util>`), or targeted by `extend`. `static` cannot modify `struct`, `enum`, or `interface`.
+A static class cannot have instance fields, instance methods, constructors, or an `implements` clause. Members must be marked `static`. It cannot be instantiated (`Util()`), used as a type (`let x: Util`, `List<Util>`), or grow instance methods via `extend`. A later `extend Util { public static fun … }` may still add more static helpers (stdlib splits `GpuMath` this way). `static` cannot modify `struct`, `enum`, or `interface`.
 
 ```dream
 // error: cannot instantiate static class 'Util'

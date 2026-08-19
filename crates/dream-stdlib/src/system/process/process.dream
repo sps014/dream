@@ -2,7 +2,7 @@ module system.process;
 
 // Runs and controls child processes (native only — the browser host reports
 // `ProcessError.unsupported` for every operation; Node supports both `run` and `spawn`).
-public class Process {
+public static class Process {
     @native @node
     @js("Dream", "processRun")
     static extern async fun host_run(cmd: string, args: string, cwd: string): char[];

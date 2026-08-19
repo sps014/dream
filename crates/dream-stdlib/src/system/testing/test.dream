@@ -1,7 +1,7 @@
 module system.testing;
 
 // Minimal test runner: prints PASS/FAIL per named case, everything else is `Assert.*`.
-public class Test {
+public static class Test {
     // Runs `body`, printing `PASS <name>` on success. Assertion failures inside `body` already
     // print their own message and exit the process (see `Assert.fail`), so a case reaching the
     // print below never failed.

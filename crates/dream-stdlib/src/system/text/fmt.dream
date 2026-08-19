@@ -3,7 +3,7 @@ module system.text;
 // `.NET`/Python-style positional string formatting: `{0}`, `{1}`, ... substitute `args[i]` (via
 // `to_string`), and `{i:.N}` additionally renders a `double`/`float` argument with exactly `N`
 // fixed decimal digits. `{{` / `}}` escape literal braces.
-public class Fmt {
+public static class Fmt {
     // Substitutes every `{i}`/`{i:spec}` placeholder in `pattern` with `args[i]`.
     public static fun format(pattern: string, args: object[]): string {
         let sb = StringBuilder(pattern.length);

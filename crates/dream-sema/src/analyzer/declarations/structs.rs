@@ -14,7 +14,11 @@ impl<'a> Analyzer<'a> {
     ) {
         for struct_decl in node.structs.iter() {
             diagnostics.file_path = file_path_string(&struct_decl.file_path);
-            if struct_decl.is_sealed {
+            // Static classes are implicitly `sealed` on the AST so they cannot grow an instance
+            // surface, but stdlib splits static helpers across `extend` files (e.g. `GpuMath`).
+            // Those extends are allowed when every member is `static` (checked in
+            // `register_extensions`).
+            if struct_decl.is_sealed && !struct_decl.is_static {
                 self.sealed_types.insert(struct_decl.name.text.clone());
             }
             let def = self.type_ctx.register(

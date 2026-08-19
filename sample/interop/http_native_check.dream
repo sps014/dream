@@ -1,4 +1,4 @@
-// Temporary native smoke check: exercises the wasmtime HTTP future bridge end to end.
+// Temporary native smoke check: exercises the c HTTP future bridge end to end.
 import system;
 import system.text;
 import system.net;

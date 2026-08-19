@@ -1,4 +1,4 @@
-//! Codegen backends: WAT/Wasmtime (`wasm`) and native C (`c`).
+//! Codegen backends: WAT/c (`wasm`) and native C (`c`).
 
 pub mod c;
 pub(crate) mod shared;

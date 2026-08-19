@@ -10,7 +10,7 @@ import system.text;
 // Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
 //
 // Notes vs C# (`tests/bench/csharp`):
-// - Dream executes under Wasm/wasmtime + ARC; C# is native JIT + GC.
+// - Dream executes under Wasm/c + ARC; C# is native JIT + GC.
 // - `char_scan` is a `char_at` loop over UTF-16 units; `byte_scan` walks UTF-16 LE payload bytes.
 // - `substring(start, end)` is start/end indices; C# uses (start, length).
 

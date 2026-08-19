@@ -1,5 +1,5 @@
 // Regex via the `Regex` class (stdlib prelude). The engine is plain compiled Dream — no host
-// runtime involved — so this program behaves identically under wasmtime, Node, and the browser.
+// runtime involved — so this program behaves identically under c, Node, and the browser.
 //
 //   cargo run -- run sample/interop/regex.dream
 //   node sample/interop/regex.mjs sample/interop/regex.wasm

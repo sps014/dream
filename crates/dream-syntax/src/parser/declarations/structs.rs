@@ -200,7 +200,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         decl.implements = implements;
         decl.is_value = is_value;
         decl.is_ref_struct = is_ref_struct;
-        // A static class is implicitly sealed: there is no instance surface to extend.
+        // Implicitly sealed so there is no instance surface to inherit; static `extend` helpers
+        // are still allowed (see analyzer `register_extensions`).
         decl.is_sealed = is_sealed || is_static;
         decl.is_static = is_static;
         decl.generic_constraints = generic_constraints;

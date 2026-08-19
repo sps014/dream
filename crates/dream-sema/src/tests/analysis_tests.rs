@@ -2060,6 +2060,42 @@ fn test_static_class_rejects_instance_members() {
 }
 
 #[test]
+fn test_extend_static_class_static_members_ok() {
+    let code = "
+        static class Util {
+            public static fun n(): int { return 1; }
+        }
+        extend Util {
+            public static fun m(): int { return 2; }
+        }
+        fun main(): void {
+            let x: int = Util.n() + Util.m();
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false, "{:?}", diagnostics.diagnostics);
+}
+
+#[test]
+fn test_extend_static_class_rejects_instance_members() {
+    let code = "
+        static class Util {
+            public static fun n(): int { return 1; }
+        }
+        extend Util {
+            public fun m(): int { return 2; }
+        }
+        fun main(): void {}
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("static class") && d.message.contains("static members")));
+}
+
+#[test]
 fn test_generic_mismatch_pretty_prints_angle_brackets() {
     let code = "
         class Box<T> {

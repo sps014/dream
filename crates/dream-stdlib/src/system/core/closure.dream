@@ -8,7 +8,7 @@ module system.core;
 // a non-capturing function/lambda). `funcbox_new` allocates the box and retains a non-null env;
 // `$release_funcbox` (wired by the backend for `TyKind::Func`) releases that env when the last
 // fun reference drops. `funcbox_funcidx`/`funcbox_env` read the box apart at an indirect-call site.
-internal class Closure {
+internal static class Closure {
     @intrinsic("funcbox_new")
     static extern fun funcbox_new(funcidx: int, env: int): int;
 

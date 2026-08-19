@@ -3,7 +3,7 @@ module system.gpu;
 // Math helpers for GPU shaders (`@compute` / `@vertex` / `@fragment`).
 // Inside shaders the WGSL emitter maps these method names to WGSL builtins
 // (`sin`, `normalize`, `cross`, …). On the CPU they use host `Math` (stubs for some vec/mat ops).
-public class GpuMath {
+public static class GpuMath {
     // Smaller of two floats (WGSL `min`).
     public static fun min(a: float, b: float): float {
         if (a < b) { return a; }

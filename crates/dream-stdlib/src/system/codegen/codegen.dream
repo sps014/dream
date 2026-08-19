@@ -98,7 +98,7 @@ public class CodeBuilder {
 
 /// Stdout protocol markers and helpers for Dream-side generator harnesses.
 /// The Rust host parses these markers and reports into `DiagnosticBag` (see `json_gen`).
-public class GenHost {
+public static class GenHost {
     public static fun ok_marker(): string {
         return "__DREAM_GEN_OK__";
     }

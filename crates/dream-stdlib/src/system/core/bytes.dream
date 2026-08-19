@@ -7,7 +7,7 @@ module system.core;
 // Only blittable values (`T : unmanaged`, recursively free of reference fields) are safe to copy
 // this way - a raw byte copy of a heap reference would carry a pointer that is meaningless in
 // another memory space.
-public class Bytes {
+public static class Bytes {
     // Copy the raw bytes of blittable `value` into a fresh `byte[]` (one element per byte).
     @intrinsic("to_bytes")
     static extern fun of<T : unmanaged>(value: T): byte[];

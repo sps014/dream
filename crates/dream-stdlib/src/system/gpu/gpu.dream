@@ -1,7 +1,7 @@
 module system.gpu;
 
 // Device lifecycle, host bridges, kernel barriers / atomics / texture builtins.
-public class Gpu {
+public static class Gpu {
     @js("Dream", "gpuIsAvailable")
     static extern fun is_available_host(): bool;
 

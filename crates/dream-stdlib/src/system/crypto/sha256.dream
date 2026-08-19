@@ -1,7 +1,7 @@
 module system.crypto;
 
 // SHA-256 digest (32-byte output). Host-backed via `Dream.cryptoSha256`.
-public class Sha256 {
+public static class Sha256 {
     @js("Dream", "cryptoSha256")
     static extern fun hash_host(data: byte[]): byte[];
 

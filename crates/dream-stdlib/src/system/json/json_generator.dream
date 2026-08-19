@@ -6,7 +6,7 @@ import system.text;
 // Dream `@json` source generator: builds `extend Type { to_json / write_json / from_json }` source
 // from a [`GenType`] snapshot. Invoked by the compile host during the generate pass.
 
-public class JsonGenerator {
+public static class JsonGenerator {
     // Emits `extend … { to_json / write_json / from_json }` source for each snapshot in `types`.
     public static fun expand(borrow types: List<GenType>, borrow json_names: List<string>, borrow jsonable: List<string>): GenResult {
         let cb = CodeBuilder();

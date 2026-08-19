@@ -34,4 +34,4 @@ Numeric ABI (`TAG_*`, string header, future slots) is shared in
 
 - LLVM IR, libLLVM, or merging branch `llvm`.
 - Deleting the Wasm backend (browser still needs it).
-- Wasmtime as a native runner.
+- c as a native runner.

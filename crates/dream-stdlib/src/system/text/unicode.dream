@@ -2,7 +2,7 @@ module system.text;
 
 // ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
 
-public class Unicode {
+public static class Unicode {
     @js("Dream", "unicodeNormalize")
     static extern fun normalize_host(text: string, form: int): string;
 

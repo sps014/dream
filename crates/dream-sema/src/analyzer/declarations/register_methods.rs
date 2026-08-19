@@ -222,16 +222,24 @@ impl<'a> Analyzer<'a> {
             // (interface defaults, `@json` converters) are exempt, so a sealed type may still
             // implement interfaces with default methods or derive `@json`.
             if !ext.is_synthesized && self.sealed_types.contains(&target) {
-                let kind = if self.is_static_class_name(&target) {
-                    "static class"
-                } else {
-                    "sealed type"
-                };
                 diagnostics.report_error(
-                    format!("Cannot extend {} '{}'", kind, target),
+                    format!("Cannot extend sealed type '{}'", target),
                     Some(ext.target.position),
                 );
                 continue;
+            }
+            if self.is_static_class_name(&target) {
+                for method in &ext.methods {
+                    if !method.is_static {
+                        diagnostics.report_error(
+                            format!(
+                                "extend of static class '{}' can only add static members ({} is not static)",
+                                target, method.name.text
+                            ),
+                            Some(method.name.position),
+                        );
+                    }
+                }
             }
             if ext.generic_parameters.is_some() {
                 // Generic extend blocks were stashed by `stash_generic_extensions` and are attached

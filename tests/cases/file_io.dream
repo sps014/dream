@@ -1,4 +1,4 @@
-// Exercises the File API end-to-end under the native wasmtime harness: write, append, read back,
+// Exercises the File API end-to-end under the native c harness: write, append, read back,
 // then delete. The host functions are linked in tests/e2e_tests.rs (src/execution/host.rs).
 import system;
 import system.io;

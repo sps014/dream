@@ -1,7 +1,7 @@
 module system.gpu;
 
 // High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
-public class Compute {
+public static class Compute {
     // Dispatches `kernel` over a 1D grid of size `n` (float storage buffers only).
     public static async fun run_1d(
         kernel: string,

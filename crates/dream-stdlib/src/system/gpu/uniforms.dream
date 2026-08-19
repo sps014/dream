@@ -1,7 +1,7 @@
 module system.gpu;
 
 // Pack little-endian uniforms for `Compute.run_*` / draw helpers.
-public class Uniforms {
+public static class Uniforms {
     // Packs a blittable unmanaged value (scalar or struct) as raw little-endian bytes.
     public static fun pack<T : unmanaged>(value: T): byte[] {
         return Bytes.of(value);

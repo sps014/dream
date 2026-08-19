@@ -1,7 +1,7 @@
 module system.crypto;
 
 // Cryptographically secure random bytes from the OS CSPRNG.
-public class SecureRandom {
+public static class SecureRandom {
     @js("Dream", "cryptoSecureRandomBytes")
     static extern fun bytes_host(n: int): byte[];
 

@@ -2,7 +2,7 @@ module system.crypto;
 
 // AES-256-GCM authenticated encryption (confidentiality + integrity). Host-backed via the `aes-gcm`
 // crate natively and Web Crypto / `node:crypto` in the browser/Node hosts.
-public class AesGcm {
+public static class AesGcm {
     // Standard 96-bit (12-byte) GCM nonce size.
     public static fun nonce_size(): int {
         return 12;

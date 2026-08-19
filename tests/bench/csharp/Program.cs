@@ -9,7 +9,7 @@ namespace DreamBench;
 /// <summary>
 /// 1:1 C# port of tests/bench/microbenches.dream for side-by-side ns/op comparison.
 /// Pass --dream-scores path/to/native.txt (from run-microbenches.sh) for live ratios.
-/// Dream runs under Wasm/wasmtime + ARC; this is native JIT + GC — substrate differs.
+/// Dream runs under Wasm/c + ARC; this is native JIT + GC — substrate differs.
 /// </summary>
 public static class Program
 {

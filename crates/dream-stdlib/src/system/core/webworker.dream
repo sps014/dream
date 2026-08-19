@@ -2,7 +2,7 @@ module system.core;
 
 // Real OS-parallel workers with a shared heap.
 //
-// `await WebWorker.spawn(() => n * n)` starts a body on its own OS thread (native wasmtime)
+// `await WebWorker.spawn(() => n * n)` starts a body on its own OS thread (native c)
 // or Web Worker (browser/Node). There is no spawn message and no `join()`: `spawn` is `async`
 // and *is* the wait. Overlap work by saving the Future and awaiting later.
 //

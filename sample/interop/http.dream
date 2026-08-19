@@ -1,5 +1,5 @@
 // Cross-runtime HTTP via the instantiable `HttpClient` (stdlib prelude). The same program runs
-// natively under wasmtime and over `fetch` in Node / the browser - each host returns the full
+// natively under c and over `fetch` in Node / the browser - each host returns the full
 // response (status, headers, raw body) as a single binary-safe `char[]`.
 //
 //   cargo run -- sample/interop/http.dream

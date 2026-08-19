@@ -521,7 +521,12 @@ impl<'a> Analyzer<'a> {
                     self.analyze_expression(else_expr, parent_function, symbol_table, diagnostics)?;
                 let else_hir = self.hir_take();
                 // Both branches must agree; reuse the standard compatibility check.
-                self.compare_data_type(&then_type, &else_type, &empty_span(), diagnostics)?;
+                self.compare_data_type(
+                    &then_type,
+                    &else_type,
+                    &else_expr.position().unwrap_or_else(empty_span),
+                    diagnostics,
+                )?;
                 self.hir_set_ternary(cond_hir, then_hir, else_hir, &then_type);
                 Ok(then_type)
             }

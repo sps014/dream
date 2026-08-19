@@ -76,7 +76,12 @@ impl<'a> Analyzer<'a> {
         // The error type must match exactly between the operand and the function's return type
         // (`Result<T, E>` propagates its `E` unchanged; only the success payload type may differ).
         if op_base == "Result" {
-            self.compare_data_type(&op_args[1], &ret_args[1], &empty_span(), diagnostics)?;
+            self.compare_data_type(
+                &op_args[1],
+                &ret_args[1],
+                &position.unwrap_or_else(empty_span),
+                diagnostics,
+            )?;
         }
 
         let span = position.unwrap_or_else(empty_span);

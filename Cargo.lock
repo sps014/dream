@@ -1118,7 +1118,6 @@ name = "dream-diagnostics"
 version = "0.1.0"
 dependencies = [
  "dream-text",
- "tracing",
 ]
 
 [[package]]

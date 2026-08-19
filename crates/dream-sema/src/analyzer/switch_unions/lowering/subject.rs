@@ -72,7 +72,12 @@ impl<'a> Analyzer<'a> {
                     match arm_value_type {
                         None => *arm_value_type = Some(t.clone()),
                         Some(prev) => {
-                            self.compare_data_type(prev, &t, &empty_span(), diagnostics)?
+                            self.compare_data_type(
+                                prev,
+                                &t,
+                                &expr.position().unwrap_or_else(empty_span),
+                                diagnostics,
+                            )?
                         }
                     }
                     if result_temp.is_none() {

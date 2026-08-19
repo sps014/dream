@@ -55,7 +55,7 @@ impl<'a> FunctionControlGraph<'a> {
             return Ok(());
         }
         Err(Error::other(format!(
-            "error : '{}': not all code paths return a value",
+            "function '{}': not all code paths return a value",
             self.function.name.text
         )))
     }

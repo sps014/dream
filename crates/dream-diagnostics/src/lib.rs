@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use tracing::error;
-
 use dream_text::text_span::TextSpan;
+
+mod render;
+pub use render::{color_enabled, format_diagnostics, render, render_with};
 
 /// Severity of a reported [`Diagnostic`]. Used to distinguish fatal errors from
 /// non-fatal warnings so that callers can decide whether compilation should abort.
@@ -105,31 +105,5 @@ impl DiagnosticBag {
 
     pub fn extend(&mut self, other: &DiagnosticBag) {
         self.diagnostics.extend(other.diagnostics.clone());
-    }
-}
-
-/// Renders each diagnostic to the log, including a source-line excerpt with a squiggly
-/// underline when the originating file's contents are available. Kept here (rather than in
-/// the driver) so diagnostic presentation lives next to the diagnostic data model.
-pub fn render(diagnostics: &DiagnosticBag, file_contents: &HashMap<String, String>) {
-    for diag in &diagnostics.diagnostics {
-        error!("{}", diag.to_string());
-        if let (Some(path), Some(span)) = (&diag.file_path, &diag.span) {
-            if let Some(content) = file_contents.get(path) {
-                let lines: Vec<&str> = content.lines().collect();
-                if span.line_no > 0 && span.line_no <= lines.len() {
-                    let line_text = lines[span.line_no - 1];
-                    error!("  | {}", line_text);
-                    let padding = " ".repeat(span.col_no.saturating_sub(1));
-                    let squiggly_len = if span.end > span.start {
-                        span.end - span.start
-                    } else {
-                        1
-                    };
-                    let squiggly = "^".repeat(squiggly_len);
-                    error!("  | {}{}", padding, squiggly);
-                }
-            }
-        }
     }
 }

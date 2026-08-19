@@ -3,6 +3,7 @@ use std::fs;
 use tracing::{info, warn};
 
 use crate::driver::abi::emit_wasm_and_abi;
+use crate::driver::diag_highlight::highlight_dream_line;
 use crate::driver::error::CompileError;
 use crate::driver::generate::run_generators;
 use crate::driver::js_runtime::JsRuntimeTarget;
@@ -10,7 +11,7 @@ use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::attributes::CompileTargets;
-use dream_diagnostics::{render, DiagnosticBag};
+use dream_diagnostics::{render_with, DiagnosticBag};
 use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
@@ -201,7 +202,11 @@ impl Compiler {
             &mut diagnostics,
         );
         if diagnostics.has_errors() {
-            render(&diagnostics, &acc.file_contents);
+            render_with(
+                &diagnostics,
+                &acc.file_contents,
+                Some(highlight_dream_line),
+            );
             return Err(CompileError::Syntax);
         }
 
@@ -225,7 +230,11 @@ impl Compiler {
         );
 
         if diagnostics.has_errors() {
-            render(&diagnostics, &acc.file_contents);
+            render_with(
+                &diagnostics,
+                &acc.file_contents,
+                Some(highlight_dream_line),
+            );
             return Err(CompileError::Generator);
         }
 
@@ -259,7 +268,11 @@ impl Compiler {
         let symbol_info = match analyzer.analyze(&mut diagnostics) {
             Ok(info) => info,
             Err(_) => {
-                render(&diagnostics, &acc.file_contents);
+                render_with(
+                &diagnostics,
+                &acc.file_contents,
+                Some(highlight_dream_line),
+            );
                 return Err(CompileError::Semantic);
             }
         };
@@ -270,7 +283,11 @@ impl Compiler {
         // half-written `.wat` behind a generator error.
         let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
         if diagnostics.has_errors() {
-            render(&diagnostics, &acc.file_contents);
+            render_with(
+                &diagnostics,
+                &acc.file_contents,
+                Some(highlight_dream_line),
+            );
             return Err(CompileError::Generator);
         }
 

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Parallel golden-corpus probe for `tests/cases/*.dream` via `dream run` (native C)."""
 import os
+import re
 import signal
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_GUTTER = re.compile(r"^(?:\d+\s+)?\|")
 
 root = Path(__file__).resolve().parents[1]
 dream = root / "target/debug/dream"
@@ -54,11 +58,17 @@ def run_group(args, timeout):
 
 
 def run_output_body(out):
-    return "\n".join(
-        ln
-        for ln in out.splitlines()
-        if not ln.startswith(("ERROR", "INFO", "WARN"))
-    ).strip()
+    kept = []
+    for ln in out.splitlines():
+        s = _ANSI.sub("", ln).strip()
+        if not s:
+            continue
+        if s.startswith(("ERROR", "INFO", "WARN", "error:", "warning:", "-->")):
+            continue
+        if _GUTTER.match(s):
+            continue
+        kept.append(ln)
+    return "\n".join(kept).strip()
 
 
 def one(f: Path):

@@ -54,7 +54,12 @@ impl<'a> Analyzer<'a> {
                     .analyze_expression(label, ctx.parent_function, ctx.symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
                 label_hirs.push(self.hir_take());
-                self.compare_data_type(&subject_type, &label_type, &empty_span(), diagnostics)?;
+                self.compare_data_type(
+                    &subject_type,
+                    &label_type,
+                    &label.position().unwrap_or_else(empty_span),
+                    diagnostics,
+                )?;
 
                 let key = match label {
                     ExpressionNode::Literal(

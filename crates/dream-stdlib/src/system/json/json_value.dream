@@ -200,7 +200,7 @@ public class JsonValue {
     // The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
         return switch (this.obj_keys) {
-            Some(keys) => keys.get(index),
+            Some(keys) => (index < 0 || index >= keys.length) ? Option.None : Option.Some(keys.get(index)),
             None => Option.None,
         };
     }
@@ -208,7 +208,7 @@ public class JsonValue {
     // The object value at insertion index `index`, or `None`.
     public fun value_at(index: int): Option<JsonValue> {
         return switch (this.obj_vals) {
-            Some(vals) => vals.get(index),
+            Some(vals) => (index < 0 || index >= vals.length) ? Option.None : Option.Some(vals.get(index)),
             None => Option.None,
         };
     }
@@ -221,7 +221,7 @@ public class JsonValue {
     // The array element at `index`, or `None`.
     public fun at(index: int): Option<JsonValue> {
         return switch (this.items) {
-            Some(items) => items.get(index),
+            Some(items) => (index < 0 || index >= items.length) ? Option.None : Option.Some(items.get(index)),
             None => Option.None,
         };
     }

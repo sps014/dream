@@ -100,7 +100,12 @@ impl<'a> Analyzer<'a> {
             .analyze_expression(right, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
         let value_hir = self.hir_take();
-        self.compare_data_type(&inner_type, &right_type, &empty_span(), diagnostics)?;
+        self.compare_data_type(
+            &inner_type,
+            &right_type,
+            &right.position().unwrap_or_else(empty_span),
+            diagnostics,
+        )?;
         self.note_sink_store_move(right, &right_type, parent_function);
 
         let target = self.type_ctx.lower(&inner_type);

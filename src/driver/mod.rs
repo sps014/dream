@@ -9,6 +9,7 @@
 
 pub mod abi;
 pub mod compiler;
+pub mod diag_highlight;
 pub mod error;
 pub mod generate;
 pub mod gpu_gen;

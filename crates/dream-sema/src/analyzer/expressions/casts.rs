@@ -138,10 +138,9 @@ impl<'a> Analyzer<'a> {
 
         diagnostics.report_error(
             format!(
-                "cannot convert from {} to {} at {}",
+                "cannot convert from {} to {}",
                 self.ty_display(right),
                 self.ty_display(left),
-                position.get_point_str()
             ),
             Some(*position),
         );

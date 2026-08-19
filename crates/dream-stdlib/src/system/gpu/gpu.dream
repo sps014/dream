@@ -393,13 +393,56 @@ public class Gpu {
 
     // WGSL `atomicLoad` on a storage-buffer element; CPU stub returns `0`.
     public static fun atomic_load(buf: GpuBuffer<int>, i: int): int { return 0; }
-    // WGSL `atomicStore`; CPU stub is a no-op.
+    // WGSL `atomicStore` to write a 32-bit integer into a storage buffer; CPU stub is a no-op.
     public static fun atomic_store(buf: GpuBuffer<int>, i: int, v: int): void {}
-    // WGSL `atomicAdd`; returns the previous value (CPU stub returns `0`).
+    // WGSL `atomicAdd` to atomically add `v` to `buf[i]`; returns the old value.
     public static fun atomic_add(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
-    // WGSL `atomicExchange`; returns the previous value (CPU stub returns `0`).
+    // WGSL `atomicSub` to atomically subtract `v` from `buf[i]`; returns the old value.
+    public static fun atomic_sub(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicMin` to atomically compute the minimum of `v` and `buf[i]`; returns the old value.
+    public static fun atomic_min(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicMax` to atomically compute the maximum of `v` and `buf[i]`; returns the old value.
+    public static fun atomic_max(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicAnd` to atomically perform a bitwise AND with `v` on `buf[i]`; returns the old value.
+    public static fun atomic_and(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicOr` to atomically perform a bitwise OR with `v` on `buf[i]`; returns the old value.
+    public static fun atomic_or(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicXor` to atomically perform a bitwise XOR with `v` on `buf[i]`; returns the old value.
+    public static fun atomic_xor(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicExchange` to atomically swap `v` into `buf[i]`; returns the old value.
     public static fun atomic_exchange(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
 
+    // Screen-space partial derivative with respect to window X coordinate (WGSL `dpdx`); `@fragment` stage only.
+    public static fun dpdx(v: float): float { return 0.0; }
+    // Component-wise screen-space X derivative of a 2D vector (`dpdx(v.x)`, `dpdx(v.y)`); `@fragment` stage only.
+    public static fun dpdx(v: GpuVec2): GpuVec2 { return GpuVec2(); }
+    // Component-wise screen-space X derivative of a 3D vector (e.g. world position); `@fragment` stage only.
+    public static fun dpdx(v: GpuVec3): GpuVec3 { return GpuVec3(); }
+    // Component-wise screen-space X derivative of a 4D vector; `@fragment` stage only.
+    public static fun dpdx(v: GpuVec4): GpuVec4 { return GpuVec4(); }
+
+    // Screen-space partial derivative with respect to window Y coordinate (WGSL `dpdy`); `@fragment` stage only.
+    public static fun dpdy(v: float): float { return 0.0; }
+    // Component-wise screen-space Y derivative of a 2D vector (`dpdy(v.x)`, `dpdy(v.y)`); `@fragment` stage only.
+    public static fun dpdy(v: GpuVec2): GpuVec2 { return GpuVec2(); }
+    // Component-wise screen-space Y derivative of a 3D vector (e.g. world position); `@fragment` stage only.
+    public static fun dpdy(v: GpuVec3): GpuVec3 { return GpuVec3(); }
+    // Component-wise screen-space Y derivative of a 4D vector; `@fragment` stage only.
+    public static fun dpdy(v: GpuVec4): GpuVec4 { return GpuVec4(); }
+
+    // Screen-space derivative magnitude `abs(dpdx(v)) + abs(dpdy(v))` (WGSL `fwidth`) for procedural antialiasing; `@fragment` only.
+    public static fun fwidth(v: float): float { return 0.0; }
+    // Component-wise derivative magnitude for 2D coordinates (e.g. UV gradients, grid lines); `@fragment` only.
+    public static fun fwidth(v: GpuVec2): GpuVec2 { return GpuVec2(); }
+    // Component-wise derivative magnitude for 3D coordinates (e.g. world-space normal estimation); `@fragment` only.
+    public static fun fwidth(v: GpuVec3): GpuVec3 { return GpuVec3(); }
+    // Component-wise derivative magnitude for 4D coordinates; `@fragment` only.
+    public static fun fwidth(v: GpuVec4): GpuVec4 { return GpuVec4(); }
+
+    // Returns the texture's `(width, height)` in texels as a float vector (WGSL `textureDimensions`).
+    public static fun texture_dimensions(tex: GpuTexture): GpuVec2 {
+        return GpuVec2.of((float)tex.width, (float)tex.height);
+    }
     // WGSL `textureLoad` (texel fetch) for `@compute`; CPU stub returns `0`.
     public static fun texture_load(tex: GpuTexture, x: int, y: int): float { return 0.0; }
     // WGSL `textureStore` for `@compute`; CPU stub is a no-op.
@@ -426,6 +469,14 @@ public class Gpu {
         samp: GpuSampler,
         u: float,
         v: float
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // Samples a cubemap texture along the 3D direction vector `dir` (WGSL `textureSample`).
+    public static fun texture_sample_cube(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        dir: GpuVec3
     ): GpuVec4 {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }

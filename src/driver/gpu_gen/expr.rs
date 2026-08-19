@@ -43,7 +43,15 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 .unwrap_or_else(|| "0".into());
             format!("atomicLoad(&{buf}[u32({idx})])")
         }
-        "atomic_store" | "atomic_add" | "atomic_exchange" => {
+        "atomic_store"
+        | "atomic_add"
+        | "atomic_sub"
+        | "atomic_min"
+        | "atomic_max"
+        | "atomic_and"
+        | "atomic_or"
+        | "atomic_xor"
+        | "atomic_exchange" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
             let buf = args_s.first().cloned().unwrap_or_else(|| "buf".into());
             let idx = args
@@ -57,9 +65,65 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             let op = match name {
                 "atomic_store" => "atomicStore",
                 "atomic_add" => "atomicAdd",
+                "atomic_sub" => "atomicSub",
+                "atomic_min" => "atomicMin",
+                "atomic_max" => "atomicMax",
+                "atomic_and" => "atomicAnd",
+                "atomic_or" => "atomicOr",
+                "atomic_xor" => "atomicXor",
                 _ => "atomicExchange",
             };
             format!("{op}(&{buf}[u32({idx})], {val})")
+        }
+        "count_one_bits" => {
+            let val = args
+                .first()
+                .map(|a| coerce_expr_to_wgsl_ty(a, "i32", ctx))
+                .unwrap_or_else(|| "0".into());
+            format!("i32(countOneBits(u32({val})))")
+        }
+        "reverse_bits" => {
+            let val = args
+                .first()
+                .map(|a| coerce_expr_to_wgsl_ty(a, "i32", ctx))
+                .unwrap_or_else(|| "0".into());
+            format!("i32(reverseBits(u32({val})))")
+        }
+        "count_leading_zeros" => {
+            let val = args
+                .first()
+                .map(|a| coerce_expr_to_wgsl_ty(a, "i32", ctx))
+                .unwrap_or_else(|| "0".into());
+            format!("i32(countLeadingZeros(u32({val})))")
+        }
+        "count_trailing_zeros" => {
+            let val = args
+                .first()
+                .map(|a| coerce_expr_to_wgsl_ty(a, "i32", ctx))
+                .unwrap_or_else(|| "0".into());
+            format!("i32(countTrailingZeros(u32({val})))")
+        }
+        "texture_dimensions" => {
+            let tex = args
+                .first()
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "tex".into());
+            format!("vec2<f32>(textureDimensions({tex}))")
+        }
+        "texture_sample_cube" => {
+            let tex = args
+                .first()
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "tex".into());
+            let samp = args
+                .get(1)
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "samp".into());
+            let dir = args
+                .get(2)
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "vec3<f32>(0.0, 0.0, 1.0)".into());
+            format!("textureSample({tex}, {samp}, {dir})")
         }
         "texture_load" => {
             let tex = args
@@ -215,6 +279,25 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 args_s.first().cloned().unwrap_or_else(|| "m".into())
             )
         }
+        "inverse" => {
+            if let Some(arg) = args.first() {
+                let m_ty = infer_wgsl_ty(arg, ctx);
+                let m = emit_expr(arg, ctx);
+                if m_ty.starts_with("mat2") {
+                    format!(
+                        "(mat2x2<f32>(vec2<f32>({m}[1].y, -{m}[0].y), vec2<f32>(-{m}[1].x, {m}[0].x)) * (1.0 / determinant({m})))"
+                    )
+                } else {
+                    ctx.report_error(
+                        format!("inverse() for {} is not implemented in the WGSL backend yet", m_ty),
+                        arg.position(),
+                    );
+                    format!("{m}")
+                }
+            } else {
+                "m".into()
+            }
+        }
         "splat" => {
             ctx.report_error(
                 format!(
@@ -231,20 +314,25 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
         }
         "min" | "max" | "abs" | "clamp" | "sqrt" | "floor" | "ceil" | "fract" | "sin" | "cos"
         | "tan" | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
-        | "reflect" | "mix" | "pow" | "exp" | "log" | "sign" | "saturate" | "step"
-        | "smoothstep" | "fma" | "inversesqrt" => {
+        | "reflect" | "refract" | "faceforward" | "distance" | "mix" | "pow" | "exp" | "exp2"
+        | "log" | "log2" | "round" | "trunc" | "radians" | "degrees" | "sign" | "saturate"
+        | "step" | "smoothstep" | "fma" | "inversesqrt" | "determinant" | "dpdx"
+        | "dpdy" | "fwidth" => {
             let arg_tys: Vec<String> = args.iter().map(|a| infer_wgsl_ty(a, ctx)).collect();
             let any_vec = arg_tys.iter().any(|t| is_vec_wgsl(t));
+            let any_mat = arg_tys.iter().any(|t| is_mat_wgsl(t));
             let vec_ty = arg_tys.iter().find(|t| is_vec_wgsl(t)).cloned();
-            let args_s: Vec<String> = if any_vec {
+            let args_s: Vec<String> = if any_mat {
+                args.iter().map(|a| emit_expr(a, ctx)).collect()
+            } else if any_vec {
                 args.iter()
                     .zip(arg_tys.iter())
                     .map(|(a, ty)| {
                         let rendered = emit_expr(a, ctx);
                         if *ty == "f32" {
                             if let Some(vty) = vec_ty.as_deref() {
-                                if name == "mix" {
-                                    // WGSL `mix(vec, vec, f32)` keeps a scalar factor.
+                                if name == "mix" || name == "refract" {
+                                    // WGSL `mix(vec, vec, f32)` and `refract(vec, vec, f32)` keep a scalar factor.
                                     return rendered;
                                 }
                                 return format!("{vty}({rendered})");
@@ -278,6 +366,18 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
                 ),
+                "faceforward" => format!(
+                    "faceForward({}, {}, {})",
+                    args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
+                ),
+                "refract" => format!(
+                    "refract({}, {}, {})",
+                    args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
+                    args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
+                ),
                 "saturate" => {
                     if let Some(vty) = vec_ty.as_deref() {
                         format!(
@@ -291,7 +391,7 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                         )
                     }
                 }
-                "atan2" | "step" | "pow" => format!(
+                "distance" | "atan2" | "step" | "pow" => format!(
                     "{}({}, {})",
                     name,
                     args_s.first().cloned().unwrap_or_else(|| "0.0".into()),
@@ -303,8 +403,25 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
                 ),
-                "normalize" | "length" | "cross" | "reflect" | "dot" | "exp" | "log" | "sign"
-                | "inversesqrt" => {
+                "normalize"
+                | "length"
+                | "cross"
+                | "reflect"
+                | "dot"
+                | "exp"
+                | "exp2"
+                | "log"
+                | "log2"
+                | "round"
+                | "trunc"
+                | "radians"
+                | "degrees"
+                | "sign"
+                | "inversesqrt"
+                | "determinant"
+                | "dpdx"
+                | "dpdy"
+                | "fwidth" => {
                     format!("{}({})", name, args_s.join(", "))
                 }
                 other => format!(
@@ -532,6 +649,14 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             let base = emit_expr(obj, ctx);
             if member.text == "length" {
                 format!("i32(arrayLength(&{}))", base)
+            } else if is_mat_wgsl(&infer_wgsl_ty(obj, ctx)) {
+                match member.text.as_str() {
+                    "c0" => format!("{base}[0]"),
+                    "c1" => format!("{base}[1]"),
+                    "c2" => format!("{base}[2]"),
+                    "c3" => format!("{base}[3]"),
+                    _ => format!("{}.{}", base, escape_wgsl_ident(&member.text)),
+                }
             } else {
                 format!("{}.{}", base, escape_wgsl_ident(&member.text))
             }

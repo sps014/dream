@@ -1,0 +1,54 @@
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+    public uv: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public uv: GpuVec2;
+}
+
+@vertex
+fun deriv_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.uv = v.uv;
+    return o;
+}
+
+@fragment
+fun deriv_fs(
+    v: VsOut,
+    @readonly tex: GpuTexture,
+    @readonly @cube cube_tex: GpuTexture,
+    samp: GpuSampler
+): GpuVec4 {
+    let dx = Gpu.dpdx(v.uv.x);
+    let dy = Gpu.dpdy(v.uv.y);
+    let fw = Gpu.fwidth(v.uv);
+
+    let dims = Gpu.texture_dimensions(tex);
+    let cube_col = Gpu.texture_sample_cube(cube_tex, samp, GpuVec3.of(v.uv.x, v.uv.y, 1.0));
+
+    let norm = GpuVec3.of(0.0, 1.0, 0.0);
+    let inc = GpuVec3.of(dx, -1.0, dy);
+    let refr = GpuMath.refract(inc, norm, 1.33);
+    let ff = GpuMath.faceforward(norm, inc, norm);
+
+    let m = GpuMat2.of(GpuVec2.of(2.0, 0.0), GpuVec2.of(0.0, 2.0));
+    let inv_m = GpuMath.inverse(m);
+
+    return GpuVec4.of(fw.x + dims.x * 0.0 + cube_col.x + refr.x + ff.x + inv_m.c0.x, fw.y, 0.0, 1.0);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+    System.println("ok");
+}

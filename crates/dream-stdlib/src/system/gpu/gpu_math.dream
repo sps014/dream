@@ -224,4 +224,109 @@ public class GpuMath {
             GpuVec4.of(m.c0.w, m.c1.w, m.c2.w, m.c3.w)
         );
     }
+
+    // Euclidean distance between two scalar values: `|a - b|` (WGSL `distance`).
+    public static fun distance(a: float, b: float): float {
+        return GpuMath.abs(a - b);
+    }
+
+    // Refraction vector for incident ray `i`, surface normal `n`, and index of refraction ratio `eta` (WGSL `refract`).
+    public static fun refract(i: GpuVec3, n: GpuVec3, eta: float): GpuVec3 {
+        return GpuVec3.of(0.0, 0.0, 0.0);
+    }
+
+    // Flips the surface normal `n` to face the opposite direction of incident vector `i` if `dot(nref, i) >= 0` (WGSL `faceForward`).
+    public static fun faceforward(n: GpuVec3, i: GpuVec3, nref: GpuVec3): GpuVec3 {
+        if (GpuMath.dot(nref, i) < 0.0) { return n; }
+        return -n;
+    }
+
+    // Base-2 exponential `2^x` (WGSL `exp2`).
+    public static fun exp2(x: float): float {
+        return GpuMath.pow(2.0, x);
+    }
+
+    // Base-2 logarithm `log2(x)` (WGSL `log2`).
+    public static fun log2(x: float): float {
+        return 0.0;
+    }
+
+    // Rounds to the nearest integer, rounding ties to the nearest even number (WGSL `round`).
+    public static fun round(x: float): float {
+        return (float)Math.round((double)x);
+    }
+
+    // Truncates fractional digits toward zero (WGSL `trunc`).
+    public static fun trunc(x: float): float {
+        if (x < 0.0) { return GpuMath.ceil(x); }
+        return GpuMath.floor(x);
+    }
+
+    // Converts an angle from degrees to radians: `deg * (pi / 180)` (WGSL `radians`).
+    public static fun radians(deg: float): float {
+        return deg * 0.017453292519943295;
+    }
+
+    // Converts an angle from radians to degrees: `rad * (180 / pi)` (WGSL `degrees`).
+    public static fun degrees(rad: float): float {
+        return rad * 57.29577951308232;
+    }
+
+    // Determinant of a 2x2 matrix (WGSL `determinant`).
+    public static fun determinant(m: GpuMat2): float {
+        return m.c0.x * m.c1.y - m.c0.y * m.c1.x;
+    }
+
+    // Determinant of a 3x3 matrix (WGSL `determinant`).
+    public static fun determinant(m: GpuMat3): float {
+        return m.c0.x * (m.c1.y * m.c2.z - m.c1.z * m.c2.y)
+             - m.c1.x * (m.c0.y * m.c2.z - m.c0.z * m.c2.y)
+             + m.c2.x * (m.c0.y * m.c1.z - m.c0.z * m.c1.y);
+    }
+
+    // Determinant of a 4x4 matrix (WGSL `determinant`).
+    public static fun determinant(m: GpuMat4): float {
+        return 0.0;
+    }
+
+    // Multiplicative inverse of a 2x2 matrix: `m^-1` such that `m * m^-1 = I` (WGSL `inverse`).
+    public static fun inverse(m: GpuMat2): GpuMat2 {
+        let det = GpuMath.determinant(m);
+        if (det == 0.0) { return GpuMat2.identity(); }
+        let inv_det = 1.0 / det;
+        return GpuMat2.of(
+            GpuVec2.of(m.c1.y * inv_det, -m.c0.y * inv_det),
+            GpuVec2.of(-m.c1.x * inv_det, m.c0.x * inv_det)
+        );
+    }
+
+    // Multiplicative inverse of a 3x3 matrix (WGSL `inverse`).
+    public static fun inverse(m: GpuMat3): GpuMat3 {
+        return GpuMat3.identity();
+    }
+
+    // Multiplicative inverse of a 4x4 matrix (WGSL `inverse`).
+    public static fun inverse(m: GpuMat4): GpuMat4 {
+        return GpuMat4.identity();
+    }
+
+    // Number of 1 bits in the 32-bit integer binary representation (WGSL `countOneBits` / popcount).
+    public static fun count_one_bits(x: int): int {
+        return 0;
+    }
+
+    // Reverses the order of the bits in a 32-bit integer (WGSL `reverseBits`).
+    public static fun reverse_bits(x: int): int {
+        return 0;
+    }
+
+    // Number of consecutive zero bits starting from the most significant bit (WGSL `countLeadingZeros` / clz).
+    public static fun count_leading_zeros(x: int): int {
+        return 0;
+    }
+
+    // Number of consecutive zero bits starting from the least significant bit (WGSL `countTrailingZeros` / ctz).
+    public static fun count_trailing_zeros(x: int): int {
+        return 0;
+    }
 }

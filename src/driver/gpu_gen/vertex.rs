@@ -236,6 +236,7 @@ fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, Str
 
 pub(super) enum ResClass {
     Texture { storage: bool },
+    TextureCube,
     Sampler,
     Storage { elem: String },
     Uniform { ty: String },
@@ -243,9 +244,14 @@ pub(super) enum ResClass {
 
 pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
     let readonly = has_readonly_attr(&param.attributes);
+    let is_cube = dream_abi::attributes::has_named_attr(&param.attributes, "cube");
     match &param.type_ {
         Type::Struct(tok, None) if tok.text == "GpuTexture" => {
-            ResClass::Texture { storage: !readonly }
+            if is_cube {
+                ResClass::TextureCube
+            } else {
+                ResClass::Texture { storage: !readonly }
+            }
         }
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ResClass::Sampler,
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
@@ -333,6 +339,23 @@ pub(super) fn emit_resource_param(
                     "texture_2d<f32>".into()
                 },
                 read_write: storage,
+                atomic: false,
+            });
+        }
+        ResClass::TextureCube => {
+            let pname = param.name.text.clone();
+            let wgsl_name = format!("{entry}_{pname}");
+            let (group, binding) = next_binding_slot(param, binding_idx)?;
+            let decl = format!(
+                "@group({group}) @binding({binding}) var {wgsl_name}: texture_cube<f32>;\n"
+            );
+            header.push_str(&decl);
+            bindings.push(GpuBinding {
+                name: pname,
+                binding,
+                kind: "texture_cube",
+                wgsl_ty: "texture_cube<f32>".into(),
+                read_write: false,
                 atomic: false,
             });
         }

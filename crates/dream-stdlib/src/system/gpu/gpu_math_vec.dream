@@ -258,4 +258,95 @@ extend GpuMath {
     public static fun dot(a: GpuVec4, b: GpuVec4): float {
         return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     }
+
+    // Euclidean distance between two 2D points: `length(a - b)` (WGSL `distance`).
+    public static fun distance(a: GpuVec2, b: GpuVec2): float {
+        return GpuMath.length(a - b);
+    }
+    // Euclidean distance between two 3D points in space: `length(a - b)` (WGSL `distance`).
+    public static fun distance(a: GpuVec3, b: GpuVec3): float {
+        return GpuMath.length(a - b);
+    }
+    // Euclidean distance between two 4D vectors/homogeneous points: `length(a - b)` (WGSL `distance`).
+    public static fun distance(a: GpuVec4, b: GpuVec4): float {
+        return GpuMath.length(a - b);
+    }
+
+    // Component-wise base-2 exponential: `(2^x, 2^y)` (WGSL `exp2`).
+    public static fun exp2(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.exp2(x.x), GpuMath.exp2(x.y));
+    }
+    // Component-wise base-2 exponential: `(2^x, 2^y, 2^z)` (WGSL `exp2`).
+    public static fun exp2(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.exp2(x.x), GpuMath.exp2(x.y), GpuMath.exp2(x.z));
+    }
+    // Component-wise base-2 exponential: `(2^x, 2^y, 2^z, 2^w)` (WGSL `exp2`).
+    public static fun exp2(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.exp2(x.x), GpuMath.exp2(x.y), GpuMath.exp2(x.z), GpuMath.exp2(x.w));
+    }
+
+    // Component-wise base-2 logarithm: `(log2(x), log2(y))` (WGSL `log2`).
+    public static fun log2(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.log2(x.x), GpuMath.log2(x.y));
+    }
+    // Component-wise base-2 logarithm: `(log2(x), log2(y), log2(z))` (WGSL `log2`).
+    public static fun log2(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.log2(x.x), GpuMath.log2(x.y), GpuMath.log2(x.z));
+    }
+    // Component-wise base-2 logarithm: `(log2(x), log2(y), log2(z), log2(w))` (WGSL `log2`).
+    public static fun log2(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.log2(x.x), GpuMath.log2(x.y), GpuMath.log2(x.z), GpuMath.log2(x.w));
+    }
+
+    // Rounds each 2D vector component to the nearest integer, ties to even (WGSL `round`).
+    public static fun round(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.round(x.x), GpuMath.round(x.y));
+    }
+    // Rounds each 3D vector component to the nearest integer, ties to even (WGSL `round`).
+    public static fun round(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.round(x.x), GpuMath.round(x.y), GpuMath.round(x.z));
+    }
+    // Rounds each 4D vector component to the nearest integer, ties to even (WGSL `round`).
+    public static fun round(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.round(x.x), GpuMath.round(x.y), GpuMath.round(x.z), GpuMath.round(x.w));
+    }
+
+    // Truncates fractional parts toward zero for each 2D vector component (WGSL `trunc`).
+    public static fun trunc(x: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.trunc(x.x), GpuMath.trunc(x.y));
+    }
+    // Truncates fractional parts toward zero for each 3D vector component (WGSL `trunc`).
+    public static fun trunc(x: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.trunc(x.x), GpuMath.trunc(x.y), GpuMath.trunc(x.z));
+    }
+    // Truncates fractional parts toward zero for each 4D vector component (WGSL `trunc`).
+    public static fun trunc(x: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.trunc(x.x), GpuMath.trunc(x.y), GpuMath.trunc(x.z), GpuMath.trunc(x.w));
+    }
+
+    // Converts 2D vector angles from degrees to radians: `deg * (pi / 180)` (WGSL `radians`).
+    public static fun radians(deg: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.radians(deg.x), GpuMath.radians(deg.y));
+    }
+    // Converts 3D Euler angles from degrees to radians: `deg * (pi / 180)` (WGSL `radians`).
+    public static fun radians(deg: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.radians(deg.x), GpuMath.radians(deg.y), GpuMath.radians(deg.z));
+    }
+    // Converts 4D vector angles from degrees to radians: `deg * (pi / 180)` (WGSL `radians`).
+    public static fun radians(deg: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.radians(deg.x), GpuMath.radians(deg.y), GpuMath.radians(deg.z), GpuMath.radians(deg.w));
+    }
+
+    // Converts 2D vector angles from radians to degrees: `rad * (180 / pi)` (WGSL `degrees`).
+    public static fun degrees(rad: GpuVec2): GpuVec2 {
+        return GpuVec2.of(GpuMath.degrees(rad.x), GpuMath.degrees(rad.y));
+    }
+    // Converts 3D Euler angles from radians to degrees: `rad * (180 / pi)` (WGSL `degrees`).
+    public static fun degrees(rad: GpuVec3): GpuVec3 {
+        return GpuVec3.of(GpuMath.degrees(rad.x), GpuMath.degrees(rad.y), GpuMath.degrees(rad.z));
+    }
+    // Converts 4D vector angles from radians to degrees: `rad * (180 / pi)` (WGSL `degrees`).
+    public static fun degrees(rad: GpuVec4): GpuVec4 {
+        return GpuVec4.of(GpuMath.degrees(rad.x), GpuMath.degrees(rad.y), GpuMath.degrees(rad.z), GpuMath.degrees(rad.w));
+    }
 }

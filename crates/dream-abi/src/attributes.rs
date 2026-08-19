@@ -444,6 +444,14 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "On a `@compute` `GpuBuffer` parameter: storage access is read-only (WGSL `read`).",
     },
+    // Cubemap texture parameter attribute: WGSL `texture_cube<f32>`.
+    AttributeSpec {
+        name: "cube",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "On a `GpuTexture` parameter: binds a cubemap texture (WGSL `texture_cube<f32>`).",
+    },
     // WebGPU vertex stage: body emitted as WGSL, not WASM.
     AttributeSpec {
         name: "vertex",

@@ -128,16 +128,17 @@ pub(super) fn builtin_return_wgsl_ty(
     let a0 = first_arg_ty(args, ctx);
     match name {
         "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "floor" | "ceil"
-        | "fract" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "log" | "sign"
-        | "saturate" | "step" | "smoothstep" | "fma" | "inversesqrt" => {
+        | "fract" | "min" | "max" | "abs" | "clamp" | "mix" | "pow" | "exp" | "exp2" | "log"
+        | "log2" | "round" | "trunc" | "radians" | "degrees" | "sign" | "saturate" | "step"
+        | "smoothstep" | "fma" | "inversesqrt" | "dpdx" | "dpdy" | "fwidth" => {
             if is_vec_wgsl(&a0) {
                 Some(a0)
             } else {
                 Some("f32".into())
             }
         }
-        "length" | "dot" => Some("f32".into()),
-        "normalize" | "cross" | "reflect" => {
+        "length" | "dot" | "distance" | "determinant" => Some("f32".into()),
+        "normalize" | "cross" | "reflect" | "refract" | "faceforward" => {
             if is_vec_wgsl(&a0) {
                 Some(a0)
             } else {
@@ -157,7 +158,7 @@ pub(super) fn builtin_return_wgsl_ty(
                 Some("vec4<f32>".into())
             }
         }
-        "transpose" => {
+        "transpose" | "inverse" => {
             if is_mat_wgsl(&a0) {
                 Some(a0)
             } else {
@@ -165,9 +166,22 @@ pub(super) fn builtin_return_wgsl_ty(
             }
         }
         "identity" => Some("mat4x4<f32>".into()),
-        "atomic_load" | "atomic_add" | "atomic_exchange" => Some("i32".into()),
+        "atomic_load"
+        | "atomic_add"
+        | "atomic_sub"
+        | "atomic_min"
+        | "atomic_max"
+        | "atomic_and"
+        | "atomic_or"
+        | "atomic_xor"
+        | "atomic_exchange"
+        | "count_one_bits"
+        | "reverse_bits"
+        | "count_leading_zeros"
+        | "count_trailing_zeros" => Some("i32".into()),
         "texture_load" | "texture_sample_level" => Some("f32".into()),
-        "texture_sample" => Some("vec4<f32>".into()),
+        "texture_sample" | "texture_sample_cube" => Some("vec4<f32>".into()),
+        "texture_dimensions" => Some("vec2<f32>".into()),
         "splat" => None,
         "of" => {
             if is_vec_wgsl(&a0) {
@@ -250,6 +264,15 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                 }
                 return "i32".into();
             }
+            if is_mat_wgsl(&base) {
+                if base.starts_with("mat2") {
+                    return "vec2<f32>".into();
+                }
+                if base.starts_with("mat3") {
+                    return "vec3<f32>".into();
+                }
+                return "vec4<f32>".into();
+            }
             if let Some(ft) = ctx.lookup_struct_field(&base, &member.text) {
                 return ft;
             }
@@ -264,7 +287,9 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                     "uniform" => return b.wgsl_ty.clone(),
                     // Bare storage names are arrays — avoid treating them as scalars.
                     "storage" => return format!("array<{}>", b.wgsl_ty),
-                    "texture" | "storage_texture" | "sampler" => return b.wgsl_ty.clone(),
+                    "texture" | "storage_texture" | "sampler" | "texture_cube" => {
+                        return b.wgsl_ty.clone()
+                    }
                     _ => {}
                 }
             }
@@ -284,12 +309,7 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             }
         }
         ExpressionNode::MethodCall(obj, name, _, args) => {
-            if name.text == "splat" {
-                if let Some(ty) = receiver_wgsl_ty(obj) {
-                    return ty.into();
-                }
-            }
-            if name.text == "identity" {
+            if name.text == "splat" || name.text == "identity" || name.text == "of" {
                 if let Some(ty) = receiver_wgsl_ty(obj) {
                     return ty.into();
                 }
@@ -320,12 +340,7 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                     .unwrap_or_else(|| "i32".into())
             }
             ExpressionNode::MemberAccess(obj, method) => {
-                if method.text == "splat" {
-                    if let Some(ty) = receiver_wgsl_ty(obj) {
-                        return ty.into();
-                    }
-                }
-                if method.text == "identity" {
+                if method.text == "splat" || method.text == "identity" || method.text == "of" {
                     if let Some(ty) = receiver_wgsl_ty(obj) {
                         return ty.into();
                     }

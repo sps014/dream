@@ -42,7 +42,7 @@ async fun main(): void {
 
 `GpuTexture.rgba8` (and depth / float / cube variants), `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `present()`, input helpers, `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
 
-Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*`.
+Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
 
 ## Vector math
 
@@ -67,12 +67,16 @@ same operators work in `@compute` / `@vertex` / `@fragment` and on the CPU:
 | --- | --- |
 | `mix(a, b, t)` | `vec, vec, float` or `vec, vec, vec` |
 | `min` / `max` | `vec, vec` |
-| `abs` / `sign` / `floor` / `ceil` / `fract` / `sqrt` / `exp` / `saturate` | `vec` |
+| `abs` / `sign` / `floor` / `ceil` / `fract` / `sqrt` / `exp` / `exp2` / `log2` / `round` / `trunc` / `radians` / `degrees` / `saturate` | `vec` |
 | `clamp(x, lo, hi)` | `vec, float, float` or `vec, vec, vec` |
 | `pow(x, e)` | `vec, float` or `vec, vec` |
 | `normalize` / `length` / `dot` | `GpuVec2` / `GpuVec3` / `GpuVec4` |
-| `transpose` | `GpuMat2` / `GpuMat3` / `GpuMat4` |
+| `distance(a, b)` | `GpuVec2` / `GpuVec3` / `GpuVec4` |
+| `refract(i, n, eta)` / `faceforward(n, i, nref)` | `GpuVec3` |
+| `transpose` / `inverse` | `GpuMat2` / `GpuMat3` / `GpuMat4` |
+| `determinant` | `GpuMat2` / `GpuMat3` / `GpuMat4` |
 | `mul` | `GpuMatN × GpuVecN` or `GpuMatN × GpuMatN` |
+| `count_one_bits` / `reverse_bits` / `count_leading_zeros` / `count_trailing_zeros` | `int` bitwise |
 
 Near-zero `normalize` on the CPU returns a unit axis (`(1,0)`, `(0,1,0)`, or `(0,0,0,1)`);
 shaders use WGSL `normalize`.

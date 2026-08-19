@@ -95,7 +95,7 @@ impl EmitCtx<'_> {
             && self.bindings.iter().any(|b| {
                 matches!(
                     b.kind,
-                    "storage" | "texture" | "storage_texture" | "sampler"
+                    "storage" | "texture" | "storage_texture" | "sampler" | "texture_cube"
                 ) && b.name == name
             })
     }

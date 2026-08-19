@@ -163,6 +163,28 @@ pub(super) fn emit_kernel(
                     atomic: false,
                 });
             }
+            ParamClass::TextureCube => {
+                let wgsl_name = format!("{entry}_{pname}");
+                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                    Ok(slot) => slot,
+                    Err(e) => {
+                        diagnostics.report_error(e, Some(param.name.position));
+                        continue;
+                    }
+                };
+                let decl = format!(
+                    "@group({group}) @binding({binding}) var {wgsl_name}: texture_cube<f32>;\n"
+                );
+                header.push_str(&decl);
+                bindings.push(GpuBinding {
+                    name: pname,
+                    binding,
+                    kind: "texture_cube",
+                    wgsl_ty: "texture_cube<f32>".into(),
+                    read_write: false,
+                    atomic: false,
+                });
+            }
             ParamClass::Sampler => {
                 let wgsl_name = format!("{entry}_{pname}");
                 let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
@@ -302,6 +324,7 @@ enum ParamClass {
         /// `true` → `texture_storage_2d` (write); `false` → sampled `texture_2d`.
         storage: bool,
     },
+    TextureCube,
     Sampler,
     Uniform {
         ty: String,
@@ -310,6 +333,7 @@ enum ParamClass {
 
 fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
     let readonly = has_readonly_attr(&param.attributes);
+    let is_cube = dream_abi::attributes::has_named_attr(&param.attributes, "cube");
     match &param.type_ {
         // Bare `T[]` params are rejected in sema; only `GpuBuffer<T>` is storage.
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
@@ -322,8 +346,11 @@ fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
             }
         }
         Type::Struct(tok, None) if tok.text == "GpuTexture" => {
-            // `@readonly GpuTexture` → sampled; otherwise storage texture (write).
-            ParamClass::Texture { storage: !readonly }
+            if is_cube {
+                ParamClass::TextureCube
+            } else {
+                ParamClass::Texture { storage: !readonly }
+            }
         }
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ParamClass::Sampler,
         other => ParamClass::Uniform {
@@ -390,7 +417,16 @@ fn walk_stmts_atomics(stmts: &[StatementNode<'_>], out: &mut IndexSet<String>) {
             StatementNode::MethodInvocation(obj, method, _, args) => {
                 if matches!(
                     method.text.as_str(),
-                    "atomic_load" | "atomic_add" | "atomic_exchange" | "atomic_store"
+                    "atomic_load"
+                        | "atomic_add"
+                        | "atomic_sub"
+                        | "atomic_min"
+                        | "atomic_max"
+                        | "atomic_and"
+                        | "atomic_or"
+                        | "atomic_xor"
+                        | "atomic_exchange"
+                        | "atomic_store"
                 ) {
                     if let Some(ExpressionNode::Identifier(name)) = args.first() {
                         out.insert(name.text.clone());
@@ -458,7 +494,16 @@ fn walk_expr_atomics(expr: &ExpressionNode<'_>, out: &mut IndexSet<String>) {
         ExpressionNode::MethodCall(obj, method, _, args)
             if matches!(
                 method.text.as_str(),
-                "atomic_load" | "atomic_add" | "atomic_exchange" | "atomic_store"
+                "atomic_load"
+                    | "atomic_add"
+                    | "atomic_sub"
+                    | "atomic_min"
+                    | "atomic_max"
+                    | "atomic_and"
+                    | "atomic_or"
+                    | "atomic_xor"
+                    | "atomic_exchange"
+                    | "atomic_store"
             ) =>
         {
             if let Some(ExpressionNode::Identifier(name)) = args.first() {
@@ -472,7 +517,16 @@ fn walk_expr_atomics(expr: &ExpressionNode<'_>, out: &mut IndexSet<String>) {
         ExpressionNode::FunctionCall(name, _, args)
             if matches!(
                 name.text.as_str(),
-                "atomic_load" | "atomic_add" | "atomic_exchange" | "atomic_store"
+                "atomic_load"
+                    | "atomic_add"
+                    | "atomic_sub"
+                    | "atomic_min"
+                    | "atomic_max"
+                    | "atomic_and"
+                    | "atomic_or"
+                    | "atomic_xor"
+                    | "atomic_exchange"
+                    | "atomic_store"
             ) =>
         {
             if let Some(ExpressionNode::Identifier(n)) = args.first() {

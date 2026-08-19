@@ -99,7 +99,7 @@ import system.net;
 class Downloader {
     url: string;
     async fun fetch(): string {
-        let body = await HttpClient("").text(this.url);
+        let body = await HttpClient().text(this.url);
         return body;
     }
 }

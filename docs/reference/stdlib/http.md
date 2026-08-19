@@ -21,7 +21,7 @@ Native uses the host HTTP client (reqwest in `libdream`); browser and Node use `
 
 | Call | Meaning |
 | --- | --- |
-| `HttpClient(base_url)` | `""` if every URL is absolute |
+| `HttpClient()` / `HttpClient(base_url)` | empty base by default; pass a prefix when paths are relative |
 | `set_header(name, value)` | default header (chains) |
 | `with_timeout(ms)` | `0` = none |
 | `with_http_version(1 or 2)` | native only |

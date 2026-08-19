@@ -447,6 +447,7 @@ fn print_usage(program: &str) {
     error!("  test                  Discover and run @test functions in a file or directory");
     error!("  debug-adapter         DAP over stdio via lldb-dap on the native .bin (implies -g)");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
+    error!(r"Example: {} run tests/cases/process_args_basic.dream -- alpha beta", program);
     error!(r"Example: {} test tests/", program);
     error!(r"Example: {} --filter adds test tests/math.dream", program);
     error!(

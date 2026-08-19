@@ -292,7 +292,7 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                         format!("inverse() for {} is not implemented in the WGSL backend yet", m_ty),
                         arg.position(),
                     );
-                    format!("{m}")
+                    m
                 }
             } else {
                 "m".into()

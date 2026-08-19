@@ -13,6 +13,8 @@ site/
 *.abi.json
 *.runtime.js
 
+
+**/target/**/*.cc.lock
 tests/**/*.C
 tests/**/*.bin
 tests/**/*.o

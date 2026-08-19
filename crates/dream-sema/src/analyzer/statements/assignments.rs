@@ -75,7 +75,10 @@ impl<'a> Analyzer<'a> {
             (_, other) => {
                 self.hir_fail();
                 diagnostics.report_error(
-                    format!("Cannot index into non-array type {}", other.get_type()),
+                    format!(
+                        "Cannot index into non-array type {}",
+                        self.ty_display(&other)
+                    ),
                     arr.position(),
                 );
                 return Ok(());
@@ -90,7 +93,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "Array index must be of type int, got {}",
-                    index_type.get_type()
+                    self.ty_display(&index_type)
                 ),
                 index.position(),
             );
@@ -128,6 +131,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
+        let pretty_obj = self.ty_display(obj_type);
         let Some((hook, _)) = self.resolve_hook_or_diagnose(
             obj_type,
             ProtocolRole::Set,
@@ -137,7 +141,7 @@ impl<'a> Analyzer<'a> {
             || {
                 format!(
                     "type '{}' is not index-assignable (define '@set_indexer public fun ...(index, value)' to allow obj[index] = value)",
-                    obj_type.get_type()
+                    pretty_obj
                 )
             },
         ) else {
@@ -287,7 +291,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "Cannot access member of non-class type {}",
-                        obj_type.get_type()
+                        self.ty_display(&obj_type)
                     ),
                     Some(member.position),
                 );
@@ -296,7 +300,7 @@ impl<'a> Analyzer<'a> {
             MemberField::StructNotFound { struct_name } => {
                 self.hir_fail();
                 diagnostics.report_error(
-                    format!("Struct '{}' not found", struct_name),
+                    format!("Struct '{}' not found", self.ty_str_display(&struct_name)),
                     Some(member.position),
                 );
                 Ok(())
@@ -322,7 +326,8 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Field '{}' not found in class '{}'",
-                            member.text, struct_name
+                            member.text,
+                            self.ty_str_display(&struct_name)
                         ),
                         Some(member.position),
                     );
@@ -371,7 +376,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "'++'/'--' require an integer operand, got {}",
-                    target_ty.display_name()
+                    self.ty_display(&target_ty)
                 ),
                 Some(op.position),
             );

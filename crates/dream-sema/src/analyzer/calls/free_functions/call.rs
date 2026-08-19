@@ -697,7 +697,10 @@ impl<'a> Analyzer<'a> {
 
         Err(report(
             diagnostics,
-            format!("cannot call value of type '{}'", callee_ty.get_type()),
+            format!(
+                "cannot call value of type '{}'",
+                self.ty_display(&callee_ty)
+            ),
             span,
         ))
     }

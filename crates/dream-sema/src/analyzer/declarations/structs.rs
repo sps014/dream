@@ -196,13 +196,12 @@ impl<'a> Analyzer<'a> {
         ) {
             return;
         }
-        let field_type_name = field.field_type.get_type();
         diagnostics.report_error(
             format!(
                 "field '{}' of '@shared class {}' has type '{}', which is not shared: an '@shared class' may only hold blittable values, string, structs of shared fields, or other '@shared' types",
                 field.name.text,
                 owner_name,
-                field_type_name
+                self.ty_display(&field.field_type)
             ),
             Some(field.name.position),
         );
@@ -224,7 +223,7 @@ impl<'a> Analyzer<'a> {
                     "field '{}' of '{}' cannot have type '{}': a 'ref struct' cannot be stored as a field (it would let a stack-only value escape its stack frame)",
                     field.name.text,
                     owner_name,
-                    field.field_type.get_type()
+                    self.ty_display(&field.field_type)
                 ),
                 Some(field.name.position),
             );
@@ -257,7 +256,7 @@ impl<'a> Analyzer<'a> {
                             "async function '{}' cannot take 'ref struct' parameter '{}' of type '{}': it may need to survive an 'await' suspend point, which would spill it into the heap-allocated coroutine state",
                             f.name.text,
                             p.name.text,
-                            p.type_.get_type()
+                            this.ty_display(&p.type_)
                         ),
                         Some(f.name.position),
                     );
@@ -301,7 +300,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'{}' is a 'ref struct' and cannot be used as a generic type argument (it would be stored in a heap-allocated container, letting it escape its stack frame)",
-                        arg.get_type()
+                        self.ty_display(arg)
                     ),
                     Some(*position),
                 );

@@ -43,7 +43,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
                 format!(
                     "'?' requires a Result<T, E> or Option<T> operand, got {}",
-                    operand_type.display_name()
+                    self.ty_display(&operand_type)
                 ),
                 position,
             ));
@@ -61,7 +61,7 @@ impl<'a> Analyzer<'a> {
             let found = parent_function
                 .return_type
                 .as_ref()
-                .map(|t| t.display_name())
+                .map(|t| self.ty_display(t))
                 .unwrap_or_else(|| "void".to_string());
             return Err(report(
                 diagnostics,

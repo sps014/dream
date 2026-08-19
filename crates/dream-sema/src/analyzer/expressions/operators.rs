@@ -70,7 +70,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'??' requires an Option<T> operand, got {}",
-                        left_value.display_name()
+                        self.ty_display(&left_value)
                     ),
                     Some(opr.position),
                 );
@@ -80,7 +80,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'??' requires an Option<T> operand, got {}",
-                        left_value.display_name()
+                        self.ty_display(&left_value)
                     ),
                     Some(opr.position),
                 );
@@ -179,7 +179,7 @@ impl<'a> Analyzer<'a> {
                     format!(
                         "'{}' requires an integer operand (int/long/uint/ulong/byte), got {}",
                         opr.text,
-                        left_value.display_name()
+                        self.ty_display(&left_value)
                     ),
                     Some(opr.position),
                 );

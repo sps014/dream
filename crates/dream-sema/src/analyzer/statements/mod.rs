@@ -31,7 +31,7 @@ impl<'a> Analyzer<'a> {
     /// are skipped (their underlying error was reported where the type was produced). `context` names
     /// the construct for the message, e.g. "if" / "while" / "do/while" / "for".
     fn check_bool_condition(
-        &self,
+        &mut self,
         context: &str,
         cond_type: &Type,
         position: Option<TextSpan>,
@@ -42,7 +42,7 @@ impl<'a> Analyzer<'a> {
                 format!(
                     "{} condition must be bool, got {}",
                     context,
-                    cond_type.get_type()
+                    self.ty_display(cond_type)
                 ),
                 position,
             );

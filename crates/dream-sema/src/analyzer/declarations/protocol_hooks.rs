@@ -215,7 +215,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "'{}' already declares an '@{}' method",
-                    target_type_str,
+                    self.ty_str_display(target_type_str),
                     role.attr_name()
                 ),
                 Some(method.name.position),

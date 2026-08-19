@@ -353,7 +353,7 @@ impl<'a> Analyzer<'a> {
                 };
                 let Some(field_idx) = self.struct_field_index(&struct_name, &member.text) else {
                     diagnostics.report_error(
-                        format!("'{}' has no field '{}'", struct_name, member.text),
+                        format!("'{}' has no field '{}'", self.ty_str_display(&struct_name), member.text),
                         Some(member.position),
                     );
                     self.hir_none();
@@ -390,7 +390,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "cannot take a 'ref' to an element of type '{}'",
-                                array_ty.get_type()
+                                self.ty_display(&array_ty)
                             ),
                             array.position(),
                         );

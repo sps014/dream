@@ -30,7 +30,7 @@ impl<'a> Analyzer<'a> {
                 let pt = self.analyze_expression(p, parent_function, symbol_table, diagnostics)?;
                 if !pt.is_int() {
                     diagnostics.report_error(
-                        format!("'sleep' expects an int argument, got {}", pt.get_type()),
+                        format!("'sleep' expects an int argument, got {}", self.ty_display(&pt)),
                         p.position(),
                     );
                 }
@@ -60,7 +60,7 @@ impl<'a> Analyzer<'a> {
                         format!(
                             "'{}' expects an array of Future values, got {}",
                             name.text,
-                            arg_type.get_type()
+                            self.ty_display(&arg_type)
                         ),
                         params[0].position(),
                     );
@@ -72,7 +72,7 @@ impl<'a> Analyzer<'a> {
                     format!(
                         "'{}' expects an array of Future values, got {}",
                         name.text,
-                        arg_type.get_type()
+                        self.ty_display(&arg_type)
                     ),
                     params[0].position(),
                 );

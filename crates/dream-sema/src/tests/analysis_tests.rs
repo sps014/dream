@@ -2127,3 +2127,35 @@ fn test_generic_mismatch_pretty_prints_angle_brackets() {
         joined
     );
 }
+
+#[test]
+fn test_missing_method_pretty_prints_generic_receiver() {
+    let code = "
+        class Box<T> {
+            public v: T;
+            public constructor(v: T) { this.v = v; }
+        }
+        fun main(): void {
+            let x = Box<Box<int>>(Box<int>(1));
+            x.nope();
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    let joined = diagnostics
+        .diagnostics
+        .iter()
+        .map(|d| d.message.clone())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        joined.contains("Box<Box<int>>"),
+        "expected pretty generic receiver, got: {}",
+        joined
+    );
+    assert!(
+        !joined.contains("Box_Box_int"),
+        "diagnostics leaked a mangled type: {}",
+        joined
+    );
+}

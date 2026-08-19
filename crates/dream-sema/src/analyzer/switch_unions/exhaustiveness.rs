@@ -54,8 +54,8 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Pattern literal of type '{}' cannot match a value of type '{}'",
-                            lit.get_type(),
-                            expected_base
+                            self.ty_display(lit),
+                            self.ty_str_display(&expected_base)
                         ),
                         lit.get_span(),
                     );
@@ -69,7 +69,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "Variant pattern '{}' can only match a discriminated union, not '{}'",
-                                variant.text, expected_base
+                                variant.text, self.ty_str_display(&expected_base)
                             ),
                             Some(variant.position),
                         );
@@ -86,7 +86,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "Variant qualifier '{}' does not match the matched enum '{}'",
-                                q.text, expected_base
+                                q.text, self.ty_str_display(&expected_base)
                             ),
                             Some(q.position),
                         );
@@ -97,7 +97,7 @@ impl<'a> Analyzer<'a> {
                     Some(v) => v.clone(),
                     None => {
                         diagnostics.report_error(
-                            format!("Enum '{}' has no variant '{}'", expected_base, variant.text),
+                            format!("Enum '{}' has no variant '{}'", self.ty_str_display(&expected_base), variant.text),
                             Some(variant.position),
                         );
                         for sub in subs {
@@ -111,7 +111,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Variant '{}.{}' has {} field(s), but the pattern binds {}",
-                            expected_base,
+                            self.ty_str_display(&expected_base),
                             variant.text,
                             var_info.fields.len(),
                             subs.len()
@@ -164,7 +164,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "tuple pattern cannot match a value of type '{}'",
-                            other.display_name()
+                            self.ty_display(other)
                         ),
                         pattern.position(),
                     );
@@ -183,8 +183,8 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "Range pattern bound of type '{}' cannot match a value of type '{}'",
-                                bound.get_type(),
-                                expected_base
+                                self.ty_display(bound),
+                                self.ty_str_display(&expected_base)
                             ),
                             bound.get_span(),
                         );
@@ -197,7 +197,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Range pattern requires an ordered numeric or char subject, got '{}'",
-                            expected_base
+                            self.ty_str_display(&expected_base)
                         ),
                         lo.get_span(),
                     );

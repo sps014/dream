@@ -63,7 +63,7 @@ impl<'a> Analyzer<'a> {
             self.in_methods_of(parent_function, &base_name),
         ) {
             diagnostics.report_error(
-                format!("'{}' is private to '{}'", member.text, base_name),
+                format!("'{}' is private to '{}'", member.text, self.ty_display(obj_type)),
                 Some(member.position),
             );
         }
@@ -259,7 +259,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics,
                     format!(
                         "Cannot access member of non-class type {}",
-                        obj_type.get_type()
+                        self.ty_display(&obj_type)
                     ),
                     Some(member.position),
                 ))
@@ -268,7 +268,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_none();
                 Err(report(
                     diagnostics,
-                    format!("Struct '{}' not found", struct_name),
+                    format!("Struct '{}' not found", self.ty_str_display(&struct_name)),
                     Some(member.position),
                 ))
             }
@@ -297,7 +297,8 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "Field '{}' not found in class '{}'",
-                            member.text, struct_name
+                            member.text,
+                            self.ty_str_display(&struct_name)
                         ),
                         Some(member.position),
                     ))

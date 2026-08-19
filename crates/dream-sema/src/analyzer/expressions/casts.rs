@@ -89,7 +89,9 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "Cannot cast from {} to interface {} ({} does not implement it)",
-                        expr_type_str, target_type_str, expr_type_str
+                        self.ty_str_display(&expr_type_str),
+                        self.ty_str_display(&target_type_str),
+                        self.ty_str_display(&expr_type_str)
                     ),
                     target_type.get_span().or_else(|| expr.position()),
                 );
@@ -101,7 +103,11 @@ impl<'a> Analyzer<'a> {
             Ok(target_type.clone())
         } else {
             diagnostics.report_error(
-                format!("Cannot cast from {} to {}", expr_type_str, target_type_str),
+                format!(
+                    "Cannot cast from {} to {}",
+                    self.ty_str_display(&expr_type_str),
+                    self.ty_str_display(&target_type_str)
+                ),
                 target_type.get_span().or_else(|| expr.position()),
             );
             Ok(target_type.clone())

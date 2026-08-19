@@ -210,7 +210,7 @@ impl<'a> Analyzer<'a> {
                     format!(
                         "interface '{}' parent must be an interface type, got {}",
                         base_name,
-                        parent_ty.get_type()
+                        self.ty_display(parent_ty)
                     ),
                     parent_ty.get_span().or(Some(template.name.position)),
                 );
@@ -659,7 +659,7 @@ impl<'a> Analyzer<'a> {
                             diagnostics.report_error(
                                 format!(
                                     "class '{}' method '{}' does not match the signature required by interface '{}'",
-                                    class_name, im.name.text, iface_name
+                                    class_name, im.name.text, self.ty_str_display(&iface_name)
                                 ),
                                 Some(cm.name.position),
                             );
@@ -674,7 +674,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "class '{}' does not implement method '{}' required by interface '{}'",
-                                class_name, im.name.text, iface_name
+                                class_name, im.name.text, self.ty_str_display(&iface_name)
                             ),
                             Some(class_pos),
                         );

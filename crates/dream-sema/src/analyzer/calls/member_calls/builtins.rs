@@ -38,7 +38,8 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'{}.length' is a property, not a method; use `.length` instead of `.{}()`",
-                        base, method.text
+                        self.ty_str_display(&base),
+                        method.text
                     ),
                     Some(method.position),
                 );
@@ -87,7 +88,7 @@ impl<'a> Analyzer<'a> {
                 idx_hir = self.hir_take();
                 if !pt.is_int() && !pt.is_unknown() {
                     diagnostics.report_error(
-                        format!("'byte_at' index must be int, got {}", pt.get_type()),
+                        format!("'byte_at' index must be int, got {}", self.ty_display(&pt)),
                         param.position(),
                     );
                 }
@@ -121,7 +122,7 @@ impl<'a> Analyzer<'a> {
                 idx_hir = self.hir_take();
                 if !pt.is_int() && !pt.is_unknown() {
                     diagnostics.report_error(
-                        format!("'char_at' index must be int, got {}", pt.get_type()),
+                        format!("'char_at' index must be int, got {}", self.ty_display(&pt)),
                         param.position(),
                     );
                 }

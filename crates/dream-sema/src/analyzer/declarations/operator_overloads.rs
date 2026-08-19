@@ -204,9 +204,9 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'{}' already declares an operator overload for '{}' on '{}'",
-                        target_type_str,
+                        self.ty_str_display(target_type_str),
                         symbol.symbol_str(),
-                        target_type_str
+                        self.ty_str_display(target_type_str)
                     ),
                     Some(method.name.position),
                 );
@@ -274,7 +274,8 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'{}' already declares a cast to '{}'",
-                        target_type_str, target_str
+                        self.ty_str_display(target_type_str),
+                        self.ty_str_display(&target_str)
                     ),
                     Some(method.name.position),
                 );

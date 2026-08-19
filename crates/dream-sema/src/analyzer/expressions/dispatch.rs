@@ -156,7 +156,7 @@ impl<'a> Analyzer<'a> {
                             diagnostics.report_error(
                                 format!(
                                     "cannot use a Set literal where a '{}' is expected",
-                                    t.display_name()
+                                    self.ty_display(&t)
                                 ),
                                 expression.position(),
                             );
@@ -287,7 +287,7 @@ impl<'a> Analyzer<'a> {
                     (_, Type::Unknown) => Type::Unknown,
                     (_, other) => {
                         diagnostics.report_error(
-                            format!("Cannot index into non-array type {}", other.get_type()),
+                            format!("Cannot index into non-array type {}", self.ty_display(&other)),
                             array_expr.position(),
                         );
                         Type::Unknown
@@ -305,7 +305,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Array index must be of type int, got {}",
-                            index_type.get_type()
+                            self.ty_display(&index_type)
                         ),
                         index_expr.position(),
                     );
@@ -335,7 +335,7 @@ impl<'a> Analyzer<'a> {
                     TokenKind::BangToken => {
                         if !right_type.is_unknown() && !right_type.is_bool() {
                             diagnostics.report_error(
-                                format!("! operator requires bool, got {}", right_type.get_type()),
+                                format!("! operator requires bool, got {}", self.ty_display(&right_type)),
                                 Some(opr.position),
                             );
                         }
@@ -368,7 +368,7 @@ impl<'a> Analyzer<'a> {
                             diagnostics.report_error(
                                 format!(
                                     "unary +/- requires a numeric type, got {}",
-                                    right_type.get_type()
+                                    self.ty_display(&right_type)
                                 ),
                                 Some(opr.position),
                             );
@@ -384,7 +384,7 @@ impl<'a> Analyzer<'a> {
                             diagnostics.report_error(
                                 format!(
                                     "~ operator requires an integer operand (int/long/uint/ulong/byte), got {}",
-                                    right_type.display_name()
+                                    self.ty_display(&right_type)
                                 ),
                                 Some(opr.position),
                             );
@@ -509,7 +509,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Ternary condition must be of type bool, got {}",
-                            cond_type.get_type()
+                            self.ty_display(&cond_type)
                         ),
                         condition.position(),
                     );
@@ -602,7 +602,7 @@ impl<'a> Analyzer<'a> {
                         self.hir_none();
                         Err(report(
                             diagnostics,
-                            format!("'await' expects a Future value, got {}", fut.get_type()),
+                            format!("'await' expects a Future value, got {}", self.ty_display(&fut)),
                             inner.position(),
                         ))
                     }
@@ -661,6 +661,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
+        let pretty_obj = self.ty_display(obj_type);
         let (hook, info) = match self.resolve_hook_or_diagnose(
             obj_type,
             ProtocolRole::Get,
@@ -670,7 +671,7 @@ impl<'a> Analyzer<'a> {
             || {
                 format!(
                     "type '{}' has no indexer (define '@get_indexer public fun ...(index): T' to allow obj[index])",
-                    obj_type.get_type()
+                    pretty_obj
                 )
             },
         ) {
@@ -683,7 +684,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "type '{}' has no indexer: its '@get_indexer' method must return a value",
-                    obj_type.get_type()
+                    self.ty_display(obj_type)
                 ),
                 array_expr.position(),
             );

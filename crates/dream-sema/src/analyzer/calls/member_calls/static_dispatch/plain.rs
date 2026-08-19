@@ -40,7 +40,8 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
-                            type_name, method.text
+                            self.ty_str_display(type_name),
+                            method.text
                         ),
                         Some(method.position),
                     ));
@@ -108,7 +109,8 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
-                            type_name, method.text
+                            self.ty_str_display(type_name),
+                            method.text
                         ),
                         Some(method.position),
                     ));
@@ -124,7 +126,9 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
                 format!(
                     "'{}' is an instance method of '{}'; call it on a '{}' value, not on the type name",
-                    method.text, type_name, type_name
+                    method.text,
+                    self.ty_str_display(type_name),
+                    self.ty_str_display(type_name)
                 ),
                 Some(method.position),
             ));
@@ -145,7 +149,11 @@ impl<'a> Analyzer<'a> {
             self.in_methods_of(parent_function, type_name),
         ) {
             diagnostics.report_error(
-                format!("'{}' is private to '{}'", method.text, type_name),
+                format!(
+                    "'{}' is private to '{}'",
+                    method.text,
+                    self.ty_str_display(type_name)
+                ),
                 Some(method.position),
             );
         }
@@ -220,8 +228,8 @@ impl<'a> Analyzer<'a> {
                         "static method {} expects parameter {} to be {}, got {}",
                         base,
                         i + 1,
-                        expected,
-                        given_type
+                        self.ty_str_display(expected),
+                        self.ty_str_display(given_type)
                     ),
                     Some(method.position),
                 );

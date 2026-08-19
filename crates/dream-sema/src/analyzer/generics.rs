@@ -324,7 +324,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "type '{}' does not satisfy the '{}' constraint on generic parameter '{}' ({})",
-                            concrete.get_type(),
+                            self.ty_display(concrete),
                             want,
                             constraint.param.text,
                             why
@@ -395,7 +395,7 @@ impl<'a> Analyzer<'a> {
     /// byte-blit intrinsics (`Bytes.of`/`Bytes.to`), whose generic bound is verified here rather
     /// than through the normal call-site constraint path (which they bypass).
     pub(super) fn require_unmanaged(
-        &self,
+        &mut self,
         ty: &Type,
         who: &str,
         position: &TextSpan,
@@ -406,7 +406,7 @@ impl<'a> Analyzer<'a> {
                 format!(
                     "'{}' requires an unmanaged (blittable) type, but '{}' is not (it is a reference type, or contains reference-typed fields)",
                     who,
-                    ty.get_type()
+                    self.ty_display(ty)
                 ),
                 Some(*position),
             );
@@ -420,7 +420,7 @@ impl<'a> Analyzer<'a> {
     /// aliasing, or refcounting is involved. Only one level of array is allowed: an array of arrays
     /// is never blittable, since its element type is itself a reference.
     pub(super) fn require_unmanaged_or_array(
-        &self,
+        &mut self,
         ty: &Type,
         who: &str,
         position: &TextSpan,

@@ -296,7 +296,7 @@ impl<'a> Analyzer<'a> {
                 let Type::Tuple(elem_tys) = ty else {
                     if !ty.is_unknown() {
                         diagnostics.report_error(
-                            format!("cannot destructure non-tuple type {}", ty.display_name()),
+                            format!("cannot destructure non-tuple type {}", self.ty_display(ty)),
                             pattern.position(),
                         );
                     }

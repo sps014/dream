@@ -27,7 +27,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'lock' target must be an '@shared class' instance, got '{}'",
-                        target_type.get_type()
+                        self.ty_display(&target_type)
                     ),
                     target.position(),
                 );

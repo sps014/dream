@@ -160,7 +160,7 @@ impl<'a> Analyzer<'a> {
                             "field '{}' of variant '{}' cannot have type '{}': a 'ref struct' cannot be stored as a union payload (it would let a stack-only value escape its stack frame)",
                             field.name.text,
                             variant.name.text,
-                            ftype.get_type()
+                            self.ty_display(&ftype)
                         ),
                         Some(field.name.position),
                     );

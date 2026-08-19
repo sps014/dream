@@ -124,7 +124,7 @@ impl<'a> Analyzer<'a> {
                 let guard_hir = self.hir_take();
                 if !gt.is_unknown() && !gt.is_bool() {
                     diagnostics.report_error(
-                        format!("switch guard must be a bool, got {}", gt.get_type()),
+                        format!("switch guard must be a bool, got {}", self.ty_display(&gt)),
                         guard.position(),
                     );
                 }

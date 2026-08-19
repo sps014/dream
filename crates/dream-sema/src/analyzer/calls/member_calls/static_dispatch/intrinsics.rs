@@ -190,7 +190,10 @@ impl<'a> Analyzer<'a> {
                 );
             } else if params_types[0] != "int" && !is_unknown_type_name(&params_types[0]) {
                 diagnostics.report_error(
-                    format!("'Buffer.alloc' length must be int, got {}", params_types[0]),
+                    format!(
+                        "'Buffer.alloc' length must be int, got {}",
+                        self.ty_str_display(&params_types[0])
+                    ),
                     Some(method.position),
                 );
             }
@@ -856,7 +859,11 @@ impl<'a> Analyzer<'a> {
             self.in_methods_of(ctx.parent_function, type_name),
         ) {
             diagnostics.report_error(
-                format!("'{}' is private to '{}'", method.text, type_name),
+                format!(
+                    "'{}' is private to '{}'",
+                    method.text,
+                    self.ty_str_display(type_name)
+                ),
                 Some(method.position),
             );
         }

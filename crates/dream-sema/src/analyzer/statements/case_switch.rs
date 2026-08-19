@@ -31,7 +31,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "switch subject must be int, string, bool, or an enum, got {}",
-                    subject_name
+                    self.ty_str_display(&subject_name)
                 ),
                 subject.position(),
             );

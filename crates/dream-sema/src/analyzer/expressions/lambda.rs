@@ -184,8 +184,8 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "lambda parameter type mismatch: expected {}, got {}",
-                                exp_elem.get_type(),
-                                declared.get_type()
+                                self.ty_display(&exp_elem),
+                                self.ty_display(declared)
                             ),
                             Some(lambda.open_paren_position),
                         );
@@ -215,7 +215,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "async lambda requires a `fun(...): Future<T>` context, but the expected type returns '{}'",
-                            exp_ret.get_type()
+                            self.ty_display(&exp_ret)
                         ),
                         Some(lambda.open_paren_position),
                     ));
@@ -305,8 +305,8 @@ impl<'a> Analyzer<'a> {
                             diagnostics.report_error(
                                 format!(
                                     "lambda return type mismatch: expected {}, got {}",
-                                    first.get_type(),
-                                    other.get_type()
+                                    self.ty_display(&first),
+                                    self.ty_display(other)
                                 ),
                                 Some(lambda.open_paren_position),
                             );
@@ -521,8 +521,8 @@ impl<'a> Analyzer<'a> {
                 format!(
                     "cannot capture '{}' of type '{}' in a lambda expression: '{}' is a 'ref struct' (stack-only) and cannot be stored in the lambda's heap-allocated closure environment",
                     bad,
-                    bad_ty.get_type(),
-                    bad_ty.get_type()
+                    self.ty_display(bad_ty),
+                    self.ty_display(bad_ty)
                 ),
                 Some(lambda.open_paren_position),
             ));
@@ -535,16 +535,17 @@ impl<'a> Analyzer<'a> {
                 self.hir_none();
                 let who = self
                     .current_call_target_name
-                    .as_deref()
-                    .unwrap_or("WebWorker");
+                    .clone()
+                    .unwrap_or_else(|| "WebWorker".to_string());
+                let pretty = self.ty_display(bad_ty);
                 return Err(report(
                     diagnostics,
                     format!(
                         "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class '@shared', or capture a blittable value, string, or a struct of those",
                         bad,
-                        bad_ty.get_type(),
+                        pretty,
                         who,
-                        bad_ty.get_type()
+                        pretty
                     ),
                     Some(lambda.open_paren_position),
                 ));

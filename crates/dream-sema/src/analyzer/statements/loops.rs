@@ -119,7 +119,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "for-each can only iterate over arrays, Collection/Iterator interfaces, or types with an '@iterator' method, got {}",
-                        iterable_type.get_type()
+                        self.ty_display(&iterable_type)
                     ),
                     iterable.position(),
                 );

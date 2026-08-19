@@ -349,7 +349,7 @@ impl<'a> Analyzer<'a> {
     /// and `ref` out-params are always accepted; a struct that satisfies `Unmanaged` (a value
     /// struct with only value-typed / primitive fields) is accepted too.
     fn validate_c_extern_signature(
-        &self,
+        &mut self,
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
@@ -371,7 +371,7 @@ impl<'a> Analyzer<'a> {
                     "'@c' extern '{}' parameter '{}' has type '{}', which is not unmanaged; C ABI parameters must be primitives, `string`, `byte[]`, or an @unmanaged value struct",
                     function.name.text,
                     param.name.text,
-                    param.type_.get_type()
+                    self.ty_display(&param.type_)
                 ),
                 Some(param.name.position),
             );
@@ -385,7 +385,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn validate_compute_shader(
-        &self,
+        &mut self,
         function: &FunctionNode<'a>,
         info: &FunctionTableInfo,
         diagnostics: &mut DiagnosticBag,
@@ -415,7 +415,7 @@ impl<'a> Analyzer<'a> {
                         "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuBuffer<T>, GpuTexture, and GpuSampler are allowed",
                         function.name.text,
                         p.name.text,
-                        p.type_.get_type()
+                        self.ty_display(&p.type_)
                     ),
                     Some(p.name.position),
                 );
@@ -423,7 +423,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn validate_vertex_shader(&self, function: &FunctionNode<'a>, diagnostics: &mut DiagnosticBag) {
+    fn validate_vertex_shader(&mut self, function: &FunctionNode<'a>, diagnostics: &mut DiagnosticBag) {
         if function.is_async {
             diagnostics.report_error(
                 format!("@vertex shader '{}' cannot be async", function.name.text),
@@ -481,7 +481,7 @@ impl<'a> Analyzer<'a> {
                         "@vertex shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, @readonly GpuBuffer, GpuTexture, and GpuSampler are allowed",
                         function.name.text,
                         p.name.text,
-                        p.type_.get_type()
+                        self.ty_display(&p.type_)
                     ),
                     Some(p.name.position),
                 );
@@ -497,7 +497,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn validate_fragment_shader(
-        &self,
+        &mut self,
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
@@ -612,7 +612,7 @@ impl<'a> Analyzer<'a> {
                         "@fragment shader '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, @readonly GpuBuffer, GpuTexture, and GpuSampler are allowed",
                         function.name.text,
                         p.name.text,
-                        p.type_.get_type()
+                        self.ty_display(&p.type_)
                     ),
                     Some(p.name.position),
                 );

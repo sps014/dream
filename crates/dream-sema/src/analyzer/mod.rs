@@ -846,6 +846,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Pretty-prints an AST type for diagnostics via the interned type graph.
+    /// Use this (or [`Self::ty_str_display`]) in every user-facing message; [`Type::get_type`]
+    /// is the mangled identity spelling (`List_List_Point`) and must not appear in diagnostics.
     pub(in crate::analyzer) fn ty_display(&mut self, ty: &Type) -> String {
         let id = self.type_ctx.lower(ty);
         dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id)

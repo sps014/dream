@@ -52,7 +52,11 @@ impl<'a> Analyzer<'a> {
         else {
             return Err(report(
                 diagnostics,
-                format!("interface '{}' has no method '{}'", iface_name, method.text),
+                format!(
+                    "interface '{}' has no method '{}'",
+                    self.ty_str_display(iface_name),
+                    method.text
+                ),
                 Some(method.position),
             ));
         };
@@ -66,7 +70,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "interface method '{}.{}' expects {} arguments, got {}",
-                    iface_name,
+                    self.ty_str_display(iface_name),
                     method.text,
                     expected.len(),
                     arg_types.len()
@@ -81,11 +85,11 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "interface method '{}.{}' expects parameter {} to be {}, got {}",
-                        iface_name,
+                        self.ty_str_display(iface_name),
                         method.text,
                         i + 1,
-                        expected[i],
-                        given
+                        self.ty_str_display(&expected[i]),
+                        self.ty_str_display(given)
                     ),
                     Some(method.position),
                 );
@@ -292,7 +296,11 @@ impl<'a> Analyzer<'a> {
                 let Some(info) = method_info else {
                     return Err(report(
                         diagnostics,
-                        format!("Type '{}' has no method '{}'", struct_name, method.text),
+                        format!(
+                            "Type '{}' has no method '{}'",
+                            self.ty_str_display(struct_name),
+                            method.text
+                        ),
                         Some(method.position),
                     ));
                 };
@@ -372,7 +380,11 @@ impl<'a> Analyzer<'a> {
                 Err(_) => {
                     return Err(report(
                         diagnostics,
-                        format!("Type '{}' has no method '{}'", struct_name, method.text),
+                        format!(
+                            "Type '{}' has no method '{}'",
+                            self.ty_str_display(struct_name),
+                            method.text
+                        ),
                         Some(method.position),
                     ));
                 }
@@ -400,7 +412,11 @@ impl<'a> Analyzer<'a> {
                 self.in_methods_of(ctx.parent_function, &base_name),
             ) {
                 diagnostics.report_error(
-                    format!("'{}' is private to '{}'", method.text, base_name),
+                    format!(
+                        "'{}' is private to '{}'",
+                        method.text,
+                        self.ty_str_display(&base_name)
+                    ),
                     Some(method.position),
                 );
             }
@@ -566,7 +582,11 @@ impl<'a> Analyzer<'a> {
             self.in_methods_of(ctx.parent_function, struct_name),
         ) {
             diagnostics.report_error(
-                format!("'{}' is private to '{}'", method.text, struct_name),
+                format!(
+                    "'{}' is private to '{}'",
+                    method.text,
+                    self.ty_str_display(struct_name)
+                ),
                 Some(method.position),
             );
         }

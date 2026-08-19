@@ -110,7 +110,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "interface '{}' has no 0-arg 'iterator' method for for-each",
-                        iface_name
+                        self.ty_str_display(&iface_name)
                     ),
                     Some(element.position),
                 );
@@ -144,7 +144,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "for-each requires enumerator '{}' to have a 0-arg 'next' method returning Option<T>",
-                    enum_iface
+                    self.ty_str_display(&enum_iface)
                 ),
                 Some(element.position),
             );
@@ -158,7 +158,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "for-each requires 'next' to return Option<T>, got {}",
-                        next_ret.get_type()
+                        self.ty_display(&next_ret)
                     ),
                     Some(element.position),
                 );
@@ -181,7 +181,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "for-each requires 'next' to return Option<T>, got {}",
-                        next_ret.get_type()
+                        self.ty_display(&next_ret)
                     ),
                     Some(element.position),
                 );
@@ -292,6 +292,7 @@ impl<'a> Analyzer<'a> {
         use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
 
         // 1. `@iterator`: an eligible 0-arg instance method returning an enumerator object.
+        let pretty_iterable = self.ty_display(iterable_type);
         let (_iterator_hook, iterator_info) = match self.resolve_hook_or_diagnose(
             iterable_type,
             ProtocolRole::Iterator,
@@ -301,7 +302,7 @@ impl<'a> Analyzer<'a> {
             || {
                 format!(
                     "for-each can only iterate over arrays or types with an '@iterator' method, got {}",
-                    iterable_type.get_type()
+                    pretty_iterable
                 )
             },
         ) {
@@ -315,7 +316,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "type '{}' is not iterable: its '@iterator' method must return an enumerator object",
-                        iterable_type.get_type()
+                        self.ty_display(iterable_type)
                     ),
                     Some(element.position),
                 );
@@ -324,6 +325,7 @@ impl<'a> Analyzer<'a> {
         };
 
         // 2. `@next` on the enumerator: an eligible 0-arg instance method returning `Option<T>`.
+        let pretty_enumerator = self.ty_display(&enumerator_type);
         let (_next_hook, next_info) = match self.resolve_hook_or_diagnose(
             &enumerator_type,
             ProtocolRole::Next,
@@ -333,7 +335,7 @@ impl<'a> Analyzer<'a> {
             || {
                 format!(
                     "enumerator '{}' must define '@next fun ...(): Option<T>' for for-each",
-                    enumerator_type.get_type()
+                    pretty_enumerator
                 )
             },
         ) {
@@ -349,7 +351,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "for-each requires '@next' to return Option<T>, got {}",
-                        next_ret.get_type()
+                        self.ty_display(&next_ret)
                     ),
                     Some(element.position),
                 );
@@ -373,7 +375,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "for-each requires '@next' to return Option<T>, got {}",
-                        next_ret.get_type()
+                        self.ty_display(&next_ret)
                     ),
                     Some(element.position),
                 );

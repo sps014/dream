@@ -158,7 +158,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     let cc_opt = OptLevel::from_cli(opts.release, opts.optimize);
     let bin = crate::execution::native_c::compile_native_c(&c_path, cc_opt, false)
         .map_err(|e| format!("cc '{}': {}", path.display(), e))?;
-    crate::execution::native_c::run_native_bin(&bin, &c_str)
+    crate::execution::native_c::run_native_bin(&bin, &c_str, &[])
         .map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
     Ok(tests.len())
 }

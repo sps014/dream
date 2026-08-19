@@ -3,8 +3,10 @@
 import os
 import re
 import signal
+import socket
 import subprocess
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -35,17 +37,22 @@ def parse_args(argv):
     return set(only) if only else None
 
 
-def run_group(args, timeout):
+def run_group(args, timeout, stdin=None, env=None):
+    proc_env = os.environ.copy()
+    if env:
+        proc_env.update(env)
     proc = subprocess.Popen(
         args,
+        stdin=subprocess.PIPE if stdin is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
         cwd=root,
+        env=proc_env,
     )
     try:
-        out, err = proc.communicate(timeout=timeout)
+        out, err = proc.communicate(input=stdin, timeout=timeout)
         return proc.returncode, out or "", err or ""
     except subprocess.TimeoutExpired:
         try:
@@ -62,6 +69,35 @@ def run_output_body(out):
     return _ANSI.sub("", out).strip()
 
 
+def spawn_tcp_echo():
+    """Loopback echo server for `tcp_echo_local` (same contract as e2e `DREAM_E2E_TCP_PORT`).
+
+    The listener stays in the accept thread with no timeout: `dream run` compiles native C
+    first, which can take longer than a short accept window when the probe is loaded.
+    """
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+
+    def serve(sock):
+        try:
+            conn, _ = sock.accept()
+            with conn:
+                data = conn.recv(64)
+                if data:
+                    conn.sendall(data)
+        except OSError:
+            pass
+        finally:
+            sock.close()
+
+    thread = threading.Thread(target=serve, args=(listener,), daemon=True)
+    thread.start()
+    return str(port)
+
+
 def one(f: Path):
     stem = f.stem
     err = f.with_suffix(".expected_error")
@@ -72,9 +108,21 @@ def one(f: Path):
         if code == 0:
             return stem, "fail", "compile should fail"
         return stem, "ok", ""
+
+    cmd = [str(dream), "run", str(f)]
+    stdin = None
+    env = None
+    if stem == "console_read_line":
+        stdin = "hello-line\n"
+    elif stem == "process_args_basic":
+        cmd.extend(["--", "alpha", "beta"])
+    elif stem == "tcp_echo_local":
+        env = {"DREAM_E2E_TCP_PORT": spawn_tcp_echo()}
+
     # Debug `cc -O0` of large `@json` units is slow; leave headroom for a cold
     # `libdream_rt.a` rebuild and a loaded machine.
-    code, out, err = run_group([str(dream), "run", str(f)], 180)
+    code, out, err = run_group(cmd, 180, stdin=stdin, env=env)
+
     if trap.exists():
         if code == 0:
             return stem, "fail", "expected trap"

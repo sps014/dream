@@ -37,10 +37,22 @@ fn main() -> ExitCode {
     let mut crate_type = CrateType::Bin;
     let mut crate_type_explicit = false;
     let mut native_c = true;
+    let mut program_args: Vec<String> = Vec::new();
+    let mut after_program_args = false;
 
     let mut i = 1;
     while i < args.len() {
         let arg = &args[i];
+        if after_program_args {
+            program_args.push(arg.clone());
+            i += 1;
+            continue;
+        }
+        if arg == "--" {
+            after_program_args = true;
+            i += 1;
+            continue;
+        }
         if arg == "-v" || arg == "--verbose" {
             verbose = true;
         } else if arg == "--release" {
@@ -376,7 +388,7 @@ fn main() -> ExitCode {
                         }
                         if run_after_compile {
                             info!("Executing native C...");
-                            if let Err(e) = run_native_bin(&bin, &out_path) {
+                            if let Err(e) = run_native_bin(&bin, &out_path, &program_args) {
                                 error!("Execution failed: {}", e);
                                 return ExitCode::FAILURE;
                             }
@@ -405,7 +417,7 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [run|test|debug-adapter] <file|dir> [-- program-args...]",
         program
     );
     error!("  -v, --verbose         Print progress information");

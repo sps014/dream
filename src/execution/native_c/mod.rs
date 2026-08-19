@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 pub fn compile_and_run(c_path: &str, opt: OptLevel) -> Result<(), Box<dyn std::error::Error>> {
     let bin = compile_native_c(Path::new(c_path), opt, false)?;
-    run_native_bin(&bin, c_path)
+    run_native_bin(&bin, c_path, &[])
 }
 
 pub fn compile_and_capture(
@@ -89,9 +89,14 @@ pub fn compile_and_capture_ex(
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-pub fn run_native_bin(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_native_bin(
+    bin: &Path,
+    c_path: &str,
+    extra_args: &[String],
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::new(bin);
     apply_native_run_env(&mut cmd, c_path);
+    cmd.args(extra_args);
     let status = cmd.status()?;
     if !status.success() {
         return Err(format!("native C program failed (status {status:?})").into());

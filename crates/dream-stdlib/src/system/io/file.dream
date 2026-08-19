@@ -261,11 +261,10 @@ public static class File {
 
     // True when `path` exists and is a regular file.
     public static fun is_file(borrow path: string): bool {
-        let st = File.stat(path);
-        if (st.is_err()) {
-            return false;
-        }
-        return st.unwrap_or(FileStats(0L, 0L, 0L, 0L, 0, 3)).is_file();
+        return switch (File.stat(path)) {
+            Ok(st) => st.is_file(),
+            Err(e) => false,
+        };
     }
 
     // One `stat` of `path`. Follows symlinks. Missing paths are `Err`.

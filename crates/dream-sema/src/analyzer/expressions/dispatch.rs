@@ -473,6 +473,7 @@ impl<'a> Analyzer<'a> {
                 // it into the guarded branch/body; the expression itself ignores the binding here.)
                 let left_type =
                     self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
+                self.check_type_not_static_class(right_type, diagnostics);
                 let left_hir = self.hir_take();
                 let left_name = left_type.get_type();
                 let right_name = right_type.get_type();

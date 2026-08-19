@@ -58,6 +58,8 @@ pub struct StructDeclarationNode<'a> {
     /// True when declared `sealed`: no `extend` block may target this type. Guards the type's method
     /// surface against outside extension (enforced during semantic analysis).
     pub is_sealed: bool,
+    /// True when declared `static class`: a namespace of static members, not a value type.
+    pub is_static: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
@@ -84,6 +86,7 @@ impl<'a> StructDeclarationNode<'a> {
             is_value: false,
             is_ref_struct: false,
             is_sealed: false,
+            is_static: false,
             file_path: None,
         }
     }

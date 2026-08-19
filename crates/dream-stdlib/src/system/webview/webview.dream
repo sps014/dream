@@ -153,13 +153,9 @@ public class WebView {
         let found = 0 - 1;
         let i = 0;
         while (i < this._on.length) {
-            switch (this._on.get(i)) {
-                Some(entry) => {
-                    if (entry.channel == channel) {
-                        found = i;
-                    }
-                },
-                None => {},
+            let entry = this._on.get(i);
+            if (entry.channel == channel) {
+                found = i;
             }
             i = i + 1;
         }
@@ -174,13 +170,9 @@ public class WebView {
         let found = 0 - 1;
         let i = 0;
         while (i < this._serve.length) {
-            switch (this._serve.get(i)) {
-                Some(entry) => {
-                    if (entry.channel == channel) {
-                        found = i;
-                    }
-                },
-                None => {},
+            let entry = this._serve.get(i);
+            if (entry.channel == channel) {
+                found = i;
             }
             i = i + 1;
         }
@@ -195,13 +187,9 @@ public class WebView {
         let found = 0 - 1;
         let i = 0;
         while (i < this._on_bytes.length) {
-            switch (this._on_bytes.get(i)) {
-                Some(entry) => {
-                    if (entry.channel == channel) {
-                        found = i;
-                    }
-                },
-                None => {},
+            let entry = this._on_bytes.get(i);
+            if (entry.channel == channel) {
+                found = i;
             }
             i = i + 1;
         }
@@ -216,13 +204,9 @@ public class WebView {
         let found = 0 - 1;
         let i = 0;
         while (i < this._serve_bytes.length) {
-            switch (this._serve_bytes.get(i)) {
-                Some(entry) => {
-                    if (entry.channel == channel) {
-                        found = i;
-                    }
-                },
-                None => {},
+            let entry = this._serve_bytes.get(i);
+            if (entry.channel == channel) {
+                found = i;
             }
             i = i + 1;
         }
@@ -457,7 +441,7 @@ public class WebView {
                 let body = Encoding.utf8_decode(body_bytes);
                 let hi = 0;
                 while (hi < this._on.length) {
-                    let entry = this._on.get(hi).unwrap_or(WebViewOnEntry(channel, (b: string) => {}));
+                    let entry = this._on.get(hi);
                     if (entry.channel == channel) {
                         WebView.run_on(entry.fire, body);
                         hi = this._on.length;
@@ -471,7 +455,7 @@ public class WebView {
                 let found = false;
                 let hi = 0;
                 while (hi < this._serve.length) {
-                    let entry = this._serve.get(hi).unwrap_or(WebViewServeEntry(channel, (b: string) => b));
+                    let entry = this._serve.get(hi);
                     if (entry.channel == channel) {
                         let out = WebView.run_serve(entry.fire, body);
                         if (out.starts_with(prefix)) {
@@ -493,7 +477,7 @@ public class WebView {
             if (kind == 2) {
                 let hi = 0;
                 while (hi < this._on_bytes.length) {
-                    let entry = this._on_bytes.get(hi).unwrap_or(WebViewOnBytesEntry(channel, (b: byte[]) => {}));
+                    let entry = this._on_bytes.get(hi);
                     if (entry.channel == channel) {
                         WebView.run_on_bytes(entry.fire, body_bytes);
                         hi = this._on_bytes.length;
@@ -506,7 +490,7 @@ public class WebView {
                 let found = false;
                 let hi = 0;
                 while (hi < this._serve_bytes.length) {
-                    let entry = this._serve_bytes.get(hi).unwrap_or(WebViewServeBytesEntry(channel, (b: byte[]) => b));
+                    let entry = this._serve_bytes.get(hi);
                     if (entry.channel == channel) {
                         let out = WebView.run_serve_bytes(entry.fire, body_bytes);
                         WebView.host_reply_bytes(this.id, reply_id, out);

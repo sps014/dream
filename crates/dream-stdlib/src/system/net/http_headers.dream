@@ -57,7 +57,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         this.index.clear();
         let j = 0;
         while (j < this.keys.length) {
-            this.index.set(this.keys.get(j).unwrap_or(string.empty).to_lower(), j);
+            this.index.set(this.keys.get(j).to_lower(), j);
             j = j + 1;
         }
         return true;
@@ -80,8 +80,8 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         let i = 0;
         while (i < this.keys.length) {
             obj.set(
-                this.keys.get(i).unwrap_or(string.empty),
-                JsonValue.from_string(this.values.get(i).unwrap_or(string.empty))
+                this.keys.get(i),
+                JsonValue.from_string(this.values.get(i))
             );
             i = i + 1;
         }
@@ -100,7 +100,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
                 let keys = v.keys();
                 let i = 0;
                 while (i < keys.length) {
-                    let key = keys.get(i).unwrap_or(string.empty);
+                    let key = keys.get(i);
                     headers.set(key, v.get(key).unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty));
                     i = i + 1;
                 }
@@ -111,10 +111,10 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     }
 
     internal fun key_at(i: int): string {
-        return this.keys.get(i).unwrap_or(string.empty);
+        return this.keys.get(i);
     }
 
     internal fun value_at(i: int): string {
-        return this.values.get(i).unwrap_or(string.empty);
+        return this.values.get(i);
     }
 }

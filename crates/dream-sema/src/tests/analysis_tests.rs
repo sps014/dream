@@ -1980,3 +1980,78 @@ fn test_shared_class_string_field_ok() {
         diagnostics.diagnostics
     );
 }
+
+#[test]
+fn test_static_class_is_not_a_value_type() {
+    let code = "
+        static class Util {
+            public static fun n(): int { return 1; }
+        }
+        fun main(): void {
+            let x: Util = Util();
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    let messages: Vec<_> = diagnostics
+        .diagnostics
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("static class") && m.contains("Util")),
+        "{:?}",
+        messages
+    );
+}
+
+#[test]
+fn test_static_class_rejects_instance_members() {
+    let code = "
+        static class Util {
+            public fun n(): int { return 1; }
+        }
+        fun main(): void {}
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("must be static")));
+}
+
+#[test]
+fn test_generic_mismatch_pretty_prints_angle_brackets() {
+    let code = "
+        class Box<T> {
+            public v: T;
+            public constructor(v: T) { this.v = v; }
+        }
+        fun take(x: Box<Box<int>>): void {}
+        fun main(): void {
+            let x: Box<Box<int>> = Box<int>(1);
+            take(x);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    let joined = diagnostics
+        .diagnostics
+        .iter()
+        .map(|d| d.message.clone())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        joined.contains("Box<Box<int>>"),
+        "expected pretty generic types, got: {}",
+        joined
+    );
+    assert!(
+        !joined.contains("Box_Box_int"),
+        "diagnostics leaked a mangled type: {}",
+        joined
+    );
+}

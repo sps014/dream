@@ -1,0 +1,11 @@
+import system;
+
+// Static classes are not value types.
+
+static class Util {
+    public fun n(): int { return 1; }
+}
+
+fun main(): void {
+    let x: Util = Util();
+}

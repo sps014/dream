@@ -101,7 +101,7 @@ public class HttpStreamResponse {
         let out = Buffer.alloc<byte>(sb.length);
         let i = 0;
         while (i < sb.length) {
-            out[i] = sb.get(i).unwrap_or((byte)0);
+            out[i] = sb.get(i);
             i = i + 1;
         }
         return Result.Ok(out);

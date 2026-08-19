@@ -55,9 +55,9 @@ public class CookieJar {
             if (i > 0) {
                 sb.append("; ");
             }
-            sb.append(this.names.get(i).unwrap_or(string.empty));
+            sb.append(this.names.get(i));
             sb.append_char('=');
-            sb.append(this.values.get(i).unwrap_or(string.empty));
+            sb.append(this.values.get(i));
             i = i + 1;
         }
         return sb.build();

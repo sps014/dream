@@ -52,7 +52,7 @@ public class GenType {
             if (i > 0) {
                 s = s + ", ";
             }
-            s = s + this.generic_params.get(i).unwrap_or(string.empty);
+            s = s + this.generic_params.get(i);
             i = i + 1;
         }
         return s + ">";

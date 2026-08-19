@@ -85,6 +85,9 @@ impl<'a> Analyzer<'a> {
             .as_ref()
             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
         let type_annotation = &mono_annotation;
+        if let Some(t) = type_annotation {
+            self.check_type_not_static_class(t, diagnostics);
+        }
         // Empty array literals carry no element type, so the declaration must supply one via an
         // array-typed (`int[]`) or `List<T>` annotation (e.g. `let xs: int[] = [];` / `let xs:
         // List<int> = [];`). With a valid annotation the literal is handled on the normal path

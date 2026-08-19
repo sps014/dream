@@ -208,6 +208,27 @@ extend Token { public fun describe(): string { return "token"; } }
 
 `sealed` combines with `public` in either order (`public sealed class ...`). It only blocks user `extend` blocks — a sealed type may still implement interfaces (including their defaults) and derive `@json`.
 
+## Advanced: static classes
+
+A `static class` is a namespace of static members, not a value type. Use it for helpers like `System` and `Math`:
+
+```dream
+public static class Util {
+    public static fun twice(n: int): int {
+        return n * 2;
+    }
+}
+
+System.println(Util.twice(3));   // 6
+```
+
+A static class cannot have instance fields, instance methods, constructors, or an `implements` clause. Members must be marked `static`. It cannot be instantiated (`Util()`), used as a type (`let x: Util`, `List<Util>`), or targeted by `extend`. `static` cannot modify `struct`, `enum`, or `interface`.
+
+```dream
+// error: cannot instantiate static class 'Util'
+let u = Util();
+```
+
 ## Advanced: `@shared` classes
 
 Prefix a `class` with `@shared` to make it a **shared** reference type — Dream's analogue of Swift `Sendable` for classes. A `@shared` class pays two costs, and only when opted in:

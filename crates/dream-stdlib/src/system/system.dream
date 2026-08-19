@@ -2,7 +2,7 @@ module system;
 
 // System utilities for console I/O, process control, and terminal colors.
 
-public class System {
+public static class System {
     // Prints a value to standard output.
     @intrinsic("print")
     static extern fun print<T>(borrow value: T): void;

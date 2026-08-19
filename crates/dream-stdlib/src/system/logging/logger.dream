@@ -42,10 +42,8 @@ public class Logger {
         let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);
         let i = 0;
         while (i < this.handlers.length) {
-            switch (this.handlers.get(i)) {
-                Some(h) => { h.emit(record); },
-                None => { },
-            }
+            let h = this.handlers.get(i);
+            h.emit(record);
             i = i + 1;
         }
     }

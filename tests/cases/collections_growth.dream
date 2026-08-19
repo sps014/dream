@@ -9,13 +9,13 @@ fun main(): void {
         i = i + 1;
     }
     System.println(xs.length);
-    System.println(xs.get(0).unwrap_or(0 - 1));
-    System.println(xs.get(99).unwrap_or(0 - 1));
+    System.println(xs.get(0));
+    System.println(xs.get(99));
 
     let sum = 0;
     let j = 0;
     while (j < xs.length) {
-        sum = sum + xs.get(j).unwrap_or(0);
+        sum = sum + xs.get(j);
         j = j + 1;
     }
     System.println(sum);
@@ -27,7 +27,7 @@ fun main(): void {
         k = k + 1;
     }
     System.println(words.length);
-    System.print(words.get(19).unwrap_or(""));
+    System.print(words.get(19));
     System.print("\n");
     System.print(words.contains("x"));
     System.print("\n");
@@ -41,6 +41,6 @@ fun main(): void {
         n = n + 1;
     }
     System.println(squares.length);
-    System.println(squares.get(12).unwrap_or(0 - 1));
-    System.println(squares.get(63).unwrap_or(0 - 1));
+    System.println(squares.get(12));
+    System.println(squares.get(63));
 }

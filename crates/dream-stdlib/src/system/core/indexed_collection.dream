@@ -4,15 +4,22 @@ module system.core;
 // wherever a `Collection` is expected without re-listing `size` / `iterator`.
 public interface IndexedCollection<T> : Collection<T> {
     @get_indexer
-    fun get(index: int): Option<T>;
+    fun get(index: int): T;
 
     // Element at index 0, or `None` when empty.
     public fun first(): Option<T> {
-        return this.get(0);
+        if (this.length == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.get(0));
     }
 
     // Last element, or `None` when empty.
     public fun last(): Option<T> {
-        return this.get(this.length - 1);
+        let n = this.length;
+        if (n == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.get(n - 1));
     }
 }

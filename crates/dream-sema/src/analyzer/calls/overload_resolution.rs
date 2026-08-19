@@ -24,17 +24,23 @@ impl<'a> Analyzer<'a> {
                 Ok(info) => Ok(info),
                 Err(_) => Err(format!("Could not resolve function '{}'", key)),
             },
-            OverloadResolution::None => Err(format!(
-                "No overload of '{}' matches argument types ({})",
-                base,
-                arg_types.join(", ")
-            )),
-            OverloadResolution::Ambiguous(keys) => Err(format!(
-                "Ambiguous call to '{}' with argument types ({}); candidates: {}",
-                base,
-                arg_types.join(", "),
-                keys.join(", ")
-            )),
+            OverloadResolution::None => {
+                let pretty: Vec<String> = arg_types.iter().map(|t| self.ty_str_display(t)).collect();
+                Err(format!(
+                    "No overload of '{}' matches argument types ({})",
+                    base,
+                    pretty.join(", ")
+                ))
+            }
+            OverloadResolution::Ambiguous(keys) => {
+                let pretty: Vec<String> = arg_types.iter().map(|t| self.ty_str_display(t)).collect();
+                Err(format!(
+                    "Ambiguous call to '{}' with argument types ({}); candidates: {}",
+                    base,
+                    pretty.join(", "),
+                    keys.join(", ")
+                ))
+            }
         }
     }
 
@@ -80,13 +86,15 @@ impl<'a> Analyzer<'a> {
         for (i, given_type) in given.iter().enumerate() {
             if let Some(expected_type_str) = expected.get(i) {
                 if !self.type_str_assignable(expected_type_str, given_type) {
+                    let expected_pretty = self.ty_str_display(expected_type_str);
+                    let given_pretty = self.ty_str_display(given_type);
                     diagnostics.report_error(
                         format!(
                             "{} expects parameter {} to be {}, got {}",
                             error_prefix,
                             i + 1,
-                            expected_type_str,
-                            given_type
+                            expected_pretty,
+                            given_pretty
                         ),
                         Some(position),
                     );

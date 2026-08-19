@@ -15,7 +15,20 @@ impl<'a, 'b> Parser<'a, 'b> {
         let doc_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
 
         let mut visibility = Visibility::Private;
-        self.try_consume_visibility(&mut visibility);
+        loop {
+            if self.try_consume_visibility(&mut visibility) {
+                continue;
+            }
+            if self.current_token().kind == TokenKind::StaticToken {
+                self.diagnostics.report_error(
+                    "'static' cannot modify an interface".to_string(),
+                    Some(self.current_token().position),
+                );
+                self.match_token(TokenKind::StaticToken);
+                continue;
+            }
+            break;
+        }
 
         self.match_token(TokenKind::InterfaceToken);
         let mut name = self.match_token(TokenKind::IdentifierToken);

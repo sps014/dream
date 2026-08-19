@@ -3,7 +3,7 @@ module system.testing;
 // Assertion helpers for `system.testing`. On failure, prints a message and exits the process with
 // a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts).
 // Exit-based failures require a real process model (`@native` / `@node`); not available on `@web`.
-public class Assert {
+public static class Assert {
     // Fails the current test run with `message`: prints it and terminates the process with a
     // non-zero exit code. There is no exception mechanism to unwind through, so `Assert.*`
     // failures are unrecoverable by design (matching `System.panic`).

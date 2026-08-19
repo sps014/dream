@@ -35,6 +35,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                     self.match_token(TokenKind::SealedToken);
                     is_sealed = true;
                 }
+                TokenKind::StaticToken => {
+                    self.diagnostics.report_error(
+                        "'static' cannot modify an enum".to_string(),
+                        Some(self.current_token().position),
+                    );
+                    self.match_token(TokenKind::StaticToken);
+                }
                 _ => break,
             }
         }

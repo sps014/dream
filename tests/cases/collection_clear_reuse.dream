@@ -8,7 +8,7 @@ fun main(): void {
         xs.push(round);
         xs.push(round + 10);
         System.println(xs.length);
-        System.println(xs.get(0).unwrap_or(-1));
+        System.println(xs.get(0));
         xs.clear();
         System.println(xs.length);
         System.println(xs.capacity());
@@ -22,7 +22,7 @@ fun main(): void {
     m.clear();
     System.println(m.length);
     m.set(3, 30);
-    System.println(m.get(3).unwrap_or(-1));
+    System.println(m.get(3));
 
     let s = Set<int>();
     s.add(7);
@@ -40,5 +40,5 @@ fun main(): void {
     names.clear();
     System.println(names.length);
     names.push("c");
-    System.println(names.get(0).unwrap_or(""));
+    System.println(names.get(0));
 }

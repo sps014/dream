@@ -1,0 +1,10 @@
+import system;
+import system.collections;
+
+fun take(xs: List<List<int>>): void {
+    System.println(xs.length);
+}
+
+fun main(): void {
+    take(List<int>());
+}

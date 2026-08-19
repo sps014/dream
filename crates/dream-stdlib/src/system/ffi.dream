@@ -1,7 +1,7 @@
 module system;
 
 // Host-address-space pointers from `@c` callbacks (`char**`, `char*`). Native-only.
-public class Ffi {
+public static class Ffi {
     @native
     @intrinsic("dream_ffi_read_ptr")
     static extern fun host_read_ptr(base: long, index: int): long;

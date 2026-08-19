@@ -5,9 +5,9 @@ fun main(): void {
     xs.push(1);
     xs.push(3);
     xs.insert(1, 2);
-    System.println(xs.get(0).unwrap_or(-1));
-    System.println(xs.get(1).unwrap_or(-1));
-    System.println(xs.get(2).unwrap_or(-1));
+    System.println(xs.get(0));
+    System.println(xs.get(1));
+    System.println(xs.get(2));
     xs.remove(2);
     System.println(xs.length);
 }

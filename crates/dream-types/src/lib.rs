@@ -78,6 +78,15 @@ mod tests {
         assert_eq!(display_name(&i, &defs, boxed_int), "Box<int>");
         let arr = i.array(i.int());
         assert_eq!(display_name(&i, &defs, arr), "int[]");
+        let arr2 = i.array(arr);
+        assert_eq!(display_name(&i, &defs, arr2), "int[][]");
+        let list = defs.intern(DefKind::Struct, "List", vec!["T".to_string()]);
+        let list_int = i.struct_ty(list, vec![i.int()]);
+        assert_eq!(display_name(&i, &defs, list_int), "List<int>");
+        let nested = i.struct_ty(list, vec![list_int]);
+        assert_eq!(display_name(&i, &defs, nested), "List<List<int>>");
+        let list_arr = i.struct_ty(list, vec![arr]);
+        assert_eq!(display_name(&i, &defs, list_arr), "List<int[]>");
     }
 
     #[test]

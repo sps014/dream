@@ -845,6 +845,68 @@ impl<'a> Analyzer<'a> {
         primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
     }
 
+    /// Pretty-prints an AST type for diagnostics via the interned type graph.
+    pub(in crate::analyzer) fn ty_display(&mut self, ty: &Type) -> String {
+        let id = self.type_ctx.lower(ty);
+        dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id)
+    }
+
+    /// Pretty-prints a (possibly mangled) type spelling for diagnostics.
+    pub(in crate::analyzer) fn ty_str_display(&mut self, s: &str) -> String {
+        if dream_syntax::nodes::types::is_unknown_type_name(s) {
+            return s.to_string();
+        }
+        let id = self.type_ctx.lower_str(s);
+        dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id)
+    }
+
+    pub(in crate::analyzer) fn is_static_class_name(&self, name: &str) -> bool {
+        self.type_ctx
+            .defs
+            .lookup(DefKind::Struct, name)
+            .map(|id| self.type_ctx.defs.is_static(id))
+            .unwrap_or(false)
+    }
+
+    /// Rejects using a `static class` as a value type (annotations, fields, generic args, arrays).
+    pub(in crate::analyzer) fn check_type_not_static_class(
+        &self,
+        ty: &Type,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        match ty {
+            Type::Struct(token, args) => {
+                if self.is_static_class_name(&token.text) {
+                    diagnostics.report_error(
+                        format!(
+                            "'{}' is a static class and cannot be used as a type",
+                            token.text
+                        ),
+                        Some(token.position),
+                    );
+                }
+                if let Some(args) = args {
+                    for a in args {
+                        self.check_type_not_static_class(a, diagnostics);
+                    }
+                }
+            }
+            Type::Array(inner) => self.check_type_not_static_class(inner, diagnostics),
+            Type::Tuple(elems) => {
+                for e in elems {
+                    self.check_type_not_static_class(e, diagnostics);
+                }
+            }
+            Type::Function(params, ret) => {
+                for p in params {
+                    self.check_type_not_static_class(p, diagnostics);
+                }
+                self.check_type_not_static_class(ret, diagnostics);
+            }
+            _ => {}
+        }
+    }
+
     /// If `ty` is a struct, returns its base name and the list of concrete generic type
     /// arguments (empty for non-generic structs). Returns `None` for any non-struct type. Does
     /// NOT recurse into arrays (a method/member access on an array is invalid and must surface

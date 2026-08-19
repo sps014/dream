@@ -1,0 +1,51 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let row = List<int>();
+    row.push(32);
+    let c = List<List<int>>();
+    c.push(row);
+
+    System.println(c);
+    System.println(c[0][0]);
+
+    let i = 0;
+    while (i < c.length) {
+        let j = 0;
+        while (j < c[i].length) {
+            System.println(c[i][j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    c[0][0] = 31;
+    System.println(c[0][0]);
+
+    let grid = Array.alloc<int[]>(2);
+    let r = 0;
+    while (r < 2) {
+        grid[r] = Array.alloc<int>(3);
+        let col = 0;
+        while (col < 3) {
+            grid[r][col] = r * 10 + col;
+            col = col + 1;
+        }
+        r = r + 1;
+    }
+    System.println(grid);
+    r = 0;
+    while (r < grid.length) {
+        let col = 0;
+        while (col < grid[r].length) {
+            System.println(grid[r][col]);
+            col = col + 1;
+        }
+        r = r + 1;
+    }
+
+    let empty = List<int>();
+    System.println(empty);
+    System.println(Array.alloc<int>(0));
+}

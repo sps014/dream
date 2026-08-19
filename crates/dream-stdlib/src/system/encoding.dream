@@ -46,7 +46,7 @@ public fun b64_value(c: char): int {
 }
 
 // UTF-8 / hex / Base64 encode and decode helpers.
-public class Encoding {
+public static class Encoding {
     // Copies the UTF-8 encoding of `text` into a new `byte[]`.
     public static fun utf8_encode(text: string): byte[] {
         let n = text.length;

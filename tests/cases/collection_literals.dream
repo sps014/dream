@@ -17,8 +17,8 @@ fun make_set(): Set<string> {
 fun main(): void {
     let xs: List<int> = [1, 2, 3];
     System.println(xs.length);
-    System.println(xs.get(0).unwrap_or(-1));
-    System.println(xs.get(2).unwrap_or(-1));
+    System.println(xs.get(0));
+    System.println(xs.get(2));
 
     // Plain `T[]` array literals are unaffected by the `List<T>` sugar.
     let raw: int[] = [4, 5, 6];
@@ -53,6 +53,6 @@ fun main(): void {
     // Nested `List<List<int>>`.
     let nested: List<List<int>> = [[1, 2], [3]];
     System.println(nested.length);
-    System.println(nested.get(0).unwrap_or(List<int>(0)).length);
-    System.println(nested.get(1).unwrap_or(List<int>(0)).length);
+    System.println(nested.get(0).length);
+    System.println(nested.get(1).length);
 }

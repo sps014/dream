@@ -54,6 +54,12 @@ impl<'a> Analyzer<'a> {
             }
             let mut info = FunctionTableInfo::from(function);
             info.declaring_module = self.module_of(function.file_path.as_ref());
+            if let Some(ret) = &function.return_type {
+                self.check_type_not_static_class(ret, diagnostics);
+            }
+            for p in &function.parameters {
+                self.check_type_not_static_class(&p.type_, diagnostics);
+            }
             if dream_abi::attributes::has_test_attr(&function.attributes) {
                 self.validate_test_function(function, diagnostics);
             }

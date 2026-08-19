@@ -1,7 +1,7 @@
 module system.core;
 
 // Promise utilities for async tasks.
-public class Promise {
+public static class Promise {
     // Waits for all promises in the array to resolve.
     @intrinsic("promise_all")
     static extern async fun all<T>(borrow promises: T[]): T[];

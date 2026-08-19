@@ -4,7 +4,7 @@ module system.core;
 // raw primitive the higher-level `List`/`Map`/`Set` collections build on; user code should
 // normally prefer `List<T>` and only reach for `Buffer.alloc` for tight, manual storage control.
 
-public class Buffer {
+public static class Buffer {
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
     @intrinsic("array_new")
     static extern fun alloc<T>(len: int): T[];

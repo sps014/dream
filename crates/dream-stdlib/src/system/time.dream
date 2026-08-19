@@ -1,7 +1,7 @@
 module system;
 
 // Timing utilities.
-public class Time {
+public static class Time {
     // Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for
     // wall-clock animation pacing in the browser.
     @intrinsic("sleep")

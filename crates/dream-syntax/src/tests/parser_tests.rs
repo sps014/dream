@@ -1042,6 +1042,40 @@ fn test_parse_sealed_modifier() {
 }
 
 #[test]
+fn test_parse_static_class_modifier() {
+    let code = "public static class Util { public static fun n(): int { return 1; } } \
+                static class Local { public static fun n(): int { return 0; } } \
+                class Open { v: int; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert!(!diagnostics.has_errors());
+
+    let util = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Util")
+        .expect("Util");
+    assert!(
+        util.is_static && util.is_sealed && util.visibility.is_public(),
+        "`public static class` must set is_static, is_sealed, and public"
+    );
+
+    let local = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Local")
+        .expect("Local");
+    assert!(local.is_static && local.is_sealed);
+
+    let open = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Open")
+        .expect("Open");
+    assert!(!open.is_static);
+}
+
+#[test]
 fn test_parse_async_function_and_await() {
     // `async fun` sets `is_async`; `await e;` is an `AwaitStmt` and `let x = await e;` carries an
     // `Await` initializer.

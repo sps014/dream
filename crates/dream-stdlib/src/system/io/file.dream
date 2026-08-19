@@ -2,7 +2,7 @@ module system.io;
 
 // `File` - a small cross-runtime filesystem API.
 
-public class File {
+public static class File {
     // --- host bridge: synchronous externs (real WASM imports; no @intrinsic) -------------------
     @js("Dream", "fileRead")
     static extern fun file_read(borrow path: string): string;

@@ -233,15 +233,15 @@ public class GenContext {
         let ei = 0;
         while (ei < this.extend_types.length) {
             System.println(GenHost.emit_extend_marker());
-            System.println(this.extend_types.get(ei).unwrap_or(string.empty));
-            System.println(escape_gen_payload(this.extend_bodies.get(ei).unwrap_or(string.empty)));
+            System.println(this.extend_types.get(ei));
+            System.println(escape_gen_payload(this.extend_bodies.get(ei)));
             ei = ei + 1;
         }
         let fi = 0;
         while (fi < this.file_paths.length) {
             System.println(GenHost.emit_file_marker());
-            System.println(this.file_paths.get(fi).unwrap_or(string.empty));
-            System.println(escape_gen_payload(this.file_sources.get(fi).unwrap_or(string.empty)));
+            System.println(this.file_paths.get(fi));
+            System.println(escape_gen_payload(this.file_sources.get(fi)));
             fi = fi + 1;
         }
     }

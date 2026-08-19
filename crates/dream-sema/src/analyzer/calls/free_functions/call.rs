@@ -311,6 +311,13 @@ impl<'a> Analyzer<'a> {
                 Some(name.position),
             ));
         }
+        if self.is_static_class_name(&function_name) {
+            return Err(report(
+                diagnostics,
+                format!("cannot instantiate static class '{}'", function_name),
+                Some(name.position),
+            ));
+        }
 
         // Constructor call: `Struct(args)` / `Struct<T>(args)`. Only treated as a constructor
         // when no free function (concrete or generic) shadows the name, so prelude factory

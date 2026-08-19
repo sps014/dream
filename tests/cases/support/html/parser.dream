@@ -184,7 +184,7 @@ public class HtmlCompiler {
             if (i > 0) {
                 joined_sb.append(", ");
             }
-            joined_sb.append(parts.get(i).unwrap_or(""));
+            joined_sb.append(parts.get(i));
             i = i + 1;
         }
         return GenResult.success("[" + joined_sb.build() + "]");
@@ -252,7 +252,7 @@ public class HtmlCompiler {
             if (i > 0) {
                 joined_sb.append(" + ");
             }
-            joined_sb.append(parts.get(i).unwrap_or(""));
+            joined_sb.append(parts.get(i));
             i = i + 1;
         }
         return GenResult.success(joined_sb.build());
@@ -315,7 +315,7 @@ public class HtmlCompiler {
             }
             let end = end_opt.unwrap_or(0);
             if (cur.i < splices.length) {
-                result_parts.push("(" + splices.get(cur.i).unwrap_or("") + ")");
+                result_parts.push("(" + splices.get(cur.i) + ")");
                 cur.i = cur.i + 1;
             } else {
                 result_parts.push("(" + after.substring(0, end) + ")");
@@ -334,7 +334,7 @@ public class HtmlCompiler {
             if (i > 0) {
                 joined_sb.append(" + ");
             }
-            joined_sb.append(result_parts.get(i).unwrap_or(""));
+            joined_sb.append(result_parts.get(i));
             i = i + 1;
         }
         return GenResult.success(joined_sb.build());

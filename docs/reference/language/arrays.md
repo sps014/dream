@@ -57,11 +57,23 @@ println(grid[1][2]);       // 6
 
 ## Fixed-size buffers
 
-Array literals — and `Buffer.alloc<T>(n)` — produce a fixed-size `T[]`; you cannot push or pop. Use `Buffer.alloc` for a zero-initialized buffer of a runtime length:
+Array literals produce a fixed-size `T[]`; you cannot push or pop. For a zero-initialized buffer of a **runtime** length, use `Array.alloc<T>(n)` (bootstrap; no extra import). `Buffer.alloc<T>(n)` is the same intrinsic underneath:
 
 ```dream
-let buf = Buffer.alloc<int>(4);   // int[] of length 4, all zero
+let buf = Array.alloc<int>(4);   // int[] of length 4, all zero
 buf[0] = 10;
+```
+
+There is no `new int[n]` / `int[5][10]` syntax. Nested `int[][]` is an array of arrays. Allocate the outer length with `Array.alloc<int[]>(rows)`, then each row with `Array.alloc<int>(cols)` — inner slots are null until you assign them:
+
+```dream
+let grid = Array.alloc<int[]>(5);
+let r = 0;
+while (r < 5) {
+    grid[r] = Array.alloc<int>(10);
+    r = r + 1;
+}
+grid[0][0] = 32;
 ```
 
 `Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
@@ -118,10 +130,10 @@ let xs = List<int>();
 xs.push(10);
 xs.push(20);
 System.println(xs.length);                // 2
-System.println(xs.get(0).unwrap_or(-1));  // 10
+System.println(xs.get(0));  // 10
 ```
 
-`List<T>` offers `push`, `pop`, `@get_indexer`/`@set_indexer` (so `xs[i]` / `xs[i] = v` work), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
+`List<T>` offers `push`, `pop`, `@get_indexer`/`@set_indexer` (so `xs[i]` / `xs.get(i)` return `T` and panic if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
 
 ```dream
 let ys = List<int>();

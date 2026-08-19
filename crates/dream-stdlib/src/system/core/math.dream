@@ -2,7 +2,7 @@ module system.core;
 
 // Mathematical functions. Trig and most transcendentals are host-native (`env.*`);
 // thin public wrappers expose them (Dream forbids `public` + `extern` on one symbol).
-public class Math {
+public static class Math {
     @js("env", "abs")
     static extern fun abs_host(x: double): double;
     public static fun abs(x: double): double { return Math.abs_host(x); }

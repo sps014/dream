@@ -10,7 +10,7 @@ fun sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
     while (i < xs.length) {
-        total = total + xs.get(i).unwrap_or(0);
+        total = total + xs.get(i);
         i = i + 1;
     }
     return total;
@@ -42,5 +42,5 @@ fun main(): void {
     xs.push(2);
     xs.push(1);
     System.println(xs.distinct().length);
-    System.println(xs.order_by(asc).get(0).unwrap_or(-1));
+    System.println(xs.order_by(asc).get(0));
 }

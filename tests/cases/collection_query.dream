@@ -30,7 +30,7 @@ fun main(): void {
 
     let doubled = xs.map(times_two);
     System.println(doubled.length);
-    System.println(doubled.get(0).unwrap_or(-1));
+    System.println(doubled.get(0));
 
     System.println(sum_evens(xs));
 
@@ -41,5 +41,5 @@ fun main(): void {
     System.println(from_iface.to_list().length);
 
     System.println(xs.distinct().length);
-    System.println(xs.order_by(asc).get(0).unwrap_or(-1));
+    System.println(xs.order_by(asc).get(0));
 }

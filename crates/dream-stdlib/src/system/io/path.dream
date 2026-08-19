@@ -1,7 +1,7 @@
 module system.io;
 
 // Path helpers for joining and inspecting filesystem paths.
-public class Path {
+public static class Path {
     // Joins two path segments with the platform separator, avoiding a double separator.
     public static fun join(a: string, b: string): string {
         if (a.is_empty()) {
@@ -134,7 +134,7 @@ public class Path {
                         // skip
                     } else if (part == "..") {
                         if (parts.length > 0) {
-                            let last = parts.get(parts.length - 1).unwrap_or(string.empty);
+                            let last = parts.get(parts.length - 1);
                             if (last != "..") {
                                 parts.pop();
                             } else {
@@ -157,7 +157,7 @@ public class Path {
             if (j > 0) {
                 sb.append(sep);
             }
-            sb.append(parts.get(j).unwrap_or(string.empty));
+            sb.append(parts.get(j));
             j = j + 1;
         }
         let out = sb.build();

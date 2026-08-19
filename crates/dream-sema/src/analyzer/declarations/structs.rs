@@ -22,6 +22,11 @@ impl<'a> Analyzer<'a> {
                 &struct_decl.name.text,
                 generic_param_names(&struct_decl.generic_parameters),
             );
+            if struct_decl.is_static {
+                self.type_ctx.defs.mark_static(def);
+                self.type_ctx.interner.mark_static_def(def);
+                self.validate_static_class(struct_decl, diagnostics);
+            }
             // A `struct` is a value type: record it on the def table and the interner so
             // reference-classification (RC, layout, codegen) treats its instances as inline values.
             if struct_decl.is_value {
@@ -129,6 +134,46 @@ impl<'a> Analyzer<'a> {
         for struct_decl in node.structs.iter() {
             for field in &struct_decl.fields {
                 self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
+                self.check_type_not_static_class(&field.field_type, diagnostics);
+            }
+        }
+    }
+
+    fn validate_static_class(
+        &self,
+        struct_decl: &StructDeclarationNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let name = &struct_decl.name.text;
+        if !struct_decl.fields.is_empty() {
+            diagnostics.report_error(
+                format!("static class '{}' cannot have instance fields", name),
+                Some(struct_decl.fields[0].name.position),
+            );
+        }
+        if !struct_decl.implements.is_empty() {
+            diagnostics.report_error(
+                format!("static class '{}' cannot implement interfaces", name),
+                Some(struct_decl.name.position),
+            );
+        }
+        for method in &struct_decl.methods {
+            if dream_syntax::nodes::types::is_special_member_name(&method.name.text) {
+                diagnostics.report_error(
+                    format!(
+                        "static class '{}' cannot declare '{}'",
+                        name, method.name.text
+                    ),
+                    Some(method.name.position),
+                );
+            } else if !method.is_static {
+                diagnostics.report_error(
+                    format!(
+                        "member '{}' of static class '{}' must be static",
+                        method.name.text, name
+                    ),
+                    Some(method.name.position),
+                );
             }
         }
     }

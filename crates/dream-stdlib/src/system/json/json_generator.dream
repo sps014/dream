@@ -12,7 +12,7 @@ public class JsonGenerator {
         let cb = CodeBuilder();
         let i = 0;
         while (i < types.length) {
-            let t = types.get(i).unwrap_or(GenType.class_type("", List<string>(), List<GenField>()));
+            let t = types.get(i);
             let one = GenResult.failure("");
             if (t.is_union) {
                 one = JsonGenerator.expand_union(t, json_names, jsonable);
@@ -32,7 +32,7 @@ public class JsonGenerator {
     static fun name_in(borrow list: List<string>, name: string): bool {
         let i = 0;
         while (i < list.length) {
-            if (list.get(i).unwrap_or(string.empty) == name) {
+            if (list.get(i) == name) {
                 return true;
             }
             i = i + 1;
@@ -246,20 +246,12 @@ public class JsonGenerator {
         cb.line("let __wfirst_" + idx_var + " = true;");
         cb.line("while (" + idx_var + " < " + access + ".length) {");
         cb.indent();
-        cb.line("switch (" + access + ".get(" + idx_var + ")) {");
-        cb.indent();
-        cb.line("Some(" + elem_var + ") => {");
-        cb.indent();
+        cb.line("let " + elem_var + " = " + access + ".get(" + idx_var + ");");
         cb.line("if (__wfirst_" + idx_var + " == false) { sb.append_char(','); }");
         cb.line("__wfirst_" + idx_var + " = false;");
         if (JsonGenerator.json_write_stmts(cb, elem, elem_var, "sb", json_names) == false) {
             return false;
         }
-        cb.dedent();
-        cb.line("}");
-        cb.line("None => {}");
-        cb.dedent();
-        cb.line("}");
         cb.line(idx_var + " = " + idx_var + " + 1;");
         cb.dedent();
         cb.line("}");
@@ -341,7 +333,7 @@ public class JsonGenerator {
             if (i > 0) {
                 cb.line("sb.append_char(',');");
             }
-            let elem = elems.get(i).unwrap_or(string.empty);
+            let elem = elems.get(i);
             let acc = access + "." + i.to_string();
             if (JsonGenerator.is_tuple_type(elem)) {
                 if (JsonGenerator.tuple_write_stmts(cb, elem, acc, json_names) == false) {
@@ -438,12 +430,8 @@ public class JsonGenerator {
         cb.line("let " + idx_var + " = 0;");
         cb.line("while (" + idx_var + " < " + access + ".length) {");
         cb.indent();
-        cb.line("switch (" + access + ".get(" + idx_var + ")) {");
-        cb.indent();
-        cb.line("Some(" + elem_var + ") => { " + arr_var + ".push(" + to_e + "); }");
-        cb.line("None => {}");
-        cb.dedent();
-        cb.line("}");
+        cb.line("let " + elem_var + " = " + access + ".get(" + idx_var + ");");
+        cb.line(arr_var + ".push(" + to_e + ");");
         cb.line(idx_var + " = " + idx_var + " + 1;");
         cb.dedent();
         cb.line("}");
@@ -579,7 +567,7 @@ public class JsonGenerator {
         cb.line("let " + idx_var + " = 0;");
         cb.line("while (" + idx_var + " < " + keys_var + ".length) {");
         cb.indent();
-        cb.line("let " + key_var + " = " + keys_var + ".get(" + idx_var + ").unwrap_or(\"\");");
+        cb.line("let " + key_var + " = " + keys_var + ".get(" + idx_var + ");");
         cb.line(out_var + ".set(" + key_var + ", " + from_e + ");");
         cb.line(idx_var + " = " + idx_var + " + 1;");
         cb.dedent();
@@ -651,7 +639,7 @@ public class JsonGenerator {
         cb.line("let " + arr_var + " = JsonValue.array();");
         let i = 0;
         while (i < elems.length) {
-            let elem = elems.get(i).unwrap_or(string.empty);
+            let elem = elems.get(i);
             let acc = access + "." + i.to_string();
             if (JsonGenerator.is_tuple_type(elem)) {
                 let nested = arr_var + "_t" + i.to_string();
@@ -702,7 +690,7 @@ public class JsonGenerator {
         let first_part = true;
         let i = 0;
         while (i < elems.length) {
-            let elem = elems.get(i).unwrap_or(string.empty);
+            let elem = elems.get(i);
             let je = src_var + ".at(" + i.to_string() + ").unwrap_or(JsonValue.none())";
             if (JsonGenerator.is_tuple_type(elem)) {
                 let nested = out_var + "_t" + i.to_string();
@@ -833,7 +821,7 @@ public class JsonGenerator {
         let first = true;
         let fi = 0;
         while (fi < t.fields.length) {
-            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+            let field = t.fields.get(fi);
             let fname = field.name;
             let ftype = field.type_name;
             if (JsonGenerator.is_tuple_type(ftype)) {
@@ -889,7 +877,7 @@ public class JsonGenerator {
         fi = 0;
         let first_if = true;
         while (fi < t.fields.length) {
-            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+            let field = t.fields.get(fi);
             let fname = field.name;
             let ftype = field.type_name;
             let json_key = field.json_key();
@@ -1053,7 +1041,7 @@ public class JsonGenerator {
         let first_field = true;
         let fi = 0;
         while (fi < t.fields.length) {
-            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+            let field = t.fields.get(fi);
             let fname = field.name;
             let ftype = field.type_name;
             let json_key = field.json_key();
@@ -1549,7 +1537,7 @@ public class JsonGenerator {
 
         let vi = 0;
         while (vi < t.variants.length) {
-            let variant = t.variants.get(vi).unwrap_or(GenVariant.make("", List<GenField>()));
+            let variant = t.variants.get(vi);
             let vname = variant.name;
             if (!first_known) {
                 known_sb.append(" || ");
@@ -1566,7 +1554,7 @@ public class JsonGenerator {
                     first_pat = JsonGenerator.comma_append(
                         pattern_sb,
                         first_pat,
-                        variant.fields.get(bi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", "")).name
+                        variant.fields.get(bi).name
                     );
                     bi = bi + 1;
                 }
@@ -1586,7 +1574,7 @@ public class JsonGenerator {
             let first_arg = true;
             let fi = 0;
             while (fi < variant.fields.length) {
-                let field = variant.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+                let field = variant.fields.get(fi);
                 let fname = field.name;
                 let ftype = field.type_name;
                 if (field.json_ignore) {
@@ -1768,7 +1756,7 @@ public class JsonGenerator {
         if (t.variants.is_empty()) {
             return GenResult.failure("@json union '" + t.name + "' has no variants");
         }
-        let first = t.variants.get(0).unwrap_or(GenVariant.make("", List<GenField>()));
+        let first = t.variants.get(0);
         if (first.fields.is_empty()) {
             from_cb.line("return " + t.name + "." + first.name + ";");
         } else {
@@ -1777,7 +1765,7 @@ public class JsonGenerator {
             let vname = first.name;
             let fi = 0;
             while (fi < first.fields.length) {
-                let field = first.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false, "", "", "", ""));
+                let field = first.fields.get(fi);
                 let fname = field.name;
                 let ftype = field.type_name;
                 let jexpr = "v.get(\"" + fname + "\").unwrap_or(JsonValue.none())";
@@ -1895,7 +1883,7 @@ public class JsonGenerator {
         cb.indent();
         let i = 0;
         while (i < specs.length) {
-            let spec = specs.get(i).unwrap_or(GenCollection.make("", "", "", "", ""));
+            let spec = specs.get(i);
             let one = JsonGenerator.expand_collection_methods(spec, json_names, jsonable);
             if (one.ok == false) {
                 return one;

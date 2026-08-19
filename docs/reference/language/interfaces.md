@@ -66,7 +66,7 @@ interface Collection<T> {
 }
 
 interface IndexedCollection<T> : Collection<T> {
-    fun get(index: int): Option<T>;
+    fun get(index: int): T;
 }
 
 interface Readable { fun read(): int; }

@@ -40,8 +40,8 @@ public class MultipartForm {
         let total = 0;
         let i = 0;
         while (i < this.field_names.length) {
-            let name = this.field_names.get(i).unwrap_or(string.empty);
-            let value = this.field_values.get(i).unwrap_or(string.empty);
+            let name = this.field_names.get(i);
+            let value = this.field_values.get(i);
             total = total + MultipartForm._str_bytes("--" + boundary + "\r\n");
             total = total + MultipartForm._str_bytes(
                 "Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n"
@@ -52,10 +52,10 @@ public class MultipartForm {
         }
         i = 0;
         while (i < this.file_names.length) {
-            let name = this.file_names.get(i).unwrap_or(string.empty);
-            let filename = this.file_filenames.get(i).unwrap_or(string.empty);
-            let ctype = this.file_types.get(i).unwrap_or("application/octet-stream");
-            let body = this.file_bodies.get(i).unwrap_or(Buffer.alloc<byte>(0));
+            let name = this.file_names.get(i);
+            let filename = this.file_filenames.get(i);
+            let ctype = this.file_types.get(i);
+            let body = this.file_bodies.get(i);
             total = total + MultipartForm._str_bytes("--" + boundary + "\r\n");
             total = total + MultipartForm._str_bytes(
                 "Content-Disposition: form-data; name=\"" + name + "\"; filename=\"" + filename + "\"\r\n"
@@ -71,8 +71,8 @@ public class MultipartForm {
         let offset = 0;
         i = 0;
         while (i < this.field_names.length) {
-            let name = this.field_names.get(i).unwrap_or(string.empty);
-            let value = this.field_values.get(i).unwrap_or(string.empty);
+            let name = this.field_names.get(i);
+            let value = this.field_values.get(i);
             offset = MultipartForm._write_str(body_buf, offset, "--" + boundary + "\r\n");
             offset = MultipartForm._write_str(
                 body_buf,
@@ -85,10 +85,10 @@ public class MultipartForm {
         }
         i = 0;
         while (i < this.file_names.length) {
-            let name = this.file_names.get(i).unwrap_or(string.empty);
-            let filename = this.file_filenames.get(i).unwrap_or(string.empty);
-            let ctype = this.file_types.get(i).unwrap_or("application/octet-stream");
-            let file_body = this.file_bodies.get(i).unwrap_or(Buffer.alloc<byte>(0));
+            let name = this.file_names.get(i);
+            let filename = this.file_filenames.get(i);
+            let ctype = this.file_types.get(i);
+            let file_body = this.file_bodies.get(i);
             offset = MultipartForm._write_str(body_buf, offset, "--" + boundary + "\r\n");
             offset = MultipartForm._write_str(
                 body_buf,

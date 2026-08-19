@@ -60,7 +60,7 @@ fun main(): void {
     prices.sort();
     let i = 0;
     while (i < prices.length) {
-        System.println(prices.get(i).unwrap_or(Money(-1)).cents);
+        System.println(prices.get(i).cents);
         i = i + 1;
     }
 
@@ -72,12 +72,12 @@ fun main(): void {
     vs.sort();
     let j = 0;
     while (j < vs.length) {
-        let v = vs.get(j).unwrap_or(Vec2(0, 0));
+        let v = vs.get(j);
         System.println(v.x * v.x + v.y * v.y);
         j = j + 1;
     }
 
     // `sort_by` with an explicit comparator (descending by cents).
     prices.sort_by(by_cents_desc);
-    System.println(prices.get(0).unwrap_or(Money(-1)).cents);   // 300
+    System.println(prices.get(0).cents);   // 300
 }

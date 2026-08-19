@@ -70,6 +70,7 @@ impl<'a> Analyzer<'a> {
 
             let resolved = match &global.declared_type {
                 Some(declared) => {
+                    self.check_type_not_static_class(declared, diagnostics);
                     let dt = declared.get_type();
                     let it = init_type.get_type();
                     let numeric = dream_syntax::nodes::types::is_numeric_primitive(&dt)
@@ -78,7 +79,9 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "Top-level variable '{}' is declared '{}' but initialized with '{}'",
-                                global.name.text, dt, it
+                                global.name.text,
+                                self.ty_display(declared),
+                                self.ty_display(&init_type)
                             ),
                             Some(global.name.position),
                         );

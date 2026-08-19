@@ -270,4 +270,21 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     internal fun slot_value(i: int): V {
         return this.slots[i].value;
     }
+
+    @override public fun to_string(): string {
+        let s = "{";
+        let n = 0;
+        let i = 0;
+        while (i < this.cap) {
+            if (this.slots[i].state == this.epoch) {
+                if (n > 0) {
+                    s = s + ", ";
+                }
+                s = s + this.slots[i].key + ": " + this.slots[i].value;
+                n = n + 1;
+            }
+            i = i + 1;
+        }
+        return s + "}";
+    }
 }

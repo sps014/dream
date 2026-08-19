@@ -2,7 +2,7 @@ module system.core;
 
 // `Array.alloc<T>(n)` — user-facing zero-initialized `T[]` allocation. Thin wrapper over the
 // lower-level `Buffer.alloc` intrinsic.
-public class Array {
+public static class Array {
     public static fun alloc<T>(len: int): T[] {
         return Buffer.alloc<T>(len);
     }
@@ -18,13 +18,13 @@ extend T[] : IndexedCollection<T> {
         return this.length;
     }
 
-    // Element at `index`, or `None` if out of range.
+    // Element at `index`. Panics if `index` is out of range.
     @get_indexer
-    public fun get(index: int): Option<T> {
+    public fun get(index: int): T {
         if (index < 0 || index >= this.length) {
-            return Option.None;
+            System.panic("array index out of range");
         }
-        return Option.Some(this[index]);
+        return this[index];
     }
 
     // Enumerator for treating an array as a `Collection`.

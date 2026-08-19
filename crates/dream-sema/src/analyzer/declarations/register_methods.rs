@@ -63,6 +63,12 @@ impl<'a> Analyzer<'a> {
             {
                 continue;
             }
+            if let Some(ret) = &method.return_type {
+                self.check_type_not_static_class(ret, diagnostics);
+            }
+            for p in &method.parameters {
+                self.check_type_not_static_class(&p.type_, diagnostics);
+            }
             let member_name = accessor_member_name(method);
             if method.where_constraints.is_empty() {
                 let key = (
@@ -216,8 +222,13 @@ impl<'a> Analyzer<'a> {
             // (interface defaults, `@json` converters) are exempt, so a sealed type may still
             // implement interfaces with default methods or derive `@json`.
             if !ext.is_synthesized && self.sealed_types.contains(&target) {
+                let kind = if self.is_static_class_name(&target) {
+                    "static class"
+                } else {
+                    "sealed type"
+                };
                 diagnostics.report_error(
-                    format!("Cannot extend sealed type '{}'", target),
+                    format!("Cannot extend {} '{}'", kind, target),
                     Some(ext.target.position),
                 );
                 continue;

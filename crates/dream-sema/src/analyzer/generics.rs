@@ -295,8 +295,8 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "type '{}' does not satisfy the constraint '{}' on generic parameter '{}' (it does not implement that interface)",
-                            concrete.get_type(),
-                            bound.get_type(),
+                            self.ty_display(concrete),
+                            self.ty_display(bound),
                             constraint.param.text
                         ),
                         Some(*position),

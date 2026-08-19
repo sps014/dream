@@ -26,6 +26,8 @@ pub struct DefInfo {
     /// True for `struct` (value) declarations: instances are stored inline with copy semantics
     /// rather than as heap-allocated, reference-counted objects. Always `false` for non-structs.
     pub is_value: bool,
+    /// True for `static class` declarations: a namespace of static members, not a value type.
+    pub is_static: bool,
 }
 
 /// Interns nominal declarations to [`DefId`]s. Lookups by `(kind, name)` are deduplicated so a base
@@ -55,6 +57,7 @@ impl DefTable {
             name: name.to_string(),
             generic_params,
             is_value: false,
+            is_static: false,
         });
         self.by_name.insert(key, id);
         id
@@ -68,6 +71,16 @@ impl DefTable {
     /// True when `id` names a value (`struct`) type.
     pub fn is_value(&self, id: DefId) -> bool {
         self.defs[id.0 as usize].is_value
+    }
+
+    /// Marks a definition as a `static class`. Idempotent.
+    pub fn mark_static(&mut self, id: DefId) {
+        self.defs[id.0 as usize].is_static = true;
+    }
+
+    /// True when `id` names a `static class`.
+    pub fn is_static(&self, id: DefId) -> bool {
+        self.defs[id.0 as usize].is_static
     }
 
     pub fn get(&self, id: DefId) -> &DefInfo {

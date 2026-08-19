@@ -2,7 +2,7 @@ module system.json;
 
 // The public JSON API.
 
-public class Json {
+public static class Json {
     @intrinsic("json_serialize")
     static extern fun serialize<T>(borrow value: T): string;
 

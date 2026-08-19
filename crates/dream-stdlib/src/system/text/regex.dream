@@ -244,7 +244,7 @@ public class Regex {
         let arr = Buffer.alloc<string>(list.length);
         let i = 0;
         while (i < list.length) {
-            arr[i] = list.get(i).unwrap_or(string.empty);
+            arr[i] = list.get(i);
             i = i + 1;
         }
         return arr;

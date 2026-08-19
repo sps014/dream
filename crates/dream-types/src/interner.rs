@@ -27,6 +27,8 @@ pub struct TypeInterner {
     /// the interner (not `DefTable`) for the same reason `value_defs` is — layout/codegen only has
     /// a `TypeId`/`DefId`, not the full analyzer state.
     shared_defs: HashSet<DefId>,
+    /// `DefId`s of `static class` types — namespaces of static members, not instantiable values.
+    static_defs: HashSet<DefId>,
     /// Inline `(size, align)` in bytes of each value (`struct`) type, keyed by its interned id.
     /// Populated once layouts are computed; consulted by `scalar_size` so a value struct stored as a
     /// field/element/local occupies its full inline footprint rather than a 4-byte pointer.
@@ -51,6 +53,7 @@ impl TypeInterner {
             value_defs: HashSet::new(),
             ref_struct_defs: HashSet::new(),
             shared_defs: HashSet::new(),
+            static_defs: HashSet::new(),
             value_layouts: HashMap::new(),
             value_unions: HashSet::new(),
         };
@@ -214,6 +217,21 @@ impl TypeInterner {
     /// True when `ty` is (or resolves to) an `@shared class` type.
     pub fn is_shared_type(&self, ty: TypeId) -> bool {
         matches!(self.kind(ty), TyKind::Struct(def, _) if self.shared_defs.contains(def))
+    }
+
+    /// Records `def` as a `static class`. Idempotent.
+    pub fn mark_static_def(&mut self, def: DefId) {
+        self.static_defs.insert(def);
+    }
+
+    /// True when `def` names a `static class`.
+    pub fn is_static_def(&self, def: DefId) -> bool {
+        self.static_defs.contains(&def)
+    }
+
+    /// True when `ty` is (or resolves to) a `static class`.
+    pub fn is_static_type(&self, ty: TypeId) -> bool {
+        matches!(self.kind(ty), TyKind::Struct(def, _) if self.static_defs.contains(def))
     }
 
     /// Records `id` as a value *union* type. Idempotent.

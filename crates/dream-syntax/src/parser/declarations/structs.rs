@@ -12,10 +12,11 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let attributes = self.parse_attributes();
 
-        // `public`/`internal` and `sealed` are modifiers that may appear in either order before the
+        // `public`/`internal`, `sealed`, and `static` may appear in either order before the
         // `class`/`struct` keyword.
         let mut visibility = Visibility::Private;
         let mut is_sealed = false;
+        let mut is_static = false;
         loop {
             if self.try_consume_visibility(&mut visibility) {
                 continue;
@@ -24,6 +25,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::SealedToken => {
                     self.match_token(TokenKind::SealedToken);
                     is_sealed = true;
+                }
+                TokenKind::StaticToken => {
+                    self.match_token(TokenKind::StaticToken);
+                    is_static = true;
                 }
                 _ => break,
             }
@@ -50,6 +55,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             self.match_token(TokenKind::ClassToken);
         } else {
+            if is_static {
+                self.diagnostics.report_error(
+                    "'static' cannot modify a struct; use 'static class'".to_string(),
+                    Some(self.current_token().position),
+                );
+            }
             self.match_token(TokenKind::StructToken);
         }
         let mut struct_name = self.match_token(TokenKind::IdentifierToken);
@@ -189,7 +200,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         decl.implements = implements;
         decl.is_value = is_value;
         decl.is_ref_struct = is_ref_struct;
-        decl.is_sealed = is_sealed;
+        // A static class is implicitly sealed: there is no instance surface to extend.
+        decl.is_sealed = is_sealed || is_static;
+        decl.is_static = is_static;
         decl.generic_constraints = generic_constraints;
         Ok(decl)
     }

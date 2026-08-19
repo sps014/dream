@@ -31,6 +31,7 @@ impl<'a> Analyzer<'a> {
         let expr_type =
             self.analyze_expression(expr, parent_function, symbol_table, diagnostics)?;
         self.current_expected_type = saved_expected;
+        self.check_type_not_static_class(target_type, diagnostics);
         let inner_hir = self.hir_take();
 
         let target_type_str = target_type.get_type();
@@ -138,8 +139,8 @@ impl<'a> Analyzer<'a> {
         diagnostics.report_error(
             format!(
                 "cannot convert from {} to {} at {}",
-                right.display_name(),
-                left.display_name(),
+                self.ty_display(right),
+                self.ty_display(left),
                 position.get_point_str()
             ),
             Some(*position),

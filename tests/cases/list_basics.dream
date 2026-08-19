@@ -7,10 +7,10 @@ fun main(): void {
     xs.push(20);
     xs.push(30);
     System.println(xs.length);
-    System.println(xs.get(0).unwrap_or(0 - 1));
-    System.println(xs.get(2).unwrap_or(0 - 1));
+    System.println(xs.get(0));
+    System.println(xs.get(2));
     xs.set(1, 99);
-    System.println(xs.get(1).unwrap_or(0 - 1));
+    System.println(xs.get(1));
     System.println(xs.pop().unwrap_or(0 - 1));
     System.println(xs.length);
     System.println(xs.index_of(99).unwrap_or(0 - 1));
@@ -25,16 +25,16 @@ fun main(): void {
         i = i + 1;
     }
     System.println(xs.length);
-    System.println(xs.get(51).unwrap_or(0 - 1));
+    System.println(xs.get(51));
 
     xs.remove_at(0);
-    System.println(xs.get(0).unwrap_or(0 - 1));
+    System.println(xs.get(0));
     System.println(xs.length);
 
     let names = List<string>();
     names.push("alpha");
     names.push("beta");
-    System.print(names.get(0).unwrap_or(""));
+    System.print(names.get(0));
     System.print("\n");
     System.print(names.contains("beta"));
     System.print("\n");

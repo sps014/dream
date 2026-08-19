@@ -74,7 +74,7 @@ fun main(): void {
             System.println(back.scores.get("ada").unwrap_or(-1));
             System.println(back.ordered.get("a").unwrap_or(-1));
             System.println(back.trail[0]);
-            System.println(back.nested.get(0).unwrap_or(Point(0, 0)).x);
+            System.println(back.nested.get(0).x);
         },
         Err(e) => System.println("err:" + e.message()),
     }
@@ -94,7 +94,7 @@ fun main(): void {
     System.println(Json.serialize<Map<string, int>>(top_map));
 
     switch (Json.deserialize<List<int>>("[9,10]")) {
-        Ok(xs) => System.println(xs.get(0).unwrap_or(-1)),
+        Ok(xs) => System.println(xs.get(0)),
         Err(e) => System.println(e.message()),
     }
 }

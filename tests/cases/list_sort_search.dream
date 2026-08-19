@@ -20,7 +20,7 @@ fun main(): void {
     xs.sort();
     let i = 0;
     while (i < xs.length) {
-        System.print(xs.get(i).unwrap_or(0 - 1));
+        System.print(xs.get(i));
         System.print(" ");
         i = i + 1;
     }
@@ -30,7 +30,7 @@ fun main(): void {
     System.println(xs.binary_search(4).is_none());          // true (absent)
 
     xs.sort_by(desc);
-    System.println(xs.get(0).unwrap_or(0 - 1));             // 9
+    System.println(xs.get(0));             // 9
 
     let ws = List<string>();
     ws.push("pear");
@@ -39,7 +39,7 @@ fun main(): void {
     ws.sort();
     let j = 0;
     while (j < ws.length) {
-        System.println(ws.get(j).unwrap_or("?"));
+        System.println(ws.get(j));
         j = j + 1;
     }
 }

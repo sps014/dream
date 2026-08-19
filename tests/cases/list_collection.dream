@@ -11,7 +11,7 @@ fun sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
     while (i < xs.length) {
-        total = total + xs.get(i).unwrap_or(0);
+        total = total + xs.get(i);
         i = i + 1;
     }
     return total;

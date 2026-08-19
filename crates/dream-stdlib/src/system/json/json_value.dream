@@ -199,18 +199,32 @@ public class JsonValue {
 
     // The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
-        return switch (this.obj_keys) {
-            Some(keys) => (index < 0 || index >= keys.length) ? Option.None : Option.Some(keys.get(index)),
-            None => Option.None,
-        };
+        switch (this.obj_keys) {
+            Some(keys) => {
+                if (index < 0 || index >= keys.length) {
+                    return Option.None;
+                }
+                return Option.Some(keys.get(index));
+            },
+            None => {
+                return Option.None;
+            },
+        }
     }
 
     // The object value at insertion index `index`, or `None`.
     public fun value_at(index: int): Option<JsonValue> {
-        return switch (this.obj_vals) {
-            Some(vals) => (index < 0 || index >= vals.length) ? Option.None : Option.Some(vals.get(index)),
-            None => Option.None,
-        };
+        switch (this.obj_vals) {
+            Some(vals) => {
+                if (index < 0 || index >= vals.length) {
+                    return Option.None;
+                }
+                return Option.Some(vals.get(index));
+            },
+            None => {
+                return Option.None;
+            },
+        }
     }
 
     // The keys of the object (empty list when not an object).
@@ -220,10 +234,17 @@ public class JsonValue {
 
     // The array element at `index`, or `None`.
     public fun at(index: int): Option<JsonValue> {
-        return switch (this.items) {
-            Some(items) => (index < 0 || index >= items.length) ? Option.None : Option.Some(items.get(index)),
-            None => Option.None,
-        };
+        switch (this.items) {
+            Some(items) => {
+                if (index < 0 || index >= items.length) {
+                    return Option.None;
+                }
+                return Option.Some(items.get(index));
+            },
+            None => {
+                return Option.None;
+            },
+        }
     }
 
     // Appends a value to the array.

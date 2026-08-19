@@ -991,7 +991,7 @@ fn cached_harness_c() -> Result<String, String> {
                 .with_optimize(None);
         compiler
             .compile(&src, &out)
-            .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;
+            .map_err(|_| "@json generator: failed to compile Dream harness".to_string())?;
     }
     Ok(c_path.to_string_lossy().into_owned())
 }

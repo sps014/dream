@@ -22,7 +22,7 @@ fun main(): void {
     m.clear();
     System.println(m.length);
     m.set(3, 30);
-    System.println(m.get(3));
+    System.println(m.get(3).unwrap_or(0));
 
     let s = Set<int>();
     s.add(7);

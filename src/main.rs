@@ -391,7 +391,12 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            error!("Compilation failed: {}", e.to_string());
+            use dream::driver::error::CompileError;
+            match e {
+                CompileError::Syntax | CompileError::Semantic | CompileError::Generator => {}
+                CompileError::Io(err) => eprintln!("error: {err}"),
+                CompileError::Internal(msg) => eprintln!("error: {msg}"),
+            }
             ExitCode::FAILURE
         }
     }

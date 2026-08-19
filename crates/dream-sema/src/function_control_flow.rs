@@ -1,4 +1,6 @@
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, Type};
+use dream_syntax::nodes::{
+    ExpressionNode, FunctionNode, StatementNode, SwitchArm, SwitchArmBody, Type,
+};
 use std::cell::RefCell;
 use std::io::Error;
 use std::rc::Rc;
@@ -118,6 +120,12 @@ impl<'a> FunctionControlGraph<'a> {
             StatementNode::Switch(_, cases, default) => {
                 self.visit_switch(cases, default, parent)?
             }
+            // Pattern `switch` in statement position is parsed as an expression statement. Each
+            // arm is an independent path; exhaustiveness is a separate check, so there is no
+            // synthetic "missing default" branch.
+            StatementNode::ExpressionStatement(ExpressionNode::Switch(_, _, arms)) => {
+                self.visit_pattern_switch(arms, parent)?
+            }
             // `lock (target) { body }` runs `body` exactly once (unlike `if`/`switch`, it is not a
             // set of alternative paths), so for return-coverage purposes it is transparent: fold
             // its body straight into the current path.
@@ -212,6 +220,34 @@ impl<'a> FunctionControlGraph<'a> {
             self.visit_block(default_body, &default_node)?;
         }
 
+        Ok(())
+    }
+
+    fn visit_pattern_switch(
+        &mut self,
+        arms: &[SwitchArm<'a>],
+        parent: &Rc<RefCell<FlowNode>>,
+    ) -> Result<(), Error> {
+        if arms.is_empty() {
+            (*parent)
+                .as_ref()
+                .borrow_mut()
+                .child_nodes
+                .push(Rc::new(RefCell::new(FlowNode::new())));
+            return Ok(());
+        }
+        for arm in arms {
+            let arm_node = Rc::new(RefCell::new(FlowNode::new()));
+            (*parent)
+                .as_ref()
+                .borrow_mut()
+                .child_nodes
+                .push(arm_node.clone());
+            match &arm.body {
+                SwitchArmBody::Block(body) => self.visit_block(body, &arm_node)?,
+                SwitchArmBody::Expr(_) => {}
+            }
+        }
         Ok(())
     }
 

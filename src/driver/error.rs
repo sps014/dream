@@ -1,7 +1,6 @@
-//! The top-level, typed error returned by [`crate::driver::compiler::Compiler::compile`]. Each
-//! variant names the pipeline phase that failed. User-facing detail for `Syntax`/`Semantic`/
-//! `Generator` lives in the diagnostics that were already rendered; `Io` wraps lower-level
-//! source/artifact failures.
+//! The top-level, typed error returned by [`crate::driver::compiler::Compiler::compile`].
+//! `Syntax` / `Semantic` / `Generator` are phase tags for the driver only — user-facing detail
+//! is already in the rendered diagnostics. `Io` and `Internal` still carry a message.
 
 use std::fmt;
 
@@ -25,9 +24,7 @@ pub enum CompileError {
 impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompileError::Syntax => write!(f, "Syntax errors found during parsing"),
-            CompileError::Semantic => write!(f, "Semantic errors found"),
-            CompileError::Generator => write!(f, "Source generator errors found"),
+            CompileError::Syntax | CompileError::Semantic | CompileError::Generator => Ok(()),
             CompileError::Io(e) => write!(f, "{}", e),
             CompileError::Internal(msg) => write!(f, "{}", msg),
         }

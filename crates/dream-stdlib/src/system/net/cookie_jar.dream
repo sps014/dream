@@ -29,7 +29,7 @@ public class CookieJar {
     public fun get(name: string): Option<string> {
         let existing = this.index.get(name);
         if (existing.is_some()) {
-            return this.values.get(existing.unwrap_or(0));
+            return Option.Some(this.values.get(existing.unwrap_or(0)));
         }
         let none: Option<string> = Option.None;
         return none;

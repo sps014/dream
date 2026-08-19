@@ -26,7 +26,10 @@ public class Stack<T> : Collection<T> {
 
     // Returns the top element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
-        return this.items.get(this.items.length - 1);
+        if (this.items.length == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.items.get(this.items.length - 1));
     }
 
     // Removes every element.

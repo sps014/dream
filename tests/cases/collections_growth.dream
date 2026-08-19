@@ -41,6 +41,6 @@ fun main(): void {
         n = n + 1;
     }
     System.println(squares.length);
-    System.println(squares.get(12));
-    System.println(squares.get(63));
+    System.println(squares.get(12).unwrap_or(0));
+    System.println(squares.get(63).unwrap_or(0));
 }

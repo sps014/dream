@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
-_GUTTER = re.compile(r"^(?:\d+\s+)?\|")
 
 root = Path(__file__).resolve().parents[1]
 dream = root / "target/debug/dream"
@@ -40,35 +39,27 @@ def run_group(args, timeout):
     proc = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
         cwd=root,
     )
     try:
-        out, _ = proc.communicate(timeout=timeout)
-        return proc.returncode, out or ""
+        out, err = proc.communicate(timeout=timeout)
+        return proc.returncode, out or "", err or ""
     except subprocess.TimeoutExpired:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         proc.wait()
-        return -9, "timeout"
+        return -9, "timeout", ""
 
 
 def run_output_body(out):
-    kept = []
-    for ln in out.splitlines():
-        s = _ANSI.sub("", ln).strip()
-        if not s:
-            continue
-        if s.startswith(("ERROR", "INFO", "WARN", "error:", "warning:", "-->")):
-            continue
-        if _GUTTER.match(s):
-            continue
-        kept.append(ln)
-    return "\n".join(kept).strip()
+    # Program stdout only. Compiler diagnostics go to stderr; do not drop blank lines or
+    # lines that happen to start with `error:` (e.g. `error: divide by zero`).
+    return _ANSI.sub("", out).strip()
 
 
 def one(f: Path):
@@ -77,19 +68,19 @@ def one(f: Path):
     exp = f.with_suffix(".expected")
     trap = f.with_suffix(".expected_trap")
     if err.exists():
-        code, _out = run_group([str(dream), str(f)], 25)
+        code, _out, _err = run_group([str(dream), str(f)], 25)
         if code == 0:
             return stem, "fail", "compile should fail"
         return stem, "ok", ""
     # Debug `cc -O0` of large `@json` units is slow; leave headroom for a cold
     # `libdream_rt.a` rebuild and a loaded machine.
-    code, out = run_group([str(dream), "run", str(f)], 180)
+    code, out, err = run_group([str(dream), "run", str(f)], 180)
     if trap.exists():
         if code == 0:
             return stem, "fail", "expected trap"
         return stem, "ok", ""
     if code != 0:
-        tail = " | ".join((out or "").strip().splitlines()[-2:])
+        tail = " | ".join((err or out or "").strip().splitlines()[-2:])
         return stem, "fail", f"run {code} {tail}"
     if exp.exists():
         want = exp.read_text().strip()

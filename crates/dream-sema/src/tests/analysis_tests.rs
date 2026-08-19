@@ -390,6 +390,42 @@ fn test_analyze_union_switch_ok() {
 }
 
 #[test]
+fn test_statement_switch_returns_on_all_arms() {
+    let code = "
+        enum Shape { Circle(radius: int), Empty }
+        fun area(s: Shape): int {
+            switch (s) {
+                Circle(r) => { return r * r; },
+                Empty => { return 0; },
+            }
+        }
+        fun main(): void { let a: int = area(Shape.Empty); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_statement_switch_missing_arm_return() {
+    let code = "
+        enum Shape { Circle(radius: int), Empty }
+        fun area(s: Shape): int {
+            switch (s) {
+                Circle(r) => { return r * r; },
+                Empty => { },
+            }
+        }
+        fun main(): void { let a: int = area(Shape.Empty); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("not all code paths return a value")));
+}
+
+#[test]
 fn test_analyze_union_switch_non_exhaustive() {
     let code = "
         enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }

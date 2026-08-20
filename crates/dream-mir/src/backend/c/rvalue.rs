@@ -436,7 +436,7 @@ impl<'a> Emitter<'a> {
                 .is_none()
             {
                 self.b.call(
-                    "dream_retain",
+                    crate::backend::c::release::retain_sym(self.cx, fld.ty),
                     vec![Expr::load(
                         cast,
                         Expr::ptr_add(dest.clone(), Expr::i(fld.offset as i64)),
@@ -525,7 +525,10 @@ impl<'a> Emitter<'a> {
                 } else {
                     b.stmt(Stmt::store(cast.clone(), at.clone(), value.clone()));
                     if rc && !skip_retain[i] {
-                        b.call("dream_retain", vec![Expr::load(cast.clone(), at)]);
+                        b.call(
+                            crate::backend::c::release::retain_sym(cx, elem_ty),
+                            vec![Expr::load(cast.clone(), at)],
+                        );
                     }
                 }
             }
@@ -559,6 +562,7 @@ impl<'a> Emitter<'a> {
             .collect();
         let casts: Vec<CTy> = fields.iter().map(|f| load_cast(self.cx, f.ty)).collect();
         let sizes: Vec<u32> = fields.iter().map(|f| elem_size(self.cx, f.ty)).collect();
+        let cx = self.cx;
         self.b.expr_block(move |b| {
             let o = b.temp(
                 CTy::Ptr,
@@ -590,7 +594,7 @@ impl<'a> Emitter<'a> {
                         ));
                         if is_rc[i] && !skip_retain[i] {
                             b.call(
-                                "dream_retain",
+                                crate::backend::c::release::retain_sym(cx, fld.ty),
                                 vec![Expr::load(
                                     casts[i].clone(),
                                     Expr::ptr_add(o.clone(), Expr::i(fld.offset as i64)),

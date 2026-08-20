@@ -144,13 +144,17 @@ impl<'a> Emitter<'a> {
                 self.b.expr_stmt(stored);
             }
             Statement::Retain(o) => {
+                let ty = self.operand_ty(o);
                 let a = self.operand(o);
-                self.b.call("dream_retain", vec![a]);
+                self.b.call(
+                    crate::backend::c::release::retain_sym(self.cx, ty),
+                    vec![a],
+                );
             }
             Statement::Release(o) => {
                 let ty = self.operand_ty(o);
                 let release = if self.cx.interner.is_rc_tracked(ty) {
-                    crate::backend::c::release::release_sym(self.cx.interner, self.cx.mir, ty)
+                    crate::backend::c::release::release_sym(self.cx, ty)
                 } else {
                     "dream_release".into()
                 };
@@ -160,7 +164,7 @@ impl<'a> Emitter<'a> {
             Statement::ReleaseUnique(o) => {
                 let ty = self.operand_ty(o);
                 let release = if self.cx.interner.is_rc_tracked(ty) {
-                    crate::backend::c::release::destroy_sym(self.cx.interner, self.cx.mir, ty)
+                    crate::backend::c::release::destroy_sym(self.cx, ty)
                 } else {
                     "dream_destroy".into()
                 };
@@ -376,10 +380,12 @@ pub(super) fn value_ref_stmts(
             } else if cx.interner.is_rc_tracked(field.ty) {
                 let value = Expr::load(CTy::Ptr, Expr::dream_p(at));
                 if retain {
-                    out.push(Stmt::call("dream_retain", vec![value]));
+                    out.push(Stmt::call(
+                        crate::backend::c::release::retain_sym(cx, field.ty),
+                        vec![value],
+                    ));
                 } else {
-                    let release =
-                        crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
+                    let release = crate::backend::c::release::release_sym(cx, field.ty);
                     out.push(Stmt::call(release, vec![value]));
                 }
             }
@@ -405,10 +411,12 @@ pub(super) fn value_ref_stmts(
             } else if cx.interner.is_rc_tracked(field.ty) {
                 let value = Expr::load(CTy::Ptr, Expr::dream_p(at));
                 if retain {
-                    body.push(Stmt::call("dream_retain", vec![value]));
+                    body.push(Stmt::call(
+                        crate::backend::c::release::retain_sym(cx, field.ty),
+                        vec![value],
+                    ));
                 } else {
-                    let release =
-                        crate::backend::c::release::release_sym(cx.interner, cx.mir, field.ty);
+                    let release = crate::backend::c::release::release_sym(cx, field.ty);
                     body.push(Stmt::call(release, vec![value]));
                 }
             }

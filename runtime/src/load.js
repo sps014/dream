@@ -68,6 +68,13 @@ function moduleWantsSharedMemory(wasmModule, desc) {
   );
 }
 
+function memoryIsShared(memory) {
+  return (
+    typeof SharedArrayBuffer !== "undefined" &&
+    memory.buffer instanceof SharedArrayBuffer
+  );
+}
+
 function makeLinearMemory(wasmModule) {
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
@@ -126,9 +133,7 @@ export async function load(source, options = {}) {
   importObject.env.memory = sharedMemory;
   const stackGate =
     options.stackGate ??
-    (sharedMemory.buffer instanceof SharedArrayBuffer
-      ? new Int32Array(new SharedArrayBuffer(4))
-      : null);
+    (memoryIsShared(sharedMemory) ? new Int32Array(new SharedArrayBuffer(4)) : null);
 
   const userImports = options.imports || {};
   const sigByName = new Map();

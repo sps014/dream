@@ -54,7 +54,10 @@ impl<'a> Emitter<'a> {
             return;
         }
         let a = self.operand(arg);
-        self.b.call("dream_retain", vec![a]);
+        self.b.call(
+            crate::backend::c::release::retain_sym(self.cx, ty),
+            vec![a],
+        );
     }
 
     fn sb_push_expr(&mut self, args: &[Operand]) -> Option<Expr> {

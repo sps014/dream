@@ -309,6 +309,9 @@ impl<'a> Emitter<'a> {
         }
         let tag = self.cx.type_tag(ty, def);
         let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
+        for a in args {
+            self.retain_rc_global_sink(true, a);
+        }
         let arg_es: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
         self.b.expr_block(move |b| {
             let o = b.temp(

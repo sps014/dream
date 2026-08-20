@@ -12,7 +12,11 @@ impl<'a> Emitter<'a> {
                 return e;
             }
         }
-        let mut args_e: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
+        let mut args_e: Vec<Expr> = Vec::with_capacity(args.len());
+        for (i, a) in args.iter().enumerate() {
+            self.retain_rc_global_sink(callee.take_params.get(i).copied().unwrap_or(false), a);
+            args_e.push(self.operand(a));
+        }
         if name == "dream_all" {
             let es = match self.cx.interner.kind(callee.ret) {
                 dream_types::TyKind::Array(e) => super::types::elem_size(self.cx, *e),
@@ -25,6 +29,30 @@ impl<'a> Emitter<'a> {
             args_e.push(Expr::i(es as i64));
         }
         Expr::call(name, args_e)
+    }
+
+    pub(super) fn retain_rc_global_sink(&mut self, take: bool, arg: &Operand) {
+        if !take {
+            return;
+        }
+        let Operand::Copy(crate::Place::Global(g)) = arg else {
+            return;
+        };
+        let Some(ty) = self
+            .cx
+            .mir
+            .globals
+            .iter()
+            .find(|global| global.id == *g)
+            .map(|global| global.ty)
+        else {
+            return;
+        };
+        if !self.cx.interner.is_rc_tracked(ty) {
+            return;
+        }
+        let a = self.operand(arg);
+        self.b.call("dream_retain", vec![a]);
     }
 
     fn sb_push_expr(&mut self, args: &[Operand]) -> Option<Expr> {
@@ -63,7 +91,13 @@ impl<'a> Emitter<'a> {
         args: &[Operand],
         sig: dream_types::TypeId,
     ) -> Expr {
-        let args_e: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
+        let args_e: Vec<Expr> = args
+            .iter()
+            .map(|a| {
+                self.retain_rc_global_sink(true, a);
+                self.operand(a)
+            })
+            .collect();
         let (td, _, params) = super::types::fn_ptr_abi(self.cx.interner, sig);
         if args_e.len() != params.len() {
             crate::internal_error!(
@@ -89,7 +123,10 @@ impl<'a> Emitter<'a> {
         args: &[Operand],
     ) -> Expr {
         let mut all = vec![self.operand(receiver)];
-        all.extend(args.iter().map(|a| self.operand(a)));
+        for a in args {
+            self.retain_rc_global_sink(true, a);
+            all.push(self.operand(a));
+        }
         Expr::call(
             c_ident(&format!("__iface_dispatch_{iface_id}_{method_slot}")),
             all,

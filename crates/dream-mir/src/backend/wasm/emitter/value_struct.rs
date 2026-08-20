@@ -116,6 +116,23 @@ impl Emitter<'_> {
         }
     }
 
+    pub(super) fn emit_rc_global_sink_retain(&mut self, take: bool, o: &Operand) {
+        if !take {
+            return;
+        }
+        let Operand::Copy(Place::Global(g)) = o else {
+            return;
+        };
+        let Some(&ty) = self.global_tys.get(&g.0) else {
+            return;
+        };
+        if !self.interner.is_rc_tracked(ty) {
+            return;
+        }
+        self.emit_operand(o);
+        self.f.call(retain_call(self.interner, ty));
+    }
+
     /// Pushes the address of a value-struct operand.
     pub(super) fn emit_operand_addr(&mut self, o: &Operand) {
         match o {

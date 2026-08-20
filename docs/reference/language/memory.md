@@ -18,7 +18,7 @@ Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored inline �
 Every heap object tracks how many names still point at it.
 
 - When a variable goes out of scope, that count goes down.
-- Reassigning a variable drops the value it held before.
+- Reassigning a variable drops the value it held before. Module-level `let` names follow the same retain/release rules as a field store (a still-live local copied into a global is retained; the previous occupant is released).
 - When the count reaches zero, the object is freed immediately (its `del` destructor runs first, if it has one).
 - Passing and assigning heap values uses [ownership](ownership.md): unmarked parameters sink, `borrow` shares, and a last use **moves** instead of copying.
 
@@ -208,6 +208,7 @@ fun main() {
 - `defer(q) { … }` — `q` is a `uint` (plain `256` is fine). That many objects are cleaned at this `}`. `defer(0)` means “don’t clean on this `}`” — useful around a game loop so inner `defer(256)` slices can spread cleanup across frames.
 - Nested `defer` share one cleanup list. While you are still inside some `defer`, leftover work can wait for the next one, but the list is capped (16 384 objects) so memory cannot grow without bound.
 - `dream run` (native) is where this queue is real. Compiling to WebAssembly still frees immediately today.
+- On native, a last-ref **string** that the compiler releases is queued like other last-refs (the free waits for `}`). Helpers such as in-place concat still free string temps immediately.
 
 A timing sample (UI tree swap + particles): `dream --release run sample/defer_destroy_bench.dream`.
 

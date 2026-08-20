@@ -30,6 +30,8 @@ const SMOKE_CASES: &[&str] = &[
     "last_use_destroy",
     "defer_last_use",
     "defer_zero",
+    "arc_global_reassign",
+    "defer_global_reassign",
     "struct_last_use_move",
     "ui_render_tree",
     "simd_f32x4",

@@ -1,0 +1,10 @@
+// Compiler-emitted string last-ref inside `defer` must not crash (native may delay the free).
+import system;
+
+fun main() {
+    defer {
+        let s = "ab" + "cd";
+        System.println(s);
+        System.println("ok");
+    }
+}

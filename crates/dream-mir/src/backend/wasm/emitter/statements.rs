@@ -478,19 +478,11 @@ impl Emitter<'_> {
             }
             Place::Global(g) => {
                 if let Some(&ty) = self.global_tys.get(&g.0) {
-                    if self.interner.is_value_type(ty) {
-                        let g0 = g.0;
-                        self.emit_value_store(
-                            |s| s.f.global_get(&format!("g{}", g0)),
-                            ty,
-                            rvalue,
-                            true,
-                        );
-                        return;
-                    }
+                    self.emit_global_store(g.0, ty, rvalue);
+                } else {
+                    self.emit_rvalue(rvalue);
+                    self.f.global_set(&format!("g{}", g.0));
                 }
-                self.emit_rvalue(rvalue);
-                self.f.global_set(&format!("g{}", g.0));
             }
             Place::Field { base, field } => {
                 if self.is_v128_local(*base) {
@@ -573,6 +565,74 @@ impl Emitter<'_> {
             self.f.i32_shl();
             self.f.i32_add();
         }
+    }
+
+    /// Wasm globals are not linear-memory slots, so field `emit_place_store` cannot address them.
+    /// Same retain/release rules as a container store: stash the old occupant, store, retain a
+    /// borrowed RHS (unless a unique last-use move), then release the stash. Identity-elide when a
+    /// borrowed store writes the same pointer already in the global (`g = f(g)` that returns `g`).
+    fn emit_global_store(&mut self, g: u32, ty: TypeId, rvalue: &Rvalue) {
+        if self.interner.is_value_type(ty) {
+            self.emit_value_store(
+                |s| s.f.global_get(&format!("g{g}")),
+                ty,
+                rvalue,
+                true,
+            );
+            return;
+        }
+        let name = format!("g{g}");
+        if !self.interner.is_rc_tracked(ty)
+            || realloc_self_store(&Place::Global(crate::Global(g)), rvalue)
+        {
+            self.emit_rvalue(rvalue);
+            self.f.global_set(&name);
+            return;
+        }
+        let take_transfer = matches!(
+            rvalue,
+            Rvalue::Use(Operand::Copy(Place::Local(l)))
+                if self.func.locals.get(l.0 as usize).is_some_and(|d| d.is_take)
+        );
+        let unique_move = match rvalue {
+            Rvalue::Use(op) | Rvalue::Cast(op, _, _) => {
+                crate::backend::shared::unique_container_move_local(self.func, self.interner, op)
+                    .is_some()
+            }
+            _ => false,
+        };
+        let borrowed_ref = self.interner.is_rc_tracked(ty)
+            && matches!(
+                rvalue,
+                Rvalue::Use(Operand::Copy(_)) | Rvalue::Use(Operand::Const(Const::Str(_)))
+            )
+            && !take_transfer
+            && !unique_move;
+        if borrowed_ref {
+            self.f.global_get(&name);
+            self.f.local_set("__rel");
+            self.emit_rvalue(rvalue);
+            self.f.local_set("__src");
+            self.f.local_get("__rel");
+            self.f.local_get("__src");
+            self.f.i32_ne();
+            self.f.if_();
+            self.f.local_get("__src");
+            self.f.global_set(&name);
+            self.f.local_get("__src");
+            self.f.call(retain_call(self.interner, ty));
+            let release = release_call(self.interner, self.layouts, ty);
+            self.f.local_get("__rel");
+            self.f.call(&release);
+            self.f.end();
+            return;
+        }
+        self.f.global_get(&name);
+        self.f.local_set("__rel");
+        self.emit_rvalue(rvalue);
+        self.f.global_set(&name);
+        self.retain_stored_rvalue(ty, rvalue);
+        self.release_stash(ty, true);
     }
 
     /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`. Shared by

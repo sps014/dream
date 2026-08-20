@@ -1,0 +1,43 @@
+// Module-level class `let` reassignment must retain a still-live RHS and release the old occupant.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+let slot: Tracked = Tracked(0);
+
+fun wrap(t: Tracked): Tracked {
+    return Tracked(t.id + 10);
+}
+
+fun same(t: Tracked): Tracked {
+    return t;
+}
+
+fun main() {
+    slot = Tracked(1);
+    System.println("a");
+    let x = Tracked(2);
+    slot = x;
+    System.println(x.id);
+    System.println(slot.id);
+    slot = Tracked(3);
+    System.println("b");
+    let y = Tracked(4);
+    slot = y;
+    slot = Tracked(5);
+    System.println("c");
+    slot = wrap(slot);
+    System.println("d");
+    slot = same(slot);
+    System.println("e");
+}

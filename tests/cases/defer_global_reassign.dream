@@ -1,0 +1,24 @@
+// Last-ref of a class global inside `defer` must enqueue `del` until `}`.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+let slot: Tracked = Tracked(1);
+
+fun main() {
+    defer {
+        slot = Tracked(2);
+        System.println(999);
+    }
+    System.println("after");
+}

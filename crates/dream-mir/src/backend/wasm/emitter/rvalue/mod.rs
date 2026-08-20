@@ -243,6 +243,7 @@ impl Emitter<'_> {
                         }
                         self.f.local_get("__obj");
                         for arg in args {
+                            self.emit_rc_global_sink_retain(true, arg);
                             self.emit_operand(arg);
                         }
                         let sym = self.callee_symbol(&crate::Callee {

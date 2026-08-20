@@ -193,9 +193,9 @@ impl<'a> Emitter<'a> {
                     rv,
                     rhs,
                     self.f.local_ty(*l),
-                    Expr::dream_p(Expr::local(l.0)),
                     Expr::local(l.0),
                     retain_copy,
+                    false,
                 )
             }
             Place::Local(l) => self.b.expr_block(|b| {
@@ -203,33 +203,53 @@ impl<'a> Emitter<'a> {
                 Expr::local(l.0)
             }),
             Place::Global(g) => {
-                let value_ty = self
+                let gty = self
                     .cx
                     .mir
                     .globals
                     .iter()
                     .find(|global| global.id == *g)
-                    .map(|global| global.ty)
-                    .filter(|ty| self.cx.interner.is_value_type(*ty));
-                if let Some(ty) = value_ty {
-                    let size = elem_size(self.cx, ty);
-                    self.b.expr_block(|b| {
-                        b.call(
-                            "memcpy",
-                            vec![
-                                Expr::dream_p(Expr::global(g.0)),
-                                Expr::dream_p(rhs.clone()),
-                                Expr::i(size as i64),
-                            ],
-                        );
-                        Expr::global(g.0)
-                    })
-                } else {
-                    self.b.expr_block(|b| {
-                        b.assign(Expr::global(g.0), rhs.clone());
-                        Expr::global(g.0)
-                    })
+                    .map(|global| global.ty);
+                if let Some(ty) = gty.filter(|ty| self.cx.interner.is_value_type(*ty)) {
+                    let alias = matches!(
+                        rv,
+                        crate::Rvalue::Use(Operand::Copy(Place::Global(src))) if src == g
+                    );
+                    return self.memcpy_value(
+                        rv,
+                        rhs,
+                        ty,
+                        Expr::global(g.0),
+                        true,
+                        !alias,
+                    );
                 }
+                if let Some(ty) = gty.filter(|ty| self.cx.interner.is_rc_tracked(*ty)) {
+                    if realloc_self_store(place, rv) {
+                        return self.b.expr_block(|b| {
+                            b.assign(Expr::global(g.0), rhs.clone());
+                            Expr::global(g.0)
+                        });
+                    }
+                    let release = crate::backend::c::release::release_sym(
+                        self.cx.interner,
+                        self.cx.mir,
+                        ty,
+                    );
+                    let move_id = unique_move_src(self.f, self.cx.interner, rv);
+                    let stored = self.rc_store(
+                        load_cast(self.cx, ty),
+                        Expr::addr_of(Expr::global(g.0)),
+                        rhs,
+                        release,
+                        borrowed_ref_store(rv) && move_id.is_none(),
+                    );
+                    return self.after_unique_move(stored, move_id);
+                }
+                self.b.expr_block(|b| {
+                    b.assign(Expr::global(g.0), rhs.clone());
+                    Expr::global(g.0)
+                })
             }
             Place::Field { base, field } => {
                 let ty = self.f.local_ty(*base);
@@ -247,13 +267,18 @@ impl<'a> Emitter<'a> {
                     crate::internal_error!("missing field {field} on type {ty:?}")
                 });
                 if self.cx.interner.is_value_type(fld.ty) {
+                    let alias = matches!(
+                        rv,
+                        crate::Rvalue::Use(Operand::Copy(Place::Field { base: b, field: f }))
+                            if b == base && f == field
+                    );
                     return self.memcpy_value(
                         rv,
                         rhs,
                         fld.ty,
-                        Expr::field_ptr(base.0, fld.offset),
                         Expr::cast(CTy::Ptr, Expr::field_ptr(base.0, fld.offset)),
                         true,
+                        !alias,
                     );
                 }
                 let cast = load_cast(self.cx, fld.ty);
@@ -490,13 +515,20 @@ impl<'a> Emitter<'a> {
         rv: &crate::Rvalue,
         rhs: Expr,
         ty: dream_types::TypeId,
-        dest: Expr,
         dest_ptr: Expr,
         retain_copy: bool,
+        drop_old: bool,
     ) -> Expr {
         let size = elem_size(self.cx, ty);
+        let dest = Expr::dream_p(dest_ptr.clone());
+        let cx = self.cx;
+        let func = self.f;
         if value_rvalue_allocates(rv) {
             self.b.expr_block(move |b| {
+                if drop_old {
+                    let mut e = Emitter::new(cx, func, b);
+                    e.value_refs(ty, dest_ptr.clone(), false);
+                }
                 let v = b.temp(CTy::Ptr, Some(rhs.clone()));
                 b.call(
                     "memcpy",
@@ -506,9 +538,11 @@ impl<'a> Emitter<'a> {
                 dest_ptr.clone()
             })
         } else {
-            let cx = self.cx;
-            let func = self.f;
             self.b.expr_block(|b| {
+                if drop_old {
+                    let mut e = Emitter::new(cx, func, b);
+                    e.value_refs(ty, dest_ptr.clone(), false);
+                }
                 b.call(
                     "memcpy",
                     vec![

@@ -22,6 +22,7 @@ pub(super) fn release_sym(interner: &TypeInterner, mir: &Mir, ty: TypeId) -> Str
             c_ident(&format!("release_array_t{}", e.0))
         }
         TyKind::Func(..) => "dream_release_funcbox".into(),
+        TyKind::Prim(dream_types::PrimTy::String) if mir.uses_defer => "release_string".into(),
         _ => "dream_release".into(),
     }
 }
@@ -194,6 +195,8 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             );
         }
         m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
+        m.static_proto(CTy::Void, "release_string", p.clone());
+        m.static_proto(CTy::Void, "destroy_string", p.clone());
     }
     let array_elems_copy = array_elems.clone();
     for elem in array_elems {
@@ -213,6 +216,10 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             &mut b,
             &c_ident(&format!("destroy_array_t{}", elem.0)),
             mir.uses_defer,
+        );
+        b.assign(
+            Expr::id("n"),
+            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
         );
         let mut body = Vec::new();
         if interner.is_value_type(elem) {
@@ -362,7 +369,36 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
     }
+    if mir.uses_defer {
+        emit_release_string(m);
+    }
     emit_destroy_helpers(m, cx, &array_elems_copy);
+}
+
+fn emit_release_string(m: &mut ModuleBuilder) {
+    let mut b = FuncBuilder::new(CTy::Void, "release_string");
+    b.static_ = true;
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(None),
+    ));
+    b.stmt(rc_header());
+    maybe_defer(&mut b, "destroy_string", true);
+    b.call("dream_free", vec![Expr::id("p")]);
+    m.push_func(b);
+}
+
+fn emit_destroy_string(m: &mut ModuleBuilder) {
+    let mut b = FuncBuilder::new(CTy::Void, "destroy_string");
+    b.static_ = true;
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(None),
+    ));
+    b.call("dream_free", vec![Expr::id("p")]);
+    m.push_func(b);
 }
 
 fn emit_destroy_helpers(
@@ -555,6 +591,9 @@ fn emit_destroy_helpers(
         });
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
+    }
+    if cx.mir.uses_defer {
+        emit_destroy_string(m);
     }
     emit_destroy_object(m, cx);
 }

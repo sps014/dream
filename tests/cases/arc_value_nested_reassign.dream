@@ -1,0 +1,48 @@
+// Overwriting a value `struct` (global or field) must drop nested RC fields of the old bits.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+struct Holder {
+    public item: Tracked;
+
+    public constructor(item: Tracked) {
+        this.item = item;
+    }
+}
+
+struct Inner {
+    public item: Tracked;
+
+    public constructor(item: Tracked) {
+        this.item = item;
+    }
+}
+
+struct Outer {
+    public inner: Inner;
+
+    public constructor(inner: Inner) {
+        this.inner = inner;
+    }
+}
+
+let slot: Holder = Holder(Tracked(10));
+
+fun main() {
+    slot = Holder(Tracked(11));
+    System.println("g");
+    let o = Outer(Inner(Tracked(20)));
+    o.inner = Inner(Tracked(21));
+    System.println("o");
+}

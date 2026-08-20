@@ -66,7 +66,7 @@ fn report(
 
 /// An empty source span, used for diagnostics on synthesized nodes that have no real
 /// position in the user's source (e.g. array element type mismatches).
-fn empty_span() -> TextSpan {
+pub(in crate::analyzer) fn empty_span() -> TextSpan {
     TextSpan::new((0, 0), &Rc::new(LineText::new(String::new())))
 }
 
@@ -97,6 +97,8 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
         | StatementNode::Lock(e, _)
         | StatementNode::IfElse(e, _, _, _)
         | StatementNode::Switch(e, _, _) => line(e.position()),
+        StatementNode::Defer(Some(e), _) => line(e.position()),
+        StatementNode::Defer(None, _) => None,
         StatementNode::For(_, Some(cond), _, _) => line(cond.position()),
         StatementNode::Labeled(_, inner) => statement_line(inner),
         StatementNode::Return(None)
@@ -108,7 +110,7 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
 
 /// Creates a token with an empty source span, used when the analyzer synthesizes
 /// AST nodes (injected `this` parameters, monomorphized generic types, etc.).
-fn synthetic_token(kind: TokenKind, text: &str) -> SyntaxToken {
+pub(in crate::analyzer) fn synthetic_token(kind: TokenKind, text: &str) -> SyntaxToken {
     SyntaxToken::new(kind, empty_span(), text.to_string())
 }
 

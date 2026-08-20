@@ -1,0 +1,21 @@
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+fun main() {
+    defer(4096u) {
+        let x = Tracked(1);
+        System.println(x.id);
+        System.println(999);
+    }
+}

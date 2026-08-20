@@ -78,6 +78,9 @@ pub enum StatementNode<'a> {
     /// `lock (target) { body }` — mutual exclusion on `target` (must be `@shared class`-typed, or
     /// `Lock`), reentrant per-thread. See `docs/language` webworkers/concurrency notes.
     Lock(ExpressionNode<'a>, &'a [StatementNode<'a>]),
+    /// `defer { body }` / `defer(q) { body }` — opt-in deferred last-ref destroy. `q` is a `uint`
+    /// drain budget (omitted: one chunk). See `docs/reference/language/memory.md`.
+    Defer(Option<ExpressionNode<'a>>, &'a [StatementNode<'a>]),
     /// `@workgroup(N) let name: T;` — GPU workgroup-shared array of `N` elements of `T`.
     /// No initializer; storage is zero-initialized by WGSL.
     WorkgroupDecl(SyntaxToken, Type, u32),

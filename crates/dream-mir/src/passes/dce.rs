@@ -173,7 +173,10 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(dst_off, read);
             read_operand(count, read);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => read_operand(o, read),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
+            read_operand(o, read)
+        }
+        Statement::DeferEnter => {}
         Statement::SimdV128 {
             dest,
             lhs,

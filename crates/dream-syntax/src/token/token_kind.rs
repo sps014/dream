@@ -135,6 +135,8 @@ pub enum TokenKind {
     DoToken,
     #[token("lock")]
     LockToken,
+    #[token("defer")]
+    DeferToken,
     #[token("return")]
     ReturnToken,
     #[token("break")]
@@ -280,6 +282,7 @@ impl TokenKind {
             TokenKind::WhileToken => "'while'",
             TokenKind::DoToken => "'do'",
             TokenKind::LockToken => "'lock'",
+            TokenKind::DeferToken => "'defer'",
             TokenKind::ReturnToken => "'return'",
             TokenKind::BreakToken => "'break'",
             TokenKind::ContinueToken => "'continue'",
@@ -369,6 +372,7 @@ pub const KEYWORDS: &[&str] = &[
     "ref",
     "borrow",
     "lock",
+    "defer",
     "int",
     "float",
     "double",
@@ -466,6 +470,7 @@ mod tests {
             "ref",
             "borrow",
             "lock",
+            "defer",
             "int",
             "float",
             "double",
@@ -483,7 +488,7 @@ mod tests {
         }
         assert_eq!(
             KEYWORDS.len(),
-            48,
+            49,
             "a keyword token was added/removed; update both this list and KEYWORDS"
         );
     }

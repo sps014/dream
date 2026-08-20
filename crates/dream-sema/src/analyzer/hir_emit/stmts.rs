@@ -398,6 +398,14 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Appends a `defer { body }` / `defer(q) { body }`.
+    pub(in crate::analyzer) fn hir_defer(&mut self, budget: Option<HExpr>, body: Vec<HStmt>) {
+        if !self.active() {
+            return;
+        }
+        self.push_stmt(HStmt::Defer { budget, body });
+    }
+
     /// Appends a `lock (target) { body }`. Fails the function if `target` was not representable.
     pub(in crate::analyzer) fn hir_lock(&mut self, target: Option<HExpr>, body: Vec<HStmt>) {
         if !self.active() {

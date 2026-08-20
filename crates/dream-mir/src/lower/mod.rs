@@ -89,8 +89,35 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         layouts: hir.layouts.clone(),
         imports: hir.imports.clone(),
         intrinsics: hir.intrinsics.clone(),
+        uses_defer: hir.functions.iter().any(|f| stmts_have_defer(&f.body)),
         interfaces: hir.interfaces.clone(),
         enums: hir.enums.clone(),
+    }
+}
+
+fn stmts_have_defer(stmts: &[HStmt]) -> bool {
+    stmts.iter().any(stmt_has_defer)
+}
+
+fn stmt_has_defer(stmt: &HStmt) -> bool {
+    match stmt {
+        HStmt::Defer { .. } => true,
+        HStmt::If {
+            then_branch,
+            else_branch,
+            ..
+        } => stmts_have_defer(then_branch) || stmts_have_defer(else_branch),
+        HStmt::While { body, .. }
+        | HStmt::DoWhile { body, .. }
+        | HStmt::Lock { body, .. } => stmts_have_defer(body),
+        HStmt::For {
+            init, step, body, ..
+        } => stmts_have_defer(init) || stmts_have_defer(step) || stmts_have_defer(body),
+        HStmt::Foreach { body, .. } => stmts_have_defer(body),
+        HStmt::Switch { arms, default, .. } => {
+            arms.iter().any(|a| stmts_have_defer(&a.body)) || stmts_have_defer(default)
+        }
+        _ => false,
     }
 }
 
@@ -153,6 +180,7 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
         locals,
         loops: Vec::new(),
         locks: Vec::new(),
+        defers: Vec::new(),
         async_coroutine: false,
     };
     lo.lower_block(&func.body);
@@ -178,6 +206,7 @@ pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFu
         locals,
         loops: Vec::new(),
         locks: Vec::new(),
+        defers: Vec::new(),
         async_coroutine: true,
     };
     lo.lower_block(&func.body);
@@ -197,6 +226,7 @@ struct LoopCtx {
     /// lock acquired *inside* the loop (`self.locks[lock_depth..]`, innermost first) but leaves any
     /// lock already held when the loop started untouched.
     lock_depth: usize,
+    defer_depth: usize,
 }
 
 struct Lowerer<'a> {
@@ -208,6 +238,7 @@ struct Lowerer<'a> {
     /// see [`Lowerer::lower_lock`] and the release-on-every-exit-path logic in `lower_break`/
     /// `lower_continue`/`HStmt::Return`.
     locks: Vec<Local>,
+    defers: Vec<Local>,
     /// When set, this is an async coroutine body: `return` completes the async task (rather than
     /// returning from a WASM function), and each `await` lowers to a [`Terminator::Await`] suspend
     /// point that splits the current block (so awaits work in any control-flow position).
@@ -433,6 +464,7 @@ impl Lowerer<'_> {
             HStmt::Return(e) => {
                 let op = e.as_ref().map(|e| self.lower_operand(e));
                 self.release_all_locks();
+                self.release_all_defers();
                 if self.async_coroutine {
                     self.b.terminate(Terminator::AsyncComplete(op));
                 } else {
@@ -469,6 +501,7 @@ impl Lowerer<'_> {
             HStmt::Break(label) => self.lower_break(label.as_deref()),
             HStmt::Continue(label) => self.lower_continue(label.as_deref()),
             HStmt::Lock { target, body } => self.lower_lock(target, body),
+            HStmt::Defer { budget, body } => self.lower_defer(budget.as_ref(), body),
             HStmt::DebugLine(line) => self.b.push(Statement::DebugLine(*line)),
             HStmt::SourceLine(line) => self.b.push(Statement::SourceLine(*line)),
         }

@@ -1,0 +1,389 @@
+// Frame-style ARC teardown: UI tree swap and particle slot rewrite.
+//
+//   dream --release run sample/defer_destroy_bench.dream
+//
+// Immediate last-ref runs `del` + nested release + `free` before the rest of the tick.
+// `defer` keeps that teardown off `build`/`paint` (time-to-present), then drains at `}`.
+
+import system;
+import system.collections;
+
+let g_del: int = 0;
+let g_sink: long = 0L;
+
+@allow_cycle
+class Widget {
+    public id: int;
+    public w: int;
+    public h: int;
+    public children: List<Widget>;
+
+    public constructor(id: int, child_cap: int) {
+        this.id = id;
+        this.w = (id % 17) + 1;
+        this.h = (id % 13) + 1;
+        this.children = List<Widget>(child_cap);
+    }
+
+    del() {
+        g_del = g_del + 1;
+    }
+}
+
+class Particle {
+    public id: int;
+    public x: int;
+    public y: int;
+
+    public constructor(id: int) {
+        this.id = id;
+        this.x = id % 640;
+        this.y = id % 360;
+    }
+
+    del() {
+        g_del = g_del + 1;
+    }
+}
+
+fun retire_widget(t: Widget): void {
+    t.children.clear();
+}
+
+fun build_tree(n: int, id0: int): Widget {
+    let root = Widget(id0, n);
+    let i = 0;
+    while (i < n) {
+        root.children.push(Widget(id0 + 1 + i, 0));
+        i = i + 1;
+    }
+    return root;
+}
+
+fun paint(borrow n: Widget): int {
+    let acc = n.id + n.w + n.h;
+    let i = 0;
+    let len = n.children.length;
+    while (i < len) {
+        acc = acc + paint(n.children[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun paint_particles(borrow slots: List<Particle>): int {
+    let acc = 0;
+    let i = 0;
+    let len = slots.length;
+    while (i < len) {
+        let p = slots[i];
+        acc = acc + p.id + p.x + p.y;
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun flush_queue(): void {
+    defer(4294967295u) {}
+}
+
+fun us(ns: long): string {
+    return (ns / 1000L).to_string();
+}
+
+fun kb(bytes: long): string {
+    return (bytes / 1024L).to_string();
+}
+
+fun line(
+    mode: string,
+    frame: int,
+    build_ns: long,
+    retire_ns: long,
+    paint_ns: long,
+    drain_ns: long,
+    present_ns: long,
+    hitch_ns: long,
+    hitch_cpu_ns: long,
+    rss: long,
+    del_retire: int,
+    del_drain: int
+): void {
+    System.println(
+        mode
+            + "  frame="
+            + frame.to_string()
+            + "  present_us="
+            + us(present_ns)
+            + "  hitch_us="
+            + us(hitch_ns)
+            + "  hitch_cpu_us="
+            + us(hitch_cpu_ns)
+            + "  retire_us="
+            + us(retire_ns)
+            + "  drain_us="
+            + us(drain_ns)
+            + "  paint_us="
+            + us(paint_ns)
+            + "  build_us="
+            + us(build_ns)
+            + "  rss_kb="
+            + kb(rss)
+            + "  del_retire="
+            + del_retire.to_string()
+            + "  del_drain="
+            + del_drain.to_string()
+    );
+}
+
+fun summary(
+    mode: string,
+    frames: int,
+    present_ns: long,
+    max_present: long,
+    max_hitch: long,
+    max_hitch_cpu: long,
+    max_rss: long
+): void {
+    let f = (long)frames;
+    System.println(
+        mode
+            + "  avg_present_us="
+            + us(present_ns / f)
+            + "  max_present_us="
+            + us(max_present)
+            + "  max_hitch_us="
+            + us(max_hitch)
+            + "  max_hitch_cpu_us="
+            + us(max_hitch_cpu)
+            + "  max_rss_kb="
+            + kb(max_rss)
+    );
+}
+
+fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool): void {
+    flush_queue();
+    System.println("");
+    System.println(
+        "== UI tree: build+paint next, then drop previous root ("
+            + nodes.to_string()
+            + " widgets/frame, "
+            + frames.to_string()
+            + " frames, "
+            + mode
+            + ") =="
+    );
+    let prev = build_tree(nodes, 1);
+    g_sink = g_sink + (long)paint(prev);
+    g_del = 0;
+
+    let present_sum = 0L;
+    let max_present = 0L;
+    let max_hitch = 0L;
+    let max_hitch_cpu = 0L;
+    let max_rss = 0L;
+    let f = 0;
+    while (f < frames) {
+        let id0 = 2 + f * (nodes + 1);
+
+        let sw = Stopwatch();
+        let next = build_tree(nodes, id0);
+        sw.stop();
+        let build_ns = sw.elapsed_nanos();
+
+        sw.restart();
+        g_sink = g_sink + (long)paint(next);
+        sw.stop();
+        let paint_ns = sw.elapsed_nanos();
+
+        g_del = 0;
+        let cpu0 = System.cpu_time_nanos();
+        sw.restart();
+        if (use_defer) {
+            defer(0) {
+                retire_widget(prev);
+            }
+        } else {
+            retire_widget(prev);
+        }
+        sw.stop();
+        let retire_ns = sw.elapsed_nanos();
+        let retire_cpu = System.cpu_time_nanos() - cpu0;
+        let del_retire = g_del;
+
+        g_del = 0;
+        let drain_ns = 0L;
+        let drain_cpu = 0L;
+        if (use_defer) {
+            cpu0 = System.cpu_time_nanos();
+            sw.restart();
+            defer(budget) {}
+            sw.stop();
+            drain_ns = sw.elapsed_nanos();
+            drain_cpu = System.cpu_time_nanos() - cpu0;
+        }
+        let del_drain = g_del;
+
+        let hitch_ns = drain_ns;
+        let hitch_cpu = drain_cpu;
+        if (use_defer == false) {
+            hitch_ns = retire_ns;
+            hitch_cpu = retire_cpu;
+        }
+        let rss = System.memory_bytes();
+        let present = build_ns + paint_ns;
+        present_sum = present_sum + present;
+        if (present > max_present) {
+            max_present = present;
+        }
+        if (hitch_ns > max_hitch) {
+            max_hitch = hitch_ns;
+        }
+        if (hitch_cpu > max_hitch_cpu) {
+            max_hitch_cpu = hitch_cpu;
+        }
+        if (rss > max_rss) {
+            max_rss = rss;
+        }
+        line(mode, f, build_ns, retire_ns, paint_ns, drain_ns, present, hitch_ns, hitch_cpu, rss, del_retire, del_drain);
+        prev = next;
+        f = f + 1;
+    }
+    summary(mode, frames, present_sum, max_present, max_hitch, max_hitch_cpu, max_rss);
+    flush_queue();
+}
+
+fun fill_particles(n: int, id0: int): List<Particle> {
+    let slots = List<Particle>.with_capacity(n);
+    let i = 0;
+    while (i < n) {
+        slots.push(Particle(id0 + i));
+        i = i + 1;
+    }
+    return slots;
+}
+
+fun rewrite_particles(borrow slots: List<Particle>, n: int, id0: int): void {
+    let i = 0;
+    while (i < n) {
+        slots.set(i, Particle(id0 + i));
+        i = i + 1;
+    }
+}
+
+fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bool): void {
+    flush_queue();
+    System.println("");
+    System.println(
+        "== Particles: rewrite "
+            + n.to_string()
+            + " slots/frame ("
+            + frames.to_string()
+            + " frames, "
+            + mode
+            + ") =="
+    );
+    let slots = fill_particles(n, 0);
+    g_sink = g_sink + (long)paint_particles(slots);
+    g_del = 0;
+
+    let present_sum = 0L;
+    let max_present = 0L;
+    let max_hitch = 0L;
+    let max_hitch_cpu = 0L;
+    let max_rss = 0L;
+    let f = 0;
+    while (f < frames) {
+        let id0 = (1 + f) * n;
+
+        g_del = 0;
+        let cpu0 = System.cpu_time_nanos();
+        let sw = Stopwatch();
+        if (use_defer) {
+            defer(0) {
+                rewrite_particles(slots, n, id0);
+            }
+        } else {
+            rewrite_particles(slots, n, id0);
+        }
+        sw.stop();
+        let retire_ns = sw.elapsed_nanos();
+        let retire_cpu = System.cpu_time_nanos() - cpu0;
+        let del_retire = g_del;
+
+        sw.restart();
+        g_sink = g_sink + (long)paint_particles(slots);
+        sw.stop();
+        let paint_ns = sw.elapsed_nanos();
+
+        g_del = 0;
+        let drain_ns = 0L;
+        let drain_cpu = 0L;
+        if (use_defer) {
+            cpu0 = System.cpu_time_nanos();
+            sw.restart();
+            defer(budget) {}
+            sw.stop();
+            drain_ns = sw.elapsed_nanos();
+            drain_cpu = System.cpu_time_nanos() - cpu0;
+        }
+        let del_drain = g_del;
+
+        let hitch_ns = drain_ns;
+        let hitch_cpu = drain_cpu;
+        if (use_defer == false) {
+            hitch_ns = retire_ns;
+            hitch_cpu = retire_cpu;
+        }
+        let rss = System.memory_bytes();
+        let present = retire_ns + paint_ns;
+        present_sum = present_sum + present;
+        if (present > max_present) {
+            max_present = present;
+        }
+        if (hitch_ns > max_hitch) {
+            max_hitch = hitch_ns;
+        }
+        if (hitch_cpu > max_hitch_cpu) {
+            max_hitch_cpu = hitch_cpu;
+        }
+        if (rss > max_rss) {
+            max_rss = rss;
+        }
+        line(mode, f, 0L, retire_ns, paint_ns, drain_ns, present, hitch_ns, hitch_cpu, rss, del_retire, del_drain);
+        f = f + 1;
+    }
+    summary(mode, frames, present_sum, max_present, max_hitch, max_hitch_cpu, max_rss);
+    flush_queue();
+}
+
+fun main(): void {
+    let ui_nodes = 50000;
+    let ui_frames = 6;
+    let particle_n = 200000;
+    let particle_frames = 6;
+    let chunk: uint = 256u;
+    let ui_keep: uint = 60000u;
+    let keep_up: uint = 250000u;
+
+    System.println(
+        "present = microseconds until paint returns. Times are us (not ms) so frame work is visible."
+    );
+    System.println(
+        "UI: build+paint the new tree (present), then retire the old one. Particles: rewrite slots, then paint."
+    );
+    System.println(
+        "hitch = teardown stall. Top-level defer(q>0) now drains the rest of the queue at `}` (RSS stays flat)."
+    );
+
+    run_ui("ui_immediate", ui_frames, ui_nodes, 0u, false);
+    run_ui("ui_defer_chunk256", ui_frames, ui_nodes, chunk, true);
+    run_ui("ui_defer_keep_up", ui_frames, ui_nodes, ui_keep, true);
+
+    run_particles("part_immediate", particle_frames, particle_n, 0u, false);
+    run_particles("part_defer_chunk256", particle_frames, particle_n, chunk, true);
+    run_particles("part_defer_keep_up", particle_frames, particle_n, keep_up, true);
+
+    System.println("");
+    System.println("sink=" + g_sink.to_string());
+}

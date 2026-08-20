@@ -49,6 +49,7 @@ impl Lowerer<'_> {
             continue_blk: cond_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
+            defer_depth: self.defers.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -73,6 +74,7 @@ impl Lowerer<'_> {
             continue_blk: cond_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
+            defer_depth: self.defers.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -120,6 +122,7 @@ impl Lowerer<'_> {
             continue_blk: step_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
+            defer_depth: self.defers.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -185,6 +188,7 @@ impl Lowerer<'_> {
             continue_blk: step_blk,
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
+            defer_depth: self.defers.len(),
         });
         self.b.switch_to(body_blk);
         let elem_local = self.mir_local(elem);
@@ -216,15 +220,17 @@ impl Lowerer<'_> {
     }
 
     pub(super) fn lower_break(&mut self, label: Option<&str>) {
-        if let Some((target, lock_depth)) = self.loop_target(label, true) {
+        if let Some((target, lock_depth, defer_depth)) = self.loop_target(label, true) {
             self.release_locks_above(lock_depth);
+            self.release_defers_above(defer_depth);
             self.b.terminate(Terminator::Goto(target));
         }
     }
 
     pub(super) fn lower_continue(&mut self, label: Option<&str>) {
-        if let Some((target, lock_depth)) = self.loop_target(label, false) {
+        if let Some((target, lock_depth, defer_depth)) = self.loop_target(label, false) {
             self.release_locks_above(lock_depth);
+            self.release_defers_above(defer_depth);
             self.b.terminate(Terminator::Goto(target));
         }
     }
@@ -233,7 +239,7 @@ impl Lowerer<'_> {
         &self,
         label: Option<&str>,
         is_break: bool,
-    ) -> Option<(super::super::BlockId, usize)> {
+    ) -> Option<(super::super::BlockId, usize, usize)> {
         let ctx = match label {
             Some(l) => self
                 .loops
@@ -247,7 +253,7 @@ impl Lowerer<'_> {
         } else {
             ctx.continue_blk
         };
-        Some((blk, ctx.lock_depth))
+        Some((blk, ctx.lock_depth, ctx.defer_depth))
     }
 
     /// `lock (target) { body }`: evaluates `target` exactly once into a fresh temp (so a
@@ -273,6 +279,42 @@ impl Lowerer<'_> {
             self.b
                 .push(Statement::LockRelease(Operand::Copy(Place::Local(ptr))));
         }
+    }
+
+    pub(super) fn lower_defer(&mut self, budget: Option<&HExpr>, body: &[HStmt]) {
+        let q = match budget {
+            Some(e) => self.lower_operand(e),
+            None => {
+                let t = self.b.new_temp(self.interner.uint());
+                self.b.assign(
+                    Place::Local(t),
+                    Rvalue::Use(Operand::Const(Const::Int(256))),
+                );
+                Operand::Copy(Place::Local(t))
+            }
+        };
+        let slot = self.b.new_temp(self.interner.uint());
+        self.b.assign(Place::Local(slot), Rvalue::Use(q));
+        self.b.push(Statement::DeferEnter);
+        self.defers.push(slot);
+        self.lower_block(body);
+        self.defers.pop();
+        if !self.b.is_terminated() {
+            self.b
+                .push(Statement::DeferLeave(Operand::Copy(Place::Local(slot))));
+        }
+    }
+
+    fn release_defers_above(&mut self, depth: usize) {
+        for i in (depth..self.defers.len()).rev() {
+            let q = self.defers[i];
+            self.b
+                .push(Statement::DeferLeave(Operand::Copy(Place::Local(q))));
+        }
+    }
+
+    pub(super) fn release_all_defers(&mut self) {
+        self.release_defers_above(0);
     }
 
     /// Releases every lock in `self.locks` above `depth`, innermost (most recently acquired) first —

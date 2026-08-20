@@ -68,6 +68,12 @@ fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
             hir_expr_edges(target, out);
             hir_body_edges(body, out);
         }
+        HStmt::Defer { budget, body } => {
+            if let Some(q) = budget {
+                hir_expr_edges(q, out);
+            }
+            hir_body_edges(body, out);
+        }
         HStmt::For {
             init,
             cond,

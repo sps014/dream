@@ -73,6 +73,8 @@ impl MirPass for Dse {
                     // memory-observing statement.
                     | Statement::LockAcquire(_)
                     | Statement::LockRelease(_)
+                    | Statement::DeferEnter
+                    | Statement::DeferLeave(_)
                     | Statement::SimdV128 { .. }
                     | Statement::ValueDrop(_)
                     | Statement::ValueRetain(_)

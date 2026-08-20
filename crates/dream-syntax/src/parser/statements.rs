@@ -260,6 +260,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::WhileToken => Ok(self.parse_while()?),
             TokenKind::DoToken => Ok(self.parse_do_while()?),
             TokenKind::LockToken => Ok(self.parse_lock()?),
+            TokenKind::DeferToken => Ok(self.parse_defer()?),
             TokenKind::ForToken => Ok(self.parse_for()?),
             TokenKind::SwitchToken => Ok(self.parse_switch()?),
             TokenKind::BreakToken => Ok(self.parse_break()?),
@@ -345,6 +346,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::WhileToken
             | TokenKind::DoToken
             | TokenKind::LockToken
+            | TokenKind::DeferToken
             | TokenKind::ReturnToken
             | TokenKind::SwitchToken
             | TokenKind::CurlyCloseBracketToken
@@ -374,6 +376,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::WhileToken
                 | TokenKind::DoToken
                 | TokenKind::LockToken
+                | TokenKind::DeferToken
                 | TokenKind::ReturnToken
                 | TokenKind::SwitchToken
                 | TokenKind::CurlyCloseBracketToken => {
@@ -567,6 +570,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         let body = self.parse_block_or_statement()?;
         Ok(StatementNode::While(condition, body))
     }
+    /// Parses `defer { body }` or `defer(q) { body }`. Braces are required.
+    pub(super) fn parse_defer(&mut self) -> Result<StatementNode<'a>, Error> {
+        self.match_token(TokenKind::DeferToken);
+        let budget = if self.current_token().kind == TokenKind::OpenParenthesisToken {
+            self.match_token(TokenKind::OpenParenthesisToken);
+            let q = self.parse_expression(0)?;
+            self.match_token(TokenKind::CloseParenthesisToken);
+            Some(q)
+        } else {
+            None
+        };
+        let body = self.parse_block()?;
+        Ok(StatementNode::Defer(budget, body))
+    }
+
     /// Parses `lock (target) { body }` — mutual exclusion on `target` (an `@shared class` instance
     /// or `Lock`), reentrant per-thread. Same shape as `while`, minus the loop-back edge.
     pub(super) fn parse_lock(&mut self) -> Result<StatementNode<'a>, Error> {

@@ -227,6 +227,14 @@ impl<'a> Analyzer<'a> {
                 has_parent_while,
                 diagnostics,
             )?,
+            StatementNode::Defer(budget, body) => self.analyze_defer(
+                budget,
+                body,
+                parent_function,
+                symbol_table,
+                has_parent_while,
+                diagnostics,
+            )?,
             StatementNode::For(init, condition, increment, body) => {
                 self.analyze_for(init, condition, increment, body, &ctx, diagnostics)?
             }

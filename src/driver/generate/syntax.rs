@@ -289,6 +289,14 @@ impl SyntaxTreeView {
                     self.walk_stmt(s, parent);
                 }
             }
+            StatementNode::Defer(budget, body) => {
+                if let Some(q) = budget {
+                    self.walk_expr(q, parent);
+                }
+                for s in *body {
+                    self.walk_stmt(s, parent);
+                }
+            }
             StatementNode::DoWhile(body, cond) => {
                 for s in *body {
                     self.walk_stmt(s, parent);

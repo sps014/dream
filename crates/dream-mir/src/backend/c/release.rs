@@ -110,6 +110,20 @@ fn unique_header() -> Stmt {
     ])
 }
 
+fn maybe_defer(b: &mut FuncBuilder, destroy: &str, uses_defer: bool) {
+    if !uses_defer {
+        return;
+    }
+    let enq = Expr::call(
+        "dream_defer_try_enqueue",
+        vec![Expr::id("p"), Expr::id(destroy)],
+    );
+    b.stmt(Stmt::if_(
+        Expr::and(Expr::unary(UnOp::Not, Expr::id("dream_defer_busy")), enq),
+        Stmt::Return(None),
+    ));
+}
+
 pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let mir = cx.mir;
     let interner = cx.interner;
@@ -157,6 +171,30 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             p.clone(),
         );
     }
+    if mir.uses_defer {
+        for elem in &array_elems {
+            m.static_proto(
+                CTy::Void,
+                c_ident(&format!("destroy_array_t{}", elem.0)),
+                p.clone(),
+            );
+        }
+        for layout in cx.native.structs.values() {
+            m.static_proto(
+                CTy::Void,
+                c_ident(&format!("destroy_{}", layout.name)),
+                p.clone(),
+            );
+        }
+        for layout in cx.native.unions.values() {
+            m.static_proto(
+                CTy::Void,
+                c_ident(&format!("destroy_{}", layout.name)),
+                p.clone(),
+            );
+        }
+        m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
+    }
     let array_elems_copy = array_elems.clone();
     for elem in array_elems {
         let name = c_ident(&format!("release_array_t{}", elem.0));
@@ -171,9 +209,10 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             Stmt::Return(None),
         ));
         b.stmt(rc_header());
-        b.assign(
-            Expr::id("n"),
-            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+        maybe_defer(
+            &mut b,
+            &c_ident(&format!("destroy_array_t{}", elem.0)),
+            mir.uses_defer,
         );
         let mut body = Vec::new();
         if interner.is_value_type(elem) {
@@ -223,6 +262,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             Stmt::Return(None),
         ));
         b.stmt(rc_header());
+        maybe_defer(
+            &mut b,
+            &c_ident(&format!("destroy_{}", layout.name)),
+            cx.mir.uses_defer,
+        );
         if let Some(del) = cx
             .mir
             .functions
@@ -272,6 +316,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             Stmt::Return(None),
         ));
         b.stmt(rc_header());
+        maybe_defer(
+            &mut b,
+            &c_ident(&format!("destroy_{}", layout.name)),
+            cx.mir.uses_defer,
+        );
         let mut arms = Vec::new();
         for variant in &layout.variants {
             let mut body = Vec::new();
@@ -352,7 +401,7 @@ fn emit_destroy_helpers(
     for elem in array_elems {
         let name = c_ident(&format!("destroy_array_t{}", elem.0));
         let es = elem_size(cx, *elem);
-        let mut b = FuncBuilder::new(CTy::Void, name);
+        let mut b = FuncBuilder::new(CTy::Void, name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
         b.stmt(Stmt::decl(CTy::I32, "n", None));
@@ -362,6 +411,7 @@ fn emit_destroy_helpers(
             Stmt::Return(None),
         ));
         b.stmt(unique_header());
+        maybe_defer(&mut b, &name, cx.mir.uses_defer);
         b.assign(
             Expr::id("n"),
             Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
@@ -406,7 +456,7 @@ fn emit_destroy_helpers(
     }
     for (_ty, layout) in &cx.native.structs {
         let name = c_ident(&format!("destroy_{}", layout.name));
-        let mut b = FuncBuilder::new(CTy::Void, name);
+        let mut b = FuncBuilder::new(CTy::Void, name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
         b.stmt(Stmt::if_(
@@ -414,6 +464,7 @@ fn emit_destroy_helpers(
             Stmt::Return(None),
         ));
         b.stmt(unique_header());
+        maybe_defer(&mut b, &name, cx.mir.uses_defer);
         if let Some(del) = cx
             .mir
             .functions
@@ -455,7 +506,7 @@ fn emit_destroy_helpers(
     }
     for (_ty, layout) in &cx.native.unions {
         let name = c_ident(&format!("destroy_{}", layout.name));
-        let mut b = FuncBuilder::new(CTy::Void, name);
+        let mut b = FuncBuilder::new(CTy::Void, name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
         b.stmt(Stmt::if_(
@@ -463,6 +514,7 @@ fn emit_destroy_helpers(
             Stmt::Return(None),
         ));
         b.stmt(unique_header());
+        maybe_defer(&mut b, &name, cx.mir.uses_defer);
         let mut arms = Vec::new();
         for variant in &layout.variants {
             let mut body = Vec::new();
@@ -515,6 +567,7 @@ fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         Expr::unary(UnOp::Not, Expr::id("p")),
         Stmt::Return(None),
     ));
+    maybe_defer(&mut b, "destroy_object", cx.mir.uses_defer);
     b.stmt(Stmt::decl(
         CTy::I32,
         "tag",

@@ -203,6 +203,7 @@ fn emit_module_encoded(
         "{THREAD_ID_COUNTER_ADDR}",
         &crate::abi::THREAD_ID_COUNTER_ADDR.to_string(),
     ));
+    m.ingest_wat(RUNTIME_DEFER);
     if crate::async_emit::module_has_async(&mir.functions) {
         m.ingest_wat(&crate::async_emit::async_runtime_wat());
     }

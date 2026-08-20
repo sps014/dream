@@ -762,6 +762,7 @@ impl<'a> Analyzer<'a> {
     fn retarget_numeric_literal(lit: &Type, expected: Option<&Type>) -> Type {
         match (expected, lit) {
             (Some(Type::Double(_)), Type::Float(t) | Type::Integer(t)) => Type::Double(t.clone()),
+            (Some(Type::UInt(_)), Type::Integer(t) | Type::UInt(t)) => Type::UInt(t.clone()),
             _ => lit.clone(),
         }
     }

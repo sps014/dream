@@ -1081,6 +1081,12 @@ impl Builder {
                 self.walk_expr(target, scope);
                 self.walk_block(body, scope);
             }
+            StatementNode::Defer(budget, body) => {
+                if let Some(q) = budget {
+                    self.walk_expr(q, scope);
+                }
+                self.walk_block(body, scope);
+            }
             StatementNode::WorkgroupDecl(_, _, _) => {}
         }
     }

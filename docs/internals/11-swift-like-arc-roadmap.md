@@ -55,8 +55,11 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - CPU SIMD language surface / Dream-owned tiered JIT
 - `externref` for `js` (handles stay `i32` ids; `externref` cannot live in linear memory)
 - Extra per-type object freelists (size-class `$malloc` already exists)
-- Time-sliced / deferred deallocation queues
 - Weak teardown header side-tables (global list until profiling says otherwise)
+
+Opt-in `defer { }` / `defer(q) { }` (native destroy queue, bounded drain) is shipped; see
+[`memory.md`](../reference/language/memory.md#defer-wait-until-after-the-important-work-to-run-destructors). WASM last-ref
+stays immediate.
 
 ## Heap throughput (shipped levers)
 

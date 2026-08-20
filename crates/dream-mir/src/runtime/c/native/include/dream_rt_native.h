@@ -93,6 +93,13 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
 
 void dream_free(dream_ptr ptr);
 
+extern _Thread_local int32_t dream_defer_depth;
+extern _Thread_local int32_t dream_defer_busy;
+void dream_defer_enter(void);
+void dream_defer_leave(uint32_t q);
+int dream_defer_try_enqueue(dream_ptr p, void (*fn)(dream_ptr));
+void dream_defer_drain_all(void);
+
 DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
     int32_t *rc;
     int32_t old;
@@ -835,6 +842,8 @@ int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 
 int64_t timeNowNanos(void);
 int64_t Time_nano_time(void);
+int64_t processCpuTimeNanos(void);
+int64_t processMemoryBytes(void);
 int64_t dateNowMillis(void);
 int32_t dateLocalOffsetMinutes(int64_t epoch_millis);
 void print_int(int32_t v);

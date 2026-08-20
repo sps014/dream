@@ -28,6 +28,8 @@ const SMOKE_CASES: &[&str] = &[
     "stdlib_helpers",
     "diagnostics",
     "last_use_destroy",
+    "defer_last_use",
+    "defer_zero",
     "struct_last_use_move",
     "ui_render_tree",
     "simd_f32x4",

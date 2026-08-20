@@ -71,6 +71,8 @@ pub struct Mir {
     /// symbol table resolves intrinsic call targets (to the runtime helper `$<key>`, or the async
     /// scheduler for `sleep`) instead of the `$def{N}` fallback.
     pub intrinsics: Vec<(DefId, String)>,
+    /// True when any function contains `defer` (so last-ref helpers may enqueue).
+    pub uses_defer: bool,
     /// Interface dispatch metadata: ordered interfaces (index = `iface_id`) + per-class concrete
     /// method symbols. Drives the itable data + dispatch trampolines emitted by the backend.
     pub interfaces: dream_hir::InterfaceTable,
@@ -264,6 +266,10 @@ pub enum Statement {
     /// Releases one level of the reentrant lock word acquired by a matching
     /// [`Statement::LockAcquire`].
     LockRelease(Operand),
+    /// Enters a `defer` pool (`depth++`).
+    DeferEnter,
+    /// Leaves a `defer` pool: drain at most `Operand` (`uint`) last-ref destroys, then `depth--`.
+    DeferLeave(Operand),
     /// `out[i..i+L] = a[i..i+L] ⊕ b[i..i+L]` (or splat RHS) as one WASM `v128` op.
     SimdV128 {
         lane: SimdLane,

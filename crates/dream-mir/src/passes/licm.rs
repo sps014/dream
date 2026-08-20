@@ -323,7 +323,10 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(dst_off, f);
             operand_reads(count, f);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => operand_reads(o, f),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
+            operand_reads(o, f)
+        }
+        Statement::DeferEnter => {}
         Statement::SimdV128 {
             dest,
             lhs,

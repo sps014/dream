@@ -29,6 +29,8 @@ fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
         | StatementNode::Lock(e, _)
         | StatementNode::IfElse(e, _, _, _)
         | StatementNode::Switch(e, _, _) => e.position(),
+        StatementNode::Defer(Some(e), _) => e.position(),
+        StatementNode::Defer(None, _) => None,
         StatementNode::For(_, Some(cond), _, _) => cond.position(),
         StatementNode::Labeled(_, inner) => stmt_span(inner),
         StatementNode::Return(None)
@@ -132,6 +134,12 @@ fn scan_stmt_nameof(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
         }
         StatementNode::Lock(e, body) => {
             scan_expr_nameof(e, ctx);
+            reject_gpu_nameof(body, ctx);
+        }
+        StatementNode::Defer(budget, body) => {
+            if let Some(q) = budget {
+                scan_expr_nameof(q, ctx);
+            }
             reject_gpu_nameof(body, ctx);
         }
         StatementNode::ForEach(_, e, _, _, body) => {
@@ -459,11 +467,13 @@ fn emit_stmt(
         StatementNode::ForEach(..)
         | StatementNode::AwaitStmt(_)
         | StatementNode::Lock(..)
+        | StatementNode::Defer(..)
         | StatementNode::TupleDeclaration { .. } => {
             let kind = match stmt {
                 StatementNode::ForEach(..) => "for-each",
                 StatementNode::AwaitStmt(_) => "await",
                 StatementNode::Lock(..) => "lock",
+                StatementNode::Defer(..) => "defer",
                 StatementNode::TupleDeclaration { .. } => "tuple declaration",
                 _ => "statement",
             };

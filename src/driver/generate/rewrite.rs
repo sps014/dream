@@ -377,6 +377,13 @@ fn rewrite_stmt<'a>(
             rewrite_expr(arena, cond, by_site, diagnostics, changed)?,
             rewrite_function_body(arena, body, by_site, diagnostics)?,
         ),
+        StatementNode::Defer(budget, body) => StatementNode::Defer(
+            match budget {
+                Some(q) => Some(rewrite_expr(arena, q, by_site, diagnostics, changed)?),
+                None => None,
+            },
+            rewrite_function_body(arena, body, by_site, diagnostics)?,
+        ),
         StatementNode::DoWhile(body, cond) => StatementNode::DoWhile(
             rewrite_function_body(arena, body, by_site, diagnostics)?,
             rewrite_expr(arena, cond, by_site, diagnostics, changed)?,

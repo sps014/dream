@@ -137,7 +137,10 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         } => {
             subst_operand(dst, known) | subst_operand(dst_off, known) | subst_operand(count, known)
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => subst_operand(o, known),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
+            subst_operand(o, known)
+        }
+        Statement::DeferEnter => false,
         Statement::SimdV128 {
             dest,
             lhs,

@@ -10,16 +10,19 @@
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
+#include <mach/mach.h>
 #endif
 
 #ifdef _WIN32
 #include <conio.h>
 #include <direct.h>
 #include <io.h>
+#include <psapi.h>
 #include <sys/stat.h>
 #include <windows.h>
 #else
 #include <dirent.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -1067,6 +1070,65 @@ int64_t timeNowNanos(void) {
 }
 
 int64_t Time_nano_time(void) { return timeNowNanos(); }
+
+int64_t processCpuTimeNanos(void) {
+#ifdef _WIN32
+    FILETIME create, exit_t, kernel, user;
+    ULARGE_INTEGER k, u;
+    if (!GetProcessTimes(GetCurrentProcess(), &create, &exit_t, &kernel, &user)) {
+        return 0;
+    }
+    k.LowPart = kernel.dwLowDateTime;
+    k.HighPart = kernel.dwHighDateTime;
+    u.LowPart = user.dwLowDateTime;
+    u.HighPart = user.dwHighDateTime;
+    return (int64_t)((k.QuadPart + u.QuadPart) * 100ULL);
+#else
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) {
+        return 0;
+    }
+    return (int64_t)ru.ru_utime.tv_sec * 1000000000LL
+        + (int64_t)ru.ru_utime.tv_usec * 1000LL
+        + (int64_t)ru.ru_stime.tv_sec * 1000000000LL
+        + (int64_t)ru.ru_stime.tv_usec * 1000LL;
+#endif
+}
+
+int64_t processMemoryBytes(void) {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS pmc;
+    pmc.cb = sizeof(pmc);
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        return 0;
+    }
+    return (int64_t)pmc.WorkingSetSize;
+#elif defined(__APPLE__)
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS) {
+        return 0;
+    }
+    return (int64_t)info.phys_footprint;
+#else
+    FILE *f;
+    long pages = 0;
+    long page = sysconf(_SC_PAGESIZE);
+    f = fopen("/proc/self/statm", "r");
+    if (f == NULL) {
+        return 0;
+    }
+    if (fscanf(f, "%*s %ld", &pages) != 1) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    if (page < 1) {
+        page = 4096;
+    }
+    return (int64_t)pages * (int64_t)page;
+#endif
+}
 
 void consoleExit(int32_t code) { exit(code); }
 

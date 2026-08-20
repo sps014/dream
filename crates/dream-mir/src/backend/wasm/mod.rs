@@ -87,6 +87,7 @@ const RUNTIME_CLOSURE: &str = include_str!("../../runtime/closure.wat");
 /// `$retain_shared`) backing `@shared class`, `lock (obj) { ... }`, and `Lock`. `{THREAD_ID_COUNTER_ADDR}`
 /// is substituted in `module.rs` alongside the other fixed shared-memory address constants.
 const RUNTIME_SYNC: &str = include_str!("../../runtime/sync.wat");
+const RUNTIME_DEFER: &str = include_str!("../../runtime/defer.wat");
 
 /// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
 /// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is

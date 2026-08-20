@@ -38,6 +38,8 @@ fun main() {
 | `System.set_env(name, value)` / `unset_env(name)` | set or clear an env var |
 | `System.cwd()` / `set_cwd(path)` | working directory |
 | `System.temp_dir()` / `home_dir()` | temp and home paths |
+| `System.cpu_time_nanos()` | process user+system CPU time since start |
+| `System.memory_bytes()` | OS resident memory (RSS / working set); `0` if unknown |
 
 ## Math (no import)
 

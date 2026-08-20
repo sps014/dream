@@ -370,7 +370,8 @@ impl<'a> Analyzer<'a> {
                 StatementNode::While(_, body)
                 | StatementNode::DoWhile(body, _)
                 | StatementNode::ForEach(_, _, _, _, body)
-                | StatementNode::Lock(_, body) => {
+                | StatementNode::Lock(_, body)
+                | StatementNode::Defer(_, body) => {
                     self.collect_return_types(
                         body,
                         parent_function,

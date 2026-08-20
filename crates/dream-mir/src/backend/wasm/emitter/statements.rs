@@ -272,6 +272,13 @@ impl Emitter<'_> {
                 self.emit_lock_addr(o);
                 self.f.call("__lock_release");
             }
+            Statement::DeferEnter => {
+                self.f.call("dream_defer_enter");
+            }
+            Statement::DeferLeave(o) => {
+                self.emit_operand(o);
+                self.f.call("dream_defer_leave");
+            }
             Statement::ValueDrop(local) => {
                 if self.is_v128_local(*local) {
                     return;

@@ -111,6 +111,12 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(target, out);
             walk_stmts_for_ref_targets(body, out);
         }
+        StatementNode::Defer(budget, body) => {
+            if let Some(q) = budget {
+                walk_expr_for_ref_targets(q, out);
+            }
+            walk_stmts_for_ref_targets(body, out);
+        }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
                 walk_stmt_for_ref_targets(i, out);
@@ -294,6 +300,12 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
         }
         StatementNode::Lock(target, body) => {
             walk_expr_for_lambdas(target, out);
+            walk_stmts_for_lambdas(body, out);
+        }
+        StatementNode::Defer(budget, body) => {
+            if let Some(q) = budget {
+                walk_expr_for_lambdas(q, out);
+            }
             walk_stmts_for_lambdas(body, out);
         }
         StatementNode::For(init, cond, step, body) => {
@@ -552,6 +564,12 @@ fn collect_names_stmt(
         }
         StatementNode::Lock(target, body) => {
             collect_names_expr(target, scopes, referenced);
+            collect_names_block(body, scopes, referenced);
+        }
+        StatementNode::Defer(budget, body) => {
+            if let Some(q) = budget {
+                collect_names_expr(q, scopes, referenced);
+            }
             collect_names_block(body, scopes, referenced);
         }
         StatementNode::For(init, cond, step, body) => {

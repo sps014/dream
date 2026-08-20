@@ -27,6 +27,12 @@ public static class System {
     @runtime("processOsFamily")
     static extern fun host_os_family(): int;
 
+    @runtime("processCpuTimeNanos")
+    static extern fun host_cpu_time_nanos(): long;
+
+    @runtime("processMemoryBytes")
+    static extern fun host_memory_bytes(): long;
+
     @runtime("processArgs")
     static extern fun host_args(): string;
 
@@ -108,6 +114,19 @@ public static class System {
             return OsFamily.Windows;
         }
         return OsFamily.Unknown;
+    }
+
+    // User+system CPU time of this process since it started, in nanoseconds. `0` if the host
+    // cannot measure it (some browser pages).
+    public static fun cpu_time_nanos(): long {
+        return System.host_cpu_time_nanos();
+    }
+
+    // Resident memory of this process in bytes (RSS / working set / physical footprint). `0` if
+    // unknown. This is OS memory, not `Debug.live_objects()` (Dream heap blocks; zero under
+    // `--release`).
+    public static fun memory_bytes(): long {
+        return System.host_memory_bytes();
     }
 
     // True when running under a browser JS host.

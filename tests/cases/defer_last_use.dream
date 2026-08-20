@@ -1,0 +1,22 @@
+// Last-ref RC drops inside `defer`, but `del` waits until `}`.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+fun main() {
+    defer {
+        let x = Tracked(1);
+        System.println(x.id);
+        System.println(999);
+    }
+}

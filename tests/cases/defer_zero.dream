@@ -1,0 +1,26 @@
+// `defer(0)` enqueues only; the outer leave drains.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+fun main() {
+    defer {
+        defer(0) {
+            let x = Tracked(1);
+            System.println(x.id);
+            System.println(2);
+        }
+        System.println(3);
+    }
+    System.println(4);
+}

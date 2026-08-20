@@ -153,6 +153,7 @@ const NATIVE_CORE_C: &[&str] = &[
     "simd.c",
     "host.c",
     "worker.c",
+    "defer.c",
 ];
 
 pub fn runtime_c_dir() -> PathBuf {

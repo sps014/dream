@@ -304,7 +304,10 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(dst_off, out);
             strings_in_operand(count, out);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => strings_in_operand(o, out),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
+            strings_in_operand(o, out)
+        }
+        Statement::DeferEnter => {}
         Statement::SimdV128 {
             dest,
             lhs,
@@ -464,6 +467,8 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::ArrayElemsFill { .. }
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
+        | Statement::DeferEnter
+        | Statement::DeferLeave(_)
         | Statement::SimdV128 { .. }
         | Statement::ValueDrop(_)
         | Statement::ValueRetain(_)

@@ -23,6 +23,7 @@ mod assignments;
 mod bindings;
 mod case_switch;
 mod conditionals;
+mod defer_stmt;
 mod lock;
 mod loops;
 

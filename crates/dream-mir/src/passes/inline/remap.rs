@@ -257,7 +257,10 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_operand(dst_off, base);
             remap_operand(count, base);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => remap_operand(o, base),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
+            remap_operand(o, base)
+        }
+        Statement::DeferEnter => {}
         Statement::SimdV128 {
             dest,
             lhs,

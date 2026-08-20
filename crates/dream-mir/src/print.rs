@@ -118,6 +118,8 @@ fn stmt(s: &Statement) -> String {
         ),
         Statement::LockAcquire(o) => format!("lock_acquire {}", operand(o)),
         Statement::LockRelease(o) => format!("lock_release {}", operand(o)),
+        Statement::DeferEnter => "defer_enter".into(),
+        Statement::DeferLeave(o) => format!("defer_leave {}", operand(o)),
         Statement::SimdV128 {
             dest,
             lhs,

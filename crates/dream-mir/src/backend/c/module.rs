@@ -101,6 +101,9 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
         if async_n > 0 {
             entry.call("dream_run_loop", vec![]);
         }
+        if cx.mir.uses_defer {
+            entry.call("dream_defer_drain_all", vec![]);
+        }
         entry.ret(Some(Expr::i(0)));
         m.push_func(entry);
         let mut main_fn = FuncBuilder::new(CTy::I32, "main");

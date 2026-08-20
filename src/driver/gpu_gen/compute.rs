@@ -484,6 +484,12 @@ fn walk_stmts_atomics(stmts: &[StatementNode<'_>], out: &mut IndexSet<String>) {
                 walk_expr_atomics(e, out);
                 walk_stmts_atomics(body, out);
             }
+            StatementNode::Defer(budget, body) => {
+                if let Some(q) = budget {
+                    walk_expr_atomics(q, out);
+                }
+                walk_stmts_atomics(body, out);
+            }
             _ => {}
         }
     }

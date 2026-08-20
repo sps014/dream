@@ -261,6 +261,15 @@ export function makeConsoleProcessHost() {
       if (!isNode) return false;
       try { process.chdir(path); return true; } catch (_) { return false; }
     },
+    processCpuTimeNanos: () => {
+      if (!isNode) return 0n;
+      const c = process.cpuUsage();
+      return BigInt(c.user + c.system) * 1000n;
+    },
+    processMemoryBytes: () => {
+      if (!isNode) return 0n;
+      return BigInt(process.memoryUsage().rss);
+    },
     processRun: (cmd, argsJoined, cwd) => processRunSync(cmd, argsJoined, cwd),
     processSpawn: (cmd, argsJoined, cwd) => processSpawnSync(cmd, argsJoined, cwd),
     processWriteStdin: (handle, data) => processWriteStdinSync(handle, data),

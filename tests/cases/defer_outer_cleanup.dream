@@ -1,0 +1,27 @@
+// Outermost `defer` (q != 0) finishes the queue at `}`, not only the first 256.
+import system;
+
+let g_del: int = 0;
+
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        g_del = g_del + 1;
+    }
+}
+
+fun main() {
+    defer {
+        let i = 0;
+        while (i < 300) {
+            let x = Tracked(i);
+            i = i + 1 + x.id * 0;
+        }
+    }
+    System.println(g_del);
+}

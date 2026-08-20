@@ -158,7 +158,9 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         | Statement::ReleaseUnique(arg)
         | Statement::ForceFree(arg)
         | Statement::LockAcquire(arg)
-        | Statement::LockRelease(arg) => strings_in_op(arg, out),
+        | Statement::LockRelease(arg)
+        | Statement::DeferLeave(arg) => strings_in_op(arg, out),
+        Statement::DeferEnter => {}
         Statement::ArrayElemsCopy {
             dst,
             dst_off,

@@ -130,6 +130,7 @@ impl<'a> FunctionControlGraph<'a> {
             // set of alternative paths), so for return-coverage purposes it is transparent: fold
             // its body straight into the current path.
             StatementNode::Lock(_, body) => self.visit_block(body, parent)?,
+            StatementNode::Defer(_, body) => self.visit_block(body, parent)?,
             _ => {}
         };
         Ok(())

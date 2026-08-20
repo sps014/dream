@@ -84,6 +84,12 @@ pub enum HStmt {
         target: HExpr,
         body: Vec<HStmt>,
     },
+    /// `defer { body }` / `defer(q) { body }`. `budget` is the `uint` drain cap; `None` means the
+    /// default (one queue chunk).
+    Defer {
+        budget: Option<HExpr>,
+        body: Vec<HStmt>,
+    },
     /// A `switch` over a scrutinee (both the C-style and pattern-matching forms lower here). Each
     /// arm is a typed pattern + body; `default` runs when no arm matches.
     Switch {

@@ -217,6 +217,14 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                     walk_stmt(s, diagnostics);
                 }
             }
+            StatementNode::Defer(budget, body) => {
+                if let Some(q) = budget {
+                    walk_expr(q, diagnostics);
+                }
+                for s in *body {
+                    walk_stmt(s, diagnostics);
+                }
+            }
             StatementNode::DoWhile(body, cond) => {
                 for s in *body {
                     walk_stmt(s, diagnostics);

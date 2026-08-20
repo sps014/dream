@@ -269,6 +269,13 @@ impl<'a> Emitter<'a> {
                 let a = self.operand(o);
                 self.b.call("dream_lock_release", vec![a]);
             }
+            Statement::DeferEnter => {
+                self.b.call("dream_defer_enter", vec![]);
+            }
+            Statement::DeferLeave(o) => {
+                let a = self.operand(o);
+                self.b.call("dream_defer_leave", vec![Expr::cast(CTy::U32, a)]);
+            }
             Statement::SimdV128 {
                 dest,
                 lhs,

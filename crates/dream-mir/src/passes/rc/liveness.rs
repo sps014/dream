@@ -135,7 +135,10 @@ fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
             add_operand_reads(dst_off, live);
             add_operand_reads(count, live);
         }
-        Statement::LockAcquire(o) | Statement::LockRelease(o) => add_operand_reads(o, live),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
+            add_operand_reads(o, live)
+        }
+        Statement::DeferEnter => {}
         Statement::SimdV128 {
             dest,
             lhs,

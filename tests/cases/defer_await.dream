@@ -1,0 +1,8 @@
+import system;
+async fun tick(): void {
+    defer {
+        await Time.sleep(1);
+    }
+}
+
+fun main(): void {}

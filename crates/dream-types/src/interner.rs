@@ -130,6 +130,9 @@ impl TypeInterner {
     pub fn int(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Int))
     }
+    pub fn uint(&self) -> TypeId {
+        self.find(&TyKind::Prim(PrimTy::UInt))
+    }
     pub fn bool(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Bool))
     }

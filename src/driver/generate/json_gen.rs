@@ -641,6 +641,14 @@ fn collect_collections_from_stmts(
                 collect_collections_from_stmts(s, jsonable, out);
             }
         }
+        StatementNode::Defer(budget, body) => {
+            if let Some(q) = budget {
+                collect_collections_from_expr(q, jsonable, out);
+            }
+            for s in *body {
+                collect_collections_from_stmts(s, jsonable, out);
+            }
+        }
         StatementNode::Assignment(_, rhs) | StatementNode::MemberAssignment(_, _, rhs) => {
             collect_collections_from_expr(rhs, jsonable, out);
         }

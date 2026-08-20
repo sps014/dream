@@ -29,7 +29,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Reports `message` at every `await` found anywhere inside `stmt` (including nested bodies).
-    fn forbid_await_in_stmt(
+    pub(in crate::analyzer) fn forbid_await_in_stmt(
         &self,
         stmt: &StatementNode<'a>,
         message: &str,
@@ -83,6 +83,14 @@ impl<'a> Analyzer<'a> {
             }
             StatementNode::Lock(target, body) => {
                 self.scan_expr_await(target, message, diagnostics);
+                for s in body.iter() {
+                    self.forbid_await_in_stmt(s, message, diagnostics);
+                }
+            }
+            StatementNode::Defer(budget, body) => {
+                if let Some(q) = budget {
+                    self.scan_expr_await(q, message, diagnostics);
+                }
                 for s in body.iter() {
                     self.forbid_await_in_stmt(s, message, diagnostics);
                 }

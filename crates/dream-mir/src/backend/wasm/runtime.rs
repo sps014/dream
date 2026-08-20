@@ -60,29 +60,7 @@ pub(super) fn runtime_prelude(debug: bool, needs_threads: bool) -> String {
     out
 }
 
-/// True when this module needs WASM shared memory + atomics: `WebWorker` host imports, a remaining
-/// `@shared class` layout (`Lock` / `Semaphore` / user shared types), or atomics would otherwise
-/// run against a private memory (wait/notify traps).
-pub(super) fn module_needs_threads(mir: &crate::Mir, interner: &TypeInterner) -> bool {
-    if mir.imports.iter().any(|imp| {
-        imp.module == "Dream"
-            && matches!(
-                imp.field.as_str(),
-                "workerSpawn"
-                    | "workerPost"
-                    | "workerRecv"
-                    | "workerTerminate"
-                    | "workerPoolSpawn"
-                    | "workerPoolDispatch"
-            )
-    }) {
-        return true;
-    }
-    mir.layouts
-        .structs
-        .keys()
-        .any(|ty| interner.is_shared_type(*ty))
-}
+pub(super) use crate::backend::module_needs_threads;
 
 /// Builds the `*_to_string` runtime (object formatters + generated `$bool_to_string` + the float/
 /// double formatter), resolving `{TAG_*}` placeholders. Interned `true`/`false`/`"-"` are

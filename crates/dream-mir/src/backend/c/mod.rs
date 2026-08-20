@@ -1,4 +1,4 @@
-//! MIR → C99 for the native clang path (`runtime/c/native`).
+//! MIR → C99 (`runtime/c/native` or wasm32 via wasi-sdk).
 
 mod ast;
 mod builder;
@@ -6,6 +6,7 @@ mod c_imports;
 mod calls;
 mod ctx;
 mod emit;
+mod js_marshal;
 mod module;
 mod native_layout;
 mod places;
@@ -15,6 +16,7 @@ mod release;
 mod rvalue;
 mod statements;
 mod tables;
+mod target;
 mod terminator;
 mod types;
 
@@ -22,7 +24,8 @@ pub use crate::runtime::{
     native_pcre2_include_dir, native_runtime_c_files, native_runtime_include_dir,
     native_runtime_units,
 };
-pub use module::emit_c_module;
+pub use module::{emit_c_module, emit_c_module_for};
+pub use target::CTarget;
 
 #[cfg(test)]
 mod tests {
@@ -428,5 +431,159 @@ mod tests {
         assert!(c.contains("dream_c_sqlite3_open"), "{}", c);
         assert!(c.contains("dream_string_to_utf8"), "{}", c);
         assert!(c.contains("sqlite3_open("), "{}", c);
+    }
+
+    #[test]
+    fn wasm32_runtime_imports_use_host_module() {
+        use crate::backend::c::{emit_c_module_for, CTarget};
+        use dream_abi::js_abi::HOST_MODULE;
+        use dream_hir::HImport;
+        use dream_types::DefId;
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("main", i.void());
+        b.terminate(Terminator::Return(None));
+        let field = dream_abi::runtime_hosts::GPU_TRY_INIT;
+        let mir = Mir {
+            functions: vec![b.finish()],
+            imports: vec![HImport {
+                def: DefId(1),
+                name: field.into(),
+                module: HOST_MODULE.into(),
+                field: field.into(),
+                params: vec![],
+                param_by_ref: vec![],
+                ret: Some(i.int()),
+                is_async: true,
+                c_wide_strings: false,
+            }],
+            ..Default::default()
+        };
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32);
+        assert!(c.contains("dream_rt_wasm32.h"), "{}", c);
+        assert!(
+            c.contains(&format!("import_module(\"{HOST_MODULE}\")")),
+            "{}",
+            c
+        );
+        assert!(c.contains(&format!("import_name(\"{field}\")")), "{}", c);
+        assert!(
+            c.contains(&format!("export_name(\"{}\")", crate::abi::ENTRY_FN)),
+            "{}",
+            c
+        );
+        assert!(!c.contains("dream_process_capture_args"), "{}", c);
+    }
+
+    #[test]
+    fn wasm32_js_call_fills_tagged_slots() {
+        use crate::backend::c::{emit_c_module_for, CTarget};
+        use dream_abi::js_abi::{self, HOST_MODULE};
+        use dream_hir::HImport;
+        use dream_types::DefId;
+        let i = TypeInterner::new();
+        let js = i.js();
+        let mut b = FunctionBuilder::new("main", i.void());
+        let tgt = b.new_param(js, Some("t".into()));
+        let name = b.new_param(i.string(), Some("n".into()));
+        let arg = b.new_param(i.int(), Some("a".into()));
+        b.push(Statement::JsCall {
+            callee: Callee {
+                def: DefId(7),
+                args: vec![],
+                ret: js,
+                take_params: vec![],
+            },
+            target: Operand::Copy(Place::Local(tgt)),
+            via: None,
+            method: Some(Operand::Copy(Place::Local(name))),
+            args: vec![(Operand::Copy(Place::Local(arg)), i.int())],
+        });
+        b.terminate(Terminator::Return(None));
+        let field = "jsCallV";
+        let mir = Mir {
+            functions: vec![b.finish()],
+            imports: vec![HImport {
+                def: DefId(7),
+                name: dream_types::method_fn(js_abi::JS_TYPE, "call"),
+                module: HOST_MODULE.into(),
+                field: field.into(),
+                params: vec![js, i.string(), i.int(), i.int()],
+                param_by_ref: vec![false, false, false, false],
+                ret: Some(js),
+                is_async: false,
+                c_wide_strings: false,
+            }],
+            ..Default::default()
+        };
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32);
+        assert!(c.contains(field), "{}", c);
+        assert!(c.contains(&js_abi::SLOT_SIZE.to_string()), "{}", c);
+        assert!(c.contains(&js_abi::tag::INT.to_string()), "{}", c);
+        assert!(!c.contains("dream_js_call"), "{}", c);
+        let native = emit_c_module(&mir, &i);
+        assert!(native.contains("dream_js_call"), "{}", native);
+    }
+
+    #[test]
+    fn module_needs_threads_on_worker_import() {
+        use dream_abi::{js_abi, runtime_hosts};
+        use dream_hir::HImport;
+        use dream_types::DefId;
+        let i = TypeInterner::new();
+        let mir = Mir {
+            imports: vec![HImport {
+                def: DefId(1),
+                name: "spawn_host".into(),
+                module: js_abi::HOST_MODULE.into(),
+                field: runtime_hosts::WORKER_SPAWN.into(),
+                params: vec![i.int(), i.long()],
+                param_by_ref: vec![false, false],
+                ret: Some(i.int()),
+                is_async: false,
+                c_wide_strings: false,
+            }],
+            ..Default::default()
+        };
+        assert!(crate::backend::module_needs_threads(&mir, &i));
+        let empty = Mir::default();
+        assert!(!crate::backend::module_needs_threads(&empty, &i));
+    }
+
+    #[test]
+    fn wasm32_exports_worker_invoke() {
+        use crate::backend::c::{emit_c_module_for, CTarget};
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("main", i.void());
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32);
+        assert!(
+            c.contains(&format!(
+                "export_name(\"{}\")",
+                crate::abi::EXPORT_WORKER_INVOKE
+            )),
+            "{}",
+            c
+        );
+        assert!(
+            c.contains(&format!(
+                "export_name(\"{}\")",
+                crate::abi::EXPORT_WORKER_INVOKE_RAW
+            )),
+            "{}",
+            c
+        );
+        assert!(
+            c.contains(&format!(
+                "export_name(\"{}\")",
+                crate::abi::EXPORT_RUNTIME_INIT
+            )),
+            "{}",
+            c
+        );
+        assert!(!c.contains("_Thread_local"), "{}", c);
     }
 }

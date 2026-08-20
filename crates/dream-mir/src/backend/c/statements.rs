@@ -136,6 +136,9 @@ impl<'a> Emitter<'a> {
                         return;
                     }
                 }
+                if self.store_js_to_value_struct(place, rv) {
+                    return;
+                }
                 let rhs = self.rvalue(rv);
                 let stored = self.store(place, rv, rhs);
                 self.b.expr_stmt(stored);
@@ -177,13 +180,13 @@ impl<'a> Emitter<'a> {
                 self.b.expr_stmt(e);
             }
             Statement::JsCall {
+                callee,
                 target,
                 via,
                 method,
                 args,
-                ..
             } => {
-                let e = self.js_call_expr(target, via, method, args);
+                let e = self.js_call_expr(callee, target, via, method, args);
                 self.b.expr_stmt(Expr::cast(CTy::Void, e));
             }
             Statement::InterfaceCall {
@@ -262,11 +265,11 @@ impl<'a> Emitter<'a> {
                 self.b.call("dream_free", vec![a]);
             }
             Statement::LockAcquire(o) => {
-                let a = self.operand(o);
+                let a = self.lock_addr(o);
                 self.b.call("dream_lock_acquire", vec![a]);
             }
             Statement::LockRelease(o) => {
-                let a = self.operand(o);
+                let a = self.lock_addr(o);
                 self.b.call("dream_lock_release", vec![a]);
             }
             Statement::DeferEnter => {
@@ -428,6 +431,57 @@ pub(super) fn value_ref_stmts(
 }
 
 impl<'a> Emitter<'a> {
+    fn lock_addr(&mut self, o: &Operand) -> Expr {
+        let ty = self.operand_ty(o);
+        let base = self.operand(o);
+        let size = self.cx.nstruct(ty).map(|l| l.size).unwrap_or(0);
+        if size == 0 {
+            base
+        } else {
+            Expr::add(base, Expr::i(size as i64))
+        }
+    }
+
+    fn js_value_struct_dst(&self, place: &Place) -> Option<Expr> {
+        match place {
+            Place::Local(l) if self.cx.interner.is_value_type(self.f.local_ty(*l)) => {
+                Some(Expr::local(l.0))
+            }
+            Place::Field { base, field } => {
+                let layout = self.cx.nstruct(self.f.local_ty(*base))?;
+                let fld = layout.fields.get(*field)?;
+                if self.cx.interner.is_value_type(fld.ty) {
+                    Some(Expr::cast(CTy::Ptr, Expr::field_ptr(base.0, fld.offset)))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn store_js_to_value_struct(&mut self, place: &Place, rv: &crate::Rvalue) -> bool {
+        if !self.cx.target.is_wasm32() {
+            return false;
+        }
+        let crate::Rvalue::Cast(o, from, to) = rv else {
+            return false;
+        };
+        if !matches!(self.cx.interner.kind(*from), TyKind::Js) || !self.cx.interner.is_value_type(*to)
+        {
+            return false;
+        }
+        let Some(sym) = super::js_marshal::cast_c_sym(self.cx, *from, *to) else {
+            return false;
+        };
+        let Some(dst) = self.js_value_struct_dst(place) else {
+            crate::internal_error!("js→value-struct cast has no in-place destination");
+        };
+        let src = self.operand(o);
+        self.b.call(sym, vec![src, dst]);
+        true
+    }
+
     fn simd_call_name(&self, callee: &Callee) -> String {
         let raw = self.cx.callee_c(callee.def, &callee.args);
         let mapped = runtime_c_name(&raw);

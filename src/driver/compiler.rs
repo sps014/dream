@@ -300,7 +300,6 @@ impl Compiler {
         let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
         let interner = analyzer.interner();
         let target = &self.target;
-        let debug = self.debug;
         let debug_info = self.debug_info;
 
         // Codegen (MIR lowering/optimization/emission) treats certain lookups - a type's layout, an
@@ -333,10 +332,8 @@ impl Compiler {
             dream_mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
             let pipeline = if debug_info {
                 dream_mir::passes::PassManager::debug_pipeline()
-            } else if matches!(target, Target::NativeC) {
-                dream_mir::passes::PassManager::native_c_pipeline()
             } else {
-                dream_mir::passes::PassManager::default_pipeline()
+                dream_mir::passes::PassManager::native_c_pipeline()
             };
             for f in &mut mir.functions {
                 pipeline.run(f, interner);
@@ -346,27 +343,31 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let (bytes, debug_map) = match target {
-                Target::Wasm => dream_mir::backend::wasm::emit_module_bytes(
-                    &mir,
-                    interner,
-                    debug,
-                    debug_info,
-                    debug
-                        || debug_info
-                        || matches!(self.crate_type, dream_sema::analyzer::CrateType::Lib),
-                ),
+            let threads = matches!(target, Target::Wasm)
+                && dream_mir::backend::module_needs_threads(&mir, interner);
+            let (bytes, debug_map): (
+                Vec<u8>,
+                Option<dream_mir::backend::wasm::DebugModule>,
+            ) = match target {
+                Target::Wasm => {
+                    let c = dream_mir::backend::c::emit_c_module_for(
+                        &mir,
+                        interner,
+                        dream_mir::backend::c::CTarget::Wasm32,
+                    );
+                    (c.into_bytes(), None)
+                }
                 Target::NativeC => {
                     let c = dream_mir::backend::c::emit_c_module(&mir, interner);
                     (c.into_bytes(), None)
                 }
             };
-            (bytes, debug_map, live_imports)
+            (bytes, debug_map, live_imports, threads)
         }));
         std::panic::set_hook(previous_hook);
         drop(hook_guard);
 
-        let (bytes, debug_map, live_imports) = codegen_result.map_err(|panic_payload| {
+        let (bytes, debug_map, live_imports, threads) = codegen_result.map_err(|panic_payload| {
             let message = panic_message(&panic_payload);
             render_internal_error(&message);
             CompileError::Internal(message)
@@ -379,10 +380,20 @@ impl Compiler {
             emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
             return Ok(());
         }
+        let c_path = std::path::Path::new(out_path).with_extension("c");
+        fs::write(&c_path, &bytes)?;
+        info!("created file: {}", c_path.display());
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
-        fs::write(&wasm_path, &bytes)?;
+        crate::driver::c_wasm32::compile_c_to_wasm32(
+            &c_path,
+            &wasm_path,
+            threads,
+            self.optimize.unwrap_or(OptLevel::O0),
+        )
+        .map_err(CompileError::Internal)?;
         info!("created file: {}", wasm_path.display());
-        let text = dream_mir::backend::wasm::print_wasm(&bytes);
+        let wasm_bytes = fs::read(&wasm_path)?;
+        let text = dream_mir::backend::wasm::print_wasm(&wasm_bytes);
         fs::write(out_path, &text)?;
         info!("created file: {}", out_path);
 

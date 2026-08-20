@@ -195,7 +195,7 @@ fn load_footer(chunks: &BTreeSet<&str>, target: JsRuntimeTarget) -> String {
     };
 
     let workers_spread = if need_workers {
-        "    ...makeWorkerModule(wasmBytes, abi, () => sharedMemory),\n"
+        "    ...makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate),\n"
     } else {
         ""
     };
@@ -249,19 +249,20 @@ async function loadAbi(abi) {{
 }}
 
 function moduleWantsSharedMemory(wasmModule, desc) {{
-  if (desc && typeof desc.shared === "boolean") {{
-    return desc.shared;
+  if (desc && desc.shared) {{
+    return true;
   }}
   return WebAssembly.Module.imports(wasmModule).some(
     (i) =>
-      i.kind === "function" &&
-      i.module === "Dream" &&
-      (i.name === "workerSpawn" ||
-        i.name === "workerPost" ||
-        i.name === "workerRecv" ||
-        i.name === "workerTerminate" ||
-        i.name === "workerPoolSpawn" ||
-        i.name === "workerPoolDispatch"),
+      (i.kind === "memory" && i.module === "env" && i.name === "memory" && i.type && i.type.shared) ||
+      (i.kind === "function" &&
+        i.module === "Dream" &&
+        (i.name === "workerSpawn" ||
+          i.name === "workerPost" ||
+          i.name === "workerRecv" ||
+          i.name === "workerTerminate" ||
+          i.name === "workerPoolSpawn" ||
+          i.name === "workerPoolDispatch")),
   );
 }}
 
@@ -295,6 +296,11 @@ async function load(source, options = {{}}) {{
   const importObject = {{ env: defaultEnv(getInstance, options) }};
   const sharedMemory = options.memory ?? makeLinearMemory(wasmModule);
   importObject.env.memory = sharedMemory;
+  const stackGate =
+    options.stackGate ??
+    (sharedMemory.buffer instanceof SharedArrayBuffer
+      ? new Int32Array(new SharedArrayBuffer(4))
+      : null);
 
   const userImports = options.imports || {{}};
   const sigByName = new Map();
@@ -356,14 +362,78 @@ async function load(source, options = {{}}) {{
         }};
   }}
 
-  const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
+  const wasmInstance = await withBootstrapLock(stackGate, async () => {{
+    const inst = await WebAssembly.instantiate(wasmModule, importObject);
+    if (stackGate || options.memory) {{
+      attachGuestStack(inst);
+    }} else if (typeof inst.exports.__runtime_init === "function") {{
+      inst.exports.__runtime_init();
+    }}
+    return inst;
+  }});
   instance = new DreamInstance(wasmInstance);
   return instance;
 }}
 
+const WORKER_STACK_BYTES = 65536;
+
+async function withBootstrapLock(gate, fn) {{
+  if (!gate) {{
+    return fn();
+  }}
+  for (;;) {{
+    if (Atomics.compareExchange(gate, 0, 0, 1) === 0) {{
+      break;
+    }}
+    if (typeof Atomics.waitAsync === "function") {{
+      await Atomics.waitAsync(gate, 0, 1, 50).value;
+    }} else {{
+      await new Promise((r) => setTimeout(r, 0));
+    }}
+  }}
+  try {{
+    return await fn();
+  }} finally {{
+    Atomics.store(gate, 0, 0);
+    Atomics.notify(gate, 0);
+  }}
+}}
+
+function guestMalloc(exports, size, tag) {{
+  if (typeof exports.dream_malloc === "function") {{
+    return exports.dream_malloc(size, tag);
+  }}
+  if (typeof exports.malloc === "function") {{
+    return exports.malloc(size, tag);
+  }}
+  return 0;
+}}
+
+function attachGuestStack(wasmInstance) {{
+  const sp = wasmInstance.exports.__stack_pointer;
+  if (!sp) {{
+    if (typeof wasmInstance.exports.__runtime_init === "function") {{
+      wasmInstance.exports.__runtime_init();
+    }}
+    return;
+  }}
+  if (typeof wasmInstance.exports.__runtime_init === "function") {{
+    wasmInstance.exports.__runtime_init();
+  }}
+  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES, 0);
+  if (!ptr) {{
+    throw new Error("failed to allocate a guest stack");
+  }}
+  sp.value = ptr + WORKER_STACK_BYTES;
+  const tls = wasmInstance.exports.__tls_base;
+  if (tls) {{
+    tls.value = ptr;
+  }}
+}}
+
 async function run(source, options = {{}}) {{
   const mod = await load(source, {{ ...options }});
-  mod.run();
+  await mod.run();
   return mod;
 }}
 

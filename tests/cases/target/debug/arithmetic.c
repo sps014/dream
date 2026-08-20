@@ -623,10 +623,15 @@ void * dream_ft_get(int32_t i) {
 static void dream_init_itables(void) {
 }
 
-dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
+dream_ptr dream_worker_invoke_raw(int32_t fn, dream_ptr env, dream_ptr arg) {
   if (fn <= 0) return 0;
   g0 = env;
   dream_ptr result = (((dream_fn_ptr__ptr)dream_ft[fn]))(arg);
+  return result;
+}
+
+dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
+  dream_ptr result = dream_worker_invoke_raw(fn, env, arg);
   return result;
 }
 

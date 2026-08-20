@@ -321,9 +321,33 @@ pub fn elem_base(array_ptr: u32) -> u32 {
 
 /// The program entry point exported to, and invoked by, the host.
 pub const ENTRY_FN: &str = "main";
+/// Native C symbol that wraps [`ENTRY_FN`]; wasm32 exports [`ENTRY_FN`] as the function name.
+pub const GUEST_ENTRY_FN: &str = "dream_guest_entry";
 
 /// Host import module for the fixed `print_*` builtins.
 pub const ENV_MODULE: &str = "env";
+
+pub const PRINT_STRING: &str = "print_string";
+pub const PRINT_INT: &str = "print_int";
+pub const PRINT_FLOAT: &str = "print_float";
+pub const PRINT_DOUBLE: &str = "print_double";
+pub const PRINT_CHAR: &str = "print_char";
+
+/// `(import name, wasm value kind)` for `env` print builtins. `I32`/`F32`/`F64` as type tags.
+pub const ENV_PRINT_IMPORTS: &[(&str, PrintVal)] = &[
+    (PRINT_STRING, PrintVal::I32),
+    (PRINT_INT, PrintVal::I32),
+    (PRINT_FLOAT, PrintVal::F32),
+    (PRINT_DOUBLE, PrintVal::F64),
+    (PRINT_CHAR, PrintVal::I32),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrintVal {
+    I32,
+    F32,
+    F64,
+}
 
 /// Exported allocator entry points the host uses to build heap values.
 pub const EXPORT_MALLOC: &str = "malloc";
@@ -336,6 +360,9 @@ pub const EXPORT_MEMORY: &str = "memory";
 pub const EXPORT_RUN_LOOP: &str = "__dream_run_loop";
 pub const EXPORT_RESOLVE: &str = "__dream_resolve";
 pub const EXPORT_NEW_FUTURE: &str = "__dream_new_future";
+/// Per-instance startup (function table, heap bump, `__dream_init`). WAT uses `(start)`; C wasm32
+/// exports this so `load()` and worker instances can run it without calling `main`.
+pub const EXPORT_RUNTIME_INIT: &str = "__runtime_init";
 
 /// Worker-thread trampoline export (see `src/stdlib/core/webworker.dream`). The *native* host
 /// worker driver (`execution/host/worker.rs`) calls this with a body funcref index and a message

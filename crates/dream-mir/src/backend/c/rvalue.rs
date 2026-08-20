@@ -257,12 +257,12 @@ impl<'a> Emitter<'a> {
                 )
             }
             Rvalue::JsCall {
+                callee,
                 target,
                 via,
                 method,
                 args,
-                ..
-            } => self.js_call_expr(target, via, method, args),
+            } => self.js_call_expr(callee, target, via, method, args),
         }
     }
 
@@ -616,6 +616,54 @@ impl<'a> Emitter<'a> {
         }
         let fk = self.cx.interner.kind(from);
         let tk = self.cx.interner.kind(to);
+        if self.cx.target.is_wasm32() {
+            if let Some(sym) = super::js_marshal::cast_c_sym(self.cx, from, to) {
+                if matches!(self.cx.interner.kind(from), TyKind::Js)
+                    && self.cx.interner.is_value_type(to)
+                {
+                    crate::internal_error!(
+                        "js→value-struct cast must be stored in place (got stack emit of {sym})"
+                    );
+                }
+                return Expr::call(sym, vec![src]);
+            }
+            if matches!(tk, TyKind::Js) {
+                if let TyKind::Prim(p) = fk {
+                    let (method, promote) = match p {
+                        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("box_int", false),
+                        PrimTy::Long | PrimTy::ULong => ("box_long", false),
+                        PrimTy::Float => ("box_double", true),
+                        PrimTy::Double => ("box_double", false),
+                        PrimTy::Bool => ("box_bool", false),
+                        PrimTy::String => ("box_string", false),
+                    };
+                    let arg = if promote {
+                        Expr::cast(CTy::F64, src)
+                    } else {
+                        src
+                    };
+                    return Expr::call(super::js_marshal::js_bridge(self.cx, method), vec![arg]);
+                }
+            }
+            if matches!(fk, TyKind::Js) {
+                if let TyKind::Prim(p) = tk {
+                    let (method, demote) = match p {
+                        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("as_int", false),
+                        PrimTy::Long | PrimTy::ULong => ("as_long", false),
+                        PrimTy::Float => ("as_double", true),
+                        PrimTy::Double => ("as_double", false),
+                        PrimTy::Bool => ("as_bool", false),
+                        PrimTy::String => ("as_string", false),
+                    };
+                    let v = Expr::call(super::js_marshal::js_bridge(self.cx, method), vec![src]);
+                    return if demote {
+                        Expr::cast(CTy::F32, v)
+                    } else {
+                        v
+                    };
+                }
+            }
+        }
         let to_is_ref_box = matches!(tk, TyKind::Object | TyKind::Interface(..));
         if to_is_ref_box && self.cx.interner.is_value_type(from) {
             let size = elem_size(self.cx, from);

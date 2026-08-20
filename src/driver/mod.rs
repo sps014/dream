@@ -8,6 +8,7 @@
 //! [`error`] (the driver-level error type).
 
 pub mod abi;
+pub mod c_wasm32;
 pub mod compiler;
 pub mod diag_highlight;
 pub mod error;

@@ -3,6 +3,7 @@ use super::print::print_unit;
 
 pub struct FuncBuilder {
     pub attr: Option<&'static str>,
+    pub export: Option<String>,
     pub static_: bool,
     pub ret: CTy,
     pub name: String,
@@ -15,6 +16,7 @@ impl FuncBuilder {
     pub fn new(ret: CTy, name: impl Into<String>) -> Self {
         Self {
             attr: None,
+            export: None,
             static_: false,
             ret,
             name: name.into(),
@@ -74,6 +76,7 @@ impl FuncBuilder {
     pub fn expr_block(&mut self, f: impl FnOnce(&mut FuncBuilder) -> Expr) -> Expr {
         let mut inner = FuncBuilder {
             attr: None,
+            export: None,
             static_: false,
             ret: CTy::Void,
             name: String::new(),
@@ -96,6 +99,7 @@ impl FuncBuilder {
     pub fn finish(self) -> Func {
         Func {
             attr: self.attr,
+            export: self.export,
             static_: self.static_,
             ret: self.ret,
             name: self.name,
@@ -129,6 +133,26 @@ impl ModuleBuilder {
             ret,
             name: name.into(),
             params,
+            import: None,
+            export: None,
+        });
+    }
+
+    pub fn import_proto(
+        &mut self,
+        ret: CTy,
+        name: impl Into<String>,
+        params: Vec<Param>,
+        module: impl Into<String>,
+        import_name: impl Into<String>,
+    ) {
+        self.items.push(Item::Proto {
+            static_: false,
+            ret,
+            name: name.into(),
+            params,
+            import: Some((module.into(), import_name.into())),
+            export: None,
         });
     }
 
@@ -138,6 +162,8 @@ impl ModuleBuilder {
             ret,
             name: name.into(),
             params,
+            import: None,
+            export: None,
         });
     }
 

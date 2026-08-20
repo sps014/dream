@@ -196,6 +196,46 @@ pub fn native_runtime_include_dir() -> PathBuf {
     runtime_c_dir().join("native/include")
 }
 
+pub fn wasm32_runtime_include_dir() -> PathBuf {
+    runtime_c_dir().join("wasm32/include")
+}
+
+pub fn wasm32_heap_c() -> PathBuf {
+    runtime_c_dir().join("wasm32/heap.c")
+}
+
+pub fn runtime_abi_include_dir() -> PathBuf {
+    runtime_c_dir().join("include")
+}
+
+pub fn wasm32_libc_c() -> PathBuf {
+    runtime_c_dir().join("wasm32/libc.c")
+}
+
+const WASM32_CORE_C: &[&str] = &[
+    "wasm32/heap.c",
+    "wasm32/libc.c",
+    "wasm32/g0.c",
+    "wasm32/g0.s",
+    "wasm32/sync_stub.c",
+    "wasm32/weak_stub.c",
+    "native/strings.c",
+    "native/object.c",
+    "native/format.c",
+    "native/panic.c",
+    "native/closure.c",
+    "native/async.c",
+    "native/defer.c",
+    "native/simd.c",
+    "native/ffi.c",
+];
+
+/// Guest runtime C units for MIR → C → wasm32 (wasi-sdk). Skips native mmap heap, libc host, and pthreads.
+pub fn wasm32_runtime_c_files() -> Vec<PathBuf> {
+    let c = runtime_c_dir();
+    WASM32_CORE_C.iter().map(|rel| c.join(rel)).collect()
+}
+
 pub fn native_pcre2_include_dir() -> PathBuf {
     runtime_c_dir().join("pcre2")
 }

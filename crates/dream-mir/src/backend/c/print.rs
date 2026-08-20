@@ -62,10 +62,13 @@ fn print_item(out: &mut String, item: &Item) {
             ret,
             name,
             params,
+            import,
+            export,
         } => {
             if *static_ {
                 out.push_str("static ");
             }
+            print_linkage(out, import.as_ref(), export.as_deref());
             print_ty(out, ret);
             out.push(' ');
             out.push_str(name);
@@ -97,6 +100,7 @@ fn print_item(out: &mut String, item: &Item) {
 }
 
 fn print_func(out: &mut String, f: &Func) {
+    print_linkage(out, None, f.export.as_deref());
     if let Some(attr) = f.attr {
         out.push_str(attr);
         out.push(' ');
@@ -113,6 +117,21 @@ fn print_func(out: &mut String, f: &Func) {
         print_stmt(out, s, 1, true);
     }
     out.push_str("}\n");
+}
+
+fn print_linkage(out: &mut String, import: Option<&(String, String)>, export: Option<&str>) {
+    if let Some((module, name)) = import {
+        out.push_str("__attribute__((import_module(\"");
+        out.push_str(module);
+        out.push_str("\"), import_name(\"");
+        out.push_str(name);
+        out.push_str("\"))) ");
+    }
+    if let Some(name) = export {
+        out.push_str("__attribute__((export_name(\"");
+        out.push_str(name);
+        out.push_str("\"))) ");
+    }
 }
 
 fn print_params(out: &mut String, params: &[Param]) {
@@ -386,9 +405,7 @@ fn print_stmt(out: &mut String, stmt: &Stmt, ind: usize, nl: bool) {
         }
         Stmt::Assign { dest, src } => {
             indent(out, ind);
-            print_expr(out, dest, 1);
-            out.push_str(" = ");
-            print_expr(out, src, 0);
+            print_assign(out, dest, src);
             out.push(';');
             if nl {
                 out.push('\n');
@@ -431,11 +448,7 @@ fn print_stmt_inline(out: &mut String, stmt: &Stmt, ind: usize) {
 
 fn print_for_clause(out: &mut String, stmt: &Stmt) {
     match stmt {
-        Stmt::Assign { dest, src } => {
-            print_expr(out, dest, 1);
-            out.push_str(" = ");
-            print_expr(out, src, 0);
-        }
+        Stmt::Assign { dest, src } => print_assign(out, dest, src),
         Stmt::Expr(Expr::PostInc(e)) => {
             print_expr(out, e, 14);
             out.push_str("++");
@@ -490,8 +503,21 @@ fn bin_sym(op: BinOp) -> &'static str {
     }
 }
 
+fn print_assign(out: &mut String, dest: &Expr, src: &Expr) {
+    if matches!(dest, Expr::Ident(s) if s == "g0") {
+        out.push_str("dream_g0_set(");
+        print_expr(out, src, 0);
+        out.push(')');
+        return;
+    }
+    print_expr(out, dest, 1);
+    out.push_str(" = ");
+    print_expr(out, src, 0);
+}
+
 fn print_expr(out: &mut String, expr: &Expr, prec: u8) {
     match expr {
+        Expr::Ident(s) if s == "g0" => out.push_str("dream_g0_get()"),
         Expr::Ident(s) => out.push_str(s),
         Expr::Int(n) => out.push_str(&n.to_string()),
         Expr::Long(n) => {
@@ -672,9 +698,7 @@ fn print_stmt_compact(out: &mut String, stmt: &Stmt) {
             out.push(';');
         }
         Stmt::Assign { dest, src } => {
-            print_expr(out, dest, 1);
-            out.push_str(" = ");
-            print_expr(out, src, 0);
+            print_assign(out, dest, src);
             out.push(';');
         }
         Stmt::Expr(e) => {

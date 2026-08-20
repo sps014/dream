@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Parallel golden-corpus probe for `tests/cases/*.dream` via `dream run` (native C)."""
+"""Parallel golden-corpus probe for `tests/cases/*.dream`.
+
+Default: `dream run` (native C).
+`--node`: compile `--backend wasm` to `target/probe-wasm/{stem}/` and run via Node + `runtime/dream.js`.
+"""
+import json
 import os
 import re
 import signal
@@ -16,25 +21,48 @@ root = Path(__file__).resolve().parents[1]
 dream = root / "target/debug/dream"
 cases = sorted((root / "tests/cases").glob("*.dream"))
 workers = int(os.environ.get("PROBE_JOBS", "8"))
+dream_js = root / "runtime" / "dream.js"
 
 USAGE = """\
-Usage: probe_test.py [case-stem ...]
+Usage: probe_test.py [--node] [case-stem ...]
 
-  stems      optional filter (e.g. arithmetic regex_basics)
+  --node     compile wasm32 C and run with Node (not native `dream run`)
+  stems      optional filter (e.g. arithmetic webworker_basic)
 """
+
+# Hosts that exist on native C only (files, sockets, GPU, interactive stdin).
+_NODE_SKIP_PREFIXES = (
+    "file_",
+    "dir_",
+    "http_",
+    "tcp_",
+    "net_",
+    "ws_",
+    "sqlite",
+    "gpu_",
+)
+_NODE_SKIP_STEMS = {
+    "console_read_line",
+    "process_args_basic",
+    "process_usage",
+}
 
 
 def parse_args(argv):
     only = []
+    node = False
     for arg in argv:
         if arg in ("-h", "--help"):
             sys.stdout.write(USAGE)
             sys.exit(0)
+        if arg == "--node":
+            node = True
+            continue
         if arg.startswith("-"):
             sys.stderr.write(f"unknown flag {arg}\n{USAGE}")
             sys.exit(2)
         only.append(arg)
-    return set(only) if only else None
+    return node, (set(only) if only else None)
 
 
 def run_group(args, timeout, stdin=None, env=None):
@@ -98,6 +126,88 @@ def spawn_tcp_echo():
     return str(port)
 
 
+def js_string(s):
+    return json.dumps(s)
+
+
+def file_url(p: Path) -> str:
+    return p.resolve().as_uri()
+
+
+def node_skip_reason(stem):
+    if stem in _NODE_SKIP_STEMS:
+        return "native-only host"
+    for p in _NODE_SKIP_PREFIXES:
+        if stem.startswith(p) or stem == p.rstrip("_"):
+            return "native-only host"
+    return None
+    if stem in _NODE_SKIP_STEMS:
+        return "native-only host"
+    for p in _NODE_SKIP_PREFIXES:
+        if stem.startswith(p) or stem == p.rstrip("_"):
+            return "native-only host"
+    return None
+
+
+def one_node(f: Path):
+    stem = f.stem
+    err = f.with_suffix(".expected_error")
+    exp = f.with_suffix(".expected")
+    trap = f.with_suffix(".expected_trap")
+    dest_dir = root / "target" / "probe-wasm" / stem
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    wat = dest_dir / f"{stem}.wat"
+    compile_cmd = [
+        str(dream),
+        "--backend",
+        "wasm",
+        "-o",
+        str(wat),
+        str(f),
+    ]
+    if err.exists():
+        code, _out, _err = run_group(compile_cmd, 60)
+        if code == 0:
+            return stem, "fail", "compile should fail"
+        return stem, "ok", ""
+    skip = node_skip_reason(stem)
+    if skip:
+        return stem, "skip", skip
+    if trap.exists():
+        return stem, "skip", "expected trap (native)"
+
+    code, out, err_txt = run_group(compile_cmd, 180)
+    if code != 0:
+        tail = " | ".join((err_txt or out or "").strip().splitlines()[-2:])
+        return stem, "fail", f"compile {code} {tail}"
+
+    wasm = wat.with_suffix(".wasm")
+    if not wasm.is_file():
+        return stem, "fail", "missing .wasm"
+    js_url = js_string(file_url(dream_js))
+    wasm_url = js_string(str(wasm.resolve()))
+    runner = dest_dir / f"{stem}_run.mjs"
+    runner.write_text(
+        f"""import {{ run }} from {js_url};
+const chunks = [];
+const timer = setTimeout(() => {{ console.error('probe --node timeout'); process.exit(2); }}, 25000);
+await run({wasm_url}, {{ stdout: (s) => chunks.push(s) }});
+clearTimeout(timer);
+process.stdout.write(chunks.join(""));
+"""
+    )
+    code, out, err_txt = run_group(["node", str(runner)], 35)
+    if code != 0:
+        tail = " | ".join((err_txt or out or "").strip().splitlines()[-2:])
+        return stem, "fail", f"node {code} {tail}"
+    if exp.exists():
+        want = exp.read_text().strip()
+        got = run_output_body(out)
+        if got != want:
+            return stem, "fail", f"output mismatch got={got[:80]!r}"
+    return stem, "ok", ""
+
+
 def one(f: Path):
     stem = f.stem
     err = f.with_suffix(".expected_error")
@@ -139,26 +249,34 @@ def one(f: Path):
 
 
 def main():
-    only = parse_args(sys.argv[1:])
+    node, only = parse_args(sys.argv[1:])
     if not dream.is_file():
         sys.stderr.write(f"missing {dream}; build with `cargo build`\n")
         sys.exit(2)
     files = [p for p in cases if not only or p.stem in only]
     fails = []
     ok = 0
+    skipped = 0
+    run_one = one_node if node else one
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(one, p): p for p in files}
+        futs = {ex.submit(run_one, p): p for p in files}
         done = 0
         for fut in as_completed(futs):
             done += 1
             label, status, msg = fut.result()
-            print(f"[{done}/{len(files)}] {label} {status}", flush=True)
+            extra = f" {msg}" if status == "skip" and msg else ""
+            print(f"[{done}/{len(files)}] {label} {status}{extra}", flush=True)
             if status == "ok":
                 ok += 1
+            elif status == "skip":
+                skipped += 1
             else:
                 fails.append(f"{label}: {msg}")
 
-    print(f"ok={ok} fail={len(fails)} total={len(files)}", flush=True)
+    print(
+        f"ok={ok} skip={skipped} fail={len(fails)} total={len(files)}",
+        flush=True,
+    )
     for line in sorted(fails):
         print(line)
     sys.exit(1 if fails else 0)

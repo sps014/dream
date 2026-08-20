@@ -88,6 +88,7 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
         "-".into(),
         "".into(),
     ];
+    v.push("length".into());
     for (_ty, layout) in &mir.layouts.structs {
         v.push(format!("{} {{ ", layout.name));
         for (i, f) in layout.fields.iter().enumerate() {
@@ -96,6 +97,7 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
             } else {
                 format!(", {}: ", f.name)
             });
+            v.push(f.name.clone());
         }
         v.push(" }".into());
     }

@@ -53,6 +53,16 @@ impl OptLevel {
         })
     }
 
+    /// clang `-O` for wasm32 (no LTO / `-march=native`; wasm-opt applies the Binaryen level).
+    pub fn wasm_clang_opt_flag(self) -> &'static str {
+        match self {
+            Self::O0 => "-O0",
+            Self::O1 => "-O1",
+            Self::O2 => "-O2",
+            Self::O3 | Self::O4 | Self::Size | Self::SizeAggressive => "-O3",
+        }
+    }
+
     /// clang flags for this level. Speed builds (`-O3`/`-O4`) use LTO + host ISA.
     pub fn cc_flags(self) -> &'static [&'static str] {
         match self {
@@ -212,5 +222,8 @@ mod tests {
         assert_eq!(OptLevel::Size.as_cli_flag(), "-Os");
         assert_eq!(OptLevel::O3.native_rt_subdir(), "O3");
         assert_eq!(OptLevel::O4.native_rt_subdir(), "O3");
+        assert_eq!(OptLevel::O0.wasm_clang_opt_flag(), "-O0");
+        assert_eq!(OptLevel::O3.wasm_clang_opt_flag(), "-O3");
+        assert_eq!(OptLevel::Size.wasm_clang_opt_flag(), "-O3");
     }
 }

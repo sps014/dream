@@ -9,39 +9,94 @@ import { isNode } from "./platform.js";
  * Browser workers use `self.onmessage` / `self.postMessage`; Node `worker_threads` workers use
  * `parentPort` instead — pass `node: true` for that dialect.
  */
+function unpackWire(data) {
+  if (data == null || data === "") {
+    return "";
+  }
+  if (typeof data === "string") {
+    return data;
+  }
+  const u =
+    data instanceof Uint16Array
+      ? data
+      : new Uint16Array(data.buffer, data.byteOffset, Math.floor(data.byteLength / 2));
+  if (u.length <= 8192) {
+    return String.fromCharCode.apply(null, u);
+  }
+  let s = "";
+  for (let i = 0; i < u.length; i += 8192) {
+    s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+  }
+  return s;
+}
+
+function packWire(s) {
+  const n = s == null ? 0 : s.length;
+  const u = new Uint16Array(n);
+  for (let i = 0; i < n; i++) {
+    u[i] = s.charCodeAt(i);
+  }
+  return u;
+}
+
+const WORKER_BOOT_UNPACK = `function unpackWire(data) {
+  if (data == null || data === "") return "";
+  if (typeof data === "string") return data;
+  const u = data instanceof Uint16Array
+    ? data
+    : new Uint16Array(data.buffer, data.byteOffset, Math.floor(data.byteLength / 2));
+  if (u.length <= 8192) return String.fromCharCode.apply(null, u);
+  let s = "";
+  for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+  return s;
+}
+function packWire(s) {
+  const n = s == null ? 0 : s.length;
+  const u = new Uint16Array(n);
+  for (let i = 0; i < n; i++) u[i] = s.charCodeAt(i);
+  return u;
+}
+`;
+
 function workerBootSource(dreamUrl, { node = false } = {}) {
   if (node) {
     return `import { parentPort } from 'node:worker_threads';
 import * as Dream from ${JSON.stringify(dreamUrl)};
+${WORKER_BOOT_UNPACK}
 let inst = null;
-parentPort.on('message', async (m) => {
-  if (m.t === 'init') {
-    inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory });
-    parentPort.postMessage({ t: 'ready' });
-  } else if (m.t === 'msg') {
-    parentPort.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'dispatch') {
-    parentPort.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'term') {
-    parentPort.close();
-  }
+let chain = Promise.resolve();
+parentPort.on('message', (m) => {
+  chain = chain.then(async () => {
+    if (m.t === 'init') {
+      inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
+      parentPort.postMessage({ t: 'ready' });
+    } else if (m.t === 'msg' || m.t === 'dispatch') {
+      const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
+      parentPort.postMessage({ t: 'reply', data: packWire(reply) });
+    } else if (m.t === 'term') {
+      parentPort.close();
+    }
+  });
 });
 `;
   }
   return `import * as Dream from ${JSON.stringify(dreamUrl)};
+${WORKER_BOOT_UNPACK}
 let inst = null;
-self.onmessage = async (e) => {
+let chain = Promise.resolve();
+self.onmessage = (e) => {
   const m = e.data;
-  if (m.t === 'init') {
-    inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory });
-    self.postMessage({ t: 'ready' });
-  } else if (m.t === 'msg') {
-    self.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'dispatch') {
-    self.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'term') {
-    self.close();
-  }
+  chain = chain.then(async () => {
+    if (m.t === 'init') {
+      inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
+      self.postMessage({ t: 'ready' });
+    } else if (m.t === 'msg' || m.t === 'dispatch') {
+      const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
+      self.postMessage({ t: 'reply', data: packWire(reply) });
+    } else if (m.t === 'term') {
+      self.close();
+    }
+  });
 };
 `;
 }
@@ -54,7 +109,7 @@ self.onmessage = async (e) => {
  * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
  * Dream's scheduler.
  */
-function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
+function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
   const reg = new Map();
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
@@ -74,8 +129,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
-          if (state.pending.length > 0) state.pending.shift()(m.data);
-          else state.replies.push(m.data);
+          const text = unpackWire(m.data);
+          if (state.pending.length > 0) state.pending.shift()(text);
+          else state.replies.push(text);
         }
       });
     } else {
@@ -86,8 +142,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
-          if (state.pending.length > 0) state.pending.shift()(m.data);
-          else state.replies.push(m.data);
+          const text = unpackWire(m.data);
+          if (state.pending.length > 0) state.pending.shift()(text);
+          else state.replies.push(text);
         }
       };
     }
@@ -96,8 +153,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
   const spawnWorker = (fnIndex, env) => {
     const state = {
       worker: null,
-      fnIndex,
-      env,
+      fnIndex: Number(fnIndex ?? 0),
+      env: Number(env ?? 0),
       pending: [],
       replies: [],
       ready: false,
@@ -113,6 +170,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
         bytes: wasmBytes,
         abi,
         memory: getSharedMemory(),
+        stackGate,
       });
     };
 
@@ -164,14 +222,14 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
     workerPost: (id, msg) => {
       const s = reg.get(id);
       if (!s) return;
-      postJob(s, { t: "msg", fnIdx: s.fnIndex, env: s.env, data: msg });
+      postJob(s, { t: "msg", fnIdx: s.fnIndex, env: s.env, data: packWire(msg) });
     },
     workerPoolDispatch: (id, fnIndex, env, msg) =>
       new Promise((resolve) => {
         const s = reg.get(id);
         if (!s) return resolve("");
         s.pending.push(resolve);
-        postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: msg });
+        postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: packWire(msg) });
       }),
     // extern async: resolve with the next reply (or "" if the worker is gone).
     workerRecv: (id) =>

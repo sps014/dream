@@ -37,6 +37,7 @@ fn main() -> ExitCode {
     let mut crate_type = CrateType::Bin;
     let mut crate_type_explicit = false;
     let mut native_c = true;
+    let mut out_override: Option<String> = None;
     let mut program_args: Vec<String> = Vec::new();
     let mut after_program_args = false;
 
@@ -179,6 +180,13 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             }
+        } else if arg == "-o" || arg == "--output" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("-o/--output requires a path");
+                return ExitCode::FAILURE;
+            };
+            out_override = Some(val.clone());
         } else if arg == "--crate-type" {
             i += 1;
             let Some(val) = args.get(i) else {
@@ -345,12 +353,15 @@ fn main() -> ExitCode {
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
-    let out_path = match get_path_from_file_path(file_name, release, native_c) {
+    let out_path = match out_override {
         Some(path) => path,
-        None => {
-            error!("Invalid source file path: {}", file_name);
-            return ExitCode::FAILURE;
-        }
+        None => match get_path_from_file_path(file_name, release, native_c) {
+            Some(path) => path,
+            None => {
+                error!("Invalid source file path: {}", file_name);
+                return ExitCode::FAILURE;
+            }
+        },
     };
 
     if let Some(parent) = Path::new(&out_path).parent() {
@@ -420,11 +431,12 @@ fn main() -> ExitCode {
 fn print_usage(program: &str) {
     eprintln!(
         "\
-Usage: {program} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [build|run|test|debug-adapter] <file|dir> [-- program-args...]
+Usage: {program} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [-o PATH] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [build|run|test|debug-adapter] <file|dir> [-- program-args...]
   -v, --verbose         Print progress information
   --release             Trimmed build; cc default -O3; wasm-opt -O3 (or -Os with --web)
   -g, --debug-info      C `#line` + clang -g -O0 for lldb-dap (`debug-adapter` implies this)
   -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z, Os, Oz; default: s); overrides --release
+  -o, --output PATH     Write guest C/WAT here instead of target/debug|release|web
   --backend wasm|c     Codegen backend (default: c / native). WAT only with --web/--node
   --target native|node|web  Compile-time runtime target for availability checks (default: native)
   --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)

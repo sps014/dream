@@ -1,31 +1,61 @@
 #ifndef DREAM_RT_NATIVE_H
 #define DREAM_RT_NATIVE_H
 
+#ifdef DREAM_WASM32
+#include "../../include/dream_abi.h"
+#else
 #ifndef DREAM_NATIVE
 #define DREAM_NATIVE 1
 #endif
 #include "../../include/dream_abi.h"
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-/* Native guest ABI: real pointers. Never truncate through (uint32_t). Wasm extract
- * still uses include/dream_rt.h (i32 linear memory). */
-
+#ifdef DREAM_WASM32
+typedef int32_t dream_ptr;
+#else
 typedef uintptr_t dream_ptr;
+#endif
 
 /* 0 until `workerSpawn`; retain/malloc then skip atomics/mutexes. */
 extern int dream_rt_mt;
 
 #define DREAM_ALWAYS_INLINE static inline __attribute__((always_inline))
 
+#ifdef DREAM_WASM32
+dream_ptr dream_g0_get(void);
+void dream_g0_set(dream_ptr v);
+int32_t dream_instance_tid(void);
+int32_t dream_next_tid(void);
+#else
+extern _Thread_local dream_ptr g0;
+DREAM_ALWAYS_INLINE dream_ptr dream_g0_get(void) { return g0; }
+DREAM_ALWAYS_INLINE void dream_g0_set(dream_ptr v) { g0 = v; }
+#endif
+
 DREAM_ALWAYS_INLINE void *dream_p(dream_ptr p) {
+#ifdef DREAM_WASM32
+    return (void *)(uintptr_t)(uint32_t)p;
+#else
     return (void *)p;
+#endif
 }
 
 DREAM_ALWAYS_INLINE int32_t *dream_i32(dream_ptr p) {
-    return (int32_t *)p;
+    return (int32_t *)dream_p(p);
 }
+
+#ifdef DREAM_WASM32
+#define DREAM_BLOCK_HEADER HEAP_HEADER_SIZE
+#else
+#define DREAM_BLOCK_HEADER NATIVE_HEAP_HEADER_SIZE
+#endif
+
+#ifdef DREAM_WASM32
+void abort(void);
+#endif
 
 #ifndef DREAM_STR_SLICE
 #define DREAM_STR_SLICE 1
@@ -141,6 +171,9 @@ DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
 
 dream_ptr dream_malloc(int32_t size, int32_t tag);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
+#ifdef DREAM_WASM32
+void dream_heap_init(void);
+#endif
 
 DREAM_ALWAYS_INLINE int32_t dream_str_rc(dream_ptr p) {
     if (p == 0) {
@@ -168,8 +201,8 @@ DREAM_ALWAYS_INLINE int32_t dream_str_unit_cap(dream_ptr p) {
     if (p == 0) {
         return 0;
     }
-    block = ((int32_t *)((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE))[0];
-    payload = block - NATIVE_HEAP_HEADER_SIZE;
+    block = ((int32_t *)((char *)dream_p(p) - DREAM_BLOCK_HEADER))[0];
+    payload = block - DREAM_BLOCK_HEADER;
     if (payload <= STRING_HEADER_SIZE) {
         return 0;
     }
@@ -786,6 +819,7 @@ void dream_release_funcbox(dream_ptr box);
 void dream_lock_acquire(dream_ptr lock_addr);
 void dream_lock_release(dream_ptr lock_addr);
 void dream_async_complete(dream_ptr future, dream_ptr value);
+void dream_resolve(dream_ptr future, dream_ptr value);
 void dream_cancel(dream_ptr future);
 int32_t dream_async_await(dream_ptr future, dream_ptr *dest, int32_t resume_pc);
 void dream_async_set_waker(dream_ptr future, dream_ptr self);
@@ -840,6 +874,15 @@ int32_t string_compare(dream_ptr a, dream_ptr b);
 int32_t dream_char_at(dream_ptr ptr, int32_t i);
 int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 
+#ifdef DREAM_WASM32
+#define DREAM_WASM_IMPORT(mod, name) __attribute__((import_module(mod), import_name(name)))
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_INT) void print_int(int32_t v);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_STRING) void print_string(dream_ptr s);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_CHAR) void print_char(int32_t c);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_FLOAT) void print_float(float v);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_DOUBLE) void print_double(double v);
+DREAM_WASM_IMPORT(DREAM_MODULE_HOST, DREAM_SYM_TIME_NOW_NANOS) int64_t timeNowNanos(void);
+#else
 int64_t timeNowNanos(void);
 int64_t Time_nano_time(void);
 int64_t processCpuTimeNanos(void);
@@ -892,5 +935,7 @@ void workerPost(int32_t id, dream_ptr msg);
 dream_ptr workerRecv(int32_t id);
 dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg);
 void workerTerminate(int32_t id);
+
+#endif /* !DREAM_WASM32 */
 
 #endif

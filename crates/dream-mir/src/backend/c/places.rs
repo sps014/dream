@@ -130,7 +130,7 @@ impl<'a> Emitter<'a> {
                 if self.cx.interner.is_value_type(ty) {
                     CTy::Ptr
                 } else {
-                    local_c_ty(self.cx.interner, ty)
+                    local_c_ty(self.cx, ty)
                 }
             }
             Place::Global(g) => {

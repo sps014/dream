@@ -430,17 +430,18 @@ pub(super) fn emit_imports_builder(
     mir: &crate::Mir,
     interner: &TypeInterner,
 ) {
-    for (name, param) in [
-        ("print_string", ValType::I32),
-        ("print_int", ValType::I32),
-        ("print_float", ValType::F32),
-        ("print_double", ValType::F64),
-        ("print_char", ValType::I32),
-    ] {
+    for (name, kind) in crate::abi::ENV_PRINT_IMPORTS {
+        let param = match kind {
+            crate::abi::PrintVal::F32 => ValType::F32,
+            crate::abi::PrintVal::F64 => ValType::F64,
+            crate::abi::PrintVal::I32 => ValType::I32,
+        };
         m.import_func(crate::abi::ENV_MODULE, name, name, vec![param], vec![]);
     }
     for imp in &mir.imports {
-        if imp.field == "jsRelease" || imp.field == "jsRetain" {
+        if imp.field == dream_abi::js_abi::HOST_JS_RELEASE
+            || imp.field == dream_abi::js_abi::HOST_JS_RETAIN
+        {
             continue;
         }
         let params: Vec<ValType> = imp
@@ -464,12 +465,18 @@ pub(super) fn emit_imports_builder(
     }
     // Host-side JS handle RC. `$js_release` is called from generated `$release_array` glue for
     // `js[]` (e.g. `Option<js>.unwrap`'s dummy slot) even when no `js*`/`gpu*` import survived DCE.
-    m.import_func("Dream", "jsRetain", "js_retain", vec![ValType::I32], vec![]);
     m.import_func(
-        "Dream",
-        "jsRelease",
+        dream_abi::js_abi::HOST_MODULE,
+        dream_abi::js_abi::HOST_JS_RETAIN,
+        "js_retain",
+        vec![ValType::I32],
+        vec![],
+    );
+    m.import_func(
+        dream_abi::js_abi::HOST_MODULE,
+        dream_abi::js_abi::HOST_JS_RELEASE,
         "js_release",
         vec![ValType::I32],
         vec![],
-        );
+    );
 }

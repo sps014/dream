@@ -1,5 +1,6 @@
 use crate::backend::c::native_layout::NativeLayouts;
 use crate::backend::c::tables::{intern_strings, struct_tags, symbol_table};
+use crate::backend::c::target::CTarget;
 use crate::{Mir, MirFunction};
 use dream_hir::TypeLayout;
 use dream_types::{DefId, TypeId, TypeInterner};
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 pub(super) struct Cx<'a> {
     pub mir: &'a Mir,
     pub interner: &'a TypeInterner,
+    pub target: CTarget,
     pub strings: IndexMap<String, String>,
     pub symbols: HashMap<(DefId, Vec<TypeId>), String>,
     pub tags: HashMap<TypeId, i32>,
@@ -17,7 +19,7 @@ pub(super) struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
-    pub(super) fn new(mir: &'a Mir, interner: &'a TypeInterner) -> Self {
+    pub(super) fn new(mir: &'a Mir, interner: &'a TypeInterner, target: CTarget) -> Self {
         let symbols = symbol_table(mir);
         let mut ft = HashMap::new();
         for (idx, f) in (1usize..).zip(mir.functions.iter()) {
@@ -28,9 +30,10 @@ impl<'a> Cx<'a> {
             symbols,
             tags: struct_tags(mir),
             ft,
-            native: NativeLayouts::compute(mir, interner),
+            native: NativeLayouts::for_target(mir, interner, target),
             mir,
             interner,
+            target,
         }
     }
 

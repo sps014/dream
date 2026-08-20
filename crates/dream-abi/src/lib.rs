@@ -6,3 +6,4 @@
 pub mod attributes;
 pub mod intrinsics;
 pub mod js_abi;
+pub mod runtime_hosts;

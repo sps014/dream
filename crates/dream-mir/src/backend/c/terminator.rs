@@ -89,7 +89,7 @@ impl<'a> Emitter<'a> {
             }
             Terminator::AsyncComplete(Some(o)) => {
                 let result = self.operand(o);
-                let wide = crate::abi::FutureLayout::native().wide as i64;
+                let wide = self.cx.target.abi().future.wide as i64;
                 match self.cx.interner.kind(self.f.ret) {
                     TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
                         self.b.stmt(Stmt::store(
@@ -140,7 +140,7 @@ impl<'a> Emitter<'a> {
                     CTy::I32,
                     Expr::ptr_add(
                         Expr::id("__self"),
-                        Expr::i(crate::abi::FutureLayout::native().state as i64),
+                        Expr::i(self.cx.target.abi().future.state as i64),
                     ),
                     Expr::i(resume.0 as i64),
                 ));

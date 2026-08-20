@@ -17,6 +17,11 @@ use dream_types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
 /// `runtime/dream.js`.
 pub const HOST_MODULE: &str = "Dream";
 
+/// Host import field for JS-handle retain (`runtime/src/hosts/js.js`).
+pub const HOST_JS_RETAIN: &str = "jsRetain";
+/// Host import field for JS-handle release.
+pub const HOST_JS_RELEASE: &str = "jsRelease";
+
 /// The Dream type name whose stdlib methods back every interop bridge. Combined with a method name
 /// via [`method_fn`] it yields the mangled symbol an `@js` extern is emitted/imported under. Shared
 /// with the analyzer (`dream_sema::analyzer::js_interop`) so the spelling that drives bridge mangling

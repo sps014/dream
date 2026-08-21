@@ -15,19 +15,21 @@ class Track {
     public artist: string;
     public url: string;
     public is_ncs: bool;
+    public unavailable: bool;
 
     public constructor(title: string, artist: string, url: string) {
         this.title = title;
         this.artist = artist;
         this.url = url;
         this.is_ncs = this.artist.contains("NCS");
+        this.unavailable = false;
     }
 }
 
 // --- Playlist -----------------------------------------------------------------------------
 
 let tracks: Track[] = [
-    Track("Mortals (feat. Laura Brehm)", "Warriyo [NCS Release]", "https://archive.org/download/soundcloud-300693179/Warriyo_-_Mortals_feat._Laura_Brehm_NCS_Release-300693179.mp3"),
+    Track("Superhero", "Alex Hogan [NCS Release]", "https://ncs.io/track/download/3e940e21-2c77-4635-ac1d-02ae4cbe0354"),
     Track("Force", "Alan Walker [NCS Release]", "https://archive.org/download/soundcloud-198928615/Alan_Walker_-_Force_NCS_Release-198928615.mp3"),
     Track("Heart Afire (feat. Strix)", "Defqwop [NCS Release]", "https://archive.org/download/soundcloud-265534576/Defqwop_-_Heart_Afire_feat._Strix_NCS_Release-265534576.mp3"),
     Track("Cloud 9", "Itro & Tobu [NCS Release]", "https://archive.org/download/soundcloud-168727023/Itro_Tobu_-_Cloud_9_NCS_Release-168727023.mp3"),
@@ -48,6 +50,9 @@ let tracks: Track[] = [
 
 let current_index: int = 0;
 let is_playing: bool = false;
+// Dead sources seen this session (archive.org rate-limits 500s); when every track has
+// failed we stop auto-skipping instead of spinning forever.
+let load_failures: int = 0;
 
 // --- DOM helpers ------------------------------------------------------------------------------
 
@@ -85,6 +90,9 @@ fun render_playlist(): void {
 
         let row = doc.createElement("li");
         row.className = i == current_index ? "track active" : "track";
+        if (track.unavailable) {
+            row.className = row.className + " unavailable";
+        }
         row.setAttribute("data-index", i.to_string());
 
         let info = doc.createElement("div");
@@ -131,9 +139,18 @@ fun load_track(index: int): void {
     el("track-title").textContent = track.title;
     el("track-artist").textContent = track.artist;
     el("seek").value = 0;
+    update_seek_fill();
     el("time-display").textContent = "0:00 / 0:00";
+    set_status("");
 
     render_playlist();
+}
+
+// Transient status line under the transport controls ("source unavailable — skipping", …).
+fun set_status(message: string): void {
+    let status = el("player-status");
+    status.textContent = message;
+    status.className = message == "" ? "status" : "status show";
 }
 
 fun update_play_button(): void {
@@ -185,11 +202,42 @@ fun on_seek_input(ev: js): void {
     if (duration > 0.0) {
         audio.currentTime = (percent / 100.0) * duration;
     }
+    update_seek_fill();
 }
 
 fun on_volume_input(ev: js): void {
     let percent: double = el("volume").value;
     el("audio-player").volume = percent / 100.0;
+    el("volume").style.setProperty("--fill", percent.to_string() + "%");
+}
+
+// `<audio>` fires `error` when a source 404s / 500s / aborts (archive.org rate-limits with
+// 500s). Mark the track dead, surface it in the UI, and move on to the next source.
+fun on_error(ev: js): void {
+    if (current_index >= 0 && current_index < tracks.length) {
+        let track = tracks[current_index];
+        if (!track.unavailable) {
+            track.unavailable = true;
+            load_failures = load_failures + 1;
+        }
+    }
+    render_playlist();
+
+    if (load_failures >= tracks.length) {
+        set_status("no playable sources — check your connection");
+        is_playing = false;
+        update_play_button();
+        return;
+    }
+    set_status("source unavailable — skipping");
+    load_track(current_index + 1);
+    if (is_playing) {
+        el("audio-player").play();
+    }
+}
+
+fun on_playing(ev: js): void {
+    set_status("");
 }
 
 fun on_time_update(ev: js): void {
@@ -200,8 +248,15 @@ fun on_time_update(ev: js): void {
     if (duration > 0.0) {
         el("seek").value = (current / duration) * 100.0;
     }
+    update_seek_fill();
 
     el("time-display").textContent = format_time((int)current) + " / " + format_time((int)duration);
+}
+
+// Paints the filled portion of the seek slider via the `--fill` custom property.
+fun update_seek_fill(): void {
+    let v: double = el("seek").value;
+    el("seek").style.setProperty("--fill", v.to_string() + "%");
 }
 
 fun on_ended(ev: js): void {
@@ -223,9 +278,12 @@ fun main(): void {
     el("volume").addEventListener("input", on_volume_input);
     audio.addEventListener("timeupdate", on_time_update);
     audio.addEventListener("ended", on_ended);
+    audio.addEventListener("error", on_error);
+    audio.addEventListener("playing", on_playing);
 
     el("volume").value = 80;
     audio.volume = 0.8;
+    el("volume").style.setProperty("--fill", "80%");
 
     load_track(0);
     update_play_button();

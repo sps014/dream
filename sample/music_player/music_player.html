@@ -4,11 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dream Music Player</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237c5cff'/%3E%3Cstop offset='1' stop-color='%23ff6bd6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='24' fill='url(%23g)'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle'%3E%E2%99%AB%3C/text%3E%3C/svg%3E" />
     <style>
       :root {
         --bg: #0b0b12;
-        --card: rgba(24, 24, 34, 0.72);
-        --card-border: rgba(255, 255, 255, 0.08);
+        --card: rgba(22, 22, 32, 0.55);
+        --card-border: rgba(255, 255, 255, 0.12);
         --accent: #7c5cff;
         --accent-2: #ff6bd6;
         --accent-soft: #7c5cff33;
@@ -22,10 +23,7 @@
 
       body {
         font-family: "Inter", system-ui, -apple-system, sans-serif;
-        background:
-          radial-gradient(circle at 15% 10%, #3a2a6b55 0%, transparent 45%),
-          radial-gradient(circle at 85% 90%, #ff6bd633 0%, transparent 45%),
-          var(--bg);
+        background: var(--bg);
         color: var(--text);
         height: 100vh;
         margin: 0;
@@ -34,20 +32,78 @@
         justify-content: center;
         padding: 1rem;
         overflow: hidden;
+        position: relative;
+      }
+
+      /* Drifting gradient orbs behind the glass — the backdrop the card blurs. */
+      .orb {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(90px);
+        opacity: 0.55;
+        pointer-events: none;
+        animation: drift 26s ease-in-out infinite alternate;
+      }
+
+      .orb.a {
+        width: 46vmax;
+        height: 46vmax;
+        left: -14vmax;
+        top: -18vmax;
+        background: radial-gradient(circle at 35% 35%, #6a48ff, transparent 65%);
+      }
+
+      .orb.b {
+        width: 40vmax;
+        height: 40vmax;
+        right: -12vmax;
+        bottom: -16vmax;
+        background: radial-gradient(circle at 60% 60%, #ff4fc3, transparent 65%);
+        animation-delay: -13s;
+        animation-direction: alternate-reverse;
+      }
+
+      @keyframes drift {
+        from { transform: translate3d(0, 0, 0) scale(1); }
+        to { transform: translate3d(9vmax, 6vmax, 0) scale(1.18); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .orb { animation: none; }
       }
 
       .player {
+        position: relative;
         width: 100%;
         max-width: 460px;
         max-height: 100%;
         background: var(--card);
         border: 1px solid var(--card-border);
-        border-radius: 22px;
+        border-radius: 24px;
         padding: 1.2rem 1.35rem;
-        box-shadow: 0 30px 70px -25px rgba(0, 0, 0, 0.75);
-        backdrop-filter: blur(18px);
+        box-shadow:
+          0 30px 70px -25px rgba(0, 0, 0, 0.8),
+          inset 0 1px 0 rgba(255, 255, 255, 0.14);
+        backdrop-filter: blur(28px) saturate(160%);
+        -webkit-backdrop-filter: blur(28px) saturate(160%);
         display: flex;
         flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* Top edge light catch — the classic glass highlight. */
+      .player::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.45),
+          transparent
+        );
+        pointer-events: none;
       }
 
       .header-row {
@@ -61,13 +117,15 @@
         width: 3.3rem;
         height: 3.3rem;
         flex-shrink: 0;
-        border-radius: 12px;
+        border-radius: 14px;
         background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 1.5rem;
-        box-shadow: 0 12px 26px -12px var(--accent-soft);
+        box-shadow:
+          0 12px 26px -12px var(--accent-soft),
+          inset 0 1px 0 rgba(255, 255, 255, 0.35);
       }
 
       .now-playing {
@@ -116,7 +174,13 @@
         flex: 1;
         height: 5px;
         border-radius: 3px;
-        background: #2f2f40;
+        /* Filled portion painted by the `--fill` custom property (set from Dream). */
+        background: linear-gradient(
+          to right,
+          var(--accent) 0%,
+          var(--accent-2) var(--fill, 0%),
+          #2f2f40 var(--fill, 0%)
+        );
         outline: none;
       }
 
@@ -157,8 +221,10 @@
       }
 
       .transport button {
-        border: none;
-        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         color: var(--text);
         font-size: 1.25rem;
         cursor: pointer;
@@ -167,11 +233,16 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.15s ease, transform 0.1s ease;
+        transition:
+          background 0.15s ease,
+          transform 0.1s ease,
+          border-color 0.15s ease,
+          box-shadow 0.2s ease;
       }
 
       .transport button:hover {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.22);
       }
 
       .transport button:active {
@@ -182,13 +253,34 @@
         width: 3.1rem;
         height: 3.1rem;
         font-size: 1.3rem;
+        border: none;
         background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-        box-shadow: 0 10px 26px -8px var(--accent-soft);
+        box-shadow:
+          0 10px 26px -8px var(--accent-soft),
+          inset 0 1px 0 rgba(255, 255, 255, 0.35);
       }
 
       #play-button:hover {
         filter: brightness(1.12);
         background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        box-shadow:
+          0 14px 34px -8px var(--accent-soft),
+          inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      }
+
+      .status {
+        min-height: 1.1rem;
+        margin: 0 0 0.55rem;
+        font-size: 0.72rem;
+        color: var(--muted);
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+      }
+
+      .status.show {
+        opacity: 1;
+        color: #ffb86b;
       }
 
       .volume-row {
@@ -262,6 +354,15 @@
       #playlist .track.active {
         background: var(--accent-soft);
         border-color: rgba(124, 92, 255, 0.4);
+        box-shadow: inset 3px 0 0 -1px var(--accent);
+      }
+
+      #playlist .track.unavailable {
+        opacity: 0.42;
+      }
+
+      #playlist .track.unavailable .track-title {
+        text-decoration: line-through;
       }
 
       .track-info {
@@ -319,6 +420,8 @@
     </style>
   </head>
   <body>
+    <div class="orb a"></div>
+    <div class="orb b"></div>
     <main class="player">
       <div class="header-row">
         <div class="art">&#127925;</div>
@@ -344,6 +447,8 @@
         <span>&#128266;</span>
         <input id="volume" type="range" min="0" max="100" value="80" />
       </div>
+
+      <p class="status" id="player-status"></p>
 
       <p class="playlist-heading">
         <span>Playlist</span>

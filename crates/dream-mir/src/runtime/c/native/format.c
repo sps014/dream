@@ -1,5 +1,8 @@
 #include "include/dream_rt_native.h"
 
+/* Debug live-object counter (defined in heap.c); immortals leave the count. */
+extern int32_t live_objects;
+
 static dream_ptr from_utf8(const char *s) {
     size_t n = strlen(s);
     size_t i;
@@ -71,13 +74,24 @@ dream_ptr dream_byte_to_string(int32_t v) {
  * callers release them through ordinary ARC. */
 static dream_ptr bool_intern[2];
 
+static void pin_immortal_obj(dream_ptr s);
+
+/* Mark a shared singleton immortal: rc == INT32_MAX is ignored by retain/release, and
+ * the block leaves Debug.live_objects accounting (it will never be freed). */
+static void pin_immortal_obj(dream_ptr s) {
+    if (s) {
+        ((int32_t *)dream_p(s))[-1] = INT32_MAX;
+        if (live_objects > 0) {
+            live_objects -= 1;
+        }
+    }
+}
+
 static dream_ptr intern_bool(int32_t v) {
     dream_ptr slot = bool_intern[v ? 1 : 0];
     if (!slot) {
         dream_ptr s = from_utf8(v ? "true" : "false");
-        if (s) {
-            ((int32_t *)dream_p(s))[-1] = INT32_MAX;
-        }
+        pin_immortal_obj(s);
         bool_intern[v ? 1 : 0] = s;
         return s;
     }

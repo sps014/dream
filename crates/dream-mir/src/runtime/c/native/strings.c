@@ -5,6 +5,20 @@
 
 static dream_ptr empty_string_singleton;
 
+extern int32_t live_objects;
+
+/* Mark a shared singleton immortal: rc == INT32_MAX is ignored by retain/release, and
+ * the block leaves Debug.live_objects accounting (it will never be freed). */
+static void pin_immortal_obj(dream_ptr s) {
+    if (s) {
+        ((int32_t *)dream_p(s))[-1] = INT32_MAX;
+        if (live_objects > 0) {
+            live_objects -= 1;
+        }
+    }
+}
+
+
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
     if (units <= 0) {
@@ -15,7 +29,7 @@ dream_ptr dream_string_alloc(int32_t units) {
             p = dream_malloc(8, TAG_STRING);
             dream_i32(p)[0] = 0;
             dream_str_init_owned(p);
-            ((int32_t *)dream_p(p))[-1] = INT32_MAX;
+            pin_immortal_obj(p);
             empty_string_singleton = p;
         }
         return empty_string_singleton;

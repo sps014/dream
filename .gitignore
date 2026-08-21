@@ -1,4 +1,4 @@
-/target
+target/
 
 .idea/
 .cursor/
@@ -14,7 +14,6 @@ site/
 *.runtime.js
 
 
-**/target/**/*.cc.lock
 tests/**/*.C
 tests/**/*.bin
 tests/**/*.o
@@ -51,7 +50,6 @@ tooling/vscode/bin/
 
 *.pyc
 sample/sqlite/*.db
-sample/sqlite/target/pack/*
 
 # C# microbench side-by-side harness
 tests/bench/csharp/bin/

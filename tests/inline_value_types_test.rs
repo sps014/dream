@@ -1,5 +1,5 @@
 //! Release inlining of value-type / Span helpers: `List<int>.insert` must collapse the
-//! `Span.copy_from` call layer into an open-coded `memory.copy` (unmanaged path).
+//! `Span.copy_from` call layer into an open-coded bulk copy (`memcpy`) on the C→wasm32 path.
 
 use dream::driver::compiler::{Compiler, Target};
 use std::fs;
@@ -40,7 +40,7 @@ fn list_insert_inlines_span_copy_from() {
             .join("\n")
     );
     assert!(
-        wat.contains("memory.copy"),
-        "unmanaged List.insert path should open-code memory.copy"
+        wat.contains("memcpy"),
+        "unmanaged List.insert path should open-code bulk copies via memcpy"
     );
 }

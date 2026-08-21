@@ -382,6 +382,12 @@ pub const EXPORT_WORKER_INVOKE: &str = "__dream_worker_invoke";
 /// settles later via a Promise callback, never synchronously within the `call_indirect`).
 pub const EXPORT_WORKER_INVOKE_RAW: &str = "__dream_worker_invoke_raw";
 
+/// C-backend wasm32 export mapping a `dream_ft[]` dispatch index to the function-pointer value.
+/// Clang assigns `__indirect_function_table` slots independently of `dream_ft[]` order, but on
+/// wasm32 a function pointer *is* its table index — so the JS host translates through this before
+/// `table.get` when wrapping a FUNC-slot callback (the WAT backend needs no such export).
+pub const EXPORT_FT_GET: &str = "dream_ft_get";
+
 #[cfg(test)]
 mod abi_h_lockstep {
     use super::*;

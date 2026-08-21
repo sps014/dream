@@ -288,12 +288,18 @@ export class DreamInstance {
     if (index < 0) return null;
     const table = this.exports.__indirect_function_table;
     if (!table) throw new Error("module does not export its function table; cannot build a callback");
+    // C-backend modules number `fun` values by their internal `dream_ft[]` dispatch table, whose
+    // slots clang assigns independently of the wasm table. The exported `dream_ft_get` maps an ft
+    // index to the function-pointer value, which on wasm32 *is* the table index. WAT-backend
+    // modules (and workers, which dispatch through `dream_ft` themselves) need no translation.
+    const mapFt = this.exports.dream_ft_get;
+    const tableIndex = typeof mapFt === "function" ? Number(mapFt(index)) : index;
     const cacheKey = `${index}|${typeStr}`;
     const cached = this._callbackWrappers.get(cacheKey);
     if (cached) return cached;
-    const fn = table.get(index);
+    const fn = table.get(tableIndex);
     if (typeof fn !== "function") {
-      throw new Error(`no Dream function at table index ${index}`);
+      throw new Error(`no Dream function at table index ${tableIndex}`);
     }
     const { params, result } = parseFunType(typeStr);
     const wrapper = (...jsArgs) => {

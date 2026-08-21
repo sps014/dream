@@ -78,6 +78,9 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
     }
     emit_ftable_def(&mut m, &cx, async_n);
     let mut ft_get = FuncBuilder::new(CTy::VoidPtr, "dream_ft_get");
+    if cx.target.is_wasm32() {
+        ft_get.export = Some(crate::abi::EXPORT_FT_GET.to_string());
+    }
     ft_get.param(CTy::I32, "i");
     ft_get.stmt(Stmt::Return(Some(Expr::ternary(
         Expr::and(

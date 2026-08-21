@@ -164,10 +164,14 @@ impl<'a> Emitter<'a> {
         let mut filled: Vec<(i32, i32, &'static str, Expr)> = Vec::with_capacity(args.len());
         for (op, ty) in args {
             let (tag, aux, store) = js_abi::slot_desc(self.cx.interner, *ty);
-            let mut payload = self.operand(op);
-            if tag == js_abi::tag::FUNC {
-                payload = Expr::call("dream_funcbox_funcidx", vec![payload]);
-            }
+            // A `fun(...)` value is a `[ft-index][env]` box from `dream_funcbox_new`; a FUNC slot
+            // carries the bare `dream_ft[]` index. The JS host translates it to a wasm-table index
+            // via the exported `dream_ft_get` before `table.get` (worker dispatch and `@c`
+            // callbacks consume the ft index directly, so it must stay untranslated here).
+            let payload = match tag == js_abi::tag::FUNC {
+                true => Expr::call("dream_funcbox_funcidx", vec![self.operand(op)]),
+                false => self.operand(op),
+            };
             filled.push((tag, aux, store, payload));
         }
         let name = self.cx.callee_c(callee.def, &callee.args);

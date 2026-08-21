@@ -87,16 +87,36 @@ export class DreamInstance {
   }
 
   /**
+   * Payload address of a Dream string. C owned strings store pad 0 (units at `ptr+8`);
+   * C slices store pad 1 and the units pointer at `ptr+8+4` on wasm32; WAT stores the
+   * absolute units address in pad.
+   */
+  stringUnitsStart(ptr) {
+    const pad = this.view.getInt32(ptr + 4, true);
+    if (pad === 0) return ptr + 8;
+    if (pad === 1) return this.view.getInt32(ptr + 12, true);
+    return pad;
+  }
+
+  /**
    * Reads a Dream string at `ptr` (a data pointer). Layout:
-   * `[unit_len: i32][pad: i32][utf16le...]`.
+   * `[unit_len: i32][pad: i32][utf16le...]`. Uses code-unit copy so `Bytes.toWire`
+   * payloads that contain U+0000 survive the JS boundary (TextDecoder is not required).
    */
   readString(ptr) {
     if (!ptr) return "";
-    const units = this.view.getInt32(ptr, true);
-    const pad = this.view.getInt32(ptr + 4, true);
-    const start = pad === 0 ? ptr + 8 : pad;
-    const bytes = this.bytes.slice(start, start + units * 2);
-    return new TextDecoder("utf-16le").decode(bytes);
+    const n = this.view.getInt32(ptr, true);
+    if (n <= 0) return "";
+    const start = this.stringUnitsStart(ptr);
+    const u16 = new Uint16Array(this.memory.buffer.slice(start, start + n * 2));
+    if (u16.length <= 8192) {
+      return String.fromCharCode.apply(null, u16);
+    }
+    let s = "";
+    for (let i = 0; i < u16.length; i += 8192) {
+      s += String.fromCharCode.apply(null, u16.subarray(i, i + 8192));
+    }
+    return s;
   }
 
   /**
@@ -104,12 +124,19 @@ export class DreamInstance {
    * extern functions can return strings back into Dream. Requires the module to export `malloc`.
    * Layout: `[unit_len: i32][pad: i32][utf16le...]` (no NUL terminator).
    */
-  writeString(str) {
-    if (typeof this.exports.malloc !== "function") {
-      throw new Error("module does not export `malloc`; cannot allocate a string");
+  guestMalloc(size, tag) {
+    if (typeof this.exports.dream_malloc === "function") {
+      return this.exports.dream_malloc(size, tag);
     }
+    if (typeof this.exports.malloc !== "function") {
+      throw new Error("module does not export `malloc`; cannot allocate");
+    }
+    return this.exports.malloc(size, tag);
+  }
+
+  writeString(str) {
     const units = str.length;
-    const ptr = this.exports.malloc(8 + units * 2, TAGS.STRING);
+    const ptr = this.guestMalloc(8 + units * 2, TAGS.STRING);
     this.view.setInt32(ptr, units, true);
     this.view.setInt32(ptr + 4, ptr + 8, true);
     for (let i = 0; i < units; i++) {
@@ -190,13 +217,10 @@ export class DreamInstance {
    * Dream. Layout: [count:i32] followed by `count` elements. Requires the module to export `malloc`.
    */
   writeArray(arr, elemType = "int") {
-    if (typeof this.exports.malloc !== "function") {
-      throw new Error("module does not export `malloc`; cannot allocate an array");
-    }
     const elem = stripSuffix(elemType);
     const size = elementSize(elem);
     const count = arr.length;
-    const ptr = this.exports.malloc(4 + count * size, TAGS.ARRAY);
+    const ptr = this.guestMalloc(4 + count * size, TAGS.ARRAY);
     this.view.setInt32(ptr, count, true);
     if (elem === "char" || elem === "byte") {
       // Bulk copy for the common byte-array case.
@@ -264,12 +288,18 @@ export class DreamInstance {
     if (index < 0) return null;
     const table = this.exports.__indirect_function_table;
     if (!table) throw new Error("module does not export its function table; cannot build a callback");
+    // C-backend modules number `fun` values by their internal `dream_ft[]` dispatch table, whose
+    // slots clang assigns independently of the wasm table. The exported `dream_ft_get` maps an ft
+    // index to the function-pointer value, which on wasm32 *is* the table index. WAT-backend
+    // modules (and workers, which dispatch through `dream_ft` themselves) need no translation.
+    const mapFt = this.exports.dream_ft_get;
+    const tableIndex = typeof mapFt === "function" ? Number(mapFt(index)) : index;
     const cacheKey = `${index}|${typeStr}`;
     const cached = this._callbackWrappers.get(cacheKey);
     if (cached) return cached;
-    const fn = table.get(index);
+    const fn = table.get(tableIndex);
     if (typeof fn !== "function") {
-      throw new Error(`no Dream function at table index ${index}`);
+      throw new Error(`no Dream function at table index ${tableIndex}`);
     }
     const { params, result } = parseFunType(typeStr);
     const wrapper = (...jsArgs) => {
@@ -298,7 +328,11 @@ export class DreamInstance {
    */
   __workerInvoke(fnIndex, env, msg) {
     const ptr = this.writeString(msg == null ? "" : String(msg));
-    const r = this.exports.__dream_worker_invoke_raw(fnIndex, env, ptr);
+    const r = this.exports.__dream_worker_invoke_raw(
+      Number(fnIndex),
+      Number(env ?? 0),
+      Number(ptr),
+    );
     return this.__awaitWorkerResult(r);
   }
 
@@ -316,30 +350,44 @@ export class DreamInstance {
    * slot on the microtask queue until some pump marks it done, then unwrap `F_RESULT`.
    */
   __awaitWorkerResult(r) {
-    const F_STATUS = 4; // mirrors src/mir/async_emit.rs
     const F_RESULT = 8;
-    const tag = r === 0 ? 0 : this.i32(r - 8); // mirrors the WASM `$object_tag` helper
+    if (!r) return Promise.resolve("");
+    const tag = this.i32(r - 8); // mirrors the WASM `$object_tag` helper
     if (tag !== 0) return Promise.resolve(this.readString(r));
+    return this.__awaitFuture(r).then(() => this.readString(this.i32(r + F_RESULT)));
+  }
+
+  /**
+   * Waits until a tag-0 Future frame is settled. `wrapAsyncImport` re-pumps `__dream_run_loop`
+   * when the host Promise completes; this only observes `F_STATUS`.
+   */
+  __awaitFuture(r) {
+    const F_STATUS = 4; // mirrors src/mir/async_emit.rs
+    if (!r || this.i32(r + F_STATUS) !== 0) return Promise.resolve();
     return new Promise((resolve) => {
       // `setTimeout`, not `queueMicrotask`: a real pending host op (e.g. `fetch`) settles via a
       // macrotask-queued I/O callback, which a tight microtask-only poll loop would starve (the
       // microtask queue must fully drain before the next macrotask runs), hanging forever.
       const poll = () => {
-        if (this.i32(r + F_STATUS) !== 0) {
-          resolve(this.readString(this.i32(r + F_RESULT)));
-        } else {
-          setTimeout(poll, 0);
+        if (typeof this.exports.__dream_run_loop === "function") {
+          this.exports.__dream_run_loop();
         }
+        if (this.i32(r + F_STATUS) !== 0) resolve();
+        else setTimeout(poll, 0);
       };
       poll();
     });
   }
 
-  /** Calls the exported `main`, if present. Returns its result (if any). */
+  /** Calls the exported `main`, if present. Async `main` returns a Future pointer. */
   run() {
-    if (typeof this.exports.main === "function") {
-      return this.exports.main();
+    if (typeof this.exports.main !== "function") {
+      throw new Error("module has no exported `main`");
     }
-    throw new Error("module has no exported `main`");
+    const r = this.exports.main();
+    if (!r) return Promise.resolve();
+    const tag = this.i32(r - 8);
+    if (tag !== 0) return Promise.resolve(r);
+    return this.__awaitFuture(r);
   }
 }

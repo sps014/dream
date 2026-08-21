@@ -120,7 +120,7 @@ The analyzer marks a class def as `@shared` when it carries the `@shared` attrib
 
 1. **Field validation** — every field of an `@shared` class must be unmanaged or itself `@shared` (closed-graph rule; see `check_shared_field` in `src/semantics/analyzer/declarations/structs.rs`).
 2. **Layout** — `@shared` allocations are four bytes larger than the equivalent non-`@shared` class to hold a reentrant lock word past the last field (`HEADER_LOCK_WORD_SIZE` in `src/mir/abi.rs`; zero-initialized in `Rvalue::New` emission).
-3. **Backend RC** — retain/release codegen selects atomic helpers for `@shared` types only (`retain_call` / `emit_release_prologue_atomic` in `src/mir/emit/release.rs`).
+3. **Backend RC** — retain/release codegen selects atomic helpers for `@shared` types only (`retain_sym` / `release_sym` in `crates/dream-mir/src/backend/c/release.rs`).
 
 Never compare types by mangled name to detect sharing — always go through `TypeInterner::is_shared_type`.
 
@@ -133,7 +133,7 @@ Worked example: a 128-bit integer `i128`.
 3. **Interner** (`src/types/interner.rs`): pre-intern it in `new()` so it has a stable id.
 4. **Widening** (`src/types/compat.rs`): add the lattice edges in `numeric_widen`.
 5. **Lowering** (`src/types/lower.rs`): add the `Type::I128(_) => self.interner.prim(PrimTy::I128)` arm.
-6. **Backend** (`src/mir/emit/`): map it to a WASM type in `wasm_ty_of` (`emit/types.rs`) and choose instructions in the emitter (`emit/emitter/`) — likely an `i64` pair or a runtime helper.
+6. **Backend** (`crates/dream-mir/src/backend/c/`): map it to a C type in `types.rs` and choose the operator/instruction lowering in the emitter — likely an `i64` pair or a runtime helper.
 7. **Tests**: add a `types::tests` case and an e2e fixture.
 
 Type identity, equality, and display fall out for free once the `PrimTy` arm exists — that is the whole point of the structured representation.

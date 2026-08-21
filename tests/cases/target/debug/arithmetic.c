@@ -1,8 +1,8 @@
 #include "dream_rt_native.h"
 #include <math.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
 typedef dream_ptr (*dream_fn_ptr__ptr)(dream_ptr);
@@ -37,14 +37,16 @@ static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32
 static const dream_ptr __ds9 = (dream_ptr)((char *)&__ds9_blk + 16);
 static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[1]; } __ds10_blk = {0, 0, TAG_STRING, INT32_MAX, 0, 0, {0}};
 static const dream_ptr __ds10 = (dream_ptr)((char *)&__ds10_blk + 16);
-static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[26]; } __ds11_blk = {0, 0, TAG_STRING, INT32_MAX, 26, 0, {112, 97, 110, 105, 99, 58, 32, 105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115}};
+static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[6]; } __ds11_blk = {0, 0, TAG_STRING, INT32_MAX, 6, 0, {108, 101, 110, 103, 116, 104}};
 static const dream_ptr __ds11 = (dream_ptr)((char *)&__ds11_blk + 16);
-static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[32]; } __ds12_blk = {0, 0, TAG_STRING, INT32_MAX, 32, 0, {112, 97, 110, 105, 99, 58, 32, 97, 116, 116, 101, 109, 112, 116, 32, 116, 111, 32, 100, 105, 118, 105, 100, 101, 32, 98, 121, 32, 122, 101, 114, 111}};
+static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[26]; } __ds12_blk = {0, 0, TAG_STRING, INT32_MAX, 26, 0, {112, 97, 110, 105, 99, 58, 32, 105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115}};
 static const dream_ptr __ds12 = (dream_ptr)((char *)&__ds12_blk + 16);
-static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[19]; } __ds13_blk = {0, 0, TAG_STRING, INT32_MAX, 19, 0, {112, 97, 110, 105, 99, 58, 32, 105, 110, 118, 97, 108, 105, 100, 32, 99, 97, 115, 116}};
+static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[32]; } __ds13_blk = {0, 0, TAG_STRING, INT32_MAX, 32, 0, {112, 97, 110, 105, 99, 58, 32, 97, 116, 116, 101, 109, 112, 116, 32, 116, 111, 32, 100, 105, 118, 105, 100, 101, 32, 98, 121, 32, 122, 101, 114, 111}};
 static const dream_ptr __ds13 = (dream_ptr)((char *)&__ds13_blk + 16);
-static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[48]; } __ds14_blk = {0, 0, TAG_STRING, INT32_MAX, 48, 0, {112, 97, 110, 105, 99, 58, 32, 97, 99, 99, 101, 115, 115, 32, 116, 111, 32, 100, 101, 97, 108, 108, 111, 99, 97, 116, 101, 100, 32, 39, 117, 110, 111, 119, 110, 101, 100, 39, 32, 114, 101, 102, 101, 114, 101, 110, 99, 101}};
+static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[19]; } __ds14_blk = {0, 0, TAG_STRING, INT32_MAX, 19, 0, {112, 97, 110, 105, 99, 58, 32, 105, 110, 118, 97, 108, 105, 100, 32, 99, 97, 115, 116}};
 static const dream_ptr __ds14 = (dream_ptr)((char *)&__ds14_blk + 16);
+static struct { int32_t size; int32_t header_pad; int32_t tag; int32_t rc; int32_t len; int32_t pad; uint16_t u[48]; } __ds15_blk = {0, 0, TAG_STRING, INT32_MAX, 48, 0, {112, 97, 110, 105, 99, 58, 32, 97, 99, 99, 101, 115, 115, 32, 116, 111, 32, 100, 101, 97, 108, 108, 111, 99, 97, 116, 101, 100, 32, 39, 117, 110, 111, 119, 110, 101, 100, 39, 32, 114, 101, 102, 101, 114, 101, 110, 99, 101}};
+static const dream_ptr __ds15 = (dream_ptr)((char *)&__ds15_blk + 16);
 _Thread_local dream_ptr g0 = 0;
 static void * dream_ft[2];
 void main_dream(void);
@@ -623,17 +625,28 @@ void * dream_ft_get(int32_t i) {
 static void dream_init_itables(void) {
 }
 
-dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
+static int32_t dream_rt_inited = 0;
+void dream_runtime_init(void) {
+  if (dream_rt_inited) return;
+  dream_rt_inited = 1;
+  dream_init_ft();
+  dream_init_itables();
+  dream_host_bind(dream_string_alloc, dream_array_new);
+}
+
+dream_ptr dream_worker_invoke_raw(int32_t fn, dream_ptr env, dream_ptr arg) {
   if (fn <= 0) return 0;
-  g0 = env;
-  dream_ptr result = (((dream_fn_ptr__ptr)dream_ft[fn]))(arg);
+  dream_g0_set(env);
+  return (((dream_fn_ptr__ptr)dream_ft[fn]))(arg);
+}
+
+dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
+  dream_ptr result = dream_worker_invoke_raw(fn, env, arg);
   return result;
 }
 
 int32_t dream_guest_entry(void) {
-  dream_init_ft();
-  dream_init_itables();
-  dream_host_bind(dream_string_alloc, dream_array_new);
+  dream_runtime_init();
   main_dream();
   return 0;
 }

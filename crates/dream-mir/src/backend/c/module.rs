@@ -4,25 +4,41 @@ use super::ctx::Cx;
 use super::emit::Emitter;
 use super::protocol::{emit_iface_init, emit_iface_trampolines, emit_protocol};
 use super::release::emit_release_helpers;
+use super::target::CTarget;
 use super::types::{c_ident, c_ty, fn_ptr_abi, local_c_ty};
 use crate::backend::shared::func_symbol;
 use crate::{Mir, MirFunction, Rvalue, Statement};
+use dream_abi::js_abi;
 use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 
+const NATIVE_RT_INCLUDE: &str = "\"dream_rt_native.h\"";
+const WASM32_RT_INCLUDE: &str = "\"dream_rt_wasm32.h\"";
+
 pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
-    let cx = Cx::new(mir, interner);
+    emit_c_module_for(mir, interner, CTarget::Native)
+}
+
+pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) -> String {
+    let cx = Cx::new(mir, interner, target);
     let mut m = ModuleBuilder::new();
-    m.include("\"dream_rt_native.h\"");
-    m.include("<math.h>");
+    m.include(if target.is_wasm32() {
+        WASM32_RT_INCLUDE
+    } else {
+        NATIVE_RT_INCLUDE
+    });
+    if !target.is_wasm32() {
+        m.include("<math.h>");
+        m.include("<stdio.h>");
+        m.include("<stdlib.h>");
+    }
     m.include("<stdint.h>");
-    m.include("<stdio.h>");
-    m.include("<stdlib.h>");
     m.include("<string.h>");
     emit_fn_typedefs(&mut m, &cx);
     emit_string_table(&mut m, &cx);
     emit_globals(&mut m, &cx);
     emit_imports(&mut m, &cx);
+    super::js_marshal::emit_js_marshal(&mut m, &cx);
     let async_n = mir.functions.iter().filter(|f| f.is_async).count();
     emit_ftable_decl(&mut m, &cx, async_n);
     for f in &mir.functions {
@@ -32,6 +48,8 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
             ret,
             name,
             params,
+            import: None,
+            export: None,
         });
         let _ = attr;
         if f.is_async {
@@ -60,6 +78,9 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
     }
     emit_ftable_def(&mut m, &cx, async_n);
     let mut ft_get = FuncBuilder::new(CTy::VoidPtr, "dream_ft_get");
+    if cx.target.is_wasm32() {
+        ft_get.export = Some(crate::abi::EXPORT_FT_GET.to_string());
+    }
     ft_get.param(CTy::I32, "i");
     ft_get.stmt(Stmt::Return(Some(Expr::ternary(
         Expr::and(
@@ -74,52 +95,70 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
     ))));
     m.push_func(ft_get);
     emit_iface_init(&mut m, &cx);
+    emit_runtime_init(&mut m, &cx);
     emit_worker_invoke(&mut m, &cx);
     if let Some(main) = mir
         .functions
         .iter()
         .find(|f| f.name == crate::abi::ENTRY_FN)
     {
-        let mut entry = FuncBuilder::new(CTy::I32, "dream_guest_entry");
-        entry.call("dream_init_ft", vec![]);
-        entry.call("dream_init_itables", vec![]);
-        entry.call(
-            "dream_host_bind",
-            vec![Expr::id("dream_string_alloc"), Expr::id("dream_array_new")],
-        );
-        if let Some(init) = mir.functions.iter().find(|f| f.name == "__dream_init") {
-            entry.call(c_ident(&func_symbol(init)), vec![]);
-        }
-        if main.params.is_empty() {
-            entry.call("main_dream", vec![]);
-        } else {
-            entry.call(
-                "main_dream",
-                vec![Expr::call("dream_array_new", vec![Expr::i(0), Expr::i(8)])],
-            );
-        }
-        if async_n > 0 {
-            entry.call("dream_run_loop", vec![]);
-        }
-        if cx.mir.uses_defer {
-            entry.call("dream_defer_drain_all", vec![]);
-        }
-        entry.ret(Some(Expr::i(0)));
-        m.push_func(entry);
-        let mut main_fn = FuncBuilder::new(CTy::I32, "main");
-        main_fn.param(CTy::I32, "argc");
-        main_fn.param(CTy::ptr_to(CTy::CharPtr), "argv");
-        main_fn.call(
-            "dream_process_capture_args",
-            vec![Expr::id("argc"), Expr::id("argv")],
-        );
-        main_fn.ret(Some(Expr::call("dream_guest_entry", vec![])));
-        m.push_func(main_fn);
+        emit_guest_entry(&mut m, &cx, main, async_n);
     }
     m.finish()
 }
 
+fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, async_n: usize) {
+    let mut entry = FuncBuilder::new(CTy::I32, crate::abi::GUEST_ENTRY_FN);
+    if cx.target.is_wasm32() {
+        entry.export = Some(crate::abi::ENTRY_FN.to_string());
+    }
+    entry.call("dream_runtime_init", vec![]);
+    let main_args = if main.params.is_empty() {
+        vec![]
+    } else {
+        vec![Expr::call("dream_array_new", vec![Expr::i(0), Expr::i(8)])]
+    };
+    if main.is_async {
+        entry.stmt(Stmt::decl(
+            CTy::Ptr,
+            "__mf",
+            Some(Expr::call("main_dream", main_args)),
+        ));
+    } else {
+        entry.call("main_dream", main_args);
+    }
+    if async_n > 0 {
+        entry.call("dream_run_loop", vec![]);
+    }
+    if cx.mir.uses_defer {
+        entry.call("dream_defer_drain_all", vec![]);
+    }
+    if cx.target.is_wasm32() && main.is_async {
+        entry.ret(Some(Expr::cast(CTy::I32, Expr::id("__mf"))));
+    } else {
+        entry.ret(Some(Expr::i(0)));
+    }
+    m.push_func(entry);
+    if cx.target.is_wasm32() {
+        return;
+    }
+    let mut main_fn = FuncBuilder::new(CTy::I32, "main");
+    main_fn.param(CTy::I32, "argc");
+    main_fn.param(CTy::ptr_to(CTy::CharPtr), "argv");
+    main_fn.call(
+        "dream_process_capture_args",
+        vec![Expr::id("argc"), Expr::id("argv")],
+    );
+    main_fn.ret(Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])));
+    m.push_func(main_fn);
+}
+
 fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let header = if cx.target.is_wasm32() {
+        crate::abi::HEAP_HEADER_SIZE as i64
+    } else {
+        crate::abi::NATIVE_HEAP_HEADER_SIZE as i64
+    };
     for (s, sym) in &cx.strings {
         let units: Vec<u16> = s.encode_utf16().collect();
         let n = units.len();
@@ -128,13 +167,34 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         } else {
             units.iter().map(|u| Expr::i(*u as i64)).collect()
         };
-        m.push(Item::Global {
-            thread_local: false,
-            align: None,
-            static_: true,
-            const_: false,
-            ty: CTy::Struct {
-                fields: vec![
+        let (fields, init) = if cx.target.is_wasm32() {
+            (
+                vec![
+                    (CTy::I32, "size".into()),
+                    (CTy::I32, "tag".into()),
+                    (CTy::I32, "rc".into()),
+                    (CTy::I32, "len".into()),
+                    (CTy::I32, "pad".into()),
+                    (
+                        CTy::Array {
+                            elem: Box::new(CTy::U16),
+                            len: n.max(1),
+                        },
+                        "u".into(),
+                    ),
+                ],
+                vec![
+                    Expr::i(0),
+                    Expr::id("TAG_STRING"),
+                    Expr::id("INT32_MAX"),
+                    Expr::i(n as i64),
+                    Expr::i(0),
+                    Expr::Compound(init_units),
+                ],
+            )
+        } else {
+            (
+                vec![
                     (CTy::I32, "size".into()),
                     (CTy::I32, "header_pad".into()),
                     (CTy::I32, "tag".into()),
@@ -149,17 +209,25 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                         "u".into(),
                     ),
                 ],
-            },
+                vec![
+                    Expr::i(0),
+                    Expr::i(0),
+                    Expr::id("TAG_STRING"),
+                    Expr::id("INT32_MAX"),
+                    Expr::i(n as i64),
+                    Expr::i(0),
+                    Expr::Compound(init_units),
+                ],
+            )
+        };
+        m.push(Item::Global {
+            thread_local: false,
+            align: None,
+            static_: true,
+            const_: false,
+            ty: CTy::Struct { fields },
             name: format!("{sym}_blk"),
-            init: Some(Expr::Compound(vec![
-                Expr::i(0),
-                Expr::i(0),
-                Expr::id("TAG_STRING"),
-                Expr::id("INT32_MAX"),
-                Expr::i(n as i64),
-                Expr::i(0),
-                Expr::Compound(init_units),
-            ])),
+            init: Some(Expr::Compound(init)),
         });
         m.push(Item::Global {
             thread_local: false,
@@ -172,7 +240,7 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 CTy::Ptr,
                 Expr::add(
                     Expr::cast(CTy::CharPtr, Expr::addr_of(Expr::id(format!("{sym}_blk")))),
-                    Expr::i(crate::abi::NATIVE_HEAP_HEADER_SIZE as i64),
+                    Expr::i(header),
                 ),
             )),
         });
@@ -182,15 +250,20 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
 fn emit_globals(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     for g in &cx.mir.globals {
         if g.id.0 == 0 {
-            m.push(Item::Global {
-                thread_local: true,
-                align: None,
-                static_: false,
-                const_: false,
-                ty: CTy::Ptr,
-                name: "g0".into(),
-                init: Some(Expr::i(0)),
-            });
+            // Native TLS `g0`. Wasm32 uses a per-instance wasm global (`dream_g0_get`/`set`)
+            // because `_Thread_local` is linear-memory TLS that aliases the stack under
+            // `--shared-memory`.
+            if !cx.target.is_wasm32() {
+                m.push(Item::Global {
+                    thread_local: true,
+                    align: None,
+                    static_: false,
+                    const_: false,
+                    ty: CTy::Ptr,
+                    name: "g0".into(),
+                    init: Some(Expr::i(0)),
+                });
+            }
             continue;
         }
         if cx.interner.is_value_type(g.ty) {
@@ -235,29 +308,49 @@ fn emit_globals(m: &mut ModuleBuilder, cx: &Cx<'_>) {
 
 fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let has_env = cx.mir.globals.iter().any(|g| g.id.0 == 0);
-    let mut b = FuncBuilder::new(CTy::Ptr, "dream_worker_invoke");
-    b.param(CTy::I32, "fn");
-    b.param(CTy::Ptr, "env");
-    b.param(CTy::Ptr, "arg");
-    b.stmt(Stmt::if_(
+    let result_off = cx.target.abi().future.result as i64;
+    let mut raw = FuncBuilder::new(CTy::Ptr, "dream_worker_invoke_raw");
+    if cx.target.is_wasm32() {
+        raw.export = Some(crate::abi::EXPORT_WORKER_INVOKE_RAW.to_string());
+    }
+    raw.param(CTy::I32, "fn");
+    raw.param(CTy::Ptr, "env");
+    raw.param(CTy::Ptr, "arg");
+    if cx.target.is_wasm32() {
+        raw.call("dream_runtime_init", vec![]);
+    }
+    raw.stmt(Stmt::if_(
         Expr::bin(crate::BinOp::Le, Expr::id("fn"), Expr::i(0)),
         Stmt::Return(Some(Expr::i(0))),
     ));
     if has_env {
-        b.assign(Expr::id("g0"), Expr::id("env"));
+        raw.assign(Expr::id("g0"), Expr::id("env"));
     } else {
-        b.expr_stmt(Expr::cast(CTy::Void, Expr::id("env")));
+        raw.expr_stmt(Expr::cast(CTy::Void, Expr::id("env")));
     }
+    raw.stmt(Stmt::Return(Some(Expr::IndirectCall {
+        callee: Box::new(Expr::cast(
+            CTy::Ident("dream_fn_ptr__ptr".into()),
+            Expr::index(Expr::id("dream_ft"), Expr::id("fn")),
+        )),
+        args: vec![Expr::id("arg")],
+    })));
+    m.push_func(raw);
+
+    let mut b = FuncBuilder::new(CTy::Ptr, "dream_worker_invoke");
+    if cx.target.is_wasm32() {
+        b.export = Some(crate::abi::EXPORT_WORKER_INVOKE.to_string());
+    }
+    b.param(CTy::I32, "fn");
+    b.param(CTy::Ptr, "env");
+    b.param(CTy::Ptr, "arg");
     b.stmt(Stmt::decl(
         CTy::Ptr,
         "result",
-        Some(Expr::IndirectCall {
-            callee: Box::new(Expr::cast(
-                CTy::Ident("dream_fn_ptr__ptr".into()),
-                Expr::index(Expr::id("dream_ft"), Expr::id("fn")),
-            )),
-            args: vec![Expr::id("arg")],
-        }),
+        Some(Expr::call(
+            "dream_worker_invoke_raw",
+            vec![Expr::id("fn"), Expr::id("env"), Expr::id("arg")],
+        )),
     ));
     let async_indices: Vec<_> = cx
         .mir
@@ -275,7 +368,7 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     Stmt::call("dream_run_loop", vec![]),
                     Stmt::Return(Some(Expr::load(
                         CTy::Ptr,
-                        Expr::ptr_add(Expr::id("result"), Expr::i(8)),
+                        Expr::ptr_add(Expr::id("result"), Expr::i(result_off)),
                     ))),
                 ],
             });
@@ -294,14 +387,26 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
 }
 
 fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    if cx.target.is_wasm32() {
+        emit_wasm32_js_rc(m);
+    }
+    let fut = cx.target.abi().future;
     for imp in &cx.mir.imports {
         if super::c_imports::is_c_import(imp) {
+            if cx.target.is_wasm32() {
+                continue;
+            }
             super::c_imports::emit_c_import(m, cx, imp);
+            continue;
+        }
+        if cx.target.is_wasm32()
+            && (imp.field == js_abi::HOST_JS_RETAIN || imp.field == js_abi::HOST_JS_RELEASE)
+        {
             continue;
         }
         let host = super::types::import_host_name(imp);
         let async_wrap = super::types::import_is_async_future(cx.mir, imp);
-        if !async_wrap && super::types::native_header_declares(&host) {
+        if !cx.target.is_wasm32() && !async_wrap && super::types::native_header_declares(&host) {
             continue;
         }
         let name = super::types::import_call_name(cx.mir, imp);
@@ -322,51 +427,102 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             .iter()
             .enumerate()
             .map(|(i, t)| Param {
-                ty: c_ty(cx.interner, *t),
+                ty: if imp.param_by_ref.get(i).copied().unwrap_or(false) {
+                    CTy::Ptr
+                } else {
+                    c_ty(cx.interner, *t)
+                },
                 name: format!("a{i}"),
             })
             .collect();
         let call_args: Vec<Expr> = (0..imp.params.len())
             .map(|i| Expr::id(format!("a{i}")))
             .collect();
-        if !super::types::native_header_declares(&host) {
+        let import_mod = if imp.module.is_empty() {
+            js_abi::HOST_MODULE.to_string()
+        } else {
+            imp.module.clone()
+        };
+        let import_field = if imp.field.is_empty() {
+            imp.name.clone()
+        } else {
+            imp.field.clone()
+        };
+        if cx.target.is_wasm32() {
+            m.import_proto(
+                host_ret.clone(),
+                host.clone(),
+                params.clone(),
+                import_mod,
+                import_field,
+            );
+        } else if !super::types::native_header_declares(&host) {
             m.proto(host_ret.clone(), host.clone(), params.clone());
         }
         if async_wrap {
             let mut b = FuncBuilder::new(CTy::Ptr, name);
             b.params = params;
-            b.stmt(Stmt::decl(
-                CTy::Ptr,
-                "__f",
-                Some(Expr::call(
-                    "dream_new_future",
-                    vec![Expr::i(64), Expr::i(-1), Expr::i(1)],
-                )),
-            ));
-            if host_ret == CTy::Void {
-                b.call(host, call_args);
-                b.call("dream_async_complete", vec![Expr::id("__f"), Expr::i(0)]);
+            if cx.target.is_wasm32() {
+                // `wrapAsyncImport` already allocates the host Future; returning a second
+                // completed wrapper made `await` see a string that was actually that Future.
+                b.ret(Some(Expr::cast(CTy::Ptr, Expr::call(host, call_args))));
             } else {
-                b.call(
-                    "dream_async_complete",
-                    vec![
-                        Expr::id("__f"),
-                        Expr::cast(
-                            CTy::Ptr,
-                            Expr::cast(CTy::Named("intptr_t"), Expr::call(host, call_args)),
-                        ),
-                    ],
-                );
+                b.stmt(Stmt::decl(
+                    CTy::Ptr,
+                    "__f",
+                    Some(Expr::call(
+                        "dream_new_future",
+                        vec![
+                            Expr::i(fut.slots as i64),
+                            Expr::i(crate::abi::HOST_POLL_INDEX as i64),
+                            Expr::i(crate::abi::FUTURE_KIND_HOST as i64),
+                        ],
+                    )),
+                ));
+                if host_ret == CTy::Void {
+                    b.call(host, call_args);
+                    b.call("dream_async_complete", vec![Expr::id("__f"), Expr::i(0)]);
+                } else {
+                    let host_call = Expr::call(host, call_args);
+                    let as_ptr = Expr::cast(
+                        CTy::Ptr,
+                        Expr::cast(CTy::Named("intptr_t"), host_call),
+                    );
+                    b.call("dream_async_complete", vec![Expr::id("__f"), as_ptr]);
+                }
+                b.ret(Some(Expr::id("__f")));
             }
-            b.ret(Some(Expr::id("__f")));
             m.push_func(b);
         }
     }
 }
 
+fn emit_wasm32_js_rc(m: &mut ModuleBuilder) {
+    let handle = vec![Param {
+        ty: CTy::Ptr,
+        name: "h".into(),
+    }];
+    m.import_proto(
+        CTy::Void,
+        "js_retain",
+        handle.clone(),
+        js_abi::HOST_MODULE,
+        js_abi::HOST_JS_RETAIN,
+    );
+    m.import_proto(
+        CTy::Void,
+        "js_release",
+        handle,
+        js_abi::HOST_MODULE,
+        js_abi::HOST_JS_RELEASE,
+    );
+}
+
 fn emit_ftable_decl(m: &mut ModuleBuilder, cx: &Cx<'_>, async_n: usize) {
     let n = cx.mir.functions.len() + 1 + async_n;
     m.push(Item::Global {
+        // Linker table indices are the same in every instance of this module; sharing BSS is
+        // required so a worker instance can call a funcref posted from the parent.
         thread_local: false,
         align: None,
         static_: true,
@@ -406,6 +562,47 @@ fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _async_n: usize) {
     m.push_func(b);
 }
 
+fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    m.push(Item::Global {
+        thread_local: false,
+        align: None,
+        static_: true,
+        const_: false,
+        ty: CTy::I32,
+        name: "dream_rt_inited".into(),
+        init: Some(Expr::i(0)),
+    });
+    let mut b = FuncBuilder::new(CTy::Void, "dream_runtime_init");
+    if cx.target.is_wasm32() {
+        b.export = Some(crate::abi::EXPORT_RUNTIME_INIT.to_string());
+    }
+    b.stmt(Stmt::if_(
+        Expr::id("dream_rt_inited"),
+        Stmt::Return(None),
+    ));
+    b.assign(Expr::id("dream_rt_inited"), Expr::i(1));
+    if cx.target.is_wasm32() {
+        b.call("dream_heap_init", vec![]);
+    }
+    b.call("dream_init_ft", vec![]);
+    b.call("dream_init_itables", vec![]);
+    if !cx.target.is_wasm32() {
+        b.call(
+            "dream_host_bind",
+            vec![Expr::id("dream_string_alloc"), Expr::id("dream_array_new")],
+        );
+    }
+    if let Some(init) = cx
+        .mir
+        .functions
+        .iter()
+        .find(|f| f.name == crate::lower::INIT_FN_NAME)
+    {
+        b.call(c_ident(&func_symbol(init)), vec![]);
+    }
+    m.push_func(b);
+}
+
 fn poll_name(f: &MirFunction) -> String {
     format!("poll_{}", c_ident(&func_symbol(f)))
 }
@@ -440,17 +637,11 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
     };
     let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
     let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
-    let fut = crate::abi::FutureLayout::native();
-    let slots = crate::async_emit::layout_async_slots(
-        &body,
-        cx.interner,
-        fut.slots as i32,
-        |_| String::new(),
-        |ty| {
-            let sz = super::types::native_scalar_size(cx, ty).0.max(8);
-            (sz, cx.interner.is_value_type(ty))
-        },
-    );
+    let fut = cx.target.abi().future;
+    let slots = crate::async_emit::layout_async_slots(&body, cx.interner, fut.slots as i32, |ty| {
+        let sz = super::types::native_scalar_size(cx, ty).0.max(8);
+        (sz, cx.interner.is_value_type(ty))
+    });
     let size = slots.frame_size;
     let offs: Vec<i32> = (0..body.locals.len())
         .map(|i| slots.offsets.get(&i).copied().unwrap_or(0))
@@ -481,7 +672,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                 ],
             );
         } else {
-            let ty = local_c_ty(cx.interner, param_ty);
+            let ty = local_c_ty(cx, param_ty);
             stub_fn.stmt(Stmt::store(
                 ty,
                 Expr::ptr_add(Expr::id("__self"), Expr::i(off as i64)),
@@ -509,7 +700,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                 )),
             ));
         } else {
-            let ty = local_c_ty(cx.interner, decl.ty);
+            let ty = local_c_ty(cx, decl.ty);
             poll.stmt(Stmt::decl(
                 ty.clone(),
                 format!("l{i}"),
@@ -527,7 +718,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
             CTy::I32,
             Expr::ptr_add(
                 Expr::id("__self"),
-                Expr::i(crate::abi::FutureLayout::native().state as i64),
+                Expr::i(cx.target.abi().future.state as i64),
             ),
         )),
     ));
@@ -567,7 +758,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
         poll.label(format!("L{bi}"));
         if let Some(d) = resume_dest[bi] {
             let dest_ty = body.local_ty(crate::Local(d));
-            let fut = crate::abi::FutureLayout::native();
+            let fut = cx.target.abi().future;
             if cx.interner.is_value_type(dest_ty) {
                 let sz = super::types::native_scalar_size(cx, dest_ty).0;
                 poll.stmt(Stmt::block(vec![
@@ -592,7 +783,7 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
                     ),
                 ]));
             } else {
-                let ty = local_c_ty(cx.interner, dest_ty);
+            let ty = local_c_ty(cx, dest_ty);
                 let value = match cx.interner.kind(dest_ty) {
                     TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
                         Expr::load(
@@ -630,16 +821,36 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
             let mut e = Emitter::new(cx, &body, &mut poll);
             e.stmts(&block.stmts);
         }
-        for (i, decl) in body.locals.iter().enumerate() {
-            if matches!(cx.interner.kind(decl.ty), TyKind::Void)
-                || cx.interner.is_value_type(decl.ty)
-            {
-                continue;
+        // Spill back only the locals this block *modified*: every poll invocation reloads all
+        // locals from the frame before the state dispatch, so unmodified locals still satisfy
+        // the frame == register invariant. Storing everything here cost O(blocks × locals)
+        // redundant heap stores per poll.
+        let mut dirty: Vec<u32> = Vec::new();
+        // The await-result handoff (`__ch` → local) emitted above this label is not a block
+        // statement, so seed it explicitly.
+        if let Some(d) = resume_dest[bi] {
+            let decl = &body.locals[d as usize];
+            if !cx.interner.is_value_type(decl.ty) {
+                dirty.push(d);
             }
+        }
+        for s in &block.stmts {
+            if let Statement::Assign(crate::Place::Local(l), _) = s {
+                let i = l.0 as usize;
+                let decl = &body.locals[i];
+                if !matches!(cx.interner.kind(decl.ty), TyKind::Void)
+                    && !cx.interner.is_value_type(decl.ty)
+                    && !dirty.contains(&l.0)
+                {
+                    dirty.push(l.0);
+                }
+            }
+        }
+        for i in dirty {
             poll.stmt(Stmt::store(
-                local_c_ty(cx.interner, decl.ty),
-                Expr::ptr_add(Expr::id("__self"), Expr::i(offs[i] as i64)),
-                Expr::local(i as u32),
+                local_c_ty(cx, body.local_ty(crate::Local(i))),
+                Expr::ptr_add(Expr::id("__self"), Expr::i(offs[i as usize] as i64)),
+                Expr::local(i),
             ));
         }
         {
@@ -720,7 +931,7 @@ fn emit_func(m: &mut ModuleBuilder, cx: &Cx<'_>, f: &MirFunction) {
             ));
         } else {
             b.stmt(Stmt::decl(
-                local_c_ty(cx.interner, decl.ty),
+                local_c_ty(cx, decl.ty),
                 format!("l{i}"),
                 Some(Expr::i(0)),
             ));

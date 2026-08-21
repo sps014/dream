@@ -32,6 +32,13 @@ static dream_ptr arr_get(dream_ptr arr, int32_t i) {
 void *dream_ft_get(int32_t i);
 static void combinator_progress(dream_ptr w, dream_ptr child);
 
+#ifdef DREAM_WASM32
+static int64_t vclock;
+#endif
+
+#ifdef DREAM_WASM32
+__attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
+#endif
 dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind) {
     dream_ptr p = dream_malloc(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, 0);
     memset(dream_p(p), 0, (size_t)(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size));
@@ -55,6 +62,13 @@ void dream_enqueue(dream_ptr f) {
     }
     rq_tail->next = n;
     rq_tail = n;
+}
+
+#ifdef DREAM_WASM32
+__attribute__((export_name(DREAM_SYM_RESOLVE)))
+#endif
+void dream_resolve(dream_ptr f, dream_ptr res) {
+    dream_async_complete(f, res);
 }
 
 void dream_async_complete(dream_ptr f, dream_ptr res) {
@@ -133,6 +147,9 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     }
 }
 
+#ifdef DREAM_WASM32
+__attribute__((export_name(DREAM_SYM_RUN_LOOP)))
+#endif
 void dream_run_loop(void) {
     for (;;) {
         while (rq_head) {
@@ -158,6 +175,10 @@ void dream_run_loop(void) {
             return;
         }
         {
+#ifdef DREAM_WASM32
+            int64_t now = timer_head->due;
+            vclock = now;
+#else
             int64_t now = timeNowNanos();
             int64_t due = timer_head->due;
             if (due > now) {
@@ -168,6 +189,7 @@ void dream_run_loop(void) {
                 nanosleep(&ts, NULL);
             }
             now = timeNowNanos();
+#endif
             while (timer_head && timer_head->due <= now) {
                 Node *n = timer_head;
                 timer_head = n->next;
@@ -183,7 +205,11 @@ dream_ptr dream_sleep(int32_t ms) {
     Node *n = (Node *)calloc(1, sizeof(Node));
     Node **pp;
     n->f = f;
+#ifdef DREAM_WASM32
+    n->due = vclock + (int64_t)ms * 1000000LL;
+#else
     n->due = timeNowNanos() + (int64_t)ms * 1000000LL;
+#endif
     pp = &timer_head;
     while (*pp && (*pp)->due <= n->due) {
         pp = &(*pp)->next;

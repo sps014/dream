@@ -10,7 +10,3 @@ pub(crate) fn func_symbol(func: &MirFunction) -> String {
         format!("{}__{}", func.name, args.join("_"))
     }
 }
-
-pub(crate) fn poll_symbol(func: &MirFunction) -> String {
-    format!("poll_{}", func_symbol(func))
-}

@@ -64,15 +64,32 @@ impl<'a> Emitter<'a> {
                 let cast = load_cast(self.cx, fld.ty);
                 let load = Expr::load(cast.clone(), Expr::field_ptr(base.0, fld.offset));
                 if fld.is_unowned {
-                    let panic = Expr::id(
+                    // Null = never assigned; the poison sentinel is written when the
+                    // referent is destroyed (weak registry clear), so each failure mode
+                    // gets a precise message.
+                    let null_panic = Expr::id(
                         self.cx
                             .str_sym(crate::backend::shared::panic_msgs::UNOWNED_NULL_DEREF),
+                    );
+                    let dead_panic = Expr::id(
+                        self.cx
+                            .str_sym(crate::backend::shared::panic_msgs::UNOWNED_DESTROYED),
                     );
                     self.b.expr_block(|b| {
                         let t = b.temp(cast.clone(), Some(load.clone()));
                         b.stmt(Stmt::if_(
                             Expr::unary(UnOp::Not, t.clone()),
-                            Stmt::call("dream_panic", vec![panic.clone()]),
+                            Stmt::call("dream_panic", vec![null_panic.clone()]),
+                        ));
+                        b.stmt(Stmt::if_(
+                            Expr::eq(
+                                t.clone(),
+                                Expr::cast(
+                                    cast.clone(),
+                                    Expr::i(crate::abi::UNOWNED_POISON as i64),
+                                ),
+                            ),
+                            Stmt::call("dream_panic", vec![dead_panic]),
                         ));
                         t
                     })
@@ -130,7 +147,7 @@ impl<'a> Emitter<'a> {
                 if self.cx.interner.is_value_type(ty) {
                     CTy::Ptr
                 } else {
-                    local_c_ty(self.cx.interner, ty)
+                    local_c_ty(self.cx, ty)
                 }
             }
             Place::Global(g) => {
@@ -231,16 +248,13 @@ impl<'a> Emitter<'a> {
                             Expr::global(g.0)
                         });
                     }
-                    let release = crate::backend::c::release::release_sym(
-                        self.cx.interner,
-                        self.cx.mir,
-                        ty,
-                    );
+                    let release = crate::backend::c::release::release_sym(self.cx, ty);
                     let move_id = unique_move_src(self.f, self.cx.interner, rv);
                     let stored = self.rc_store(
                         load_cast(self.cx, ty),
                         Expr::addr_of(Expr::global(g.0)),
                         rhs,
+                        crate::backend::c::release::retain_sym(self.cx, ty),
                         release,
                         borrowed_ref_store(rv) && move_id.is_none(),
                     );
@@ -296,16 +310,13 @@ impl<'a> Emitter<'a> {
                     return self.weak_option_store(*base, fld, rv, rhs);
                 }
                 if self.cx.interner.is_reference(fld.ty) && !fld.is_weak {
-                    let release = crate::backend::c::release::release_sym(
-                        self.cx.interner,
-                        self.cx.mir,
-                        fld.ty,
-                    );
+                    let release = crate::backend::c::release::release_sym(self.cx, fld.ty);
                     let move_id = unique_move_src(self.f, self.cx.interner, rv);
                     let stored = self.rc_store(
                         cast,
                         slot,
                         rhs,
+                        crate::backend::c::release::retain_sym(self.cx, fld.ty),
                         release,
                         borrowed_ref_store(rv) && move_id.is_none(),
                     );
@@ -341,13 +352,13 @@ impl<'a> Emitter<'a> {
                     });
                 }
                 if self.cx.interner.is_reference(ety) {
-                    let release =
-                        crate::backend::c::release::release_sym(self.cx.interner, self.cx.mir, ety);
+                    let release = crate::backend::c::release::release_sym(self.cx, ety);
                     let move_id = unique_move_src(self.f, self.cx.interner, rv);
                     let stored = self.rc_store(
                         cast,
                         addr,
                         rhs,
+                        crate::backend::c::release::retain_sym(self.cx, ety),
                         release,
                         borrowed_ref_store(rv) && move_id.is_none(),
                     );
@@ -431,6 +442,7 @@ impl<'a> Emitter<'a> {
         cast: CTy,
         slot: Expr,
         rhs: Expr,
+        retain: &'static str,
         release: String,
         borrowed: bool,
     ) -> Expr {
@@ -441,7 +453,7 @@ impl<'a> Emitter<'a> {
                 b.stmt(Stmt::if_(
                     Expr::ne(old.clone(), v.clone()),
                     Stmt::block(vec![
-                        Stmt::call("dream_retain", vec![v.clone()]),
+                        Stmt::call(retain, vec![v.clone()]),
                         Stmt::store(cast.clone(), slot.clone(), v.clone()),
                         Stmt::call(release.clone(), vec![old.clone()]),
                     ]),
@@ -584,11 +596,7 @@ impl<'a> Emitter<'a> {
         let size = u.size.max(16);
         let slot = Expr::field_ptr(base.0, fld.offset);
         let drop_src = if value_rvalue_allocates(rv) {
-            Some(crate::backend::c::release::release_sym(
-                self.cx.interner,
-                self.cx.mir,
-                fld.ty,
-            ))
+            Some(crate::backend::c::release::release_sym(self.cx, fld.ty))
         } else {
             None
         };

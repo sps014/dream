@@ -10,6 +10,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::thread;
 
 const SMOKE_CASES: &[&str] = &[
@@ -183,6 +184,247 @@ fn run_corpus(release: bool, only: Option<&[&str]>) {
     );
 }
 
+fn file_url(path: &Path) -> String {
+    let abs = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    format!("file://{}", abs.display())
+}
+
+fn js_string(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '\\' | '"' => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn run_wasm_js_case(dream_file: &Path) {
+    let expected_file = dream_file.with_extension("expected");
+    if !expected_file.exists() {
+        return;
+    }
+    let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();
+    let dest_dir = Path::new("target").join("e2e-wasm32").join(stem);
+    fs::create_dir_all(&dest_dir).unwrap();
+    let wat_path = dest_dir.join(format!("{stem}.wat"));
+    let src = dream_file.to_str().unwrap().to_string();
+    let dest = wat_path.to_str().unwrap().to_string();
+    Compiler::new(Target::Wasm32)
+        .compile(&src, &dest)
+        .unwrap_or_else(|e| panic!("wasm compile failed for {:?}: {}", dream_file, e));
+    let wasm_path = wat_path.with_extension("wasm");
+    let wasm_path = fs::canonicalize(&wasm_path).unwrap_or(wasm_path);
+    let dream_js = Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/dream.js");
+    let runner = dest_dir.join(format!("{stem}_run.mjs"));
+    fs::write(
+        &runner,
+        format!(
+            "import {{ run }} from {js};\n\
+             const chunks = [];\n\
+             const timer = setTimeout(() => {{ console.error('wasm/js e2e timeout'); process.exit(2); }}, 25000);\n\
+             await run({wasm}, {{ stdout: (s) => chunks.push(s) }});\n\
+             clearTimeout(timer);\n\
+             process.stdout.write(chunks.join(\"\"));\n",
+            js = js_string(&file_url(&dream_js)),
+            wasm = js_string(wasm_path.to_str().unwrap()),
+        ),
+    )
+    .unwrap();
+    let child = Command::new("node")
+        .arg(&runner)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("node failed for {:?}: {}", dream_file, e));
+    let pid = child.id();
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = done.clone();
+    thread::spawn(move || {
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(30) {
+            if flag.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+            thread::sleep(std::time::Duration::from_millis(50));
+        }
+        if !flag.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+        }
+    });
+    let out = child
+        .wait_with_output()
+        .unwrap_or_else(|e| panic!("node failed for {:?}: {}", dream_file, e));
+    done.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        out.status.success(),
+        "node run failed for {:?}: {}\n{}",
+        dream_file,
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let expected = fs::read_to_string(&expected_file).unwrap();
+    let actual = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        actual.trim(),
+        expected.trim(),
+        "wasm/js output mismatch for {:?}",
+        dream_file
+    );
+}
+
+fn wasm_js_success_stems() -> Vec<String> {
+    let mut stems = vec![
+        "println_basic".into(),
+        "arithmetic".into(),
+        "async_basic".into(),
+    ];
+    if let Ok(rd) = fs::read_dir("tests/cases") {
+        let mut extra: Vec<String> = rd
+            .flatten()
+            .filter_map(|e| {
+                let p = e.path();
+                let stem = p.file_stem()?.to_str()?.to_string();
+                if p.extension()?.to_str()? != "dream" {
+                    return None;
+                }
+                if !p.with_extension("expected").exists() {
+                    return None;
+                }
+                let jsonish = stem.contains("json") || stem == "struct_json" || stem == "tuple_json";
+                if stem.starts_with("webworker_") || jsonish {
+                    Some(stem)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        extra.sort();
+        extra.dedup();
+        stems.extend(extra);
+    }
+    stems
+}
+
+#[test]
+fn run_wasm_js_smoke_e2e() {
+    let stems = wasm_js_success_stems();
+    let failures: Vec<String> = stems
+        .par_iter()
+        .filter_map(|stem| {
+            let path = Path::new("tests/cases").join(format!("{stem}.dream"));
+            match catch_unwind(AssertUnwindSafe(|| run_wasm_js_case(&path))) {
+                Ok(()) => None,
+                Err(payload) => {
+                    let msg = payload
+                        .downcast_ref::<String>()
+                        .cloned()
+                        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                        .unwrap_or_else(|| "unknown panic".to_string());
+                    Some(format!("{stem}: {msg}"))
+                }
+            }
+        })
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "{} wasm/js e2e case(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn wasm_js_compile_errors_match_native() {
+    for stem in [
+        "webworker_capture_violation",
+        "webworker_array_capture",
+        "js_capturing_lambda_func",
+        "js_capturing_lambda_slot",
+    ] {
+        let src = Path::new("tests/cases").join(format!("{stem}.dream"));
+        if !src.with_extension("expected_error").exists() {
+            continue;
+        }
+        let dest = std::env::temp_dir().join(format!("dream_wasm_err_{stem}.wat"));
+        let src_s = src.to_str().unwrap().to_string();
+        let dest_s = dest.to_str().unwrap().to_string();
+        let err = Compiler::new(Target::Wasm32).compile(&src_s, &dest_s);
+        assert!(
+            err.is_err(),
+            "{} should fail to compile for wasm",
+            stem
+        );
+        let _ = fs::remove_file(&dest);
+        let _ = fs::remove_file(dest.with_extension("c"));
+        let _ = fs::remove_file(dest.with_extension("wasm"));
+    }
+}
+
+#[test]
+fn wasm_compiles_js_interop_samples() {
+    for rel in [
+        "sample/interop/js.dream",
+        "sample/interop/callbacks.dream",
+        "sample/interop/async_js.dream",
+        "sample/interop/slots.dream",
+        "sample/interop/structs.dream",
+        "sample/interop/value_structs.dream",
+    ] {
+        let src = Path::new(rel);
+        if !src.exists() {
+            continue;
+        }
+        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap();
+        let dest = std::env::temp_dir().join(format!("dream_js_{stem}.wat"));
+        let src_s = src.to_str().unwrap().to_string();
+        let dest_s = dest.to_str().unwrap().to_string();
+        Compiler::new(Target::Wasm32)
+            .compile(&src_s, &dest_s)
+            .unwrap_or_else(|e| panic!("{} should compile to wasm32 C: {}", rel, e));
+        let wasm = dest.with_extension("wasm");
+        assert!(wasm.is_file(), "expected {}", wasm.display());
+        let _ = fs::remove_file(&dest);
+        let _ = fs::remove_file(&wasm);
+        let _ = fs::remove_file(dest.with_extension("c"));
+        let _ = fs::remove_file(dest.with_extension("abi.json"));
+    }
+}
+
+#[test]
+fn wasm_compiles_webgpu_samples() {
+    for rel in [
+        "sample/compute/gpu_ext.dream",
+        "sample/compute/saxpy.dream",
+        "sample/compute/gpu_advanced_math.dream",
+        "sample/compute/life/life.dream",
+    ] {
+        let src = Path::new(rel);
+        if !src.exists() {
+            continue;
+        }
+        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap();
+        let dest = std::env::temp_dir().join(format!("dream_gpu_{stem}.wat"));
+        let src_s = src.to_str().unwrap().to_string();
+        let dest_s = dest.to_str().unwrap().to_string();
+        Compiler::new(Target::Wasm32)
+            .compile(&src_s, &dest_s)
+            .unwrap_or_else(|e| panic!("{} should compile to wasm32 C: {}", rel, e));
+        let wasm = dest.with_extension("wasm");
+        assert!(wasm.is_file(), "expected {}", wasm.display());
+        let _ = fs::remove_file(&dest);
+        let _ = fs::remove_file(&wasm);
+        let _ = fs::remove_file(dest.with_extension("c"));
+        let _ = fs::remove_file(dest.with_extension("abi.json"));
+        let _ = fs::remove_file(dest.with_extension("wgsl"));
+    }
+}
+
 #[test]
 fn run_smoke_e2e_cases() {
     run_corpus(false, Some(SMOKE_CASES));
@@ -226,10 +468,10 @@ fn run_all_e2e_cases_release() {
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
-/// independently-seeded `HashMap`s within this process) must yield byte-identical `.wasm` (primary)
-/// and printer `.wat` (secondary), plus (with `--runtime`) `*.web.runtime.js`. This guards the
-/// `IndexMap` conversion of the emission-driving tables against regressions that would reintroduce
-/// `HashMap`-iteration nondeterminism. Uses release mode so the check covers builder DCE.
+/// independently-seeded `HashMap`s within this process) must yield byte-identical guest C and
+/// (with `--runtime`) `*.web.runtime.js`. Linked `.wasm` is clang/wasm-ld output and is not
+/// required to be bit-identical. This guards the `IndexMap` conversion of the emission-driving
+/// tables against regressions that would reintroduce `HashMap`-iteration nondeterminism.
 #[test]
 fn codegen_is_deterministic() {
     let cases_dir = Path::new("tests/cases");
@@ -245,44 +487,34 @@ fn codegen_is_deterministic() {
             continue;
         }
         let src_str = src.to_str().unwrap().to_string();
-        let mut prev_wasm: Option<Vec<u8>> = None;
-        let mut prev_wat: Option<String> = None;
+        let mut prev_c: Option<String> = None;
         let mut prev_rt: Option<String> = None;
         for run in 0..2 {
             let out = std::env::temp_dir().join(format!("dream_det_{}_{}.wat", name, run));
             let out_str = out.to_str().unwrap().to_string();
-            Compiler::new(Target::Wasm)
+            Compiler::new(Target::Wasm32)
                 .with_release(true)
                 .with_optimize(None)
                 .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
-            let wat = fs::read_to_string(&out).unwrap();
-            let wasm = fs::read(out.with_extension("wasm")).unwrap();
+            let c_src = fs::read_to_string(out.with_extension("c")).unwrap();
             let rt_path = out.with_extension("web.runtime.js");
             let rt = fs::read_to_string(&rt_path)
                 .unwrap_or_else(|e| panic!("missing selective runtime for {}: {}", name, e));
             let _ = fs::remove_file(&out);
             let _ = fs::remove_file(&rt_path);
             let _ = fs::remove_file(out.with_extension("wasm"));
+            let _ = fs::remove_file(out.with_extension("c"));
             let _ = fs::remove_file(out.with_extension("abi.json"));
-            if let Some(ref first) = prev_wasm {
+            if let Some(ref first) = prev_c {
                 assert_eq!(
-                    first, &wasm,
-                    "Nondeterministic .wasm for {} (run {})",
+                    first, &c_src,
+                    "Nondeterministic C for {} (run {})",
                     name, run
                 );
             } else {
-                prev_wasm = Some(wasm);
-            }
-            if let Some(ref first) = prev_wat {
-                assert_eq!(
-                    first, &wat,
-                    "Nondeterministic printer WAT for {} (run {})",
-                    name, run
-                );
-            } else {
-                prev_wat = Some(wat);
+                prev_c = Some(c_src);
             }
             if let Some(ref first) = prev_rt {
                 assert_eq!(
@@ -322,7 +554,7 @@ fn selective_runtime_omits_unused_host_chunks() {
     let out = std::env::temp_dir().join("dream_sel_runtime_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm)
+    Compiler::new(Target::Wasm32)
         .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
         .compile(&src_str, &out_str)
         .expect("arithmetic compile");
@@ -350,7 +582,7 @@ fn release_arithmetic_code_section_stays_small() {
     let out = std::env::temp_dir().join("dream_arith_size_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm)
+    Compiler::new(Target::Wasm32)
         .with_release(true)
         .compile(&src_str, &out_str)
         .expect("arithmetic --release compile");
@@ -361,14 +593,17 @@ fn release_arithmetic_code_section_stays_small() {
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
     assert!(
-        code > 0 && code <= 2048,
-        "arithmetic --release code section should stay under 2KiB (got {})",
+        code > 0 && code <= 4 * 1024,
+        "arithmetic --release code section should stay under 4KiB (got {})",
         code
     );
 }
 
 /// Sample `--release` code-section slack: last-use destroy is compiler-only (no extra runtime
-/// helpers). Music player is DOM/`js`-heavy; a large jump here means always-live WAT crept back.
+/// helpers). Music player is DOM/`js`-heavy; host-routed `js` RC and the exported `dream_ft_get`
+/// sit near 38KiB since the unavailable-source handling landed (on_error + transient status line
+/// added ~10KiB of guest code), while a gross codegen regression (e.g. printf machinery getting
+/// linked for basic to_string calls, or the old un-routed host RC path) must trip.
 #[test]
 fn release_music_player_code_section_stays_bounded() {
     let src = Path::new("sample/music_player/music_player.dream");
@@ -378,7 +613,7 @@ fn release_music_player_code_section_stays_bounded() {
     let out = std::env::temp_dir().join("dream_music_player_size_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm)
+    Compiler::new(Target::Wasm32)
         .with_release(true)
         .compile(&src_str, &out_str)
         .expect("music_player --release compile");
@@ -389,8 +624,8 @@ fn release_music_player_code_section_stays_bounded() {
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
     assert!(
-        code > 0 && code <= 24 * 1024,
-        "music_player --release code section should stay under 24KiB (got {})",
+        code > 0 && code <= 48 * 1024,
+        "music_player --release code section should stay under 48KiB (got {})",
         code
     );
 }

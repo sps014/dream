@@ -51,10 +51,10 @@ pub fn compile_test_pipeline<R>(code: &str, emit: impl FnOnce(&Hir, &TypeInterne
     emit(&hir, interner)
 }
 
-/// Analyzes `code`, asserts it is error-free, and runs the *interleaved-emitted* HIR through the new
-/// MIR backend (`lower -> passes -> emit`), returning the WAT and how many functions were emitted.
-/// Exercises HIR emission end-to-end: source -> analyzer-emitted HIR -> WAT.
-pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
+/// Analyzes `code`, asserts it is error-free, and runs the *interleaved-emitted* HIR through
+/// MIR (`lower -> passes -> emit`), returning the emitted C and how many functions were emitted.
+/// Exercises HIR emission end-to-end: source -> analyzer-emitted HIR -> C.
+pub fn emit_hir_to_c(code: &str) -> (String, usize) {
     compile_test_pipeline(code, |hir, interner| {
         let count = hir.functions.len();
         let mut mir = dream_mir::lower::lower_program(hir, interner);
@@ -67,10 +67,7 @@ pub fn emit_hir_to_wat(code: &str) -> (String, usize) {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        (
-            dream_mir::backend::wasm::emit_program(&mir, interner),
-            count,
-        )
+        (dream_mir::backend::c::emit_c_module(&mir, interner), count)
     })
 }
 
@@ -140,7 +137,7 @@ pub fn emit_hir_to_module_rc(code: &str) -> String {
 }
 
 /// Compiles through the production-like MIR pipeline: RC insertion, module optimize (inline), then
-/// the default per-function pass manager (includes `RcElision`). Returns full-module WAT.
+/// the default per-function pass manager (includes `RcElision`). Returns full-module C.
 pub fn emit_hir_to_module_optimized(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);
@@ -149,7 +146,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        dream_mir::backend::wasm::emit_module(&mir, interner, false)
+        dream_mir::backend::c::emit_c_module(&mir, interner)
     })
 }
 
@@ -166,19 +163,19 @@ pub fn emit_hir_to_c_optimized(code: &str) -> String {
     })
 }
 
-/// Like [`emit_hir_to_module`] but emits the full self-contained module (imports, memory, runtime,
-/// exports) via `emit_module`, so import/scaffold concerns can be asserted and assembled.
+/// Like [`emit_hir_to_c`] but emits the full self-contained module (imports, memory, runtime,
+/// exports), so import/scaffold concerns can be asserted and assembled.
 pub fn emit_hir_to_module(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
-        dream_mir::backend::wasm::emit_module(&mir, interner, false)
+        dream_mir::backend::c::emit_c_module(&mir, interner)
     })
 }
 
 /// Like [`emit_hir_to_module`] but runs `RcInsertion` first (no other passes), matching the
 /// production pipeline where reference-counting is always inserted before emission. Needed for tests
-/// that assert on the deep-release runtime: those helper functions are only *reachable* — and so
-/// retained by the module's dead-function elimination — once a `Release` call site references them.
+/// that assert on the deep-release runtime: those helper functions are only *reachable* once a
+/// release call site references them.
 pub fn emit_hir_to_module_rc_only(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);
@@ -186,7 +183,7 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
         for f in &mut mir.functions {
             dream_mir::passes::RcInsertion.run(f, interner);
         }
-        dream_mir::backend::wasm::emit_module(&mir, interner, false)
+        dream_mir::backend::c::emit_c_module(&mir, interner)
     })
 }
 

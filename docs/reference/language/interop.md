@@ -80,6 +80,11 @@ import { run } from "./hello.web.runtime.js";
 await run("hello.wasm");
 ```
 
+Release builds (`--release` / `-O`) also minify the selective runtime and emit
+pre-compressed siblings — `hello.wasm.gz` / `.br` and `hello.web.runtime.js.gz` / `.br`.
+Browsers never compress on their own; serve them with `gzip_static` / `brotli_static`
+(nginx), a CDN, or any static server that negotiates encoding (e.g. `npx serve`).
+
 ### Auto-binding to JS globals
 
 For every extern you do not supply explicitly, the runtime resolves it against the JS global scope:

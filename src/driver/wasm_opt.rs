@@ -1,8 +1,7 @@
 //! `.wasm` post-processing via Binaryen's `wasm-opt` (the `wasm-opt` crate), driven by `--release`
 //! (default level [`OptLevel::RELEASE_DEFAULT`]) and/or an explicit `-O`/`--optimize` level. This
-//! runs *after* the MIR pass pipeline and builder DCE (`crates/dream-mir/src/backend/wasm/builder`) already
-//! applied — it is an independent, coarser-grained shrink/speed pass over the assembled binary, not
-//! a replacement for either.
+//! runs *after* the MIR pass pipeline already applied — an independent, coarser-grained
+//! shrink/speed pass over the linked binary, not a replacement for the MIR passes.
 
 use std::path::Path;
 use std::str::FromStr;
@@ -51,6 +50,18 @@ impl OptLevel {
         } else {
             Self::O0
         })
+    }
+
+    /// clang `-O` for wasm32 (no `-march=native`; wasm-opt applies the Binaryen level).
+    pub fn wasm_clang_opt_flag(self) -> &'static str {
+        match self {
+            Self::O0 => "-O0",
+            Self::O1 => "-O1",
+            Self::O2 => "-O2",
+            Self::O3 | Self::O4 => "-O3",
+            Self::Size => "-Os",
+            Self::SizeAggressive => "-Oz",
+        }
     }
 
     /// clang flags for this level. Speed builds (`-O3`/`-O4`) use LTO + host ISA.
@@ -212,5 +223,9 @@ mod tests {
         assert_eq!(OptLevel::Size.as_cli_flag(), "-Os");
         assert_eq!(OptLevel::O3.native_rt_subdir(), "O3");
         assert_eq!(OptLevel::O4.native_rt_subdir(), "O3");
+        assert_eq!(OptLevel::O0.wasm_clang_opt_flag(), "-O0");
+        assert_eq!(OptLevel::O3.wasm_clang_opt_flag(), "-O3");
+        assert_eq!(OptLevel::Size.wasm_clang_opt_flag(), "-Os");
+        assert_eq!(OptLevel::SizeAggressive.wasm_clang_opt_flag(), "-Oz");
     }
 }

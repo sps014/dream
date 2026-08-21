@@ -48,25 +48,93 @@ async function resolveAbi(wasmModule, source, options) {
   return loadAbi(url);
 }
 
-function moduleWantsSharedMemory(wasmModule, desc) {
-  if (desc && typeof desc.shared === "boolean") {
-    return desc.shared;
+/**
+ * Scans the wasm binary's import section for an `env`/`memory` import and reads its limits
+ * flags (bit 1 = shared). Engines do not reliably expose `.type.shared` on
+ * `WebAssembly.Module.imports()` entries, so this is the dependable signal.
+ */
+function memoryImportIsShared(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let pos = 8; // magic + version
+  const leb = () => {
+    let result = 0;
+    let shift = 0;
+    for (;;) {
+      const b = u8[pos++];
+      result += (b & 0x7f) * Math.pow(2, shift);
+      if (!(b & 0x80)) return result;
+      shift += 7;
+    }
+  };
+  const limits = () => {
+    const flags = leb();
+    leb(); // min
+    if (flags & 0x01) leb(); // max
+    return flags;
+  };
+  while (pos < u8.length) {
+    const id = u8[pos++];
+    const size = leb();
+    if (id !== 2) {
+      pos += size; // not the import section
+      continue;
+    }
+    const end = pos + size;
+    const count = leb();
+    for (let i = 0; i < count && pos < end; i++) {
+      // NB: `pos += leb()` would read `pos` before `leb()` runs — but leb() mutates pos
+      // through the closure, so the skip would land one byte short. Stage lengths first.
+      const moduleLen = leb();
+      pos += moduleLen;
+      const nameLen = leb();
+      pos += nameLen;
+      const kind = u8[pos++];
+      if (kind === 2) {
+        return (limits() & 0x02) !== 0; // shared flag
+      } else if (kind === 0) {
+        leb(); // func: type index
+      } else if (kind === 1) {
+        pos += 1; // table: element type
+        limits();
+      } else if (kind === 3) {
+        pos += 2; // global: valtype + mutability
+      } else {
+        break; // unknown kind — stop scanning rather than desync
+      }
+    }
+    return false;
   }
-  // `Module.imports()[].type` is missing in some browsers. Only worker modules need SAB.
+  return false;
+}
+
+function moduleWantsSharedMemory(wasmModule, desc) {
+  if (desc && desc.shared) {
+    return true;
+  }
+  // `Module.imports()[].type` is missing in some browsers. Shared-memory modules (WebWorker)
+  // still import the worker hosts; use either signal.
   return WebAssembly.Module.imports(wasmModule).some(
     (i) =>
-      i.kind === "function" &&
-      i.module === "Dream" &&
-      (i.name === "workerSpawn" ||
-        i.name === "workerPost" ||
-        i.name === "workerRecv" ||
-        i.name === "workerTerminate" ||
-        i.name === "workerPoolSpawn" ||
-        i.name === "workerPoolDispatch"),
+      (i.kind === "memory" && i.module === "env" && i.name === "memory" && i.type && i.type.shared) ||
+      (i.kind === "function" &&
+        i.module === "Dream" &&
+        (i.name === "workerSpawn" ||
+          i.name === "workerPost" ||
+          i.name === "workerRecv" ||
+          i.name === "workerTerminate" ||
+          i.name === "workerPoolSpawn" ||
+          i.name === "workerPoolDispatch")),
   );
 }
 
-function makeLinearMemory(wasmModule) {
+function memoryIsShared(memory) {
+  return (
+    typeof SharedArrayBuffer !== "undefined" &&
+    memory.buffer instanceof SharedArrayBuffer
+  );
+}
+
+function makeLinearMemory(wasmModule, wasmBytes) {
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
   );
@@ -74,7 +142,8 @@ function makeLinearMemory(wasmModule) {
   return new WebAssembly.Memory({
     initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
     maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
-    shared: moduleWantsSharedMemory(wasmModule, desc),
+    shared:
+      moduleWantsSharedMemory(wasmModule, desc) || memoryImportIsShared(wasmBytes),
   });
 }
 
@@ -120,17 +189,24 @@ export async function load(source, options = {}) {
   };
 
   const importObject = { env: defaultEnv(getInstance, options) };
-  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule);
+  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule, wasmBytes);
   importObject.env.memory = sharedMemory;
+  const stackGate =
+    options.stackGate ??
+    (memoryIsShared(sharedMemory) ? new Int32Array(new SharedArrayBuffer(4)) : null);
 
   const userImports = options.imports || {};
   const sigByName = new Map();
   if (abi) for (const e of abi.externs) sigByName.set(e.name, e);
 
   const composeHosts = options.dreamHosts || defaultDreamModule;
+  // Selective runtimes omit chunk files whose hosts are unused; `typeof` guards keep
+  // those references safe when the defining file was not included.
   const builtinDream = {
     ...composeHosts(getInstance),
-    ...makeWorkerModule(wasmBytes, abi, () => sharedMemory),
+    ...(typeof makeWorkerModule === "function"
+      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate)
+      : {}),
   };
   if (typeof builtinDream.__attachGpuAbi === "function") {
     const hint =
@@ -143,7 +219,11 @@ export async function load(source, options = {}) {
   }
 
   const wrapFor = (fn, sig) => {
-    if (sig && sig.field === "cryptoSecureRandomFill") {
+    if (
+      sig &&
+      sig.field === "cryptoSecureRandomFill" &&
+      typeof csprngBytes === "function"
+    ) {
       return wrapInPlaceByteArrayFill(getInstance, (count) => csprngBytes(count));
     }
     return sig && sig.async ? wrapAsyncImport(getInstance, fn, sig) : wrapImport(getInstance, fn, sig);
@@ -160,10 +240,16 @@ export async function load(source, options = {}) {
     for (const e of abi.externs) {
       const bucket = (importObject[e.module] ||= {});
       if (bucket[e.field]) continue;
+      // `cryptoSecureRandomFill` has no direct host function: wrapFor routes it through
+      // wrapInPlaceByteArrayFill + csprngBytes, so it is "implemented" despite resolving
+      // to null here.
+      const isCsprngFill =
+        e.module === "Dream" && e.field === "cryptoSecureRandomFill" &&
+        typeof csprngBytes === "function";
       const resolved = (e.module === "Dream" && builtinDream[e.field])
         ? builtinDream[e.field]
         : resolveGlobal(e.module, e.field);
-      bucket[e.field] = resolved
+      bucket[e.field] = (resolved || isCsprngFill)
         ? wrapFor(resolved, e)
         : () => {
             throw new Error(`no JS implementation for extern '${e.name}' (${e.module}.${e.field})`);
@@ -188,9 +274,73 @@ export async function load(source, options = {}) {
         };
   }
 
-  const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
+  const wasmInstance = await withBootstrapLock(stackGate, async () => {
+    const inst = await WebAssembly.instantiate(wasmModule, importObject);
+    if (stackGate || options.memory) {
+      attachGuestStack(inst);
+    } else if (typeof inst.exports.__runtime_init === "function") {
+      inst.exports.__runtime_init();
+    }
+    return inst;
+  });
   instance = new DreamInstance(wasmInstance);
   return instance;
+}
+
+const WORKER_STACK_BYTES = 65536;
+
+async function withBootstrapLock(gate, fn) {
+  if (!gate) {
+    return fn();
+  }
+  for (;;) {
+    if (Atomics.compareExchange(gate, 0, 0, 1) === 0) {
+      break;
+    }
+    if (typeof Atomics.waitAsync === "function") {
+      await Atomics.waitAsync(gate, 0, 1, 50).value;
+    } else {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    Atomics.store(gate, 0, 0);
+    Atomics.notify(gate, 0);
+  }
+}
+
+function guestMalloc(exports, size, tag) {
+  if (typeof exports.dream_malloc === "function") {
+    return exports.dream_malloc(size, tag);
+  }
+  if (typeof exports.malloc === "function") {
+    return exports.malloc(size, tag);
+  }
+  return 0;
+}
+
+function attachGuestStack(wasmInstance) {
+  const sp = wasmInstance.exports.__stack_pointer;
+  if (!sp) {
+    if (typeof wasmInstance.exports.__runtime_init === "function") {
+      wasmInstance.exports.__runtime_init();
+    }
+    return;
+  }
+  if (typeof wasmInstance.exports.__runtime_init === "function") {
+    wasmInstance.exports.__runtime_init();
+  }
+  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES, 0);
+  if (!ptr) {
+    throw new Error("failed to allocate a guest stack");
+  }
+  sp.value = ptr + WORKER_STACK_BYTES;
+  const tls = wasmInstance.exports.__tls_base;
+  if (tls) {
+    tls.value = ptr;
+  }
 }
 
 /**
@@ -200,7 +350,7 @@ export async function load(source, options = {}) {
  */
 export async function run(source, options = {}) {
   const mod = await load(source, options);
-  mod.run();
+  await mod.run();
   return mod;
 }
 

@@ -1,7 +1,9 @@
-use super::ast::{CTy, Expr};
+use super::ast::{CTy, Expr, Stmt};
 use super::emit::Emitter;
 use super::types::{c_ident, runtime_c_name};
 use crate::{Callee, Const, Operand};
+use dream_abi::js_abi;
+use dream_types::TypeId;
 
 impl<'a> Emitter<'a> {
     pub(super) fn call_expr(&mut self, callee: &Callee, args: &[Operand]) -> Expr {
@@ -52,7 +54,10 @@ impl<'a> Emitter<'a> {
             return;
         }
         let a = self.operand(arg);
-        self.b.call("dream_retain", vec![a]);
+        self.b.call(
+            crate::backend::c::release::retain_sym(self.cx, ty),
+            vec![a],
+        );
     }
 
     fn sb_push_expr(&mut self, args: &[Operand]) -> Option<Expr> {
@@ -135,20 +140,104 @@ impl<'a> Emitter<'a> {
 
     pub(super) fn js_call_expr(
         &mut self,
+        callee: &Callee,
         target: &Operand,
         via: &Option<Operand>,
         method: &Option<Operand>,
-        args: &[(Operand, dream_types::TypeId)],
+        args: &[(Operand, TypeId)],
     ) -> Expr {
+        if !self.cx.target.is_wasm32() {
+            let t = self.operand(target);
+            let v = via
+                .as_ref()
+                .map(|o| self.operand(o))
+                .unwrap_or_else(|| Expr::i(0));
+            let m = method
+                .as_ref()
+                .map(|o| self.operand(o))
+                .unwrap_or_else(|| Expr::i(0));
+            return Expr::call("dream_js_call", vec![t, v, m, Expr::i(args.len() as i64)]);
+        }
         let t = self.operand(target);
-        let v = via
-            .as_ref()
-            .map(|o| self.operand(o))
-            .unwrap_or_else(|| Expr::i(0));
-        let m = method
-            .as_ref()
-            .map(|o| self.operand(o))
-            .unwrap_or_else(|| Expr::i(0));
-        Expr::call("dream_js_call", vec![t, v, m, Expr::i(args.len() as i64)])
+        let v = via.as_ref().map(|o| self.operand(o));
+        let meth = method.as_ref().map(|o| self.operand(o));
+        let mut filled: Vec<(i32, i32, &'static str, Expr)> = Vec::with_capacity(args.len());
+        for (op, ty) in args {
+            let (tag, aux, store) = js_abi::slot_desc(self.cx.interner, *ty);
+            // A `fun(...)` value is a `[ft-index][env]` box from `dream_funcbox_new`; a FUNC slot
+            // carries the bare `dream_ft[]` index. The JS host translates it to a wasm-table index
+            // via the exported `dream_ft_get` before `table.get` (worker dispatch and `@c`
+            // callbacks consume the ft index directly, so it must stay untranslated here).
+            let payload = match tag == js_abi::tag::FUNC {
+                true => Expr::call("dream_funcbox_funcidx", vec![self.operand(op)]),
+                false => self.operand(op),
+            };
+            filled.push((tag, aux, store, payload));
+        }
+        let name = self.cx.callee_c(callee.def, &callee.args);
+        let argc = args.len();
+        self.b.expr_block(move |b| {
+            let mut host_args = vec![t];
+            if let Some(p) = v {
+                host_args.push(p);
+            }
+            if let Some(n) = meth {
+                host_args.push(n);
+            }
+            let slots_ptr = if argc == 0 {
+                Expr::i(0)
+            } else {
+                let nbytes = argc as u32 * js_abi::SLOT_SIZE;
+                let buf = b.temp(
+                    CTy::Array {
+                        elem: Box::new(CTy::U8),
+                        len: nbytes as usize,
+                    },
+                    None,
+                );
+                b.call(
+                    "memset",
+                    vec![
+                        Expr::addr_of(buf.clone()),
+                        Expr::i(0),
+                        Expr::i(nbytes as i64),
+                    ],
+                );
+                let base = Expr::cast(
+                    CTy::Ptr,
+                    Expr::cast(CTy::Named("uintptr_t"), Expr::addr_of(buf)),
+                );
+                for (i, (tag, aux, store, payload)) in filled.into_iter().enumerate() {
+                    let off = i as u32 * js_abi::SLOT_SIZE;
+                    b.stmt(Stmt::store(
+                        CTy::I32,
+                        Expr::ptr_add(base.clone(), Expr::i(off as i64)),
+                        Expr::i(tag as i64),
+                    ));
+                    b.stmt(Stmt::store(
+                        CTy::I32,
+                        Expr::ptr_add(
+                            base.clone(),
+                            Expr::i((off + js_abi::SLOT_AUX_OFFSET) as i64),
+                        ),
+                        Expr::i(aux as i64),
+                    ));
+                    let pay = Expr::ptr_add(
+                        base.clone(),
+                        Expr::i((off + js_abi::SLOT_PAYLOAD_OFFSET) as i64),
+                    );
+                    match store {
+                        "i64.store" => b.stmt(Stmt::store(CTy::I64, pay, payload)),
+                        "f64.store" => b.stmt(Stmt::store(CTy::F64, pay, Expr::cast(CTy::F64, payload))),
+                        "f32.store" => b.stmt(Stmt::store(CTy::F32, pay, payload)),
+                        _ => b.stmt(Stmt::store(CTy::I32, pay, payload)),
+                    }
+                }
+                base
+            };
+            host_args.push(Expr::cast(CTy::I32, slots_ptr));
+            host_args.push(Expr::i(argc as i64));
+            Expr::call(name, host_args)
+        })
     }
 }

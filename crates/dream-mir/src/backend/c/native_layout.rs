@@ -11,6 +11,20 @@ pub(super) struct NativeLayouts {
 }
 
 impl NativeLayouts {
+    pub(super) fn for_target(
+        mir: &Mir,
+        interner: &TypeInterner,
+        target: crate::backend::c::target::CTarget,
+    ) -> Self {
+        match target {
+            crate::backend::c::target::CTarget::Native => Self::compute(mir, interner),
+            crate::backend::c::target::CTarget::Wasm32 => Self {
+                structs: mir.layouts.structs.clone(),
+                unions: mir.layouts.unions.clone(),
+            },
+        }
+    }
+
     pub(super) fn compute(mir: &Mir, interner: &TypeInterner) -> Self {
         let mut structs = IndexMap::new();
         let mut pending: Vec<(TypeId, TypeLayout)> = mir

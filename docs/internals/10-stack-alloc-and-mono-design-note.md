@@ -16,7 +16,7 @@ dominates character data.
 heap (today's layout), mirroring value unions' inline/box split.
 
 **Why rejected:** `string` is a first-class primitive threaded through the type system, runtime
-(`src/mir/runtime/strings.wat`), every emitter path that assumes `TyKind::Prim(PrimTy::String)` is
+(`crates/dream-mir/src/runtime/c/`), every emitter path that assumes `TyKind::Prim(PrimTy::String)` is
 an `i32` pointer, RC insertion (`interner.is_reference(ty)` is purely type-driven), JS marshaling,
 and the debugger. An `(i32, i64)` ABI and per-value heap/inline checks are closer to a language
 ABI change than a self-contained follow-up. Heap-pointer strings stay the model:

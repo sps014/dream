@@ -207,7 +207,25 @@ impl Expr {
     }
 
     pub fn ptr_add(base: Expr, off: Expr) -> Self {
-        Expr::add(Expr::char_p(base), off)
+        Expr::add(Self::as_char_p(base), off)
+    }
+
+    fn as_char_p(base: Expr) -> Expr {
+        match base {
+            Expr::Cast {
+                ty: CTy::CharPtr, ..
+            } => base,
+            Expr::Binary {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } => Expr::Binary {
+                op: BinOp::Add,
+                lhs: Box::new(Self::as_char_p(*lhs)),
+                rhs,
+            },
+            other => Expr::char_p(other),
+        }
     }
 
     pub fn field_ptr(local: u32, off: u32) -> Self {
@@ -363,6 +381,7 @@ pub struct Param {
 #[derive(Clone, Debug)]
 pub struct Func {
     pub attr: Option<&'static str>,
+    pub export: Option<String>,
     pub static_: bool,
     pub ret: CTy,
     pub name: String,
@@ -387,6 +406,8 @@ pub enum Item {
         ret: CTy,
         name: String,
         params: Vec<Param>,
+        import: Option<(String, String)>,
+        export: Option<String>,
     },
     Func(Func),
     Typedef {

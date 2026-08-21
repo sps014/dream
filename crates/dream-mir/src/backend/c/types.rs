@@ -60,10 +60,10 @@ pub(super) fn c_ident(name: &str) -> String {
     s
 }
 
-pub(super) fn local_c_ty(interner: &dream_types::TypeInterner, ty: TypeId) -> CTy {
-    match interner.kind(ty) {
-        TyKind::Prim(PrimTy::Int | PrimTy::UInt) => CTy::I64,
-        _ => c_ty(interner, ty),
+pub(super) fn local_c_ty(cx: &Cx<'_>, ty: TypeId) -> CTy {
+    match cx.interner.kind(ty) {
+        TyKind::Prim(PrimTy::Int | PrimTy::UInt) if !cx.target.is_wasm32() => CTy::I64,
+        _ => c_ty(cx.interner, ty),
     }
 }
 
@@ -127,19 +127,20 @@ pub(super) fn rc_delta() -> super::ast::Expr {
 }
 
 pub(super) fn native_scalar_size(cx: &Cx<'_>, ty: TypeId) -> (u32, u32) {
+    let ptr = cx.target.abi().ptr_size;
     if cx.interner.is_value_type(ty) {
         if let Some(l) = cx.nstruct(ty) {
-            return (l.size.max(1), 8);
+            return (l.size.max(1), ptr.max(4));
         }
         if let Some(u) = cx.nunion(ty) {
-            return (u.size.max(1), 8);
+            return (u.size.max(1), ptr.max(4));
         }
     }
     match cx.interner.kind(ty) {
-        TyKind::Prim(PrimTy::String) => (8, 8),
+        TyKind::Prim(PrimTy::String) => (ptr, ptr),
         TyKind::Prim(p) => p.size_align(),
         TyKind::Enum(_) => (4, 4),
-        _ => (8, 8),
+        _ => (ptr, ptr),
     }
 }
 
@@ -179,6 +180,8 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
         "string_alloc" => "dream_string_alloc".into(),
         "substring" | "string_substring_raw" => "dream_substring".into(),
         "string_builder_push" => "dream_sb_push".into(),
+        "string_builder_push_int" => "dream_sb_push_int".into(),
+        "string_builder_push_long" => "dream_sb_push_long".into(),
         "array_new" => "dream_array_new".into(),
         "array_realloc" => "dream_array_realloc".into(),
         "to_bytes" => "dream_to_bytes".into(),

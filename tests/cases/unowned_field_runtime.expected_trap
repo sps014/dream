@@ -1,2 +1,2 @@
 before
-panic: access to deallocated 'unowned' reference
+panic: 'unowned' reference used after its target was destroyed

@@ -223,7 +223,7 @@ A timing sample (UI tree swap + particles): `dream --release run sample/defer_de
 
 ## Call stack (`dream run`)
 
-Deep recursion and large `struct` frames need enough call stack. For `dream run`, set **`DREAM_STACK_SIZE`** (e.g. `32M`, `32MiB`, or a byte count). The default is 16 MiB. Values below 64 KiB are rejected.
+Deep recursion and large `struct` frames need enough call stack. For `dream run`, set **`DREAM_STACK_SIZE`** (e.g. `32M`, `32MiB`, or a byte count). The default is 16 MiB. Values below 64 KiB are rejected. The same variable also sizes the wasm32 guest stack (`dream --wasm` links with `-z stack-size`).
 
 ```bash
 DREAM_STACK_SIZE=32M dream run path/to/file.dream

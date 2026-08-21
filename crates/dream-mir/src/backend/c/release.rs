@@ -4,11 +4,21 @@ use super::ctx::Cx;
 use super::statements::value_ref_stmts;
 use super::types::{c_ident, elem_size};
 use crate::backend::shared::func_symbol;
-use crate::Mir;
 use dream_types::{TyKind, TypeId, TypeInterner};
 
-pub(super) fn release_sym(interner: &TypeInterner, mir: &Mir, ty: TypeId) -> String {
+pub(super) fn retain_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
+    if cx.target.is_wasm32() && matches!(cx.interner.kind(ty), TyKind::Js) {
+        "js_retain"
+    } else {
+        "dream_retain"
+    }
+}
+
+pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
+    let interner = cx.interner;
+    let mir = cx.mir;
     match interner.kind(ty) {
+        TyKind::Js if cx.target.is_wasm32() => "js_release".into(),
         TyKind::Struct(..) | TyKind::Union(..) => {
             if let Some(l) = mir.layouts.structs.get(&ty) {
                 c_ident(&format!("release_{}", l.name))
@@ -27,24 +37,24 @@ pub(super) fn release_sym(interner: &TypeInterner, mir: &Mir, ty: TypeId) -> Str
     }
 }
 
-pub(super) fn destroy_sym(interner: &TypeInterner, mir: &Mir, ty: TypeId) -> String {
-    if matches!(interner.kind(ty), TyKind::Js | TyKind::Func(..))
-        || interner.is_shared_type(ty)
-        || matches!(interner.kind(ty), TyKind::Prim(dream_types::PrimTy::String))
+pub(super) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
+    if matches!(cx.interner.kind(ty), TyKind::Js | TyKind::Func(..))
+        || cx.interner.is_shared_type(ty)
+        || matches!(cx.interner.kind(ty), TyKind::Prim(dream_types::PrimTy::String))
     {
-        return release_sym(interner, mir, ty);
+        return release_sym(cx, ty);
     }
-    match interner.kind(ty) {
+    match cx.interner.kind(ty) {
         TyKind::Struct(..) | TyKind::Union(..) => {
-            if let Some(l) = mir.layouts.structs.get(&ty) {
+            if let Some(l) = cx.mir.layouts.structs.get(&ty) {
                 c_ident(&format!("destroy_{}", l.name))
-            } else if let Some(l) = mir.layouts.unions.get(&ty) {
+            } else if let Some(l) = cx.mir.layouts.unions.get(&ty) {
                 c_ident(&format!("destroy_{}", l.name))
             } else {
                 c_ident("destroy_object")
             }
         }
-        TyKind::Array(e) if interner.is_reference(*e) || interner.is_value_type(*e) => {
+        TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
             c_ident(&format!("destroy_array_t{}", e.0))
         }
         TyKind::Object | TyKind::Interface(..) => c_ident("destroy_object"),
@@ -235,7 +245,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             );
             body.extend(value_ref_stmts(cx, elem, at, false));
         } else if interner.is_rc_tracked(elem) {
-            let rel = release_sym(interner, mir, elem);
+            let rel = release_sym(cx, elem);
             body.push(Stmt::call(
                 rel,
                 vec![Expr::load(
@@ -288,7 +298,26 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
         for f in &layout.fields {
-            if f.is_weak || f.is_unowned {
+            if f.is_weak {
+                continue;
+            }
+            if f.is_unowned {
+                // Unowned fields live in the weak registry (registered on store, see
+                // `unowned_store`). Destroying the holder without unregistering leaves a
+                // (target, slot) entry whose slot points into this freed block — a later
+                // clear of the target would then write into freed memory.
+                let slot = Expr::cast(
+                    CTy::Ptr,
+                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+                );
+                let cur = Expr::load(CTy::Ptr, slot.clone());
+                b.stmt(Stmt::if_(
+                    cur.clone(),
+                    Stmt::call(
+                        "dream_weak_unregister",
+                        vec![cur, Expr::cast(CTy::Ptr, slot)],
+                    ),
+                ));
                 continue;
             }
             if interner.is_value_type(f.ty) {
@@ -300,7 +329,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     b.stmt(s);
                 }
             } else if interner.is_rc_tracked(f.ty) {
-                let rel = release_sym(interner, mir, f.ty);
+                let rel = release_sym(cx, f.ty);
                 b.call(
                     rel,
                     vec![Expr::load(
@@ -342,7 +371,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     );
                     body.extend(value_ref_stmts(cx, field.ty, at, false));
                 } else if interner.is_rc_tracked(field.ty) {
-                    let rel = release_sym(interner, mir, field.ty);
+                    let rel = release_sym(cx, field.ty);
                     body.push(Stmt::call(
                         rel,
                         vec![Expr::load(
@@ -406,7 +435,6 @@ fn emit_destroy_helpers(
     cx: &Cx<'_>,
     array_elems: &std::collections::BTreeSet<TypeId>,
 ) {
-    let mir = cx.mir;
     let interner = cx.interner;
     let p = vec![Param {
         ty: CTy::Ptr,
@@ -466,7 +494,7 @@ fn emit_destroy_helpers(
             );
             body.extend(value_ref_stmts(cx, *elem, at, false));
         } else if interner.is_rc_tracked(*elem) {
-            let rel = release_sym(interner, mir, *elem);
+            let rel = release_sym(cx, *elem);
             body.push(Stmt::call(
                 rel,
                 vec![Expr::load(
@@ -515,7 +543,26 @@ fn emit_destroy_helpers(
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
         for f in &layout.fields {
-            if f.is_weak || f.is_unowned {
+            if f.is_weak {
+                continue;
+            }
+            if f.is_unowned {
+                // Unowned fields live in the weak registry (registered on store, see
+                // `unowned_store`). Destroying the holder without unregistering leaves a
+                // (target, slot) entry whose slot points into this freed block — a later
+                // clear of the target would then write into freed memory.
+                let slot = Expr::cast(
+                    CTy::Ptr,
+                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+                );
+                let cur = Expr::load(CTy::Ptr, slot.clone());
+                b.stmt(Stmt::if_(
+                    cur.clone(),
+                    Stmt::call(
+                        "dream_weak_unregister",
+                        vec![cur, Expr::cast(CTy::Ptr, slot)],
+                    ),
+                ));
                 continue;
             }
             if interner.is_value_type(f.ty) {
@@ -527,7 +574,7 @@ fn emit_destroy_helpers(
                     b.stmt(s);
                 }
             } else if interner.is_rc_tracked(f.ty) {
-                let rel = release_sym(interner, mir, f.ty);
+                let rel = release_sym(cx, f.ty);
                 b.call(
                     rel,
                     vec![Expr::load(
@@ -565,7 +612,7 @@ fn emit_destroy_helpers(
                     );
                     body.extend(value_ref_stmts(cx, field.ty, at, false));
                 } else if interner.is_rc_tracked(field.ty) {
-                    let rel = release_sym(interner, mir, field.ty);
+                    let rel = release_sym(cx, field.ty);
                     body.push(Stmt::call(
                         rel,
                         vec![Expr::load(

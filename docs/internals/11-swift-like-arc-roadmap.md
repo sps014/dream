@@ -18,7 +18,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 12-byte `[size][tag][ref_count]` header.
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
-  ([`weak.wat`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/runtime/weak.wat)).
+  (planned C runtime unit under `crates/dream-mir/src/runtime/c/`).
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
   (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
   lattice (last-use **move**, last-use **destroy**, split-edge release when a token is dead on one

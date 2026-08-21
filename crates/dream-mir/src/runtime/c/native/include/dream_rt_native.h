@@ -1,31 +1,61 @@
 #ifndef DREAM_RT_NATIVE_H
 #define DREAM_RT_NATIVE_H
 
+#ifdef DREAM_WASM32
+#include "../../include/dream_abi.h"
+#else
 #ifndef DREAM_NATIVE
 #define DREAM_NATIVE 1
 #endif
 #include "../../include/dream_abi.h"
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-/* Native guest ABI: real pointers. Never truncate through (uint32_t). Wasm extract
- * still uses include/dream_rt.h (i32 linear memory). */
-
+#ifdef DREAM_WASM32
+typedef int32_t dream_ptr;
+#else
 typedef uintptr_t dream_ptr;
+#endif
 
 /* 0 until `workerSpawn`; retain/malloc then skip atomics/mutexes. */
 extern int dream_rt_mt;
 
 #define DREAM_ALWAYS_INLINE static inline __attribute__((always_inline))
 
+#ifdef DREAM_WASM32
+dream_ptr dream_g0_get(void);
+void dream_g0_set(dream_ptr v);
+int32_t dream_instance_tid(void);
+int32_t dream_next_tid(void);
+#else
+extern _Thread_local dream_ptr g0;
+DREAM_ALWAYS_INLINE dream_ptr dream_g0_get(void) { return g0; }
+DREAM_ALWAYS_INLINE void dream_g0_set(dream_ptr v) { g0 = v; }
+#endif
+
 DREAM_ALWAYS_INLINE void *dream_p(dream_ptr p) {
+#ifdef DREAM_WASM32
+    return (void *)(uintptr_t)(uint32_t)p;
+#else
     return (void *)p;
+#endif
 }
 
 DREAM_ALWAYS_INLINE int32_t *dream_i32(dream_ptr p) {
-    return (int32_t *)p;
+    return (int32_t *)dream_p(p);
 }
+
+#ifdef DREAM_WASM32
+#define DREAM_BLOCK_HEADER HEAP_HEADER_SIZE
+#else
+#define DREAM_BLOCK_HEADER NATIVE_HEAP_HEADER_SIZE
+#endif
+
+#ifdef DREAM_WASM32
+void abort(void);
+#endif
 
 #ifndef DREAM_STR_SLICE
 #define DREAM_STR_SLICE 1
@@ -141,6 +171,9 @@ DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
 
 dream_ptr dream_malloc(int32_t size, int32_t tag);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
+#ifdef DREAM_WASM32
+void dream_heap_init(void);
+#endif
 
 DREAM_ALWAYS_INLINE int32_t dream_str_rc(dream_ptr p) {
     if (p == 0) {
@@ -168,8 +201,8 @@ DREAM_ALWAYS_INLINE int32_t dream_str_unit_cap(dream_ptr p) {
     if (p == 0) {
         return 0;
     }
-    block = ((int32_t *)((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE))[0];
-    payload = block - NATIVE_HEAP_HEADER_SIZE;
+    block = ((int32_t *)((char *)dream_p(p) - DREAM_BLOCK_HEADER))[0];
+    payload = block - DREAM_BLOCK_HEADER;
     if (payload <= STRING_HEADER_SIZE) {
         return 0;
     }
@@ -406,6 +439,8 @@ DREAM_ALWAYS_INLINE int dream_slice_unique(dream_ptr p) {
     return dream_i32(p)[1] == DREAM_STR_SLICE;
 }
 
+dream_ptr dream_string_alloc(int32_t units);
+
 DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_t end) {
     int32_t n;
     dream_ptr p;
@@ -416,10 +451,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
     dream_substring_clamp(s, &start, &end);
     n = end - start;
     if (n <= 0) {
-        p = dream_malloc(8, TAG_STRING);
-        dream_i32(p)[0] = 0;
-        dream_str_init_owned(p);
-        return p;
+        return dream_string_alloc(0); /* immortal shared empty */
     }
     p = dream_malloc((int32_t)(8 + 2 * (int32_t)sizeof(dream_ptr)), TAG_STRING);
     data = dream_str_units(s) + start;
@@ -642,28 +674,19 @@ DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
     dream_release(parent);
 }
 
-DREAM_ALWAYS_INLINE int32_t string_builder_append(dream_ptr bytes, int32_t count, dream_ptr text) {
-    int32_t n = dream_str_byte_size(text);
-    const uint16_t *src;
-    if (n <= 0 || !bytes || !text) {
-        return count;
-    }
-    src = dream_str_units(text);
-    memcpy((char *)dream_p(bytes) + 8 + count, src, (size_t)n);
-    return count + n;
-}
-
 int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
 
-/* Native `StringBuilder` payload (bytes, count, scalars). Typed so memcpy into the
- * `byte[]` is not treated as clobbering the builder fields. */
+/* Native `StringBuilder` payload (bytes, count, capacity). `cap` mirrors the backing
+ * `byte[]` length inline so the per-append fast path avoids a dependent load through the
+ * array header; grow is the only writer. Typed so memcpy into the `byte[]` is not treated
+ * as clobbering the builder fields. */
 typedef struct {
     dream_ptr bytes;
     int32_t count;
-    int32_t scalars;
+    int32_t cap;
 } dream_sb;
 
 dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes, int32_t need);
@@ -697,15 +720,15 @@ DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
     s = (dream_sb *)dream_p(sb);
     bytes = s->bytes;
     count = s->count;
-    cap = bytes ? dream_i32(bytes)[0] : 0;
+    cap = s->cap;
     if (__builtin_expect(count + nbytes + 4 > cap, 0)) {
         bytes = dream_sb_grow_bytes(s, bytes, count + nbytes + 4);
+        cap = s->cap;
     }
     src = (const char *)dream_str_units_fast(text);
     dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
     memcpy(dst, src, (size_t)nbytes);
     s->count = count + nbytes;
-    s->scalars += n;
 }
 
 DREAM_ALWAYS_INLINE void dream_sb_push_units(dream_ptr sb, const void *src, int32_t n) {
@@ -722,14 +745,54 @@ DREAM_ALWAYS_INLINE void dream_sb_push_units(dream_ptr sb, const void *src, int3
     s = (dream_sb *)dream_p(sb);
     bytes = s->bytes;
     count = s->count;
-    cap = bytes ? dream_i32(bytes)[0] : 0;
+    cap = s->cap;
     if (__builtin_expect(count + nbytes + 4 > cap, 0)) {
         bytes = dream_sb_grow_bytes(s, bytes, count + nbytes + 4);
+        cap = s->cap;
     }
     dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
     memcpy(dst, src, (size_t)(uint32_t)nbytes);
     s->count = count + nbytes;
-    s->scalars += n;
+}
+
+/* Digits are rendered into a stack buffer and copied once — replaces the old Dream-level
+ * per-digit `ensure` + `store16` pairs in `StringBuilder.append_int/append_long`. */
+DREAM_ALWAYS_INLINE void dream_sb_push_int(dream_ptr sb, int32_t v) {
+    uint16_t buf[12];
+    int32_t n = 12;
+    uint32_t x;
+    if (v == INT32_MIN) {
+        dream_sb_push_units(sb, "-2147483648", 11);
+        return;
+    }
+    x = (uint32_t)(v < 0 ? -v : v);
+    do {
+        buf[--n] = (uint16_t)('0' + (x % 10u));
+        x /= 10u;
+    } while (x);
+    if (v < 0) {
+        buf[--n] = (uint16_t)'-';
+    }
+    dream_sb_push_units(sb, buf + n, 12 - n);
+}
+
+DREAM_ALWAYS_INLINE void dream_sb_push_long(dream_ptr sb, int64_t v) {
+    uint16_t buf[20];
+    int32_t n = 20;
+    uint64_t x;
+    if (v == INT64_MIN) {
+        dream_sb_push_units(sb, "-9223372036854775808", 20);
+        return;
+    }
+    x = (uint64_t)(v < 0 ? -v : v);
+    do {
+        buf[--n] = (uint16_t)('0' + (int32_t)(x % 10ull));
+        x /= 10ull;
+    } while (x);
+    if (v < 0) {
+        buf[--n] = (uint16_t)'-';
+    }
+    dream_sb_push_units(sb, buf + n, 20 - n);
 }
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
@@ -786,6 +849,7 @@ void dream_release_funcbox(dream_ptr box);
 void dream_lock_acquire(dream_ptr lock_addr);
 void dream_lock_release(dream_ptr lock_addr);
 void dream_async_complete(dream_ptr future, dream_ptr value);
+void dream_resolve(dream_ptr future, dream_ptr value);
 void dream_cancel(dream_ptr future);
 int32_t dream_async_await(dream_ptr future, dream_ptr *dest, int32_t resume_pc);
 void dream_async_set_waker(dream_ptr future, dream_ptr self);
@@ -840,6 +904,15 @@ int32_t string_compare(dream_ptr a, dream_ptr b);
 int32_t dream_char_at(dream_ptr ptr, int32_t i);
 int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 
+#ifdef DREAM_WASM32
+#define DREAM_WASM_IMPORT(mod, name) __attribute__((import_module(mod), import_name(name)))
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_INT) void print_int(int32_t v);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_STRING) void print_string(dream_ptr s);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_CHAR) void print_char(int32_t c);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_FLOAT) void print_float(float v);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_DOUBLE) void print_double(double v);
+DREAM_WASM_IMPORT(DREAM_MODULE_HOST, DREAM_SYM_TIME_NOW_NANOS) int64_t timeNowNanos(void);
+#else
 int64_t timeNowNanos(void);
 int64_t Time_nano_time(void);
 int64_t processCpuTimeNanos(void);
@@ -892,5 +965,7 @@ void workerPost(int32_t id, dream_ptr msg);
 dream_ptr workerRecv(int32_t id);
 dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg);
 void workerTerminate(int32_t id);
+
+#endif /* !DREAM_WASM32 */
 
 #endif

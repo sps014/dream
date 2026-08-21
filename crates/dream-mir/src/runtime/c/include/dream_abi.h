@@ -27,6 +27,9 @@
 #define DREAM_STR_PAD_INLINE 0
 #define DREAM_STR_SLICE 1
 #define NATIVE_HEAP_HEADER_SIZE 16
+/* Written into cleared `unowned` slots (weak-registry kind 1) so a later load can tell
+ * "target was destroyed" apart from "never assigned" (null). Must not be a valid pointer. */
+#define DREAM_UNOWNED_POISON (-165764356) /* 0xF601A0CC as i32 */
 #define RC_FROM_DATA 4
 #define TAG_FROM_DATA 8
 
@@ -75,7 +78,24 @@
 #define F_QUEUED_WASM 48
 #define F_DUE_WASM 52
 #define F_WIDE_WASM 56
+#define F_ESIZE_WASM F_WIDE_WASM
 #define F_SLOTS_WASM 64
+
+#define DREAM_SYM_MALLOC "malloc"
+#define DREAM_SYM_FREE "free"
+#define DREAM_SYM_MEMORY "memory"
+#define DREAM_SYM_RUN_LOOP "__dream_run_loop"
+#define DREAM_SYM_NEW_FUTURE "__dream_new_future"
+#define DREAM_SYM_RESOLVE "__dream_resolve"
+#define DREAM_SYM_RUNTIME_INIT "__runtime_init"
+#define DREAM_MODULE_ENV "env"
+#define DREAM_MODULE_HOST "Dream"
+#define DREAM_SYM_PRINT_INT "print_int"
+#define DREAM_SYM_PRINT_STRING "print_string"
+#define DREAM_SYM_PRINT_CHAR "print_char"
+#define DREAM_SYM_PRINT_FLOAT "print_float"
+#define DREAM_SYM_PRINT_DOUBLE "print_double"
+#define DREAM_SYM_TIME_NOW_NANOS "timeNowNanos"
 
 #define F_STATE_NATIVE 0
 #define F_STATUS_NATIVE 4
@@ -129,6 +149,7 @@
 #define F_QUEUED F_QUEUED_WASM
 #define F_DUE F_DUE_WASM
 #define F_WIDE F_WIDE_WASM
+#define F_ESIZE F_ESIZE_WASM
 #define F_SLOTS F_SLOTS_WASM
 #endif
 

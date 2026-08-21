@@ -1,6 +1,6 @@
-# 06 — Relooper & WAT Backend (`relooper.rs`, `backend/wasm/`)
+# 06 — Relooper & C99 Backend (`relooper.rs`, `backend/c/`)
 
-The backend turns optimized MIR into WebAssembly **binary** (then pretty-prints `.wat` with `wasmprinter`). The hard part is control flow: MIR is a reducible CFG, but WASM has **no `goto`** — only structured `block`/`loop`/`if` and relative branches (`br`/`br_if`/`br_table`). The relooper bridges that gap.
+The backend turns optimized MIR into **C99** (`backend/c`). For wasm32 targets that C is compiled by wasi-sdk clang/wasm-ld to `.wasm`, then pretty-printed to `.wat` with `wasmprinter`; native targets stop at the `.c` + host cc. The hard part is control flow: MIR is an unstructured CFG of basic blocks, and the relooper recovers the structured shapes (loops, diamonds) that structured emission is informed by.
 
 ## The two-layer backend
 
@@ -8,14 +8,16 @@ The backend turns optimized MIR into WebAssembly **binary** (then pretty-prints 
 flowchart TD
     mir[Optimized MIR function] --> rl[relooper::reloop]
     rl --> shape["Shape tree\n(Simple / Loop / Multiple)"]
-    shape --> emit[backend::wasm::FuncBuilder]
+    shape --> emit[backend::c emitter]
     mir --> emit
-    emit --> wasm[".wasm via wasm-encoder"]
-    emit -. parses .-> rt["runtime/*.wat (wast merge by name)"]
+    emit --> c["C99 source"]
+    c --> wasm[".wasm via wasi-sdk clang/wasm-ld"]
+    wasm --> wat[".wat via wasmprinter"]
+    rt["runtime/c/wasm32/ + runtime/c/native/\n(C guest runtime units)"] -. compiled & linked .-> wasm
 ```
 
-- `relooper::reloop(func) -> Option<Shape>` recovers structured shapes.
-- `backend::wasm::emit_program / emit_function` walks the function into builder ops, consulting the type interner for WASM value types. Same-module runtime helpers are `runtime/*.wat` (wast merge by name). Linked PCRE2 is `runtime/regex.wat` from C.
+- `relooper::reloop(func) -> Option<Shape>` recovers structured shapes from the CFG.
+- `backend::c::emit_c_module_for(mir, interner, target)` walks each function into C statements. Sync functions emit structured C control flow (`while`/`goto` from relooper shapes); async poll functions keep a `$__pc` program counter + dispatch `switch` for suspend/resume. Guest runtime helpers are C units under `runtime/c/wasm32/` plus shared `runtime/c/native/` (compiled by wasi-sdk — see `src/driver/c_wasm32.rs`); PCRE2 regex links `runtime/c/regex.c` + `runtime/c/pcre2/`.
 
 ## The relooper
 
@@ -32,7 +34,7 @@ flowchart LR
     end
 ```
 
-A CFG like this (a diamond whose join loops back) cannot be written directly in WASM. The relooper discovers that `B → D → B` forms a loop and that `A` branches into two arms, and produces a tree of **shapes** the emitter can translate to nested `block`/`loop`/`if`.
+A CFG like this (a diamond whose join loops back) is a tangle of gotos if emitted block-by-block. The relooper discovers that `B → D → B` forms a loop and that `A` branches into two arms, and produces a tree of **shapes** the emitter can translate into structured control flow (nested `while`/`if` in C) instead of raw goto spaghetti.
 
 ### Shapes — the `Shape` enum
 
@@ -60,37 +62,31 @@ The one subtle point — and the bug fixed during development — is **back-edge
 
 Because Dream's surface syntax only generates reducible CFGs, `reloop` always returns `Some`. It is typed `Option<Shape>` so an irreducible graph would fail loudly rather than miscompile.
 
-## The emitter (`src/mir/emit/`)
+## The emitter (`crates/dream-mir/src/backend/c/`)
 
-### Today: shape-based sync emit
+### Sync: structured C control flow
 
-Sync functions call `relooper::reloop` and walk the shape tree into nested WASM `block`/`loop`/`if`
-(see `src/mir/emit/emitter/shape.rs`). CFG edges become `br`/`br_if` relative to continue/break
-labels; multi-exit loops nest one `block` per exit arm so each break runs the matching exit shape.
+Sync functions are emitted as relooper-informed structured C — nested `while`/`if` with labels and
+`goto` only where a shape's exit arms need them. MIR terminators map directly onto C statements:
+`Goto` → `goto L<block>`, `If` → `if`/`else`, `Switch` → a C `switch`.
 
-```wat
-(func $f (param ...) (result ...)
-  (local $__pc i32) ;; reserved; used only on PC-dispatch fallback
-  (block $__brk0_0
-    (loop $__cnt0
-      ;; … body …
-      (br $__cnt0)
-    )
-    ;; exit arm(s)
-  )
-)
+```c
+L0:;
+  while (1) {
+    /* … body … */
+    goto L0;   /* back-edge to the loop header */
+  }
+  /* exit arm(s) */
 ```
 
-**Async poll functions** still use a `$__pc` + `br_table` dispatch loop: suspend/resume must save and
-restore a durable program counter in the `Future` frame (`src/mir/emit/emitter/async_ops.rs`).
-Sync functions also fall back to PC dispatch when the relooper shape has a **multi-entry loop body**
-or when the nested walker cannot resolve a branch to a structured label (rewind + dispatch).
+**Async poll functions** keep a `$__pc` + dispatch-`switch` resume loop: suspend/resume must save and
+restore a durable program counter in the `Future` frame.
 
 ### Statements, operands, types
 
-- `wasm_ty(TypeId)` maps interned types to WASM value types: `i32` for ints/bools/chars/refs (pointers), `i64` for longs, `f32`/`f64` for floats. Reference types are `i32` pointers into linear memory.
-- `binop_instr` picks the instruction from `(BinOp, operand type)` — e.g. `i32.add`, `f64.mul`, `i32.lt_s` vs `i32.lt_u` by signedness.
-- Operands lower trivially: `Const` → `i32.const`/`f64.const`/…; `Copy(Place::Local)` → `local.get`.
+- Interned types map to C types via the interner: `i32`-class primitives for ints/bools/chars, `i64` for longs, `f32`/`f64` for floats, and pointers (`CTy::Ptr`) for references into the heap.
+- Binops pick the C operator from `(BinOp, operand type)` — signed vs unsigned comparisons included.
+- Operands lower trivially: `Const` → a literal; `Copy(Place::Local)` → the local's C name.
 
 ### Runtime integration points
 
@@ -105,8 +101,8 @@ flowchart LR
     end
     subgraph "Backend support"
       lay["Mir.layouts (hir::layout)\nfield offsets, element stride, header size"]
-      rt["src/mir/runtime/*.wat + src/mir/abi.rs\nallocator, object protocol, tag constants"]
-      str["string interning → data segments"]
+      rt["runtime/c/ (C guest runtime) + mir::abi\nallocator, object protocol, tag constants"]
+      str["string interning → static objects"]
     end
     f --> lay
     n --> rt
@@ -114,10 +110,10 @@ flowchart LR
 ```
 
 - **Field/index access** uses the struct/array **layout** in `Mir.layouts` (built by `hir::layout`, threaded through lowering) to compute `base + offset` loads/stores with width-aware ops.
-- **Allocation/construction** (`New`, `UnionNew`, `ArrayLit`) emits an inline `$malloc(size, tag)` — tag from `mir::abi` — then sets the header/refcount, initializes fields/elements, and calls the user constructor (`$Type_constructor`) when one exists. `@shared class` instances allocate **four extra bytes** past their field layout for an embedded reentrant lock word (see `HEADER_LOCK_WORD_SIZE` in `mir::abi.rs`); retain/release for `@shared` types use atomic RMW helpers (`$retain_shared`, `$release_*` with an atomic prologue) instead of the ordinary non-atomic `$retain`/`$release_*` path.
-- **String constants** are interned into `[len][utf8][\0]` data segments, so identical literals share one pointer.
+- **Allocation/construction** (`New`, `UnionNew`, `ArrayLit`) emits an inline `dream_malloc(size, tag)` — tag from `mir::abi` — then sets the header/refcount, initializes fields/elements, and calls the user constructor when one exists. `@shared class` instances allocate **four extra bytes** past their field layout for an embedded reentrant lock word (see `HEADER_LOCK_WORD_SIZE` in `mir::abi.rs`); retain/release for `@shared` types go through the atomic RMW helpers in the runtime instead of the ordinary non-atomic retain/release path.
+- **String constants** are interned into static heap-object definitions (header + UTF-16 payload), so identical literals share one symbol (`__ds<n>`).
 
-The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are the `.wat` files in `crates/dream-mir/src/runtime/` (C authoring sources in `runtime/c/`; see that README). Placeholders (`{TAG_*}`) are substituted; interned `true`/`false`/`"-"`/`""` are `$__rt_str_*` globals. The text is parsed with `wast` and lowered into the same `ModuleBuilder` by name. Unreachable functions and unused func imports are dropped on the builder before `finish()`.
+The allocator, string, object-protocol, float/double formatter, and async scheduler runtimes are C units under `crates/dream-mir/src/runtime/c/` (`wasm32/` for the wasm32 guest, shared `native/` units for every target; see that README). `TAG_*` constants and heap offsets live in `mir::abi` lockstep with `runtime/c/include/dream_abi.h`. The wasm32 link list, PCRE2 sources, and `--global-base` are cataloged in `crates/dream-mir/src/runtime/modules.rs`.
 
 ## Determinism in the backend
 

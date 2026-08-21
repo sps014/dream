@@ -17,13 +17,13 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 03 | [HIR](./03-hir.md) | The typed, name-resolved High-level IR |
 | 04 | [MIR](./04-mir.md) | The CFG-based Mid-level IR and how HIR lowers into it |
 | 05 | [Writing Passes](./05-writing-passes.md) | The pass manager and a step-by-step tutorial |
-| 06 | [Relooper & Backend](./06-relooper-and-backend.md) | Recovering structured control flow and emitting WAT |
+| 06 | [Relooper & Backend](./06-relooper-and-backend.md) | Recovering structured control flow and the C99 backend |
 | 07 | [Adding a Feature](./07-adding-a-language-feature.md) | A worked example touching every stage |
 | 08 | [Testing & Determinism](./08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
 | 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
 | 11 | [Nim-hard ARC](./11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
-| 14 | [Dual backend](./14-dual-backend-plan.md) | Default native C for `dream run`; WAT for `--runtime --web/--node`. |
+| 14 | [Dual backend](./14-dual-backend-plan.md) | Historical decision record — superseded when the WAT emitter was removed in favor of the C backend. |
 
 ## Why a multi-pass architecture
 
@@ -44,13 +44,13 @@ flowchart LR
     SEMA --> HIR[Typed HIR]
     HIR --> MIR[CFG MIR]
     MIR --> OPT[Optimization passes]
-    OPT --> WAT[MIR to WAT backend]
-    WAT --> WASM[.wasm + .abi.json]
+    OPT --> C99[MIR to C99 backend]
+    C99 --> WASM[.wasm + .abi.json]
 
     TYPES[(Type system: TypeInterner / DefTable)] -.feeds.-> SEMA
     TYPES -.feeds.-> HIR
     TYPES -.feeds.-> MIR
-    TYPES -.feeds.-> WAT
+    TYPES -.feeds.-> C99
 ```
 
 Each arrow is a *total* lowering: the producer records everything the consumer needs, so the consumer never reaches backward. Types are interned once and referenced by a small integer (`TypeId`), so equality is `==` and there is no mangling.
@@ -68,7 +68,7 @@ Dream/
 │   ├── dream-abi/                  Attributes, intrinsics, JS ABI (shared by sema + MIR)
 │   ├── dream-stdlib/               Embedded prelude + package registry
 │   ├── dream-sema/                 Analyzer + tables + hir_emit (no MIR dependency)
-│   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit + runtime/
+│   └── dream-mir/                  CFG MIR, passes, relooper, C99 backend + runtime/c/
 ├── src/                            Root `dream`: driver, CLI, execution only
 │   ├── driver/                     Pipeline orchestration, source loading, errors
 │   └── execution/                  (feature "native") C guest + libdream + lldb-dap
@@ -146,7 +146,7 @@ Cargo enforces: `dream-sema` never depends on `dream-mir`, and `dream-syntax` ne
 - **Basic block** — a straight-line run of statements ending in exactly one terminator (the only place control branches).
 - **Terminator** — the control-flow instruction ending a block (`goto`, `if`, `switch`, `return`, `unreachable`).
 - **Operand** — a readable value: a local/global read or a constant. All computation is an `Rvalue`.
-- **Relooper** — the algorithm that turns a reducible CFG back into the structured `block`/`loop`/`if` WASM requires.
+- **Relooper** — the algorithm that recovers structured shapes (loops, diamonds) from a reducible CFG, informing the backend's structured control-flow emission.
 - **RC** — reference counting. Heap values carry a count; `Retain` increments, `Release` decrements and frees at zero.
 - **Poison / `Error` type** — the type given to expressions after a semantic error, assignable to and from everything so one mistake doesn't cascade into a flood of diagnostics.
 

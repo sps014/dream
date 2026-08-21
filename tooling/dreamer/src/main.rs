@@ -4,7 +4,7 @@ use dreamer::compile_flags::CompileFlags;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-/// Same `--release` / `-O` / `--backend` tokens as `dream`.
+/// Same `--release` / `-O` / `--wasm` tokens as `dream`.
 #[derive(Args, Clone, Debug, Default)]
 struct OptFlags {
     /// Trimmed build; wasm-opt / cc default `-O3` (`-Os` with `--web`).
@@ -19,14 +19,14 @@ struct OptFlags {
         value_name = "LVL"
     )]
     optimize: Option<String>,
-    /// Compiler backend: `wasm` or `c` (default `c`).
-    #[arg(long, value_name = "KIND")]
-    backend: Option<String>,
+    /// Compile to a wasm32 module instead of a native host.
+    #[arg(long)]
+    wasm: bool,
 }
 
 impl OptFlags {
     fn into_compile_flags(self) -> anyhow::Result<CompileFlags> {
-        CompileFlags::from_cli(self.release, self.optimize, self.backend)
+        CompileFlags::from_cli(self.release, self.optimize, self.wasm)
     }
 }
 
@@ -34,7 +34,9 @@ impl OptFlags {
 #[command(
     name = "dreamer",
     version,
-    about = "Package manager for the Dream language"
+    about = "Package manager for the Dream language",
+    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install wasi-sdk",
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file executables from release wasm\n  dreamer toolchain install wasi-sdk    WebAssembly toolchain for `dreamer build --wasm`"
 )]
 struct Cli {
     #[command(subcommand)]

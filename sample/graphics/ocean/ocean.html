@@ -32,11 +32,11 @@
     <div id="hud">loading…</div>
     <script type="module">
       // Prefer the per-module runtime emitted next to the .wasm (`--runtime --web`).
-      let run;
+      let runtime;
       try {
-        ({ run } = await import("./target/web/ocean.web.runtime.js"));
+        runtime = await import("./target/web/ocean.web.runtime.js");
       } catch (_) {
-        ({ run } = await import("../../../runtime/dream.js"));
+        runtime = await import("../../../runtime/dream.js");
       }
 
       const hud = document.getElementById("hud");
@@ -50,8 +50,14 @@
       });
 
       try {
-        await run("./target/web/ocean.wasm");
+        // The sample's main() renders until the window closes, so it never completes on
+        // the web — start it and mark loaded as soon as the module is live.
+        const mod = await runtime.load("./target/web/ocean.wasm");
         setHud("gerstner ocean · webgpu");
+        mod.run().catch((e) => {
+          console.error(e);
+          setHud(String(e && e.message ? e.message : e), true);
+        });
       } catch (e) {
         console.error(e);
         setHud(String(e && e.message ? e.message : e), true);

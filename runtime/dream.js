@@ -161,16 +161,36 @@ class DreamInstance {
   }
 
   /**
+   * Payload address of a Dream string. C owned strings store pad 0 (units at `ptr+8`);
+   * C slices store pad 1 and the units pointer at `ptr+8+4` on wasm32; WAT stores the
+   * absolute units address in pad.
+   */
+  stringUnitsStart(ptr) {
+    const pad = this.view.getInt32(ptr + 4, true);
+    if (pad === 0) return ptr + 8;
+    if (pad === 1) return this.view.getInt32(ptr + 12, true);
+    return pad;
+  }
+
+  /**
    * Reads a Dream string at `ptr` (a data pointer). Layout:
-   * `[unit_len: i32][pad: i32][utf16le...]`.
+   * `[unit_len: i32][pad: i32][utf16le...]`. Uses code-unit copy so `Bytes.toWire`
+   * payloads that contain U+0000 survive the JS boundary (TextDecoder is not required).
    */
   readString(ptr) {
     if (!ptr) return "";
-    const units = this.view.getInt32(ptr, true);
-    const pad = this.view.getInt32(ptr + 4, true);
-    const start = pad === 0 ? ptr + 8 : pad;
-    const bytes = this.bytes.slice(start, start + units * 2);
-    return new TextDecoder("utf-16le").decode(bytes);
+    const n = this.view.getInt32(ptr, true);
+    if (n <= 0) return "";
+    const start = this.stringUnitsStart(ptr);
+    const u16 = new Uint16Array(this.memory.buffer.slice(start, start + n * 2));
+    if (u16.length <= 8192) {
+      return String.fromCharCode.apply(null, u16);
+    }
+    let s = "";
+    for (let i = 0; i < u16.length; i += 8192) {
+      s += String.fromCharCode.apply(null, u16.subarray(i, i + 8192));
+    }
+    return s;
   }
 
   /**
@@ -178,12 +198,19 @@ class DreamInstance {
    * extern functions can return strings back into Dream. Requires the module to export `malloc`.
    * Layout: `[unit_len: i32][pad: i32][utf16le...]` (no NUL terminator).
    */
-  writeString(str) {
-    if (typeof this.exports.malloc !== "function") {
-      throw new Error("module does not export `malloc`; cannot allocate a string");
+  guestMalloc(size, tag) {
+    if (typeof this.exports.dream_malloc === "function") {
+      return this.exports.dream_malloc(size, tag);
     }
+    if (typeof this.exports.malloc !== "function") {
+      throw new Error("module does not export `malloc`; cannot allocate");
+    }
+    return this.exports.malloc(size, tag);
+  }
+
+  writeString(str) {
     const units = str.length;
-    const ptr = this.exports.malloc(8 + units * 2, TAGS.STRING);
+    const ptr = this.guestMalloc(8 + units * 2, TAGS.STRING);
     this.view.setInt32(ptr, units, true);
     this.view.setInt32(ptr + 4, ptr + 8, true);
     for (let i = 0; i < units; i++) {
@@ -264,13 +291,10 @@ class DreamInstance {
    * Dream. Layout: [count:i32] followed by `count` elements. Requires the module to export `malloc`.
    */
   writeArray(arr, elemType = "int") {
-    if (typeof this.exports.malloc !== "function") {
-      throw new Error("module does not export `malloc`; cannot allocate an array");
-    }
     const elem = stripSuffix(elemType);
     const size = elementSize(elem);
     const count = arr.length;
-    const ptr = this.exports.malloc(4 + count * size, TAGS.ARRAY);
+    const ptr = this.guestMalloc(4 + count * size, TAGS.ARRAY);
     this.view.setInt32(ptr, count, true);
     if (elem === "char" || elem === "byte") {
       // Bulk copy for the common byte-array case.
@@ -338,12 +362,18 @@ class DreamInstance {
     if (index < 0) return null;
     const table = this.exports.__indirect_function_table;
     if (!table) throw new Error("module does not export its function table; cannot build a callback");
+    // C-backend modules number `fun` values by their internal `dream_ft[]` dispatch table, whose
+    // slots clang assigns independently of the wasm table. The exported `dream_ft_get` maps an ft
+    // index to the function-pointer value, which on wasm32 *is* the table index. WAT-backend
+    // modules (and workers, which dispatch through `dream_ft` themselves) need no translation.
+    const mapFt = this.exports.dream_ft_get;
+    const tableIndex = typeof mapFt === "function" ? Number(mapFt(index)) : index;
     const cacheKey = `${index}|${typeStr}`;
     const cached = this._callbackWrappers.get(cacheKey);
     if (cached) return cached;
-    const fn = table.get(index);
+    const fn = table.get(tableIndex);
     if (typeof fn !== "function") {
-      throw new Error(`no Dream function at table index ${index}`);
+      throw new Error(`no Dream function at table index ${tableIndex}`);
     }
     const { params, result } = parseFunType(typeStr);
     const wrapper = (...jsArgs) => {
@@ -372,7 +402,11 @@ class DreamInstance {
    */
   __workerInvoke(fnIndex, env, msg) {
     const ptr = this.writeString(msg == null ? "" : String(msg));
-    const r = this.exports.__dream_worker_invoke_raw(fnIndex, env, ptr);
+    const r = this.exports.__dream_worker_invoke_raw(
+      Number(fnIndex),
+      Number(env ?? 0),
+      Number(ptr),
+    );
     return this.__awaitWorkerResult(r);
   }
 
@@ -390,31 +424,45 @@ class DreamInstance {
    * slot on the microtask queue until some pump marks it done, then unwrap `F_RESULT`.
    */
   __awaitWorkerResult(r) {
-    const F_STATUS = 4; // mirrors src/mir/async_emit.rs
     const F_RESULT = 8;
-    const tag = r === 0 ? 0 : this.i32(r - 8); // mirrors the WASM `$object_tag` helper
+    if (!r) return Promise.resolve("");
+    const tag = this.i32(r - 8); // mirrors the WASM `$object_tag` helper
     if (tag !== 0) return Promise.resolve(this.readString(r));
+    return this.__awaitFuture(r).then(() => this.readString(this.i32(r + F_RESULT)));
+  }
+
+  /**
+   * Waits until a tag-0 Future frame is settled. `wrapAsyncImport` re-pumps `__dream_run_loop`
+   * when the host Promise completes; this only observes `F_STATUS`.
+   */
+  __awaitFuture(r) {
+    const F_STATUS = 4; // mirrors src/mir/async_emit.rs
+    if (!r || this.i32(r + F_STATUS) !== 0) return Promise.resolve();
     return new Promise((resolve) => {
       // `setTimeout`, not `queueMicrotask`: a real pending host op (e.g. `fetch`) settles via a
       // macrotask-queued I/O callback, which a tight microtask-only poll loop would starve (the
       // microtask queue must fully drain before the next macrotask runs), hanging forever.
       const poll = () => {
-        if (this.i32(r + F_STATUS) !== 0) {
-          resolve(this.readString(this.i32(r + F_RESULT)));
-        } else {
-          setTimeout(poll, 0);
+        if (typeof this.exports.__dream_run_loop === "function") {
+          this.exports.__dream_run_loop();
         }
+        if (this.i32(r + F_STATUS) !== 0) resolve();
+        else setTimeout(poll, 0);
       };
       poll();
     });
   }
 
-  /** Calls the exported `main`, if present. Returns its result (if any). */
+  /** Calls the exported `main`, if present. Async `main` returns a Future pointer. */
   run() {
-    if (typeof this.exports.main === "function") {
-      return this.exports.main();
+    if (typeof this.exports.main !== "function") {
+      throw new Error("module has no exported `main`");
     }
-    throw new Error("module has no exported `main`");
+    const r = this.exports.main();
+    if (!r) return Promise.resolve();
+    const tag = this.i32(r - 8);
+    if (tag !== 0) return Promise.resolve(r);
+    return this.__awaitFuture(r);
   }
 }
 
@@ -705,6 +753,23 @@ function getNodeNet() { return _nodeNet; }
 
 // ----- hosts/env.js -----
 /** Default `env` builtins every Dream module imports (mirrors the WASM guest ABI). */
+
+/** Native host parity: `%.6f` with trailing zeros (and dot) trimmed. */
+function formatFloat(v) {
+  if (!Number.isFinite(v)) return String(v);
+  let text = v.toFixed(6);
+  if (text.includes(".")) {
+    text = text.replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return text === "-0" ? "0" : text;
+}
+
+/** Native host parity: `%.16g`. */
+function formatDouble(v) {
+  if (!Number.isFinite(v)) return String(v);
+  return String(Number(v.toPrecision(16)));
+}
+
 function defaultEnv(getInstance, options) {
   const writeOut = options.stdout || ((s) => (typeof process !== "undefined" ? process.stdout.write(s) : console.log(s)));
   const writeLine = options.stdout
@@ -715,8 +780,8 @@ function defaultEnv(getInstance, options) {
     print_string: (ptr) => writeOut(getInstance().readString(ptr)),
     println: (ptr) => writeLine(getInstance().readString(ptr)),
     print_int: (v) => writeOut(String(v)),
-    print_float: (v) => writeOut(String(v)),
-    print_double: (v) => writeOut(String(v)),
+    print_float: (v) => writeOut(formatFloat(v)),
+    print_double: (v) => writeOut(formatDouble(v)),
     print_char: (v) => writeOut(String.fromCharCode(v)),
     sin: Math.sin,
     cos: Math.cos,
@@ -4442,6 +4507,15 @@ function wsConnect(url, timeoutMs) {
       resolve(encodeWireText("-2", "WebSocket is not available in this host"));
       return;
     }
+    // Only ws:// and wss:// are WebSocket schemes; anything else is an unsupported
+    // target (-2), not a connection failure (-1).
+    const raw = String(url || "");
+    const colon = raw.indexOf(":");
+    const scheme = (colon > 0 ? raw.slice(0, colon) : "").toLowerCase();
+    if (scheme !== "ws" && scheme !== "wss") {
+      resolve(encodeWireText("-2", `unsupported URL scheme '${scheme || "?"}:'`));
+      return;
+    }
     let socket;
     try {
       socket = new Ctor(url);
@@ -4603,39 +4677,94 @@ function defaultDreamModule(getInstance) {
  * Browser workers use `self.onmessage` / `self.postMessage`; Node `worker_threads` workers use
  * `parentPort` instead — pass `node: true` for that dialect.
  */
+function unpackWire(data) {
+  if (data == null || data === "") {
+    return "";
+  }
+  if (typeof data === "string") {
+    return data;
+  }
+  const u =
+    data instanceof Uint16Array
+      ? data
+      : new Uint16Array(data.buffer, data.byteOffset, Math.floor(data.byteLength / 2));
+  if (u.length <= 8192) {
+    return String.fromCharCode.apply(null, u);
+  }
+  let s = "";
+  for (let i = 0; i < u.length; i += 8192) {
+    s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+  }
+  return s;
+}
+
+function packWire(s) {
+  const n = s == null ? 0 : s.length;
+  const u = new Uint16Array(n);
+  for (let i = 0; i < n; i++) {
+    u[i] = s.charCodeAt(i);
+  }
+  return u;
+}
+
+const WORKER_BOOT_UNPACK = `function unpackWire(data) {
+  if (data == null || data === "") return "";
+  if (typeof data === "string") return data;
+  const u = data instanceof Uint16Array
+    ? data
+    : new Uint16Array(data.buffer, data.byteOffset, Math.floor(data.byteLength / 2));
+  if (u.length <= 8192) return String.fromCharCode.apply(null, u);
+  let s = "";
+  for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+  return s;
+}
+function packWire(s) {
+  const n = s == null ? 0 : s.length;
+  const u = new Uint16Array(n);
+  for (let i = 0; i < n; i++) u[i] = s.charCodeAt(i);
+  return u;
+}
+`;
+
 function workerBootSource(dreamUrl, { node = false } = {}) {
   if (node) {
     return `import { parentPort } from 'node:worker_threads';
 import * as Dream from ${JSON.stringify(dreamUrl)};
+${WORKER_BOOT_UNPACK}
 let inst = null;
-parentPort.on('message', async (m) => {
-  if (m.t === 'init') {
-    inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory });
-    parentPort.postMessage({ t: 'ready' });
-  } else if (m.t === 'msg') {
-    parentPort.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'dispatch') {
-    parentPort.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'term') {
-    parentPort.close();
-  }
+let chain = Promise.resolve();
+parentPort.on('message', (m) => {
+  chain = chain.then(async () => {
+    if (m.t === 'init') {
+      inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
+      parentPort.postMessage({ t: 'ready' });
+    } else if (m.t === 'msg' || m.t === 'dispatch') {
+      const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
+      parentPort.postMessage({ t: 'reply', data: packWire(reply) });
+    } else if (m.t === 'term') {
+      parentPort.close();
+    }
+  });
 });
 `;
   }
   return `import * as Dream from ${JSON.stringify(dreamUrl)};
+${WORKER_BOOT_UNPACK}
 let inst = null;
-self.onmessage = async (e) => {
+let chain = Promise.resolve();
+self.onmessage = (e) => {
   const m = e.data;
-  if (m.t === 'init') {
-    inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory });
-    self.postMessage({ t: 'ready' });
-  } else if (m.t === 'msg') {
-    self.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'dispatch') {
-    self.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
-  } else if (m.t === 'term') {
-    self.close();
-  }
+  chain = chain.then(async () => {
+    if (m.t === 'init') {
+      inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
+      self.postMessage({ t: 'ready' });
+    } else if (m.t === 'msg' || m.t === 'dispatch') {
+      const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
+      self.postMessage({ t: 'reply', data: packWire(reply) });
+    } else if (m.t === 'term') {
+      self.close();
+    }
+  });
 };
 `;
 }
@@ -4648,7 +4777,7 @@ self.onmessage = async (e) => {
  * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
  * Dream's scheduler.
  */
-function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
+function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
   const reg = new Map();
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
@@ -4668,8 +4797,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
-          if (state.pending.length > 0) state.pending.shift()(m.data);
-          else state.replies.push(m.data);
+          const text = unpackWire(m.data);
+          if (state.pending.length > 0) state.pending.shift()(text);
+          else state.replies.push(text);
         }
       });
     } else {
@@ -4680,8 +4810,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
-          if (state.pending.length > 0) state.pending.shift()(m.data);
-          else state.replies.push(m.data);
+          const text = unpackWire(m.data);
+          if (state.pending.length > 0) state.pending.shift()(text);
+          else state.replies.push(text);
         }
       };
     }
@@ -4690,8 +4821,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
   const spawnWorker = (fnIndex, env) => {
     const state = {
       worker: null,
-      fnIndex,
-      env,
+      fnIndex: Number(fnIndex ?? 0),
+      env: Number(env ?? 0),
       pending: [],
       replies: [],
       ready: false,
@@ -4707,6 +4838,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
         bytes: wasmBytes,
         abi,
         memory: getSharedMemory(),
+        stackGate,
       });
     };
 
@@ -4758,14 +4890,14 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
     workerPost: (id, msg) => {
       const s = reg.get(id);
       if (!s) return;
-      postJob(s, { t: "msg", fnIdx: s.fnIndex, env: s.env, data: msg });
+      postJob(s, { t: "msg", fnIdx: s.fnIndex, env: s.env, data: packWire(msg) });
     },
     workerPoolDispatch: (id, fnIndex, env, msg) =>
       new Promise((resolve) => {
         const s = reg.get(id);
         if (!s) return resolve("");
         s.pending.push(resolve);
-        postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: msg });
+        postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: packWire(msg) });
       }),
     // extern async: resolve with the next reply (or "" if the worker is gone).
     workerRecv: (id) =>
@@ -4833,25 +4965,93 @@ async function resolveAbi(wasmModule, source, options) {
   return loadAbi(url);
 }
 
-function moduleWantsSharedMemory(wasmModule, desc) {
-  if (desc && typeof desc.shared === "boolean") {
-    return desc.shared;
+/**
+ * Scans the wasm binary's import section for an `env`/`memory` import and reads its limits
+ * flags (bit 1 = shared). Engines do not reliably expose `.type.shared` on
+ * `WebAssembly.Module.imports()` entries, so this is the dependable signal.
+ */
+function memoryImportIsShared(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let pos = 8; // magic + version
+  const leb = () => {
+    let result = 0;
+    let shift = 0;
+    for (;;) {
+      const b = u8[pos++];
+      result += (b & 0x7f) * Math.pow(2, shift);
+      if (!(b & 0x80)) return result;
+      shift += 7;
+    }
+  };
+  const limits = () => {
+    const flags = leb();
+    leb(); // min
+    if (flags & 0x01) leb(); // max
+    return flags;
+  };
+  while (pos < u8.length) {
+    const id = u8[pos++];
+    const size = leb();
+    if (id !== 2) {
+      pos += size; // not the import section
+      continue;
+    }
+    const end = pos + size;
+    const count = leb();
+    for (let i = 0; i < count && pos < end; i++) {
+      // NB: `pos += leb()` would read `pos` before `leb()` runs — but leb() mutates pos
+      // through the closure, so the skip would land one byte short. Stage lengths first.
+      const moduleLen = leb();
+      pos += moduleLen;
+      const nameLen = leb();
+      pos += nameLen;
+      const kind = u8[pos++];
+      if (kind === 2) {
+        return (limits() & 0x02) !== 0; // shared flag
+      } else if (kind === 0) {
+        leb(); // func: type index
+      } else if (kind === 1) {
+        pos += 1; // table: element type
+        limits();
+      } else if (kind === 3) {
+        pos += 2; // global: valtype + mutability
+      } else {
+        break; // unknown kind — stop scanning rather than desync
+      }
+    }
+    return false;
   }
-  // `Module.imports()[].type` is missing in some browsers. Only worker modules need SAB.
+  return false;
+}
+
+function moduleWantsSharedMemory(wasmModule, desc) {
+  if (desc && desc.shared) {
+    return true;
+  }
+  // `Module.imports()[].type` is missing in some browsers. Shared-memory modules (WebWorker)
+  // still import the worker hosts; use either signal.
   return WebAssembly.Module.imports(wasmModule).some(
     (i) =>
-      i.kind === "function" &&
-      i.module === "Dream" &&
-      (i.name === "workerSpawn" ||
-        i.name === "workerPost" ||
-        i.name === "workerRecv" ||
-        i.name === "workerTerminate" ||
-        i.name === "workerPoolSpawn" ||
-        i.name === "workerPoolDispatch"),
+      (i.kind === "memory" && i.module === "env" && i.name === "memory" && i.type && i.type.shared) ||
+      (i.kind === "function" &&
+        i.module === "Dream" &&
+        (i.name === "workerSpawn" ||
+          i.name === "workerPost" ||
+          i.name === "workerRecv" ||
+          i.name === "workerTerminate" ||
+          i.name === "workerPoolSpawn" ||
+          i.name === "workerPoolDispatch")),
   );
 }
 
-function makeLinearMemory(wasmModule) {
+function memoryIsShared(memory) {
+  return (
+    typeof SharedArrayBuffer !== "undefined" &&
+    memory.buffer instanceof SharedArrayBuffer
+  );
+}
+
+function makeLinearMemory(wasmModule, wasmBytes) {
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
   );
@@ -4859,7 +5059,8 @@ function makeLinearMemory(wasmModule) {
   return new WebAssembly.Memory({
     initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
     maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
-    shared: moduleWantsSharedMemory(wasmModule, desc),
+    shared:
+      moduleWantsSharedMemory(wasmModule, desc) || memoryImportIsShared(wasmBytes),
   });
 }
 
@@ -4905,17 +5106,24 @@ async function load(source, options = {}) {
   };
 
   const importObject = { env: defaultEnv(getInstance, options) };
-  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule);
+  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule, wasmBytes);
   importObject.env.memory = sharedMemory;
+  const stackGate =
+    options.stackGate ??
+    (memoryIsShared(sharedMemory) ? new Int32Array(new SharedArrayBuffer(4)) : null);
 
   const userImports = options.imports || {};
   const sigByName = new Map();
   if (abi) for (const e of abi.externs) sigByName.set(e.name, e);
 
   const composeHosts = options.dreamHosts || defaultDreamModule;
+  // Selective runtimes omit chunk files whose hosts are unused; `typeof` guards keep
+  // those references safe when the defining file was not included.
   const builtinDream = {
     ...composeHosts(getInstance),
-    ...makeWorkerModule(wasmBytes, abi, () => sharedMemory),
+    ...(typeof makeWorkerModule === "function"
+      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate)
+      : {}),
   };
   if (typeof builtinDream.__attachGpuAbi === "function") {
     const hint =
@@ -4928,7 +5136,11 @@ async function load(source, options = {}) {
   }
 
   const wrapFor = (fn, sig) => {
-    if (sig && sig.field === "cryptoSecureRandomFill") {
+    if (
+      sig &&
+      sig.field === "cryptoSecureRandomFill" &&
+      typeof csprngBytes === "function"
+    ) {
       return wrapInPlaceByteArrayFill(getInstance, (count) => csprngBytes(count));
     }
     return sig && sig.async ? wrapAsyncImport(getInstance, fn, sig) : wrapImport(getInstance, fn, sig);
@@ -4945,10 +5157,16 @@ async function load(source, options = {}) {
     for (const e of abi.externs) {
       const bucket = (importObject[e.module] ||= {});
       if (bucket[e.field]) continue;
+      // `cryptoSecureRandomFill` has no direct host function: wrapFor routes it through
+      // wrapInPlaceByteArrayFill + csprngBytes, so it is "implemented" despite resolving
+      // to null here.
+      const isCsprngFill =
+        e.module === "Dream" && e.field === "cryptoSecureRandomFill" &&
+        typeof csprngBytes === "function";
       const resolved = (e.module === "Dream" && builtinDream[e.field])
         ? builtinDream[e.field]
         : resolveGlobal(e.module, e.field);
-      bucket[e.field] = resolved
+      bucket[e.field] = (resolved || isCsprngFill)
         ? wrapFor(resolved, e)
         : () => {
             throw new Error(`no JS implementation for extern '${e.name}' (${e.module}.${e.field})`);
@@ -4973,9 +5191,73 @@ async function load(source, options = {}) {
         };
   }
 
-  const wasmInstance = await WebAssembly.instantiate(wasmModule, importObject);
+  const wasmInstance = await withBootstrapLock(stackGate, async () => {
+    const inst = await WebAssembly.instantiate(wasmModule, importObject);
+    if (stackGate || options.memory) {
+      attachGuestStack(inst);
+    } else if (typeof inst.exports.__runtime_init === "function") {
+      inst.exports.__runtime_init();
+    }
+    return inst;
+  });
   instance = new DreamInstance(wasmInstance);
   return instance;
+}
+
+const WORKER_STACK_BYTES = 65536;
+
+async function withBootstrapLock(gate, fn) {
+  if (!gate) {
+    return fn();
+  }
+  for (;;) {
+    if (Atomics.compareExchange(gate, 0, 0, 1) === 0) {
+      break;
+    }
+    if (typeof Atomics.waitAsync === "function") {
+      await Atomics.waitAsync(gate, 0, 1, 50).value;
+    } else {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    Atomics.store(gate, 0, 0);
+    Atomics.notify(gate, 0);
+  }
+}
+
+function guestMalloc(exports, size, tag) {
+  if (typeof exports.dream_malloc === "function") {
+    return exports.dream_malloc(size, tag);
+  }
+  if (typeof exports.malloc === "function") {
+    return exports.malloc(size, tag);
+  }
+  return 0;
+}
+
+function attachGuestStack(wasmInstance) {
+  const sp = wasmInstance.exports.__stack_pointer;
+  if (!sp) {
+    if (typeof wasmInstance.exports.__runtime_init === "function") {
+      wasmInstance.exports.__runtime_init();
+    }
+    return;
+  }
+  if (typeof wasmInstance.exports.__runtime_init === "function") {
+    wasmInstance.exports.__runtime_init();
+  }
+  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES, 0);
+  if (!ptr) {
+    throw new Error("failed to allocate a guest stack");
+  }
+  sp.value = ptr + WORKER_STACK_BYTES;
+  const tls = wasmInstance.exports.__tls_base;
+  if (tls) {
+    tls.value = ptr;
+  }
 }
 
 /**
@@ -4985,7 +5267,7 @@ async function load(source, options = {}) {
  */
 async function run(source, options = {}) {
   const mod = await load(source, options);
-  mod.run();
+  await mod.run();
   return mod;
 }
 

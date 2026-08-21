@@ -310,11 +310,8 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // reclassified as owning in the caller. Locals already marked `manual_drop` (from a prior
     // inline into this callee) keep their existing `ValueDrop` in the remapped body; do not drop
     // them again at this site's continuation.
-    let callee_frame = crate::backend::shared::ValueFrame::compute(
-        &mir.functions[site.callee],
-        interner,
-        &mir.layouts,
-    );
+    let callee_frame =
+        crate::backend::shared::ValueFrame::compute(&mir.functions[site.callee], interner);
     let local_base = mir.functions[fi].locals.len() as u32;
     let drop_locals: Vec<Local> = g_locals
         .iter()

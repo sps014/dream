@@ -1,4 +1,4 @@
-//! HIR->MIR->WAT emission and native execution tests.
+//! HIR->MIR->C emission and native execution tests.
 //! Moved out of `dream-sema` so the analyzer crate has no `dream-mir` dependency.
 
 mod common;
@@ -9,46 +9,53 @@ use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 use pretty_assertions::assert_eq;
 
-fn wasm_func_body<'a>(wat: &'a str, name: &str) -> &'a str {
-    let tag = format!("\n  (func ${name}");
-    let rest = match wat.split(&tag).nth(1) {
-        Some(r) => r,
-        None => return "",
-    };
-    match rest.find("\n  (func $") {
-        Some(i) => &rest[..i],
-        None => rest,
+/// Extracts the body of the C function `name` (the definition whose signature line ends with '{'),
+/// up to its closing brace. Returns "" when no definition is found. Declarations (`;`) and
+/// same-prefix functions (`poll_work` when searching `work`) are skipped.
+fn c_func_body<'a>(c: &'a str, name: &str) -> &'a str {
+    let needle = format!("{name}(");
+    let mut from = 0;
+    while let Some(i) = c[from..].find(&needle) {
+        let hit = from + i;
+        let at_word_start = hit == 0 || {
+            let b = c.as_bytes()[hit - 1];
+            !(b.is_ascii_alphanumeric() || b == b'_')
+        };
+        let line_start = c[..hit].rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let line_end = c[hit..].find('\n').map(|p| hit + p).unwrap_or(c.len());
+        if at_word_start && c[line_start..line_end].trim_end().ends_with('{') {
+            let rest = &c[line_end..];
+            return match rest.find("\n}") {
+                Some(e) => &rest[..e],
+                None => rest,
+            };
+        }
+        from = hit + needle.len();
     }
+    ""
 }
 
 #[test]
 fn test_hir_emission_arithmetic_function() {
     // A plain free function over arithmetic on parameters is fully representable in HIR, so the
     // analyzer emits it and it survives the MIR backend pipeline.
-    let (wat, count) = emit_hir_to_wat("fun add(a: int, b: int): int { return a + b; }");
+    let (c, count) = emit_hir_to_c("fun add(a: int, b: int): int { return a + b; }");
     assert_eq!(
         count, 1,
         "the single free function should be emitted as HIR"
     );
-    assert!(
-        wat.contains("(func $add"),
-        "missing emitted function:\n{}",
-        wat
-    );
-    assert!(wat.contains("i32.add"), "missing arithmetic:\n{}", wat);
+    assert!(c.contains("int32_t add("), "missing emitted function:\n{}", c);
+    let body = c_func_body(&c, "add");
+    assert!(body.contains('+'), "missing arithmetic:\n{}", c);
 }
 
 #[test]
 fn test_hir_emission_locals_and_assignment() {
     // `let` + assignment + return over locals: each statement is supported, so the function emits.
     let code = "fun calc(n: int): int { let x: int = n; let y: int = x + 1; y = y + n; return y; }";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1);
-    assert!(
-        wat.contains("(func $calc"),
-        "missing emitted function:\n{}",
-        wat
-    );
+    assert!(c.contains("int32_t calc("), "missing emitted function:\n{}", c);
 }
 
 #[test]
@@ -60,7 +67,7 @@ fn test_hir_emission_skips_unsupported_functions() {
         fun simple(a: int): int { return a; }
         fun gen<T>(x: T): T { return x; }
     ";
-    let (_, count) = emit_hir_to_wat(code);
+    let (_, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 1,
         "only the fully-supported function should be emitted"
@@ -69,27 +76,16 @@ fn test_hir_emission_skips_unsupported_functions() {
 
 #[test]
 fn test_hir_emission_while_loop() {
-    // `while` over locals is now fully representable; the whole function survives the pipeline and
-    // its CFG is emitted via the block-dispatch loop.
+    // `while` over locals is now fully representable; the whole function survives the pipeline.
+    // Control flow is plain C now (labelled blocks + gotos), so only the comparison shape and the
+    // presence of the back-edge are asserted.
     let code = "fun count(n: int): int { let s: int = 0; while (s < n) { s = s + 1; } return s; }";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the while function should be emitted as HIR");
-    assert!(
-        wat.contains("(func $count"),
-        "missing emitted function:\n{}",
-        wat
-    );
-    assert!(
-        wat.contains("i32.lt_s"),
-        "missing loop comparison:\n{}",
-        wat
-    );
-    assert!(wat.contains("loop"), "missing structured loop:\n{}", wat);
-    assert!(
-        !wat.contains("br_table"),
-        "sync while should not use br_table dispatch:\n{}",
-        wat
-    );
+    assert!(c.contains("int32_t count("), "missing emitted function:\n{}", c);
+    let body = c_func_body(&c, "count");
+    assert!(body.contains('<'), "missing loop comparison:\n{}", c);
+    assert!(body.contains("goto L"), "missing CFG back-edge:\n{}", c);
 }
 
 #[test]
@@ -100,15 +96,15 @@ fn test_hir_emission_if_else_chain() {
             if (n < 0) { return 0; } else if (n == 0) { return 1; } else { return 2; }
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 1,
         "the if/else-if/else function should be emitted as HIR"
     );
     assert!(
-        wat.contains("(func $classify"),
+        c.contains("int32_t classify("),
         "missing emitted function:\n{}",
-        wat
+        c
     );
 }
 
@@ -122,14 +118,11 @@ fn test_hir_emission_for_loop() {
             return acc;
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the for-loop function should be emitted as HIR");
-    assert!(
-        wat.contains("(func $sum"),
-        "missing emitted function:\n{}",
-        wat
-    );
-    assert!(wat.contains("i32.add"), "missing arithmetic:\n{}", wat);
+    assert!(c.contains("int32_t sum("), "missing emitted function:\n{}", c);
+    let body = c_func_body(&c, "sum");
+    assert!(body.contains('+'), "missing arithmetic:\n{}", c);
 }
 
 #[test]
@@ -142,12 +135,12 @@ fn test_hir_emission_foreach_loop() {
             return acc;
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the foreach function should be emitted as HIR");
     assert!(
-        wat.contains("(func $total"),
+        c.contains("int32_t total("),
         "missing emitted function:\n{}",
-        wat
+        c
     );
 }
 
@@ -159,15 +152,15 @@ fn test_hir_emission_logical_and_ternary() {
             return (a && b) ? x : y;
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 1,
         "the logical/ternary function should be emitted as HIR"
     );
     assert!(
-        wat.contains("(func $pick"),
+        c.contains("int32_t pick("),
         "missing emitted function:\n{}",
-        wat
+        c
     );
 }
 
@@ -185,58 +178,55 @@ fn test_hir_emission_coalesce() {
         }
         fun or_default(x: Option<string>): string { return x ?? \"d\"; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 2,
         "unwrap_or and or_default should be emitted as HIR"
     );
     assert!(
-        wat.contains("(func $or_default"),
+        c.contains("or_default("),
         "missing emitted function:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_cast() {
-    // A numeric widening cast lowers to a concrete conversion instruction.
+    // A numeric widening cast lowers to a concrete C cast expression.
     let code = "fun widen(x: int): double { return (double)x; }";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the cast function should be emitted as HIR");
-    assert!(
-        wat.contains("f64.convert_i32_s"),
-        "missing widening cast:\n{}",
-        wat
-    );
+    let body = c_func_body(&c, "widen");
+    assert!(body.contains("(double)"), "missing widening cast:\n{}", c);
 }
 
 #[test]
 fn test_hir_emission_index_and_array_literal() {
-    // Array literals allocate via `$malloc` and store the length + elements; indexing reads through
-    // the element address.
+    // Array literals allocate via `dream_malloc` and store the length + elements; indexing reads
+    // through the element address.
     let code = "
         fun first(xs: int[]): int { return xs[0]; }
         fun make(): int[] { return [1, 2, 3]; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 2,
         "both the index and array-literal functions should be emitted"
     );
     assert!(
-        wat.contains("(func $first"),
+        c.contains("int32_t first("),
         "missing index function:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $make"),
+        c.contains("make(void)"),
         "missing array-literal function:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $malloc"),
+        c.contains("dream_malloc("),
         "array literal should allocate:\n{}",
-        wat
+        c
     );
 }
 
@@ -255,21 +245,21 @@ fn test_empty_array_literal_infers_from_context() {
             return sink([]);
         }
     ";
-    let (wat, _count) = emit_hir_to_wat(code);
+    let (c, _count) = emit_hir_to_c(code);
     assert!(
-        wat.contains("(func $make"),
+        c.contains("make(void)"),
         "return-context empty array should emit:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $driver"),
+        c.contains("int32_t driver("),
         "assignment/arg empty array should emit:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $Bag_constructor"),
+        c.contains("Bag_constructor("),
         "field-init empty array should emit:\n{}",
-        wat
+        c
     );
 }
 
@@ -289,11 +279,11 @@ fn test_nested_empty_array_infers_element_type() {
         "nested empty array should type-check: {:?}",
         diagnostics.diagnostics
     );
-    let (wat, _count) = emit_hir_to_wat(code);
+    let (c, _count) = emit_hir_to_c(code);
     assert!(
-        wat.contains("(func $driver"),
+        c.contains("int32_t driver("),
         "nested empty array should emit:\n{}",
-        wat
+        c
     );
 }
 
@@ -319,18 +309,18 @@ fn test_ambiguous_empty_array_reports_clear_error() {
 
 #[test]
 fn test_hir_emission_direct_call() {
-    // A direct free-function call resolves to the callee's `DefId` and emits a `call`.
+    // A direct free-function call resolves to the callee's `DefId` and emits a direct C call.
     let code = "
         fun addup(a: int, b: int): int { return a + b; }
         fun driver(): int { return addup(1, 2); }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 2, "both the callee and the caller should be emitted");
-    assert!(wat.contains("(func $driver"), "missing caller:\n{}", wat);
+    assert!(c.contains("int32_t driver("), "missing caller:\n{}", c);
     assert!(
-        wat.contains("call $addup"),
+        c.contains("addup(1, 2)"),
         "call should resolve to the callee symbol:\n{}",
-        wat
+        c
     );
 }
 
@@ -343,16 +333,16 @@ fn test_hir_emission_extend_nongeneric_class() {
         extend Point { public fun getx(): int { return this.x; } }
         fun use_ext(p: Point): int { return p.getx(); }
     ";
-    let (wat, _count) = emit_hir_to_wat(code);
+    let (c, _count) = emit_hir_to_c(code);
     assert!(
-        wat.contains("(func $Point_getx"),
+        c.contains("int32_t Point_getx("),
         "extend method body should emit:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $Point_getx"),
+        c.contains("Point_getx(l0)"),
         "call should resolve to the extend method:\n{}",
-        wat
+        c
     );
 }
 
@@ -365,45 +355,45 @@ fn test_hir_emission_extend_generic_class() {
         extend Box<T> { public fun peek(): T { return this.v; } }
         fun use_ext(b: Box<int>): int { return b.peek(); }
     ";
-    let (wat, _count) = emit_hir_to_wat(code);
+    let (c, _count) = emit_hir_to_c(code);
     assert!(
-        wat.contains("(func $Box_int_peek"),
+        c.contains("int32_t Box_int_peek("),
         "generic extend method should emit:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $Box_int_peek"),
+        c.contains("Box_int_peek(l0)"),
         "call should resolve to the instance:\n{}",
-        wat
+        c
     );
     assert!(
-        !wat.contains("$Box_int_peek__"),
+        !c.contains("Box_int_peek__"),
         "no instance suffix on a struct-generic extend:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_destructor_body() {
     // A `del()` destructor is lowered like any method, so its body emits under `{Type}_del`. (The
-    // release-time *invocation* is part of the RC runtime and handled at the driver switch.)
+    // release-time *invocation* is part of the RC runtime and handled by the release helpers.)
     let code = "
         class Res { public h: int; del() { this.h = 0; } }
         fun mk(): Res { return Res(); }
     ";
-    let (wat, _count) = emit_hir_to_wat(code);
+    let (c, _count) = emit_hir_to_c(code);
     assert!(
-        wat.contains("(func $Res_del"),
+        c.contains("void Res_del("),
         "destructor body should emit:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_release_runtime_deep_release_del_and_dispatch() {
-    // The deep-release runtime: each nominal type gets a `$release_<Type>` that (when the count hits
-    // zero) runs its `del()` destructor, releases reference fields, and frees. `$release_object`
-    // tag-dispatches to those per-type releases. Non-reference fields (`v: int`) are not released.
+    // The deep-release runtime: each nominal type gets a `release_<Type>` that (when the count hits
+    // zero) runs its `del()` destructor, releases reference fields, and frees. `destroy_object`
+    // tag-dispatches to those per-type destroys. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
         @allow_cycle
@@ -413,35 +403,35 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         }}
         fun main(): void {{ let n: Node = Node(1); let o: object = n; }}"
     );
-    // RC insertion is required so `main`'s scope-exit `Release`s reference the deep-release runtime;
+    // RC insertion is required so `main`'s scope-exit releases reference the deep-release runtime;
     // dead-function elimination otherwise (correctly) drops those uncalled helpers. Binding to an
     // `object` local forces a statically-untyped release, exercising the tag-dispatch router.
-    let wat = emit_hir_to_module_rc_only(&code);
+    let c = emit_hir_to_module_rc_only(&code);
     assert!(
-        wat.contains("(func $release_Node"),
+        c.contains("static void release_Node("),
         "per-type release missing:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $Node_del"),
+        c.contains("Node_del(p);"),
         "destructor not invoked from release:\n{}",
-        wat
+        c
     );
     // The reference field `next` is deep-released; the scalar `v` is not.
     assert!(
-        wat.contains("call $release_Node"),
+        c.matches("release_Node(").count() >= 2,
         "reference field not released:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $destroy_object") || wat.contains("(func $release_object"),
+        c.contains("static void destroy_object("),
         "tag-dispatch router missing:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $free"),
+        c.contains("dream_free(p);"),
         "release must free the block:\n{}",
-        wat
+        c
     );
 }
 
@@ -457,26 +447,26 @@ fn test_hir_emission_user_constructor() {
         }
         fun make(): Point { return Point(1, 2); }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 2,
         "both the constructor body and make should be emitted:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $Point_constructor"),
+        c.contains("void Point_constructor("),
         "constructor body should emit:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $malloc"),
+        c.contains("dream_malloc("),
         "construction should allocate:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $Point_constructor"),
+        c.contains("Point_constructor(t0, 1, 2)"),
         "construction should invoke the user constructor:\n{}",
-        wat
+        c
     );
 }
 
@@ -490,26 +480,27 @@ fn test_hir_emission_generic_struct_construction_and_field() {
         fun make(): Box<int> { return Box<int>(7); }
         fun read(b: Box<int>): int { return b.v; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 3,
         "make, read, and the constructor body should be emitted:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $malloc"),
+        c.contains("dream_malloc("),
         "generic construction should allocate:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("i32.store"),
-        "the field should be initialized:\n{}",
-        wat
+        c.contains("void Box_int_constructor("),
+        "the monomorphized constructor should emit:\n{}",
+        c
     );
+    let read = c_func_body(&c, "read");
     assert!(
-        wat.contains("i32.load"),
+        read.contains("*(int32_t *)"),
         "the field read should lower to a load:\n{}",
-        wat
+        c
     );
 }
 
@@ -522,28 +513,28 @@ fn test_hir_emission_generic_struct_method_instance() {
         class Box<T> { public v: T; public fun get(): T { return this.v; } }
         fun use_box(b: Box<int>): int { return b.get(); }
     ";
-    let (wat, _count) = emit_hir_to_wat(code);
+    let (c, _count) = emit_hir_to_c(code);
     assert!(
-        wat.contains("(func $Box_int_get"),
+        c.contains("int32_t Box_int_get("),
         "generic-struct method body should emit under its mangled name:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $Box_int_get"),
+        c.contains("Box_int_get(l0)"),
         "instance call should dispatch to the mangled method:\n{}",
-        wat
+        c
     );
     assert!(
-        !wat.contains("$Box_int_get__"),
+        !c.contains("Box_int_get__"),
         "a struct-generic method should NOT carry an instance suffix:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_global_initializer_runs_in_start() {
     // A top-level variable's initializer is captured as the global's `init`; the module synthesizes
-    // a `$__dream_init` that stores it and wires it to `(start ...)`, and the module assembles.
+    // a `__dream_init` that stores it, and `dream_runtime_init` invokes it before any user code runs.
     let code = "
         let counter: int = 40;
         fun get(): int { return counter; }
@@ -563,56 +554,48 @@ fn test_hir_emission_global_initializer_runs_in_start() {
 
     let interner = analyzer.interner();
     let mir = dream_mir::lower::lower_program(&hir, interner);
-    let wat = dream_mir::backend::wasm::emit_module(&mir, interner, false);
+    let c = dream_mir::backend::c::emit_c_module(&mir, interner);
     assert!(
-        wat.contains("(func $__dream_init"),
+        c.contains("void __dream_init(void)"),
         "missing init function:\n{}",
-        wat
+        c
     );
-    // `$__dream_init` is itself invoked from `$__runtime_init`, which `(start)` actually wires up —
-    // the wrapper also atomically initializes the cross-thread shared-memory heap pointer once
-    // before running any user global initializer (see `emit/module.rs`).
+    // `__dream_init` is itself invoked from `dream_runtime_init`, which the C `main` calls before
+    // running any user code.
     assert!(
-        wat.contains("call $__dream_init"),
+        c.contains("__dream_init();"),
         "init must be invoked from the runtime-init wrapper:\n{}",
-        wat
+        c
     );
+    // `g0` is the synthetic `__closure_env` global; `counter` is the first user global, so it lands
+    // at `g1`.
     assert!(
-        wat.contains("(start $__runtime_init)"),
-        "runtime init wrapper must run at start:\n{}",
-        wat
-    );
-    // `$g0` is the synthetic `__closure_env` global (see `register_globals`), registered before any
-    // user global; `counter` is the first user global, so it lands at `$g1`.
-    assert!(
-        wat.contains("global.set $g1"),
+        c.contains("g1 = 40"),
         "init should store the global:\n{}",
-        wat
+        c
     );
-    wat::parse_str(&wat).expect("module with a start-based initializer should assemble");
 }
 
 #[test]
 fn test_hir_emission_extern_import_and_call() {
-    // An `extern fun` becomes a WASM import (module/field from `@js`), and a call to it resolves to
-    // the imported `$name` so the module links and assembles.
+    // An `extern fun` becomes a declaration of its `@js` host symbol, and a call to it resolves to
+    // that symbol so the module links.
     let code = "
         @js(\"host\", \"log_it\")
         extern fun log(x: int): void;
         fun run(): void { log(7); }
     ";
-    let wat = emit_hir_to_module(code);
+    let c = emit_hir_to_module(code);
     assert!(
-        wat.contains("(import \"host\" \"log_it\""),
-        "extern should import from its @js target:\n{}",
-        wat
+        c.contains("void log_it(int32_t a0);"),
+        "extern should declare its @js target:\n{}",
+        c
     );
     assert!(
-        wat.contains("call $log"),
+        c.contains("log_it(7)"),
         "call should resolve to the import:\n{}",
-        wat
+        c
     );
-    wat::parse_str(&wat).expect("module importing and calling an extern should assemble");
 }
 
 #[test]
@@ -622,35 +605,34 @@ fn test_hir_emission_runtime_import_and_call() {
         extern fun file_read(path: string): string;
         fun run(): string { return file_read(\"x\"); }
     ";
-    let wat = emit_hir_to_module(code);
+    let c = emit_hir_to_module(code);
     assert!(
-        wat.contains("(import \"Dream\" \"fileRead\""),
-        "runtime extern should import from Dream:\n{}",
-        wat
+        c.contains("fileRead("),
+        "runtime extern should bind to its Dream host symbol:\n{}",
+        c
     );
-    wat::parse_str(&wat).expect("module importing a @runtime extern should assemble");
 }
 
 #[test]
 fn test_hir_emission_extern_import_with_result() {
-    // A defaulted extern (no `@js`) imports from `("env", <name>)` and carries its result type.
+    // A defaulted extern (no `@js`) binds to a plain C symbol of the same name.
     let code = "
         extern fun now(): int;
         fun t(): int { return now(); }
     ";
-    let wat = emit_hir_to_module(code);
+    let c = emit_hir_to_module(code);
     assert!(
-        wat.contains("(import \"env\" \"now\""),
-        "defaulted extern should import from env with its result:\n{}",
-        wat
+        c.contains("int32_t now(void);"),
+        "defaulted extern should declare its result-bearing symbol:\n{}",
+        c
     );
-    wat::parse_str(&wat).expect("module importing a result-returning extern should assemble");
+    assert!(c.contains("now()"), "call should resolve to the symbol:\n{}", c);
 }
 
 #[test]
 fn test_hir_emission_print_int_and_println() {
-    // `System.print(int)` lowers to `$print_int`; `println` adds a trailing newline (`\n` = 10) via
-    // `$print_char`. Both link against the host import prelude and assemble.
+    // `System.print(int)` lowers to `print_int`; `println` adds a trailing newline (`\n` = 10) via
+    // `print_char`.
     let code = format!(
         "{SYSTEM_STUB}
         fun run(): void {{
@@ -658,54 +640,52 @@ fn test_hir_emission_print_int_and_println() {
             System.println(42);
         }}"
     );
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     assert!(
-        wat.contains("call $print_int"),
-        "print(int) should call $print_int:\n{}",
-        wat
+        c.contains("print_int((int32_t)41)"),
+        "print(int) should call print_int:\n{}",
+        c
     );
     assert!(
-        wat.contains("i32.const 10") && wat.contains("call $print_char"),
-        "println should append a newline via $print_char:\n{}",
-        wat
+        c.contains("print_char(10)"),
+        "println should append a newline via print_char:\n{}",
+        c
     );
-    wat::parse_str(&wat).expect("module printing an int should assemble");
 }
 
 #[test]
 fn test_hir_emission_print_string_interns_literal() {
-    // `System.print(string)` lowers to `$print_string` and interns the literal as a data segment.
+    // `System.print(string)` lowers to `print_string` over the interned literal (a static
+    // length-prefixed UTF-16 block: "hi" = {104, 105}).
     let code = format!("{SYSTEM_STUB} fun run(): void {{ System.print(\"hi\"); }}");
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     assert!(
-        wat.contains("call $print_string"),
-        "print(string) should call $print_string:\n{}",
-        wat
+        c.contains("print_string(__ds"),
+        "print(string) should call print_string:\n{}",
+        c
     );
     assert!(
-        wat.contains("(data "),
+        c.contains("{104, 105}"),
         "the string literal should be interned:\n{}",
-        wat
+        c
     );
-    wat::parse_str(&wat).expect("module printing a string should assemble");
 }
 
 #[test]
 fn test_hir_emission_print_char() {
     let code = format!("{SYSTEM_STUB} fun run(): void {{ System.print('x'); }}");
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     assert!(
-        wat.contains("call $print_char"),
-        "print(char) should call $print_char:\n{}",
-        wat
+        c.contains("print_char("),
+        "print(char) should call print_char:\n{}",
+        c
     );
-    wat::parse_str(&wat).expect("module printing a char should assemble");
 }
 
 #[test]
 fn test_hir_emission_print_bool_float_double_long() {
-    // Non-`int`/`char`/`string` scalars render through their in-wasm `*_to_string` then print as a
-    // string. The module bundles those formatters (+ the `true`/`false`/`-` constants) and assembles.
+    // Non-`int`/`char`/`string` scalars render through their `*_to_string` formatter (float/double
+    // go through the host `print_float`/`print_double`) then print as strings.
     let code = format!(
         "{SYSTEM_STUB}
         fun run(b: bool, f: float, d: double, l: long): void {{
@@ -715,53 +695,47 @@ fn test_hir_emission_print_bool_float_double_long() {
             System.print(l);
         }}"
     );
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     for helper in [
-        "$bool_to_string",
-        "$float_to_string",
-        "$double_to_string",
-        "$long_to_string",
+        "dream_bool_to_string(",
+        "print_float(",
+        "print_double(",
+        "dream_long_to_string(",
     ] {
         assert!(
-            wat.contains(&format!("call {helper}")),
+            c.contains(helper),
             "missing {helper} in print:\n{}",
-            wat
+            c
         );
     }
-    assert!(
-        wat.contains("(func $bool_to_string"),
-        "bool formatter should be defined:\n{}",
-        wat
-    );
-    wat::parse_str(&wat).expect("module printing non-int scalars should assemble");
 }
 
 #[test]
 fn test_hir_emission_print_object_routes_to_print_object() {
-    // Printing an object is now covered: it lowers to `Statement::Print` over a reference type, which
-    // the backend renders through the tag-dispatching `$print_object`.
+    // Printing an object renders through the generated default `{Type}_to_string`, then prints the
+    // resulting string (the WAT backend's tag-dispatching `$print_object` call site is gone; the
+    // router survives as `dream_print_object` for the dynamic-`object` path).
     let code = format!(
         "{SYSTEM_STUB}
         class Box {{ public v: int; }}
         fun run(b: Box): void {{ System.print(b); }}"
     );
-    let module = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     assert!(
-        module.contains("(func $run"),
+        c.contains("void run("),
         "an object print should be covered now:\n{}",
-        module
+        c
     );
     assert!(
-        module.contains("call $print_object"),
-        "object print routes to $print_object:\n{}",
-        module
+        c.contains("Box_to_string(l0)"),
+        "object print routes through the generated to_string:\n{}",
+        c
     );
     assert!(
-        module.contains("(func $Box_to_string"),
+        c.contains("dream_ptr Box_to_string(dream_ptr p)"),
         "a default struct to_string is generated:\n{}",
-        module
+        c
     );
-    wat::parse_str(&module).expect("object-printing module should assemble");
 }
 
 #[cfg(feature = "native")]
@@ -817,8 +791,8 @@ fn exec_print_string_literal() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_bool_via_to_string() {
-    // Exercises the bundled `*_to_string` runtime: `bool` renders through `$bool_to_string`, whose
-    // interned "true"/"false" are printed as length-prefixed strings.
+    // Exercises the bundled `*_to_string` runtime: `bool` renders through `dream_bool_to_string`,
+    // whose interned "true"/"false" are printed as length-prefixed strings.
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{
@@ -832,7 +806,7 @@ fn exec_print_bool_via_to_string() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_string_len_via_strlen() {
-    // `str.length` calls `$str_scalar_len` (UTF-16 code-unit count).
+    // `str.length` calls `dream_str_len` (UTF-16 code-unit count).
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{
@@ -846,9 +820,8 @@ fn exec_string_len_via_strlen() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_long_literal_via_to_string() {
-    // The exact case that used to fail assembly (`123456789012` emitted as an out-of-range
-    // `i32.const`): a magnitude-typed `long` literal now lowers to `i64.const` and renders via
-    // `$long_to_string`.
+    // A magnitude-typed `long` literal stays 64-bit through lowering and renders via
+    // `dream_long_to_string`.
     let code = format!("{SYSTEM_STUB} fun main(): void {{ System.println(123456789012); }}");
     assert_eq!(run_and_capture(&code, "main"), "123456789012\n");
 }
@@ -871,8 +844,8 @@ fn exec_long_arithmetic_stays_i64() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_struct_via_object_to_string() {
-    // Object print end-to-end: `Point(1, 2)` allocates a tagged struct, and `$print_object` routes
-    // through the generated `$Point_to_string` to render `Point { x: 1, y: 2 }`.
+    // Object print end-to-end: `Point(1, 2)` allocates a tagged struct, and printing routes through
+    // the generated `Point_to_string` to render `Point { x: 1, y: 2 }`.
     let code = format!(
         "{SYSTEM_STUB}
         class Point {{ public x: int; public y: int; public constructor(x: int, y: int) {{ this.x = x; this.y = y; }} }}
@@ -884,7 +857,7 @@ fn exec_print_struct_via_object_to_string() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_nested_struct() {
-    // A struct field that is itself a struct renders recursively via `$object_to_string`.
+    // A struct field that is itself a struct renders recursively via the object protocol.
     let code = format!(
         "{SYSTEM_STUB}
         class Point {{ public x: int; public y: int; public constructor(x: int, y: int) {{ this.x = x; this.y = y; }} }}
@@ -900,7 +873,7 @@ fn exec_print_nested_struct() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_union_variants() {
-    // Union print: the tag-dispatched `$<Union>_to_string` reads the discriminant and renders the
+    // Union print: the tag-dispatched `{Union}_to_string` reads the discriminant and renders the
     // active variant. Data variants render `Variant(field: value, ...)`; unit variants render bare.
     let code = format!(
         "{SYSTEM_STUB}
@@ -920,7 +893,7 @@ fn exec_print_union_variants() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_int_array() {
-    // Array print: the element-typed `$array_to_string_t<id>` renders `[e0, e1, ...]`.
+    // Array print: the element-typed array renderer produces `[e0, e1, ...]`.
     let code = format!(
         "{SYSTEM_STUB} fun main(): void {{ let xs: int[] = [10, 20, 30]; System.println(xs); }}"
     );
@@ -930,8 +903,7 @@ fn exec_print_int_array() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_struct_array() {
-    // An array of structs renders each element via the struct's `to_string` (reference elements route
-    // through `$object_to_string`).
+    // An array of structs renders each element via the struct's `to_string`.
     let code = format!(
         "{SYSTEM_STUB}
         class Point {{ public x: int; public y: int; public constructor(x: int, y: int) {{ this.x = x; this.y = y; }} }}
@@ -953,7 +925,7 @@ fn exec_del_runs_at_last_release() {
     // runtime runs the object's `del()` (prints 9 here) before freeing. So `Res(1)` is released (9)
     // when `r` is reassigned, the surviving `Res(2)` prints its field (2), and finally the scope-exit
     // release of `r` runs `Res(2).del()` (9) at function return -> "929". Proves overwrite release,
-    // `$release_Res` -> `$Res_del` -> `$free`, and scope-exit release all fire end-to-end.
+    // `release_Res` -> `Res_del` -> `dream_free`, and scope-exit release all fire end-to-end.
     let code = format!(
         "{SYSTEM_STUB}
         class Res {{ public v: int;
@@ -1020,8 +992,8 @@ fn exec_returned_value_transfers_ownership() {
 /// Hand-builds a two-function MIR that takes `add` as a first-class value and calls it indirectly:
 /// `fun main() { let f = add; print(f(2, 3)); }`. The analyzer now emits function values itself (see
 /// `test_hir_emission_first_class_function`); this hand-built MIR still exercises the backend
-/// (FuncRef -> table index, function table + signature, `call_indirect`) in isolation. Returns the
-/// interner alongside so its `TypeId`s stay valid.
+/// (FuncRef -> function-table index, function table registration, indirect call through `dream_ft`)
+/// in isolation. Returns the interner alongside so its `TypeId`s stay valid.
 fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
     use dream_mir::build::FunctionBuilder;
     use dream_mir::{BinOp, Callee, Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
@@ -1088,27 +1060,31 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
 #[test]
 fn test_indirect_call_emits_table_and_signature() {
     let (mir, interner) = indirect_call_demo();
-    let wat = dream_mir::backend::wasm::emit_module(&mir, &interner, false);
+    let c = dream_mir::backend::c::emit_c_module(&mir, &interner);
     assert!(
-        wat.contains("(table $__ft"),
+        c.contains("static void * dream_ft["),
         "function table missing:\n{}",
-        wat
-    );
-    assert!(wat.contains("$add"), "elem section missing:\n{}", wat);
-    assert!(
-        wat.contains("(type $sig_i32_i32__i32"),
-        "call_indirect signature missing:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call_indirect"),
-        "indirect call missing:\n{}",
-        wat
+        c.contains("(void *)add"),
+        "callee must be registered in the table:\n{}",
+        c
     );
     assert!(
-        wat.contains("__indirect_function_table"),
-        "table export missing:\n{}",
-        wat
+        c.contains("dream_fn_i32_i32__i32"),
+        "indirect-call pointer signature missing:\n{}",
+        c
+    );
+    assert!(
+        c.contains("dream_ft["),
+        "indirect call through the table missing:\n{}",
+        c
+    );
+    assert!(
+        c.contains("dream_ft_get"),
+        "table accessor missing:\n{}",
+        c
     );
 }
 
@@ -1127,23 +1103,25 @@ fn exec_indirect_call_through_function_table() {
 #[test]
 fn test_hir_emission_first_class_function() {
     // A bare function name is a value (`Binding::Func`), and calling a function-typed local emits an
-    // `IndirectCall` — both are now HIR-representable, so `main` stays in coverage.
+    // `IndirectCall` — both are now HIR-representable, so `main` stays in coverage. The value is
+    // boxed as a funcbox and invoked through the function table.
     let code = format!(
         "{SYSTEM_STUB}
         {CLOSURE_STUB}
         fun add(a: int, b: int): int {{ return a + b; }}
         fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
     );
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     assert!(
-        wat.contains("call_indirect"),
-        "indirect call not emitted:\n{}",
-        wat
+        c.contains("dream_funcbox_new("),
+        "function value not boxed:\n{}",
+        c
     );
+    let main_body = c_func_body(&c, "main_dream");
     assert!(
-        wat.contains("funcref"),
-        "function value not emitted:\n{}",
-        wat
+        main_body.contains("dream_ft["),
+        "indirect call through the function table not emitted:\n{}",
+        c
     );
 }
 
@@ -1290,55 +1268,44 @@ fn test_hir_emission_generic_function_instances() {
         fun id<T>(x: T): T { return x; }
         fun driver(): int { let a: int = id(5); let b: bool = id(true); return a; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 3,
         "two id instances + driver should be emitted:\n{}",
-        wat
-    );
-    let instances = wat.matches("(func $id__").count();
-    assert_eq!(
-        instances, 2,
-        "each monomorphization gets its own symbol:\n{}",
-        wat
-    );
-    assert_eq!(
-        wat.matches("call $id__").count(),
-        2,
-        "each generic call site should resolve to an instance symbol:\n{}",
-        wat
+        c
     );
     assert!(
-        !wat.contains("call $def"),
-        "no generic call should fall back to a def{{N}} placeholder:\n{}",
-        wat
+        c.contains("id__0(") && c.contains("id__7("),
+        "each monomorphization gets its own symbol:\n{}",
+        c
+    );
+    assert!(
+        c.contains("id__0(5)") && c.contains("id__7(1)"),
+        "each generic call site should resolve to an instance symbol:\n{}",
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_string_literal() {
-    // A string literal resolves to its interned data pointer. The runtime constants are interned
-    // first (`true`/`false`/`-`, then this function's located panic messages — none of which
-    // actually occur here, so only the `line == 0` fallback quadruple is added — then the
-    // object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`), so the user's `"hi"` follows them.
-    // The absolute offset drifts when the prelude/runtime string pool grows; assert the shape
-    // `(i32.const N)` return rather than a hard-coded address.
+    // A string literal resolves to its interned static data block (`__ds<N>`), laid out after the
+    // runtime's own constants.
     let code = "fun greet(): string { return \"hi\"; }";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 1,
         "the string-returning function should be emitted as HIR"
     );
     assert!(
-        wat.contains("(func $greet"),
+        c.contains("greet(void)"),
         "missing emitted function:\n{}",
-        wat
+        c
     );
-    let greet = wasm_func_body(&wat, "greet");
+    let greet = c_func_body(&c, "greet");
     assert!(
-        greet.contains("i32.const"),
-        "string literal should resolve to a data pointer const:\n{}",
-        greet
+        greet.contains("__ds"),
+        "string literal should resolve to an interned data pointer:\n{}",
+        c
     );
 }
 
@@ -1351,32 +1318,33 @@ fn test_hir_emission_field_read_and_constructor() {
         fun getx(p: Point): int { return p.x; }
         fun make(): Point { return Point(1, 2); }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 3,
         "the field-read, constructor, and constructor-body functions should be emitted"
     );
     assert!(
-        wat.contains("(func $getx"),
+        c.contains("int32_t getx("),
         "missing field-read function:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $make"),
+        c.contains("make(void)"),
         "missing constructor function:\n{}",
-        wat
+        c
     );
     // `p.x` (field 0) lowers to a real load now that the layout is threaded through.
+    let getx = c_func_body(&c, "getx");
     assert!(
-        wat.contains("i32.load"),
+        getx.contains("*(int32_t *)"),
         "field read should lower to a load:\n{}",
-        wat
+        c
     );
     // `Point(1, 2)` allocates and initializes fields.
     assert!(
-        wat.contains("call $malloc"),
+        c.contains("dream_malloc("),
         "constructor should allocate:\n{}",
-        wat
+        c
     );
 }
 
@@ -1387,18 +1355,19 @@ fn test_hir_emission_field_assignment() {
         class Counter { public n: int; }
         fun bump(c: Counter): void { c.n = c.n + 1; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the field-assignment function should be emitted");
     assert!(
-        wat.contains("(func $bump"),
+        c.contains("void bump("),
         "missing field-assignment function:\n{}",
-        wat
+        c
     );
     // `c.n = ...` lowers to a real store through the field address.
+    let bump = c_func_body(&c, "bump");
     assert!(
-        wat.contains("i32.store"),
+        bump.contains("*(int32_t *)"),
         "field write should lower to a store:\n{}",
-        wat
+        c
     );
 }
 
@@ -1406,18 +1375,19 @@ fn test_hir_emission_field_assignment() {
 fn test_hir_emission_index_assignment() {
     // Indexed assignment lowers to an `Assign` with an `Index` place.
     let code = "fun setfirst(xs: int[], v: int): void { xs[0] = v; }";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the index-assignment function should be emitted");
     assert!(
-        wat.contains("(func $setfirst"),
+        c.contains("void setfirst("),
         "missing index-assignment function:\n{}",
-        wat
+        c
     );
     // `xs[0] = v` computes the element address (base + 4 + i*stride) and stores.
+    let setfirst = c_func_body(&c, "setfirst");
     assert!(
-        wat.contains("i32.store"),
+        setfirst.contains("*(int32_t *)"),
         "index write should lower to a store:\n{}",
-        wat
+        c
     );
 }
 
@@ -1428,144 +1398,138 @@ fn test_hir_emission_enum_value() {
         enum Color { Red, Green, Blue }
         fun pick(): Color { return Color.Green; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the enum-returning function should be emitted");
     assert!(
-        wat.contains("(func $pick"),
+        c.contains("int32_t pick("),
         "missing enum function:\n{}",
-        wat
+        c
     );
     // `Color.Green` is the second member, value 1.
-    assert!(
-        wat.contains("i32.const 1"),
-        "missing enum constant:\n{}",
-        wat
-    );
+    let pick = c_func_body(&c, "pick");
+    assert!(pick.contains("return 1"), "missing enum constant:\n{}", c);
 }
 
 #[test]
 fn test_hir_emission_method_body_and_instance_call() {
     // A method body (with a `this` receiver and a field read) is emitted under its mangled name,
-    // and a resolved instance-method call lowers to a `MethodCall`.
+    // and a resolved instance-method call lowers to a direct call.
     let code = "
         class Box { public v: int; public fun get(): int { return this.v; } }
         fun use_box(b: Box): int { return b.get(); }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 2,
         "both the method body and its caller should be emitted:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $Box_get"),
+        c.contains("int32_t Box_get("),
         "missing emitted method body:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $use_box"),
+        c.contains("int32_t use_box("),
         "missing instance-call function:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $Box_get"),
+        c.contains("Box_get(l0)"),
         "instance call should dispatch to the method:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_static_call() {
     // A (non-generic) static method is a free function under its mangled `{Type}_{method}` name;
-    // calling it lowers to a direct `Call`.
+    // calling it lowers to a direct call.
     let code = "
         class M { public static fun id(n: int): int { return n; } }
         fun use_static(): int { return M.id(7); }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 2,
         "both the static method and its caller should be emitted:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $M_id"),
+        c.contains("int32_t M_id("),
         "missing emitted static method:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $M_id"),
+        c.contains("M_id(7)"),
         "static call should dispatch to the method:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_global_read_and_write() {
-    // A module-global resolves to a `Global` binding for both reads and assignments.
+    // A module-global resolves to a C file-scope global for both reads and assignments.
     let code = "
         let counter: int = 0;
         fun tick(): int { counter = counter + 1; return counter; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 1,
         "the global-using function should be emitted:\n{}",
-        wat
+        c
     );
-    // `$g0` is the synthetic `__closure_env` global (see `register_globals`); `counter` is the first
-    // user global, so it lands at `$g1`.
+    // `g0` is the synthetic `__closure_env` global; `counter` is the first user global, so it lands
+    // at `g1`.
+    let tick = c_func_body(&c, "tick");
     assert!(
-        wat.contains("global.get $g1"),
-        "missing global read:\n{}",
-        wat
+        tick.contains("g1 = g1 + 1"),
+        "missing global read+write:\n{}",
+        c
     );
-    assert!(
-        wat.contains("global.set $g1"),
-        "missing global write:\n{}",
-        wat
-    );
+    assert!(tick.contains("return g1"), "missing global read:\n{}", c);
 }
 
 #[test]
 fn test_hir_emission_union_construction() {
     // Constructing a (non-generic) discriminated-union variant lowers to a `UnionNew`. `Shape` has
-    // only primitive payloads, so it is inferred as a *value union*: constructed inline into the
-    // return slot (its first word is the discriminant) rather than heap-allocated.
+    // only primitive payloads, so it is inferred as a *value union*: built into a stack scratch
+    // buffer whose first word is the variant discriminant (boxed into a tagged heap block only when
+    // returned, unlike the WAT backend which kept it unboxed).
     let code = "
         enum Shape { Circle(radius: int), Empty }
         fun mk(): Shape { return Shape.Circle(2); }
         fun nil(): Shape { return Shape.Empty; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 2,
         "both union constructors should be emitted:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $mk"),
+        c.contains("mk(void)"),
         "missing data-variant constructor:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $nil"),
+        c.contains("nil(void)"),
         "missing unit-variant constructor:\n{}",
-        wat
+        c
     );
-    // A value union is written inline (no `$malloc`), and its first word is the variant discriminant.
-    let mk = wasm_func_body(&wat, "mk");
-    let nil = wasm_func_body(&wat, "nil");
+    // The first word of the union block is the variant discriminant.
+    let mk = c_func_body(&c, "mk");
+    let nil = c_func_body(&c, "nil");
     assert!(
-        !mk.contains("call $malloc") && !nil.contains("call $malloc"),
-        "value-union construction should not allocate on the heap:\nMK: {}\nNIL: {}",
-        mk,
-        nil
+        mk.contains("= (int32_t)0"),
+        "data variant should store discriminant 0:\n{}",
+        c
     );
     assert!(
-        mk.contains("i32.store") && mk.contains("i32.const"),
-        "union block should store its discriminant:\n{}",
-        wat
+        nil.contains("= (int32_t)1"),
+        "unit variant should store discriminant 1:\n{}",
+        c
     );
 }
 
@@ -1583,12 +1547,12 @@ fn test_hir_emission_switch_statement() {
             return r;
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
-    assert_eq!(count, 1, "the switch function should be emitted:\n{}", wat);
+    let (c, count) = emit_hir_to_c(code);
+    assert_eq!(count, 1, "the switch function should be emitted:\n{}", c);
     assert!(
-        wat.contains("(func $classify"),
+        c.contains("int32_t classify("),
         "missing switch function:\n{}",
-        wat
+        c
     );
 }
 
@@ -1607,43 +1571,47 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
             return r;
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
-    assert_eq!(count, 1, "the switch function should be emitted:\n{}", wat);
+    let (c, count) = emit_hir_to_c(code);
+    assert_eq!(count, 1, "the switch function should be emitted:\n{}", c);
     assert!(
-        wat.contains("(func $describe"),
+        c.contains("int32_t describe("),
         "missing switch function:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_hir_emission_len_builtin() {
-    // `arr.length` reads the array's stored length word; `str.length` is an inlined `i32.load`
-    // of the UTF-16 unit count (both O(1)).
+    // `arr.length` reads the array's stored length word; `str.length` calls `dream_str_len`
+    // (UTF-16 unit count) — both O(1).
     let code = "
         fun count(xs: int[]): int { return xs.length; }
         fun slen(s: string): int { return s.length; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
-    assert_eq!(count, 2, "both size functions should be emitted:\n{}", wat);
+    let (c, count) = emit_hir_to_c(code);
+    assert_eq!(count, 2, "both size functions should be emitted:\n{}", c);
     assert!(
-        wat.contains("(func $count"),
+        c.contains("int32_t count("),
         "missing array-len function:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $slen"),
+        c.contains("int32_t slen("),
         "missing string-len function:\n{}",
-        wat
+        c
     );
+    let slen = c_func_body(&c, "slen");
     assert!(
-        wat.contains("i32.load"),
-        "string len should be an inlined unit_len load:\n{}",
-        wat
+        slen.contains("dream_str_len("),
+        "string len should call dream_str_len:\n{}",
+        c
     );
-    // A full module (with the string runtime) must assemble.
-    let module = emit_hir_to_module(code);
-    wat::parse_str(&module).expect("module with inlined string len should assemble");
+    let count_body = c_func_body(&c, "count");
+    assert!(
+        count_body.contains("*(int32_t *)dream_p(l0)"),
+        "array len should be an inlined length-word load:\n{}",
+        c
+    );
 }
 
 #[test]
@@ -1659,16 +1627,16 @@ fn test_hir_emission_switch_expression() {
             };
         }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
+    let (c, count) = emit_hir_to_c(code);
     assert_eq!(
         count, 1,
         "the switch-expression function should be emitted:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $area"),
+        c.contains("int32_t area("),
         "missing switch-expression function:\n{}",
-        wat
+        c
     );
 }
 
@@ -1791,17 +1759,18 @@ fn test_switch_nested_patterns_incomplete_is_rejected() {
 
 #[test]
 fn test_hir_emission_async_await() {
-    // Async bodies emit with `Await` nodes; an async call carries a `Future` return type.
+    // Async bodies emit with `Await` nodes plus a synthesized `poll_<name>` resumption; an async
+    // call carries a `Future` return type.
     let code = "
         async fun delay(): void { }
         async fun work(n: int): int { await delay(); return n; }
     ";
-    let (wat, count) = emit_hir_to_wat(code);
-    assert_eq!(count, 2, "both async functions should be emitted:\n{}", wat);
+    let (c, count) = emit_hir_to_c(code);
+    assert_eq!(count, 2, "both async functions should be emitted:\n{}", c);
     assert!(
-        wat.contains("(func $work"),
-        "missing async function:\n{}",
-        wat
+        c.contains("dream_ptr work(") && c.contains("int32_t poll_work("),
+        "missing async function / poll companion:\n{}",
+        c
     );
 }
 
@@ -1812,31 +1781,27 @@ fn test_async_emits_scheduler_runtime_and_poll() {
         async fun delay(): void {{ await Time.sleep(0); }}
         async fun main(): void {{ await delay(); }}"
     );
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
     assert!(
-        wat.contains("(func $dream_run_loop"),
+        c.contains("dream_run_loop"),
         "scheduler missing:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("(func $poll_delay"),
+        c.contains("int32_t poll_delay("),
         "poll fn missing:\n{}",
-        wat
+        c
     );
     assert!(
-        wat.contains("call $dream_new_future"),
+        c.contains("dream_new_future("),
         "constructor missing:\n{}",
-        wat
+        c
     );
+    assert!(c.contains("dream_await("), "suspend missing:\n{}", c);
     assert!(
-        wat.contains("call $dream_await"),
-        "suspend missing:\n{}",
-        wat
-    );
-    assert!(
-        wat.contains("(export \"main\""),
+        c.contains("main_dream") && c.contains("poll_main_dream"),
         "async main wrapper missing:\n{}",
-        wat
+        c
     );
 }
 
@@ -1865,16 +1830,19 @@ fn test_interface_call_emits_dynamic_dispatch() {
         fun describe(a: Animal): string { return a.speak(); }
         fun run(): string { return describe(Cat()); }
     ";
-    let (wat, _) = emit_hir_to_wat(code);
+    let (c, _) = emit_hir_to_c(code);
     assert!(
-        wat.contains("$__iface_dispatch_"),
+        c.contains("__iface_dispatch_"),
         "interface call should dispatch through a trampoline:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_js_desugars_to_host_bridges() {
+    // Dynamic js operations desugar to the declared host bridge symbols (`jsGlobal`, ...) and fused
+    // slot/method marshalling goes through `dream_js_call`. (The WAT backend's `$js_set_slot` /
+    // shadow-stack plumbing has no C counterpart — arguments marshal through the same call.)
     let code = format!(
         "{JS_STUB}
         fun entry(): void {{
@@ -1883,24 +1851,18 @@ fn test_js_desugars_to_host_bridges() {
             el.textContent = \"hello\";
         }}"
     );
-    let (wat, _count) = emit_hir_to_wat(&code);
-    assert!(wat.contains("$js_global"), "js.global:\n{}", wat);
-    assert!(wat.contains("$js_call"), "js.call:\n{}", wat);
+    let (c, _count) = emit_hir_to_c(&code);
+    assert!(c.contains("jsGlobal("), "js.global:\n{}", c);
+    let entry = c_func_body(&c, "entry");
     assert!(
-        wat.contains("$js_set_slot"),
-        "js.set_slot (slot write):\n{}",
-        wat
+        entry.contains("dream_js_call("),
+        "js.call / slot write:\n{}",
+        c
     );
-    let entry = wasm_func_body(&wat, "entry");
     assert!(
-        !entry.contains("$js_box_string"),
+        !entry.contains("jsString("),
         "set_slot should not pre-box string:\n{}",
-        entry
-    );
-    assert!(
-        wat.contains("$__jsp") && wat.contains("global.set $__sp"),
-        "shadow-stack slots:\n{}",
-        wat
+        c
     );
 }
 
@@ -1913,24 +1875,22 @@ fn test_js_fuses_get_as_string_at_typed_boundary() {
             let title: string = config.title;
         }}"
     );
-    let (wat, _count) = emit_hir_to_wat(&code);
+    let (c, _count) = emit_hir_to_c(&code);
+    let entry = c_func_body(&c, "entry");
     assert!(
-        wat.contains("call $js_get_as_string"),
+        entry.contains("jsGetAsString("),
         "fused get+unbox:\n{}",
-        wat
+        c
     );
     assert!(
-        !wat.replace("call $js_get_as_string", "")
-            .contains("call $js_get"),
+        !entry.contains("jsGetV("),
         "should not emit plain js.get:\n{}",
-        wat
+        c
     );
-    // `js_to_str` in the stub still calls `as_string`; only the binding site must be fused.
-    let entry = wat.split("(func $js_to_").next().unwrap_or(&wat);
     assert!(
-        !entry.contains("call $js_as_string"),
+        !entry.contains("jsAsString("),
         "entry should not emit separate as_string:\n{}",
-        entry
+        c
     );
 }
 
@@ -1943,17 +1903,17 @@ fn test_js_fuses_get_call_chain() {
             let shout = config.title.toUpperCase();
         }}"
     );
-    let (wat, _count) = emit_hir_to_wat(&code);
-    let entry = wasm_func_body(&wat, "entry");
+    let (c, _count) = emit_hir_to_c(&code);
+    let entry = c_func_body(&c, "entry");
     assert!(
-        entry.contains("call $js_get_call"),
+        entry.contains("dream_js_call("),
         "fused get+call:\n{}",
-        entry
+        c
     );
     assert!(
-        !entry.contains("call $js_get\n") && !entry.contains("call $js_get "),
+        !entry.contains("jsGetV("),
         "should not emit separate js.get:\n{}",
-        entry
+        c
     );
 }
 
@@ -1966,18 +1926,18 @@ fn test_js_fuses_get_call_as_string() {
             let shout: string = config.title.toUpperCase();
         }}"
     );
-    let (wat, _count) = emit_hir_to_wat(&code);
+    let (c, _count) = emit_hir_to_c(&code);
     assert!(
-        wat.contains("call $js_get_call_as_string"),
+        c.contains("jsGetCallAsString("),
         "fused get+call+unbox:\n{}",
-        wat
+        c
     );
 }
 
 #[test]
 fn test_js_to_value_struct_fills_in_place() {
-    // A `js` → value `struct` cast must emit the in-place `$js_to_<Name>(j, dst)` filler (no
-    // malloc result), and the store site must pass the destination address as the second arg.
+    // A `js` -> value `struct` cast fills the destination in place: the payload is memcpy'd from the
+    // js handle straight into the stack struct (no `dream_malloc` result, no separate filler call).
     let code = format!(
         "{JS_STUB}
         struct Point {{
@@ -1989,17 +1949,16 @@ fn test_js_to_value_struct_fills_in_place() {
             return p.x + p.y;
         }}"
     );
-    let wat = emit_hir_to_module(&code);
+    let c = emit_hir_to_module(&code);
+    let entry = c_func_body(&c, "entry");
     assert!(
-        wat.contains("(func $js_to_Point") && wat.contains("(param $dst i32)"),
-        "value-struct js_to must take (j, dst)"
+        entry.contains("memcpy(dream_p("),
+        "value-struct js_to must fill the destination in place:\n{}",
+        c
     );
     assert!(
-        !wat.contains("(result i32)") || wat.contains("(param $dst i32)"),
-        "value-struct js_to must not return a heap pointer"
-    );
-    assert!(
-        wat.contains("call $js_to_Point"),
-        "assignment should call in-place filler"
+        !entry.contains("dream_malloc("),
+        "value-struct js_to must not allocate a heap pointer:\n{}",
+        c
     );
 }

@@ -3,6 +3,31 @@
 mod common;
 use common::*;
 
+/// Extracts the body of the C function `name` (the definition whose signature line ends with '{'),
+/// up to its closing brace. Returns "" when no definition is found.
+fn c_func_body<'a>(c: &'a str, name: &str) -> &'a str {
+    let needle = format!("{name}(");
+    let mut from = 0;
+    while let Some(i) = c[from..].find(&needle) {
+        let hit = from + i;
+        let at_word_start = hit == 0 || {
+            let b = c.as_bytes()[hit - 1];
+            !(b.is_ascii_alphanumeric() || b == b'_')
+        };
+        let line_start = c[..hit].rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let line_end = c[hit..].find('\n').map(|p| hit + p).unwrap_or(c.len());
+        if at_word_start && c[line_start..line_end].trim_end().ends_with('{') {
+            let rest = &c[line_end..];
+            return match rest.find("\n}") {
+                Some(e) => &rest[..e],
+                None => rest,
+            };
+        }
+        from = hit + needle.len();
+    }
+    ""
+}
+
 #[test]
 fn sink_param_unmarked_parses_and_typechecks() {
     let code = r#"
@@ -129,29 +154,23 @@ fn sink_store_skips_retain_vs_borrow() {
         }}
     "
     );
-    let sink_wat = emit_hir_to_module_optimized(&sink_code);
-    let borrow_wat = emit_hir_to_module_optimized(&borrow_code);
-    let sink_retains = sink_wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $retain")
-        })
+    let sink_c = emit_hir_to_module_optimized(&sink_code);
+    let borrow_c = emit_hir_to_module_optimized(&borrow_code);
+    // Count `dream_retain(` inside the constructor body only (the module scaffold's
+    // object-protocol retain is constant noise otherwise).
+    let sink_retains = c_func_body(&sink_c, "Box_constructor")
+        .matches("dream_retain(")
         .count();
-    let borrow_retains = borrow_wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $retain")
-        })
+    let borrow_retains = c_func_body(&borrow_c, "Box_constructor")
+        .matches("dream_retain(")
         .count();
     assert!(
         sink_retains < borrow_retains,
         "sink constructor should retain less than borrow ({} vs {})\nsink:\n{}\nborrow:\n{}",
         sink_retains,
         borrow_retains,
-        sink_wat,
-        borrow_wat
+        sink_c,
+        borrow_c
     );
 }
 
@@ -179,11 +198,11 @@ fn take_param_array_and_ctor_both_see_value() {
         }}
     "
     );
-    let wat = emit_hir_to_module_optimized(&code);
+    let c = emit_hir_to_module_optimized(&code);
     assert!(
-        wat.contains("call $retain"),
-        "array store of a still-live take param must retain:\n{}",
-        wat
+        c.matches("dream_retain(").count() >= 2,
+        "array store of a still-live take param must retain (scaffold has exactly one):\n{}",
+        c
     );
     let out = run_and_capture_rc(&code, "main");
     assert_eq!(out.trim(), "hi\nhi");

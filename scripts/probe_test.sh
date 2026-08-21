@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Golden-corpus probe: `dream run` (native C) on tests/cases/*.dream.
+# Golden-corpus probe: native `dream run`, or `--node` for wasm32 + Node.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ ! -x "$ROOT/target/debug/dream" ]]; then

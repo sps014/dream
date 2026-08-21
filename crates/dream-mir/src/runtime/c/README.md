@@ -1,21 +1,19 @@
-# Guest C (linked libs + native)
+# Guest C (wasm32 + native + linked libs)
 
-Same-module WASM helpers are **WAT** (`../allocator.wat`, `../strings.wat`, …). This directory is:
+The guest runtime is **C only** — there is no WAT runtime anymore. This directory holds:
 
-- **Linked wasm32 libraries** — today PCRE2 (`regex.c`, `regex_wasm_libc.c`, `pcre2/`). Rebuild with `scripts/build-runtime.sh`.
+- **wasm32 guest** — [`wasm32/`](wasm32/) (heap, libc, g0, sync/weak stubs) plus shared units from [`native/`](native/). Compiled by wasi-sdk clang (`dreamer toolchain install wasi-sdk`); see `src/driver/c_wasm32.rs`.
 - **Native host runtime** — [`native/`](native/) for `dream run`.
-
-Modules are declared in [`../modules.rs`](../modules.rs). The shell script compiles catalog `wasm_c` with `wasm-ld` (`wrap` / `exports` / `global_base` / `stack_size`) and writes `wat_out`. It does not extract or rewrite helper bodies.
+- **Linked libraries** — today PCRE2 ([`regex.c`](regex.c), [`regex_wasm_libc.c`](regex_wasm_libc.c), [`pcre2/`](pcre2/)), compiled per target when the catalog (`../modules.rs`) says `RuntimeNeed::REGEX`.
 
 ## Do
 
 - Share numeric ABI via `include/dream_abi.h`. Portable wrappers (wasm regex + native) include `include/dream_guest.h`.
-- Link: `wasm-ld --import-memory` with catalog `wrap` / `exports` / `global_base` / `stack_size`.
 - Native-only files live in [`native/`](native/).
+- Keep the wasm32 unit list in `../modules.rs` (`WASM32_CORE_C`) in sync with new helper files.
 
 ## Don't
 
-- Do not run clang from `dream` or default CI (`cargo test --workspace`, `windows-latest` release jobs).
-- Do not hand-edit `../regex.wat`; edit `regex.c` / `pcre2/` then `scripts/build-runtime.sh`.
-- Do not add a guest-C extract pipeline for `$malloc` / strings / panic. Author those as WAT.
+- Do not run clang from default CI paths that lack toolchains (the e2e wasm32 tests gate on wasi-sdk presence; `cargo test --workspace` stays green without it).
+- Do not add a WAT authoring path for guest helpers; edit the C.
 - Do not use clang `-O4` / wasm-opt `-O4`.

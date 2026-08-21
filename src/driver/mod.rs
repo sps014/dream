@@ -8,7 +8,9 @@
 //! [`error`] (the driver-level error type).
 
 pub mod abi;
+pub mod c_wasm32;
 pub mod compiler;
+pub mod compress;
 pub mod diag_highlight;
 pub mod error;
 pub mod generate;
@@ -19,4 +21,5 @@ pub mod prelude;
 pub mod source_loader;
 #[cfg(feature = "native")]
 pub mod test;
+pub mod ui;
 pub mod wasm_opt;

@@ -1,0 +1,45 @@
+// Destroying the *holder* of an `unowned` field must unregister its (target, slot) entry
+// from the weak registry. Before the fix the registry kept a slot pointing into the freed
+// holder block, so clearing the target later wrote into freed memory (silent corruption).
+import system;
+class Engine {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.println("engine dropped");
+    }
+}
+
+class Sensor {
+    public unowned engine: Engine;
+    public tag: string;
+
+    public constructor(engine: Engine, tag: string) {
+        this.engine = engine;
+        this.tag = tag;
+    }
+
+    del() {
+        System.println("sensor dropped");
+    }
+}
+
+fun holder_scope(borrow e: Engine): void {
+    let s = Sensor(e, "a");
+    System.println(s.engine.id);
+}
+
+fun main() {
+    let e = Engine(7);
+    holder_scope(e);
+    // Holder destroyed above; the engine outlives it and must still read cleanly.
+    System.println("holder gone, engine alive");
+    System.println(e.id);
+    // Engine destroyed after all holders are gone: clearing its registry entries must not
+    // write into any freed holder.
+    System.println("done");
+}

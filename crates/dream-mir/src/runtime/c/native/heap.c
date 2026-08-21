@@ -25,7 +25,8 @@ static dream_ptr large_freelist;
 static char *arena;
 static size_t arena_off;
 static size_t arena_len;
-static int32_t live_objects;
+/* Global (mirrors wasm32): immortal singletons in strings.c/format.c adjust it when pinning. */
+int32_t live_objects;
 static int32_t total_allocations;
 static int32_t last_freed;
 static char *chunks[32];

@@ -7,7 +7,7 @@ This chapter covers how the compiler is tested, the determinism contract the who
 ```mermaid
 flowchart TD
     unit["Unit tests (per module)\ntypes::tests, hir::tests, mir::passes::*::tests, relooper::tests"]
-    integ["Integration tests\nmir hir_to_mir_to_optimized_wat (HIR→MIR→passes→WAT)"]
+    integ["Integration tests\nmir hir_to_mir_to_optimized_c (HIR→MIR→passes→C)"]
     e2e["End-to-end tests (tests/)\ncompile a .dream program, run it, check output"]
     det["Determinism test\ncodegen_is_deterministic"]
     unit --> integ --> e2e
@@ -26,7 +26,7 @@ cargo test -p dream relooper::
 
 ### Integration test
 
-`src/mir/mod.rs::tests::hir_to_mir_to_optimized_wat` exercises the whole middle/back end in one shot: build typed HIR by hand → `lower_function` → `PassManager::default_pipeline` → `emit`. When you change lowering, passes, or emission, this is the fastest signal that the stages still compose.
+`crates/dream-mir/src/lib.rs::tests::hir_to_mir_to_optimized_c` exercises the whole middle/back end in one shot: build typed HIR by hand → `lower_function` → `PassManager::default_pipeline` → C emission. When you change lowering, passes, or emission, this is the fastest signal that the stages still compose.
 
 ### End-to-end tests — `tests/`
 

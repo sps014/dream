@@ -31,6 +31,9 @@ pub const TAG_STRUCT_BASE: i32 = 12;
 /// Byte size of the universal heap-block header `[size:i32][tag:i32][ref_count:i32]`. A value's data
 /// pointer is `block_start + HEAP_HEADER_SIZE`.
 pub const HEAP_HEADER_SIZE: u32 = 12;
+/// Written into cleared `unowned` slots so loads can report "target destroyed" distinctly
+/// from "never assigned". Mirrors `DREAM_UNOWNED_POISON` in dream_abi.h.
+pub const UNOWNED_POISON: i32 = -165764356;
 
 /// Byte offset (from the block start) of the type-tag word in the heap header.
 pub const HEADER_TAG_OFFSET: u32 = 4;
@@ -321,9 +324,33 @@ pub fn elem_base(array_ptr: u32) -> u32 {
 
 /// The program entry point exported to, and invoked by, the host.
 pub const ENTRY_FN: &str = "main";
+/// Native C symbol that wraps [`ENTRY_FN`]; wasm32 exports [`ENTRY_FN`] as the function name.
+pub const GUEST_ENTRY_FN: &str = "dream_guest_entry";
 
 /// Host import module for the fixed `print_*` builtins.
 pub const ENV_MODULE: &str = "env";
+
+pub const PRINT_STRING: &str = "print_string";
+pub const PRINT_INT: &str = "print_int";
+pub const PRINT_FLOAT: &str = "print_float";
+pub const PRINT_DOUBLE: &str = "print_double";
+pub const PRINT_CHAR: &str = "print_char";
+
+/// `(import name, wasm value kind)` for `env` print builtins. `I32`/`F32`/`F64` as type tags.
+pub const ENV_PRINT_IMPORTS: &[(&str, PrintVal)] = &[
+    (PRINT_STRING, PrintVal::I32),
+    (PRINT_INT, PrintVal::I32),
+    (PRINT_FLOAT, PrintVal::F32),
+    (PRINT_DOUBLE, PrintVal::F64),
+    (PRINT_CHAR, PrintVal::I32),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrintVal {
+    I32,
+    F32,
+    F64,
+}
 
 /// Exported allocator entry points the host uses to build heap values.
 pub const EXPORT_MALLOC: &str = "malloc";
@@ -336,6 +363,9 @@ pub const EXPORT_MEMORY: &str = "memory";
 pub const EXPORT_RUN_LOOP: &str = "__dream_run_loop";
 pub const EXPORT_RESOLVE: &str = "__dream_resolve";
 pub const EXPORT_NEW_FUTURE: &str = "__dream_new_future";
+/// Per-instance startup (function table, heap bump, `__dream_init`). WAT uses `(start)`; C wasm32
+/// exports this so `load()` and worker instances can run it without calling `main`.
+pub const EXPORT_RUNTIME_INIT: &str = "__runtime_init";
 
 /// Worker-thread trampoline export (see `src/stdlib/core/webworker.dream`). The *native* host
 /// worker driver (`execution/host/worker.rs`) calls this with a body funcref index and a message
@@ -354,6 +384,12 @@ pub const EXPORT_WORKER_INVOKE: &str = "__dream_worker_invoke";
 /// is a still-pending `Future` and await it asynchronously (a real `extern async` host call there
 /// settles later via a Promise callback, never synchronously within the `call_indirect`).
 pub const EXPORT_WORKER_INVOKE_RAW: &str = "__dream_worker_invoke_raw";
+
+/// C-backend wasm32 export mapping a `dream_ft[]` dispatch index to the function-pointer value.
+/// Clang assigns `__indirect_function_table` slots independently of `dream_ft[]` order, but on
+/// wasm32 a function pointer *is* its table index — so the JS host translates through this before
+/// `table.get` when wrapping a FUNC-slot callback (the WAT backend needs no such export).
+pub const EXPORT_FT_GET: &str = "dream_ft_get";
 
 #[cfg(test)]
 mod abi_h_lockstep {

@@ -188,16 +188,16 @@ impl GeneratorContext {
         }
 
         for f in &mut acc.all_functions {
-            rewrite_function(arena, f, &by_site, diagnostics)?;
+            rewrite_function(arena, f, &by_site, diagnostics, &acc.file_contents)?;
         }
         for st in &mut acc.all_structs {
             for m in &mut st.methods {
-                rewrite_function(arena, m, &by_site, diagnostics)?;
+                rewrite_function(arena, m, &by_site, diagnostics, &acc.file_contents)?;
             }
         }
         for e in &mut acc.all_extends {
             for m in &mut e.methods {
-                rewrite_function(arena, m, &by_site, diagnostics)?;
+                rewrite_function(arena, m, &by_site, diagnostics, &acc.file_contents)?;
             }
         }
         Ok(())

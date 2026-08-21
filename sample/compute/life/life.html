@@ -61,7 +61,13 @@
     <div class="vignette" aria-hidden="true"></div>
     <div id="hud">loading…</div>
     <script type="module">
-      import { run } from "../../../runtime/dream.js";
+      // Prefer the per-module runtime emitted next to the .wasm (`--runtime --web`).
+      let runtime;
+      try {
+        runtime = await import("./target/web/life.web.runtime.js");
+      } catch (_) {
+        runtime = await import("../../../runtime/dream.js");
+      }
 
       const hud = document.getElementById("hud");
       const setHud = (msg, err = false) => {
@@ -74,8 +80,14 @@
       });
 
       try {
-        await run("./target/web/life.wasm");
+        // The sample's main() renders until the window closes, so it never completes on
+        // the web — start it and mark loaded as soon as the module is live.
+        const mod = await runtime.load("./target/web/life.wasm");
         setHud('Gray–Scott <span class="accent">reaction–diffusion</span> · Dream @compute');
+        mod.run().catch((e) => {
+          console.error(e);
+          setHud(String(e && e.message ? e.message : e), true);
+        });
       } catch (e) {
         console.error(e);
         setHud(String(e && e.message ? e.message : e), true);

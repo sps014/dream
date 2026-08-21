@@ -31,11 +31,11 @@
     <script type="module">
       // Prefer the per-module runtime emitted next to the .wasm (`--runtime --web`).
       // Fall back to the full repo runtime when serving from the repository root.
-      let run;
+      let runtime;
       try {
-        ({ run } = await import("./target/web/triangle.web.runtime.js"));
+        runtime = await import("./target/web/triangle.web.runtime.js");
       } catch (_) {
-        ({ run } = await import("../../../runtime/dream.js"));
+        runtime = await import("../../../runtime/dream.js");
       }
       const hud = document.getElementById("hud");
       const setHud = (msg, err = false) => {
@@ -43,8 +43,14 @@
         hud.classList.toggle("err", err);
       };
       try {
-        await run("./target/web/triangle.wasm", { canvas: "c" });
+        // The sample's main() renders until the window closes, so it never completes on
+        // the web — start it and mark loaded as soon as the module is live.
+        const mod = await runtime.load("./target/web/triangle.wasm", { canvas: "c" });
         setHud("triangle");
+        mod.run().catch((e) => {
+          console.error(e);
+          setHud(String(e && e.message ? e.message : e), true);
+        });
       } catch (e) {
         console.error(e);
         setHud(String(e && e.message ? e.message : e), true);

@@ -31,11 +31,12 @@
     <canvas id="elevated" width="1280" height="720"></canvas>
     <div id="hud">loading…</div>
     <script type="module">
-      let run;
+      // Prefer the per-module runtime emitted next to the .wasm (`--runtime --web`).
+      let runtime;
       try {
-        ({ run } = await import("./target/web/elevated.web.runtime.js"));
+        runtime = await import("./target/web/elevated.web.runtime.js");
       } catch (_) {
-        ({ run } = await import("../../../runtime/dream.js"));
+        runtime = await import("../../../runtime/dream.js");
       }
 
       const hud = document.getElementById("hud");
@@ -49,8 +50,14 @@
       });
 
       try {
-        await run("./target/web/elevated.wasm");
+        // The sample's main() renders until the window closes, so it never completes on
+        // the web — start it and mark loaded as soon as the module is live.
+        const mod = await runtime.load("./target/web/elevated.wasm");
         setHud("elevated · webgpu");
+        mod.run().catch((e) => {
+          console.error(e);
+          setHud(String(e && e.message ? e.message : e), true);
+        });
       } catch (e) {
         console.error(e);
         setHud(String(e && e.message ? e.message : e), true);

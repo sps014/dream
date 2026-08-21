@@ -10,6 +10,7 @@
 pub mod abi;
 pub mod c_wasm32;
 pub mod compiler;
+pub mod compress;
 pub mod diag_highlight;
 pub mod error;
 pub mod generate;

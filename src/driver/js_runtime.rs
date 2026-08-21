@@ -279,6 +279,10 @@ pub(crate) fn emit_selective_runtimes(
         };
         fs::write(&path, final_text)?;
         info!("created file: {}", path.display());
+        if minify {
+            // Same release gate as minification: emit .gz/.br sidecars for static servers.
+            let _ = crate::driver::compress::write_precompressed(&path);
+        }
     }
     Ok(())
 }

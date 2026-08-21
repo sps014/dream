@@ -416,6 +416,12 @@ impl Compiler {
         fs::write(out_path, &text)?;
         info!("created file: {}", out_path);
 
+        // Release builds ship pre-compressed siblings (.gz / .br) for servers with
+        // `gzip_static` / `brotli_static` (or CDNs); browsers never compress on their own.
+        if self.optimize.is_some() {
+            let _ = crate::driver::compress::write_precompressed(&wasm_path);
+        }
+
         // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`); minified on
         // optimizing builds.
         if !self.runtimes.is_empty() {

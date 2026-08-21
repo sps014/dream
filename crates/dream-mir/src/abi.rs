@@ -31,6 +31,9 @@ pub const TAG_STRUCT_BASE: i32 = 12;
 /// Byte size of the universal heap-block header `[size:i32][tag:i32][ref_count:i32]`. A value's data
 /// pointer is `block_start + HEAP_HEADER_SIZE`.
 pub const HEAP_HEADER_SIZE: u32 = 12;
+/// Written into cleared `unowned` slots so loads can report "target destroyed" distinctly
+/// from "never assigned". Mirrors `DREAM_UNOWNED_POISON` in dream_abi.h.
+pub const UNOWNED_POISON: i32 = -165764356;
 
 /// Byte offset (from the block start) of the type-tag word in the heap header.
 pub const HEADER_TAG_OFFSET: u32 = 4;

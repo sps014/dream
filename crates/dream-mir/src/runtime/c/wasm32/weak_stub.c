@@ -85,7 +85,9 @@ void dream_weak_clear_all(dream_ptr obj) {
                     *(dream_ptr *)dream_p(node->slot) = node->extra;
                     *(dream_ptr *)((char *)dream_p(node->slot) + sizeof(dream_ptr)) = 0;
                 } else {
-                    *(dream_ptr *)dream_p(node->slot) = 0;
+                    /* unowned: poison so a later load reports "target destroyed" rather
+                     * than an ambiguous null deref. */
+                    *(dream_ptr *)dream_p(node->slot) = (dream_ptr)(intptr_t)DREAM_UNOWNED_POISON;
                 }
                 *link = node->next;
                 node->next = dead;

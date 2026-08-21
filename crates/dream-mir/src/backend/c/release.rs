@@ -298,7 +298,26 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
         for f in &layout.fields {
-            if f.is_weak || f.is_unowned {
+            if f.is_weak {
+                continue;
+            }
+            if f.is_unowned {
+                // Unowned fields live in the weak registry (registered on store, see
+                // `unowned_store`). Destroying the holder without unregistering leaves a
+                // (target, slot) entry whose slot points into this freed block — a later
+                // clear of the target would then write into freed memory.
+                let slot = Expr::cast(
+                    CTy::Ptr,
+                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+                );
+                let cur = Expr::load(CTy::Ptr, slot.clone());
+                b.stmt(Stmt::if_(
+                    cur.clone(),
+                    Stmt::call(
+                        "dream_weak_unregister",
+                        vec![cur, Expr::cast(CTy::Ptr, slot)],
+                    ),
+                ));
                 continue;
             }
             if interner.is_value_type(f.ty) {
@@ -524,7 +543,26 @@ fn emit_destroy_helpers(
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
         for f in &layout.fields {
-            if f.is_weak || f.is_unowned {
+            if f.is_weak {
+                continue;
+            }
+            if f.is_unowned {
+                // Unowned fields live in the weak registry (registered on store, see
+                // `unowned_store`). Destroying the holder without unregistering leaves a
+                // (target, slot) entry whose slot points into this freed block — a later
+                // clear of the target would then write into freed memory.
+                let slot = Expr::cast(
+                    CTy::Ptr,
+                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+                );
+                let cur = Expr::load(CTy::Ptr, slot.clone());
+                b.stmt(Stmt::if_(
+                    cur.clone(),
+                    Stmt::call(
+                        "dream_weak_unregister",
+                        vec![cur, Expr::cast(CTy::Ptr, slot)],
+                    ),
+                ));
                 continue;
             }
             if interner.is_value_type(f.ty) {

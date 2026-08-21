@@ -64,15 +64,32 @@ impl<'a> Emitter<'a> {
                 let cast = load_cast(self.cx, fld.ty);
                 let load = Expr::load(cast.clone(), Expr::field_ptr(base.0, fld.offset));
                 if fld.is_unowned {
-                    let panic = Expr::id(
+                    // Null = never assigned; the poison sentinel is written when the
+                    // referent is destroyed (weak registry clear), so each failure mode
+                    // gets a precise message.
+                    let null_panic = Expr::id(
                         self.cx
                             .str_sym(crate::backend::shared::panic_msgs::UNOWNED_NULL_DEREF),
+                    );
+                    let dead_panic = Expr::id(
+                        self.cx
+                            .str_sym(crate::backend::shared::panic_msgs::UNOWNED_DESTROYED),
                     );
                     self.b.expr_block(|b| {
                         let t = b.temp(cast.clone(), Some(load.clone()));
                         b.stmt(Stmt::if_(
                             Expr::unary(UnOp::Not, t.clone()),
-                            Stmt::call("dream_panic", vec![panic.clone()]),
+                            Stmt::call("dream_panic", vec![null_panic.clone()]),
+                        ));
+                        b.stmt(Stmt::if_(
+                            Expr::eq(
+                                t.clone(),
+                                Expr::cast(
+                                    cast.clone(),
+                                    Expr::i(crate::abi::UNOWNED_POISON as i64),
+                                ),
+                            ),
+                            Stmt::call("dream_panic", vec![dead_panic]),
                         ));
                         t
                     })

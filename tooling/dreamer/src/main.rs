@@ -34,7 +34,9 @@ impl OptFlags {
 #[command(
     name = "dreamer",
     version,
-    about = "Package manager for the Dream language"
+    about = "Package manager for the Dream language",
+    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install wasi-sdk",
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file executables from release wasm\n  dreamer toolchain install wasi-sdk    WebAssembly toolchain for `dreamer build --wasm`"
 )]
 struct Cli {
     #[command(subcommand)]

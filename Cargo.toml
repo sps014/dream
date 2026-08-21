@@ -36,6 +36,8 @@ indexmap = "2"
 logos = "0.16.1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+# CLI parsing + auto-generated help for the `dream` binary (same crate `dreamer` uses).
+clap = { version = "4", features = ["derive"] }
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 # HTTP client backing native `HttpClient` (libdream).
 # Blocking so it fits the synchronous host-call model; `serde_json` parses the header object.

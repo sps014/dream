@@ -314,11 +314,12 @@ pub fn compile_native_c(
     ccmd.args(opt_flags);
     ccmd.args(warn);
     ccmd.arg(&include);
-    ccmd.arg("-c").arg(c_path).arg("-o").arg(&obj);
-    let status = ccmd.status()?;
-    if !status.success() {
-        return Err(format!("cc -c failed for {}", c_path.display()).into());
+    if crate::driver::ui::color_enabled() {
+        // We capture output, so force colored diagnostics (clang + gcc spelling).
+        ccmd.arg("-fdiagnostics-color=always");
     }
+    ccmd.arg("-c").arg(c_path).arg("-o").arg(&obj);
+    crate::driver::c_wasm32::run_captured(&mut ccmd, &format!("cc -c ({})", c_path.display()))?;
 
     let mut lcmd = toolchain.cc_command();
     lcmd.args(opt_flags);
@@ -329,7 +330,7 @@ pub fn compile_native_c(
     let Some(dir) = libdream_dir() else {
         return Err(
             "libdream not found next to the dream binary (needed to link host functions). \
-             Set DREAM_HOME or run `source ./use-toolchain.sh` from the Dream repo."
+             Set DREAM_HOME or DREAM_BIN to the directory containing libdream."
                 .into(),
         );
     };
@@ -345,10 +346,7 @@ pub fn compile_native_c(
         }
     }
     lcmd.arg("-o").arg(&bin);
-    let status = lcmd.status()?;
-    if !status.success() {
-        return Err(format!("cc link failed for {}", obj.display()).into());
-    }
+    crate::driver::c_wasm32::run_captured(&mut lcmd, &format!("cc link ({})", obj.display()))?;
     let _ = std::fs::remove_file(&obj);
     Ok(bin)
 }

@@ -21,4 +21,5 @@ pub mod prelude;
 pub mod source_loader;
 #[cfg(feature = "native")]
 pub mod test;
+pub mod ui;
 pub mod wasm_opt;

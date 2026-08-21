@@ -8,6 +8,49 @@ use std::time::SystemTime;
 
 use crate::driver::wasm_opt::OptLevel;
 
+/// True when clang/ld should emit colored diagnostics (we capture their output, so their own
+/// TTY detection would otherwise strip colors).
+fn tool_color() -> bool {
+    crate::driver::ui::color_enabled()
+}
+
+/// Runs `cmd` capturing its output so failures can be reported as a styled, attributed error
+/// instead of raw interleaved stderr. Returns `Err` with a message including the captured tool
+/// output when the command fails. Callers pass `-fcolor-diagnostics` / `--color-diagnostics`
+/// themselves when stderr is a TTY (we capture, so the tool's own TTY detection strips colors).
+pub(crate) fn run_captured(cmd: &mut Command, what: &str) -> Result<(), String> {
+    let out = cmd
+        .output()
+        .map_err(|e| format!("failed to spawn {what}: {e}"))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    let mut msg = format!("{what} failed");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for captured in [stderr.trim(), stdout.trim()] {
+        if !captured.is_empty() {
+            msg.push('\n');
+            msg.push_str(captured);
+        }
+    }
+    Err(msg)
+}
+
+/// Appends a concrete fix under common toolchain failure patterns.
+pub fn hint_for_failure(msg: &str) -> Option<&'static str> {
+    if msg.contains("not found") && msg.contains("clang") {
+        Some("run `dreamer toolchain install wasi-sdk` to get the WebAssembly toolchain")
+    } else if msg.contains("undefined symbol") || msg.contains("undefined reference") {
+        Some(
+            "your installed toolchain may be out of date — run `dreamer toolchain install` \
+             to refresh it",
+        )
+    } else {
+        None
+    }
+}
+
 pub fn wasi_clang() -> Option<PathBuf> {
     if let Ok(sdk) = std::env::var("WASI_SDK_PATH") {
         if !sdk.is_empty() {
@@ -275,19 +318,13 @@ fn compile_linked_units(
                 cmd.arg(format!("-D{d}"));
             }
         }
-        let status = cmd
-            .arg("-o")
-            .arg(&obj)
-            .arg(&unit.path)
-            .status()
-            .map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err(format!(
-                "clang failed for {} (using {})",
-                unit.path.display(),
-                clang.display()
-            ));
+        if tool_color() {
+            cmd.arg("-fcolor-diagnostics");
         }
+        run_captured(
+            cmd.arg("-o").arg(&obj).arg(&unit.path),
+            &format!("clang ({})", unit.path.display()),
+        )?;
         objs.push(obj);
     }
     Ok(objs)
@@ -366,15 +403,14 @@ pub fn compile_c_to_wasm32(
         // `--features` to those two makes wasm-ld reject the rest (`sign-ext`, …).
         cmd.arg("--no-check-features");
     }
+    if tool_color() {
+        cmd.arg("--color-diagnostics");
+    }
     cmd.arg("-o").arg(wasm_path);
     for o in &objs {
         cmd.arg(o);
     }
-    let status = cmd.status().map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err("wasm-ld failed for wasm32 C guest".into());
-    }
-    Ok(())
+    run_captured(&mut cmd, "wasm-ld")
 }
 
 fn compile_unit(
@@ -425,20 +461,13 @@ fn compile_unit(
             cmd.arg("-I").arg(inc);
         }
     }
-    let status = cmd
-        .arg("-o")
-        .arg(obj)
-        .arg(src)
-        .status()
-        .map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err(format!(
-            "clang failed for {} (using {})",
-            src.display(),
-            clang.display()
-        ));
+    if tool_color() {
+        cmd.arg("-fcolor-diagnostics");
     }
-    Ok(())
+    run_captured(
+        cmd.arg("-o").arg(obj).arg(src),
+        &format!("clang ({})", src.display()),
+    )
 }
 
 /// Guest call-stack size for the linked module, from `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`,

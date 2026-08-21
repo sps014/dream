@@ -5,38 +5,29 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::Path;
-use tracing::info;
+use std::path::{Path, PathBuf};
 
 /// Files smaller than this are not worth a sidecar.
 const MIN_COMPRESS_BYTES: u64 = 1024;
 
-/// Writes `<path>.gz` and `<path>.br` next to `path`. Returns `(gzip_len, brotli_len)`.
-/// Best-effort per encoding: one failing writer does not block the other.
-pub fn write_precompressed(path: &Path) -> std::io::Result<(u64, u64)> {
-    let raw = fs::read(path)?;
+/// Writes `<path>.gz` and `<path>.br` next to `path`, returning every sidecar actually written
+/// with its size. Best-effort per encoding: one failing writer does not block the other.
+pub fn write_precompressed(path: &Path) -> Vec<(PathBuf, u64)> {
+    let Ok(raw) = fs::read(path) else {
+        return Vec::new();
+    };
     let raw_len = raw.len() as u64;
     if raw_len < MIN_COMPRESS_BYTES {
-        return Ok((0, 0));
+        return Vec::new();
     }
-    let mut gz_len = 0u64;
-    let mut br_len = 0u64;
-    match write_gzip(path, &raw) {
-        Ok(n) => gz_len = n,
-        Err(e) => tracing::warn!("could not write {}: {}", gzip_path(path).display(), e),
+    let mut written = Vec::new();
+    if let Ok(n) = write_gzip(path, &raw) {
+        written.push((gzip_path(path), n));
     }
-    match write_brotli(path, &raw) {
-        Ok(n) => br_len = n,
-        Err(e) => tracing::warn!("could not write {}: {}", brotli_path(path).display(), e),
+    if let Ok(n) = write_brotli(path, &raw) {
+        written.push((brotli_path(path), n));
     }
-    info!(
-        "precompressed {} (raw {}, gzip {}, brotli {})",
-        path.display(),
-        raw.len(),
-        gz_len,
-        br_len
-    );
-    Ok((gz_len, br_len))
+    written
 }
 
 fn gzip_path(path: &Path) -> std::path::PathBuf {

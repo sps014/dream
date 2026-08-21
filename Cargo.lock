@@ -1168,6 +1168,7 @@ dependencies = [
  "bumpalo",
  "chrono",
  "chrono-tz",
+ "clap",
  "crossterm",
  "dream-abi",
  "dream-diagnostics",

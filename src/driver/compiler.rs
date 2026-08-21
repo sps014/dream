@@ -1,6 +1,8 @@
 use bumpalo::Bump;
 use std::fs;
-use tracing::{info, warn};
+use std::path::Path;
+use std::sync::Arc;
+use tracing::{debug, info};
 
 use crate::driver::abi::emit_wasm_and_abi;
 use crate::driver::diag_highlight::highlight_dream_line;
@@ -9,6 +11,7 @@ use crate::driver::generate::run_generators;
 use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
+use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::attributes::CompileTargets;
 use dream_diagnostics::{render_with, DiagnosticBag};
@@ -57,6 +60,8 @@ pub struct Compiler {
     emit_abi: bool,
     /// Library vs binary; libs reject a primary-file `main`.
     crate_type: dream_sema::analyzer::CrateType,
+    /// Progress/artifact sink (silent by default; the CLI installs [`ConsoleReporter`](crate::driver::ui::ConsoleReporter)).
+    reporter: Arc<dyn BuildReporter>,
 }
 
 impl Compiler {
@@ -71,7 +76,15 @@ impl Compiler {
             compile_targets: CompileTargets::native_only(),
             emit_abi: true,
             crate_type: dream_sema::analyzer::CrateType::Bin,
+            reporter: Arc::new(SilentReporter),
         }
+    }
+
+    /// Builder: receive artifact paths and non-fatal warnings through `reporter` instead of
+    /// staying silent. Library users may install their own sink; the CLI uses a console one.
+    pub fn with_reporter(mut self, reporter: Arc<dyn BuildReporter>) -> Self {
+        self.reporter = reporter;
+        self
     }
 
     /// Builder: skip `@json` / syntax-DSL generators (for compiling generator harnesses).
@@ -373,13 +386,17 @@ impl Compiler {
         info!("finished code generation");
         if matches!(self.target, Target::NativeC) {
             fs::write(out_path, &bytes)?;
-            info!("created file: {}", out_path);
-            emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+            self.reporter.artifact(Path::new(out_path));
+            let abi_artifacts =
+                emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+            for p in abi_artifacts {
+                self.reporter.artifact(&p);
+            }
             return Ok(());
         }
         let c_path = std::path::Path::new(out_path).with_extension("c");
         fs::write(&c_path, &bytes)?;
-        info!("created file: {}", c_path.display());
+        self.reporter.artifact(&c_path);
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
         // Debug (no `-O`) builds still compile the guest at -O1: naive -O0 C codegen bloats
         // both clang's own work and the module; -O1 is near-free and keeps iteration fast.
@@ -391,7 +408,7 @@ impl Compiler {
             self.optimize.unwrap_or(OptLevel::O1),
         )
         .map_err(CompileError::Internal)?;
-        info!("created file: {}", wasm_path.display());
+        self.reporter.artifact(&wasm_path);
 
         // Post-process order matters: wasm-opt first (it drops unknown custom sections), then
         // embed the ABI custom section, then read the final binary once to print `.wat` — so
@@ -399,13 +416,26 @@ impl Compiler {
         if let Some(level) = self.optimize {
             // Non-fatal: the unoptimized `.wasm` is already valid output.
             match crate::driver::wasm_opt::optimize_wasm_file(&wasm_path, level) {
-                Ok(()) => info!("optimized file with wasm-opt: {}", wasm_path.display()),
-                Err(e) => warn!("could not run wasm-opt on {}: {}", wasm_path.display(), e),
+                Ok(()) => debug!("wasm-opt applied at {level:?}: {}", wasm_path.display()),
+                Err(e) => self.reporter.warning(&format!(
+                    "could not optimize {} with wasm-opt: {}",
+                    wasm_path.display(),
+                    e
+                )),
             }
         }
 
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+        let abi_artifacts = emit_wasm_and_abi(
+            out_path,
+            ast.get_root(),
+            &gpu,
+            &live_imports,
+            self.emit_abi,
+        )?;
+        for p in abi_artifacts {
+            self.reporter.artifact(&p);
+        }
 
         if self.emit_abi {
             crate::driver::abi::embed_abi_in_wasm(out_path)?;
@@ -414,23 +444,28 @@ impl Compiler {
         let wasm_bytes = fs::read(&wasm_path)?;
         let text = dream_mir::backend::print_wasm(&wasm_bytes);
         fs::write(out_path, &text)?;
-        info!("created file: {}", out_path);
+        self.reporter.artifact(Path::new(out_path));
 
         // Release builds ship pre-compressed siblings (.gz / .br) for servers with
         // `gzip_static` / `brotli_static` (or CDNs); browsers never compress on their own.
         if self.optimize.is_some() {
-            let _ = crate::driver::compress::write_precompressed(&wasm_path);
+            for (path, _) in crate::driver::compress::write_precompressed(&wasm_path) {
+                self.reporter.artifact(&path);
+            }
         }
 
         // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`); minified on
         // optimizing builds.
         if !self.runtimes.is_empty() {
-            crate::driver::js_runtime::emit_selective_runtimes(
+            let runtime_paths = crate::driver::js_runtime::emit_selective_runtimes(
                 out_path,
                 &live_imports,
                 &self.runtimes,
                 self.optimize.is_some(),
             )?;
+            for p in runtime_paths {
+                self.reporter.artifact(&p);
+            }
         }
 
         Ok(())

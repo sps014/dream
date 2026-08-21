@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::Error;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::debug;
 
 use crate::driver::abi::LiveImport;
 
@@ -256,13 +256,14 @@ fn chunk_for_field<'a>(manifest: &'a Manifest, field: &str) -> Option<&'a str> {
 
 /// Writes `<wat_stem>.{web,node}.runtime.js` next to the compiled `.wat` / `.wasm` for each
 /// target. Optimizing builds (`-O` / `--release`) minify the emitted JS; a minifier failure
-/// falls back to the readable form rather than failing the compile.
+/// falls back to the readable form rather than failing the compile. Returns the paths written.
 pub(crate) fn emit_selective_runtimes(
     wat_path: &str,
     live_imports: &[LiveImport],
     targets: &[JsRuntimeTarget],
     minify: bool,
-) -> Result<(), Error> {
+) -> Result<Vec<std::path::PathBuf>, Error> {
+    let mut written = Vec::new();
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
         let text = assemble_selective_runtime(live_imports, target)?;
@@ -270,7 +271,7 @@ pub(crate) fn emit_selective_runtimes(
             match minify_js_source(&text) {
                 Ok(m) => m,
                 Err(e) => {
-                    warn!("could not minify {}: {}", path.display(), e);
+                    debug!("could not minify {}: {}", path.display(), e);
                     text
                 }
             }
@@ -278,13 +279,15 @@ pub(crate) fn emit_selective_runtimes(
             text
         };
         fs::write(&path, final_text)?;
-        info!("created file: {}", path.display());
+        written.push(path.clone());
         if minify {
             // Same release gate as minification: emit .gz/.br sidecars for static servers.
-            let _ = crate::driver::compress::write_precompressed(&path);
+            for (sidecar, _) in crate::driver::compress::write_precompressed(&path) {
+                written.push(sidecar);
+            }
         }
     }
-    Ok(())
+    Ok(written)
 }
 
 /// Minifies an ES module with the Oxc toolchain (parse → compress/mangle → codegen).

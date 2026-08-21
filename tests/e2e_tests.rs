@@ -601,7 +601,9 @@ fn release_arithmetic_code_section_stays_small() {
 
 /// Sample `--release` code-section slack: last-use destroy is compiler-only (no extra runtime
 /// helpers). Music player is DOM/`js`-heavy; host-routed `js` RC and the exported `dream_ft_get`
-/// sit near 25KiB, while a gross regression (e.g. the 32KiB pre-host-RC-routing codegen) must trip.
+/// sit near 38KiB since the unavailable-source handling landed (on_error + transient status line
+/// added ~10KiB of guest code), while a gross codegen regression (e.g. printf machinery getting
+/// linked for basic to_string calls, or the old un-routed host RC path) must trip.
 #[test]
 fn release_music_player_code_section_stays_bounded() {
     let src = Path::new("sample/music_player/music_player.dream");
@@ -622,8 +624,8 @@ fn release_music_player_code_section_stays_bounded() {
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
     assert!(
-        code > 0 && code <= 28 * 1024,
-        "music_player --release code section should stay under 28KiB (got {})",
+        code > 0 && code <= 48 * 1024,
+        "music_player --release code section should stay under 48KiB (got {})",
         code
     );
 }

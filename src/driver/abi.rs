@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Error;
 use std::path::Path;
-use tracing::info;
 
 use crate::driver::gpu_gen::{self, GpuEmitResult};
 use dream_abi::attributes::{
@@ -72,27 +71,29 @@ pub(crate) fn embed_abi_in_wasm(wat_path: &str) -> Result<(), Error> {
 /// **live** extern imports (for JS interop marshaling) and exported functions. When `gpu` is
 /// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI (when ABI
 /// is requested). Native `run` / `debug-adapter` also load `abi.gpu` for wgpu kernels/shaders.
+/// Returns the paths of every file written so callers can surface them as build artifacts.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     program: &ProgramNode,
     gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     emit_abi: bool,
-) -> Result<(), Error> {
+) -> Result<Vec<std::path::PathBuf>, Error> {
     let base = Path::new(wat_path);
+    let mut written = Vec::new();
 
     if !gpu.is_empty() {
         let wgsl_path = base.with_extension("wgsl");
         fs::write(&wgsl_path, gpu_gen::join_wgsl_module(gpu))?;
-        info!("created file: {}", wgsl_path.display());
+        written.push(wgsl_path);
     }
 
     if emit_abi {
         let abi_path = base.with_extension("abi.json");
         fs::write(&abi_path, build_abi_json(program, gpu, live_imports))?;
-        info!("created file: {}", abi_path.display());
+        written.push(abi_path);
     }
-    Ok(())
+    Ok(written)
 }
 
 /// Escapes a string for embedding in a JSON document.

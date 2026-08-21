@@ -2,11 +2,13 @@
 
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
 use crate::driver::compiler::{Compiler, Target};
+use crate::driver::ui::Ui;
 use crate::driver::wasm_opt::OptLevel;
 use dream_sema::analyzer::CrateType;
 use std::fs;
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+use tracing::debug;
 
 #[derive(Debug, Clone, Default)]
 pub struct TestOptions {
@@ -31,8 +33,11 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
         return Err(format!("no .dream test files under '{}'", path.display()));
     }
 
+    let ui = Ui::new();
     let mut result = TestRunResult::default();
     for file in &files {
+        ui.step("Testing", &file.display().to_string());
+        let start = Instant::now();
         match run_one_file(file, opts) {
             Ok(n) => {
                 result.files_run += 1;
@@ -41,9 +46,10 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
             Err(e) => {
                 result.files_run += 1;
                 result.files_failed += 1;
-                let _ = writeln!(io::stderr(), "error: {}", e);
+                ui.error(&e);
             }
         }
+        debug!("{} finished in {:.2}s", file.display(), start.elapsed().as_secs_f64());
     }
 
     if result.files_failed > 0 {
@@ -52,12 +58,10 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
             result.files_failed, result.files_run, result.tests_run
         ));
     }
-    let _ = writeln!(
-        io::stderr(),
+    ui.success(&format!(
         "test result: ok. {} passed in {} file(s)",
-        result.tests_run,
-        result.files_run
-    );
+        result.tests_run, result.files_run
+    ));
     Ok(result)
 }
 
@@ -141,15 +145,11 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         compiler = compiler.with_optimize(Some(level));
     }
     let runner_str = runner_path.to_string_lossy().into_owned();
-    if opts.verbose {
-        let _ = writeln!(
-            io::stderr(),
-            "running {} ({} test(s))",
-            path.display(),
-            tests.len()
-        );
-    }
-    let _ = writeln!(io::stderr(), "running {}:", path.display());
+    debug!(
+        "running {} ({} test(s))",
+        path.display(),
+        tests.len()
+    );
     let c_path = out_dir.join(format!("{stem}.c"));
     let c_str = c_path.to_string_lossy().into_owned();
     compiler

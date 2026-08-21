@@ -1,55 +1,101 @@
-//! Track A ARC goldens: upper bounds on `$retain` / `$release_` in optimized WAT.
+//! Track A ARC goldens: upper bounds on `dream_retain` / release traffic in optimized C.
 
 mod common;
 use common::*;
 
-fn count_calls(wat: &str, name: &str) -> usize {
-    let needle = format!("call ${}", name);
-    wat.lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains(&needle)
-        })
-        .count()
+/// A parsed C function definition: its symbol name and body text.
+struct CFunc {
+    name: String,
+    body: String,
 }
 
-fn retain_release_counts(wat: &str) -> (usize, usize) {
-    let retains = count_calls(wat, "retain")
-        + count_calls(wat, "retain_shared")
-        + count_calls(wat, "js_retain");
-    let releases = wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $release")
-        })
-        .count();
-    (retains, releases)
+const C_KEYWORDS: [&str; 6] = ["if", "else", "while", "for", "switch", "return"];
+
+/// The symbol name if `line` is a function *definition* signature (`... name(params) {`),
+/// i.e. not a declaration (`;`), statement, or bare control-flow block.
+fn fn_def_name(line: &str) -> Option<&str> {
+    if !line.ends_with('{') || line.contains(';') || !line.contains('(') {
+        return None;
+    }
+    let sig = line.trim_end_matches('{').trim();
+    let (header, _) = sig.split_once('(')?;
+    let mut tokens = header.split_whitespace();
+    let name = tokens.next_back()?;
+    tokens.next()?; // a return type must precede the name
+    if C_KEYWORDS.contains(&name) {
+        return None;
+    }
+    Some(name)
 }
 
-/// Protocol `dream_object_to_string` retains interned strings; user paths use `main_dream` / ctors.
-fn c_user_retain_count(c: &str) -> usize {
-    let mut n = 0;
-    let mut in_user = false;
-    for line in c.lines() {
-        let t = line.trim();
-        if t.starts_with("void main_dream(") || (t.contains("_constructor(") && t.ends_with('{')) {
-            in_user = true;
-        } else if in_user
-            && (t.starts_with("void ")
-                || t.starts_with("static ")
-                || t.starts_with("dream_ptr ")
-                || t.starts_with("int32_t "))
-            && t.contains('(')
-            && !t.contains("_constructor(")
-        {
-            in_user = false;
-        }
-        if in_user && t.contains("dream_retain(") {
-            n += 1;
+/// Parses every function definition out of the emitted C; bodies run from after the signature
+/// line to the closing brace at column zero.
+fn c_func_defs(c: &str) -> Vec<CFunc> {
+    let mut out = Vec::new();
+    let mut offset = 0;
+    while let Some(line_end) = c[offset..].find('\n') {
+        let line = c[offset..offset + line_end].trim_end();
+        if let Some(name) = fn_def_name(line) {
+            let start = offset + line_end + 1;
+            let tail = &c[start..];
+            let len = match tail.find("\n}") {
+                Some(e) => e,
+                None => tail.len(),
+            };
+            out.push(CFunc {
+                name: name.to_string(),
+                body: tail[..len].to_string(),
+            });
+            offset = start + len;
+        } else {
+            offset += line_end + 1;
         }
     }
-    n
+    out
+}
+
+/// Backend/protocol scaffolding rather than user code (`dream_*` runtime, iface trampolines,
+/// generated `to_string`/`hash_code`, deep-release helpers).
+fn is_generated_fn(name: &str) -> bool {
+    name.starts_with("dream_")
+        || name.starts_with("__")
+        || name.starts_with("release_")
+        || name.starts_with("destroy_")
+        || name.ends_with("_to_string")
+        || name.ends_with("_hash_code")
+        || name == "main"
+}
+
+fn count_in(body: &str, needle: &str) -> usize {
+    body.matches(needle).count()
+}
+
+/// `dream_retain(` calls inside user functions only.
+fn user_retains(c: &str) -> usize {
+    c_func_defs(c)
+        .iter()
+        .filter(|f| !is_generated_fn(&f.name))
+        .map(|f| count_in(&f.body, "dream_retain("))
+        .sum()
+}
+
+/// Release-side traffic (`dream_release(` plus per-type `release_*` / `destroy_*` calls) inside
+/// user functions only.
+fn user_releases(c: &str) -> usize {
+    c_func_defs(c)
+        .iter()
+        .filter(|f| !is_generated_fn(&f.name))
+        .map(|f| {
+            count_in(&f.body, "dream_release(")
+                + f.body
+                    .lines()
+                    .filter(|l| {
+                        let t = l.trim_start();
+                        t.starts_with("release_") || t.starts_with("destroy_")
+                    })
+                    .count()
+        })
+        .sum()
 }
 
 #[test]
@@ -64,19 +110,20 @@ fn rc_golden_last_use_return_bounded() {
             System.println(make());
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    let (retains, releases) = retain_release_counts(&wat);
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let retains = user_retains(&c);
+    let releases = user_releases(&c);
     assert!(
-        retains <= 4,
+        retains <= 2,
         "too many retains ({}) in last-use return:\n{}",
         retains,
-        wat
+        c
     );
     assert!(
-        releases <= 6,
+        releases <= 3,
         "too many releases ({}) in last-use return:\n{}",
         releases,
-        wat
+        c
     );
 }
 
@@ -95,19 +142,20 @@ fn rc_golden_transparent_if_else_bounded() {
             System.println(pick(true));
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    let (retains, releases) = retain_release_counts(&wat);
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let retains = user_retains(&c);
+    let releases = user_releases(&c);
     assert!(
-        retains <= 8,
+        retains <= 3,
         "too many retains ({}) in if/else:\n{}",
         retains,
-        wat
+        c
     );
     assert!(
-        releases <= 12,
+        releases <= 4,
         "too many releases ({}) in if/else:\n{}",
         releases,
-        wat
+        c
     );
 }
 
@@ -135,18 +183,17 @@ fn rc_golden_field_walk_near_zero_retains() {
             System.println(walk(p));
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    // Count retains inside the walk function body only (between its func header and the next).
-    let walk_wat = wat
-        .split("(func $")
-        .find(|s| s.starts_with("walk") || s.contains("walk"))
-        .unwrap_or(&wat);
-    let (retains, _) = retain_release_counts(walk_wat);
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let walk = c_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "walk")
+        .expect("walk should be emitted");
+    let retains = count_in(&walk.body, "dream_retain(");
     assert!(
-        retains <= 2,
+        retains <= 1,
         "field-walk should be near retain-free inside walk (got {}):\n{}",
         retains,
-        walk_wat
+        c
     );
 }
 
@@ -166,24 +213,25 @@ fn rc_golden_transparent_loop_bounded() {
             System.println(count(3));
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    let (retains, releases) = retain_release_counts(&wat);
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let retains = user_retains(&c);
+    let releases = user_releases(&c);
     assert!(
-        retains <= 6,
+        retains <= 3,
         "too many retains ({}) around transparent loop:\n{}",
         retains,
-        wat
+        c
     );
     assert!(
-        releases <= 10,
+        releases <= 4,
         "too many releases ({}) around transparent loop:\n{}",
         releases,
-        wat
+        c
     );
 }
 
-/// DOM-shaped `js` temps: last-use destroy must emit `$js_release` in the rebuild function so
-/// handles unpin before later work (host `_jsHandles` is not the browser DOM).
+/// DOM-shaped `js` temps: last-use destroy must release them in the rebuild function so handles
+/// unpin before later work (host `_jsHandles` is not the browser DOM).
 #[test]
 fn rc_golden_js_rebuild_emits_js_release() {
     let code = r#"
@@ -198,17 +246,17 @@ fn rc_golden_js_rebuild_emits_js_release() {
             rebuild();
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
-    let rebuild = wat
-        .split("(func $")
-        .find(|s| s.starts_with("rebuild"))
-        .unwrap_or(&wat);
-    let js_rel = count_calls(rebuild, "js_release");
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
+    let rebuild = c_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "rebuild")
+        .expect("rebuild should be emitted");
+    let js_rel = count_in(&rebuild.body, "dream_release(");
     assert!(
-        js_rel >= 1,
-        "rebuild should js_release temps at last use (got {}):\n{}",
+        js_rel >= 2,
+        "rebuild should release its js temps at last use (got {}):\n{}",
         js_rel,
-        rebuild
+        rebuild.body
     );
 }
 
@@ -224,55 +272,23 @@ fn rc_golden_unique_class_no_retain() {
             System.println(b.n);
         }
     "#;
-    let wat = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    let (retains, _) = retain_release_counts(&wat);
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
     assert_eq!(
-        retains, 0,
-        "unique Box should not retain:\n{}",
-        wat
-    );
-    let destroys = wat
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.starts_with(";;") && t.contains("call $destroy_")
-        })
-        .count();
-    assert!(
-        destroys >= 1,
-        "unique Box should unique-destroy:\n{}",
-        wat
-    );
-}
-
-#[test]
-fn rc_golden_unique_class_no_retain_native_c() {
-    let code = r#"
-        class Box {
-            public n: int;
-            public constructor(n: int) { this.n = n; }
-        }
-        fun main(): void {
-            let b = Box(1);
-            System.println(b.n);
-        }
-    "#;
-    let c = emit_hir_to_c_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    assert_eq!(
-        c_user_retain_count(&c),
+        user_retains(&c),
         0,
-        "unique Box should not dream_retain:\n{}",
+        "unique Box should not retain:\n{}",
         c
     );
     assert!(
-        c.contains("destroy_Box("),
+        c.contains("destroy_Box(l0);"),
         "unique Box should unique-destroy:\n{}",
         c
     );
 }
 
 #[test]
-fn rc_golden_last_use_field_store_both_backends_skip_retain() {
+fn rc_golden_last_use_field_store_skips_retain() {
+    // A last-use value moved into a field must transfer ownership without a retain.
     let code = r#"
         class Inner {
             public n: int;
@@ -287,19 +303,11 @@ fn rc_golden_last_use_field_store_both_backends_skip_retain() {
             System.println(w.inner.n);
         }
     "#;
-    let src = format!("{}\n{}", SYSTEM_STUB, code);
-    let wat = emit_hir_to_module_optimized(&src);
-    let c = emit_hir_to_c_optimized(&src);
-    let (wat_retains, _) = retain_release_counts(&wat);
-    let c_retains = c_user_retain_count(&c);
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
     assert_eq!(
-        wat_retains, 0,
-        "Wasm last-use field store should not retain:\n{}",
-        wat
-    );
-    assert_eq!(
-        c_retains, 0,
-        "C last-use field store should not retain:\n{}",
+        user_retains(&c),
+        0,
+        "last-use field store should not retain:\n{}",
         c
     );
 }

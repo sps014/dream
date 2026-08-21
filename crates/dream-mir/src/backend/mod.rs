@@ -1,8 +1,9 @@
-//! Codegen backends: WAT/c (`wasm`) and native C (`c`).
+//! Codegen backends: C99 for wasm32 (`c` with [`CTarget::Wasm32`]) and native hosts.
 
 pub mod c;
 pub(crate) mod shared;
-pub mod wasm;
+
+pub use shared::print_wasm;
 
 use crate::Mir;
 use dream_abi::{js_abi, runtime_hosts};

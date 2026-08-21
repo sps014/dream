@@ -22,7 +22,7 @@ fn list_insert_inlines_span_copy_from() {
     let src_s = src.to_str().unwrap().to_string();
     let wat_s = wat_path.to_str().unwrap().to_string();
 
-    Compiler::new(Target::Wasm)
+    Compiler::new(Target::Wasm32)
         .with_release(true)
         .compile(&src_s, &wat_s)
         .expect("list_insert should compile under --release");
@@ -40,7 +40,7 @@ fn list_insert_inlines_span_copy_from() {
             .join("\n")
     );
     assert!(
-        wat.contains("memcpy"),
-        "unmanaged List.insert path should open-code bulk copies via memcpy"
+        wat.contains("memory.copy"),
+        "unmanaged List.insert path should open-code bulk copies via memory.copy"
     );
 }

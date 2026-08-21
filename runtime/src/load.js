@@ -48,6 +48,65 @@ async function resolveAbi(wasmModule, source, options) {
   return loadAbi(url);
 }
 
+/**
+ * Scans the wasm binary's import section for an `env`/`memory` import and reads its limits
+ * flags (bit 1 = shared). Engines do not reliably expose `.type.shared` on
+ * `WebAssembly.Module.imports()` entries, so this is the dependable signal.
+ */
+function memoryImportIsShared(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let pos = 8; // magic + version
+  const leb = () => {
+    let result = 0;
+    let shift = 0;
+    for (;;) {
+      const b = u8[pos++];
+      result += (b & 0x7f) * Math.pow(2, shift);
+      if (!(b & 0x80)) return result;
+      shift += 7;
+    }
+  };
+  const limits = () => {
+    const flags = leb();
+    leb(); // min
+    if (flags & 0x01) leb(); // max
+    return flags;
+  };
+  while (pos < u8.length) {
+    const id = u8[pos++];
+    const size = leb();
+    if (id !== 2) {
+      pos += size; // not the import section
+      continue;
+    }
+    const end = pos + size;
+    const count = leb();
+    for (let i = 0; i < count && pos < end; i++) {
+      // NB: `pos += leb()` would read `pos` before `leb()` runs — but leb() mutates pos
+      // through the closure, so the skip would land one byte short. Stage lengths first.
+      const moduleLen = leb();
+      pos += moduleLen;
+      const nameLen = leb();
+      pos += nameLen;
+      const kind = u8[pos++];
+      if (kind === 2) {
+        return (limits() & 0x02) !== 0; // shared flag
+      } else if (kind === 0) {
+        leb(); // func: type index
+      } else if (kind === 1) {
+        pos += 1; // table: element type
+        limits();
+      } else if (kind === 3) {
+        pos += 2; // global: valtype + mutability
+      } else {
+        break; // unknown kind — stop scanning rather than desync
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
 function moduleWantsSharedMemory(wasmModule, desc) {
   if (desc && desc.shared) {
     return true;
@@ -75,7 +134,7 @@ function memoryIsShared(memory) {
   );
 }
 
-function makeLinearMemory(wasmModule) {
+function makeLinearMemory(wasmModule, wasmBytes) {
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
   );
@@ -83,7 +142,8 @@ function makeLinearMemory(wasmModule) {
   return new WebAssembly.Memory({
     initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
     maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
-    shared: moduleWantsSharedMemory(wasmModule, desc),
+    shared:
+      moduleWantsSharedMemory(wasmModule, desc) || memoryImportIsShared(wasmBytes),
   });
 }
 
@@ -129,7 +189,7 @@ export async function load(source, options = {}) {
   };
 
   const importObject = { env: defaultEnv(getInstance, options) };
-  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule);
+  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule, wasmBytes);
   importObject.env.memory = sharedMemory;
   const stackGate =
     options.stackGate ??
@@ -140,9 +200,13 @@ export async function load(source, options = {}) {
   if (abi) for (const e of abi.externs) sigByName.set(e.name, e);
 
   const composeHosts = options.dreamHosts || defaultDreamModule;
+  // Selective runtimes omit chunk files whose hosts are unused; `typeof` guards keep
+  // those references safe when the defining file was not included.
   const builtinDream = {
     ...composeHosts(getInstance),
-    ...makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate),
+    ...(typeof makeWorkerModule === "function"
+      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate)
+      : {}),
   };
   if (typeof builtinDream.__attachGpuAbi === "function") {
     const hint =
@@ -155,7 +219,11 @@ export async function load(source, options = {}) {
   }
 
   const wrapFor = (fn, sig) => {
-    if (sig && sig.field === "cryptoSecureRandomFill") {
+    if (
+      sig &&
+      sig.field === "cryptoSecureRandomFill" &&
+      typeof csprngBytes === "function"
+    ) {
       return wrapInPlaceByteArrayFill(getInstance, (count) => csprngBytes(count));
     }
     return sig && sig.async ? wrapAsyncImport(getInstance, fn, sig) : wrapImport(getInstance, fn, sig);
@@ -172,10 +240,16 @@ export async function load(source, options = {}) {
     for (const e of abi.externs) {
       const bucket = (importObject[e.module] ||= {});
       if (bucket[e.field]) continue;
+      // `cryptoSecureRandomFill` has no direct host function: wrapFor routes it through
+      // wrapInPlaceByteArrayFill + csprngBytes, so it is "implemented" despite resolving
+      // to null here.
+      const isCsprngFill =
+        e.module === "Dream" && e.field === "cryptoSecureRandomFill" &&
+        typeof csprngBytes === "function";
       const resolved = (e.module === "Dream" && builtinDream[e.field])
         ? builtinDream[e.field]
         : resolveGlobal(e.module, e.field);
-      bucket[e.field] = resolved
+      bucket[e.field] = (resolved || isCsprngFill)
         ? wrapFor(resolved, e)
         : () => {
             throw new Error(`no JS implementation for extern '${e.name}' (${e.module}.${e.field})`);

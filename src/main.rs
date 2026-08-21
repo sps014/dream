@@ -162,24 +162,9 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             });
-        } else if arg == "--backend=c" {
-            native_c = true;
-        } else if arg == "--backend=wasm" {
+        } else if arg == "--wasm" {
+            // Compile to a wasm32 module (.c → clang → .wasm + .wat) instead of a native host.
             native_c = false;
-        } else if arg == "--backend" {
-            i += 1;
-            let Some(val) = args.get(i) else {
-                error!("--backend requires wasm or c");
-                return ExitCode::FAILURE;
-            };
-            match val.as_str() {
-                "wasm" => native_c = false,
-                "c" => native_c = true,
-                other => {
-                    error!("unknown --backend '{}': expected wasm or c", other);
-                    return ExitCode::FAILURE;
-                }
-            }
         } else if arg == "-o" || arg == "--output" {
             i += 1;
             let Some(val) = args.get(i) else {
@@ -261,12 +246,12 @@ fn main() -> ExitCode {
         print_usage(&program);
         return ExitCode::FAILURE;
     }
-    // `--web` / `--node` select a JS host and imply the tree-shaken runtime sidecar.
+    // `--web` / `--node` select a JS host and imply wasm32 output.
     if !runtimes.is_empty() {
         native_c = false;
     }
     if !native_c && (debug_adapter || run_after_compile || run_tests) {
-        error!("`run`, `test`, and `debug-adapter` use the native C backend; WAT is only emitted with `--runtime --web` and/or `--node` (or `--backend wasm` to compile without running)");
+        error!("`run`, `test`, and `debug-adapter` execute natively; wasm32 output requires `build` with `--wasm`, `--web`, and/or `--node`");
         return ExitCode::FAILURE;
     }
 
@@ -342,7 +327,7 @@ fn main() -> ExitCode {
     let mut compiler = Compiler::new(if native_c {
         Target::NativeC
     } else {
-        Target::Wasm
+        Target::Wasm32
     })
     .with_release(release)
     .with_debug_info(debug_info)
@@ -431,17 +416,17 @@ fn main() -> ExitCode {
 fn print_usage(program: &str) {
     eprintln!(
         "\
-Usage: {program} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [-o PATH] [--crate-type lib|bin] [--backend wasm|c] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [build|run|test|debug-adapter] <file|dir> [-- program-args...]
+Usage: {program} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [-o PATH] [--crate-type lib|bin] [--wasm] [--target native|node|web] [--runtime --web|--node] [--filter SUBSTR] [build|run|test|debug-adapter] <file|dir> [-- program-args...]
   -v, --verbose         Print progress information
   --release             Trimmed build; cc default -O3; wasm-opt -O3 (or -Os with --web)
   -g, --debug-info      C `#line` + clang -g -O0 for lldb-dap (`debug-adapter` implies this)
   -O, --optimize[=LVL]  wasm-opt and cc level (LVL: 0-4, s, z, Os, Oz; default: s); overrides --release
-  -o, --output PATH     Write guest C/WAT here instead of target/debug|release|web
-  --backend wasm|c     Codegen backend (default: c / native). WAT only with --web/--node
+  -o, --output PATH     Write guest C here instead of target/debug|release|web
+  --wasm                Compile to a wasm32 module (.c + .wasm + .wat) instead of a native host
   --target native|node|web  Compile-time runtime target for availability checks (default: native)
   --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)
-  --web                 Browser-targeted *.web.runtime.js (implies --runtime, wasm backend)
-  --node                Node-targeted *.node.runtime.js (implies --runtime, wasm backend)
+  --web                 Browser-targeted *.web.runtime.js (implies --runtime, wasm output)
+  --node                Node-targeted *.node.runtime.js (implies --runtime, wasm output)
   --filter SUBSTR       With `test`: only run @test functions whose names contain SUBSTR
   -h, --help            Show this help message
   build                 Compile only (default; `dream build --web file.dream` is valid)
@@ -453,6 +438,7 @@ Example: {program} run tests/cases/process_args_basic.dream -- alpha beta
 Example: {program} test tests/
 Example: {program} --filter adds test tests/math.dream
 Example: {program} --release run src/sample/test_arrays.dream
+Example: {program} --wasm sample/interop/js.dream
 Example: {program} --web sample/interop/js.dream
 Example: {program} --node sample/interop/js.dream
 Example: {program} --web --node sample/interop/js.dream

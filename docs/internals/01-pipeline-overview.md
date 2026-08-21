@@ -19,9 +19,11 @@ flowchart TD
     hir --> mir["mir::lower\nHIR → CFG MIR"]
     mir --> rc["RcInsertion pass\n(make ownership explicit)"]
     rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
-    opt --> emit["backend::wasm\nMIR → WASM bytes (wasm-encoder)"]
+    opt --> emit["backend::c\nMIR → C99 (relooper-informed)"]
 
-    emit --> wasm[".wasm"]
+    emit --> cc["clang / wasm-ld (wasi-sdk)"]
+    cc --> wasm[".wasm"]
+    cc --> nat[".c + host cc → native .bin"]
     wasm --> wat["pretty-print .wat (wasmprinter)"]
     wasm --> abi["driver::abi sidecar\n.abi.json / .wgsl"]
 ```
@@ -75,16 +77,16 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 - **Out:** optimized MIR (a CFG per function).
 - **Steps:** `mir::lower` desugars structured control flow into blocks; `RcInsertion` makes ownership explicit (module-wide, before inlining); `optimize_module` inlines and prunes, then the per-function `PassManager` runs the optimization pipeline to a fixpoint. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
-### 7. Backend — `src/mir/relooper.rs` + `src/mir/emit/`
+### 7. Backend — `crates/dream-mir/src/relooper.rs` + `crates/dream-mir/src/backend/c/`
 
 - **In:** optimized MIR.
-- **Out:** WASM bytes (and pretty-printed WAT).
-- **How:** the relooper recovers structured shapes from the CFG; `emit` walks the function into a `wasm-encoder` builder. Hand-written `runtime/*.wat` is parsed with `wast` and merged by name. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
+- **Out:** C99 (`backend::c::emit_c_module_for`). For wasm32 targets the C is compiled by wasi-sdk clang/wasm-ld to `.wasm`, then pretty-printed to `.wat` via wasmprinter; native targets stop at the `.c` + host cc.
+- **How:** relooper-informed C99 emission — the emitter walks MIR blocks into C statements (labels, `goto`, `switch`), and the guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
 
 ### 8. Artifact emission — `src/driver/compiler.rs` / `src/driver/abi.rs`
 
-- **In:** encoded `.wasm` bytes plus the AST root (for ABI metadata).
-- **Out:** `.wasm` first, then `.wat` via `wasmprinter`, and an `.abi.json` describing extern imports/exports for the JS runtime.
+- **In:** linked `.wasm` plus the AST root (for ABI metadata).
+- **Out:** link → `wasm-opt` → embed the ABI custom section → print `.wat` via `wasmprinter`; the `.abi.json` sidecar describes extern imports/exports for the JS runtime.
 
 ## Where errors come from
 

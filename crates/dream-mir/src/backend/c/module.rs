@@ -638,16 +638,10 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
     let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
     let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
     let fut = cx.target.abi().future;
-    let slots = crate::async_emit::layout_async_slots(
-        &body,
-        cx.interner,
-        fut.slots as i32,
-        |_| String::new(),
-        |ty| {
-            let sz = super::types::native_scalar_size(cx, ty).0.max(8);
-            (sz, cx.interner.is_value_type(ty))
-        },
-    );
+    let slots = crate::async_emit::layout_async_slots(&body, cx.interner, fut.slots as i32, |ty| {
+        let sz = super::types::native_scalar_size(cx, ty).0.max(8);
+        (sz, cx.interner.is_value_type(ty))
+    });
     let size = slots.frame_size;
     let offs: Vec<i32> = (0..body.locals.len())
         .map(|i| slots.offsets.get(&i).copied().unwrap_or(0))
@@ -827,16 +821,36 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
             let mut e = Emitter::new(cx, &body, &mut poll);
             e.stmts(&block.stmts);
         }
-        for (i, decl) in body.locals.iter().enumerate() {
-            if matches!(cx.interner.kind(decl.ty), TyKind::Void)
-                || cx.interner.is_value_type(decl.ty)
-            {
-                continue;
+        // Spill back only the locals this block *modified*: every poll invocation reloads all
+        // locals from the frame before the state dispatch, so unmodified locals still satisfy
+        // the frame == register invariant. Storing everything here cost O(blocks × locals)
+        // redundant heap stores per poll.
+        let mut dirty: Vec<u32> = Vec::new();
+        // The await-result handoff (`__ch` → local) emitted above this label is not a block
+        // statement, so seed it explicitly.
+        if let Some(d) = resume_dest[bi] {
+            let decl = &body.locals[d as usize];
+            if !cx.interner.is_value_type(decl.ty) {
+                dirty.push(d);
             }
+        }
+        for s in &block.stmts {
+            if let Statement::Assign(crate::Place::Local(l), _) = s {
+                let i = l.0 as usize;
+                let decl = &body.locals[i];
+                if !matches!(cx.interner.kind(decl.ty), TyKind::Void)
+                    && !cx.interner.is_value_type(decl.ty)
+                    && !dirty.contains(&l.0)
+                {
+                    dirty.push(l.0);
+                }
+            }
+        }
+        for i in dirty {
             poll.stmt(Stmt::store(
-                local_c_ty(cx, decl.ty),
-                Expr::ptr_add(Expr::id("__self"), Expr::i(offs[i] as i64)),
-                Expr::local(i as u32),
+                local_c_ty(cx, body.local_ty(crate::Local(i))),
+                Expr::ptr_add(Expr::id("__self"), Expr::i(offs[i as usize] as i64)),
+                Expr::local(i),
             ));
         }
         {

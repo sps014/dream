@@ -135,8 +135,8 @@ More syntax: [Language tour](https://sps014.github.io/dream/learn/tour/).
 | --- | --- |
 | Installer / `dreamer run` | Nothing besides the [install script](#5-minute-quickstart) (no Rust) |
 | Build and test the compiler | [Rust](https://rustup.rs/) (stable `rustc` + `cargo`) |
-| `dream run --backend c` / native-C e2e | `dreamer toolchain install cc` (Zig) or a clang-compatible `CC` on `PATH` |
-| Rebuild guest `regex.wat` | `dreamer toolchain install wasi-sdk` and `wasm-tools` or `wasm2wat` — [runtime README](crates/dream-mir/src/runtime/README.md). Not used by `cargo test` or Windows CI |
+| `dream run` / native-C e2e | `dreamer toolchain install cc` (Zig) or a clang-compatible `CC` on `PATH` |
+| wasm32 output (`dream --wasm`) | `dreamer toolchain install wasi-sdk` — [runtime README](crates/dream-mir/src/runtime/README.md). Not used by `cargo test` or Windows CI |
 | JS runtime bundle | Node.js (`node scripts/bundle-runtime.mjs`) |
 | Docs site | Python 3; `python3 -m venv .venv && .venv/bin/pip install -r docs/requirements-docs.txt` then `mkdocs build --strict` |
 

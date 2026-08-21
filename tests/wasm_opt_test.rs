@@ -41,7 +41,7 @@ fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
     let plain_wat_str = plain_wat.to_str().unwrap().to_string();
 
     // Release trimming without Binaryen — size baseline for each `-O` level below.
-    Compiler::new(Target::Wasm)
+    Compiler::new(Target::Wasm32)
         .with_release(true)
         .with_optimize(None)
         .compile(&dream_file, &plain_wat_str)
@@ -60,7 +60,7 @@ fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
         let opt_wasm = opt_wat.with_extension("wasm");
         let opt_wat_str = opt_wat.to_str().unwrap().to_string();
 
-        Compiler::new(Target::Wasm)
+        Compiler::new(Target::Wasm32)
             .with_release(true)
             .with_optimize(Some(level))
             .compile(&dream_file, &opt_wat_str)

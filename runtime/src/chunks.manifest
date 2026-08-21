@@ -1,0 +1,23 @@
+# Dream JS host chunk table — single source of truth shared by
+# src/driver/js_runtime.rs (selective *.(web|node).runtime.js assembly) and
+# scripts/bundle-runtime.mjs (full runtime/dream.js bundle).
+#
+# Format (one entry per line, `#` comments, blank lines ignored):
+#   always <file>...            modules concatenated into every runtime, in order
+#   order <chunk>...            emission/registration order for optional chunks
+#   chunk <id> <file> <factory> <field>...
+#
+# <factory> is the host-factory function defined by <file> (`-` when the chunk has
+# none; `workers` is wired inside load.js instead). Each <field> maps a WASM import
+# field to this chunk by prefix; a leading `=` marks an exact-match field.
+always platform.js urls.js core.js instance.js marshal.js hosts/env.js
+order js http fs crypto gpu console_process datetime_text net_sockets workers
+chunk js hosts/js.js makeJsHost js
+chunk http hosts/http.js makeHttpHost http
+chunk fs hosts/fs.js makeFsHost file dir
+chunk crypto hosts/crypto.js makeCryptoHost crypto
+chunk gpu hosts/gpu.js makeGpuHost gpu =__attachGpuAbi
+chunk console_process hosts/console_process.js makeConsoleProcessHost console process
+chunk datetime_text hosts/datetime_text.js makeDatetimeTextHost unicode date time =delayMs
+chunk net_sockets hosts/net_sockets.js makeNetSocketsHost tcp ws
+chunk workers workers.js - worker

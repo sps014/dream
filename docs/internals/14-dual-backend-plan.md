@@ -1,5 +1,10 @@
 # 14 — Dual backend: native C (default run) and Wasm (web)
 
+> **Status: superseded.** This plan concluded with the WAT/WASM emitter removed: the C99 backend
+> (`backend/c`) is the only codegen path, and wasm32 output is C → wasi-sdk clang → `.wasm`
+> (pretty-printed to `.wat` via wasmprinter). Kept as a historical decision record; CLI details
+> below (`--backend wasm`, `Target::Wasm`, `runtime/*.wat`) reflect the plan, not the current tree.
+
 Same MIR, two emitters. There is **no LLVM backend**. `dream run` / `test` / `debug-adapter` compile MIR → C → `cc` → `.bin`. WAT/WASM is for `--runtime --web` / `--node` (and explicit `--backend wasm` compile-only).
 
 ## What ships

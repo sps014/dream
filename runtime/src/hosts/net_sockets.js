@@ -223,6 +223,15 @@ function wsConnect(url, timeoutMs) {
       resolve(encodeWireText("-2", "WebSocket is not available in this host"));
       return;
     }
+    // Only ws:// and wss:// are WebSocket schemes; anything else is an unsupported
+    // target (-2), not a connection failure (-1).
+    const raw = String(url || "");
+    const colon = raw.indexOf(":");
+    const scheme = (colon > 0 ? raw.slice(0, colon) : "").toLowerCase();
+    if (scheme !== "ws" && scheme !== "wss") {
+      resolve(encodeWireText("-2", `unsupported URL scheme '${scheme || "?"}:'`));
+      return;
+    }
     let socket;
     try {
       socket = new Ctor(url);

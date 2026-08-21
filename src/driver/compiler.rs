@@ -16,8 +16,10 @@ use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
 
+/// Output artifact kind for the single C codegen backend: a wasm32 module
+/// (`C→clang→.wasm`, pretty-printed via wasmprinter) or a native host C file.
 pub enum Target {
-    Wasm,
+    Wasm32,
     /// MIR → C99 (`dream_mir::backend::c`). Default for `dream run` / `test` / `debug-adapter`.
     NativeC,
 }
@@ -32,8 +34,8 @@ pub struct Compiler {
     /// every runtime helper in the WAT (skips structural dead-function elimination). Release builds
     /// (`--release` / [`Compiler::with_release`]) turn this off for a trimmed, uninstrumented module.
     debug: bool,
-    /// When `true`, the compiler threads source-line info through HIR/MIR and the backend emits
-    /// source-line hooks + a `.dbg.json` source map for the interactive debugger. Off by default;
+    /// When `true`, the compiler threads source-line info through HIR/MIR so the backend can emit
+    /// source-line hooks / line directives for the interactive debugger. Off by default;
     /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
     debug_info: bool,
     /// When set, the emitted `.wasm` is post-processed in place with Binaryen's `wasm-opt` at this
@@ -343,31 +345,26 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let threads = matches!(target, Target::Wasm)
+            let threads = matches!(target, Target::Wasm32)
                 && dream_mir::backend::module_needs_threads(&mir, interner);
-            let (bytes, debug_map): (
-                Vec<u8>,
-                Option<dream_mir::backend::wasm::DebugModule>,
-            ) = match target {
-                Target::Wasm => {
-                    let c = dream_mir::backend::c::emit_c_module_for(
-                        &mir,
-                        interner,
-                        dream_mir::backend::c::CTarget::Wasm32,
-                    );
-                    (c.into_bytes(), None)
-                }
+            let need = dream_mir::runtime::runtime_need_from_mir(&mir);
+            let bytes: Vec<u8> = match target {
+                Target::Wasm32 => dream_mir::backend::c::emit_c_module_for(
+                    &mir,
+                    interner,
+                    dream_mir::backend::c::CTarget::Wasm32,
+                )
+                .into_bytes(),
                 Target::NativeC => {
-                    let c = dream_mir::backend::c::emit_c_module(&mir, interner);
-                    (c.into_bytes(), None)
+                    dream_mir::backend::c::emit_c_module(&mir, interner).into_bytes()
                 }
             };
-            (bytes, debug_map, live_imports, threads)
+            (bytes, live_imports, threads, need)
         }));
         std::panic::set_hook(previous_hook);
         drop(hook_guard);
 
-        let (bytes, debug_map, live_imports, threads) = codegen_result.map_err(|panic_payload| {
+        let (bytes, live_imports, threads, need) = codegen_result.map_err(|panic_payload| {
             let message = panic_message(&panic_payload);
             render_internal_error(&message);
             CompileError::Internal(message)
@@ -384,51 +381,50 @@ impl Compiler {
         fs::write(&c_path, &bytes)?;
         info!("created file: {}", c_path.display());
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
+        // Debug (no `-O`) builds still compile the guest at -O1: naive -O0 C codegen bloats
+        // both clang's own work and the module; -O1 is near-free and keeps iteration fast.
         crate::driver::c_wasm32::compile_c_to_wasm32(
             &c_path,
             &wasm_path,
             threads,
-            self.optimize.unwrap_or(OptLevel::O0),
+            need,
+            self.optimize.unwrap_or(OptLevel::O1),
         )
         .map_err(CompileError::Internal)?;
         info!("created file: {}", wasm_path.display());
-        let wasm_bytes = fs::read(&wasm_path)?;
-        let text = dream_mir::backend::wasm::print_wasm(&wasm_bytes);
-        fs::write(out_path, &text)?;
-        info!("created file: {}", out_path);
 
-        // Emit the debug-info source map next to the `.wat` when debug-info is enabled, so the
-        // interactive debugger can map hook calls back to source lines/variables.
-        if let Some(map) = debug_map {
-            let map_path = debug_map_path(out_path);
-            fs::write(&map_path, map.to_json())?;
-            info!("created debug map: {}", map_path);
-        }
-
-        // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
-
-        // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`).
-        if !self.runtimes.is_empty() {
-            crate::driver::js_runtime::emit_selective_runtimes(
-                out_path,
-                &live_imports,
-                &self.runtimes,
-            )?;
-        }
-
+        // Post-process order matters: wasm-opt first (it drops unknown custom sections), then
+        // embed the ABI custom section, then read the final binary once to print `.wat` — so
+        // the text always mirrors the shipped bytes.
         if let Some(level) = self.optimize {
-            let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
-            // Non-fatal, matching the existing `.wasm` assembly failure handling in
-            // `emit_wasm_and_abi`: the unoptimized `.wasm`/`.wat` are already valid output.
+            // Non-fatal: the unoptimized `.wasm` is already valid output.
             match crate::driver::wasm_opt::optimize_wasm_file(&wasm_path, level) {
                 Ok(()) => info!("optimized file with wasm-opt: {}", wasm_path.display()),
                 Err(e) => warn!("could not run wasm-opt on {}: {}", wasm_path.display(), e),
             }
         }
 
+        // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
+        emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+
         if self.emit_abi {
             crate::driver::abi::embed_abi_in_wasm(out_path)?;
+        }
+
+        let wasm_bytes = fs::read(&wasm_path)?;
+        let text = dream_mir::backend::print_wasm(&wasm_bytes);
+        fs::write(out_path, &text)?;
+        info!("created file: {}", out_path);
+
+        // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`); minified on
+        // optimizing builds.
+        if !self.runtimes.is_empty() {
+            crate::driver::js_runtime::emit_selective_runtimes(
+                out_path,
+                &live_imports,
+                &self.runtimes,
+                self.optimize.is_some(),
+            )?;
         }
 
         Ok(())
@@ -452,17 +448,6 @@ fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
 /// compiler error looks like the rest of the CLI's output rather than a raw Rust panic dump.
 fn render_internal_error(message: &str) {
     eprintln!("error: {}", message);
-}
-
-/// Derives the `.dbg.json` debug-map path that sits next to the compiled `.wat` output.
-fn debug_map_path(out_path: &str) -> String {
-    let path = std::path::Path::new(out_path);
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("out");
-    let parent = path.parent().unwrap_or_else(|| std::path::Path::new(""));
-    parent
-        .join(format!("{}.dbg.json", stem))
-        .to_string_lossy()
-        .into_owned()
 }
 
 /// True when any collected user type carries `@json` (derived converters need `system.json`).

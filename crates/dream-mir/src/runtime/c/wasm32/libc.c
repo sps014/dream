@@ -4,51 +4,55 @@
 
 #include "dream_rt_wasm32.h"
 
+/* `__builtin_memmove`/`__builtin_memset` lower to single `memory.copy` / `memory.fill`
+ * instructions (the module is always compiled with -mbulk-memory; see c_wasm32.rs) — one
+ * trap check instead of a byte loop per element. `memory.copy` has memmove semantics. */
 void *memcpy(void *dst, const void *src, size_t n) {
-    uint8_t *d = (uint8_t *)dst;
-    const uint8_t *s = (const uint8_t *)src;
-    size_t i;
-    for (i = 0; i < n; i++) {
-        d[i] = s[i];
+    if (n) {
+        __builtin_memmove(dst, src, n);
     }
     return dst;
 }
 
 void *memset(void *dst, int c, size_t n) {
-    uint8_t *d = (uint8_t *)dst;
-    size_t i;
-    for (i = 0; i < n; i++) {
-        d[i] = (uint8_t)c;
+    if (n) {
+        __builtin_memset(dst, c, n);
     }
     return dst;
 }
 
 void *memmove(void *dst, const void *src, size_t n) {
-    uint8_t *d = (uint8_t *)dst;
-    const uint8_t *s = (const uint8_t *)src;
-    size_t i;
-    if (d == s || n == 0) {
-        return dst;
-    }
-    if (d < s) {
-        return memcpy(dst, src, n);
-    }
-    i = n;
-    while (i) {
-        i--;
-        d[i] = s[i];
-    }
-    return dst;
+    return memcpy(dst, src, n);
 }
 
 int memcmp(const void *a, const void *b, size_t n) {
     const uint8_t *x = (const uint8_t *)a;
     const uint8_t *y = (const uint8_t *)b;
-    size_t i;
-    for (i = 0; i < n; i++) {
-        if (x[i] != y[i]) {
-            return (int)x[i] - (int)y[i];
+    while (n >= 8) {
+        uint64_t xa;
+        uint64_t ya;
+        __builtin_memcpy(&xa, x, 8);
+        __builtin_memcpy(&ya, y, 8);
+        if (xa != ya) {
+            const uint8_t *xd = (const uint8_t *)&xa;
+            const uint8_t *yd = (const uint8_t *)&ya;
+            int i;
+            for (i = 0; i < 8; i++) {
+                if (xd[i] != yd[i]) {
+                    return (int)xd[i] - (int)yd[i];
+                }
+            }
         }
+        x += 8;
+        y += 8;
+        n -= 8;
+    }
+    while (n--) {
+        if (*x != *y) {
+            return (int)*x - (int)*y;
+        }
+        x++;
+        y++;
     }
     return 0;
 }
@@ -145,7 +149,11 @@ int vsnprintf(char *dst, size_t cap, const char *fmt, va_list ap) {
             fmt++;
             continue;
         }
+        /* Track length modifiers ('ll' / 'z' / 'j' / 't'): wasm varargs keep i64
+         * distinct from i32, so 64-bit args must be read with the right width. */
+        int wide = 0;
         while (*fmt == 'l' || *fmt == 'z' || *fmt == 'j' || *fmt == 't') {
+            wide = 1;
             fmt++;
         }
         switch (*fmt) {
@@ -154,20 +162,22 @@ int vsnprintf(char *dst, size_t cap, const char *fmt, va_list ap) {
             break;
         case 'd':
         case 'i': {
-            int v = va_arg(ap, int);
+            int64_t v = wide ? va_arg(ap, int64_t) : (int64_t)va_arg(ap, int);
             if (v < 0) {
                 append_char(dst, cap, &o, '-');
-                append_u64(dst, cap, &o, (uint64_t)(-(int64_t)v), 0);
+                append_u64(dst, cap, &o, (uint64_t)(-v), 0);
             } else {
                 append_u64(dst, cap, &o, (uint64_t)v, 0);
             }
             break;
         }
         case 'u':
-            append_u64(dst, cap, &o, (uint64_t)va_arg(ap, unsigned), 0);
+            append_u64(dst, cap, &o,
+                       wide ? va_arg(ap, uint64_t) : (uint64_t)va_arg(ap, unsigned), 0);
             break;
         case 'x':
-            append_u64(dst, cap, &o, (uint64_t)va_arg(ap, unsigned), 1);
+            append_u64(dst, cap, &o,
+                       wide ? va_arg(ap, uint64_t) : (uint64_t)va_arg(ap, unsigned), 1);
             break;
         case 'p':
             append_str(dst, cap, &o, "0x");

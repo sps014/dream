@@ -129,19 +129,34 @@ export default { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };
   return out;
 }
 
+/**
+ * Chunk table parsed from runtime/src/chunks.manifest — the single source of truth shared
+ * with src/driver/js_runtime.rs (selective runtimes).
+ */
+function parseChunksManifest() {
+  const text = fs.readFileSync(path.join(SRC_ROOT, "chunks.manifest"), "utf8");
+  const files = {};
+  const fields = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const tokens = line.split(/\s+/);
+    if (tokens[0] === "chunk") {
+      const [, id, file] = tokens;
+      files[id] = file;
+      for (const f of tokens.slice(3)) {
+        const exact = f.startsWith("=");
+        fields.push([exact ? f.slice(1) : f, exact, id]);
+      }
+    }
+  }
+  return { files, fields };
+}
+
+const MANIFEST = parseChunksManifest();
+
 /** Chunk ids → relative source entry factories for selective assembly. */
-export const HOST_CHUNKS = {
-  js: "hosts/js.js",
-  http: "hosts/http.js",
-  fs: "hosts/fs.js",
-  crypto: "hosts/crypto.js",
-  gpu: "hosts/gpu.js",
-  console_process: "hosts/console_process.js",
-  datetime_text: "hosts/datetime_text.js",
-  net_sockets: "hosts/net_sockets.js",
-  workers: "workers.js",
-  env: "hosts/env.js",
-};
+export const HOST_CHUNKS = MANIFEST.files;
 
 /**
  * Map a WASM/ABI import field name to the host chunk id that implements it.
@@ -149,26 +164,8 @@ export const HOST_CHUNKS = {
  */
 export function chunkForImportField(field) {
   if (!field) return null;
-  if (field.startsWith("js")) return "js";
-  if (field.startsWith("http")) return "http";
-  if (field.startsWith("file") || field.startsWith("dir")) return "fs";
-  if (field.startsWith("crypto")) return "crypto";
-  if (field.startsWith("gpu") || field === "__attachGpuAbi") return "gpu";
-  if (field.startsWith("worker")) return "workers";
-  if (field.startsWith("tcp") || field.startsWith("ws")) return "net_sockets";
-  if (
-    field.startsWith("console") ||
-    field.startsWith("process")
-  ) {
-    return "console_process";
-  }
-  if (
-    field.startsWith("unicode") ||
-    field.startsWith("date") ||
-    field.startsWith("time") ||
-    field === "delayMs"
-  ) {
-    return "datetime_text";
+  for (const [name, exact, id] of MANIFEST.fields) {
+    if (exact ? field === name : field.startsWith(name)) return id;
   }
   return null;
 }

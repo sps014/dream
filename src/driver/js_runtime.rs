@@ -2,12 +2,17 @@
 //! `<stem>.node.runtime.js` next to each `.wasm` from the modular sources under `runtime/src/`,
 //! including only the host chunks required by live WASM imports. Opt-in via CLI
 //! `--runtime --web` / `--runtime --node` (both hosts may be requested in one compile).
+//!
+//! The loader itself is the canonical [`runtime/src/load.js`] (same file the full
+//! `runtime/dream.js` bundle uses); this module only picks which chunk files join it and
+//! generates the data-driven `defaultDreamModule` composer. The chunk table lives in
+//! `runtime/src/chunks.manifest`, shared with `scripts/bundle-runtime.mjs`.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Error;
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::driver::abi::LiveImport;
 
@@ -34,59 +39,63 @@ impl JsRuntimeTarget {
     }
 }
 
-const ALWAYS_MODULES: &[&str] = &[
-    "platform.js",
-    "urls.js",
-    "core.js",
-    "instance.js",
-    "marshal.js",
-    "hosts/env.js",
-];
-
-/// Map a Dream host import field to the optional chunk that implements it.
-fn chunk_for_field(field: &str) -> Option<&'static str> {
-    if field.starts_with("js") {
-        Some("js")
-    } else if field.starts_with("http") {
-        Some("http")
-    } else if field.starts_with("file") || field.starts_with("dir") {
-        Some("fs")
-    } else if field.starts_with("crypto") {
-        Some("crypto")
-    } else if field.starts_with("gpu") {
-        Some("gpu")
-    } else if field.starts_with("worker") {
-        Some("workers")
-    } else if field.starts_with("tcp") || field.starts_with("ws") {
-        Some("net_sockets")
-    } else if field.starts_with("console") || field.starts_with("process") {
-        Some("console_process")
-    } else if field.starts_with("unicode")
-        || field.starts_with("date")
-        || field.starts_with("time")
-        || field == "delayMs"
-    {
-        Some("datetime_text")
-    } else {
-        None
-    }
+/// One optional host chunk from `chunks.manifest`.
+struct Chunk {
+    id: String,
+    file: String,
+    /// Host-factory function defined by `file`; `None` when wired elsewhere (`workers`).
+    factory: Option<String>,
+    /// Import-field matchers: `(exact, name)` — prefix match unless `exact`.
+    fields: Vec<(bool, String)>,
 }
 
-fn chunk_file(chunk: &str) -> Option<&'static str> {
-    match chunk {
-        "js" => Some("hosts/js.js"),
-        "http" => Some("hosts/http.js"),
-        "fs" => Some("hosts/fs.js"),
-        "crypto" => Some("hosts/crypto.js"),
-        "gpu" => Some("hosts/gpu.js"),
-        "console_process" => Some("hosts/console_process.js"),
-        "datetime_text" => Some("hosts/datetime_text.js"),
-        "net_sockets" => Some("hosts/net_sockets.js"),
-        "workers" => Some("workers.js"),
-        _ => None,
-    }
+/// Parsed `runtime/src/chunks.manifest`.
+struct Manifest {
+    always: Vec<String>,
+    order: Vec<String>,
+    chunks: Vec<Chunk>,
 }
 
+fn parse_manifest(text: &'static str) -> Manifest {
+    let mut manifest = Manifest {
+        always: Vec::new(),
+        order: Vec::new(),
+        chunks: Vec::new(),
+    };
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut tokens = line.split_whitespace();
+        match tokens.next() {
+            Some("always") => manifest.always.extend(tokens.map(String::from)),
+            Some("order") => manifest.order.extend(tokens.map(String::from)),
+            Some("chunk") => {
+                let (Some(id), Some(file), Some(factory)) =
+                    (tokens.next(), tokens.next(), tokens.next())
+                else {
+                    panic!("malformed chunks.manifest line: {}", line);
+                };
+                manifest.chunks.push(Chunk {
+                    id: id.to_string(),
+                    file: file.to_string(),
+                    factory: (factory != "-").then(|| factory.to_string()),
+                    fields: tokens
+                        .map(|f| {
+                            (
+                                f.starts_with('='),
+                                f.strip_prefix('=').unwrap_or(f).to_string(),
+                            )
+                        })
+                        .collect(),
+                });
+            }
+            other => panic!("unknown chunks.manifest directive {:?}", other),
+        }
+    }
+    manifest
+}
 fn runtime_src_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/src")
 }
@@ -94,9 +103,21 @@ fn runtime_src_dir() -> PathBuf {
 /// Strip ESM imports / rewrite exports so modules can share one scope when concatenated.
 fn transform_module(text: &str, rel: &str) -> String {
     let mut cleaned = String::new();
+    // Multi-line `import { … } from "…";` statements span several lines; skip until the
+    // terminating `;` once one starts.
+    let mut in_import = false;
     for line in text.lines() {
         let trimmed = line.trim_start();
+        if in_import {
+            if trimmed.contains(';') {
+                in_import = false;
+            }
+            continue;
+        }
         if trimmed.starts_with("import ") {
+            if !trimmed.ends_with(';') {
+                in_import = true;
+            }
             continue;
         }
         if trimmed.starts_with("export {") || trimmed.starts_with("export default") {
@@ -121,331 +142,6 @@ fn transform_module(text: &str, rel: &str) -> String {
     }
 
     format!("\n// ----- {} -----\n{}", rel, cleaned.trim())
-}
-
-fn factory_spread(chunks: &BTreeSet<&str>) -> String {
-    let mut parts = Vec::new();
-    if chunks.contains("gpu") {
-        parts.push("    ...makeGpuHost(getInstance),");
-    }
-    if chunks.contains("js") {
-        parts.push("    ...makeJsHost(getInstance),");
-    }
-    if chunks.contains("http") {
-        parts.push("    ...makeHttpHost(),");
-    }
-    if chunks.contains("fs") {
-        parts.push("    ...makeFsHost(),");
-    }
-    if chunks.contains("crypto") {
-        parts.push("    ...makeCryptoHost(),");
-    }
-    if chunks.contains("datetime_text") {
-        parts.push("    ...makeDatetimeTextHost(),");
-    }
-    if chunks.contains("console_process") {
-        parts.push("    ...makeConsoleProcessHost(),");
-    }
-    if chunks.contains("net_sockets") {
-        parts.push("    ...makeNetSocketsHost(),");
-    }
-    if parts.is_empty() {
-        "  return {};".to_string()
-    } else {
-        format!("  return {{\n{}\n  }};", parts.join("\n"))
-    }
-}
-
-fn load_footer(chunks: &BTreeSet<&str>, target: JsRuntimeTarget) -> String {
-    let need_crypto = chunks.contains("crypto");
-    let need_workers = chunks.contains("workers");
-    let need_fs = chunks.contains("fs") || chunks.contains("console_process");
-    let need_child_process = chunks.contains("console_process");
-    let need_net = chunks.contains("net_sockets");
-    let compose = factory_spread(chunks);
-    let is_node = matches!(target, JsRuntimeTarget::Node);
-
-    let crypto_preload = if is_node && need_crypto {
-        r#"
-  try { setNodeCrypto(await import("node:crypto")); } catch (_) {}
-"#
-    } else {
-        ""
-    };
-    let fs_preload = if is_node && need_fs {
-        r#"
-  try { setNodeFs(await import("node:fs")); } catch (_) {}
-"#
-    } else {
-        ""
-    };
-    let child_process_preload = if is_node && need_child_process {
-        r#"
-  try { setNodeChildProcess(await import("node:child_process")); } catch (_) {}
-"#
-    } else {
-        ""
-    };
-    let net_preload = if is_node && need_net {
-        r#"
-  try { setNodeNet(await import("node:net")); } catch (_) {}
-"#
-    } else {
-        ""
-    };
-
-    let workers_spread = if need_workers {
-        "    ...makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate),\n"
-    } else {
-        ""
-    };
-
-    let crypto_wrap = if need_crypto {
-        r#"
-    if (sig && sig.field === "cryptoSecureRandomFill") {
-      return wrapInPlaceByteArrayFill(getInstance, (count) => csprngBytes(count));
-    }
-"#
-    } else {
-        ""
-    };
-
-    let fetch_bytes = if is_node {
-        r#"async function fetchBytes(source) {
-  if (source instanceof ArrayBuffer) return new Uint8Array(source);
-  if (source instanceof Uint8Array) return source;
-  const { readFile } = await import("node:fs/promises");
-  return new Uint8Array(await readFile(source));
-}"#
-    } else {
-        r#"async function fetchBytes(source) {
-  if (source instanceof ArrayBuffer) return new Uint8Array(source);
-  if (source instanceof Uint8Array) return source;
-  if (typeof fetch !== "function") {
-    throw new Error("fetch unavailable; compile with --runtime --node for filesystem loads");
-  }
-  const res = await fetch(source);
-  if (!res.ok) throw new Error(`failed to fetch ${source}: ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
-}"#
-    };
-
-    format!(
-        r#"
-function defaultDreamModule(getInstance) {{
-{compose}
-}}
-
-const FALLBACK_INITIAL_MEMORY_PAGES = 64;
-const FALLBACK_MAX_MEMORY_PAGES = 65536;
-
-{fetch_bytes}
-
-async function loadAbi(abi) {{
-  if (!abi) return null;
-  if (typeof abi === "object" && abi.externs) return abi;
-  const bytes = await fetchBytes(abi);
-  return JSON.parse(new TextDecoder("utf-8").decode(bytes));
-}}
-
-function moduleWantsSharedMemory(wasmModule, desc) {{
-  if (desc && desc.shared) {{
-    return true;
-  }}
-  return WebAssembly.Module.imports(wasmModule).some(
-    (i) =>
-      (i.kind === "memory" && i.module === "env" && i.name === "memory" && i.type && i.type.shared) ||
-      (i.kind === "function" &&
-        i.module === "Dream" &&
-        (i.name === "workerSpawn" ||
-          i.name === "workerPost" ||
-          i.name === "workerRecv" ||
-          i.name === "workerTerminate" ||
-          i.name === "workerPoolSpawn" ||
-          i.name === "workerPoolDispatch")),
-  );
-}}
-
-function memoryIsShared(memory) {{
-  return (
-    typeof SharedArrayBuffer !== "undefined" &&
-    memory.buffer instanceof SharedArrayBuffer
-  );
-}}
-
-function makeLinearMemory(wasmModule) {{
-  const memoryImport = WebAssembly.Module.imports(wasmModule).find(
-    (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
-  );
-  const desc = memoryImport && memoryImport.type;
-  return new WebAssembly.Memory({{
-    initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
-    maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
-    shared: moduleWantsSharedMemory(wasmModule, desc),
-  }});
-}}
-
-async function load(source, options = {{}}) {{
-  const wasmBytes = await fetchBytes(source);
-  const wasmModule = await WebAssembly.compile(wasmBytes);
-  let abi = options.abi;
-  if (!(abi && typeof abi === "object" && abi.externs)) {{
-    abi = readEmbeddedAbi(wasmModule)
-      || await loadAbi(typeof abi === "string" ? abi : replaceArtifactExt(source, ".abi.json"));
-  }}
-{fs_preload}{crypto_preload}{child_process_preload}{net_preload}
-  let instance = null;
-  const getInstance = () => {{
-    if (!instance) throw new Error("instance not ready");
-    return instance;
-  }};
-
-  const importObject = {{ env: defaultEnv(getInstance, options) }};
-  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule);
-  importObject.env.memory = sharedMemory;
-  const stackGate =
-    options.stackGate ??
-    (memoryIsShared(sharedMemory) ? new Int32Array(new SharedArrayBuffer(4)) : null);
-
-  const userImports = options.imports || {{}};
-  const sigByName = new Map();
-  if (abi) for (const e of abi.externs) sigByName.set(e.name, e);
-
-  const builtinDream = {{
-    ...defaultDreamModule(getInstance),
-{workers_spread}  }};
-  if (typeof builtinDream.__attachGpuAbi === "function") {{
-    const hint =
-      typeof source === "string"
-        ? source
-        : typeof options.abi === "string"
-          ? options.abi
-          : null;
-    builtinDream.__attachGpuAbi(abi, hint);
-  }}
-
-  const wrapFor = (fn, sig) => {{
-{crypto_wrap}    return sig && sig.async ? wrapAsyncImport(getInstance, fn, sig) : wrapImport(getInstance, fn, sig);
-  }};
-
-  for (const name of Object.keys(userImports)) {{
-    const sig = sigByName.get(name);
-    const module = sig ? sig.module : "env";
-    const field = sig ? sig.field : name;
-    (importObject[module] ||= {{}})[field] = wrapFor(userImports[name], sig);
-  }}
-
-  if (abi) {{
-    for (const e of abi.externs) {{
-      const bucket = (importObject[e.module] ||= {{}});
-      if (bucket[e.field]) continue;
-      const resolved = (e.module === "Dream" && builtinDream[e.field])
-        ? builtinDream[e.field]
-        : resolveGlobal(e.module, e.field);
-      bucket[e.field] = resolved
-        ? wrapFor(resolved, e)
-        : () => {{
-            throw new Error(`no JS implementation for extern '${{e.name}}' (${{e.module}}.${{e.field}})`);
-          }};
-    }}
-  }}
-
-  // Compiler-emitted imports (e.g. `jsRetain` / `jsRelease`) appear in the WASM module but are not
-  // listed in `.abi.json` — bind any still-missing Dream functions from the host factory.
-  // WASM passes a handle id; marshal `js` so the host sees the registered value.
-  const jsRcSig = {{ params: ["js"], result: "void" }};
-  for (const imp of WebAssembly.Module.imports(wasmModule)) {{
-    if (imp.kind !== "function" || imp.module !== "Dream") continue;
-    const bucket = (importObject.Dream ||= {{}});
-    if (bucket[imp.name]) continue;
-    const resolved = builtinDream[imp.name];
-    const rcSig = (imp.name === "jsRetain" || imp.name === "jsRelease") ? jsRcSig : null;
-    bucket[imp.name] = resolved
-      ? wrapFor(resolved, rcSig)
-      : () => {{
-          throw new Error(`no JS implementation for Dream.${{imp.name}}`);
-        }};
-  }}
-
-  const wasmInstance = await withBootstrapLock(stackGate, async () => {{
-    const inst = await WebAssembly.instantiate(wasmModule, importObject);
-    if (stackGate || options.memory) {{
-      attachGuestStack(inst);
-    }} else if (typeof inst.exports.__runtime_init === "function") {{
-      inst.exports.__runtime_init();
-    }}
-    return inst;
-  }});
-  instance = new DreamInstance(wasmInstance);
-  return instance;
-}}
-
-const WORKER_STACK_BYTES = 65536;
-
-async function withBootstrapLock(gate, fn) {{
-  if (!gate) {{
-    return fn();
-  }}
-  for (;;) {{
-    if (Atomics.compareExchange(gate, 0, 0, 1) === 0) {{
-      break;
-    }}
-    if (typeof Atomics.waitAsync === "function") {{
-      await Atomics.waitAsync(gate, 0, 1, 50).value;
-    }} else {{
-      await new Promise((r) => setTimeout(r, 0));
-    }}
-  }}
-  try {{
-    return await fn();
-  }} finally {{
-    Atomics.store(gate, 0, 0);
-    Atomics.notify(gate, 0);
-  }}
-}}
-
-function guestMalloc(exports, size, tag) {{
-  if (typeof exports.dream_malloc === "function") {{
-    return exports.dream_malloc(size, tag);
-  }}
-  if (typeof exports.malloc === "function") {{
-    return exports.malloc(size, tag);
-  }}
-  return 0;
-}}
-
-function attachGuestStack(wasmInstance) {{
-  const sp = wasmInstance.exports.__stack_pointer;
-  if (!sp) {{
-    if (typeof wasmInstance.exports.__runtime_init === "function") {{
-      wasmInstance.exports.__runtime_init();
-    }}
-    return;
-  }}
-  if (typeof wasmInstance.exports.__runtime_init === "function") {{
-    wasmInstance.exports.__runtime_init();
-  }}
-  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES, 0);
-  if (!ptr) {{
-    throw new Error("failed to allocate a guest stack");
-  }}
-  sp.value = ptr + WORKER_STACK_BYTES;
-  const tls = wasmInstance.exports.__tls_base;
-  if (tls) {{
-    tls.value = ptr;
-  }}
-}}
-
-async function run(source, options = {{}}) {{
-  const mod = await load(source, {{ ...options }});
-  await mod.run();
-  return mod;
-}}
-
-export {{ load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE }};
-export default {{ load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE }};
-"#
-    )
 }
 
 /// Pin `isNode` for the selected host so host chunks take the right branch without probing.
@@ -473,14 +169,15 @@ pub(crate) fn assemble_selective_runtime(
     live_imports: &[LiveImport],
     target: JsRuntimeTarget,
 ) -> Result<String, Error> {
+    let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
     let mut chunks: BTreeSet<&str> = BTreeSet::new();
     for (_module, field) in live_imports {
-        if let Some(c) = chunk_for_field(field) {
+        if let Some(c) = chunk_for_field(&manifest, field) {
             chunks.insert(c);
         }
     }
-    // GPU resources are `js` handles; WAT emits `$js_retain`/`$js_release` even when no other
-    // `js*` bridge survives import pruning.
+    // GPU resources are `js` handles; the module emits `js_retain`/`js_release` even when no
+    // other `js*` bridge survives import pruning.
     if chunks.contains("gpu") {
         chunks.insert("js");
     }
@@ -495,57 +192,118 @@ pub(crate) fn assemble_selective_runtime(
         target.as_str(),
     );
 
-    for rel in ALWAYS_MODULES {
+    for rel in &manifest.always {
         let path = src.join(rel);
         let text = fs::read_to_string(&path)?;
         let mut transformed = transform_module(&text, rel);
-        if *rel == "platform.js" {
+        if rel == "platform.js" {
             transformed = pin_is_node(&transformed, target);
         }
         out.push_str(&transformed);
         out.push('\n');
     }
 
-    for chunk in [
-        "js",
-        "http",
-        "fs",
-        "crypto",
-        "gpu",
-        "console_process",
-        "datetime_text",
-        "net_sockets",
-        "workers",
-    ] {
-        if !chunks.contains(chunk) {
+    for chunk_id in &manifest.order {
+        if !chunks.contains(chunk_id.as_str()) {
             continue;
         }
-        let Some(rel) = chunk_file(chunk) else {
+        let Some(chunk) = manifest.chunks.iter().find(|c| &c.id == chunk_id) else {
             continue;
         };
-        let path = src.join(rel);
+        let path = src.join(&chunk.file);
         let text = fs::read_to_string(&path)?;
-        out.push_str(&transform_module(&text, rel));
+        out.push_str(&transform_module(&text, &chunk.file));
         out.push('\n');
     }
 
-    out.push_str(&load_footer(&chunks, target));
+    // Data-driven host composer over exactly the included chunks (the full-bundle
+    // `hosts.js` references every factory, which would be undefined here).
+    out.push_str("\n// ----- selective Dream host composer -----\n");
+    out.push_str("function defaultDreamModule(getInstance) {\n  const parts = {};\n");
+    for chunk in &manifest.chunks {
+        if !chunks.contains(chunk.id.as_str()) {
+            continue;
+        }
+        if let Some(factory) = &chunk.factory {
+            out.push_str(&format!("  Object.assign(parts, {factory}(getInstance));\n"));
+        }
+    }
+    out.push_str("  return parts;\n}\n");
+
+    let loader = fs::read_to_string(src.join("load.js"))?;
+    out.push_str(&transform_module(&loader, "load.js"));
+    out.push_str(
+        "\nexport { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };\n\
+         export default { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };\n",
+    );
     Ok(out)
 }
 
-/// Writes `<wat_stem>.{web,node}.runtime.js` next to the compiled `.wat` / `.wasm` for each target.
+/// Map a Dream host import field to the optional chunk that implements it.
+fn chunk_for_field<'a>(manifest: &'a Manifest, field: &str) -> Option<&'a str> {
+    for id in &manifest.order {
+        let Some(chunk) = manifest.chunks.iter().find(|c| &c.id == id) else {
+            continue;
+        };
+        for &(exact, ref name) in &chunk.fields {
+            if (exact && field == name) || (!exact && field.starts_with(name.as_str())) {
+                return Some(&chunk.id);
+            }
+        }
+    }
+    None
+}
+
+/// Writes `<wat_stem>.{web,node}.runtime.js` next to the compiled `.wat` / `.wasm` for each
+/// target. Optimizing builds (`-O` / `--release`) minify the emitted JS; a minifier failure
+/// falls back to the readable form rather than failing the compile.
 pub(crate) fn emit_selective_runtimes(
     wat_path: &str,
     live_imports: &[LiveImport],
     targets: &[JsRuntimeTarget],
+    minify: bool,
 ) -> Result<(), Error> {
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
         let text = assemble_selective_runtime(live_imports, target)?;
-        fs::write(&path, text)?;
+        let final_text = if minify {
+            match minify_js_source(&text) {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!("could not minify {}: {}", path.display(), e);
+                    text
+                }
+            }
+        } else {
+            text
+        };
+        fs::write(&path, final_text)?;
         info!("created file: {}", path.display());
     }
     Ok(())
+}
+
+/// Minifies an ES module with the Oxc toolchain (parse → compress/mangle → codegen).
+fn minify_js_source(source: &str) -> Result<String, String> {
+    let allocator = oxc_allocator::Allocator::default();
+    let source_type = oxc_span::SourceType::mjs();
+    let parser_return = oxc_parser::Parser::new(&allocator, source, source_type).parse();
+    if !parser_return.diagnostics.is_empty() {
+        return Err(
+            parser_return
+                .diagnostics
+                .first()
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "parse failed".to_string()),
+        );
+    }
+    let mut program = parser_return.program;
+    oxc_minifier::Minifier::new(oxc_minifier::MinifierOptions::default())
+        .minify(&allocator, &mut program);
+    Ok(oxc_codegen::Codegen::new()
+        .with_options(oxc_codegen::CodegenOptions::default())
+        .build(&program)
+        .code)
 }
 
 #[cfg(test)]
@@ -555,29 +313,27 @@ mod tests {
     #[test]
     fn minimal_print_runtime_omits_gpu_and_fs() {
         let text = assemble_selective_runtime(&[], JsRuntimeTarget::Web).expect("assemble");
-        assert!(!text.contains("makeGpuHost"));
-        assert!(!text.contains("makeFsHost"));
-        assert!(!text.contains("makeCryptoHost"));
+        assert!(!text.contains("makeGpuHost(getInstance)"));
+        assert!(!text.contains("makeFsHost(getInstance)"));
+        assert!(!text.contains("makeCryptoHost(getInstance)"));
         assert!(text.contains("function load("));
         assert!(text.contains("readEmbeddedAbi"));
         assert!(text.contains("const isNode = false;"));
-        assert!(!text.contains("node:fs"));
     }
 
     #[test]
     fn node_target_pins_is_node() {
         let text = assemble_selective_runtime(&[], JsRuntimeTarget::Node).expect("assemble");
         assert!(text.contains("const isNode = true;"));
-        assert!(text.contains("node:fs/promises"));
     }
 
     #[test]
     fn gpu_field_pulls_gpu_chunk() {
         let live = vec![("Dream".into(), "gpuDispatch".into())];
         let text = assemble_selective_runtime(&live, JsRuntimeTarget::Web).expect("assemble");
-        assert!(text.contains("makeGpuHost"));
-        assert!(text.contains("makeJsHost"));
-        assert!(!text.contains("makeFsHost"));
+        assert!(text.contains("makeGpuHost(getInstance)"));
+        assert!(text.contains("makeJsHost(getInstance)"));
+        assert!(!text.contains("makeFsHost(getInstance)"));
     }
 
     #[test]
@@ -595,5 +351,17 @@ mod tests {
         let a = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
         let b = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn manifest_fields_match_previous_prefix_table() {
+        let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
+        assert_eq!(chunk_for_field(&manifest, "jsGlobal"), Some("js"));
+        assert_eq!(chunk_for_field(&manifest, "fileRead"), Some("fs"));
+        assert_eq!(chunk_for_field(&manifest, "dirList"), Some("fs"));
+        assert_eq!(chunk_for_field(&manifest, "delayMs"), Some("datetime_text"));
+        assert_eq!(chunk_for_field(&manifest, "delay"), None);
+        assert_eq!(chunk_for_field(&manifest, "__attachGpuAbi"), Some("gpu"));
+        assert_eq!(chunk_for_field(&manifest, "print_int"), None);
     }
 }

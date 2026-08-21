@@ -14,14 +14,11 @@ dream-abi = { path = "../dream-abi" }
 dream-stdlib = { path = "../dream-stdlib" }
 dream-syntax = { path = "../dream-syntax" }
 indexmap = "2"
-wast = "252.0.0"
-wasm-encoder = "0.252"
 wasmprinter = "0.252"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 bumpalo = "3.20.3"
-wat = "1.252.0"
 dream-sema = { path = "../dream-sema" }
 dream-diagnostics = { path = "../dream-diagnostics" }
 dream-text = { path = "../dream-text" }

@@ -11,7 +11,6 @@ pub mod abi;
 pub mod async_emit;
 pub mod backend;
 pub mod build;
-pub mod debug_schema;
 pub mod lower;
 pub mod passes;
 pub mod print;
@@ -615,9 +614,9 @@ mod tests {
     use dream_types::{DefKind, TypeCtx};
 
     /// Exercises the whole middle/back-end: build typed HIR, lower to a MIR CFG, run the
-    /// optimization pipeline, and emit WAT.
+    /// optimization pipeline, and emit C.
     #[test]
-    fn hir_to_mir_to_optimized_wat() {
+    fn hir_to_mir_to_optimized_c() {
         let mut ctx = TypeCtx::new();
         let def = ctx.register(DefKind::Function, "add", vec![]);
         let int = ctx.interner.int();
@@ -660,9 +659,14 @@ mod tests {
 
         let mut mir = lower_function(&func, &ctx.interner);
         PassManager::default_pipeline().run(&mut mir, &ctx.interner);
-        let wat = super::backend::wasm::emit_function(&mir, &ctx.interner);
-        assert!(wat.contains("(func $add"));
-        assert!(wat.contains("i32.add"), "pipeline output:\n{}", wat);
-        assert!(wat.contains("return"));
+        let program = crate::Mir {
+            functions: vec![mir],
+            ..Default::default()
+        };
+        let c = super::backend::c::emit_c_module(&program, &ctx.interner).into_bytes();
+        let c = String::from_utf8(c).expect("C module is UTF-8");
+        assert!(c.contains("add"), "pipeline output:\n{}", c);
+        assert!(c.contains('+'), "pipeline output:\n{}", c);
+        assert!(c.contains("return"), "pipeline output:\n{}", c);
     }
 }

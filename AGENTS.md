@@ -11,7 +11,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **Determinism is non-negotiable.** Two compiles of the same source must produce byte-identical `.wat`/`.wasm`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
-- **Guest same-module runtime is WAT.** `crates/dream-mir/src/runtime/*.wat` (except linked `regex.wat`) is the source the WASM backend `include_str!`s. Edit those files. Native helpers live under `runtime/c/native/`. The only C→WAT step is PCRE2: edit `runtime/c/regex.c` then `scripts/build-runtime.sh` (wasi-sdk 33 via `dreamer toolchain install wasi-sdk`). Do not add a clang extract pipeline or WAT ident rewriter for core helpers.
+- **The guest runtime is C only.** wasm32 units live under `runtime/c/wasm32/` + shared `runtime/c/native/` (list in `runtime/modules.rs::WASM32_CORE_C`, compiled by wasi-sdk via `src/driver/c_wasm32.rs`); native helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
 
 ## What Dream is
 
@@ -32,7 +32,7 @@ Dream/
 │   ├── dream-abi/                  Shared constants: attributes, intrinsics, JS ABI names
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
-│   └── dream-mir/                  CFG MIR, passes, relooper, backend/{wasm,c}, runtime/*.wat
+│   └── dream-mir/                  CFG MIR, passes, relooper, backend/c (C99 emitter), runtime/c
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
@@ -64,8 +64,8 @@ Dream/
 ```
 .dream source → Lexer (logos) → Parser (recursive descent, arena AST) → Semantic Analyzer
   → Typed HIR (types::TypeCtx feeds it) → MIR lowering (CFG) → Pass manager (opt passes)
-  → Relooper (structured control flow recovery) → binary WASM emit (wasm-encoder) → .wasm
-  → wasmprinter `.wat` + `.abi.json` sidecar
+  → Relooper-informed C99 emission (`backend/c`) → clang/wasm-ld → `.c` + `.wasm`
+  → wasmprinter `.wat` + `.abi.json` sidecar (native targets stop at the `.c` + cc)
 ```
 
 Each arrow is a **total** lowering: the producer records everything the consumer needs, so the consumer never looks backward. Types are interned once (`TypeId`), so equality is `==`, never string comparison/mangling (the old `"Box_int"`-style stringly-typed system is gone — do not reintroduce string-keyed types).
@@ -106,7 +106,7 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 - **Lexer** (`crates/dream-syntax/src/lexer.rs`): tokens only. No syntactic rules, no diagnostics assumptions.
 - **Parser** (`crates/dream-syntax/src/parser/`): builds AST from tokens. No type-checking, no scope enforcement. **Recover-and-continue**: `match_token` synthesizes a placeholder + reports an error instead of bailing; `parse_program`/`parse_block` recover at declaration/statement boundaries. `parse()` *always* returns a `ProgramNode` no matter how malformed the input. Every token-consuming loop needs its `ensure_progress` guard so recovery can't spin forever. Fuzz/property tests in `crates/dream-syntax/src/tests/parser_tests.rs` (`fuzz_*`) lock in "never panics, always returns a ProgramNode" — keep green.
 - **Analyzer** (`crates/dream-sema/`): validates types/scopes/async constraints, emits HIR. Never mutates AST structure, never generates target code (WAT/WASM).
-- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → WASM bytes (pretty-printed WAT via wasmprinter). Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
+- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → C99 (`backend/c`; wasm32 output is then compiled by wasi-sdk, pretty-printed to `.wat` via wasmprinter). Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
 
 ## Backend non-goals
 
@@ -118,7 +118,7 @@ Do not implement these (decision record: `docs/internals/10-stack-alloc-and-mono
 
 Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/internals/11-swift-like-arc-roadmap.md`.
 
-Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll functions keep `$__pc` + `br_table` (suspend/resume).
+Sync functions emit structured C control flow (`while`/`goto` from relooper shapes); async poll functions keep `$__pc` + dispatch (suspend/resume).
 
 ## Error handling model
 
@@ -143,7 +143,7 @@ cargo build --release            # binary at target/release/dream
 # Run a program
 cargo run -- run path/to/file.dream        # compile native C + execute
 cargo run -- path/to/file.dream            # compile to .c (then .bin) / .abi.json
-cargo run -- --backend wasm path/to/file.dream  # compile WAT/WASM only
+cargo run -- --wasm path/to/file.dream         # compile wasm32 (.c + .wasm + .wat) only
 cargo run -- -v run path/to/file.dream     # verbose
 
 # WASM guest stack for `dream run` / e2e (default from `[package.metadata.dream] stack-size`)
@@ -157,12 +157,6 @@ cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node 
 # Full shared JS runtime (edit runtime/src/, then regenerate)
 node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
-
-# Guest WAT: edit crates/dream-mir/src/runtime/*.wat. PCRE2 only:
-# dreamer toolchain install wasi-sdk + wasm2wat; crates/dream-mir/src/runtime/README.md
-# Not invoked by cargo/dream/Windows CI.
-scripts/build-runtime.sh                   # PCRE2 only: writes regex.wat (wasi-sdk; skip on Windows CI)
-scripts/build-runtime.sh --check           # skips if clang has no wasm32
 
 # Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
 # Native C hotpath: scripts/bench-native-c.sh
@@ -214,7 +208,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 
 - **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Default `cargo test --workspace` runs a smoke subset; the full corpus is `cargo test --workspace -- --ignored`.
 - **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes/`relooper`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
-- **Integration test** `dream-mir`'s `hir_to_mir_to_optimized_wat` exercises HIR→MIR lowering→pass pipeline→emit in one shot — fastest signal when touching lowering/passes/emission.
+- **Integration test** `dream-mir`'s `hir_to_mir_to_optimized_c` exercises HIR→MIR lowering→pass pipeline→C emission in one shot — fastest signal when touching lowering/passes/emission.
 - **Determinism test** `codegen_is_deterministic` (`tests/e2e_tests.rs`) compiles the same source twice and asserts byte-identical output. Never break this.
 
 ## Adding a language feature (checklist)
@@ -224,7 +218,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 3. `crates/dream-sema/`: type-check + validate; emit HIR via `hir_emit/`.
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
-6. `crates/dream-mir/src/backend/wasm/`: emit if new lowering is needed. New **same-module runtime helpers** go in `runtime/*.wat`. Native C is `runtime/c/native/` + `backend/c/` (default `dream run`). Regex/PCRE2 is `runtime/c/regex.c` then `scripts/build-runtime.sh`.
+6. `crates/dream-mir/src/backend/c/`: emit if new lowering is needed. New runtime helpers: wasm32 units under `runtime/c/wasm32/` (+ shared `native/`, registered in `runtime/modules.rs::WASM32_CORE_C`); native-only helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
 9. Run the full pre-commit gate above. See `docs/internals/07-adding-a-language-feature.md` for a worked example.
@@ -233,5 +227,5 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 
 - Memory: AST uses `bumpalo` arena allocation — mind lifetimes tied to the `Bump` arena.
 - Avoid `unsafe` unless there's no idiomatic composition available.
-- Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat`/`wast` (WAT text assembly + structural DCE), `reqwest`+`serde_json` (HTTP host fn), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
+- Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat` (dev-dep; parses emitted `.wat` in tests), `reqwest`+`serde_json` (HTTP host fn), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
 - `native` feature (`reqwest`, `serde_json`, `crossterm`, `chrono`, wgpu, …) is excluded from the wasm32 analyzer-only build — keep new native-only deps behind it.

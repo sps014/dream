@@ -2,7 +2,7 @@
 """Parallel golden-corpus probe for `tests/cases/*.dream`.
 
 Default: `dream run` (native C).
-`--node`: compile `--backend wasm` to `target/probe-wasm/{stem}/` and run via Node + `runtime/dream.js`.
+`--node`: compile `--wasm` to `target/probe-wasm/{stem}/` and run via Node + `runtime/dream.js`.
 """
 import json
 import os
@@ -40,11 +40,16 @@ _NODE_SKIP_PREFIXES = (
     "ws_",
     "sqlite",
     "gpu_",
+    # wgpu hosts: no WebGPU under Node.
+    "render_",
+    "compute_",
 )
 _NODE_SKIP_STEMS = {
     "console_read_line",
     "process_args_basic",
     "process_usage",
+    # Asserts `System.platform() == Platform.Native`; true only on the native host.
+    "platform_basic",
 }
 
 
@@ -141,12 +146,6 @@ def node_skip_reason(stem):
         if stem.startswith(p) or stem == p.rstrip("_"):
             return "native-only host"
     return None
-    if stem in _NODE_SKIP_STEMS:
-        return "native-only host"
-    for p in _NODE_SKIP_PREFIXES:
-        if stem.startswith(p) or stem == p.rstrip("_"):
-            return "native-only host"
-    return None
 
 
 def one_node(f: Path):
@@ -159,8 +158,7 @@ def one_node(f: Path):
     wat = dest_dir / f"{stem}.wat"
     compile_cmd = [
         str(dream),
-        "--backend",
-        "wasm",
+        "--wasm",
         "-o",
         str(wat),
         str(f),

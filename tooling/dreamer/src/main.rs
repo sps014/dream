@@ -4,7 +4,7 @@ use dreamer::compile_flags::CompileFlags;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-/// Same `--release` / `-O` / `--backend` tokens as `dream`.
+/// Same `--release` / `-O` / `--wasm` tokens as `dream`.
 #[derive(Args, Clone, Debug, Default)]
 struct OptFlags {
     /// Trimmed build; wasm-opt / cc default `-O3` (`-Os` with `--web`).
@@ -19,14 +19,14 @@ struct OptFlags {
         value_name = "LVL"
     )]
     optimize: Option<String>,
-    /// Compiler backend: `wasm` or `c` (default `c`).
-    #[arg(long, value_name = "KIND")]
-    backend: Option<String>,
+    /// Compile to a wasm32 module instead of a native host.
+    #[arg(long)]
+    wasm: bool,
 }
 
 impl OptFlags {
     fn into_compile_flags(self) -> anyhow::Result<CompileFlags> {
-        CompileFlags::from_cli(self.release, self.optimize, self.backend)
+        CompileFlags::from_cli(self.release, self.optimize, self.wasm)
     }
 }
 

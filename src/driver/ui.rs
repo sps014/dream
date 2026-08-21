@@ -112,16 +112,12 @@ impl Ui {
 
     /// A dim informational note (e.g. the unoptimized-debug-build reminder).
     pub fn note(&self, msg: &str) {
-        eprintln!("{}{}", " ".repeat(LABEL_WIDTH), self.paint(DIM, msg));
+        eprintln!("{}", self.paint(DIM, msg));
     }
 
-    /// An indented `help:` line following an error.
+    /// A `help:` line following an error or note.
     pub fn help(&self, msg: &str) {
-        eprintln!(
-            "{}{}",
-            " ".repeat(LABEL_WIDTH),
-            self.paint(BLUE, &format!("help: {msg}"))
-        );
+        eprintln!("{}", self.paint(BLUE, &format!("help: {msg}")));
     }
 
     pub fn error(&self, msg: &str) {

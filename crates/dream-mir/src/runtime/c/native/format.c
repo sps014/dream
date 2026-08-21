@@ -67,8 +67,25 @@ dream_ptr dream_byte_to_string(int32_t v) {
     return dream_int_to_string(v & 255);
 }
 
+/* Interned `"true"` / `"false"` singletons, pinned immortal (rc == INT32_MAX) because
+ * callers release them through ordinary ARC. */
+static dream_ptr bool_intern[2];
+
+static dream_ptr intern_bool(int32_t v) {
+    dream_ptr slot = bool_intern[v ? 1 : 0];
+    if (!slot) {
+        dream_ptr s = from_utf8(v ? "true" : "false");
+        if (s) {
+            ((int32_t *)dream_p(s))[-1] = INT32_MAX;
+        }
+        bool_intern[v ? 1 : 0] = s;
+        return s;
+    }
+    return slot;
+}
+
 dream_ptr dream_bool_to_string(int32_t v) {
-    return from_utf8(v ? "true" : "false");
+    return intern_bool(v);
 }
 
 dream_ptr dream_char_to_string(int32_t v) {

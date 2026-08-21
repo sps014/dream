@@ -180,6 +180,8 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
         "string_alloc" => "dream_string_alloc".into(),
         "substring" | "string_substring_raw" => "dream_substring".into(),
         "string_builder_push" => "dream_sb_push".into(),
+        "string_builder_push_int" => "dream_sb_push_int".into(),
+        "string_builder_push_long" => "dream_sb_push_long".into(),
         "array_new" => "dream_array_new".into(),
         "array_realloc" => "dream_array_realloc".into(),
         "to_bytes" => "dream_to_bytes".into(),

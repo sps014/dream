@@ -39,9 +39,6 @@ extend string {
     @intrinsic("string_copy_utf8")
     static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void;
 
-    @intrinsic("string_builder_append")
-    static extern fun builder_append(borrow bytes: byte[], count: int, borrow text: string): int;
-
     // UTF-16 lexicographic compare (code-unit order): negative / zero / positive.
     @intrinsic("string_compare")
     static extern fun compare_raw(borrow a: string, borrow b: string): int;

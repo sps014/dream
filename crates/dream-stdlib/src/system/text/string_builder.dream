@@ -6,8 +6,9 @@ public class StringBuilder {
     bytes: byte[];
     // Payload bytes used in `bytes` (always even; two bytes per UTF-16 unit).
     count: int;
-    // UTF-16 code-unit count of the bytes written so far (`.length`).
-    scalars: int;
+    // Backing-buffer capacity in bytes (mirrors `this.bytes.length`; the native fast path
+    // reads this field instead of chasing the array header on every append).
+    cap: int;
 
     // Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
     public constructor(capacity: int = 16) {
@@ -17,12 +18,12 @@ public class StringBuilder {
         }
         this.bytes = Buffer.alloc<byte>(c + 4);
         this.count = 0;
-        this.scalars = 0;
+        this.cap = c + 4;
     }
 
-    // Number of UTF-16 code units appended so far.
+    // Number of UTF-16 code units appended so far (`count` is always even).
     public get length(): int {
-        return this.scalars;
+        return this.count / 2;
     }
 
     // True when nothing has been appended yet.
@@ -34,17 +35,18 @@ public class StringBuilder {
     // Grows the backing buffer to at least `min_capacity` bytes via in-place realloc when possible.
     @inline
     fun grow(min_capacity: int): void {
-        let new_cap = this.bytes.length * 2;
-        if (new_cap < min_capacity + 4) {
-            new_cap = min_capacity + 4;
+        let new_cap = this.cap * 2;
+        if (new_cap < min_capacity) {
+            new_cap = min_capacity;
         }
         this.bytes = Buffer.realloc<byte>(this.bytes, new_cap);
+        this.cap = new_cap;
     }
 
     @inline
     fun ensure(extra: int): void {
         let need = this.count + extra + 4;
-        if (need > this.bytes.length) {
+        if (need > this.cap) {
             this.grow(need);
         }
     }
@@ -54,7 +56,6 @@ public class StringBuilder {
         this.ensure(2);
         Buffer.store16(this.bytes, this.count + 4, u);
         this.count = this.count + 2;
-        this.scalars = this.scalars + 1;
     }
 
     // Appends a Unicode scalar as one or two UTF-16 units.
@@ -75,6 +76,12 @@ public class StringBuilder {
     @intrinsic("string_builder_push")
     static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
 
+    @intrinsic("string_builder_push_int")
+    static extern fun push_int(borrow sb: StringBuilder, n: int): void;
+
+    @intrinsic("string_builder_push_long")
+    static extern fun push_long(borrow sb: StringBuilder, n: long): void;
+
     // Appends every UTF-16 unit of `text`, growing at most once.
     @inline
     public fun append(borrow text: string): void {
@@ -89,38 +96,11 @@ public class StringBuilder {
         this.ensure(byte_len);
         string.copy_utf8(this.bytes, this.count + 4, text, start, byte_len);
         this.count = this.count + byte_len;
-        this.scalars = this.scalars + (byte_len / 2);
     }
 
     // Appends a decimal integer without allocating an intermediate string.
     public fun append_int(n: int): void {
-        if (n == 0) {
-            this.append_char('0');
-            return;
-        }
-        if ((n < 0) && ((n + 2147483647) < 0)) {
-            this.append("-2147483648");
-            return;
-        }
-        let x = n;
-        if (n < 0) {
-            x = 0 - n;
-        }
-        let buf = Buffer.alloc<int>(12);
-        let i = 0;
-        while (x > 0) {
-            buf[i] = 48 + (x % 10);
-            x = x / 10;
-            i = i + 1;
-        }
-        if (n < 0) {
-            this.write_unit(45);
-        }
-        let j = i - 1;
-        while (j >= 0) {
-            this.write_unit(buf[j]);
-            j = j - 1;
-        }
+        StringBuilder.push_int(this, n);
     }
 
     // Appends `"true"` or `"false"` without allocating an intermediate string.
@@ -134,30 +114,7 @@ public class StringBuilder {
 
     // Appends a decimal long without allocating an intermediate string.
     public fun append_long(n: long): void {
-        if (n == 0L) {
-            this.append_char('0');
-            return;
-        }
-        if (n < 0L) {
-            this.append_char('-');
-            if (n == (0L - 9223372036854775807L) - 1L) {
-                this.append("9223372036854775808");
-                return;
-            }
-            n = 0L - n;
-        }
-        let buf = Buffer.alloc<int>(20);
-        let i = 0;
-        while (n > 0L) {
-            buf[i] = 48 + (int)(n % 10L);
-            n = n / 10L;
-            i = i + 1;
-        }
-        let j = i - 1;
-        while (j >= 0) {
-            this.write_unit(buf[j]);
-            j = j - 1;
-        }
+        StringBuilder.push_long(this, n);
     }
 
     // Appends a double via `to_string`.
@@ -175,18 +132,17 @@ public class StringBuilder {
     @inline
     public fun clear(): void {
         this.count = 0;
-        this.scalars = 0;
     }
 
     // Snapshot into a new string. `from_builder` copies once; do not stage through a
     // second `byte[]` (that doubled the finish memcpy).
     public fun build(): string {
         let n = this.count;
-        let sc = this.scalars;
         if (n <= 0) {
             return string.empty;
         }
-        return string.from_builder(this.bytes, n, sc);
+        // `scalars < 0` tells the runtime to derive the unit count from `len`.
+        return string.from_builder(this.bytes, n, -1);
     }
 
     @override public fun to_string(): string {

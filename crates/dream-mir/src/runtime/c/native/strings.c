@@ -3,10 +3,22 @@
 #include <limits.h>
 #include <stdlib.h>
 
+static dream_ptr empty_string_singleton;
+
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
-    if (units < 0) {
-        units = 0;
+    if (units <= 0) {
+        /* Immortal shared empty string: callers release through ordinary ARC, so the
+         * cached block is pinned (rc == INT32_MAX is ignored by retain/release).
+         * Immutable + zero units means sharing is invisible. */
+        if (!empty_string_singleton) {
+            p = dream_malloc(8, TAG_STRING);
+            dream_i32(p)[0] = 0;
+            dream_str_init_owned(p);
+            ((int32_t *)dream_p(p))[-1] = INT32_MAX;
+            empty_string_singleton = p;
+        }
+        return empty_string_singleton;
     }
     p = dream_malloc((int32_t)((size_t)units * 2 + 8), TAG_STRING);
     dream_i32(p)[0] = units;
@@ -33,6 +45,17 @@ dream_ptr dream_array_new(int32_t len, int32_t esize) {
     return p;
 }
 
+/* Builder buffers are never read past `count` before being written, so growing them can
+ * skip `dream_array_realloc`'s zero-fill of the tail (pure waste here). */
+__attribute__((cold, noinline)) static dream_ptr sb_realloc_no_zero(dream_ptr bytes,
+                                                                    int32_t new_cap) {
+    int32_t old_len = bytes ? dream_i32(bytes)[0] : 0;
+    dream_ptr p = dream_realloc(bytes, 4 + new_cap, TAG_ARRAY);
+    dream_i32(p)[0] = new_cap;
+    (void)old_len;
+    return p;
+}
+
 __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes,
                                                               int32_t need) {
     int32_t cap = bytes ? dream_i32(bytes)[0] : 0;
@@ -40,9 +63,10 @@ __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, drea
     if (new_cap < need) {
         new_cap = need;
     }
-    bytes = dream_array_realloc(bytes, new_cap, 1);
+    bytes = sb_realloc_no_zero(bytes, new_cap);
     if (sb) {
         sb->bytes = bytes;
+        sb->cap = new_cap;
     }
     return bytes;
 }

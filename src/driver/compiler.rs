@@ -294,6 +294,16 @@ impl Compiler {
 
         info!("finished semantic analysis");
 
+        // Warnings (e.g. the unowned-field lint, unused locals) render even when the
+        // compile succeeds; errors short-circuit earlier via has_errors().
+        if !diagnostics.diagnostics.is_empty() {
+            render_with(
+                &diagnostics,
+                &acc.file_contents,
+                Some(highlight_dream_line),
+            );
+        }
+
         // Validate GPU shaders (unsupported stmts / stage rules) before MIR so failures don't leave a
         // half-written `.wat` behind a generator error.
         let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);

@@ -108,6 +108,9 @@ See [`GenContext` / `GenSyntaxBlock`](../stdlib/codegen.md#gensyntaxblock) for t
   not collide with identifiers in user scope.
 - Text inside `{ … }` is opaque to the Dream parser until your generator rewrites the site.
 - `{ … }` splices must be valid Dream expressions; they are type-checked after rewrite.
+- Errors inside a replaced site — whether the generated text fails to parse or does not
+  type-check — are reported against the original `introducer { … }` block in your source file,
+  not the replacement text.
 - Every introducer must be claimed by `@syntax_block("…")` on a registered `@generator`.
 
 ## A larger example: HTML

@@ -13,11 +13,6 @@ use std::collections::HashSet;
 use super::syntax_gen::{build_snapshot, parse_harness_output, HarnessError};
 #[cfg(feature = "native")]
 use std::path::{Path, PathBuf};
-#[cfg(feature = "native")]
-use std::sync::Mutex;
-
-#[cfg(feature = "native")]
-const SNAPSHOT_ENV: &str = "DREAM_SYNTAX_GEN_SNAPSHOT";
 
 /// Runs every registered `@generator(ctx: GenContext)` body that claims syntax blocks. Returns
 /// the set of generator names it handled.
@@ -93,8 +88,6 @@ fn run_context_body(
     gen: &RegisteredGenerator,
     snapshot: &str,
 ) -> Result<super::syntax_gen::HarnessOutput, HarnessError> {
-    static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
-    let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
     let gen_path = Path::new(&gen.file_path);
     let Some(dir) = gen_path.parent() else {
@@ -111,8 +104,7 @@ fn run_context_body(
     };
 
     let harness_source = format!(
-        "import system;\nimport system.io;\nimport system.collections;\nimport system.json;\nimport system.codegen;\nimport {stem};\n\nasync fun main(): void {{\n    let path = System.env_or(\"{env}\", \"\");\n    let ctx_res = await GenContext.from_snapshot(path);\n    switch (ctx_res) {{\n        Ok(gen_ctx) => {{\n            {func}(gen_ctx);\n            gen_ctx.finish();\n        }}\n        Err(e) => {{\n            System.println(GenHost.err_marker());\n            System.println(e);\n        }}\n    }}\n}}\n",
-        env = SNAPSHOT_ENV,
+        "import system;\nimport system.io;\nimport system.collections;\nimport system.json;\nimport system.codegen;\nimport {stem};\n\nasync fun main(): void {{\n    let args = System.args();\n    if (args.length < 1) {{\n        System.println(GenHost.err_marker());\n        System.println(\"missing snapshot path argument\");\n        return;\n    }}\n    let ctx_res = await GenContext.from_snapshot(args[0]);\n    switch (ctx_res) {{\n        Ok(gen_ctx) => {{\n            {func}(gen_ctx);\n            gen_ctx.finish();\n        }}\n        Err(e) => {{\n            System.println(GenHost.err_marker());\n            System.println(e);\n        }}\n    }}\n}}\n",
         stem = stem,
         func = gen.name,
     );
@@ -123,11 +115,15 @@ fn run_context_body(
     let c_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
     let snap_file = write_snapshot_tempfile(&gen.name, snapshot).map_err(HarnessError::General)?;
 
-    std::env::set_var(SNAPSHOT_ENV, snap_file.to_string_lossy().as_ref());
     let c_path_str = c_path.to_string_lossy().into_owned();
-    let output = crate::execution::native_c::compile_and_capture(
+    let snap_arg = snap_file.to_string_lossy().into_owned();
+    let output = crate::execution::native_c::compile_and_capture_ex(
         &c_path_str,
         crate::driver::wasm_opt::OptLevel::O3,
+        &[],
+        &[snap_arg.as_str()],
+        None,
+        300,
     )
     .map_err(|e| {
         HarnessError::General(format!(
@@ -135,7 +131,6 @@ fn run_context_body(
             gen.name
         ))
     });
-    std::env::remove_var(SNAPSHOT_ENV);
     let _ = std::fs::remove_file(&snap_file);
     let _ = std::fs::remove_file(&c_path);
 

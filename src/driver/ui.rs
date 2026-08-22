@@ -15,9 +15,6 @@ const BLUE: &str = "\x1b[34m";
 const CYAN: &str = "\x1b[36m";
 const RED: &str = "\x1b[31m";
 
-/// Width the status label column is right-aligned into (cargo's convention).
-const LABEL_WIDTH: usize = 12;
-
 /// True when user-facing CLI output should use ANSI colors (TTY stderr, no `NO_COLOR`).
 pub fn color_enabled() -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
@@ -99,12 +96,10 @@ impl Ui {
         }
     }
 
-    /// One cargo-style progress line: a right-aligned green verb plus its detail.
+    /// One progress line: a bold-green verb plus its detail, flush left.
     pub fn step(&self, label: &str, detail: &str) {
-        let pad = LABEL_WIDTH.saturating_sub(label.len());
         eprintln!(
-            "{}{} {}",
-            " ".repeat(pad),
+            "{} {}",
             self.paint(&format!("{BOLD}{GREEN}"), label),
             detail
         );

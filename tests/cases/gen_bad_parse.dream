@@ -1,0 +1,12 @@
+import system;
+import support.genbad_parse.gen;
+
+fun page(): string {
+    return html {
+        <div>hi</div>
+    };
+}
+
+fun main() {
+    System.println(page());
+}

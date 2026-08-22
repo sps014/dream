@@ -8,6 +8,8 @@ const BOLD: &str = "\x1b[1m";
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const CYAN: &str = "\x1b[36m";
+const BLUE: &str = "\x1b[34m";
+const DIM: &str = "\x1b[2m";
 
 /// True when user-facing diagnostics should use ANSI colors (TTY stderr, no `NO_COLOR`).
 pub fn color_enabled() -> bool {
@@ -47,8 +49,32 @@ pub fn format_diagnostics(
     highlight: Option<fn(&str, bool) -> String>,
 ) -> String {
     let mut out = String::new();
+    // Group diagnostics by file (first-seen file order, within-file order preserved) so
+    // multi-file errors render as one contiguous block per file instead of interleaving
+    // excerpts back and forth.
+    let mut file_order: Vec<Option<String>> = Vec::new();
+    let mut by_file: Vec<Vec<&Diagnostic>> = Vec::new();
+    fn index_of(file: &Option<String>, order: &mut Vec<Option<String>>) -> usize {
+        if let Some(pos) = order.iter().position(|f| f == file) {
+            return pos;
+        }
+        order.push(file.clone());
+        order.len() - 1
+    }
     for diag in &diagnostics.diagnostics {
-        format_one(&mut out, diag, file_contents, color, highlight);
+        let idx = index_of(&diag.file_path, &mut file_order);
+        if by_file.len() <= idx {
+            by_file.resize_with(idx + 1, Vec::new);
+        }
+        by_file[idx].push(diag);
+    }
+    for (i, (_, diags)) in file_order.iter().zip(by_file.iter()).enumerate() {
+        if i > 0 && !out.is_empty() && !out.ends_with("\n\n") {
+            out.push('\n');
+        }
+        for diag in diags {
+            format_one(&mut out, diag, file_contents, color, highlight);
+        }
     }
     out
 }
@@ -128,9 +154,22 @@ fn format_one(
     let squiggly = "^".repeat(squiggly_len);
     let caret = paint(color, &format!("{BOLD}{RED}"), &squiggly);
     out.push_str(&format!(
-        "{:>gutter$} {bar} {padding}{caret}\n\n",
+        "{:>gutter$} {bar} {padding}{caret}\n",
         ""
     ));
+
+    for note in &diag.notes {
+        let label = match note.kind {
+            crate::NoteKind::Help => ("help:", format!("{BOLD}{BLUE}")),
+            crate::NoteKind::Note => ("note:", DIM.to_string()),
+        };
+        out.push_str(&format!(
+            "{} {}\n",
+            paint(color, &label.1, label.0),
+            paint(color, DIM, &note.message)
+        ));
+    }
+    out.push('\n');
 }
 
 #[cfg(test)]

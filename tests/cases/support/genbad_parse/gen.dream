@@ -1,0 +1,13 @@
+module gen;
+
+import system.codegen;
+
+@generator
+@syntax_block("html")
+public fun broken(ctx: GenContext): void {
+    for (let block in ctx.syntax_blocks("html")) {
+        // Emits syntactically invalid Dream so the replacement re-parse fails; the
+        // diagnostic must map back into the user's `html {}` block.
+        ctx.replace(block, "1 + );");
+    }
+}

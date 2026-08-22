@@ -17,6 +17,21 @@ pub struct Diagnostic {
     pub message: String,
     pub span: Option<TextSpan>,
     pub file_path: Option<String>,
+    /// Follow-up lines rendered after the source excerpt (`note:` dim, `help:` blue).
+    pub notes: Vec<DiagnosticNote>,
+}
+
+/// One follow-up line attached to a diagnostic.
+#[derive(Debug, Clone)]
+pub struct DiagnosticNote {
+    pub kind: NoteKind,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteKind {
+    Note,
+    Help,
 }
 
 impl Diagnostic {
@@ -27,6 +42,7 @@ impl Diagnostic {
             message,
             span,
             file_path,
+            notes: Vec::new(),
         }
     }
 
@@ -37,7 +53,26 @@ impl Diagnostic {
             message,
             span,
             file_path,
+            notes: Vec::new(),
         }
+    }
+
+    /// Builder: appends a `help:` follow-up line.
+    pub fn with_help(mut self, message: impl Into<String>) -> Self {
+        self.notes.push(DiagnosticNote {
+            kind: NoteKind::Help,
+            message: message.into(),
+        });
+        self
+    }
+
+    /// Builder: appends a `note:` follow-up line.
+    pub fn with_note(mut self, message: impl Into<String>) -> Self {
+        self.notes.push(DiagnosticNote {
+            kind: NoteKind::Note,
+            message: message.into(),
+        });
+        self
     }
 
     pub fn is_error(&self) -> bool {
@@ -69,6 +104,11 @@ impl DiagnosticBag {
             diagnostics: Vec::new(),
             file_path,
         }
+    }
+
+    /// Reports a pre-built diagnostic (builder-style: `Diagnostic::new(..).with_help(..)`).
+    pub fn report(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
     }
 
     pub fn report_error(&mut self, message: String, span: Option<TextSpan>) {

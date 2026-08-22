@@ -5,7 +5,7 @@ use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionTable;
 use bumpalo::Bump;
 use dream_abi::attributes::{CompileTargets, RuntimeSupport};
-use dream_diagnostics::DiagnosticBag;
+use dream_diagnostics::{Diagnostic, DiagnosticBag};
 use dream_syntax::nodes::types::{mangle_with_suffixes, primitive_type, FUTURE_TYPE};
 use dream_syntax::nodes::{EnumDeclarationNode, ExtendNode};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, ProgramNode, Type};
@@ -61,6 +61,21 @@ fn report(
     span: Option<TextSpan>,
 ) -> SemanticError {
     diagnostics.report_error(message.clone(), span);
+    SemanticError::reported(message, span)
+}
+
+/// Like [`report`], attaching follow-up `help:` lines (e.g. did-you-mean suggestions).
+fn report_with_notes(
+    diagnostics: &mut DiagnosticBag,
+    message: String,
+    span: Option<TextSpan>,
+    notes: Vec<String>,
+) -> SemanticError {
+    let mut diag = Diagnostic::new(message.clone(), span, diagnostics.file_path.clone());
+    for n in notes {
+        diag = diag.with_help(n);
+    }
+    diagnostics.report(diag);
     SemanticError::reported(message, span)
 }
 

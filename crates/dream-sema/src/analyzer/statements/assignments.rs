@@ -250,6 +250,26 @@ impl<'a> Analyzer<'a> {
                 struct_name,
                 field_type,
             } => {
+                // Lint: assigning a freshly constructed object into an `unowned` field is
+                // guaranteed to dangle — the new object has no other owner and dies when
+                // this statement ends. Zero false positives by construction.
+                let is_unowned_field = self
+                    .struct_table
+                    .get_struct(&struct_name)
+                    .and_then(|info| info.fields.get(&member.text))
+                    .map(|f| f.is_unowned)
+                    .unwrap_or(false);
+                if is_unowned_field
+                    && matches!(right, ExpressionNode::FunctionCall(_, _, _))
+                {
+                    diagnostics.report_warning(
+                        format!(
+                            "'{}' does not retain its referent; the object created here is dropped at the end of this statement",
+                            member.text
+                        ),
+                        Some(member.position),
+                    );
+                }
                 // Publish the field's declared type so the right-hand side can infer against it
                 // (e.g. `this.items = []` resolves the empty literal to the field's element type).
                 let saved_expected = self.current_expected_type.take();

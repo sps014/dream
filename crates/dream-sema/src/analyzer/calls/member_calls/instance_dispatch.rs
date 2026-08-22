@@ -294,7 +294,13 @@ impl<'a> Analyzer<'a> {
                 )?;
             } else {
                 let Some(info) = method_info else {
-                    return Err(report(
+                    let suggestions =
+                        suggest_methods(&self.function_table, struct_name, &method.text);
+                    let notes = suggestions
+                        .iter()
+                        .map(|m| format!("similar method exists: '{}.{}'", struct_name, m))
+                        .collect();
+                    return Err(report_with_notes(
                         diagnostics,
                         format!(
                             "Type '{}' has no method '{}'",
@@ -302,6 +308,7 @@ impl<'a> Analyzer<'a> {
                             method.text
                         ),
                         Some(method.position),
+                        notes,
                     ));
                 };
                 let param_names: Vec<String> = info.param_names.iter().skip(1).cloned().collect();
@@ -378,7 +385,13 @@ impl<'a> Analyzer<'a> {
             match self.function_table.get_function(&mangled_name) {
                 Ok(s) => s.clone(),
                 Err(_) => {
-                    return Err(report(
+                    let suggestions =
+                        suggest_methods(&self.function_table, struct_name, &method.text);
+                    let notes = suggestions
+                        .iter()
+                        .map(|m| format!("similar method exists: '{}.{}'", struct_name, m))
+                        .collect();
+                    return Err(report_with_notes(
                         diagnostics,
                         format!(
                             "Type '{}' has no method '{}'",
@@ -386,6 +399,7 @@ impl<'a> Analyzer<'a> {
                             method.text
                         ),
                         Some(method.position),
+                        notes,
                     ));
                 }
             }
@@ -722,4 +736,47 @@ impl<'a> Analyzer<'a> {
             || this_base.starts_with(&format!("{}_", base_name))
             || base_name.starts_with(&format!("{}_", this_base))
     }
+}
+
+/// Case-insensitive close-match suggestions for `did you mean` notes: prefix match or
+/// Levenshtein distance <= 2 over the methods of `struct_name` registered in the table.
+fn suggest_methods(
+    table: &crate::function_table::FunctionTable,
+    struct_name: &str,
+    wanted: &str,
+) -> Vec<String> {
+    let prefix = format!("{struct_name}_"); // method_fn naming: Counter_increment
+    let mut out: Vec<String> = Vec::new();
+    let want = wanted.to_ascii_lowercase();
+    for key in table.functions.keys() {
+        if !key.starts_with(&prefix) {
+            continue;
+        }
+        let m = key[prefix.len()..].to_string();
+        let lm = m.to_ascii_lowercase();
+        if (lm.starts_with(&want) || levenshtein(&lm, &want) <= 2) && !out.contains(&m) {
+            out.push(m);
+        }
+        if out.len() >= 3 {
+            break;
+        }
+    }
+    out.sort();
+    out
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut cur = vec![i + 1];
+        for (j2, cb) in b.iter().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            cur.push((prev[j2] + cost).min(cur[j2] + 1).min(prev[j2 + 1] + 1));
+        }
+        prev = cur;
+        if i > 40 { break; }
+    }
+    *prev.last().unwrap_or(&usize::MAX)
 }

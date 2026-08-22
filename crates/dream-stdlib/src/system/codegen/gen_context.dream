@@ -83,11 +83,11 @@ public class GenContext {
         this.has_error = false;
     }
 
-    // Loads a `GenContext` from the JSON snapshot the host wrote (path from
-    // `DREAM_SYNTAX_GEN_SNAPSHOT`). Mirrors the manual parsing sibling harnesses used to do.
+    // Loads a `GenContext` from the JSON snapshot file the compiler wrote. The path is
+    // passed to the generator harness as its first program argument.
     public static async fun from_snapshot(path: string): Result<GenContext, string> {
         if (path.is_empty()) {
-            return Result.Err("DREAM_SYNTAX_GEN_SNAPSHOT is not set");
+            return Result.Err("snapshot path is empty");
         }
         let text_res = await File.read(path);
         switch (text_res) {

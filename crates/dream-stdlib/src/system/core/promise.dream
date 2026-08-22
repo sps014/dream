@@ -19,4 +19,10 @@ public static class Promise {
     // Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.
     @intrinsic("dream_cancel")
     static extern fun cancel(borrow future: object): void;
+
+    // Explicitly launches a lazy future without awaiting it (fire-and-forget). Futures only run
+    // when awaited, passed to `all`/`any`/`race`, or started here; a never-started future never
+    // executes. Takes the future as `object` (futures are heap refs) like `cancel`.
+    @intrinsic("dream_start")
+    static extern fun start(borrow future: object): void;
 }

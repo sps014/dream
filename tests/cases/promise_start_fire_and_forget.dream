@@ -1,0 +1,16 @@
+// `Promise.start(f)` launches a lazy future without awaiting it (fire-and-forget). The body runs
+// at the next scheduler pass; here that is while `main` is suspended on the timer, so the worker
+// line prints before "done".
+import system;
+
+async fun work(): void {
+    System.println("worker ran");
+}
+
+async fun main(): void {
+    let f = work();
+    System.println("created");
+    Promise.start(f);
+    await Time.sleep(10);
+    System.println("done");
+}

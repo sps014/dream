@@ -356,7 +356,7 @@ A lambda written with an untyped parameter and no surrounding `fun(...)` context
 
 #### Async lambdas
 
-Prefix an arrow lambda with `async` to allow `await` in its body. An async lambda is a first-class value of type `fun(...): Future<T>` — calling it eagerly starts the task and returns a `Future` handle, same as calling a named `async fun`:
+Prefix an arrow lambda with `async` to allow `await` in its body. An async lambda is a first-class value of type `fun(...): Future<T>` — calling it returns a lazy `Future` handle, same as calling a named `async fun` (the body runs on await / `Promise.start` / a combinator):
 
 ```dream
 async fun main(): void {

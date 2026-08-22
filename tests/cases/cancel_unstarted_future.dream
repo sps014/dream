@@ -1,0 +1,13 @@
+// Cancelling a future that has not been started yet means it never executes.
+import system;
+
+async fun work(): void {
+    System.println("never printed");
+}
+
+async fun main(): void {
+    let f = work();
+    Promise.cancel(f);
+    await Time.sleep(5);
+    System.println("cancelled before start");
+}

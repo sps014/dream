@@ -2,7 +2,7 @@
 
 **Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`. HTTP examples need `import system.net;`.
 
-Dream has cooperative concurrency with `async`/`await`. The execution model is **eager**, like JavaScript: calling an `async fun` starts the work immediately and hands you a `Future<T>` handle; `await` retrieves the result.
+Dream has cooperative concurrency with `async`/`await`. The execution model is **lazy**, like Rust: calling an `async fun` constructs a `Future<T>` but does *not* run it. The body executes when the future is first **awaited**, passed to a combinator (`Promise.all` / `any` / `race`), or explicitly launched with `Promise.start`. A future that is never started never runs, and a cancelled-before-start future is simply discarded.
 
 ## Declaring and awaiting
 
@@ -41,7 +41,7 @@ let z = flag && await ready();                  // right side of && / || / ??
 
 ## Running work concurrently
 
-Because calls are eager, you can start several before the first `await` and let them run concurrently, then combine them:
+`await` starts the future it awaits, so a plain `let x = await work();` runs alone. To run several futures concurrently, hand them to a combinator (which starts every member) or launch them explicitly:
 
 ```dream
 import system;
@@ -52,12 +52,24 @@ async fun work(id: int): int {
 }
 
 async fun main(): void {
-    let a = work(2);                         // started now
-    let b = work(3);                         // started now
-    let results = await Promise.all([a, b]); // both ran concurrently -> [4, 9]
+    let a = work(2);                         // constructed, not yet running
+    let b = work(3);                         // constructed, not yet running
+    let results = await Promise.all([a, b]); // starts both -> they run concurrently -> [4, 9]
     System.println(results[0] + ", " + results[1]);
 }
 ```
+
+### Fire-and-forget (`Promise.start`)
+
+`Promise.start(future)` schedules a future on the run loop without awaiting it:
+
+```dream
+let f = logLater();     // nothing runs yet
+Promise.start(f);       // launches it; result is discarded
+await Time.sleep(10);   // give it a chance to run
+```
+
+A future that is neither started nor awaited never executes — dropping it just releases its captured state. `Promise.cancel(f)` before the first start means it never will.
 
 ### Combinators (`Promise`)
 
@@ -86,7 +98,7 @@ src.cancel();
 System.println(tok.check().is_err()); // true → ECANCELLED
 ```
 
-`Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Prefer tokens for app-level checks; native in-flight HTTP cancel remains best-effort (`HttpClient.with_cancellation` + `with_timeout`).
+`Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Cancelling a not-yet-started future means it never runs. Prefer tokens for app-level checks; native in-flight HTTP cancel remains best-effort (`HttpClient.with_cancellation` + `with_timeout`).
 
 ## Async methods
 
@@ -119,7 +131,7 @@ An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — se
 
 ## Awaiting JavaScript promises
 
-An `extern async fun` bridges to a host function that returns a Promise. Dream source never sees the Promise itself:
+An `extern async fun` bridges to a host function that returns a Promise. Like every other future, the bridge is lazy: calling it does *not* invoke the host yet — the call happens when the returned future is first awaited, started, or passed to a combinator. Dream source never sees the Promise itself:
 
 ```dream
 @js("api", "getUser")

@@ -51,7 +51,8 @@ static void *worker_main(void *arg) {
         }
         pthread_mutex_unlock(&w->mu);
         dream_ptr r = dream_worker_invoke(j->fn, j->env, j->msg);
-        dream_release(j->msg);
+        /* Ownership of `j->msg` transferred to the invoked body (string params are taken), which
+         * releases it; releasing here too over-frees the posted wire string. */
         free(j);
         pthread_mutex_lock(&w->mu);
         w->reply = r;

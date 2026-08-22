@@ -588,7 +588,6 @@ mod abi_h_lockstep {
     #[test]
     fn core_js_tags_match_abi_rs() {
         let js = include_str!("../../../runtime/src/core.js");
-        let marshal = include_str!("../../../runtime/src/marshal.js");
         fn js_num(src: &str, key: &str) -> i64 {
             let pat = format!("{key}:");
             for line in src.lines() {
@@ -624,9 +623,5 @@ mod abi_h_lockstep {
         assert_eq!(js_num(js, "BYTE"), TAG_BYTE as i64);
         assert_eq!(js_num(js, "STRUCT_BASE"), TAG_STRUCT_BASE as i64);
         assert_eq!(js_assign(js, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);
-        assert_eq!(
-            js_assign(marshal, "FUTURE_SLOTS_SIZE"),
-            FutureLayout::WASM32.slots as i64
-        );
     }
 }

@@ -229,6 +229,7 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
         "dream_complete" => "dream_async_complete".into(),
         "sleep" => "dream_sleep".into(),
         "dream_cancel" => "dream_cancel".into(),
+        "dream_start" => "dream_start".into(),
         "__promise_all" | "promise_all" | "dream_all" => "dream_all".into(),
         "__promise_any" | "__promise_race" | "promise_any" | "promise_race" | "dream_any" => {
             "dream_any".into()

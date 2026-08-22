@@ -856,6 +856,7 @@ void dream_async_set_waker(dream_ptr future, dream_ptr self);
 void dream_await(dream_ptr parent, dream_ptr child);
 dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind);
 void dream_enqueue(dream_ptr f);
+void dream_start(dream_ptr f);
 void dream_run_loop(void);
 dream_ptr dream_sleep(int32_t ms);
 dream_ptr dream_all(dream_ptr arr, int32_t esize);

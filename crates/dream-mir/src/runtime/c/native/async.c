@@ -32,6 +32,28 @@ static dream_ptr arr_get(dream_ptr arr, int32_t i) {
 void *dream_ft_get(int32_t i);
 static void combinator_progress(dream_ptr w, dream_ptr child);
 
+/* Futures are lazy: constructing one does not run it. It runs when first awaited, started by a
+ * combinator it was passed to, or explicitly scheduled via dream_start (Promise.start). */
+void dream_start(dream_ptr f) {
+    int32_t kind;
+    if (!f || i32_at(f, F_QUEUED)[0] || i32_at(f, F_STATUS)[0]) {
+        return;
+    }
+    kind = i32_at(f, F_KIND)[0];
+    if (kind == KIND_ALL || kind == KIND_ANY) {
+        /* Combinators are passive (no poll fn); starting one starts its members. Members that
+         * are themselves combinators recurse through dream_start above. */
+        dream_ptr kids = ptr_at(f, F_CHILDREN)[0];
+        int32_t n = i32_at(f, F_COUNT)[0];
+        int32_t i;
+        for (i = 0; i < n; i++) {
+            dream_start(arr_get(kids, i));
+        }
+        return;
+    }
+    dream_enqueue(f);
+}
+
 #ifdef DREAM_WASM32
 static int64_t vclock;
 #endif
@@ -144,7 +166,10 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     ptr_at(child, F_WAKER)[0] = parent;
     if (i32_at(child, F_STATUS)[0]) {
         dream_enqueue(parent);
+        return;
     }
+    /* Awaiting a lazy future is what launches it. */
+    dream_start(child);
 }
 
 #ifdef DREAM_WASM32

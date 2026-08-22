@@ -37,10 +37,18 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
     emit_fn_typedefs(&mut m, &cx);
     emit_string_table(&mut m, &cx);
     emit_globals(&mut m, &cx);
-    emit_imports(&mut m, &cx);
-    super::js_marshal::emit_js_marshal(&mut m, &cx);
     let async_n = mir.functions.iter().filter(|f| f.is_async).count();
-    emit_ftable_decl(&mut m, &cx, async_n);
+    let import_async_n = mir
+        .imports
+        .iter()
+        .filter(|i| lazy_import_poll(&cx, i).is_some())
+        .count();
+    // Poll table layout: [0] reserved, [1..functions] sync/async stubs,
+    // [functions+1 .. +async_n] coroutine polls, then deferred-extern polls.
+    let import_poll_base = mir.functions.len() + 1 + async_n;
+    emit_imports(&mut m, &cx, import_poll_base);
+    super::js_marshal::emit_js_marshal(&mut m, &cx);
+    emit_ftable_decl(&mut m, &cx, async_n + import_async_n);
     for f in &mir.functions {
         let (ret, name, params, attr) = proto_parts(&cx, f);
         m.push(Item::Proto {
@@ -63,6 +71,18 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
             );
         }
     }
+    for imp in &mir.imports {
+        if let Some(poll_sym) = lazy_import_poll(&cx, imp) {
+            m.proto(
+                CTy::I32,
+                poll_sym,
+                vec![Param {
+                    ty: CTy::Ptr,
+                    name: "__self".into(),
+                }],
+            );
+        }
+    }
     emit_release_helpers(&mut m, &cx);
     emit_protocol(&mut m, &cx);
     emit_iface_trampolines(&mut m, &cx);
@@ -76,7 +96,7 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
             emit_func(&mut m, &cx, f);
         }
     }
-    emit_ftable_def(&mut m, &cx, async_n);
+    emit_ftable_def(&mut m, &cx, async_n + import_async_n);
     let mut ft_get = FuncBuilder::new(CTy::VoidPtr, "dream_ft_get");
     if cx.target.is_wasm32() {
         ft_get.export = Some(crate::abi::EXPORT_FT_GET.to_string());
@@ -87,7 +107,7 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
             Expr::bin(crate::BinOp::Gt, Expr::id("i"), Expr::i(0)),
             Expr::lt(
                 Expr::id("i"),
-                Expr::i((mir.functions.len() + 1 + async_n) as i64),
+                Expr::i((mir.functions.len() + 1 + async_n + import_async_n) as i64),
             ),
         ),
         Expr::index(Expr::id("dream_ft"), Expr::id("i")),
@@ -124,6 +144,8 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
             "__mf",
             Some(Expr::call("main_dream", main_args)),
         ));
+        // Futures are lazy; the entry point launches async main explicitly.
+        entry.call("dream_start", vec![Expr::id("__mf")]);
     } else {
         entry.call("main_dream", main_args);
     }
@@ -328,13 +350,32 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     } else {
         raw.expr_stmt(Expr::cast(CTy::Void, Expr::id("env")));
     }
-    raw.stmt(Stmt::Return(Some(Expr::IndirectCall {
-        callee: Box::new(Expr::cast(
-            CTy::Ident("dream_fn_ptr__ptr".into()),
-            Expr::index(Expr::id("dream_ft"), Expr::id("fn")),
-        )),
-        args: vec![Expr::id("arg")],
-    })));
+    raw.stmt(Stmt::decl(
+        CTy::Ptr,
+        "__r",
+        Some(Expr::IndirectCall {
+            callee: Box::new(Expr::cast(
+                CTy::Ident("dream_fn_ptr__ptr".into()),
+                Expr::index(Expr::id("dream_ft"), Expr::id("fn")),
+            )),
+            args: vec![Expr::id("arg")],
+        }),
+    ));
+    if cx.target.is_wasm32() {
+        // Worker bodies cross the string wire, so a tag-0 return can only be a lazy Future frame;
+        // launch it so the JS-side F_STATUS polling observes progress. Native returns can be
+        // untagged scalars, so the native path starts futures in `dream_worker_invoke` instead,
+        // where the async fn indices are known exactly.
+        raw.stmt(Stmt::if_(
+            Expr::bin(
+                crate::BinOp::Eq,
+                Expr::call("dream_object_tag", vec![Expr::id("__r")]),
+                Expr::i(0),
+            ),
+            Stmt::call("dream_start", vec![Expr::id("__r")]),
+        ));
+    }
+    raw.stmt(Stmt::Return(Some(Expr::id("__r"))));
     m.push_func(raw);
 
     let mut b = FuncBuilder::new(CTy::Ptr, "dream_worker_invoke");
@@ -362,16 +403,18 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     if !async_indices.is_empty() {
         let mut arms = Vec::new();
         for index in async_indices {
-            arms.push(super::ast::SwitchArm {
-                keys: vec![super::ast::CaseKey::Int(index as i64)],
-                body: vec![
-                    Stmt::call("dream_run_loop", vec![]),
-                    Stmt::Return(Some(Expr::load(
-                        CTy::Ptr,
-                        Expr::ptr_add(Expr::id("result"), Expr::i(result_off)),
-                    ))),
-                ],
-            });
+        arms.push(super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Int(index as i64)],
+            body: vec![
+                // The constructor returned a lazy future; launch it before draining.
+                Stmt::call("dream_start", vec![Expr::id("result")]),
+                Stmt::call("dream_run_loop", vec![]),
+                Stmt::Return(Some(Expr::load(
+                    CTy::Ptr,
+                    Expr::ptr_add(Expr::id("result"), Expr::i(result_off)),
+                ))),
+            ],
+        });
         }
         arms.push(super::ast::SwitchArm {
             keys: vec![],
@@ -386,11 +429,12 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     m.push_func(b);
 }
 
-fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
     if cx.target.is_wasm32() {
         emit_wasm32_js_rc(m);
     }
     let fut = cx.target.abi().future;
+    let mut poll_i = 0usize;
     for imp in &cx.mir.imports {
         if super::c_imports::is_c_import(imp) {
             if cx.target.is_wasm32() {
@@ -435,9 +479,6 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 name: format!("a{i}"),
             })
             .collect();
-        let call_args: Vec<Expr> = (0..imp.params.len())
-            .map(|i| Expr::id(format!("a{i}")))
-            .collect();
         let import_mod = if imp.module.is_empty() {
             js_abi::HOST_MODULE.to_string()
         } else {
@@ -448,6 +489,104 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         } else {
             imp.field.clone()
         };
+        // Async host bridges are lazy like every other future: calling the extern constructs an
+        // unstarted Future carrying the marshaled args; the first poll performs the host call.
+        // On wasm32 the JS wrapper settles the guest-provided future via `__dream_resolve`, so
+        // the import takes the future as its leading argument. Native hosts are blocking calls
+        // that keep their declared signatures; their poll completes the future directly.
+        if async_wrap {
+            let slot_base = fut.slots as i64;
+            let frame_size = slot_base + (params.len() as i64) * 8;
+            let poll_sym = format!("{name}_poll");
+            if cx.target.is_wasm32() {
+                let mut proto_params = vec![Param {
+                    ty: CTy::Ptr,
+                    name: "__f".into(),
+                }];
+                proto_params.extend(params.iter().cloned());
+                m.import_proto(CTy::Void, host.clone(), proto_params, import_mod, import_field);
+            } else if !super::types::native_header_declares(&host) {
+                m.proto(host_ret.clone(), host.clone(), params.clone());
+            }
+
+            let poll_idx = (import_poll_base + poll_i) as i64;
+            poll_i += 1;
+
+            let mut b = FuncBuilder::new(CTy::Ptr, name);
+            b.params = params.clone();
+            b.stmt(Stmt::decl(
+                CTy::Ptr,
+                "__self",
+                Some(Expr::call(
+                    "dream_new_future",
+                    vec![
+                        Expr::i(frame_size),
+                        Expr::i(poll_idx),
+                        Expr::i(crate::abi::FUTURE_KIND_TASK as i64),
+                    ],
+                )),
+            ));
+            for (i, p) in params.iter().enumerate() {
+                b.stmt(Stmt::store(
+                    p.ty.clone(),
+                    Expr::ptr_add(Expr::id("__self"), Expr::i(slot_base + (i as i64) * 8)),
+                    Expr::id(p.name.clone()),
+                ));
+            }
+            b.ret(Some(Expr::id("__self")));
+            m.push_func(b);
+
+            let mut poll = FuncBuilder::new(CTy::I32, poll_sym);
+            poll.param(CTy::Ptr, "__self");
+            poll.stmt(Stmt::decl(
+                CTy::I32,
+                "__st",
+                Some(Expr::load(
+                    CTy::I32,
+                    Expr::ptr_add(Expr::id("__self"), Expr::i(fut.state as i64)),
+                )),
+            ));
+            poll.stmt(Stmt::if_(
+                Expr::bin(crate::BinOp::Ne, Expr::id("__st"), Expr::i(0)),
+                Stmt::Goto("Done".into()),
+            ));
+            let saved_args: Vec<Expr> = (0..params.len())
+                .map(|i| {
+                    Expr::load(
+                        params[i].ty.clone(),
+                        Expr::ptr_add(Expr::id("__self"), Expr::i(slot_base + (i as i64) * 8)),
+                    )
+                })
+                .collect();
+            if cx.target.is_wasm32() {
+                poll.call(
+                    host.clone(),
+                    std::iter::once(Expr::id("__self"))
+                        .chain(saved_args)
+                        .collect(),
+                );
+            } else if host_ret == CTy::Void {
+                poll.call(host.clone(), saved_args);
+                poll.call(
+                    "dream_async_complete",
+                    vec![Expr::id("__self"), Expr::i(0)],
+                );
+            } else {
+                let host_call = Expr::call(host.clone(), saved_args);
+                let as_ptr =
+                    Expr::cast(CTy::Ptr, Expr::cast(CTy::Named("intptr_t"), host_call));
+                poll.call("dream_async_complete", vec![Expr::id("__self"), as_ptr]);
+            }
+            poll.stmt(Stmt::store(
+                CTy::I32,
+                Expr::ptr_add(Expr::id("__self"), Expr::i(fut.state as i64)),
+                Expr::i(1),
+            ));
+            poll.label("Done");
+            poll.ret(Some(Expr::i(0)));
+            m.push_func(poll);
+            continue;
+        }
         if cx.target.is_wasm32() {
             m.import_proto(
                 host_ret.clone(),
@@ -458,41 +597,6 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             );
         } else if !super::types::native_header_declares(&host) {
             m.proto(host_ret.clone(), host.clone(), params.clone());
-        }
-        if async_wrap {
-            let mut b = FuncBuilder::new(CTy::Ptr, name);
-            b.params = params;
-            if cx.target.is_wasm32() {
-                // `wrapAsyncImport` already allocates the host Future; returning a second
-                // completed wrapper made `await` see a string that was actually that Future.
-                b.ret(Some(Expr::cast(CTy::Ptr, Expr::call(host, call_args))));
-            } else {
-                b.stmt(Stmt::decl(
-                    CTy::Ptr,
-                    "__f",
-                    Some(Expr::call(
-                        "dream_new_future",
-                        vec![
-                            Expr::i(fut.slots as i64),
-                            Expr::i(crate::abi::HOST_POLL_INDEX as i64),
-                            Expr::i(crate::abi::FUTURE_KIND_HOST as i64),
-                        ],
-                    )),
-                ));
-                if host_ret == CTy::Void {
-                    b.call(host, call_args);
-                    b.call("dream_async_complete", vec![Expr::id("__f"), Expr::i(0)]);
-                } else {
-                    let host_call = Expr::call(host, call_args);
-                    let as_ptr = Expr::cast(
-                        CTy::Ptr,
-                        Expr::cast(CTy::Named("intptr_t"), host_call),
-                    );
-                    b.call("dream_async_complete", vec![Expr::id("__f"), as_ptr]);
-                }
-                b.ret(Some(Expr::id("__f")));
-            }
-            m.push_func(b);
         }
     }
 }
@@ -536,9 +640,10 @@ fn emit_ftable_decl(m: &mut ModuleBuilder, cx: &Cx<'_>, async_n: usize) {
     });
 }
 
-fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _async_n: usize) {
+fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _ft_extra: usize) {
     let mut b = FuncBuilder::new(CTy::Void, "dream_init_ft");
     b.static_ = true;
+    let coroutine_n = cx.mir.functions.iter().filter(|f| f.is_async).count();
     for f in &cx.mir.functions {
         let i = cx.func_index(f);
         let name = c_ident(&func_symbol(f));
@@ -559,7 +664,30 @@ fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _async_n: usize) {
         );
         async_i += 1;
     }
+    let mut import_i = 0usize;
+    for imp in &cx.mir.imports {
+        if let Some(poll_sym) = lazy_import_poll(cx, imp) {
+            let i = cx.mir.functions.len() + 1 + coroutine_n + import_i;
+            b.assign(
+                Expr::index(Expr::id("dream_ft"), Expr::i(i as i64)),
+                Expr::cast(CTy::VoidPtr, Expr::id(poll_sym)),
+            );
+            import_i += 1;
+        }
+    }
     m.push_func(b);
+}
+
+/// A deferred-extern poll symbol for `imp`, or `None` when the import is not an async host bridge
+/// (C FFI imports keep their synchronous wrappers).
+fn lazy_import_poll(cx: &Cx<'_>, imp: &dream_hir::HImport) -> Option<String> {
+    if super::c_imports::is_c_import(imp) || !super::types::import_is_async_future(cx.mir, imp) {
+        return None;
+    }
+    Some(format!(
+        "{}_poll",
+        super::types::import_call_name(cx.mir, imp)
+    ))
 }
 
 fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
@@ -680,7 +808,6 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
             ));
         }
     }
-    stub_fn.call("dream_enqueue", vec![Expr::id("__self")]);
     stub_fn.ret(Some(Expr::id("__self")));
     m.push_func(stub_fn);
 

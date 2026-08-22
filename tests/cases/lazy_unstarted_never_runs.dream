@@ -1,0 +1,15 @@
+// Futures are lazy: calling an `async fun` constructs a `Future<T>` but does not run it.
+// The body executes only when the future is awaited (or started via `Promise.start`).
+import system;
+
+async fun work(n: int): int {
+    System.println("work " + n.to_string());
+    return n * 2;
+}
+
+async fun main(): void {
+    let f = work(21);
+    System.println("created");
+    let v = await f;
+    System.println("got " + v.to_string());
+}

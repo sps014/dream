@@ -108,10 +108,6 @@ export function wrapInPlaceByteArrayFill(getInstance, fillBytes) {
   };
 }
 
-// Future heap kinds/sizes (mirrors src/mir/async_emit.rs).
-export const FUTURE_KIND_HOST = 1;
-export const FUTURE_SLOTS_SIZE = 64; // F_SLOTS: a host future has no saved-locals region.
-
 const runLoopPumps = new WeakMap();
 
 /**
@@ -148,10 +144,11 @@ export function pumpRunLoop(inst) {
 }
 
 /**
- * Wraps an `extern async` import. The JS implementation returns a Promise; the wrapper
- * synchronously allocates a host `Future` and hands its pointer back to Dream, then resolves it
- * (and re-pumps the scheduler) once the Promise settles. This is the only place the JS `.then`
- * bridge lives - Dream source never sees a Promise.
+ * Wraps an `extern async` import. The guest allocates a lazy Future for each call and only
+ * invokes the import from that future's first poll, passing the future as the leading argument;
+ * the wrapper marshals the remaining args, kicks off the host Promise, and settles the
+ * guest-provided future (re-pumping the scheduler) when it resolves. This is the only place the
+ * JS `.then` bridge lives - Dream source never sees a Promise.
  */
 export function wrapAsyncImport(getInstance, fn, signature) {
   const params = signature ? signature.params : null;
@@ -165,14 +162,10 @@ export function wrapAsyncImport(getInstance, fn, signature) {
       ? TAG_ULONG
       : null;
 
-  return (...rawArgs) => {
+  return (future, ...rawArgs) => {
     const inst = getInstance();
     const exports = inst.exports;
-    if (typeof exports.__dream_new_future !== "function") {
-      throw new Error("module does not export the async runtime; cannot bridge an extern async import");
-    }
     const args = marshalArgs(inst, params, rawArgs);
-    const future = exports.__dream_new_future(FUTURE_SLOTS_SIZE, -1, FUTURE_KIND_HOST);
     const settle = (rawResult) => {
       const marshaled = boxTag != null
         ? boxLong64(inst, rawResult, boxTag)
@@ -190,7 +183,6 @@ export function wrapAsyncImport(getInstance, fn, signature) {
         settle(null);
       },
     );
-    return future;
   };
 }
 

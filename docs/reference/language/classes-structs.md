@@ -236,7 +236,7 @@ Prefix a `class` with `@shared` to make it a **shared** reference type — Dream
 - **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a `@shared` instance's refcount can be touched from more than one thread.
 - **An extra header word** reserved for a reentrant lock, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking.
 
-A type is **`shared`** (and may be captured by a [`WebWorker`](webworkers.md) body, or stored in an `@shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or an `@shared class`. `T[]`, `List<T>`, and ordinary classes are not. Constrain generics with `T : shared`.
+A type is **`shared`** (and may be captured by a [`WebWorker`](webworkers.md) body, or stored in an `@shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or an `@shared class`. Constrain generics with `T : shared`.
 
 ```dream
 @shared
@@ -253,15 +253,28 @@ class Counter {
 }
 ```
 
-**The closed-graph field rule:** every field of an `@shared class` must itself be `shared`. This is enforced at compile time so there is no way to reach an unprotected, ordinary managed reference by following fields from a `@shared` object.
+**The closed-graph field rule:** every field of an `@shared class` must be either `shared`, or a **managed heap reference** — another ordinary class, an array (`int[]`, `Job[]`), `List<T>`, a union like `Option<Plain>` — whose whole reachable graph then joins this object's shared region. Such fields use the same `lock` discipline as every other field; there are no per-field access rules. What is rejected is anything that would smuggle an *untracked* reference in: a value struct embedding a non-shared class field, or a generic argument that could be one.
 
 ```dream
 class Plain { public x: int; }
 
 @shared
+class Holder {
+    // legal: managed heap references — the graph below `h` is part of the shared object
+    public p: Option<Plain>;
+    public xs: int[];
+
+    fun new() { this.p = Option.None; this.xs = []; }
+}
+
+struct Wrap {
+    public p: Plain;   // value struct embedding a non-shared class
+}
+
+@shared
 class Bad {
-    // error: field 'p' of type 'Plain' is not shared
-    public p: Plain;
+    // error: 'Wrap' is a value struct containing a non-shared reference
+    public w: Wrap;
 }
 ```
 

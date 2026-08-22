@@ -85,6 +85,25 @@ impl<'a> super::Analyzer<'a> {
             .any(|p| p.name.text == name && !p.is_ref && !p.is_borrow && p.name.text != "this")
     }
 
+    /// True when `ty` is a managed heap value that can cross a thread boundary by pointer
+    /// hand-off (single-owner move): non-value class instances, arrays, unions, interfaces, and
+    /// the `object` top type. Value structs are inline copies, not heap refs, so they don't
+    /// transfer; blittables and strings are already `shared`.
+    pub(super) fn type_is_transferable_managed(&mut self, ty: &Type) -> bool {
+        if ty.is_unknown() {
+            return false;
+        }
+        let tid = self.type_ctx.lower(ty);
+        match self.type_ctx.interner.kind(tid) {
+            dream_types::TyKind::Array(_)
+            | dream_types::TyKind::Object
+            | dream_types::TyKind::Union(_, _)
+            | dream_types::TyKind::Interface(_, _) => true,
+            dream_types::TyKind::Struct(def, _) => !self.type_ctx.interner.is_value_def(*def),
+            _ => false,
+        }
+    }
+
     fn type_is_rc_tracked(&mut self, ty: &Type) -> bool {
         let id = self.type_ctx.lower(ty);
         self.type_ctx.interner.is_rc_tracked(id)

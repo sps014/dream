@@ -1,1 +1,0 @@
-cannot capture 'nums' of type 'int[]' in a `WebWorker.spawn` body: 'int[]' is not shared — mark the class '@shared', or capture a blittable value, string, or a struct of those

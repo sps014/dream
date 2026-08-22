@@ -113,14 +113,24 @@ The `body` argument follows the same capture rules as `spawn`.
 
 ## Sharing state safely
 
-A worker body may be a **capturing lambda** — as long as everything it captures is `shared`:
+A worker body may be a **capturing lambda** — as long as everything it captures is either `shared` or **moved**:
 
 - a blittable / unmanaged local,
 - a `string`,
-- a value struct of `shared` fields, or
-- an **`@shared class`** instance.
+- a value struct of `shared` fields,
+- an **`@shared class`** instance (captured by reference, guarded by its lock word), or
+- a **managed heap value moved by pointer hand-off** — an ordinary class instance, an array (`int[]`, `Job[]`), `List<T>`, … Workers share the parent's linear memory, so the move is zero-copy: the object's ownership transfers and **the sender's binding cannot be used afterwards** (a use after the move is a compile error until it is reassigned).
 
-Ordinary managed captures are a compile-time error — mark the class `@shared`, or pass blittable/`string` pieces.
+What stays rejected: anything that would copy a non-shared *reference* across the boundary without transferring ownership — e.g. a value struct embedding an ordinary class field.
+
+```dream
+async fun main(): void {
+    let nums = [1, 2, 3];
+    let r = WebWorker.spawn(() => nums.length);   // nums moves into the worker
+    // System.println(nums.length);               // error: use of 'nums' after move
+    System.println(await r);                      // 3
+}
+```
 
 ```dream
 @shared

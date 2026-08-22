@@ -118,7 +118,7 @@ Because the parser emits `Type::Struct` for *any* bare identifier (structs, unio
 
 The analyzer marks a class def as `@shared` when it carries the `@shared` attribute (`TypeInterner::mark_shared_def` / `is_shared_def`). That flag is load-bearing in three places downstream:
 
-1. **Field validation** — every field of an `@shared` class must be unmanaged or itself `@shared` (closed-graph rule; see `check_shared_field` in `src/semantics/analyzer/declarations/structs.rs`).
+1. **Field validation** — every field of an `@shared` class must be unmanaged, itself `@shared`, or a managed heap reference whose graph joins the shared region (relaxed closed-graph rule; see `check_shared_field` in `crates/dream-sema/src/analyzer/declarations/structs.rs`, re-checked per monomorphization for generic classes).
 2. **Layout** — `@shared` allocations are four bytes larger than the equivalent non-`@shared` class to hold a reentrant lock word past the last field (`HEADER_LOCK_WORD_SIZE` in `src/mir/abi.rs`; zero-initialized in `Rvalue::New` emission).
 3. **Backend RC** — retain/release codegen selects atomic helpers for `@shared` types only (`retain_sym` / `release_sym` in `crates/dream-mir/src/backend/c/release.rs`).
 

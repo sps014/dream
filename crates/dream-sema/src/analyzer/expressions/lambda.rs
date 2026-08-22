@@ -529,9 +529,23 @@ impl<'a> Analyzer<'a> {
             ));
         }
 
+        let mut move_captures: Vec<String> = Vec::new();
         if self.is_webworker_body_call() {
-            if let Some((bad, bad_ty)) = captures.iter().find(|(_, ty)| {
-                !self.type_satisfies_kind(ty, dream_syntax::nodes::ConstraintKind::Shared)
+            // Worker bodies run on another thread sharing linear memory. A non-shared capture
+            // cannot be aliased across that boundary unless it is *transferred*: a managed heap
+            // value (`Job`, `int[]`, `List<Job>`, …) moves by pointer hand-off and its sender-side
+            // binding dies here. Anything else that isn't `shared` stays rejected.
+            for (name, ty) in &captures {
+                if self.type_satisfies_kind(ty, dream_syntax::nodes::ConstraintKind::Shared) {
+                    continue;
+                }
+                if self.type_is_transferable_managed(ty) {
+                    move_captures.push(name.clone());
+                }
+            }
+            if let Some((bad, bad_ty)) = captures.iter().find(|(name, ty)| {
+                !move_captures.contains(name)
+                    && !self.type_satisfies_kind(ty, dream_syntax::nodes::ConstraintKind::Shared)
             }) {
                 self.hir_none();
                 let who = self
@@ -542,7 +556,7 @@ impl<'a> Analyzer<'a> {
                 return Err(report(
                     diagnostics,
                     format!(
-                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class '@shared', or capture a blittable value, string, or a struct of those",
+                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class '@shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)",
                         bad,
                         pretty,
                         who,
@@ -642,6 +656,11 @@ impl<'a> Analyzer<'a> {
             })
             .collect();
         let func_ty = Type::Function(func_ty_params, Box::new(box_ret.clone()));
+        // The lambda literal is the transfer point: from here on, moved captures are owned by
+        // the worker body and any later use of the sender-side binding is a use-after-move.
+        for name in move_captures {
+            self.moved_locals.insert(name);
+        }
         match captures.len() {
             0 => self.hir_set_func_value(&name, &func_ty, &box_ret),
             1 => {

@@ -1,0 +1,27 @@
+// Capturing a *value struct* that embeds a non-shared class is still an error: the struct
+// copies by value into the closure env, so its inner heap pointer would be aliased across
+// threads (unlike a direct managed-heap capture, which moves).
+
+class Counter {
+    public value: int;
+
+    public constructor() {
+        this.value = 0;
+    }
+}
+
+struct Wrap {
+    public counter: Counter;
+
+    public constructor(c: Counter) {
+        this.counter = c;
+    }
+}
+
+async fun main(): void {
+    let wrap = Wrap(Counter());
+
+    let _ = await WebWorker.spawn(() => {
+        return wrap.counter.value;
+    });
+}

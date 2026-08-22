@@ -106,9 +106,11 @@ impl<'a> Analyzer<'a> {
 
         // `@shared class` closed-graph rule: every field must be safe to access from another
         // thread without going through this class's own lock — either unmanaged/value-typed
-        // (copied, no shared heap pointer) or itself another `@shared` type (guarded by its own
-        // lock). Run once every non-generic class's `is_shared`/fields are registered above, so a
-        // field referencing another `@shared` class declared later in the same file still resolves.
+        // (copied, no shared heap pointer), itself another `@shared` type (guarded by its own
+        // lock), or a managed heap reference whose whole graph joins this object's shared
+        // region (accessed under the same `lock` discipline). Run once every non-generic
+        // class's `is_shared`/fields are registered above, so a field referencing another
+        // `@shared` class declared later in the same file still resolves.
         for struct_decl in node.structs.iter() {
             if struct_decl.generic_parameters.is_some() {
                 continue;
@@ -120,8 +122,9 @@ impl<'a> Analyzer<'a> {
             {
                 continue;
             }
+            let owner_name = struct_decl.name.text.clone();
             for field in &struct_decl.fields {
-                self.check_shared_field(&struct_decl.name.text, field, diagnostics);
+                self.check_shared_field(&owner_name, field, diagnostics);
             }
         }
 
@@ -182,8 +185,13 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Reports an error unless `field`'s type is `shared` (Sendable analogue: unmanaged, `string`,
-    /// a value struct of shared fields, or another `@shared` type).
+    /// Classifies one field of an `@shared class`. Shared-typed fields are ordinary. A
+    /// non-shared field whose type is a managed heap reference (another class, an array like
+    /// `int[]`, `List<T>`, a union such as `Option<Job>`, …) is also allowed: the object's whole
+    /// reachable graph is treated as shared once inside an `@shared class`, so such fields are
+    /// accessed under the same `lock` discipline as every other field — no per-field rules.
+    /// Anything else (a value struct embedding a non-shared reference, unresolved generics) is
+    /// rejected.
     fn check_shared_field(
         &mut self,
         owner_name: &str,
@@ -196,15 +204,75 @@ impl<'a> Analyzer<'a> {
         ) {
             return;
         }
+        if self.shared_graph_field_ok(&field.field_type, 0, &field.name.position, diagnostics) {
+            return;
+        }
         diagnostics.report_error(
             format!(
-                "field '{}' of '@shared class {}' has type '{}', which is not shared: an '@shared class' may only hold blittable values, string, structs of shared fields, or other '@shared' types",
+                "field '{}' of '@shared class {}' has type '{}', which is not shared: an '@shared class' may only hold blittable values, string, structs of shared fields, other '@shared' types, or managed heap types ('Option<T>', arrays, classes) accessed under 'lock'",
                 field.name.text,
                 owner_name,
                 self.ty_display(&field.field_type)
             ),
             Some(field.name.position),
         );
+    }
+
+    /// True when a value of type `ty` may live inside an `@shared class`'s shared region:
+    /// either `shared`, a non-value class instance (whole object joins the graph), or an
+    /// array/union/value-struct whose element/payload/field types are themselves joinable.
+    /// The recursion is what blocks smuggling: `Option<Wrap>` where `Wrap` is a value struct
+    /// embedding a non-shared class would copy an untracked pointer into the shared object.
+    fn shared_graph_field_ok(
+        &mut self,
+        ty: &Type,
+        depth: u32,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) -> bool {
+        if depth > 8 || self.type_satisfies_kind(ty, dream_syntax::nodes::ConstraintKind::Shared) {
+            return depth <= 8;
+        }
+        match ty {
+            Type::Array(elem) => self.shared_graph_field_ok(elem, depth + 1, position, diagnostics),
+            Type::Struct(token, args) => {
+                let mangled = ty.get_type();
+                if let Some(info) = self.struct_table.get_struct(&mangled) {
+                    // A reference class joins wholesale; a value struct's inline fields must
+                    // each be joinable (their bytes — including embedded pointers — are copied).
+                    if !info.is_value {
+                        return true;
+                    }
+                    let field_types: Vec<Type> =
+                        info.fields.values().map(|f| f.type_.clone()).collect();
+                    return field_types
+                        .iter()
+                        .all(|f| self.shared_graph_field_ok(f, depth + 1, position, diagnostics));
+                }
+                if self.union_table.contains_key(&mangled) {
+                    let base = token.text.clone();
+                    let arg_types = args.clone().unwrap_or_default();
+                    self.ensure_union_instantiated(&base, &arg_types, position, diagnostics);
+                    let payload_types: Vec<Type> = self
+                        .union_table
+                        .get(&mangled)
+                        .map(|info| {
+                            info.variants
+                                .iter()
+                                .flat_map(|v| v.fields.iter().map(|f| f.type_.clone()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    return payload_types
+                        .iter()
+                        .all(|f| self.shared_graph_field_ok(f, depth + 1, position, diagnostics));
+                }
+                // Unresolvable here (not yet instantiated / unknown): don't block registration;
+                // later concrete uses go through their own checks.
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Reports an error if `field`'s type is a `ref struct` — such a type cannot be stored as a
@@ -446,6 +514,20 @@ impl<'a> Analyzer<'a> {
 
         if let Err(e) = self.struct_table.add_struct(new_decl_ref) {
             diagnostics.report_error(e, Some(*position));
+        }
+
+        // The closed-graph rule runs per monomorphization for generic `@shared class`es: whether a
+        // field like `payload: T` is shared, transfer-only (`Option<T>`), or rejected is only
+        // decidable once `T` is concrete.
+        if template
+            .attributes
+            .iter()
+            .any(|a| a.name.text == "shared")
+        {
+            let owner = mangled_name.clone();
+            for field in &new_decl_ref.fields {
+                self.check_shared_field(&owner, field, diagnostics);
+            }
         }
 
         // Value-struct soundness is checked per instantiation (the template's fields are generic, so

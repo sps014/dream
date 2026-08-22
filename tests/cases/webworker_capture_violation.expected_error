@@ -1,1 +1,0 @@
-cannot capture 'counter' of type 'Counter' in a `WebWorker.spawn` body: 'Counter' is not shared — mark the class '@shared', or capture a blittable value, string, or a struct of those

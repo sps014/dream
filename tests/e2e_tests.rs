@@ -452,8 +452,7 @@ fn run_wasm_js_smoke_e2e() {
 #[test]
 fn wasm_js_compile_errors_match_native() {
     for stem in [
-        "webworker_capture_violation",
-        "webworker_array_capture",
+        "webworker_value_struct_capture_violation",
         "js_capturing_lambda_func",
         "js_capturing_lambda_slot",
     ] {

@@ -528,6 +528,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             "system.collections",
             "system.text",
             "system.json",
+            "system.encoding",
         ],
         files: &[
             (

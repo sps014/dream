@@ -27,12 +27,17 @@ Native uses the host HTTP client (reqwest in `libdream`); browser and Node use `
 | `with_http_version(1 or 2)` | native only |
 | `with_cookie_jar(jar)` | cookies |
 | `with_cancellation(token)` | cooperative cancel |
-| `await text(path)` | GET, body as string |
-| `await get` / `get_with` / `get_json` / `post` / `post_json` / `put` / `patch` / `delete` / `head` | full response |
+| `await text(path)` / `get_bytes(path)` | GET, body as string / bytes |
+| `await get` / `get_with` / `get_json` | full response |
+| `await post` / `post_with` / `post_json` / `post_form(path, Map<string,string>)` | POST; `_json` sends `application/json`, `_form` sends percent-encoded `application/x-www-form-urlencoded` |
+| `await put` / `put_with` / `put_json` / `patch` / `patch_with` / `patch_json` | PUT/PATCH; `_json` variants send `application/json` |
+| `await delete` / `delete_with` / `head` | DELETE/HEAD |
 | `await request(method, path, body, headers)` | custom |
 | `await post_bytes` / `put_bytes` / `request_bytes` | binary body |
 | `await post_multipart(path, form)` | multipart |
 | `await get_stream` / `request_stream` | chunked body |
+
+Per-call headers override client defaults from `set_header` on a name collision; all other defaults are always sent.
 
 ## Response and helpers
 

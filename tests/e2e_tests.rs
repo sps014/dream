@@ -67,6 +67,104 @@ fn spawn_tcp_echo() -> (u16, thread::JoinHandle<()>) {
     (port, handle)
 }
 
+struct MockRequest {
+    method: String,
+    path: String,
+    x_tag: Option<String>,
+    content_type: Option<String>,
+    body: String,
+}
+
+/// Reads one HTTP/1.1 request (head + Content-Length framed body); `None` on EOF/error.
+fn read_http_request(stream: &mut std::net::TcpStream) -> Option<MockRequest> {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 1024];
+    let head_end = loop {
+        if let Some(pos) = buf
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+        {
+            break pos;
+        }
+        let n = stream.read(&mut chunk).ok()?;
+        if n == 0 {
+            return None;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    };
+    let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
+    let mut lines = head.split("\r\n");
+    let request_line = lines.next().unwrap_or_default();
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default().to_string();
+    let path = parts.next().unwrap_or_default().to_string();
+    let mut content_length = 0usize;
+    let mut x_tag = None;
+    let mut content_type = None;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        match name.to_ascii_lowercase().as_str() {
+            "content-length" => content_length = value.parse().unwrap_or(0),
+            "x-tag" => x_tag = Some(value.to_string()),
+            "content-type" => content_type = Some(value.to_string()),
+            _ => {}
+        }
+    }
+    let mut body = buf[head_end + 4..].to_vec();
+    while body.len() < content_length {
+        let n = stream.read(&mut chunk).ok()?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..n]);
+    }
+    body.truncate(content_length);
+    Some(MockRequest {
+        method,
+        path,
+        x_tag,
+        content_type,
+        body: String::from_utf8_lossy(&body).to_string(),
+    })
+}
+
+/// Loopback HTTP mock: echoes `METHOD path|x-tag|content-type|body` as the response body.
+/// `/bytes` serves a fixed binary payload instead. Handles sequential requests forever.
+fn spawn_http_mock() -> (u16, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback http");
+    let port = listener.local_addr().expect("http local addr").port();
+    let handle = thread::spawn(move || {
+        while let Ok((mut stream, _)) = listener.accept() {
+            while let Some(req) = read_http_request(&mut stream) {
+                let body = if req.path == "/bytes" {
+                    "bin-data-01".to_string()
+                } else {
+                    format!(
+                        "{} {}|{}|{}|{}",
+                        req.method,
+                        req.path,
+                        req.x_tag.as_deref().unwrap_or("-"),
+                        req.content_type.as_deref().unwrap_or("-"),
+                        req.body
+                    )
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    if req.method == "HEAD" { "" } else { body.as_str() }
+                );
+                if stream.write_all(response.as_bytes()).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+    (port, handle)
+}
+
 fn run_native_case(dream_file: &Path, release: bool) {
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
@@ -112,7 +210,16 @@ fn run_native_case(dream_file: &Path, release: bool) {
     } else {
         None
     };
-    let timeout_secs = if stem == "http_get_local" { 20 } else { 8 };
+    let http_mock = if stem == "http_methods_local" {
+        Some(spawn_http_mock())
+    } else {
+        None
+    };
+    let timeout_secs = if stem == "http_get_local" || stem == "http_methods_local" {
+        20
+    } else {
+        8
+    };
     let extra_args: &[&str] = if stem == "process_args_basic" {
         &["alpha", "beta"]
     } else {
@@ -126,6 +233,9 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let mut env: Vec<(&str, String)> = Vec::new();
     if let Some((port, _)) = tcp.as_ref() {
         env.push(("DREAM_E2E_TCP_PORT", port.to_string()));
+    }
+    if let Some((port, _)) = http_mock.as_ref() {
+        env.push(("DREAM_E2E_HTTP_PORT", port.to_string()));
     }
     let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let run = if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty()
@@ -441,6 +551,7 @@ fn run_file_http_parity_e2e() {
             "file_copy_rename",
             "file_remove_dir",
             "http_get_local",
+            "http_methods_local",
             "tcp_echo_local",
             "process_args_basic",
             "console_read_line",

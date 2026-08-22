@@ -1,0 +1,115 @@
+// HttpClient convenience methods against the loopback mock server (DREAM_E2E_HTTP_PORT).
+// The mock echoes `METHOD path|x-tag|content-type|body`.
+import system;
+import system.net;
+import system.encoding;
+
+async fun main(): void {
+    let port = int.parse(System.env_or("DREAM_E2E_HTTP_PORT", "0")).unwrap_or(0);
+    if (port == 0) {
+        System.println("no port");
+        return;
+    }
+    let c = HttpClient("http://127.0.0.1:" + port.to_string());
+
+    switch (await c.get("/hello")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    let tagged = HttpHeaders();
+    tagged.set("X-Tag", "abc");
+    switch (await c.get_with("/hello", tagged)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.post("/echo", "hi there")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    let t1 = HttpHeaders();
+    t1.set("X-Tag", "t1");
+    switch (await c.post_with("/echo", "hi again", t1)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.put("/echo", "put body")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    let t2 = HttpHeaders();
+    t2.set("X-Tag", "t2");
+    switch (await c.put_with("/echo", "pw", t2)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.patch("/echo", "patched")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    let t3 = HttpHeaders();
+    t3.set("X-Tag", "t3");
+    switch (await c.patch_with("/echo", "patched too", t3)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.delete("/item/9")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    let t4 = HttpHeaders();
+    t4.set("X-Tag", "t4");
+    switch (await c.delete_with("/item/9", t4)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.post_json("/json", Json.parse("{\"name\":\"dream\",\"n\":42}").unwrap_or(JsonValue.none()))) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.put_json("/json", Json.parse("{\"name\":\"dream\",\"n\":42}").unwrap_or(JsonValue.none()))) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.patch_json("/json", Json.parse("{\"n\":43}").unwrap_or(JsonValue.none()))) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    let form = Map<string, string>();
+    form.set("name", "Shivendra Kumar");
+    form.set("q", "a&b=c");
+    switch (await c.post_form("/form", form)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    // Defaults survive alongside per-call headers.
+    let authed = HttpClient("http://127.0.0.1:" + port.to_string());
+    authed.set_header("X-Tag", "default");
+    switch (await authed.post("/echo", "with default")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.head("/hello")) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.message()),
+    }
+
+    switch (await c.get_bytes("/bytes")) {
+        Ok(b) => System.println(Encoding.utf8_decode(b)),
+        Err(e) => System.println(e.message()),
+    }
+}

@@ -1,0 +1,17 @@
+GET /hello|-|-|
+GET /hello|abc|-|
+POST /echo|-|-|hi there
+POST /echo|t1|-|hi again
+PUT /echo|-|-|put body
+PUT /echo|t2|-|pw
+PATCH /echo|-|-|patched
+PATCH /echo|t3|-|patched too
+DELETE /item/9|-|-|
+DELETE /item/9|t4|-|
+POST /json|-|application/json|{"name":"dream","n":42}
+PUT /json|-|application/json|{"name":"dream","n":42}
+PATCH /json|-|application/json|{"n":43}
+POST /form|-|application/x-www-form-urlencoded|q=a%26b%3dc&name=Shivendra%20Kumar
+POST /echo|default|-|with default
+200
+bin-data-01

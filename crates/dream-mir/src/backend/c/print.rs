@@ -96,6 +96,13 @@ fn print_item(out: &mut String, item: &Item) {
             }
             out.push_str(");\n");
         }
+        Item::Alias { name, ty } => {
+            out.push_str("typedef ");
+            print_ty(out, ty);
+            out.push(' ');
+            out.push_str(name);
+            out.push_str(";\n");
+        }
     }
 }
 
@@ -133,6 +140,11 @@ fn print_line_anchored_stmts(out: &mut String, stmts: &[Stmt], ind: usize) {
             print_line_directive(out, file, line);
         }
         print_stmt(out, s, ind, true);
+    }
+    // Functions emitted after one carrying `#line` markers would otherwise inherit the last
+    // directive, attributing their code to the dream file and stealing its breakpoints.
+    if group.is_some() {
+        out.push_str("#line 1 \"<dream-generated>\"\n");
     }
 }
 

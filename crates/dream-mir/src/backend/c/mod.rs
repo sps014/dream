@@ -5,6 +5,7 @@ mod builder;
 mod c_imports;
 mod calls;
 mod ctx;
+mod debugviews;
 mod emit;
 mod js_marshal;
 mod localnames;
@@ -126,6 +127,12 @@ mod tests {
         assert!(
             out[after_16..].contains("return"),
             "return must follow the line-16 directive:\n{}", out
+        );
+        // Functions after a `#line`-carrying one must not inherit its attribution.
+        assert!(
+            out.contains("#line 1 \"<dream-generated>\""),
+            "line group must be closed so later functions don't steal breakpoints:\n{}",
+            out
         );
     }
 

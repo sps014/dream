@@ -415,6 +415,8 @@ pub enum Item {
         ret: CTy,
         params: Vec<CTy>,
     },
+    /// `typedef <ty> <name>;` for debugger-only type aliases (`-g` builds).
+    Alias { name: String, ty: CTy },
 }
 
 #[derive(Clone, Debug, Default)]

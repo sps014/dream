@@ -36,6 +36,9 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
     m.include("<stdint.h>");
     m.include("<string.h>");
     emit_fn_typedefs(&mut m, &cx);
+    for item in super::debugviews::module_alias_items(&cx) {
+        m.push(item);
+    }
     emit_string_table(&mut m, &cx);
     emit_globals(&mut m, &cx);
     let async_n = mir.functions.iter().filter(|f| f.is_async).count();
@@ -1016,6 +1019,9 @@ fn build_async_pair(
             ));
         }
     }
+    for s in super::debugviews::local_debug_views(cx, &body) {
+        poll.stmt(s);
+    }
     poll.stmt(Stmt::decl(
         CTy::I32,
         "__st",
@@ -1241,6 +1247,9 @@ fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
                 Some(Expr::i(0)),
             ));
         }
+    }
+    for s in super::debugviews::local_debug_views(cx, f) {
+        b.stmt(s);
     }
     b.goto(format!("L{}", f.entry.0));
     for (bi, block) in f.blocks.iter().enumerate() {

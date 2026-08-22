@@ -59,7 +59,7 @@ impl DapClient {
             .arg(source)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()
             .expect("failed to spawn dream debug-adapter");
         let stdin = child.stdin.take().unwrap();
@@ -188,10 +188,12 @@ fn dap_breakpoint_stack_variables_step_continue() {
         serde_json::json!({ "adapterID": "dream", "linesStartAt1": true }),
     );
     client.wait_response("initialize");
-    client.wait_event("initialized");
 
     client.request("launch", serde_json::json!({ "program": source_path }));
     client.wait_response("launch");
+    // This lldb-dap emits `initialized` only after `launch` and parks the process until
+    // `configurationDone`, so bind breakpoints in that window.
+    client.wait_event("initialized");
 
     // Breakpoint on `return sum;` (line 5), inside `add`.
     client.request(
@@ -202,7 +204,9 @@ fn dap_breakpoint_stack_variables_step_continue() {
         }),
     );
     let bp = client.wait_response("setBreakpoints");
-    assert_eq!(bp["body"]["breakpoints"][0]["verified"], true);
+    // Verification may be deferred until the module loads; the `stopped` assertion below is
+    // the real check that the breakpoint bound.
+    assert!(!bp["body"]["breakpoints"].as_array().unwrap().is_empty());
 
     client.request("configurationDone", serde_json::json!({}));
     client.wait_response("configurationDone");
@@ -211,10 +215,18 @@ fn dap_breakpoint_stack_variables_step_continue() {
     let stopped = client.wait_event("stopped");
     assert_eq!(stopped["body"]["reason"], "breakpoint");
 
-    // The call stack must show `add` (innermost, line 5) over `main`.
-    client.request("stackTrace", serde_json::json!({ "threadId": 1 }));
-    let st = client.wait_response("stackTrace");
-    let frames = st["body"]["stackFrames"].as_array().unwrap();
+    // The call stack must show `add` (innermost, line 5) over `main`. lldb-dap advertises
+    // delayed stack loading, so the first request after a stop may come back empty.
+    let thread_id = stopped["body"]["threadId"].as_i64().expect("threadId");
+    let mut frames = Vec::new();
+    for _ in 0..10 {
+        client.request("stackTrace", serde_json::json!({ "threadId": thread_id }));
+        let st = client.wait_response("stackTrace");
+        frames = st["body"]["stackFrames"].as_array().unwrap().clone();
+        if !frames.is_empty() {
+            break;
+        }
+    }
     assert!(
         frames.iter().any(|f| f["line"] == 5),
         "expected a frame on .dream line 5: {:?}",
@@ -231,10 +243,14 @@ fn dap_breakpoint_stack_variables_step_continue() {
     );
     let vars = client.wait_response("variables");
     let vars = vars["body"]["variables"].as_array().unwrap();
+    let names: Vec<String> = vars
+        .iter()
+        .filter_map(|v| v["name"].as_str().map(String::from))
+        .collect();
     assert!(
-        !vars.is_empty(),
-        "expected DWARF locals (C names lN are ok): {:?}",
-        vars
+        ["a", "b", "sum"].iter().all(|n| names.contains(&n.to_string())),
+        "expected DWARF locals under their Dream names (a, b, sum), got: {:?}",
+        names
     );
 
     client.request("continue", serde_json::json!({ "threadId": stopped["body"]["threadId"] }));
@@ -268,9 +284,9 @@ fn run_to_breakpoint(source_path: &str, line: u32) -> DapClient {
         serde_json::json!({ "adapterID": "dream", "linesStartAt1": true }),
     );
     client.wait_response("initialize");
-    client.wait_event("initialized");
     client.request("launch", serde_json::json!({ "program": source_path }));
     client.wait_response("launch");
+    client.wait_event("initialized");
     client.request(
         "setBreakpoints",
         serde_json::json!({
@@ -279,7 +295,9 @@ fn run_to_breakpoint(source_path: &str, line: u32) -> DapClient {
         }),
     );
     let bp = client.wait_response("setBreakpoints");
-    assert_eq!(bp["body"]["breakpoints"][0]["verified"], true);
+    // Verification may be deferred until the module loads; the `stopped` assertion below is
+    // the real check that the breakpoint bound.
+    assert!(!bp["body"]["breakpoints"].as_array().unwrap().is_empty());
     client.request("configurationDone", serde_json::json!({}));
     client.wait_response("configurationDone");
     client
@@ -346,11 +364,25 @@ fn dap_async_breakpoint_on_branch_with_locals() {
     );
     let vars = client.wait_response("variables");
     let vars = vars["body"]["variables"].as_array().unwrap();
+    let names: Vec<String> = vars
+        .iter()
+        .filter_map(|v| v["name"].as_str().map(String::from))
+        .collect();
     assert!(
-        !vars.is_empty(),
-        "expected DWARF locals on async frame: {:?}",
-        vars
+        ["base", "sum"]
+            .iter()
+            .all(|n| names.contains(&n.to_string())),
+        "expected DWARF locals under their Dream names (base, sum), got: {:?}",
+        names
     );
+    let value_of = |want: &str| -> Option<i64> {
+        vars.iter()
+            .find(|v| v["name"].as_str() == Some(want))
+            .and_then(|v| v["value"].as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+    };
+    assert_eq!(value_of("base"), Some(10));
+    assert_eq!(value_of("sum"), Some(45));
 
     client.request(
         "continue",

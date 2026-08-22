@@ -280,7 +280,7 @@ fn rc_golden_unique_class_no_retain() {
         c
     );
     assert!(
-        c.contains("destroy_Box(l0);"),
+        c.contains("destroy_Box(b);"),
         "unique Box should unique-destroy:\n{}",
         c
     );

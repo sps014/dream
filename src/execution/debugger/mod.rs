@@ -53,11 +53,18 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
     while let Some(mut msg) = read_message(&mut reader)? {
-        if msg.get("command").and_then(|c| c.as_str()) == Some("launch") {
-            if msg.get("arguments").is_none_or(Value::is_null) {
-                msg["arguments"] = json!({});
+        match msg.get("command").and_then(|c| c.as_str()) {
+            Some("launch") => {
+                if msg.get("arguments").is_none_or(Value::is_null) {
+                    msg["arguments"] = json!({});
+                }
+                rewrite_launch(&mut msg, &bin_s, &cwd, &env_pairs);
             }
-            rewrite_launch(&mut msg, &bin_s, &cwd, &env_pairs);
+            // DWARF records symlink-resolved source paths (macOS `/tmp` → `/private/tmp`), while
+            // clients echo back whatever path they opened; lldb-dap compares literally, so
+            // canonicalize before forwarding or breakpoints silently never bind.
+            Some("setBreakpoints") | Some("source") => canonicalize_source_paths(&mut msg),
+            _ => {}
         }
         write_message(&mut lldb_in, &msg)?;
     }
@@ -66,6 +73,45 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
     let _ = child.wait();
     let _ = pump.join();
     Ok(())
+}
+
+/// Resolves `path` to its real filesystem spelling; returns the input when resolution fails.
+fn canonicalize_path(path: &str) -> String {
+    std::fs::canonicalize(path)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string())
+}
+
+fn canonicalize_source(msg: &mut Value) {
+    let Some(obj) = msg.as_object_mut() else {
+        return;
+    };
+    if let Some(Value::String(path)) = obj.get_mut("path") {
+        *path = canonicalize_path(path);
+    }
+}
+
+/// Rewrites every `source.path` in a request (`setBreakpoints` carries them at the top level and
+/// per breakpoint; `source` is one itself).
+fn canonicalize_source_paths(msg: &mut Value) {
+    // Clients put the file either on the request itself (`source`, `arguments.source`) or
+    // per breakpoint (`arguments.breakpoints[].source`) depending on request kind.
+    for loc in ["source", "/arguments/source"] {
+        if msg.pointer(loc).is_some() {
+            canonicalize_source(msg.pointer_mut(loc).expect("checked above"));
+        }
+    }
+    let Some(bps) = msg
+        .pointer_mut("/arguments/breakpoints")
+        .and_then(|b| b.as_array_mut())
+    else {
+        return;
+    };
+    for bp in bps {
+        if bp.get("source").is_some() {
+            canonicalize_source(&mut bp["source"]);
+        }
+    }
 }
 
 fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, String)]) {

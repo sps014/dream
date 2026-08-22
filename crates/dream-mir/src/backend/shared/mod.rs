@@ -1,5 +1,6 @@
 //! Backend pieces shared by the C targets (not target-specific).
 
+pub(crate) mod names;
 pub(crate) mod panic_msgs;
 mod print;
 pub(crate) mod rc_store;

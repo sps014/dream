@@ -99,7 +99,7 @@ fn print_item(out: &mut String, item: &Item) {
     }
 }
 
-fn print_func(out: &mut String, f: &Func) {
+pub(super) fn print_func(out: &mut String, f: &Func) {
     print_linkage(out, None, f.export.as_deref());
     if let Some(attr) = f.attr {
         out.push_str(attr);
@@ -113,10 +113,27 @@ fn print_func(out: &mut String, f: &Func) {
     out.push_str(&f.name);
     print_params(out, &f.params);
     out.push_str(" {\n");
-    for s in &f.body {
-        print_stmt(out, s, 1, true);
-    }
+    print_line_anchored_stmts(out, &f.body, 1);
     out.push_str("}\n");
+}
+
+/// Prints a statement sequence with `#line` anchoring: a [`Stmt::Line`] marker opens a source-line
+/// group, and the directive is re-emitted before *every* statement in the group. Without the
+/// re-emission, a group's extra C statements (deferred copies, spills) each consume the following
+/// line number, so debugger breakpoints for dream line N bind one or two C statements early —
+/// visibly stopping before the statement's assignments ran.
+fn print_line_anchored_stmts(out: &mut String, stmts: &[Stmt], ind: usize) {
+    let mut group: Option<(&str, u32)> = None;
+    for s in stmts {
+        if let Stmt::Line { file, line } = s {
+            group = Some((file.as_str(), *line));
+            continue;
+        }
+        if let Some((file, line)) = group {
+            print_line_directive(out, file, line);
+        }
+        print_stmt(out, s, ind, true);
+    }
 }
 
 fn print_linkage(out: &mut String, import: Option<&(String, String)>, export: Option<&str>) {

@@ -16,6 +16,10 @@ pub(super) struct Cx<'a> {
     pub tags: HashMap<TypeId, i32>,
     pub ft: HashMap<(DefId, Vec<TypeId>), usize>,
     pub native: NativeLayouts,
+    /// True when the module was compiled with debug info (`-g`): the analyzer only emits
+    /// `Statement::DebugLine` markers then, so their presence is the backend's signal to add
+    /// debugger-only views (async future-frame structs).
+    pub debug_syms: bool,
 }
 
 impl<'a> Cx<'a> {
@@ -25,6 +29,11 @@ impl<'a> Cx<'a> {
         for (idx, f) in (1usize..).zip(mir.functions.iter()) {
             ft.insert((f.def, f.instance.clone()), idx);
         }
+        let debug_syms = mir.functions.iter().any(|f| {
+            f.blocks
+                .iter()
+                .any(|b| b.stmts.iter().any(|s| matches!(s, crate::Statement::DebugLine(_))))
+        });
         Self {
             strings: intern_strings(mir, interner),
             symbols,
@@ -34,6 +43,7 @@ impl<'a> Cx<'a> {
             mir,
             interner,
             target,
+            debug_syms,
         }
     }
 

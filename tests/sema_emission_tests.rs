@@ -340,7 +340,7 @@ fn test_hir_emission_extend_nongeneric_class() {
         c
     );
     assert!(
-        c.contains("Point_getx(l0)"),
+        c.contains("Point_getx(p)"),
         "call should resolve to the extend method:\n{}",
         c
     );
@@ -362,7 +362,7 @@ fn test_hir_emission_extend_generic_class() {
         c
     );
     assert!(
-        c.contains("Box_int_peek(l0)"),
+        c.contains("Box_int_peek(b)"),
         "call should resolve to the instance:\n{}",
         c
     );
@@ -520,7 +520,7 @@ fn test_hir_emission_generic_struct_method_instance() {
         c
     );
     assert!(
-        c.contains("Box_int_get(l0)"),
+        c.contains("Box_int_get(b)"),
         "instance call should dispatch to the mangled method:\n{}",
         c
     );
@@ -727,7 +727,7 @@ fn test_hir_emission_print_object_routes_to_print_object() {
         c
     );
     assert!(
-        c.contains("Box_to_string(l0)"),
+        c.contains("Box_to_string(b)"),
         "object print routes through the generated to_string:\n{}",
         c
     );
@@ -1435,7 +1435,7 @@ fn test_hir_emission_method_body_and_instance_call() {
         c
     );
     assert!(
-        c.contains("Box_get(l0)"),
+        c.contains("Box_get(b)"),
         "instance call should dispatch to the method:\n{}",
         c
     );
@@ -1608,7 +1608,7 @@ fn test_hir_emission_len_builtin() {
     );
     let count_body = c_func_body(&c, "count");
     assert!(
-        count_body.contains("*(int32_t *)dream_p(l0)"),
+        count_body.contains("*(int32_t *)dream_p(xs)"),
         "array len should be an inlined length-word load:\n{}",
         c
     );

@@ -1,7 +1,8 @@
-use super::ast::{CTy, Expr, Item, Param, Stmt};
+use super::ast::{CTy, Expr, Func, Item, Param, Stmt};
 use super::builder::{FuncBuilder, ModuleBuilder};
 use super::ctx::Cx;
 use super::emit::Emitter;
+use super::localnames;
 use super::protocol::{emit_iface_init, emit_iface_trampolines, emit_protocol};
 use super::release::emit_release_helpers;
 use super::target::CTarget;
@@ -49,27 +50,25 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
     emit_imports(&mut m, &cx, import_poll_base);
     super::js_marshal::emit_js_marshal(&mut m, &cx);
     emit_ftable_decl(&mut m, &cx, async_n + import_async_n);
+    // Build every function body before emitting any prototype: source-named locals are resolved
+    // against the full body (so a local can never shadow a helper or another function symbol),
+    // and prototypes are then derived from the rewritten params — declaration and body can never
+    // disagree.
+    let mut built: Vec<(&MirFunction, Vec<Func>)> = Vec::new();
+    let mut user_async_i = 0usize;
     for f in &mir.functions {
-        let (ret, name, params, attr) = proto_parts(&cx, f);
-        m.push(Item::Proto {
-            static_: false,
-            ret,
-            name,
-            params,
-            import: None,
-            export: None,
-        });
-        let _ = attr;
-        if f.is_async {
-            m.proto(
-                CTy::I32,
-                poll_name(f),
-                vec![Param {
-                    ty: CTy::Ptr,
-                    name: "__self".into(),
-                }],
-            );
-        }
+        let builders: Vec<FuncBuilder> = if f.is_async {
+            let poll_idx = mir.functions.len() + 1 + user_async_i;
+            user_async_i += 1;
+            let (stub, poll) = build_async_pair(&cx, f, poll_idx as i32);
+            vec![stub, poll]
+        } else {
+            vec![build_sync(&cx, f)]
+        };
+        built.push((
+            f,
+            builders.into_iter().map(|b| finish_named(f, b)).collect(),
+        ));
     }
     for imp in &mir.imports {
         if let Some(poll_sym) = lazy_import_poll(&cx, imp) {
@@ -83,17 +82,33 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
             );
         }
     }
+    for (_, funcs) in &built {
+        let def = &funcs[0];
+        m.push(Item::Proto {
+            static_: false,
+            ret: def.ret.clone(),
+            name: def.name.clone(),
+            params: def.params.clone(),
+            import: None,
+            export: None,
+        });
+        if let Some(poll) = funcs.get(1) {
+            m.proto(
+                CTy::I32,
+                poll.name.clone(),
+                vec![Param {
+                    ty: CTy::Ptr,
+                    name: "__self".into(),
+                }],
+            );
+        }
+    }
     emit_release_helpers(&mut m, &cx);
     emit_protocol(&mut m, &cx);
     emit_iface_trampolines(&mut m, &cx);
-    let mut async_i = 0usize;
-    for f in &mir.functions {
-        if f.is_async {
-            let poll_idx = mir.functions.len() + 1 + async_i;
-            emit_async_pair(&mut m, &cx, f, poll_idx as i32);
-            async_i += 1;
-        } else {
-            emit_func(&mut m, &cx, f);
+    for (_, funcs) in &built {
+        for func in funcs {
+            m.push(Item::Func(func.clone()));
         }
     }
     emit_ftable_def(&mut m, &cx, async_n + import_async_n);
@@ -793,10 +808,134 @@ fn proto_parts(cx: &Cx<'_>, f: &MirFunction) -> (CTy, String, Vec<Param>, Option
     (ret, name, params, attr)
 }
 
-fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_idx: i32) {
+/// Finishes `b` into a `Func` with source-named locals resolved against the full body.
+fn finish_named(f: &MirFunction, b: FuncBuilder) -> Func {
+    let mut func = b.finish();
+    localnames::apply_local_names(f, &mut func);
+    func
+}
+
+/// A typed view over the coroutine future frame for `-g` builds: an anonymous struct mirroring
+/// [`crate::abi::FutureLayout`] byte-for-byte plus one field per saved local, pointed at
+/// `__self`. While a poll frame is live the debugger shows suspended locals as
+/// `__dbg_self-><name>`; the struct is a read-only lens over the same bytes — no layout or
+/// behavior change. Native only (wasm32 debug output is stripped downstream anyway).
+fn future_frame_debug_view(cx: &Cx<'_>, body: &MirFunction, offs: &[i32]) -> Vec<Stmt> {
+    let ps = if cx.target.is_wasm32() { 4u32 } else { 8 };
+    // Header fields in FutureLayout order, offsets taken verbatim from the ABI (single source of
+    // truth): (offset, size, name). Gaps become explicit padding so the C struct view lands
+    // byte-for-byte on the runtime's layout.
+    let fut = cx.target.abi().future;
+    let ptr_size = ps;
+    let mut header: Vec<(u32, u32, &str)> = vec![
+        (fut.state, 4, "state"),
+        (fut.status, 4, "status"),
+        (fut.result, ptr_size, "result"),
+        (fut.poll, 4, "poll"),
+        (fut.waker, ptr_size, "waker"),
+        (fut.awaiting, ptr_size, "awaiting"),
+        (fut.kind, 4, "kind"),
+        (fut.children, ptr_size, "children"),
+        (fut.count, 4, "count"),
+        (fut.remaining, 4, "remaining"),
+        (fut.results, ptr_size, "results"),
+        (fut.next, ptr_size, "next"),
+        (fut.queued, 4, "queued"),
+        (fut.due, 4, "due"),
+    ];
+    if !cx.target.is_wasm32() {
+        header.push((fut.esize, 4, "esize"));
+    }
+    header.push((fut.wide, 8, "wide"));
+
+    let uchar = || CTy::Named("unsigned char");
+    let field_ty = |size: u32, name: &str| match (name, size) {
+        ("wide", _) => CTy::I64,
+        (_, 4) => CTy::I32,
+        _ => CTy::Ptr,
+    };
+
+    let mut fields: Vec<(CTy, String)> = Vec::new();
+    let mut cursor = 0u32;
+    let mut pad = 0u32;
+    for (off, size, name) in header {
+        let ty = field_ty(size, name);
+        fields.extend(pad_to(&mut cursor, off, &mut pad, uchar()));
+        fields.push((ty, name.to_string()));
+        cursor = off + size;
+    }
+    // Saved-locals slots, laid out exactly like `layout_async_slots` (8-byte aligned, index order).
+    for (i, decl) in body.locals.iter().enumerate() {
+        if matches!(cx.interner.kind(decl.ty), TyKind::Void) {
+            continue;
+        }
+        let off = offs[i] as u32;
+        let sz = super::types::native_scalar_size(cx, decl.ty).0.max(8);
+        fields.extend(pad_to(&mut cursor, off, &mut pad, uchar()));
+        let ty = if cx.interner.is_value_type(decl.ty) {
+            CTy::Array {
+                elem: Box::new(uchar()),
+                len: sz as usize,
+            }
+        } else {
+            local_c_ty(cx, decl.ty)
+        };
+        let fname = decl
+            .name
+            .as_deref()
+            .map(|n| format!("v_{n}"))
+            .unwrap_or_else(|| format!("v{i}"));
+        fields.push((ty, fname));
+        cursor = off + sz;
+    }
+
+    let view = CTy::Struct { fields };
+    vec![
+        Stmt::decl(
+            CTy::VoidPtr,
+            "__dbg_raw",
+            Some(Expr::cast(CTy::VoidPtr, Expr::id("__self"))),
+        ),
+        Stmt::Decl {
+            align: Some(8),
+            static_: false,
+            const_: true,
+            ty: CTy::PtrTo(Box::new(view.clone())),
+            name: "__dbg_self".into(),
+            init: Some(Expr::cast(
+                CTy::ptr_to(view),
+                Expr::id("__dbg_raw"),
+            )),
+        },
+    ]
+}
+
+fn pad_to(cursor: &mut u32, target: u32, pad: &mut u32, elem: CTy) -> Option<(CTy, String)> {
+    if *cursor >= target {
+        return None;
+    }
+    let n = (target - *cursor) as usize;
+    *cursor = target;
+    *pad += 1;
+    Some((
+        CTy::Array {
+            elem: Box::new(elem),
+            len: n,
+        },
+        format!("_pad{pad}"),
+    ))
+}
+
+fn build_async_pair(
+    cx: &Cx<'_>,
+    stub: &MirFunction,
+    poll_idx: i32,
+) -> (FuncBuilder, FuncBuilder) {
     let Some(hir) = stub.hir_fn.as_ref() else {
-        emit_func(m, cx, stub);
-        return;
+        let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
+        poll.param(CTy::Ptr, "__self");
+        poll.ret(Some(Expr::i(0)));
+        return (build_sync(cx, stub), poll);
     };
     let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
     let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
@@ -844,10 +983,14 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
         }
     }
     stub_fn.ret(Some(Expr::id("__self")));
-    m.push_func(stub_fn);
 
     let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
     poll.param(CTy::Ptr, "__self");
+    if cx.debug_syms && !cx.target.is_wasm32() {
+        for s in future_frame_debug_view(cx, &body, &offs) {
+            poll.stmt(s);
+        }
+    }
     for (i, decl) in body.locals.iter().enumerate() {
         if matches!(cx.interner.kind(decl.ty), TyKind::Void) {
             continue;
@@ -1021,10 +1164,10 @@ fn emit_async_pair(m: &mut ModuleBuilder, cx: &Cx<'_>, stub: &MirFunction, poll_
         }
     }
     poll.ret(Some(Expr::i(0)));
-    m.push_func(poll);
+    (stub_fn, poll)
 }
 
-fn emit_func(m: &mut ModuleBuilder, cx: &Cx<'_>, f: &MirFunction) {
+fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
     let (ret, name, params, attr) = proto_parts(cx, f);
     let mut b = FuncBuilder::new(ret, name);
     b.attr = attr;
@@ -1108,7 +1251,7 @@ fn emit_func(m: &mut ModuleBuilder, cx: &Cx<'_>, f: &MirFunction) {
             e.term(&block.terminator);
         }
     }
-    m.push_func(b);
+    b
 }
 
 fn emit_fn_typedefs(m: &mut ModuleBuilder, cx: &Cx<'_>) {
@@ -1160,5 +1303,95 @@ fn emit_fn_typedefs(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         .or_insert((CTy::Ptr, vec![CTy::Ptr]));
     for (name, (ret, params)) in seen {
         m.push(Item::Typedef { name, ret, params });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dream_types::TypeInterner;
+
+    fn async_body(interner: &TypeInterner) -> MirFunction {
+        MirFunction {
+            def: dream_types::DefId(1),
+            instance: vec![],
+            name: "main_dream".into(),
+            params: vec![],
+            ret: interner.void(),
+            locals: vec![
+                crate::LocalDecl {
+                    ty: interner.long(),
+                    name: Some("base".into()),
+                    is_ref: false,
+                    is_take: false,
+                    is_cursor: false,
+                    manual_drop: false,
+                },
+                crate::LocalDecl {
+                    ty: interner.string(),
+                    name: Some("sum".into()),
+                    is_ref: false,
+                    is_take: false,
+                    is_cursor: false,
+                    manual_drop: false,
+                },
+            ],
+            blocks: vec![],
+            entry: crate::BlockId(0),
+            is_async: true,
+            hir_fn: None,
+            file: None,
+            prefer_inline: false,
+        }
+    }
+
+    #[test]
+    fn future_frame_view_mirrors_abi_offsets() {
+        let i = TypeInterner::new();
+        let mir = Mir::default();
+        let cx = Cx::new(&mir, &i, CTarget::Native);
+        let body = async_body(&i);
+        // Slots start at FutureLayout::native().slots; base (8 bytes) then sum.
+        let fut = cx.target.abi().future;
+        let offs = vec![fut.slots as i32, fut.slots as i32 + 8];
+        let stmts = future_frame_debug_view(&cx, &body, &offs);
+        assert_eq!(stmts.len(), 2);
+        let Stmt::Decl { ty, init: Some(_), .. } = &stmts[1] else {
+            panic!("expected view decl");
+        };
+        let CTy::PtrTo(view) = ty else {
+            panic!("expected pointer-to-struct");
+        };
+        let CTy::Struct { fields } = view.as_ref() else {
+            panic!("expected struct");
+        };
+        // Header starts at state and ends at wide; slot fields carry source names.
+        assert_eq!(fields[0].1, "state");
+        assert!(fields.iter().any(|(ty, n)| matches!(ty, CTy::I64) && n == "wide"));
+        let names: Vec<&String> = fields.iter().map(|(_, n)| n).collect();
+        assert!(names.contains(&&"v_base".to_string()));
+        assert!(names.contains(&&"v_sum".to_string()));
+        // The sum slot must sit exactly at its offset: the padding before it covers
+        // Header fields + padding must reach the slots boundary exactly where the first
+        // saved-local slot begins.
+        let mut cursor = 0u32;
+        for (ty, name) in fields.iter() {
+            if name.starts_with("v_") {
+                break;
+            }
+            let sz: u32 = match ty {
+                CTy::I32 => 4,
+                CTy::I64 => 8,
+                CTy::Ptr => 8,
+                CTy::Array { len, .. } => *len as u32,
+                _ => panic!("unexpected field type: {:?}", ty),
+            };
+            cursor += sz;
+        }
+        assert_eq!(
+            cursor, fut.slots,
+            "header fields + padding must reach the slots boundary"
+        );
+
     }
 }

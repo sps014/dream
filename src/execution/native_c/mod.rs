@@ -347,7 +347,11 @@ pub fn compile_native_c(
     }
     lcmd.arg("-o").arg(&bin);
     crate::driver::c_wasm32::run_captured(&mut lcmd, &format!("cc link ({})", obj.display()))?;
-    let _ = std::fs::remove_file(&obj);
+    // Mach-O keeps only a stabs debug map in the linked binary; the DWARF itself stays in the
+    // object file, so deleting it leaves the debugger with no line/variable info.
+    if !debug {
+        let _ = std::fs::remove_file(&obj);
+    }
     Ok(bin)
 }
 

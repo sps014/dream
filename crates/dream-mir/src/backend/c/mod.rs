@@ -7,6 +7,7 @@ mod calls;
 mod ctx;
 mod emit;
 mod js_marshal;
+mod localnames;
 mod module;
 mod native_layout;
 mod places;
@@ -80,6 +81,51 @@ mod tests {
             c.contains("#line 7 \"/tmp/prog.dream\""),
             "expected #line from DebugLine:\n{}",
             c
+        );
+    }
+
+    #[test]
+    fn line_groups_reanchor_each_statement() {
+        // A dream statement whose C expansion spans several physical lines (call into a temp, then
+        // the deferred copy) must not consume its neighbors' line numbers: every statement in a
+        // `#line` group re-anchors at the group's line, so breakpoints bind to the statement that
+        // actually carries them.
+        use crate::backend::c::ast::{CTy, Expr, Func, Param, Stmt};
+        let f = Func {
+            attr: None,
+            export: None,
+            static_: false,
+            ret: CTy::I32,
+            name: "f".into(),
+            params: vec![Param {
+                ty: CTy::I32,
+                name: "x".into(),
+            }],
+            body: vec![
+                Stmt::Line {
+                    file: "/tmp/p.dream".into(),
+                    line: 15,
+                },
+                Stmt::decl(CTy::I32, "t0", Some(Expr::local(0))),
+                Stmt::assign(Expr::local(1), Expr::local(0)),
+                Stmt::Line {
+                    file: "/tmp/p.dream".into(),
+                    line: 16,
+                },
+                Stmt::Return(Some(Expr::local(1))),
+            ],
+        };
+        let mut out = String::new();
+        super::print::print_func(&mut out, &f);
+        let anchored = out.matches("#line 15 \"/tmp/p.dream\"").count();
+        assert_eq!(
+            anchored, 2,
+            "both statements of the line-15 group must re-anchor:\n{out}"
+        );
+        let after_16 = out.rfind("#line 16").expect("16 directive");
+        assert!(
+            out[after_16..].contains("return"),
+            "return must follow the line-16 directive:\n{}", out
         );
     }
 

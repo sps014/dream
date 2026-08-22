@@ -492,12 +492,15 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
         // Async host bridges are lazy like every other future: calling the extern constructs an
         // unstarted Future carrying the marshaled args; the first poll performs the host call.
         // On wasm32 the JS wrapper settles the guest-provided future via `__dream_resolve`, so
-        // the import takes the future as its leading argument. Native hosts are blocking calls
-        // that keep their declared signatures; their poll completes the future directly.
+        // the import takes the future as its leading argument. On native, `@async_host` imports
+        // delegate to a `<host>Async` symbol that takes the future and completes it from a
+        // foreign thread; other native hosts are blocking calls keeping their declared
+        // signatures, completed inline by their poll.
         if async_wrap {
             let slot_base = fut.slots as i64;
             let frame_size = slot_base + (params.len() as i64) * 8;
             let poll_sym = format!("{name}_poll");
+            let delegate_host = !cx.target.is_wasm32() && imp.async_host;
             if cx.target.is_wasm32() {
                 let mut proto_params = vec![Param {
                     ty: CTy::Ptr,
@@ -505,6 +508,13 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
                 }];
                 proto_params.extend(params.iter().cloned());
                 m.import_proto(CTy::Void, host.clone(), proto_params, import_mod, import_field);
+            } else if delegate_host {
+                let mut host_params = vec![Param {
+                    ty: CTy::Ptr,
+                    name: "__f".into(),
+                }];
+                host_params.extend(params.iter().cloned());
+                m.proto(CTy::I32, format!("{host}Async"), host_params);
             } else if !super::types::native_header_declares(&host) {
                 m.proto(host_ret.clone(), host.clone(), params.clone());
             }
@@ -565,6 +575,24 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
                         .chain(saved_args)
                         .collect(),
                 );
+            } else if delegate_host {
+                // The async host owns the future now: it completes it from a foreign thread via
+                // the bound dream_complete_foreign. A truthy return means deferred work, so the
+                // loop must stay parked for it; a zero return was completed synchronously.
+                poll.stmt(Stmt::decl(
+                    CTy::I32,
+                    "__deferred",
+                    Some(Expr::call(
+                        format!("{host}Async"),
+                        std::iter::once(Expr::id("__self"))
+                            .chain(saved_args)
+                            .collect(),
+                    )),
+                ));
+                poll.stmt(Stmt::if_(
+                    Expr::id("__deferred"),
+                    Stmt::call("dream_foreign_work_begin", vec![]),
+                ));
             } else if host_ret == CTy::Void {
                 poll.call(host.clone(), saved_args);
                 poll.call(
@@ -717,7 +745,14 @@ fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     if !cx.target.is_wasm32() {
         b.call(
             "dream_host_bind",
-            vec![Expr::id("dream_string_alloc"), Expr::id("dream_array_new")],
+            vec![
+                Expr::id("dream_string_alloc"),
+                Expr::id("dream_array_new"),
+                Expr::cast(
+                    CTy::VoidPtr,
+                    Expr::id("dream_complete_foreign"),
+                ),
+            ],
         );
     }
     if let Some(init) = cx

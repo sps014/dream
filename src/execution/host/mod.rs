@@ -80,12 +80,18 @@ mod contract_tests {
                 t.strip_prefix("pub extern \"C\" fn ")
             });
             let Some(t) = t else { continue };
-            if let Some(end) = t.find('(') {
-                let name = t[..end].trim();
-                if !name.is_empty() && name != "dream_host_bind" {
-                    out.push(name.to_string());
+                if let Some(end) = t.find('(') {
+                    let name = t[..end].trim();
+                    // `<Host>Async` fns are the deferred variants of an existing `@runtime`
+                    // host (same wire format, plus a leading future arg), not standalone
+                    // entry points — they share their base name's prelude declaration.
+                    if !name.is_empty()
+                        && name != "dream_host_bind"
+                        && !name.ends_with("Async")
+                    {
+                        out.push(name.to_string());
+                    }
                 }
-            }
         }
         out
     }

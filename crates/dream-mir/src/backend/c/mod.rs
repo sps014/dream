@@ -422,6 +422,7 @@ mod tests {
                 param_by_ref: vec![false, true],
                 ret: Some(i.int()),
                 is_async: false,
+                async_host: false,
                 c_wide_strings: false,
             }],
             ..Default::default()
@@ -453,6 +454,7 @@ mod tests {
                 param_by_ref: vec![],
                 ret: Some(i.int()),
                 is_async: true,
+            async_host: false,
                 c_wide_strings: false,
             }],
             ..Default::default()
@@ -510,6 +512,7 @@ mod tests {
                 param_by_ref: vec![false, false, false, false],
                 ret: Some(js),
                 is_async: false,
+                async_host: false,
                 c_wide_strings: false,
             }],
             ..Default::default()
@@ -539,6 +542,7 @@ mod tests {
                 param_by_ref: vec![false, false],
                 ret: Some(i.int()),
                 is_async: false,
+                async_host: false,
                 c_wide_strings: false,
             }],
             ..Default::default()

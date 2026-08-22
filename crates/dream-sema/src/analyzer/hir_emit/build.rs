@@ -340,6 +340,7 @@ impl<'a> Analyzer<'a> {
             let param_by_ref: Vec<bool> = func.parameters.iter().map(|p| p.is_ref).collect();
             let c_wide_strings =
                 dream_abi::attributes::c_marshal_charset(&func.attributes) == Some("lpwstr");
+            let async_host = dream_abi::attributes::has_async_host_attr(&func.attributes);
             let params = func
                 .parameters
                 .iter()
@@ -365,6 +366,7 @@ impl<'a> Analyzer<'a> {
                 param_by_ref,
                 ret,
                 is_async: func.is_async,
+                async_host,
                 c_wide_strings,
             });
         }

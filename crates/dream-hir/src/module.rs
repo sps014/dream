@@ -97,6 +97,9 @@ pub struct HImport {
     pub param_by_ref: Vec<bool>,
     pub ret: Option<TypeId>,
     pub is_async: bool,
+    /// `@async_host` extern: on native the host takes the future as its leading argument and
+    /// completes it from a foreign thread, so its poll delegates instead of blocking inline.
+    pub async_host: bool,
     /// `@marshal("lpwstr")` on a `@c` extern: string args become UTF-16 rather than UTF-8.
     pub c_wide_strings: bool,
 }

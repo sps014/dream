@@ -100,6 +100,10 @@ System.println(tok.check().is_err()); // true → ECANCELLED
 
 `Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Cancelling a not-yet-started future means it never runs. Prefer tokens for app-level checks; native in-flight HTTP cancel remains best-effort (`HttpClient.with_cancellation` + `with_timeout`).
 
+### Native deferred hosts (`@async_host`)
+
+On native, an `extern async fun` host blocks the whole run loop while it runs. Declaring it `@async_host` opts that import into true async: the runtime calls a `<host>Async` C symbol with the future as its leading argument, the work happens on another thread, and the future is completed there — so timers and other tasks keep interleaving while the host op is in flight. `HttpClient` request methods use this on native; wasm32 bridges are always deferred.
+
 ## Async methods
 
 Instance and `static` class methods can be `async`, so a type can own its asynchronous behavior. The call types as `Future<T>` just like a free async call:

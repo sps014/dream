@@ -958,7 +958,13 @@ dream_ptr processHomeDir(void);
 dream_ptr consoleReadLine(void);
 int32_t consoleReadKey(void);
 
-void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t));
+void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
+                     void (*complete_foreign)(dream_ptr, dream_ptr));
+/* Complete an @async_host future from a foreign thread and wake the parked loop. */
+void dream_complete_foreign(dream_ptr f, dream_ptr res);
+/* Called by a delegate-shape poll thunk after handing work to a deferred host: keeps
+ * dream_run_loop parked while the work is in flight. */
+void dream_foreign_work_begin(void);
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 int32_t workerSpawn(int32_t fn, int64_t env);
 int32_t workerPoolSpawn(void);

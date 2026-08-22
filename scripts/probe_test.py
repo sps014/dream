@@ -102,6 +102,73 @@ def run_output_body(out):
     return _ANSI.sub("", out).strip()
 
 
+def spawn_http_mock():
+    """Loopback HTTP mock for `http_methods_local` (same contract as e2e `DREAM_E2E_HTTP_PORT`).
+
+    Echoes `METHOD path|x-tag|content-type|body` as the response body; `/bytes` serves a fixed
+    binary payload. Handles sequential requests forever, like the Rust mock in e2e_tests.rs.
+    """
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(8)
+    port = listener.getsockname()[1]
+
+    def serve(sock):
+        try:
+            while True:
+                conn, _ = sock.accept()
+                with conn:
+                    while _serve_one(conn):
+                        pass
+        except OSError:
+            pass
+        finally:
+            sock.close()
+
+    def _serve_one(conn):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = conn.recv(4096)
+            if not chunk:
+                return False
+            data += chunk
+        head, _, rest = data.partition(b"\r\n\r\n")
+        lines = head.split(b"\r\n")
+        method, path, _ = lines[0].decode("latin1").split(" ", 2)
+        length = 0
+        x_tag = "-"
+        content_type = "-"
+        for line in lines[1:]:
+            name, _, value = line.decode("latin1").partition(":")
+            value = value.strip()
+            if name.lower() == "content-length":
+                length = int(value)
+            elif name.lower() == "x-tag":
+                x_tag = value
+            elif name.lower() == "content-type":
+                content_type = value
+        while len(rest) < length:
+            rest += conn.recv(4096)
+        body = rest[:length].decode("utf-8", "replace")
+        if path == "/bytes":
+            payload = "bin-data-01"
+        else:
+            payload = f"{method} {path}|{x_tag}|{content_type}|{body}"
+        if method == "HEAD":
+            payload = ""
+        response = (
+            f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+            f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n{payload}"
+        )
+        conn.sendall(response.encode())
+        return False
+
+    thread = threading.Thread(target=serve, args=(listener,), daemon=True)
+    thread.start()
+    return port
+
+
 def spawn_tcp_echo():
     """Loopback echo server for `tcp_echo_local` (same contract as e2e `DREAM_E2E_TCP_PORT`).
 
@@ -226,6 +293,8 @@ def one(f: Path):
         cmd.extend(["--", "alpha", "beta"])
     elif stem == "tcp_echo_local":
         env = {"DREAM_E2E_TCP_PORT": spawn_tcp_echo()}
+    elif stem == "http_methods_local":
+        env = {"DREAM_E2E_HTTP_PORT": str(spawn_http_mock())}
 
     # Debug `cc -O0` of large `@json` units is slow; leave headroom for a cold
     # `libdream_rt.a` rebuild and a loaded machine.

@@ -251,6 +251,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Binds an extern to the Dream runtime host on WASM and native: `@runtime(\"fileRead\")` imports `Dream.fileRead` and calls the C symbol `fileRead`.",
     },
     AttributeSpec {
+        name: "async_host",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Deferred native host for an `extern async fun`: the `<host>Async` C symbol takes the future as its leading argument, performs the work off-thread, and completes it via the bound dream_complete_foreign. The run loop stays parked while the work is in flight.",
+    },
+    AttributeSpec {
         name: "allow_cycle",
         targets: &[AttributeTarget::Struct],
         args: ArgShape::None,
@@ -1053,6 +1060,13 @@ pub fn has_fragment_attr(attributes: &[AttributeNode]) -> bool {
 /// True when the declaration carries `@gpu` (shader-callable helper).
 pub fn has_gpu_helper_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "gpu")
+}
+
+/// True when an extern declaration carries `@async_host`: on native, its host function accepts
+/// the future as its leading argument and completes it from another thread (returning 1 for
+/// deferred work), instead of blocking inside the poll. wasm32 bridges are always deferred.
+pub fn has_async_host_attr(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, "async_host")
 }
 
 /// True when the declaration carries `@inline` (raised inliner size budget).

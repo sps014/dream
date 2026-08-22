@@ -11,22 +11,40 @@ use std::sync::{Mutex, Once};
 
 type AllocFn = unsafe extern "C" fn(i32) -> usize;
 type ArrayNewFn = unsafe extern "C" fn(i32, i32) -> usize;
+type CompleteForeignFn = unsafe extern "C" fn(usize, usize);
 
 struct GuestAlloc {
     string_alloc: Option<AllocFn>,
     array_new: Option<ArrayNewFn>,
+    complete_foreign: Option<CompleteForeignFn>,
 }
 
 static GUEST: Mutex<GuestAlloc> = Mutex::new(GuestAlloc {
     string_alloc: None,
     array_new: None,
+    complete_foreign: None,
 });
 
 #[no_mangle]
-pub extern "C" fn dream_host_bind(string_alloc: AllocFn, array_new: ArrayNewFn) {
+pub extern "C" fn dream_host_bind(
+    string_alloc: AllocFn,
+    array_new: ArrayNewFn,
+    complete_foreign: CompleteForeignFn,
+) {
     let mut g = GUEST.lock().expect("guest alloc");
     g.string_alloc = Some(string_alloc);
     g.array_new = Some(array_new);
+    g.complete_foreign = Some(complete_foreign);
+}
+
+/// Completes an `@async_host` future from a foreign thread and wakes the guest run loop.
+pub(crate) fn complete_foreign_future(future: usize, result: usize) {
+    let complete = GUEST.lock().ok().and_then(|g| g.complete_foreign);
+    if let Some(complete) = complete {
+        unsafe {
+            complete(future, result);
+        }
+    }
 }
 
 pub fn attach_gpu_abi_beside(path: &str) {
@@ -843,6 +861,35 @@ pub unsafe extern "C" fn httpRequest(
     alloc_bytes(&out)
 }
 
+/// Deferred variant of [`httpRequest`]: performs the request on a worker thread and completes
+/// the guest future via the bound `dream_complete_foreign`. Returns 1 (work deferred) so the
+/// guest loop stays parked for it; errors still complete with an encoded error payload.
+#[no_mangle]
+pub unsafe extern "C" fn httpRequestAsync(
+    future: usize,
+    url: usize,
+    method: usize,
+    headers: usize,
+    body: usize,
+    timeout_ms: i32,
+    http_version: i32,
+) -> i32 {
+    let args = (
+        read_string(method),
+        read_string(url),
+        read_string(headers),
+        read_string(body).into_bytes(),
+    );
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http::perform_http(
+            &args.0, &args.1, &args.2, args.3, timeout_ms, http_version,
+        );
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn httpRequestBytes(
     url: usize,
@@ -861,6 +908,29 @@ pub unsafe extern "C" fn httpRequestBytes(
         http_version,
     );
     alloc_bytes(&out)
+}
+
+/// Deferred variant of [`httpRequestBytes`] — see [`httpRequestAsync`].
+#[no_mangle]
+pub unsafe extern "C" fn httpRequestBytesAsync(
+    future: usize,
+    url: usize,
+    method: usize,
+    headers: usize,
+    body: usize,
+    timeout_ms: i32,
+    http_version: i32,
+) -> i32 {
+    let args = (read_string(method), read_string(url), read_string(headers));
+    let payload_in = read_bytes(body);
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http::perform_http(
+            &args.0, &args.1, &args.2, payload_in, timeout_ms, http_version,
+        );
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
 }
 
 #[no_mangle]

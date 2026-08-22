@@ -3,6 +3,10 @@
 
 mod protocol;
 
+/// Presentation-only lldb formatters, written next to the compiled artifacts and imported by the
+/// proxied session so Dream strings/arrays render as text in the debugger.
+const LLDB_FORMATTERS: &str = include_str!("dream_lldb_formatters.py");
+
 use protocol::{read_message, write_message};
 use serde_json::{json, Value};
 use std::io::{self, BufReader, Read, Write};
@@ -49,6 +53,18 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
     let bin_s = bin.to_string_lossy().into_owned();
     let env_pairs = crate::execution::native_c::native_run_env_pairs(c_path);
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // Presentation-only lldb formatters (strings as quoted text, array lengths), shipped next to
+    // the other artifacts and imported at session start via `initCommands`. lldb forbids dots in
+    // module names, so the stem joins with underscores rather than `with_extension`.
+    let c_path_p = Path::new(c_path);
+    let formatters = c_path_p.with_file_name(format!(
+        "{}_lldb_dream.py",
+        c_path_p
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("dream")
+    ));
+    std::fs::write(&formatters, LLDB_FORMATTERS)?;
 
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
@@ -59,6 +75,10 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
                     msg["arguments"] = json!({});
                 }
                 rewrite_launch(&mut msg, &bin_s, &cwd, &env_pairs);
+                merge_init_commands(&mut msg, &[format!(
+                    "command script import {}",
+                    formatters.display()
+                )]);
             }
             // DWARF records symlink-resolved source paths (macOS `/tmp` → `/private/tmp`), while
             // clients echo back whatever path they opened; lldb-dap compares literally, so
@@ -114,8 +134,25 @@ fn canonicalize_source_paths(msg: &mut Value) {
     }
 }
 
-fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, String)]) {
+/// Merges extra lldb commands into the launch request's `initCommands`, preserving any the
+/// client already supplied.
+fn merge_init_commands(msg: &mut Value, extra: &[String]) {
     let args = msg
+        .as_object_mut()
+        .and_then(|o| o.get_mut("arguments"))
+        .and_then(|a| a.as_object_mut());
+    let Some(args) = args else {
+        return;
+    };
+    let mut commands: Vec<Value> = args
+        .get("initCommands")
+        .and_then(|c| c.as_array().cloned())
+        .unwrap_or_default();
+    commands.extend(extra.iter().map(|c| json!(c)));
+    args.insert("initCommands".into(), Value::Array(commands));
+}
+
+fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, String)]) {    let args = msg
         .as_object_mut()
         .and_then(|o| o.get_mut("arguments"))
         .and_then(|a| a.as_object_mut());

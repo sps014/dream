@@ -21,6 +21,8 @@ pub enum CTy {
     Named(&'static str),
     Ident(String),
     Struct { fields: Vec<(CTy, String)> },
+    /// Anonymous C union; used by debugger-only views over discriminated unions.
+    Union { fields: Vec<(CTy, String)> },
 }
 
 impl CTy {
@@ -415,8 +417,18 @@ pub enum Item {
         ret: CTy,
         params: Vec<CTy>,
     },
-    /// `typedef <ty> <name>;` for debugger-only type aliases (`-g` builds).
-    Alias { name: String, ty: CTy },
+    /// `typedef struct <tag> <name>;` — forward declaration so view aliases may reference
+    /// each other regardless of emission order (`-g` builds).
+    AliasFwd { tag: String, name: String },
+    /// Full definition backing an [`Item::AliasFwd`] (`-g` builds). `packed` marks the struct
+    /// `__attribute__((packed))` — required for array views whose elements the runtime stores
+    /// unaligned (right after the 4-byte length word).
+    Alias {
+        tag: String,
+        name: String,
+        ty: CTy,
+        packed: bool,
+    },
 }
 
 #[derive(Clone, Debug, Default)]

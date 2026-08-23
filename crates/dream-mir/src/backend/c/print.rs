@@ -96,13 +96,48 @@ fn print_item(out: &mut String, item: &Item) {
             }
             out.push_str(");\n");
         }
-        Item::Alias { name, ty } => {
-            out.push_str("typedef ");
-            print_ty(out, ty);
+        Item::AliasFwd { tag, name } => {
+            out.push_str("typedef struct ");
+            out.push_str(tag);
             out.push(' ');
             out.push_str(name);
             out.push_str(";\n");
         }
+        Item::Alias {
+            tag,
+            name,
+            ty: CTy::Struct { fields },
+            packed: false,
+        } => {
+            out.push_str("typedef struct ");
+            out.push_str(tag);
+            out.push_str(" { ");
+            for (ty, fname) in fields {
+                print_decl_ty(out, ty, fname);
+                out.push_str("; ");
+            }
+            out.push_str("} ");
+            out.push_str(name);
+            out.push_str(";\n");
+        }
+        Item::Alias {
+            tag,
+            name,
+            ty: CTy::Struct { fields },
+            packed: true,
+        } => {
+            out.push_str("typedef struct __attribute__((packed)) ");
+            out.push_str(tag);
+            out.push_str(" { ");
+            for (ty, fname) in fields {
+                print_decl_ty(out, ty, fname);
+                out.push_str("; ");
+            }
+            out.push_str("} ");
+            out.push_str(name);
+            out.push_str(";\n");
+        }
+        Item::Alias { .. } => {}
     }
 }
 
@@ -201,6 +236,14 @@ fn print_ty(out: &mut String, ty: &CTy) {
         CTy::Ident(s) => out.push_str(s),
         CTy::Struct { fields } => {
             out.push_str("struct { ");
+            for (ty, name) in fields {
+                print_decl_ty(out, ty, name);
+                out.push_str("; ");
+            }
+            out.push('}');
+        }
+        CTy::Union { fields } => {
+            out.push_str("union { ");
             for (ty, name) in fields {
                 print_decl_ty(out, ty, name);
                 out.push_str("; ");

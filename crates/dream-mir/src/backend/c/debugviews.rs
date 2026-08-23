@@ -13,6 +13,7 @@ use super::types::c_ident;
 use crate::MirFunction;
 use dream_hir::UnionLayout;
 use dream_types::{PrimTy, TyKind, TypeId};
+use indexmap::IndexSet;
 
 pub(super) fn enabled(cx: &Cx<'_>) -> bool {
     cx.debug_syms && !cx.target.is_wasm32()
@@ -56,34 +57,18 @@ fn str_view_ty() -> CTy {
 
 /// Module-level `typedef`s backing the views: the string shape plus every nominal struct and
 /// discriminated union in the module.
+/// View aliases reference each other through pointer fields, so every name gets a forward
+/// declaration up front and definitions follow in any order.
 pub(super) fn module_alias_items(cx: &Cx<'_>) -> Vec<Item> {
     if !enabled(cx) {
         return vec![];
     }
-    let mut items = vec![
-        Item::Alias {
-            name: "dream_Str".into(),
-            ty: str_view_ty(),
-        },
-        // Arrays are `[count:i32][elems...]`; elements are exposed as raw bytes because the
-        // runtime packs them at offset 4 with no C-representable alignment guarantee.
-        Item::Alias {
-            name: "dream_Arr".into(),
-            ty: CTy::Struct {
-                fields: vec![
-                    (CTy::I32, "len".into()),
-                    (
-                        CTy::Array {
-                            elem: Box::new(CTy::Named("unsigned char")),
-                            len: 0,
-                        },
-                        "bytes".into(),
-                    ),
-                ],
-            },
-        },
-    ];
-    let push_alias = |items: &mut Vec<Item>, ty: TypeId| {
+    let mut defs: Vec<(String, CTy, bool)> = vec![(
+        "dream_Str".into(),
+        str_view_ty(),
+        false,
+    )];
+    let push_def = |defs: &mut Vec<(String, CTy, bool)>, ty: TypeId| {
         let Some(name) = alias_for(cx, ty) else {
             return;
         };
@@ -99,18 +84,66 @@ pub(super) fn module_alias_items(cx: &Cx<'_>) -> Vec<Item> {
             TyKind::Union(_, _) => union_fields(cx, cx.nunion(ty).unwrap()),
             _ => return,
         };
-        items.push(Item::Alias {
-            name,
-            ty: CTy::Struct { fields },
-        });
+        defs.push((name, CTy::Struct { fields }, false));
     };
     for ty in cx.native.structs.keys() {
-        push_alias(&mut items, *ty);
+        push_def(&mut defs, *ty);
     }
     for ty in cx.native.unions.keys() {
-        push_alias(&mut items, *ty);
+        push_def(&mut defs, *ty);
+    }
+    // One packed view per element type that actually appears inside an array: elements sit
+    // unaligned at offset 4, so only a packed struct can type them truthfully.
+    let mut arr_elems: IndexSet<TypeId> = IndexSet::new();
+    for f in cx.mir.functions.iter() {
+        for d in f.locals.iter() {
+            collect_array_elems(cx, d.ty, &mut arr_elems);
+        }
+    }
+    for layout in cx.native.structs.values() {
+        for f in &layout.fields {
+            collect_array_elems(cx, f.ty, &mut arr_elems);
+        }
+    }
+    for e in &arr_elems {
+        defs.push((
+            arr_alias(cx, *e),
+            CTy::Struct {
+                fields: vec![
+                    (CTy::I32, "len".into()),
+                    (
+                        CTy::Array {
+                            elem: Box::new(field_c_ty(cx, *e)),
+                            len: 0,
+                        },
+                        "elems".into(),
+                    ),
+                ],
+            },
+            true,
+        ));
+    }
+    let mut items: Vec<Item> = Vec::with_capacity(defs.len() * 2);
+    for (name, _, _) in &defs {
+        items.push(Item::AliasFwd {
+            tag: alias_tag(name),
+            name: name.clone(),
+        });
+    }
+    for (name, ty, packed) in defs {
+        items.push(Item::Alias {
+            tag: alias_tag(&name),
+            name,
+            ty,
+            packed,
+        });
     }
     items
+}
+
+/// The struct tag backing a view alias (`Point` -> `__dv_Point`).
+fn alias_tag(name: &str) -> String {
+    format!("__dv_{name}")
 }
 
 /// Fields with explicit padding so the C struct lands byte-for-byte on the runtime layout.
@@ -143,23 +176,74 @@ fn padded_fields(
 /// variant; every variant's payload sits at its fixed block offset, so a flat struct exposes all
 /// of them with `<Variant>_`-prefixed names (the active variant's are the meaningful ones).
 fn union_fields(cx: &Cx<'_>, u: &UnionLayout) -> Vec<(CTy, String)> {
-    let mut fields: Vec<(u32, TypeId, String)> = Vec::new();
-    for var in &u.variants {
-        for f in &var.fields {
-            if f.offset < 4 || f.offset >= u.size {
-                continue;
-            }
-            fields.push((f.offset, f.ty, format!("{}_{}", var.name, f.name)));
+    let variants: Vec<(CTy, String)> = u
+        .variants
+        .iter()
+        .map(|var| {
+            let fields: Vec<(u32, TypeId, String)> = var
+                .fields
+                .iter()
+                .filter(|f| f.offset >= 4 && f.offset < u.size)
+                .map(|f| (f.offset - 4, f.ty, f.name.clone()))
+                .collect();
+            (
+                CTy::Struct {
+                    fields: padded_fields(cx, fields.into_iter()),
+                },
+                var.name.clone(),
+            )
+        })
+        .collect();
+    vec![
+        (CTy::I32, "tag".into()),
+        (CTy::Union { fields: variants }, "value".into()),
+    ]
+}
+
+/// Recursively records every element type reachable through array shapes at `ty`.
+fn collect_array_elems(cx: &Cx<'_>, ty: TypeId, out: &mut IndexSet<TypeId>) {
+    match cx.interner.kind(ty) {
+        TyKind::Array(elem) => {
+            out.insert(*elem);
+            collect_array_elems(cx, *elem, out);
         }
+        TyKind::Struct(_, _) => {
+            if let Some(l) = cx.nstruct(ty) {
+                for f in &l.fields {
+                    collect_array_elems(cx, f.ty, out);
+                }
+            }
+        }
+        _ => {}
     }
-    let mut out = padded_fields(cx, fields.into_iter());
-    out.insert(0, (CTy::I32, "tag".into()));
-    out
+}
+
+/// Readable element spelling for typed array-view aliases (`dream_Arr_int`, `dream_Arr_Point`).
+fn elem_tag(cx: &Cx<'_>, ty: TypeId) -> String {
+    match cx.interner.kind(ty) {
+        TyKind::Prim(p) => p.name().to_string(),
+        TyKind::Struct(_, _) => c_ident(&cx.nstruct(ty).unwrap().name),
+        TyKind::Union(_, _) => c_ident(&cx.nunion(ty).unwrap().name),
+        TyKind::Enum(_) => format!("e{}", ty.0),
+        TyKind::Array(inner) => format!("arr_{}", elem_tag(cx, *inner)),
+        TyKind::Tuple(elems) => {
+            let ids: Vec<String> = elems.iter().map(|t| elem_tag(cx, *t)).collect();
+            format!("tuple_{}", ids.join("_"))
+        }
+        _ => format!("t{}", ty.0),
+    }
+}
+
+fn arr_alias(cx: &Cx<'_>, elem: TypeId) -> String {
+    format!("dream_Arr_{}", elem_tag(cx, elem))
 }
 
 /// How a field of Dream type `fty` renders inside a view: scalars directly, structured heap
 /// references as pointers to their alias.
 fn field_c_ty(cx: &Cx<'_>, fty: TypeId) -> CTy {
+    if let TyKind::Array(elem) = cx.interner.kind(fty) {
+        return CTy::ptr_to(CTy::Ident(arr_alias(cx, *elem)));
+    }
     if let Some(alias) = alias_for(cx, fty) {
         return CTy::ptr_to(CTy::Ident(alias));
     }
@@ -186,7 +270,9 @@ pub(super) fn local_debug_views(cx: &Cx<'_>, f: &MirFunction) -> Vec<Stmt> {
                 decl.ty,
             )
             .map(|alias| CTy::ptr_to(CTy::Ident(alias))),
-            TyKind::Array(_) => Some(CTy::ptr_to(CTy::Named("dream_Arr"))),
+            TyKind::Array(elem) => {
+                Some(CTy::ptr_to(CTy::Ident(arr_alias(cx, *elem))))
+            }
             _ if is_value && !is_param => match kind {
                 TyKind::Struct(_, _) => alias_for(cx, decl.ty).map(|a| CTy::ptr_to(CTy::Ident(a))),
                 TyKind::Tuple(elems) => Some(CTy::ptr_to(CTy::Struct {

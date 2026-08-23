@@ -7,6 +7,37 @@ mod protocol;
 /// proxied session so Dream strings/arrays render as text in the debugger.
 const LLDB_FORMATTERS: &str = include_str!("dream_lldb_formatters.py");
 
+/// Extracts debugger-view typedef names from the generated C: lines shaped
+/// `typedef struct [...} Name;`. Function-pointer typedefs (containing `(`) are skipped.
+fn view_typedef_names(c_src: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in c_src.lines() {
+        let line = line.trim();
+        // Packed array views carry `__attribute__((packed))`, whose parens are not a function
+        // pointer; strip attributes before the fn-ptr exclusion.
+        let plain = match line.find("__attribute__") {
+            Some(i) => &line[..i],
+            None => line,
+        };
+        if !plain.starts_with("typedef struct") || plain.contains('(') {
+            continue;
+        }
+        if let Some(name) = line.rsplit('}').next().and_then(|t| t.trim_end().strip_suffix(';')) {
+            let name = name.trim();
+            if !name.is_empty() {
+                names.push(name.to_string());
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn formatter_init_commands(formatters: &Path) -> Vec<String> {
+    vec![format!("command script import {}", formatters.display())]
+}
+
 use protocol::{read_message, write_message};
 use serde_json::{json, Value};
 use std::io::{self, BufReader, Read, Write};
@@ -57,14 +88,18 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
     // the other artifacts and imported at session start via `initCommands`. lldb forbids dots in
     // module names, so the stem joins with underscores rather than `with_extension`.
     let c_path_p = Path::new(c_path);
-    let formatters = c_path_p.with_file_name(format!(
-        "{}_lldb_dream.py",
-        c_path_p
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("dream")
-    ));
+    let stem = c_path_p.file_stem().and_then(|s| s.to_str()).unwrap_or("dream");
+    let formatters = c_path_p.with_file_name(format!("{stem}_lldb_dream.py"));
     std::fs::write(&formatters, LLDB_FORMATTERS)?;
+    // The import hook reads this generated list to know which typedef names get summaries.
+    let names: Vec<String> = std::fs::read_to_string(c_path)
+        .map(|src| view_typedef_names(&src))
+        .unwrap_or_default();
+    let list: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
+    std::fs::write(
+        c_path_p.with_file_name(format!("{stem}_lldb_names.py")),
+        format!("NAMES = [{}]\n", list.join(", ")),
+    )?;
 
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
@@ -75,10 +110,9 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
                     msg["arguments"] = json!({});
                 }
                 rewrite_launch(&mut msg, &bin_s, &cwd, &env_pairs);
-                merge_init_commands(&mut msg, &[format!(
-                    "command script import {}",
-                    formatters.display()
-                )]);
+                // Registration must happen as session commands (not from the module's import
+                // hook): summaries added during `command script import` do not reliably attach.
+                merge_init_commands(&mut msg, &formatter_init_commands(&formatters));
             }
             // DWARF records symlink-resolved source paths (macOS `/tmp` → `/private/tmp`), while
             // clients echo back whatever path they opened; lldb-dap compares literally, so

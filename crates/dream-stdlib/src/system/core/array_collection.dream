@@ -6,6 +6,29 @@ public static class Array {
     public static fun alloc<T>(len: int): T[] {
         return Buffer.alloc<T>(len);
     }
+
+    // A `T[]` of length `len` whose every slot holds `value` (evaluated once, shared).
+    public static fun repeat<T>(len: int, value: T): T[] {
+        let out = Buffer.alloc<T>(len);
+        let i = 0;
+        while (i < len) {
+            out[i] = value;
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Like `repeat`, but calls `fill()` once per slot so each element can be a fresh value
+    // (`[v; n]` uses this whenever `v` itself constructs an array, giving distinct rows).
+    public static fun repeat_with<T>(len: int, fill: fun(): T): T[] {
+        let out = Buffer.alloc<T>(len);
+        let i = 0;
+        while (i < len) {
+            out[i] = fill();
+            i = i + 1;
+        }
+        return out;
+    }
 }
 
 // Every `T[]` implements `IndexedCollection<T>` (and thus `Collection<T>`). Instantiated on demand

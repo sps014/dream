@@ -719,6 +719,9 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
         ExpressionNode::ArrayLiteral(tok, _) => {
             ctx.unsupported_expr("array literal", Some(tok.position))
         }
+        ExpressionNode::ArrayRepeat(tok, _, _) => {
+            ctx.unsupported_expr("repeat-array literal", Some(tok.position))
+        }
         ExpressionNode::TupleLiteral(tok, _) => {
             ctx.unsupported_expr("tuple literal", Some(tok.position))
         }

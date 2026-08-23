@@ -1208,6 +1208,10 @@ impl Builder {
                     self.walk_expr(v, scope);
                 }
             }
+            ExpressionNode::ArrayRepeat(_, v, n) => {
+                self.walk_expr(v, scope);
+                self.walk_expr(n, scope);
+            }
             ExpressionNode::Await(_, e) => self.walk_expr(e, scope),
             ExpressionNode::Switch(_, subject, arms) => {
                 self.walk_expr(subject, scope);

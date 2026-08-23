@@ -11,6 +11,12 @@ pub enum ExpressionNode<'a> {
     Literal(Type),
     /// `[e1, e2, …]` — the `SyntaxToken` is the opening `[` (true start for inlay hints).
     ArrayLiteral(SyntaxToken, Vec<ExpressionNode<'a>>),
+    /// `[value; len]` — a repeat-array literal: a `T[]` of length `len` whose every slot holds
+    /// `value` (`T` inferred from the value expression or the surrounding array-typed context).
+    /// Nesting composes (`[[0; 3]; 5]`); the analyzer decides between zero-init allocation,
+    /// single-evaluation fill, and per-slot re-evaluation based on what `value` is. The
+    /// `SyntaxToken` is the opening `[`.
+    ArrayRepeat(SyntaxToken, Box<ExpressionNode<'a>>, Box<ExpressionNode<'a>>),
     /// `(e1, e2, …)` — a positional tuple literal (arity ≥ 2). Distinguised from
     /// [`Parenthesized`] by a comma after the first element. The `SyntaxToken` is the opening `(`.
     TupleLiteral(SyntaxToken, Vec<ExpressionNode<'a>>),
@@ -201,6 +207,7 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::Call(callee, _, _) => callee.position(),
             ExpressionNode::Parenthesized(open, _)
             | ExpressionNode::ArrayLiteral(open, _)
+            | ExpressionNode::ArrayRepeat(open, _, _)
             | ExpressionNode::TupleLiteral(open, _)
             | ExpressionNode::SetLiteral(open, _)
             | ExpressionNode::MapLiteral(open, _)
@@ -247,6 +254,7 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
             ExpressionNode::Parenthesized(open, _)
             | ExpressionNode::ArrayLiteral(open, _)
+            | ExpressionNode::ArrayRepeat(open, _, _)
             | ExpressionNode::TupleLiteral(open, _)
             | ExpressionNode::SetLiteral(open, _)
             | ExpressionNode::MapLiteral(open, _)

@@ -856,8 +856,13 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Builds a concrete `Type` from a type name, used when substituting a generic
-    /// parameter `T` with the concrete type chosen at the call/instantiation site.
+    /// parameter `T` with the concrete type chosen at the call/instantiation site. Array
+    /// spellings (`int[]`, `Point[][]`) recurse so `T[] = int[]` binds `T` to a real array
+    /// type, not a struct that merely prints as one.
     pub(in crate::analyzer) fn concrete_type_from_str(name: &str) -> Type {
+        if let Some(base) = name.strip_suffix("[]") {
+            return Type::Array(Box::new(Self::concrete_type_from_str(base)));
+        }
         let token = synthetic_token(TokenKind::DataTypeToken, name);
         primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
     }

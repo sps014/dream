@@ -122,6 +122,10 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                     walk_expr(a, diagnostics);
                 }
             }
+            ExpressionNode::ArrayRepeat(_, v, n) => {
+                walk_expr(v, diagnostics);
+                walk_expr(n, diagnostics);
+            }
             ExpressionNode::FunctionCall(_, _, args)
             | ExpressionNode::ArrayLiteral(_, args)
             | ExpressionNode::TupleLiteral(_, args)

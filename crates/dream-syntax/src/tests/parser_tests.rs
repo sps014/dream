@@ -44,7 +44,63 @@ fn test_parse_function_declaration() {
 }
 
 #[test]
+fn test_parse_repeat_array_literal() {
+    let code = "fun test(): void { let a = [7; 5]; let m = [[0; 3]; 2]; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+
+    let lit_text = |e: &ExpressionNode| -> String {
+        match e {
+            ExpressionNode::Literal(Type::Integer(t)) => t.text.clone(),
+            other => panic!("Expected integer literal, got {:?}", other),
+        }
+    };
+
+    if let StatementNode::Declaration(_, _, init, _) = &func.body[0] {
+        if let ExpressionNode::ArrayRepeat(open, value, len) = init {
+            assert_eq!(open.text, "[");
+            assert_eq!(lit_text(value), "7");
+            assert_eq!(lit_text(len), "5");
+        } else {
+            panic!("Expected ArrayRepeat, got {:?}", init);
+        }
+    } else {
+        panic!("Expected declaration statement");
+    }
+
+    // Nesting: the outer repeat's value is itself an inner repeat.
+    if let StatementNode::Declaration(_, _, init, _) = &func.body[1] {
+        if let ExpressionNode::ArrayRepeat(_, value, len) = init {
+            assert!(
+                matches!(&**value, ExpressionNode::ArrayRepeat(_, _, _)),
+                "expected nested ArrayRepeat as value"
+            );
+            assert_eq!(lit_text(len), "2");
+        } else {
+            panic!("Expected outer ArrayRepeat, got {:?}", init);
+        }
+    } else {
+        panic!("Expected declaration statement");
+    }
+}
+
+#[test]
+fn test_comma_literal_still_parses_alongside_repeat_syntax() {
+    let code = "fun test(): void { let a = [1, 2]; let e: int[] = []; let s = \"a;b\"; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    if let StatementNode::Declaration(_, _, init, _) = &program.functions[0].body[0] {
+        assert!(matches!(init, ExpressionNode::ArrayLiteral(_, elems) if elems.len() == 2));
+    }
+}
+
+#[test]
 fn test_parse_array_declaration_and_assignment() {
+
     let code = "fun test(): void { let arr: int[] = [1, 2, 3]; arr[0] = 5; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);

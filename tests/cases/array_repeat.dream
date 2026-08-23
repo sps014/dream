@@ -1,0 +1,38 @@
+import system;
+
+fun main(): void {
+    // Zero-init fast path: lowers straight to Buffer.alloc (no fill loop).
+    let zeros = [0; 4];
+    System.println(zeros.length);
+    System.println(zeros[0] + zeros[3]);
+
+    // Non-zero scalar: value evaluated once, copied into every slot.
+    let sevens = [7; 3];
+    let i = 0;
+    while (i < sevens.length) {
+        System.println(sevens[i]);
+        i = i + 1;
+    }
+
+    // Runtime length.
+    let n = 5;
+    let scaled = [2; n * 2];
+    System.println(scaled.length);
+    System.println(scaled[9]);
+
+    // Nested repeat: every row is a distinct array — mutating one row
+    // must not affect the others.
+    let grid = [[0; 3]; 2];
+    grid[0][1] = 42;
+    System.println(grid[0].length);
+    System.println(grid[0][1]);
+    System.println(grid[1][1]);
+
+    // Reference-typed init: slots share one ARC-retained value.
+    let names = ["dream"; 2];
+    System.println(names[0]);
+
+    // List context composes with the collection-literal desugar.
+    let xs: List<int> = [9; 2];
+    System.println(xs.length);
+}

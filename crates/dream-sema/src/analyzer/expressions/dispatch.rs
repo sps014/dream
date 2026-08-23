@@ -4,7 +4,7 @@ use super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, LambdaBody, LambdaNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -94,6 +94,110 @@ impl<'a> Analyzer<'a> {
                 let array_type = Type::Array(Box::new(first_type));
                 self.hir_set_array_lit(elem_hirs, &array_type);
                 Ok(array_type)
+            }
+            ExpressionNode::ArrayRepeat(open, value, len) => {
+                // `[v; n]` in a `List<T>` context composes with the collection-literal desugar:
+                // replay as `List<T>.from_array([v; n])`, re-entering this arm for the inner
+                // repeat once the callee signature publishes its `T[]` parameter expectation.
+                if let Some(elem_ty) = self
+                    .current_expected_type
+                    .as_ref()
+                    .and_then(|t| Self::collection_generic_arg(t, "List"))
+                {
+                    let ctx = super::super::AnalyzerContext {
+                        parent_function,
+                        symbol_table,
+                    };
+                    return self.lower_collection_literal_call(
+                        "List",
+                        vec![elem_ty],
+                        "from_array",
+                        vec![ExpressionNode::ArrayRepeat(
+                            open.clone(),
+                            Box::new((**value).clone()),
+                            Box::new((**len).clone()),
+                        )],
+                        &ctx,
+                        diagnostics,
+                    );
+                }
+
+                let expected_elem = match &self.current_expected_type {
+                    Some(Type::Array(elem)) => Some((**elem).clone()),
+                    _ => None,
+                };
+
+                // Zero-like scalar init (`[0; n]`, `[0.0; n]`, `[false; n]`): every runtime
+                // allocation is zero-filled anyway, so lower straight to the `Buffer.alloc`
+                // intrinsic and skip the per-slot fill entirely. Only for scalar element types —
+                // for reference elements (`string[]` from `[0; n]`) zero-fill would produce null
+                // refs, and the general path below reports the mismatch instead.
+                if Self::is_zero_like_literal(value)
+                    && expected_elem
+                        .as_ref()
+                        .is_none_or(Self::is_scalar_value_type)
+                {
+                    let elem_ty = match expected_elem {
+                        Some(t) => t,
+                        None => {
+                            let saved = self.current_expected_type.take();
+                            let ty = self.analyze_expression(
+                                value,
+                                parent_function,
+                                symbol_table,
+                                diagnostics,
+                            )?;
+                            self.current_expected_type = saved;
+                            let _ = self.hir_take();
+                            ty
+                        }
+                    };
+                    let len_ty =
+                        self.analyze_expression(len, parent_function, symbol_table, diagnostics)?;
+                    let len_hir = self.hir_take();
+                    let int_ty = Type::Integer(synthetic_token(TokenKind::DataTypeToken, "int"));
+                    if !len_ty.is_unknown() && len_ty != int_ty {
+                        let span = len.position().unwrap_or(open.position);
+                        self.compare_data_type(&int_ty, &len_ty, &span, diagnostics)?;
+                    }
+                    self.hir_set_array_new(&elem_ty, len_hir);
+                    return Ok(Type::Array(Box::new(elem_ty)));
+                }
+
+                // General case, replayed through ordinary static dispatch on the bootstrap
+                // `Array` class (single analysis of both operands — no duplicated diagnostics).
+                // When the value builds an array at its top level (`[[0; 3]; n]`) every slot must
+                // receive a *fresh* row, so the value is re-evaluated per index via
+                // `Array.repeat_with<T>(n, () => v)`; otherwise it is evaluated exactly once and
+                // shared (`Array.repeat<T>(n, v)`, ARC-retain per slot).
+                let repeat_with = Self::is_array_construction(value);
+                let method = if repeat_with { "repeat_with" } else { "repeat" };
+                let args = if repeat_with {
+                    let body = self.arena.alloc((**value).clone());
+                    let lambda = ExpressionNode::Lambda(self.arena.alloc(LambdaNode {
+                        open_paren_position: open.position,
+                        async_keyword: None,
+                        is_async: false,
+                        generic_parameters: None,
+                        generic_constraints: Vec::new(),
+                        parameters: Vec::new(),
+                        body: LambdaBody::Expr(body),
+                    }));
+                    vec![(**len).clone(), lambda]
+                } else {
+                    vec![(**len).clone(), (**value).clone()]
+                };
+                let receiver = self.arena.alloc(ExpressionNode::Identifier(synthetic_token(
+                    TokenKind::IdentifierToken,
+                    "Array",
+                )));
+                let synthetic = ExpressionNode::MethodCall(
+                    receiver,
+                    synthetic_token(TokenKind::IdentifierToken, method),
+                    None,
+                    args,
+                );
+                self.analyze_expression(&synthetic, parent_function, symbol_table, diagnostics)
             }
             ExpressionNode::TupleLiteral(_, elements) => {
                 if elements.len() < 2 {
@@ -701,6 +805,49 @@ impl<'a> Analyzer<'a> {
         let call =
             ExpressionNode::MethodCall(array_expr, get_tok, None, vec![(*index_expr).clone()]);
         self.analyze_expression(&call, parent_function, symbol_table, diagnostics)
+    }
+
+    /// True for scalar value types whose all-zero bit pattern is a valid value (`int`,
+    /// `float`, `bool`, …). Excludes `string`/objects/classes, where zero means a null ref.
+    fn is_scalar_value_type(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Integer(_)
+                | Type::Float(_)
+                | Type::Double(_)
+                | Type::Boolean(_)
+                | Type::Byte(_)
+                | Type::Char(_)
+                | Type::Long(_)
+                | Type::UInt(_)
+                | Type::ULong(_)
+        )
+    }
+
+    /// True for a literal whose every slot would already be produced by runtime zero-fill
+    /// (`0`, `0.0`, `false`, `0` bytes), letting `[v; n]` skip the per-slot fill loop.
+    fn is_zero_like_literal(expr: &ExpressionNode) -> bool {
+        match expr {
+            ExpressionNode::Literal(Type::Integer(t)) | ExpressionNode::Literal(Type::Byte(t)) => {
+                t.text == "0"
+            }
+            ExpressionNode::Literal(Type::Float(t)) | ExpressionNode::Literal(Type::Double(t)) => {
+                matches!(t.text.as_str(), "0" | "0.0")
+            }
+            ExpressionNode::Literal(Type::Boolean(t)) => t.text == "false",
+            _ => false,
+        }
+    }
+
+    /// True when the top level of `expr` constructs an array (`[...]` literal, `[v; n]` repeat,
+    /// possibly parenthesized). Only then does `[v; n]` re-evaluate the value per slot so each
+    /// row is distinct; deeper occurrences evaluate once like any other expression.
+    fn is_array_construction(expr: &ExpressionNode) -> bool {
+        match expr {
+            ExpressionNode::Parenthesized(_, inner) => Self::is_array_construction(inner),
+            ExpressionNode::ArrayLiteral(..) | ExpressionNode::ArrayRepeat(..) => true,
+            _ => false,
+        }
     }
 
     /// If `t` is `{name}<A>` (a one-generic-argument struct named `name`, e.g. `List<int>`),

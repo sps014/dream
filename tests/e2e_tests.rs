@@ -21,6 +21,7 @@ const SMOKE_CASES: &[&str] = &[
     "async_basic",
     "async_generic_sink_reuse",
     "collection_literals",
+    "array_repeat",
     "map_basics",
     "map_indexer_missing",
     "container_clear_rc",

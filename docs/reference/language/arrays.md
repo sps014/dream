@@ -55,16 +55,37 @@ println(grid[0].length);   // 3  (columns)
 println(grid[1][2]);       // 6
 ```
 
+## Repeat arrays: `[value; len]`
+
+`[value; len]` allocates a `T[]` of length `len` whose every slot holds `value`. The element type is inferred from the value (or from the surrounding array-typed context), and `len` may be any runtime `int` expression:
+
+```dream
+let zeros = [0; 4];        // int[4], all zero
+let sevens = [7; 3];       // [7, 7, 7]
+let n = read_count();
+let buf = [2.0; n * 2];    // length computed at runtime
+```
+
+The value expression is evaluated **once**, and every slot shares the result — for reference types (`["hi"; 3]`, `[config; 8]`) all slots point at the same object. The one exception is a value that itself constructs an array: then it is re-evaluated per slot so each row is distinct:
+
+```dream
+let grid = [[0; 3]; 5];   // int[][] — five *distinct* rows of three zeros
+grid[0][1] = 42;
+println(grid[1][1]);      // still 0
+```
+
+A zero-like value (`0`, `0.0`, `false`) on a scalar element type skips the fill loop entirely and lowers straight to a zero-initialized allocation.
+
 ## Fixed-size buffers
 
-Array literals produce a fixed-size `T[]`; you cannot push or pop. For a zero-initialized buffer of a **runtime** length, use `Array.alloc<T>(n)` (bootstrap; no extra import). `Buffer.alloc<T>(n)` is the same intrinsic underneath:
+Array literals produce a fixed-size `T[]`; you cannot push or pop. For an explicitly zero-initialized buffer of a runtime length, use `Array.alloc<T>(n)` (bootstrap; no extra import). `Buffer.alloc<T>(n)` is the same intrinsic underneath:
 
 ```dream
 let buf = Array.alloc<int>(4);   // int[] of length 4, all zero
 buf[0] = 10;
 ```
 
-There is no `new int[n]` / `int[5][10]` syntax. Nested `int[][]` is an array of arrays. Allocate the outer length with `Array.alloc<int[]>(rows)`, then each row with `Array.alloc<int>(cols)` — inner slots are null until you assign them:
+There is no `new int[n]` / `int[5][10]` syntax — use `[value; len]` for a filled buffer, or `Array.alloc<int[]>(rows)` followed by per-row allocation when rows must be built individually (inner slots are null until you assign them):
 
 ```dream
 let grid = Array.alloc<int[]>(5);

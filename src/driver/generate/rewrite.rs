@@ -298,6 +298,11 @@ fn rewrite_expr<'a>(
             }
             ExpressionNode::ArrayLiteral(open.clone(), nargs)
         }
+        ExpressionNode::ArrayRepeat(open, v, n) => ExpressionNode::ArrayRepeat(
+            open.clone(),
+            Box::new(rewrite_expr(arena, v, by_site, diagnostics, changed, file, file_contents)?),
+            Box::new(rewrite_expr(arena, n, by_site, diagnostics, changed, file, file_contents)?),
+        ),
         ExpressionNode::TupleLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
@@ -599,6 +604,11 @@ fn shift_expr<'a>(map: &SpanMap, arena: &'a Bump, e: &ExpressionNode<'a>) -> Exp
         ExpressionNode::ArrayLiteral(t, xs) => ExpressionNode::ArrayLiteral(
             map.token(t),
             xs.iter().map(|x| shift_expr(map, arena, x)).collect(),
+        ),
+        ExpressionNode::ArrayRepeat(t, v, n) => ExpressionNode::ArrayRepeat(
+            map.token(t),
+            Box::new(shift_expr(map, arena, v)),
+            Box::new(shift_expr(map, arena, n)),
         ),
         ExpressionNode::TupleLiteral(t, xs) => ExpressionNode::TupleLiteral(
             map.token(t),

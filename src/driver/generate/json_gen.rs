@@ -542,6 +542,10 @@ fn collect_collections_from_expr(
                 collect_collections_from_expr(elem, jsonable, out);
             }
         }
+        ExpressionNode::ArrayRepeat(_, v, n) => {
+            collect_collections_from_expr(v, jsonable, out);
+            collect_collections_from_expr(n, jsonable, out);
+        }
         ExpressionNode::MapLiteral(_, pairs) => {
             for (k, v) in pairs {
                 collect_collections_from_expr(k, jsonable, out);

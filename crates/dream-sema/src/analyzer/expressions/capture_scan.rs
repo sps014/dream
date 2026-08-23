@@ -169,6 +169,10 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
                 walk_expr_for_ref_targets(e, out);
             }
         }
+        ExpressionNode::ArrayRepeat(_, v, n) => {
+            walk_expr_for_ref_targets(v, out);
+            walk_expr_for_ref_targets(n, out);
+        }
         ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
                 walk_expr_for_ref_targets(k, out);
@@ -353,6 +357,10 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
             for e in es {
                 walk_expr_for_lambdas(e, out);
             }
+        }
+        ExpressionNode::ArrayRepeat(_, v, n) => {
+            walk_expr_for_lambdas(v, out);
+            walk_expr_for_lambdas(n, out);
         }
         ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
@@ -633,6 +641,10 @@ fn collect_names_expr(
             for e in es {
                 collect_names_expr(e, scopes, referenced);
             }
+        }
+        ExpressionNode::ArrayRepeat(_, v, n) => {
+            collect_names_expr(v, scopes, referenced);
+            collect_names_expr(n, scopes, referenced);
         }
         ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {

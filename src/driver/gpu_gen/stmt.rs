@@ -198,6 +198,10 @@ fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
                 scan_expr_nameof(a, ctx);
             }
         }
+        ExpressionNode::ArrayRepeat(_, v, n) => {
+            scan_expr_nameof(v, ctx);
+            scan_expr_nameof(n, ctx);
+        }
         ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
                 scan_expr_nameof(k, ctx);

@@ -188,6 +188,10 @@ impl SyntaxTreeView {
                     self.walk_expr(a, parent);
                 }
             }
+            ExpressionNode::ArrayRepeat(_, v, n) => {
+                self.walk_expr(v, parent);
+                self.walk_expr(n, parent);
+            }
             ExpressionNode::FunctionCall(_, _, args)
             | ExpressionNode::ArrayLiteral(_, args)
             | ExpressionNode::TupleLiteral(_, args)

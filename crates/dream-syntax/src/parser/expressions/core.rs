@@ -114,10 +114,40 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             return self.parse_paren_or_cast();
         } else if self.current_token().kind == TokenKind::OpenBracketToken {
-            // Array literal
+            // Array literal, or a repeat-array `[value; len]` when the first element is followed
+            // by `;` (a separator no comma-delimited literal can contain).
             let open = self.match_token(TokenKind::OpenBracketToken);
-            let elements =
-                self.parse_delimited_list(TokenKind::CloseBracketToken, |p| p.parse_expression(0))?;
+            if self.current_token().kind == TokenKind::CloseBracketToken {
+                self.match_token(TokenKind::CloseBracketToken);
+                let expr = ExpressionNode::ArrayLiteral(open, Vec::new());
+                return self.parse_postfix_chain(expr);
+            }
+            let first = self.parse_expression(0)?;
+            if self.current_token().kind == TokenKind::SemicolonToken {
+                self.match_token(TokenKind::SemicolonToken);
+                let len = self.parse_expression(0)?;
+                self.match_token(TokenKind::CloseBracketToken);
+                let expr = ExpressionNode::ArrayRepeat(open, Box::new(first), Box::new(len));
+                return self.parse_postfix_chain(expr);
+            }
+            // Same shape as `parse_delimited_list` with the first element hoisted out: each
+            // iteration parses one element, then consumes an optional comma, so a trailing
+            // comma before `]` stays valid.
+            let mut elements = vec![first];
+            if self.current_token().kind == TokenKind::CommaToken {
+                self.match_token(TokenKind::CommaToken);
+            }
+            while self.current_token().kind != TokenKind::CloseBracketToken
+                && self.current_token().kind != TokenKind::EndOfFileToken
+            {
+                let iter = self.current_token_index;
+                elements.push(self.parse_expression(0)?);
+                if self.current_token().kind == TokenKind::CommaToken {
+                    self.match_token(TokenKind::CommaToken);
+                }
+                self.ensure_progress(iter);
+            }
+            self.match_token(TokenKind::CloseBracketToken);
             let expr = ExpressionNode::ArrayLiteral(open, elements);
             return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::CurlyOpenBracketToken {

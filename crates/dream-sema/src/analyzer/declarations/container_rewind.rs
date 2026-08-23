@@ -34,11 +34,17 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
+        // Value structs are unmanaged as elements, but their fields may hold references
+        // (`struct Cell { label: string, owner: Boxed }`): shrinking an array of them must
+        // release those fields. Precompute which value structs are managed-by-content.
+        let mut ref_values: std::collections::HashSet<String> = std::collections::HashSet::new();
+        self.collect_managed_value_structs(node, &mut ref_values);
+
         for struct_decl in node.structs.iter() {
             if struct_decl.is_value || struct_decl.is_static {
                 continue;
             }
-            let Some(fields) = self.container_fields(struct_decl) else {
+            let Some(fields) = self.container_fields(struct_decl, &ref_values) else {
                 continue;
             };
             // A class-level `T : unmanaged` bound means no element can hold a reference.
@@ -88,13 +94,17 @@ impl<'a> Analyzer<'a> {
 
     /// Classifies `(buffer field, counter field)` pairs for a class, or returns `None` when the
     /// declaration cannot exhibit the rewind pattern.
-    fn container_fields(&self, decl: &StructDeclarationNode) -> Option<ContainerFields> {
+    fn container_fields(
+        &self,
+        decl: &StructDeclarationNode,
+        ref_values: &std::collections::HashSet<String>,
+    ) -> Option<ContainerFields> {
         let mut buffers = Vec::new();
         let mut counters = Vec::new();
         for field in &decl.fields {
             match &field.field_type {
                 Type::Array(inner) => {
-                    if self.holds_managed(inner.as_ref()) {
+                    if self.holds_managed(inner.as_ref(), ref_values) {
                         buffers.push(field.name.text.clone());
                     }
                 }
@@ -108,28 +118,77 @@ impl<'a> Analyzer<'a> {
         Some(ContainerFields { buffers, counters })
     }
 
+    /// Value structs whose fields transitively hold an RC-tracked value. Fixed point so nested
+    /// value structs (`struct Outer { inner: Cell }`) resolve without looping on cycles.
+    fn collect_managed_value_structs(
+        &self,
+        node: &'a ProgramNode<'a>,
+        out: &mut std::collections::HashSet<String>,
+    ) {
+        let value_decls: Vec<&StructDeclarationNode> =
+            node.structs.iter().filter(|s| s.is_value).collect();
+        loop {
+            let mut grew = false;
+            for decl in &value_decls {
+                let name = decl.name.text.clone();
+                if out.contains(&name) {
+                    continue;
+                }
+                let holds = decl.fields.iter().any(|f| match &f.field_type {
+                    Type::String(_) | Type::Object(_) | Type::Generic(_) => true,
+                    Type::Array(inner) => self.holds_managed_shallow(inner.as_ref(), out),
+                    Type::Struct(tok, _) => {
+                        match self.struct_table.get_struct(&tok.text) {
+                            // Another value struct: resolved by a later fixed-point pass.
+                            Some(i) if i.is_value => out.contains(&tok.text),
+                            // A class field makes the value struct managed-by-content.
+                            Some(_) => true,
+                            None => false,
+                        }
+                    }
+                    _ => false,
+                });
+                if holds {
+                    out.insert(name);
+                    grew = true;
+                }
+            }
+            if !grew {
+                return;
+            }
+        }
+    }
+
+    fn holds_managed_shallow(
+        &self,
+        ty: &Type,
+        ref_values: &std::collections::HashSet<String>,
+    ) -> bool {
+        match ty {
+            Type::Struct(tok, _) => ref_values.contains(&tok.text),
+            Type::Array(inner) => self.holds_managed_shallow(inner.as_ref(), ref_values),
+            other => self.holds_managed(other, ref_values),
+        }
+    }
+
     /// True when `ty` transitively contains an RC-tracked value: a class, `string`, `object`,
-    /// arrays of those, or an unresolved generic parameter (conservative — `Queue<T>`'s `items:
-    /// T[]` must count as managed even though `T` is only known at monomorphization).
-    /// Primitives and user value structs are not managed.
-    fn holds_managed(&self, ty: &Type) -> bool {
+    /// arrays of those, a value struct that contains references, or an unresolved generic
+    /// parameter (conservative — `Queue<T>`'s `items: T[]` must count as managed even though
+    /// `T` is only known at monomorphization). Primitives and reference-free value structs
+    /// are not managed.
+    fn holds_managed(&self, ty: &Type, ref_values: &std::collections::HashSet<String>) -> bool {
         match ty {
             Type::String(_) | Type::Object(_) | Type::Generic(_) => true,
-            Type::Array(inner) => self.holds_managed(inner),
+            Type::Array(inner) => self.holds_managed(inner.as_ref(), ref_values),
             Type::Struct(token, args) => {
-                if let Some(arg0) = args.as_ref().and_then(|a| a.first()) {
-                    // Instantiated container shapes (`List<MaybeManaged>`) follow their argument.
-                    if matches!(
-                        token.text.as_str(),
-                        "List" | "Set" | "Map" | "Option"
-                    ) {
-                        let parts = args.as_ref().unwrap();
-                        return parts.iter().any(|a| self.holds_managed(a));
+                if matches!(token.text.as_str(), "List" | "Set" | "Map" | "Option") {
+                    if let Some(parts) = args.as_ref() {
+                        return parts.iter().any(|a| self.holds_managed(a, ref_values));
                     }
-                    let _ = arg0;
                 }
                 match self.struct_table.get_struct(&token.text) {
-                    Some(info) => !info.is_value,
+                    Some(info) if info.is_value => ref_values.contains(&token.text),
+                    Some(_) => true,
                     // Unknown named types are treated as managed to stay conservative.
                     None => true,
                 }
@@ -145,7 +204,18 @@ impl<'a> Analyzer<'a> {
 struct MethodScan {
     count_writes: Vec<String>,
     stored_buffers: Vec<String>,
+    /// Local names aliased to a buffer field (`let buf = this.items;`), so stores through the
+    /// alias count as covering stores.
+    buffer_locals: Vec<String>,
     called_this: bool,
+}
+
+impl MethodScan {
+    /// True when `name` is a known alias for one of the class's buffer fields.
+    fn is_buffer_name(&self, fields: &ContainerFields, name: &str) -> bool {
+        fields.buffers.iter().any(|b| b == name)
+            || self.buffer_locals.iter().any(|l| l == name)
+    }
 }
 
 impl MethodScan {
@@ -193,7 +263,18 @@ fn scan_statement(
             }
             scan_expression(value, fields, siblings, scan);
         }
-        StatementNode::Declaration(_, _, init, _) => scan_expression(init, fields, siblings, scan),
+        StatementNode::Declaration(name_tok, _, init, _) => {
+            // `let buf = this.items;` aliases a buffer field: subsequent `buf[i] = v` stores
+            // release slots exactly like direct field stores.
+            if let ExpressionNode::MemberAccess(recv, member) = init {
+                if matches!(*recv, ExpressionNode::Identifier(ref t) if t.text == "this")
+                    && fields.buffers.iter().any(|b| b == &member.text)
+                {
+                    scan.buffer_locals.push(name_tok.text.clone());
+                }
+            }
+            scan_expression(init, fields, siblings, scan);
+        }
         StatementNode::TupleDeclaration { init, .. } => {
             scan_expression(init, fields, siblings, scan)
         }
@@ -202,7 +283,7 @@ fn scan_statement(
                 scan.called_this = true;
             }
             for a in args {
-                if let Some(t) = buffer_field_arg(a, fields) {
+                if let Some(t) = buffer_field_arg(a, fields, scan) {
                     scan.stored_buffers.push(t);
                 }
                 scan_expression(a, fields, siblings, scan);
@@ -213,7 +294,7 @@ fn scan_statement(
                 scan.called_this = true;
             }
             for a in args {
-                if let Some(t) = buffer_field_arg(a, fields) {
+                if let Some(t) = buffer_field_arg(a, fields, scan) {
                     scan.stored_buffers.push(t);
                 }
                 scan_expression(a, fields, siblings, scan);
@@ -320,7 +401,7 @@ fn scan_expression(
             // Handing the buffer to any call (`Buffer.clear(this.items)`, `zero(items)`)
             // delegates its cleanup — conservatively covered.
             for a in args {
-                if let Some(t) = buffer_field_arg(a, fields) {
+                if let Some(t) = buffer_field_arg(a, fields, scan) {
                     scan.stored_buffers.push(t);
                 }
                 scan_expression(a, fields, siblings, scan);
@@ -337,7 +418,7 @@ fn scan_expression(
                 scan.called_this = true;
             }
             for a in args {
-                if let Some(t) = buffer_field_arg(a, fields) {
+                if let Some(t) = buffer_field_arg(a, fields, scan) {
                     scan.stored_buffers.push(t);
                 }
                 scan_expression(a, fields, siblings, scan);
@@ -399,8 +480,8 @@ fn note_buffer_store(base: &ExpressionNode, fields: &ContainerFields, scan: &mut
         _ => None,
     };
     if let Some(name) = name {
-        if fields.buffers.iter().any(|b| b == name) {
-            scan.stored_buffers.push(name.clone());
+        if scan.is_buffer_name(fields, name) {
+            scan.stored_buffers.push(name.to_string());
         }
     }
 }
@@ -484,8 +565,9 @@ fn is_self_receiver(e: &ExpressionNode) -> bool {
     }
 }
 
-/// Field name when `e` is a bare buffer-field reference (`items` or `this.items`).
-fn buffer_field_arg(e: &ExpressionNode, fields: &ContainerFields) -> Option<String> {
+/// Buffer identity when `e` is a bare buffer-field reference (`items`, `this.items`, or a
+/// local alias of one).
+fn buffer_field_arg(e: &ExpressionNode, fields: &ContainerFields, scan: &MethodScan) -> Option<String> {
     let name = match e {
         ExpressionNode::Identifier(t) => Some(&t.text),
         ExpressionNode::MemberAccess(recv, member) => {
@@ -495,11 +577,11 @@ fn buffer_field_arg(e: &ExpressionNode, fields: &ContainerFields) -> Option<Stri
         _ => None,
     };
     let name = name?;
-    fields
-        .buffers
-        .iter()
-        .find(|b| *b == name)
-        .cloned()
+    if scan.is_buffer_name(fields, name) {
+        Some(name.to_string())
+    } else {
+        None
+    }
 }
 
 /// True when every generic parameter of the class is bound `unmanaged`.

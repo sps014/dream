@@ -1,0 +1,25 @@
+module main;
+
+import system;
+import system.collections;
+
+// 2. Two buffers, one counter: shrinking count strands both.
+public class Outer2 {
+    items: string[];
+    extra: string[];
+    count: int;
+
+    public constructor() {
+        this.items = Buffer.alloc<string>(8);
+        this.extra = Buffer.alloc<string>(8);
+        this.count = 0;
+    }
+
+    public fun wipe(): void {
+        this.count = 0;
+    }
+}
+
+fun main(): void {
+    System.println("n2");
+}

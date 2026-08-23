@@ -451,7 +451,7 @@ fun bench_vec_add(iters: int): void {
         b[k] = (float)(k + 1);
         k = k + 1;
     }
-    let lanes = Vector<float>.count();
+    let lanes = Vector<float>.lane_count();
     let sw = Stopwatch();
     let r = 0;
     while (r < iters) {

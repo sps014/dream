@@ -1,0 +1,23 @@
+module main;
+
+import system;
+import system.collections;
+
+// 1. Nested generic element: List<List<T>> buffer.
+public class Outer1<T> {
+    grid: List<List<T>>;
+    count: int;
+
+    public constructor() {
+        this.grid = List<List<T>>();
+        this.count = 0;
+    }
+
+    public fun wipe(): void {
+        this.count = 0;
+    }
+}
+
+fun main(): void {
+    System.println("n1");
+}

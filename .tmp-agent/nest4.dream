@@ -1,0 +1,29 @@
+module main;
+
+import system;
+import system.collections;
+
+// 4. Store through a local alias with a different name — false positive check.
+public class Outer4 {
+    items: string[];
+    count: int;
+
+    public constructor() {
+        this.items = Buffer.alloc<string>(8);
+        this.count = 0;
+    }
+
+    public fun refill(v: string): void {
+        let buf = this.items;
+        let i = 0;
+        while (i < this.count) {
+            buf[i] = v;
+            i = i + 1;
+        }
+        this.count = this.count - 1;
+    }
+}
+
+fun main(): void {
+    System.println("n4");
+}

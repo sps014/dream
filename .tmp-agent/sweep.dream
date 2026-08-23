@@ -1,0 +1,32 @@
+module main;
+
+import system;
+import system.collections;
+
+fun main(): void {
+    let m = Map<string, string>();
+    m.set("k", "v");
+    m.remove("k");
+    let s = Set<string>();
+    s.add("x");
+    s.remove("x");
+    s.clear();
+    let sm = SortedMap<int, string>();
+    sm.set(1, "a");
+    sm.remove(1);
+    let q = Queue<string>();
+    q.enqueue("a");
+    let _ = q.dequeue();
+    q.clear();
+    let pq = PriorityQueue<string>();
+    pq.push("b");
+    let _ = pq.pop();
+    pq.clear();
+    let l = List<string>();
+    l.push("c");
+    l.remove_at(0);
+    l.push("d");
+    l.pop();
+    l.clear();
+    System.println(m.length.to_string() + s.length.to_string() + sm.length.to_string() + q.length.to_string() + pq.length.to_string() + l.length.to_string());
+}

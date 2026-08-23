@@ -1,0 +1,11 @@
+// `m[k]` on a missing key panics at runtime, matching `List[i]` out-of-range semantics.
+
+import system;
+import system.collections;
+
+fun main(): void {
+    let m = Map<string, int>();
+    m.set("a", 1);
+    System.println(m["a"]);
+    System.println(m["missing"]);
+}

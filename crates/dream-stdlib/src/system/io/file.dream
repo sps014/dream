@@ -186,25 +186,33 @@ public static class File {
         return Result.Ok(true);
     }
 
-    // Lists the entries of directory `path`. An empty or non-directory path yields an empty array.
-    public static async fun list(borrow path: string): string[] {
+    // Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a
+    // directory (an existing empty directory yields `Ok([])`).
+    public static async fun list(borrow path: string): Result<string[], IoError> {
+        if (File.is_dir(path) == false) {
+            return Result.Err(IoError.not_found(path));
+        }
         let joined = File.dir_list(path);
         if (joined.is_empty()) {
-            return Buffer.alloc<string>(0);
+            return Result.Ok(Buffer.alloc<string>(0));
         }
-        return joined.split('\n');
+        return Result.Ok(joined.split('\n'));
     }
 
-    // Like `list`, but each name is joined onto `path`.
-    public static async fun list_paths(borrow path: string): string[] {
-        let names = await File.list(path);
+    // Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
+    public static async fun list_paths(borrow path: string): Result<string[], IoError> {
+        let got = await File.list(path);
+        if (got.is_err()) {
+            return got;
+        }
+        let names = got.unwrap_or(Buffer.alloc<string>(0));
         let out = Buffer.alloc<string>(names.length);
         let i = 0;
         while (i < names.length) {
             out[i] = Path.join(path, names[i]);
             i = i + 1;
         }
-        return out;
+        return Result.Ok(out);
     }
 
     // Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.

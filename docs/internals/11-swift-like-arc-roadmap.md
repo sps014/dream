@@ -81,3 +81,22 @@ Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0
 shapes; `new` + share a class graph every iteration will not.
 
 Measure: `./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](https://github.com/sps014/dream/blob/main/tests/bench/BASELINE.md).
+
+## Container slot-zeroing convention (shipped guardrails)
+
+A class that owns a `T[]` buffer of managed elements plus a scalar count/length field **must zero
+live slots before rewinding the counter** (`Queue`/`PriorityQueue` follow `List`/`Map`/`Set` here);
+the `where T : unmanaged` overload is the sanctioned rewind-only specialization. Two compile-time /
+runtime guardrails back the convention:
+
+1. **Sema lint** — `crates/dream-sema/src/analyzer/declarations/container_rewind.rs` warns when a
+   method writes the counter field with no indexed store into any paired buffer field and no
+   same-class call that might zero slots.
+2. **Shrink-releasing realloc** — `Buffer.realloc` over RC-tracked elements emits
+   `dream_array_realloc_rc` (backend/c), which releases dropped tail slots before `realloc`, so
+   shrinking can never strand retained elements in dead capacity.
+
+Leak checking: `DREAM_DEBUG_LEAKS=1 dream run …` prints `live` / `total_allocations` heap counters
+at exit; `Debug.live_objects()` deltas (see `tests/cases/container_clear_rc.dream`) assert balance
+in goldens. Note the counters include interned strings and boxed print values, so measure into
+locals *before* printing and keep elements as literals.

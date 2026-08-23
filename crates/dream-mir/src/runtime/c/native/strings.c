@@ -96,6 +96,22 @@ dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize) {
     return p;
 }
 
+/* Same as `dream_array_realloc`, but for arrays of RC-tracked elements: shrinking releases the
+ * dropped tail slots before `realloc` (the pointers go stale once the block moves), so truncated
+ * elements do not stay retained until their slots happen to be overwritten. */
+dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
+                                 void (*release)(dream_ptr)) {
+    int32_t old_len = arr ? dream_i32(arr)[0] : 0;
+    if (arr && release && new_len < old_len) {
+        for (int32_t i = new_len; i < old_len; i++) {
+            dream_ptr elem;
+            memcpy(&elem, (char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize, sizeof(elem));
+            release(elem);
+        }
+    }
+    return dream_array_realloc(arr, new_len, esize);
+}
+
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size) {
     dream_ptr p = dream_array_new(size, 1);
     if (value && size > 0) {

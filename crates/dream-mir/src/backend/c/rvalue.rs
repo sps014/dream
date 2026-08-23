@@ -212,13 +212,21 @@ impl<'a> Emitter<'a> {
                 new_len,
             } => {
                 let es = elem_size(self.cx, *elem_ty);
+                let arr = self.operand(array);
+                let len = self.operand(new_len);
+                // RC-tracked elements must release dropped tail slots on shrink, or truncated
+                // elements stay retained until their slots are overwritten (the plain realloc
+                // just rewrites the length prefix).
+                if self.cx.interner.is_rc_tracked(*elem_ty) {
+                    let rel = super::release::release_sym(self.cx, *elem_ty);
+                    return Expr::call(
+                        "dream_array_realloc_rc",
+                        vec![arr, len, Expr::i(es as i64), Expr::id(&rel)],
+                    );
+                }
                 Expr::call(
                     "dream_array_realloc",
-                    vec![
-                        self.operand(array),
-                        self.operand(new_len),
-                        Expr::i(es as i64),
-                    ],
+                    vec![arr, len, Expr::i(es as i64)],
                 )
             }
             Rvalue::Cast(v, from, to) => self.emit_cast(v, *from, *to),
@@ -726,6 +734,30 @@ impl<'a> Emitter<'a> {
             }
             (TyKind::Prim(PrimTy::Int), TyKind::Prim(PrimTy::Float)) => {
                 Expr::cast(CTy::F32, Expr::cast(CTy::I32, src))
+            }
+            // Unsigned sources must zero-extend (via U32/U64) before conversion; a direct
+            // I32→F64 cast would sign-extend values ≥ 2^31.
+            (TyKind::Prim(PrimTy::UInt), TyKind::Prim(PrimTy::Double)) => {
+                Expr::cast(CTy::F64, Expr::cast(CTy::U32, src))
+            }
+            (TyKind::Prim(PrimTy::UInt), TyKind::Prim(PrimTy::Float)) => {
+                Expr::cast(CTy::F32, Expr::cast(CTy::U32, src))
+            }
+            (TyKind::Prim(PrimTy::UInt), TyKind::Prim(PrimTy::Long)) => {
+                Expr::cast(CTy::I64, Expr::cast(CTy::U32, src))
+            }
+            // `byte`/`char` are I32-backed; their numeric value is already sign-safe.
+            (TyKind::Prim(PrimTy::Byte | PrimTy::Char), TyKind::Prim(PrimTy::Double)) => {
+                Expr::cast(CTy::F64, Expr::cast(CTy::I32, src))
+            }
+            (TyKind::Prim(PrimTy::Byte | PrimTy::Char), TyKind::Prim(PrimTy::Float)) => {
+                Expr::cast(CTy::F32, Expr::cast(CTy::I32, src))
+            }
+            (TyKind::Prim(PrimTy::ULong), TyKind::Prim(PrimTy::Double)) => {
+                Expr::cast(CTy::F64, Expr::cast(CTy::Named("unsigned long long"), src))
+            }
+            (TyKind::Prim(PrimTy::ULong), TyKind::Prim(PrimTy::Float)) => {
+                Expr::cast(CTy::F32, Expr::cast(CTy::Named("unsigned long long"), src))
             }
             (TyKind::Prim(PrimTy::Float), TyKind::Prim(PrimTy::Double)) => {
                 Expr::cast(CTy::F64, Expr::cast(CTy::F32, src))

@@ -190,7 +190,22 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
         "dream_process_capture_args",
         vec![Expr::id("argc"), Expr::id("argv")],
     );
-    main_fn.ret(Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])));
+    let rc = main_fn.temp(CTy::I32, Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])));
+    // `DREAM_DEBUG_LEAKS=1` prints heap counters at exit so golden tests (and users) can assert
+    // that programs which drop everything return the allocator to its post-init state.
+    main_fn.stmt(Stmt::if_(
+        Expr::call("getenv", vec![Expr::cstr("DREAM_DEBUG_LEAKS")]),
+        Stmt::call(
+            "fprintf",
+            vec![
+                Expr::id("stderr"),
+                Expr::cstr("[dream] leak check: live=%d total_allocations=%d\n"),
+                Expr::call("debug_get_live_objects", vec![]),
+                Expr::call("debug_get_total_allocations", vec![]),
+            ],
+        ),
+    ));
+    main_fn.ret(Some(rc));
     m.push_func(main_fn);
 }
 

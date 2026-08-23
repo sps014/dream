@@ -31,10 +31,10 @@ public class Random {
         return (int)(this.next_u32() % (uint)bound);
     }
 
-    // Uniform value in `[0.0, 1.0)`.
+    // Uniform value in `[0.0, 1.0)` at full 32-bit resolution (no quantization or modulo bias).
     public fun next_double(): double {
         let x = this.next_u32();
-        return (double)((int)(x % 1000000u)) / 1000000.0d;
+        return (double)x / 4294967296.0d;
     }
 
     // True or false with equal probability.
@@ -42,10 +42,12 @@ public class Random {
         return (this.next_u32() & 1u) == 1u;
     }
 
+    // Uniform 64-bit value from two independent 32-bit draws, composed exactly (may be negative
+    // when viewed as signed).
     public fun next_long(): long {
-        let hi = (long)this.next_int(2000000000);
-        let lo = (long)this.next_int(2000000000);
-        return hi * 2000000000L + lo;
+        let hi = (ulong)this.next_u32();
+        let lo = (ulong)this.next_u32();
+        return (long)(hi * 4294967296uL + lo);
     }
 
     public fun next_bytes(n: int): byte[] {

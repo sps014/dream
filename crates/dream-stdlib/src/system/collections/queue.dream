@@ -70,8 +70,23 @@ public class Queue<T> : Collection<T> {
         return Option.Some(this.items[this.head]);
     }
 
-    // Removes every element.
+    // Removes every element. Live ring slots are overwritten with a zero value so managed
+    // elements release immediately instead of staying retained until later enqueues overwrite
+    // them; the ring is reset to front-aligned empty.
     public fun clear(): void {
+        let cap = this.items.length;
+        let z = Buffer.alloc<T>(1);
+        let i = 0;
+        while (i < this.count) {
+            this.items[(this.head + i) % cap] = z[0];
+            i = i + 1;
+        }
+        this.head = 0;
+        this.count = 0;
+    }
+
+    // Unmanaged: no RC to release — rewind only.
+    public fun clear(): void where T : unmanaged {
         this.head = 0;
         this.count = 0;
     }

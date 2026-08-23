@@ -1,0 +1,41 @@
+// `clear()` on managed-element containers must release elements immediately: after clearing
+// inside a scoped call, the live-object count returns exactly to its pre-call baseline.
+// Elements are literals on purpose — dynamic strings would pollute the counter via interning.
+
+import system;
+import system.collections;
+
+fun churn_queue(): void {
+    let q = Queue<string>();
+    q.enqueue("alpha");
+    q.enqueue("beta");
+    q.enqueue("gamma");
+    q.enqueue("delta");
+    q.clear();
+}
+
+fun churn_priority_queue(): void {
+    let pq = PriorityQueue<string>();
+    pq.push("alpha");
+    pq.push("beta");
+    pq.push("gamma");
+    pq.pop();
+    pq.clear();
+}
+
+fun churn_list(): void {
+    let l = List<string>();
+    l.push("alpha");
+    l.push("beta");
+    l.push("gamma");
+    l.clear();
+}
+
+fun main(): void {
+    let before = Debug.live_objects();
+    churn_queue();
+    churn_priority_queue();
+    churn_list();
+    let after = Debug.live_objects();
+    System.println(after - before);
+}

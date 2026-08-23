@@ -57,6 +57,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/string_abi.dream"),
             ),
             (
+                "<std>/system/core/string_builder.dream",
+                include_str!("system/core/string_builder.dream"),
+            ),
+            (
                 "<std>/system/core/collection_tuning.dream",
                 include_str!("system/core/collection_tuning.dream"),
             ),
@@ -245,6 +249,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/collections/priority_queue.dream"),
             ),
             (
+                "<std>/system/collections/priority_queue_iterator.dream",
+                include_str!("system/collections/priority_queue_iterator.dream"),
+            ),
+            (
                 "<std>/system/collections/stack.dream",
                 include_str!("system/collections/stack.dream"),
             ),
@@ -282,10 +290,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/text/string_iterator.dream",
                 include_str!("system/text/string_iterator.dream"),
-            ),
-            (
-                "<std>/system/text/string_builder.dream",
-                include_str!("system/text/string_builder.dream"),
             ),
             (
                 "<std>/system/text/fmt.dream",

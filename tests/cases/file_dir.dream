@@ -18,10 +18,10 @@ async fun main(): void {
     marker[0] = (byte)1;
     await File.write_bytes(root + "/a.bin", marker);
 
-    let names = await File.list(root);
+    let names = (await File.list(root)).unwrap_or(Buffer.alloc<string>(0));
     System.println(names.length);
-    System.println(names[0]);
-    System.println(names[1]);
+    System.println(names.get(0));
+    System.println(names.get(1));
 
     await File.delete(root + "/a.bin");
     await File.delete(root + "/nested/leaf");

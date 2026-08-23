@@ -1,6 +1,7 @@
-module system.text;
+module system.core;
 
-// `StringBuilder` — growable UTF-16 string construction (`import system.text;`).
+// `StringBuilder` — growable UTF-16 string construction. Lives in the bootstrap core so every
+// package (collections included) can build strings in O(n); always available without imports.
 
 public class StringBuilder {
     bytes: byte[];

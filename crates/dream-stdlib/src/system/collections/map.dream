@@ -166,13 +166,25 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
-    @get_indexer
+    // Value for `key`, or `None` when absent.
+    @inline
     public fun get(borrow key: K): Option<V> {
         let i = this.find(key);
         if (i >= 0) {
             return Option.Some(this.slots[i].value);
         }
         return Option.None;
+    }
+
+    // Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use
+    // `get(k)` for absence-tolerant reads.
+    @get_indexer
+    public fun at(borrow key: K): V {
+        let i = this.find(key);
+        if (i < 0) {
+            System.panic("Map key not found");
+        }
+        return this.slots[i].value;
     }
 
     @inline
@@ -300,19 +312,23 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     @override public fun to_string(): string {
-        let s = "{";
+        let sb = StringBuilder();
+        sb.append("{");
         let n = 0;
         let i = 0;
         while (i < this.cap) {
             if (this.slots[i].state == this.epoch) {
                 if (n > 0) {
-                    s = s + ", ";
+                    sb.append(", ");
                 }
-                s = s + this.slots[i].key + ": " + this.slots[i].value;
+                sb.append(this.slots[i].key.to_string());
+                sb.append(": ");
+                sb.append(this.slots[i].value.to_string());
                 n = n + 1;
             }
             i = i + 1;
         }
-        return s + "}";
+        sb.append("}");
+        return sb.build();
     }
 }

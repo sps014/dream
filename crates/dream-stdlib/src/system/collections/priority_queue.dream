@@ -2,7 +2,7 @@ module system.collections;
 
 // Binary min-heap: `pop`/`peek` always return the smallest element by the active comparator
 // (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
-public class PriorityQueue<T> {
+public class PriorityQueue<T> : Collection<T> {
     items: T[];
     count: int;
     cmp_fn: fun(T, T): int;
@@ -33,8 +33,20 @@ public class PriorityQueue<T> {
         return this.count == 0;
     }
 
-    // Removes every element.
+    // Removes every element. Live slots are overwritten with a zero value so managed elements
+    // release immediately instead of staying retained until later pushes overwrite them.
     public fun clear(): void {
+        let z = Buffer.alloc<T>(1);
+        let i = 0;
+        while (i < this.count) {
+            this.items[i] = z[0];
+            i = i + 1;
+        }
+        this.count = 0;
+    }
+
+    // Unmanaged: no RC to release — rewind only.
+    public fun clear(): void where T : unmanaged {
         this.count = 0;
     }
 
@@ -115,6 +127,9 @@ public class PriorityQueue<T> {
         let top = this.items[0];
         this.count = this.count - 1;
         this.items[0] = this.items[this.count];
+        // Zero the vacated tail slot: it still holds a reference to the moved element and must
+        // not keep it retained past the next overwrite.
+        this.items[this.count] = Buffer.alloc<T>(1)[0];
         if (this.count > 0) {
             this.sift_down(0);
         }
@@ -127,5 +142,20 @@ public class PriorityQueue<T> {
             return Option.None;
         }
         return Option.Some(this.items[0]);
+    }
+
+    // Iterates elements in ascending order under the active comparator, over a snapshot taken
+    // now, so later pushes/pops do not affect the cursor.
+    @iterator
+    public fun iterator(): PriorityQueueIterator<T> {
+        let sorted = List<T>(this.count);
+        let i = 0;
+        while (i < this.count) {
+            sorted.push(this.items[i]);
+            i = i + 1;
+        }
+        let cmp = this.cmp_fn;
+        sorted.sort_by(cmp);
+        return PriorityQueueIterator<T>(sorted.take_array());
     }
 }

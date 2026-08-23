@@ -328,19 +328,21 @@ public class Set<T> : Collection<T> {
     }
 
     @override public fun to_string(): string {
-        let s = "{";
+        let sb = StringBuilder();
+        sb.append("{");
         let n = 0;
         let i = 0;
         while (i < this.cap) {
             if (this.states[i] == this.epoch) {
                 if (n > 0) {
-                    s = s + ", ";
+                    sb.append(", ");
                 }
-                s = s + this.keys[i];
+                sb.append(this.keys[i].to_string());
                 n = n + 1;
             }
             i = i + 1;
         }
-        return s + "}";
+        sb.append("}");
+        return sb.build();
     }
 }

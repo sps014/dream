@@ -199,13 +199,23 @@ public class JsonValue {
         };
     }
 
-    // The value for `key`, or `None`.
+    // The value for `key`, or `None` when this is not an object or the key is absent.
     @get_indexer
     public fun get(borrow key: string): Option<JsonValue> {
         return switch (this.obj_map) {
             Some(m) => m.get(key),
             None => Option.None,
         };
+    }
+
+    // The value for `key`. Panics when this is not an object or the key is absent — use
+    // `get(key)` for absence-tolerant reads.
+    public fun at(borrow key: string): JsonValue {
+        let at = this.get(key);
+        if (at.is_none()) {
+            System.panic("JsonValue key not found: " + key);
+        }
+        return at.unwrap_or(JsonValue.none());
     }
 
     // Sets the value for `key` (objects only).

@@ -2,7 +2,7 @@ module system.text;
 
 // The `string` primitive.
 
-extend string : Comparable<string> {
+extend string : Comparable<string>, Equatable<string> {
     // Orders this string against `other` lexicographically.
     public fun compare(borrow other: string): int {
         return string.compare_raw(this, other);
@@ -34,11 +34,6 @@ extend string : Comparable<string> {
     // Gets an iterator for the string's characters.
     @iterator
     public fun iterator(): StringIterator {
-        return StringIterator(this);
-    }
-
-    // Sequential UTF-16 code-unit walk (O(1) per unit). Prefer this over `s[i]` in hot loops.
-    public fun chars(): StringIterator {
         return StringIterator(this);
     }
 
@@ -240,19 +235,30 @@ extend string : Comparable<string> {
     }
 
     // The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`.
+    // Byte-compare scan like `index_of` — allocates nothing per candidate.
     public fun last_index_of(borrow sub: string): Option<int> {
-        let needle = sub.length;
+        let needle = sub.byte_size();
         if (needle == 0) {
             return Option.Some(this.length);
         }
-        let i = this.length - needle;
-        while (i >= 0) {
-            if (this.substring(i, i + needle) == sub) {
-                return Option.Some(i);
-            }
-            i = i - 1;
+        let hay = this.byte_size();
+        if (needle > hay) {
+            return Option.None;
         }
-        return Option.None;
+        let best_si = -1;
+        let bo = 0;
+        let si = 0;
+        while ((bo + needle) <= hay) {
+            if (this._bytes_eq(sub, bo, 0, needle) == true) {
+                best_si = si;
+            }
+            bo = bo + string.utf8_width_at(this, bo);
+            si = si + 1;
+        }
+        if (best_si < 0) {
+            return Option.None;
+        }
+        return Option.Some(best_si);
     }
 
     // Replaces the first occurrence of `old` with `replacement`.
@@ -265,10 +271,14 @@ extend string : Comparable<string> {
         return this.substring(0, i) + replacement + this.substring(i + old.length, this.length);
     }
 
+    // Splits at the first occurrence of `sep` into exactly two parts. When `sep` does not occur,
+    // returns `[this]` (consistent with `split`), never an empty array.
     public fun split_once(sep: char): string[] {
         let at = this.index_of(sep);
         if (at.is_none()) {
-            return Buffer.alloc<string>(0);
+            let whole = Buffer.alloc<string>(1);
+            whole[0] = this;
+            return whole;
         }
         let i = at.unwrap_or(0);
         let out = Buffer.alloc<string>(2);
@@ -279,11 +289,15 @@ extend string : Comparable<string> {
 
     public fun split_once(borrow sep: string): string[] {
         if (sep.is_empty()) {
-            return Buffer.alloc<string>(0);
+            let whole = Buffer.alloc<string>(1);
+            whole[0] = this;
+            return whole;
         }
         let at = this.index_of(sep);
         if (at.is_none()) {
-            return Buffer.alloc<string>(0);
+            let whole = Buffer.alloc<string>(1);
+            whole[0] = this;
+            return whole;
         }
         let i = at.unwrap_or(0);
         let out = Buffer.alloc<string>(2);
@@ -351,7 +365,7 @@ extend string : Comparable<string> {
         return string.from_utf8_prefix_n(buf, total, this.length * times);
     }
 
-    // True if this string has the same contents as `other`.
+    // Value equality (`Equatable<string>`); identical to `this == other`.
     public fun equals(borrow other: string): bool {
         return this == other;
     }

@@ -101,14 +101,24 @@ public class SortedMap<K : Comparable<K>, V> {
         }
     }
 
-    // Gets the value for a key, or `None`.
-    @get_indexer
+    // Value for `key`, or `None` when the key is absent.
     public fun get(borrow key: K): Option<V> {
         let idx = this.locate(key);
         if (idx >= 0) {
             return Option.Some(this.values_arr[idx]);
         }
         return Option.None;
+    }
+
+    // Value for `key`. Panics when the key is absent — this is what `sm[k]` compiles to; use
+    // `get(k)` for absence-tolerant reads.
+    @get_indexer
+    public fun at(borrow key: K): V {
+        let idx = this.locate(key);
+        if (idx < 0) {
+            System.panic("SortedMap key not found");
+        }
+        return this.values_arr[idx];
     }
 
     // True if the map contains the key.

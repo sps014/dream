@@ -2,7 +2,7 @@ import system;
 
 fun main(): void {
     let s = "hi";
-    for (let c in s.chars()) {
+    for (let c in s.iterator()) {
         System.print(c);
     }
     System.print('\n');

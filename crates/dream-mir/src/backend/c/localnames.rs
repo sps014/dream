@@ -195,7 +195,8 @@ fn collect_expr(e: &Expr, set: &mut HashSet<String>) {
         | Expr::Null
         | Expr::Nan { .. }
         | Expr::Inf { .. }
-        | Expr::LabelAddr(_) => {}
+        | Expr::LabelAddr(_)
+        | Expr::CStr(_) => {}
         Expr::Ident(name) | Expr::Call { name, .. } => {
             set.insert(name.clone());
         }
@@ -318,7 +319,8 @@ fn rewrite_expr(e: &mut Expr, names: &[String]) {
         | Expr::Null
         | Expr::Nan { .. }
         | Expr::Inf { .. }
-        | Expr::LabelAddr(_) => {}
+        | Expr::LabelAddr(_)
+        | Expr::CStr(_) => {}
         Expr::Ident(s) => {
             if let Some(idx) = parse_numbered(s, 'l') {
                 if let Some(n) = names.get(idx) {

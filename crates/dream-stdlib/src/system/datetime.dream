@@ -34,7 +34,7 @@ public struct Duration {
 }
 
 // A calendar date and time of day.
-public struct DateTime {
+public struct DateTime : Equatable<DateTime> {
     @runtime("dateNowMillis")
     static extern fun now_millis(): long;
 
@@ -308,13 +308,8 @@ public struct DateTime {
         return sb.build();
     }
 
-    // Alias of `parse_iso8601`.
+    // Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
     public static fun parse(text: string): Result<DateTime, ParseError> {
-        return DateTime.parse_iso8601(text);
-    }
-
-    // Parses an ISO-8601 datetime.
-    public static fun parse_iso8601(text: string): Result<DateTime, ParseError> {
         let n = text.length;
         if (n < 19) {
             return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));

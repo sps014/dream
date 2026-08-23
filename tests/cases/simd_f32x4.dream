@@ -16,6 +16,6 @@ fun main(): void {
     let fc = [(float)0, (float)0, (float)0, (float)0];
     (Vector<float>.load(fa, 0) + Vector<float>.load(fb, 0)).store(fc, 0);
     System.println((int)fc[0]);
-    System.println(Vector<int>.count());
-    System.println(Vector<float>.count());
+    System.println(Vector<int>.lane_count());
+    System.println(Vector<float>.lane_count());
 }

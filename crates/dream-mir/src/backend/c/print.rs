@@ -591,6 +591,18 @@ fn print_expr(out: &mut String, expr: &Expr, prec: u8) {
     match expr {
         Expr::Ident(s) if s == "g0" => out.push_str("dream_g0_get()"),
         Expr::Ident(s) => out.push_str(s),
+        Expr::CStr(s) => {
+            out.push('"');
+            for c in s.chars() {
+                match c {
+                    '"' => out.push_str("\\\""),
+                    '\\' => out.push_str("\\\\"),
+                    '\n' => out.push_str("\\n"),
+                    _ => out.push(c),
+                }
+            }
+            out.push('"');
+        }
         Expr::Int(n) => out.push_str(&n.to_string()),
         Expr::Long(n) => {
             out.push_str(&n.to_string());

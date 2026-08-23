@@ -954,7 +954,7 @@ fn cached_harness_c() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream"),
-        include_str!("../../../crates/dream-stdlib/src/system/text/string_builder.dream"),
+        include_str!("../../../crates/dream-stdlib/src/system/core/string_builder.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/json_value.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream"),

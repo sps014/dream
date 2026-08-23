@@ -1,0 +1,13 @@
+// `Path.join` takes two or more segments (trailing arguments pack into the variadic slot);
+// empty segments are skipped and existing separators are not doubled.
+
+import system;
+import system.io;
+
+fun main(): void {
+    System.println(Path.join("a", "b"));
+    System.println(Path.join("a", "b", "c", "d"));
+    System.println(Path.join("root/", "sub", "file.txt"));
+    System.println(Path.join("", "only"));
+    System.println(Path.of(["x", "", "y"]));
+}

@@ -1,86 +1,144 @@
 module system.collections;
 
-// Query wrapper over a list range. `take`/`skip` adjust bounds without copying; `filter`/`map`
-// materialize. Call `.to_list()` for a dense list of the current view.
+// Lazy query view over a list. Stages (`filter`/`take`/`skip`) build a chain without copying or
+// scanning; evaluation happens once, at the terminal step (`to_list`/`count`/`map`/...).
+// `to_list()` always copies — a `Seq` never aliases the list it was built from. Type-changing
+// steps (`map`, `flat_map`) must allocate a new element stream, so they materialize immediately
+// and are documented as terminal.
+//
+// Stages are a parent-linked chain of the same element type `T` (Dream cannot yet put function
+// types in generic containers, so predicates hang off nodes instead of a list).
 
 public class Seq<T> {
-    public items: List<T>;
+    // Source storage; meaningful on the base node only.
+    items: List<T>;
     start: int;
     end: int;
+    // Previous stage; `None` on the base node.
+    parent: Option<Seq<T>>;
+    // Exactly one stage kind is active per node.
+    has_pred: bool;
+    pred: fun(T): bool;
+    is_take: bool;
+    take_n: int;
+    is_skip: bool;
+    skip_n: int;
 
-    // Wraps an already-materialized list (full range).
+    // Wraps a list (base node). Does not copy — the view reads `items` live until a terminal
+    // step materializes.
     public constructor(items: List<T>) {
         this.items = items;
         this.start = 0;
         // `items` is a sink param — read length from the field after the move.
         this.end = this.items.length;
+        this.parent = Option.None;
+        this.has_pred = false;
+        let accept_all: fun(T): bool = (v) => true;
+        this.pred = accept_all;
+        this.is_take = false;
+        this.take_n = 0;
+        this.is_skip = false;
+        this.skip_n = 0;
     }
 
-    static fun from_range(items: List<T>, start: int, end: int): Seq<T> {
-        let s = Seq<T>(items);
-        s.start = start;
-        s.end = end;
+    fun from_stage(parent_seq: Seq<T>): Seq<T> {
+        let s = Seq<T>(parent_seq.items);
+        s.parent = Option.Some(parent_seq);
         return s;
     }
 
-    fun view_len(): int {
-        let n = this.end - this.start;
-        if (n < 0) {
-            return 0;
-        }
-        return n;
+    // Keeps elements for which `pred` is true (deferred — runs once per element at
+    // materialization).
+    public fun filter(borrow p: fun(T): bool): Seq<T> {
+        let s = this.from_stage(this);
+        s.has_pred = true;
+        s.pred = p;
+        return s;
     }
 
-    // Keeps elements for which `pred` is true.
-    public fun filter(borrow pred: fun(T): bool): Seq<T> {
-        let result = List<T>();
-        let i = this.start;
-        while (i < this.end) {
-            let v = this.items.get(i);
-            if (pred(v)) {
-                result.push(v);
-            }
-            i = i + 1;
-        }
-        return Seq<T>(result);
-    }
-
-    // Maps each element through `f`.
-    public fun map<U>(borrow f: fun(T): U): Seq<U> {
-        let result = List<U>();
-        let i = this.start;
-        while (i < this.end) {
-            let v = this.items.get(i);
-            result.push(f(v));
-            i = i + 1;
-        }
-        return Seq<U>(result);
-    }
-
-    // Keeps at most the first `n` elements (view — no copy).
+    // Keeps the first `n` surviving elements of the chain (deferred).
     public fun take(n: int): Seq<T> {
-        let take_n = n;
-        if (take_n < 0) {
-            take_n = 0;
-        }
-        let len = this.view_len();
-        if (take_n > len) {
-            take_n = len;
-        }
-        return Seq<T>.from_range(this.items, this.start, this.start + take_n);
+        let s = this.from_stage(this);
+        s.is_take = true;
+        s.take_n = n;
+        return s;
     }
 
-    // Drops the first `n` elements (view — no copy).
+    // Drops the first `n` surviving elements of the chain (deferred).
     public fun skip(n: int): Seq<T> {
-        let skip_n = n;
-        if (skip_n < 0) {
-            skip_n = 0;
+        let s = this.from_stage(this);
+        s.is_skip = true;
+        s.skip_n = n;
+        return s;
+    }
+
+    // Appends every element surviving this stage (and everything below it) into `out`.
+    fun drain(out: List<T>): void {
+        if (this.parent.is_none()) {
+            let i = this.start;
+            while (i < this.end) {
+                out.push(this.items.get(i));
+                i = i + 1;
+            }
+            return;
         }
-        let new_start = this.start + skip_n;
-        if (new_start > this.end) {
-            new_start = this.end;
+        let upstream = List<T>();
+        switch (this.parent) {
+            Some(p) => p.drain(upstream),
+            None => {},
         }
-        return Seq<T>.from_range(this.items, new_start, this.end);
+        if (this.has_pred) {
+            let keep = this.pred;
+            let i = 0;
+            while (i < upstream.length) {
+                let v = upstream.get(i);
+                if (keep(v)) {
+                    out.push(v);
+                }
+                i = i + 1;
+            }
+            return;
+        }
+        if (this.is_take) {
+            let n = this.take_n;
+            if (n > upstream.length) {
+                n = upstream.length;
+            }
+            let i = 0;
+            while (i < n) {
+                out.push(upstream.get(i));
+                i = i + 1;
+            }
+            return;
+        }
+        if (this.is_skip) {
+            let n = this.skip_n;
+            if (n < 0) {
+                n = 0;
+            }
+            if (n > upstream.length) {
+                n = upstream.length;
+            }
+            let i = n;
+            while (i < upstream.length) {
+                out.push(upstream.get(i));
+                i = i + 1;
+            }
+        }
+    }
+
+    // Terminal step: dense copy of the surviving elements, in order.
+    public fun to_list(): List<T> {
+        let out = List<T>();
+        this.drain(out);
+        return out;
+    }
+
+    // Terminal step: number of elements that survive the chain.
+    public fun count(): int {
+        let out = List<T>();
+        this.drain(out);
+        return out.length;
     }
 
     // Removes duplicates while preserving first-seen order.
@@ -98,17 +156,15 @@ public class Seq<T> {
         return Seq<U>(this.to_list().flat_map(f));
     }
 
-    // Materializes the current view as a `List`.
-    public fun to_list(): List<T> {
-        if ((this.start == 0) && (this.end == this.items.length)) {
-            return this.items;
-        }
-        let result = List<T>(this.view_len());
-        let i = this.start;
-        while (i < this.end) {
-            result.push(this.items.get(i));
+    // Terminal step: maps the surviving elements through `f` into a new `Seq`.
+    public fun map<U>(borrow f: fun(T): U): Seq<U> {
+        let src = this.to_list();
+        let result = List<U>();
+        let i = 0;
+        while (i < src.length) {
+            result.push(f(src.get(i)));
             i = i + 1;
         }
-        return result;
+        return Seq<U>(result);
     }
 }

@@ -815,6 +815,8 @@ int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
+dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
+                                 void (*release)(dream_ptr));
 
 /* Native `StringBuilder` payload (bytes, count, capacity). `cap` mirrors the backing
  * `byte[]` length inline so the per-append fast path avoids a dependent load through the

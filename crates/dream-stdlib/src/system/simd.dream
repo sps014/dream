@@ -8,12 +8,6 @@ public struct Vector<T : unmanaged> {
     w2: int;
     w3: int;
 
-    // Number of `T` lanes that fit in 16 bytes (`16 / sizeof(T)`).
-    @inline
-    public static fun count(): int {
-        return Vector<T>.lane_count();
-    }
-
     @intrinsic("simd_lane_count")
     static extern fun lane_count(): int;
 
@@ -54,7 +48,7 @@ public struct Vector<T : unmanaged> {
 
     // Returns lane `i` (`0 .. count`).
     public fun lane(i: int): T {
-        let n = Vector<T>.count();
+        let n = Vector<T>.lane_count();
         let tmp = Buffer.alloc<T>(n);
         this.store(tmp, 0);
         return tmp[i];
@@ -62,7 +56,7 @@ public struct Vector<T : unmanaged> {
 
     // Returns a copy with lane `i` replaced by `value`.
     public fun with_lane(i: int, value: T): Vector<T> {
-        let n = Vector<T>.count();
+        let n = Vector<T>.lane_count();
         let tmp = Buffer.alloc<T>(n);
         this.store(tmp, 0);
         tmp[i] = value;

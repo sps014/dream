@@ -1,5 +1,6 @@
-// The standard `Map<K, V>` supports `m[k] = v` (via `set`), `m[k]` (via `get`, yielding
-// `Option<V>`), and `for (let pair in m)` yielding `KeyValuePair<K, V>`. Map order is
+// The standard `Map<K, V>` supports `m[k] = v` (via `set`), `m[k]` (via `at`, panicking on a
+// missing key; `get(k)` returns `Option<V>`), and `for (let pair in m)` yielding
+// `KeyValuePair<K, V>`. Map order is
 // unspecified, so this case only checks order-independent aggregates.
 
 import system;
@@ -19,6 +20,6 @@ fun main() {
     System.println(vtotal);            // 1 + 2 + 3 = 6
     System.println(count);             // 3
 
-    let hit = m["b"];                  // Option<int>
-    System.println(hit.unwrap_or(-1)); // 2
+    System.println(m["b"]);            // 2 (panics if absent)
+    System.println(m.get("z").unwrap_or(-1)); // -1
 }

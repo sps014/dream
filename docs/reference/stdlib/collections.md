@@ -54,7 +54,10 @@ Typed `{k: v, …}` literal, or `Map<K, V>()`.
 | --- | --- |
 | Size | `.length`, `is_empty()` |
 | Change | `set`, `remove`, `clear` |
-| Read | `get` → `Option<V>`, `contains`, `get_or`, `get_or_insert`, `keys`, `values`, `entries` |
+| Read | `m[k]` (panics on missing key), `get` → `Option<V>`, `get_or`, `get_or_insert`, `contains`, `keys`, `values`, `entries` |
+
+`m[k]` compiles to `at(k)` and panics on an absent key — the same semantics as `list[i]`; use
+`get(k)` when absence is expected.
 
 `for (let pair in map)` yields `KeyValuePair<K, V>` (`.key`, `.value`).
 

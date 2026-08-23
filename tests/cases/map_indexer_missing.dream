@@ -1,0 +1,17 @@
+// `m[k]` (via `at`) panics on a missing key, matching `List[i]`; `get(k)` stays the
+// absence-tolerant read returning `Option<V>`.
+
+import system;
+import system.collections;
+
+fun main(): void {
+    let m = Map<string, int>();
+    m.set("a", 1);
+    System.println(m["a"]);
+    System.println(m.get("missing").unwrap_or(-7));
+    System.println(m.get_or("missing", -9));
+    let sm = SortedMap<int, string>();
+    sm.set(1, "one");
+    System.println(sm[1]);
+    System.println(sm.get(2).unwrap_or("none"));
+}

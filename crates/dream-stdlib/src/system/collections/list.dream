@@ -236,18 +236,19 @@ public class List<T> : IndexedCollection<T> {
         return this.slice(0, this.count);
     }
 
-    // Joins stringifiable elements with `sep` (same conversion as `to_string` uses).
+    // Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass
+    // into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.
     public fun join(sep: string): string {
-        let s = string.empty;
+        let sb = StringBuilder();
         let i = 0;
         while (i < this.count) {
             if (i > 0) {
-                s = s + sep;
+                sb.append(sep);
             }
-            s = s + this.items[i];
+            sb.append(this.items[i].to_string());
             i = i + 1;
         }
-        return s;
+        return sb.build();
     }
 
     // Empties the list while keeping the backing buffer. Live slots are overwritten with a zero
@@ -423,15 +424,17 @@ public class List<T> : IndexedCollection<T> {
     }
 
     @override public fun to_string(): string {
-        let s = "[";
+        let sb = StringBuilder();
+        sb.append("[");
         let i = 0;
         while (i < this.count) {
             if (i > 0) {
-                s = s + ", ";
+                sb.append(", ");
             }
-            s = s + this.items[i];
+            sb.append(this.items[i].to_string());
             i = i + 1;
         }
-        return s + "]";
+        sb.append("]");
+        return sb.build();
     }
 }

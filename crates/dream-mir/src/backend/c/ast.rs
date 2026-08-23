@@ -41,6 +41,7 @@ pub enum UnOp {
 #[derive(Clone, Debug)]
 pub enum Expr {
     Ident(String),
+    CStr(String),
     Int(i64),
     Long(i64),
     Float(f64),
@@ -102,6 +103,10 @@ pub enum Expr {
 impl Expr {
     pub fn id(s: impl Into<String>) -> Self {
         Expr::Ident(s.into())
+    }
+
+    pub fn cstr(s: impl Into<String>) -> Self {
+        Expr::CStr(s.into())
     }
 
     pub fn local(n: u32) -> Self {

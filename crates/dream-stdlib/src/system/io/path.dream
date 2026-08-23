@@ -2,22 +2,37 @@ module system.io;
 
 // Path helpers for joining and inspecting filesystem paths.
 public static class Path {
-    // Joins two path segments with the platform separator, avoiding a double separator.
-    public static fun join(a: string, b: string): string {
-        if (a.is_empty()) {
-            return b;
+    // Joins path segments left-to-right with the platform separator, avoiding double separators
+    // and skipping empty segments. Two-argument calls compile exactly as before; three or more
+    // trailing arguments pack into `more` automatically (no spread operator at the call site).
+    public static fun join(a: string, b: string, ...more: string[]): string {
+        let sb = StringBuilder(a.length + b.length + 16);
+        let have = Path._append_segment(sb, false, a);
+        have = Path._append_segment(sb, have, b);
+        let i = 0;
+        while (i < more.length) {
+            have = Path._append_segment(sb, have, more[i]);
+            i = i + 1;
         }
-        if (b.is_empty()) {
-            return a;
-        }
-        let sep = Path.separator();
-        if (a.ends_with(sep) || a.ends_with("/") || a.ends_with("\\")) {
-            return a + b;
-        }
-        return a + sep + b;
+        return sb.build();
     }
 
-    // Joins every segment in `parts` left-to-right via `join`.
+    // Single-pass fold shared by `join` and `of`. An empty segment contributes nothing; a segment
+    // is separated from what is already built unless the builder is empty or already separator-
+    // terminated. Returns true when the builder now holds at least one segment and its last
+    // character is not a separator (i.e. the next segment needs one).
+    static fun _append_segment(sb: StringBuilder, have_live: bool, seg: string): bool {
+        if (seg.is_empty()) {
+            return have_live;
+        }
+        if (have_live) {
+            sb.append(Path.separator());
+        }
+        sb.append(seg);
+        return (seg.ends_with("/") == false) && (seg.ends_with("\\") == false);
+    }
+
+    // Joins every segment in `parts` left-to-right with the same rules as `join`.
     public static fun of(parts: string[]): string {
         if (parts.length == 0) {
             return string.empty;
@@ -29,15 +44,10 @@ public static class Path {
             i = i + 1;
         }
         let sb = StringBuilder(total);
+        let have = false;
         i = 0;
         while (i < parts.length) {
-            if (sb.is_empty()) {
-                sb.append(parts[i]);
-            } else {
-                let joined = Path.join(sb.build(), parts[i]);
-                sb.clear();
-                sb.append(joined);
-            }
+            have = Path._append_segment(sb, have, parts[i]);
             i = i + 1;
         }
         return sb.build();

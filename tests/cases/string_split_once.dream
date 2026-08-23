@@ -1,0 +1,18 @@
+// `split_once` splits at the first occurrence into exactly two parts; a miss yields `[this]`
+// (never empty), matching `split`'s whole-string fallback.
+
+import system;
+import system.text;
+
+fun print_parts(parts: string[]): void {
+    System.println(parts.length.to_string() + ":" + parts.join("|"));
+}
+
+fun main(): void {
+    let hit = "k=v=w".split_once("=");
+    System.println(hit[0] + "," + hit[1]);
+    print_parts("no-separator".split_once("-"));
+    print_parts("a-b-c".split_once('-'));
+    print_parts("miss".split_once('?'));
+    print_parts("leading-x".split_once("leading-"));
+}

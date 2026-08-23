@@ -136,6 +136,20 @@ impl<'a> Emitter<'a> {
                         return;
                     }
                 }
+                if let (
+                    Place::Local(l),
+                    crate::Rvalue::New { def, ty, ctor, args },
+                ) = (place, rv)
+                {
+                    if self.cx.interner.is_value_type(self.f.local_ty(*l))
+                        && !is_value_place_alias(self.f, *l, rv)
+                    {
+                        // Construct directly into the shadow-stack slot: skips the
+                        // heap temp + memcpy + free round-trip of the generic path.
+                        self.struct_new_at(Expr::local(l.0), *ty, *def, *ctor, args);
+                        return;
+                    }
+                }
                 if self.store_js_to_value_struct(place, rv) {
                     return;
                 }

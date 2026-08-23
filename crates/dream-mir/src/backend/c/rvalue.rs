@@ -309,11 +309,11 @@ impl<'a> Emitter<'a> {
             size += crate::abi::HEADER_LOCK_WORD_SIZE;
         }
         let tag = self.cx.type_tag(ty, def);
-        let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
         for a in args {
             self.retain_rc_global_sink(true, a);
         }
         let arg_es: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
+        let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
         self.b.expr_block(move |b| {
             let o = b.temp(
                 CTy::Ptr,
@@ -333,6 +333,34 @@ impl<'a> Emitter<'a> {
             }
             o
         })
+    }
+
+    /// Construct a value struct directly into `dest` (a shadow-stack slot): zero
+    /// the slot, run the constructor in place. Skips the heap-temp + memcpy +
+    /// free round-trip of [`Self::emit_new`] for value-local assignments.
+    pub(super) fn struct_new_at(
+        &mut self,
+        dest: Expr,
+        ty: dream_types::TypeId,
+        _def: dream_types::DefId,
+        ctor: Option<dream_types::DefId>,
+        args: &[crate::Operand],
+    ) {
+        let layout = self.cx.nstruct(ty).unwrap_or_else(|| {
+            crate::internal_error!("missing layout for struct allocation {ty:?}")
+        });
+        for a in args {
+            self.retain_rc_global_sink(true, a);
+        }
+        let arg_es: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
+        let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
+        self.b
+            .call("memset", vec![Expr::dream_p(dest.clone()), Expr::i(0), Expr::i(layout.size as i64)]);
+        if let Some(name) = ctor_name {
+            let mut call_args = vec![dest];
+            call_args.extend(arg_es);
+            self.b.call(name, call_args);
+        }
     }
 
     fn concat_parts(&mut self, parts: &[crate::Operand]) -> Expr {

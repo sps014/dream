@@ -2,11 +2,12 @@ use super::ast::{CTy, CaseKey, Expr, Param, Stmt, SwitchArm, UnOp};
 use super::builder::{FuncBuilder, ModuleBuilder};
 use super::ctx::Cx;
 use super::rvalue::{hash_code_of, to_string_fn};
+use super::reach::ProtocolReach;
 use super::types::{c_ident, elem_size, load_cast};
 use crate::backend::shared::func_symbol;
-use dream_types::{TyKind, TypeId};
+use dream_types::{PrimTy, TyKind, TypeId};
 
-pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>, reach: &ProtocolReach) {
     let mut array_elems: Vec<_> = cx
         .mir
         .functions
@@ -35,37 +36,49 @@ pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         ty: CTy::Ptr,
         name: "p".into(),
     }];
-    for elem in &array_elems {
+    for (ty, layout) in &cx.native.structs {
+        if reach.needs_to_string(*ty) {
+            let sym = format!("{}_to_string", layout.name);
+            if !user.contains(&sym) {
+                m.proto(CTy::Ptr, c_ident(&sym), p.clone());
+            }
+        }
+        if reach.needs_hash_code(*ty) {
+            let hash = format!("{}_hash_code", layout.name);
+            if !user.contains(&hash) {
+                m.proto(CTy::I32, c_ident(&hash), p.clone());
+            }
+        }
+    }
+    for (ty, layout) in &cx.native.unions {
+        if reach.needs_to_string(*ty) {
+            let sym = format!("{}_to_string", layout.name);
+            if !user.contains(&sym) {
+                m.proto(CTy::Ptr, c_ident(&sym), p.clone());
+            }
+        }
+        if reach.needs_hash_code(*ty) {
+            let hash = format!("{}_hash_code", layout.name);
+            if !user.contains(&hash) {
+                m.proto(CTy::I32, c_ident(&hash), p.clone());
+            }
+        }
+    }
+    for elem in array_elems {
+        if !reach.needs_to_string(elem) {
+            continue;
+        }
         m.proto(
             CTy::Ptr,
             c_ident(&format!("array_to_string_t{}", elem.0)),
             p.clone(),
         );
-    }
-    for layout in cx.native.structs.values() {
-        let sym = format!("{}_to_string", layout.name);
-        if !user.contains(&sym) {
-            m.proto(CTy::Ptr, c_ident(&sym), p.clone());
-        }
-        let hash = format!("{}_hash_code", layout.name);
-        if !user.contains(&hash) {
-            m.proto(CTy::I32, c_ident(&hash), p.clone());
-        }
-    }
-    for layout in cx.native.unions.values() {
-        let sym = format!("{}_to_string", layout.name);
-        if !user.contains(&sym) {
-            m.proto(CTy::Ptr, c_ident(&sym), p.clone());
-        }
-        let hash = format!("{}_hash_code", layout.name);
-        if !user.contains(&hash) {
-            m.proto(CTy::I32, c_ident(&hash), p.clone());
-        }
-    }
-    for elem in array_elems {
         emit_array_to_string(m, cx, elem);
     }
     for (ty, layout) in &cx.native.structs {
+        if !reach.needs_to_string(*ty) {
+            continue;
+        }
         let sym = format!("{}_to_string", layout.name);
         if user.contains(&sym) {
             continue;
@@ -73,6 +86,9 @@ pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         emit_struct_to_string(m, cx, *ty, &layout.name, &layout.fields);
     }
     for (ty, layout) in &cx.native.unions {
+        if !reach.needs_to_string(*ty) && !reach.to_string.contains(ty) {
+            continue;
+        }
         let sym = format!("{}_to_string", layout.name);
         if user.contains(&sym) {
             continue;
@@ -80,47 +96,70 @@ pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         emit_union_to_string(m, cx, *ty, &layout.name);
     }
     for (ty, layout) in &cx.native.structs {
+        if !reach.needs_hash_code(*ty) {
+            continue;
+        }
         let hash = format!("{}_hash_code", layout.name);
         if !user.contains(&hash) {
             emit_struct_hash_code(m, cx, *ty, layout);
         }
     }
     for (ty, layout) in &cx.native.unions {
+        if !reach.needs_hash_code(*ty) {
+            continue;
+        }
         let hash = format!("{}_hash_code", layout.name);
         if !user.contains(&hash) {
             emit_union_hash_code(m, cx, *ty, layout);
         }
     }
+    if !reach.dynamic {
+        return;
+    }
     emit_object_to_string_router(m, cx);
     emit_object_hash_code_router(m, cx);
 }
 
-fn concat_assign(r: &str, piece: Expr) -> Stmt {
-    Stmt::block(vec![
-        Stmt::decl(
-            CTy::Ptr,
-            "__c",
-            Some(Expr::call("dream_concat_strings", vec![Expr::id(r), piece])),
-        ),
-        Stmt::call("dream_release", vec![Expr::id(r)]),
-        Stmt::assign(Expr::id(r), Expr::id("__c")),
-    ])
+/// `dream_sb sb = {0, 0, 0};`
+fn sb_decl() -> Stmt {
+    Stmt::decl(
+        CTy::Ident("dream_strb".to_string()),
+        "sb",
+        Some(Expr::CompoundTyped {
+            ty: CTy::Ident("dream_strb".to_string()),
+            elems: vec![Expr::i(0), Expr::i(0), Expr::i(0)],
+        }),
+    )
 }
 
-fn concat_conv(r: &str, conv: &str, value: Expr) -> Stmt {
+fn sb_addr() -> Expr {
+    Expr::addr_of(Expr::id("sb"))
+}
+
+/// Upper bound on one element's rendered units (separator included). Values are
+/// generous — `dream_sb` grows geometrically when the estimate misses, so this
+/// only tunes how often a reallocation happens.
+fn elem_units_bound(cx: &Cx<'_>, elem: TypeId) -> i64 {
+    match cx.interner.kind(elem) {
+        TyKind::Prim(PrimTy::Byte | PrimTy::Bool) => 6,
+        TyKind::Prim(PrimTy::Char) => 4,
+        TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => 14,
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => 24,
+        TyKind::Prim(PrimTy::Float | PrimTy::Double) => 16,
+        _ => 8,
+    }
+}
+
+/// Append one converted element into `sb`: run `conv` when non-empty, append its
+/// result, release it. An empty `conv` appends the value itself (string fields).
+fn sb_append_conv(conv: &str, value: Expr) -> Stmt {
+    if conv.is_empty() {
+        return Stmt::call("dream_strb_append", vec![sb_addr(), value]);
+    }
     Stmt::block(vec![
         Stmt::decl(CTy::Ptr, "__p", Some(Expr::call(conv, vec![value]))),
-        Stmt::decl(
-            CTy::Ptr,
-            "__c",
-            Some(Expr::call(
-                "dream_concat_strings",
-                vec![Expr::id(r), Expr::id("__p")],
-            )),
-        ),
-        Stmt::call("dream_release", vec![Expr::id(r)]),
+        Stmt::call("dream_strb_append", vec![sb_addr(), Expr::id("__p")]),
         Stmt::call("dream_release", vec![Expr::id("__p")]),
-        Stmt::assign(Expr::id(r), Expr::id("__c")),
     ])
 }
 
@@ -141,7 +180,21 @@ fn emit_array_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, elem: TypeId) {
         )),
     ));
     b.stmt(Stmt::decl(CTy::I32, "i", None));
-    b.stmt(Stmt::decl(CTy::Ptr, "r", Some(Expr::id(cx.str_sym("[")))));
+    b.stmt(sb_decl());
+    b.stmt(Stmt::call(
+        "dream_strb_reserve",
+        vec![
+            sb_addr(),
+            Expr::add(
+                Expr::mul(Expr::cast(CTy::I64, Expr::id("n")), Expr::i(elem_units_bound(cx, elem))),
+                Expr::i(2),
+            ),
+        ],
+    ));
+    b.stmt(Stmt::call(
+        "dream_strb_append",
+        vec![sb_addr(), Expr::id(cx.str_sym("["))],
+    ));
     let elem_ptr = Expr::add(
         Expr::ptr_add(Expr::id("p"), super::types::len_prefix()),
         Expr::mul(
@@ -151,14 +204,20 @@ fn emit_array_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, elem: TypeId) {
     );
     let mut loop_body = vec![Stmt::if_(
         Expr::id("i"),
-        concat_assign("r", Expr::id(cx.str_sym(", "))),
+        Stmt::call(
+            "dream_strb_append",
+            vec![sb_addr(), Expr::id(cx.str_sym(", "))],
+        ),
     )];
     if cx.interner.is_value_type(elem) {
-        loop_body.push(concat_conv("r", &conv, Expr::cast(CTy::Ptr, elem_ptr)));
+        loop_body.push(sb_append_conv(&conv, Expr::cast(CTy::Ptr, elem_ptr)));
     } else if conv.is_empty() {
-        loop_body.push(concat_assign("r", Expr::load(cast, elem_ptr)));
+        loop_body.push(Stmt::call(
+            "dream_strb_append",
+            vec![sb_addr(), Expr::load(cast, elem_ptr)],
+        ));
     } else {
-        loop_body.push(concat_conv("r", &conv, Expr::load(cast, elem_ptr)));
+        loop_body.push(sb_append_conv(&conv, Expr::load(cast, elem_ptr)));
     }
     b.stmt(Stmt::For {
         init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
@@ -166,18 +225,11 @@ fn emit_array_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, elem: TypeId) {
         step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
         body: Box::new(Stmt::block(loop_body)),
     });
-    b.stmt(Stmt::block(vec![
-        Stmt::decl(
-            CTy::Ptr,
-            "__c",
-            Some(Expr::call(
-                "dream_concat_strings",
-                vec![Expr::id("r"), Expr::id(cx.str_sym("]"))],
-            )),
-        ),
-        Stmt::call("dream_release", vec![Expr::id("r")]),
-        Stmt::Return(Some(Expr::id("__c"))),
-    ]));
+    b.stmt(Stmt::call(
+        "dream_strb_append",
+        vec![sb_addr(), Expr::id(cx.str_sym("]"))],
+    ));
+    b.ret(Some(Expr::call("dream_strb_finish", vec![sb_addr()])));
     m.push_func(b);
 }
 
@@ -200,10 +252,10 @@ fn emit_struct_to_string(
     } else {
         format!("{name} {{ ")
     };
-    b.stmt(Stmt::decl(
-        CTy::Ptr,
-        "r",
-        Some(Expr::id(cx.str_sym(&start))),
+    b.stmt(sb_decl());
+    b.stmt(Stmt::call(
+        "dream_strb_append",
+        vec![sb_addr(), Expr::id(cx.str_sym(&start))],
     ));
     for (i, f) in fields.iter().enumerate() {
         let label = if matches!(cx.interner.kind(ty), TyKind::Tuple(_)) {
@@ -217,32 +269,26 @@ fn emit_struct_to_string(
         } else {
             format!(", {}: ", f.name)
         };
-        b.stmt(concat_assign("r", Expr::id(cx.str_sym(&label))));
+        if !label.is_empty() {
+            b.stmt(Stmt::call(
+                "dream_strb_append",
+                vec![sb_addr(), Expr::id(cx.str_sym(&label))],
+            ));
+        }
         let value = field_value(cx, f);
         let text = to_string_fn(cx, f.ty);
-        if text.is_empty() {
-            b.stmt(concat_assign("r", value));
-        } else {
-            b.stmt(concat_conv("r", &text, value));
-        }
+        b.stmt(sb_append_conv(&text, value));
     }
     let end = if matches!(cx.interner.kind(ty), TyKind::Tuple(_)) {
         ")"
     } else {
         " }"
     };
-    b.stmt(Stmt::block(vec![
-        Stmt::decl(
-            CTy::Ptr,
-            "__c",
-            Some(Expr::call(
-                "dream_concat_strings",
-                vec![Expr::id("r"), Expr::id(cx.str_sym(end))],
-            )),
-        ),
-        Stmt::call("dream_release", vec![Expr::id("r")]),
-        Stmt::Return(Some(Expr::id("__c"))),
-    ]));
+    b.stmt(Stmt::call(
+        "dream_strb_append",
+        vec![sb_addr(), Expr::id(cx.str_sym(end))],
+    ));
+    b.ret(Some(Expr::call("dream_strb_finish", vec![sb_addr()])));
     m.push_func(b);
 }
 
@@ -256,8 +302,8 @@ fn emit_union_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, ty: TypeId, name: &s
         m.push_func(b);
         return;
     };
+    b.stmt(sb_decl());
     b.stmt(Stmt::decl(CTy::I32, "d", None));
-    b.stmt(Stmt::decl(CTy::Ptr, "r", None));
     b.stmt(Stmt::if_(
         Expr::unary(UnOp::Not, Expr::id("p")),
         Stmt::Return(Some(Expr::id(cx.str_sym("null")))),
@@ -266,23 +312,27 @@ fn emit_union_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, ty: TypeId, name: &s
         Expr::id("d"),
         Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
     );
-    b.assign(Expr::id("r"), Expr::id(cx.str_sym("<object>")));
     let mut arms = Vec::new();
     for variant in &layout.variants {
         let (prefix, labels, suffix) = union_variant_pieces(variant);
-        let mut body = vec![Stmt::assign(Expr::id("r"), Expr::id(cx.str_sym(&prefix)))];
+        let mut body = vec![Stmt::call(
+            "dream_strb_append",
+            vec![sb_addr(), Expr::id(cx.str_sym(&prefix))],
+        )];
         for (i, f) in variant.fields.iter().enumerate() {
-            body.push(concat_assign("r", Expr::id(cx.str_sym(&labels[i]))));
+            body.push(Stmt::call(
+                "dream_strb_append",
+                vec![sb_addr(), Expr::id(cx.str_sym(&labels[i]))],
+            ));
             let value = field_value(cx, f);
             let text = to_string_fn(cx, f.ty);
-            if text.is_empty() {
-                body.push(concat_assign("r", value));
-            } else {
-                body.push(concat_conv("r", &text, value));
-            }
+            body.push(sb_append_conv(&text, value));
         }
         if !suffix.is_empty() {
-            body.push(concat_assign("r", Expr::id(cx.str_sym(&suffix))));
+            body.push(Stmt::call(
+                "dream_strb_append",
+                vec![sb_addr(), Expr::id(cx.str_sym(&suffix))],
+            ));
         }
         body.push(Stmt::Expr(Expr::id("break")));
         arms.push(SwitchArm {
@@ -298,7 +348,7 @@ fn emit_union_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, ty: TypeId, name: &s
         expr: Expr::id("d"),
         arms,
     });
-    b.ret(Some(Expr::id("r")));
+    b.ret(Some(Expr::call("dream_strb_finish", vec![sb_addr()])));
     m.push_func(b);
 }
 
@@ -622,6 +672,58 @@ fn arm_ret(tag: &'static str, e: Expr) -> SwitchArm {
 pub(super) fn emit_iface_trampolines(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let max_tag = cx.tags.values().copied().max().unwrap_or(12);
     let ntags = (max_tag as usize) + 1;
+    // One dispatch function per unique method signature; the itable is passed in
+    // by the call site, so interfaces sharing a signature share one trampoline.
+    let mut shared: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for iface in cx.mir.interfaces.interfaces.iter() {
+        for slot in 0..iface.method_count {
+            let (td, ret, params) = super::types::fn_ptr_abi(cx.interner, iface.sigs[slot]);
+            shared.entry(td.clone()).or_insert_with(|| {
+                let fname = c_ident(&format!("__iface_dispatch_{td}"));
+                let mut b = FuncBuilder::new(ret, fname.clone());
+                b.param(CTy::ptr_to(CTy::VoidPtr), "itab");
+                let mut pnames = Vec::new();
+                for (i, pty) in params.iter().enumerate() {
+                    let n = if i == 0 {
+                        "this".into()
+                    } else {
+                        format!("a{}", i - 1)
+                    };
+                    b.param(pty.clone(), n.clone());
+                    pnames.push(n);
+                }
+                b.stmt(Stmt::decl(
+                    CTy::I32,
+                    "tag",
+                    Some(Expr::call("dream_object_tag", vec![Expr::id("this")])),
+                ));
+                b.stmt(Stmt::decl(
+                    CTy::Ident(td.clone()),
+                    "fn",
+                    Some(Expr::cast(
+                        CTy::Ident(td),
+                        Expr::index(Expr::id("itab"), Expr::id("tag")),
+                    )),
+                ));
+                b.stmt(Stmt::if_(
+                    Expr::unary(UnOp::Not, Expr::id("fn")),
+                    Stmt::call("abort", vec![]),
+                ));
+                let call = Expr::IndirectCall {
+                    callee: Box::new(Expr::id("fn")),
+                    args: pnames.into_iter().map(Expr::id).collect(),
+                };
+                if matches!(b.ret, CTy::Void) {
+                    b.expr_stmt(call);
+                    b.ret(None);
+                } else {
+                    b.ret(Some(call));
+                }
+                m.push_func(b);
+                fname
+            });
+        }
+    }
     for (iid, iface) in cx.mir.interfaces.interfaces.iter().enumerate() {
         for slot in 0..iface.method_count {
             m.push(super::ast::Item::Global {
@@ -636,51 +738,6 @@ pub(super) fn emit_iface_trampolines(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 name: format!("dream_iface_{iid}_{slot}"),
                 init: None,
             });
-            let name = c_ident(&format!("__iface_dispatch_{iid}_{slot}"));
-            let sig = iface.sigs[slot];
-            let (td, ret, params) = super::types::fn_ptr_abi(cx.interner, sig);
-            let mut b = FuncBuilder::new(ret, name);
-            let mut pnames = Vec::new();
-            for (i, pty) in params.iter().enumerate() {
-                let n = if i == 0 {
-                    "this".into()
-                } else {
-                    format!("a{}", i - 1)
-                };
-                b.param(pty.clone(), n.clone());
-                pnames.push(n);
-            }
-            b.stmt(Stmt::decl(
-                CTy::I32,
-                "tag",
-                Some(Expr::call("dream_object_tag", vec![Expr::id("this")])),
-            ));
-            b.stmt(Stmt::decl(
-                CTy::Ident(td.clone()),
-                "fn",
-                Some(Expr::cast(
-                    CTy::Ident(td),
-                    Expr::index(
-                        Expr::id(format!("dream_iface_{iid}_{slot}")),
-                        Expr::id("tag"),
-                    ),
-                )),
-            ));
-            b.stmt(Stmt::if_(
-                Expr::unary(UnOp::Not, Expr::id("fn")),
-                Stmt::call("abort", vec![]),
-            ));
-            let call = Expr::IndirectCall {
-                callee: Box::new(Expr::id("fn")),
-                args: pnames.into_iter().map(Expr::id).collect(),
-            };
-            if matches!(b.ret, CTy::Void) {
-                b.expr_stmt(call);
-                b.ret(None);
-            } else {
-                b.ret(Some(call));
-            }
-            m.push_func(b);
         }
     }
 }

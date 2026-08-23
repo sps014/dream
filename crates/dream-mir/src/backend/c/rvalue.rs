@@ -132,9 +132,10 @@ impl<'a> Emitter<'a> {
                 receiver,
                 iface_id,
                 method_slot,
+                sig,
                 args,
                 ..
-            } => self.iface_expr(receiver, *iface_id, *method_slot, args),
+            } => self.iface_expr(receiver, *iface_id, *method_slot, *sig, args),
             Rvalue::FuncRef(callee) => {
                 let idx = self
                     .cx
@@ -341,31 +342,28 @@ impl<'a> Emitter<'a> {
         if parts.len() == 1 {
             return self.operand(&parts[0]);
         }
-        let first = self.operand(&parts[0]);
-        let second = self.operand(&parts[1]);
-        if parts.len() == 2 {
-            return Expr::call("dream_concat_strings", vec![first, second]);
-        }
-        let rest: Vec<Expr> = parts[2..].iter().map(|p| self.operand(p)).collect();
-        self.b.expr_block(move |b| {
-            let r = b.temp(
-                CTy::Ptr,
-                Some(Expr::call(
-                    "dream_concat_strings",
-                    vec![first.clone(), second.clone()],
+        let elems: Vec<Expr> = parts.iter().map(|p| self.operand(p)).collect();
+        let n = elems.len();
+        self.b.temp(
+            CTy::Ptr,
+            Some(Expr::Gnu {
+                stmts: vec![Stmt::Decl {
+                    align: None,
+                    static_: false,
+                    const_: false,
+                    ty: CTy::Array {
+                        elem: Box::new(CTy::Ptr),
+                        len: n,
+                    },
+                    name: "__parts".into(),
+                    init: Some(Expr::Compound(elems)),
+                }],
+                result: Box::new(Expr::call(
+                    "dream_concat_n",
+                    vec![Expr::id("__parts"), Expr::i(n as i64)],
                 )),
-            );
-            let n = b.temp(CTy::Ptr, None);
-            for p in &rest {
-                b.assign(
-                    n.clone(),
-                    Expr::call("dream_concat_strings", vec![r.clone(), p.clone()]),
-                );
-                b.call("dream_release", vec![r.clone()]);
-                b.assign(r.clone(), n.clone());
-            }
-            r
-        })
+            }),
+        )
     }
 
     pub(super) fn union_new_at(

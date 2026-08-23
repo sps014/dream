@@ -197,10 +197,11 @@ impl<'a> Emitter<'a> {
                 receiver,
                 iface_id,
                 method_slot,
+                sig,
                 args,
                 ..
             } => {
-                let e = self.iface_expr(receiver, *iface_id, *method_slot, args);
+                let e = self.iface_expr(receiver, *iface_id, *method_slot, *sig, args);
                 self.b.expr_stmt(Expr::cast(CTy::Void, e));
             }
             Statement::IndirectCall { target, args, sig } => {

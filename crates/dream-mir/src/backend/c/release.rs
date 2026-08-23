@@ -20,16 +20,18 @@ pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
     match interner.kind(ty) {
         TyKind::Js if cx.target.is_wasm32() => "js_release".into(),
         TyKind::Struct(..) | TyKind::Union(..) => {
-            if let Some(l) = mir.layouts.structs.get(&ty) {
+            let raw = if let Some(l) = mir.layouts.structs.get(&ty) {
                 c_ident(&format!("release_{}", l.name))
             } else if let Some(l) = mir.layouts.unions.get(&ty) {
                 c_ident(&format!("release_{}", l.name))
             } else {
-                "dream_release".into()
-            }
+                return "dream_release".into();
+            };
+            cx.canon_maps().release.get(&ty).cloned().unwrap_or(raw)
         }
         TyKind::Array(e) if interner.is_reference(*e) || interner.is_value_type(*e) => {
-            c_ident(&format!("release_array_t{}", e.0))
+            let raw = c_ident(&format!("release_array_t{}", e.0));
+            cx.canon_maps().release.get(e).cloned().unwrap_or(raw)
         }
         TyKind::Func(..) => "dream_release_funcbox".into(),
         TyKind::Prim(dream_types::PrimTy::String) if mir.uses_defer => "release_string".into(),
@@ -46,79 +48,147 @@ pub(super) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
     }
     match cx.interner.kind(ty) {
         TyKind::Struct(..) | TyKind::Union(..) => {
-            if let Some(l) = cx.mir.layouts.structs.get(&ty) {
+            let raw = if let Some(l) = cx.mir.layouts.structs.get(&ty) {
                 c_ident(&format!("destroy_{}", l.name))
             } else if let Some(l) = cx.mir.layouts.unions.get(&ty) {
                 c_ident(&format!("destroy_{}", l.name))
             } else {
-                c_ident("destroy_object")
-            }
+                return c_ident("destroy_object");
+            };
+            cx.canon_maps().destroy.get(&ty).cloned().unwrap_or(raw)
         }
         TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
-            c_ident(&format!("destroy_array_t{}", e.0))
+            let raw = c_ident(&format!("destroy_array_t{}", e.0));
+            cx.canon_maps().destroy.get(e).cloned().unwrap_or(raw)
         }
         TyKind::Object | TyKind::Interface(..) => c_ident("destroy_object"),
         _ => "dream_destroy".into(),
     }
 }
 
-fn collect_array_elems(
-    interner: &TypeInterner,
-    f: &crate::MirFunction,
-    array_elems: &mut std::collections::BTreeSet<TypeId>,
-) {
-    for local in &f.locals {
-        if let TyKind::Array(e) = interner.kind(local.ty) {
-            if interner.is_reference(*e) || interner.is_value_type(*e) {
-                array_elems.insert(*e);
-            }
+/// Symbol canonicalization for ARC glue: types whose `release_*` (resp.
+/// `destroy_*`) bodies would be byte-identical share one emitted function —
+/// fieldless structs, arrays of plain references, and so on. Maps contain only
+/// *redirects*: entries whose target differs from the type's own raw symbol,
+/// keyed by struct/union id resp. array element id.
+pub(super) struct CanonMaps {
+    pub release: std::collections::HashMap<TypeId, String>,
+    pub destroy: std::collections::HashMap<TypeId, String>,
+}
+
+pub(super) fn canonical_maps(cx: &Cx<'_>) -> CanonMaps {
+    let mut rel: Vec<(String, TypeId, String)> = Vec::new();
+    let mut des: Vec<(String, TypeId, String)> = Vec::new();
+    for (ty, layout) in &cx.native.structs {
+        if has_del(cx, &layout.name) {
+            continue;
         }
+        let Some(key) = struct_profile_key(cx, *ty) else {
+            continue;
+        };
+        rel.push((format!("S|rel|{key}"), *ty, c_ident(&format!("release_{}", layout.name))));
+        des.push((format!("S|des|{key}"), *ty, c_ident(&format!("destroy_{}", layout.name))));
+    }
+    for (ty, layout) in &cx.native.unions {
+        let Some(key) = union_profile_key(cx, *ty) else {
+            continue;
+        };
+        rel.push((format!("U|rel|{key}"), *ty, c_ident(&format!("release_{}", layout.name))));
+        des.push((format!("U|des|{key}"), *ty, c_ident(&format!("destroy_{}", layout.name))));
+    }
+    // Arrays are excluded from dedup: their bodies embed the element type's own
+    // release symbol, so identical-looking shapes (a plain ref union vs string)
+    // still differ. The empty-loop skip below already minimizes the trivial ones.
+    CanonMaps {
+        release: redirects(rel),
+        destroy: redirects(des),
     }
 }
 
+/// Group candidates by body-shape key and pick the lexically smallest symbol in
+/// each group as the representative (BTreeMap + sort keep output deterministic).
+fn redirects(cands: Vec<(String, TypeId, String)>) -> std::collections::HashMap<TypeId, String> {
+    let mut groups: std::collections::BTreeMap<String, Vec<(TypeId, String)>> =
+        std::collections::BTreeMap::new();
+    for (key, ty, sym) in cands {
+        groups.entry(key).or_default().push((ty, sym));
+    }
+    let mut out = std::collections::HashMap::new();
+    for (_, mut members) in groups {
+        members.sort_by(|a, b| a.1.cmp(&b.1));
+        let rep = members[0].1.clone();
+        for (ty, sym) in members {
+            if sym != rep {
+                out.insert(ty, rep.clone());
+            }
+        }
+    }
+    out
+}
+
+fn has_del(cx: &Cx<'_>, name: &str) -> bool {
+    cx.mir
+        .functions
+        .iter()
+        .any(|f| f.name == format!("{name}_del"))
+}
+
+/// Body key for a struct's glue: everything the emitted code can depend on
+/// (field offsets, types, ownership flags). `None` = not dedupable.
+fn struct_profile_key(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
+    let layout = cx.native.structs.get(&ty)?;
+    let mut key = String::new();
+    for f in &layout.fields {
+        key.push_str(&format!("|{}:{}", f.offset, f.ty.0));
+        if f.is_weak {
+            key.push('w');
+        } else if f.is_unowned {
+            key.push('u');
+        } else if cx.interner.is_value_type(f.ty) {
+            key.push('v');
+        } else if cx.interner.is_rc_tracked(f.ty) {
+            key.push('r');
+        }
+    }
+    Some(key)
+}
+
+fn union_profile_key(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
+    let layout = cx.native.unions.get(&ty)?;
+    let mut key = String::new();
+    for v in &layout.variants {
+        key.push_str(&format!("|d{}", v.discriminant));
+        for f in &v.fields {
+            key.push_str(&format!(",{}:{}", f.offset, f.ty.0));
+            if f.is_weak {
+                key.push('w');
+            } else if f.is_unowned {
+                key.push('u');
+            } else if cx.interner.is_value_type(f.ty) {
+                key.push('v');
+            } else if cx.interner.is_rc_tracked(f.ty) {
+                key.push('r');
+            }
+        }
+    }
+    Some(key)
+}
+
 fn rc_header() -> Stmt {
-    Stmt::block(vec![
-        Stmt::decl(
-            CTy::ptr_to(CTy::I32),
-            "rc",
-            Some(Expr::cast(
-                CTy::ptr_to(CTy::I32),
-                Expr::add(Expr::char_p(Expr::id("p")), super::types::rc_delta()),
-            )),
+    Stmt::if_(
+        Expr::unary(
+            UnOp::Not,
+            Expr::call("dream_rc_last", vec![Expr::id("p")]),
         ),
-        Stmt::decl(CTy::I32, "old", Some(Expr::deref(Expr::id("rc")))),
-        Stmt::if_(
-            Expr::bin(
-                crate::BinOp::Or,
-                Expr::bin(crate::BinOp::Le, Expr::id("old"), Expr::i(0)),
-                Expr::eq(Expr::id("old"), Expr::id("INT32_MAX")),
-            ),
-            Stmt::Return(None),
-        ),
-        Stmt::assign(
-            Expr::deref(Expr::id("rc")),
-            Expr::bin(crate::BinOp::Sub, Expr::id("old"), Expr::i(1)),
-        ),
-        Stmt::if_(Expr::ne(Expr::id("old"), Expr::i(1)), Stmt::Return(None)),
-    ])
+        Stmt::Return(None),
+    )
 }
 
 fn unique_header() -> Stmt {
-    Stmt::block(vec![
-        Stmt::decl(
-            CTy::ptr_to(CTy::I32),
-            "rc",
-            Some(Expr::cast(
-                CTy::ptr_to(CTy::I32),
-                Expr::add(Expr::char_p(Expr::id("p")), super::types::rc_delta()),
-            )),
-        ),
-        Stmt::decl(CTy::I32, "old", Some(Expr::deref(Expr::id("rc")))),
-        Stmt::if_(
-            Expr::eq(Expr::id("old"), Expr::id("INT32_MAX")),
-            Stmt::Return(None),
-        ),
-    ])
+    Stmt::if_(
+        Expr::call("dream_rc_immortal", vec![Expr::id("p")]),
+        Stmt::Return(None),
+    )
 }
 
 fn maybe_defer(b: &mut FuncBuilder, destroy: &str, uses_defer: bool) {
@@ -133,6 +203,20 @@ fn maybe_defer(b: &mut FuncBuilder, destroy: &str, uses_defer: bool) {
         Expr::and(Expr::unary(UnOp::Not, Expr::id("dream_defer_busy")), enq),
         Stmt::Return(None),
     ));
+}
+
+fn collect_array_elems(
+    interner: &TypeInterner,
+    f: &crate::MirFunction,
+    array_elems: &mut std::collections::BTreeSet<TypeId>,
+) {
+    for local in &f.locals {
+        if let TyKind::Array(e) = interner.kind(local.ty) {
+            if interner.is_reference(*e) || interner.is_value_type(*e) {
+                array_elems.insert(*e);
+            }
+        }
+    }
 }
 
 pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
@@ -161,21 +245,32 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         ty: CTy::Ptr,
         name: "p".into(),
     }];
+    let canon = cx.canon_maps();
+    let rel_redirect = |ty: &TypeId| canon.release.contains_key(ty);
     for elem in &array_elems {
+        if rel_redirect(elem) {
+            continue;
+        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("release_array_t{}", elem.0)),
             p.clone(),
         );
     }
-    for layout in cx.native.structs.values() {
+    for (ty, layout) in &cx.native.structs {
+        if rel_redirect(ty) {
+            continue;
+        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("release_{}", layout.name)),
             p.clone(),
         );
     }
-    for layout in cx.native.unions.values() {
+    for (ty, layout) in &cx.native.unions {
+        if rel_redirect(ty) {
+            continue;
+        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("release_{}", layout.name)),
@@ -183,21 +278,31 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         );
     }
     if mir.uses_defer {
+        let des_redirect = |ty: &TypeId| canon.destroy.contains_key(ty);
         for elem in &array_elems {
+            if des_redirect(elem) {
+                continue;
+            }
             m.static_proto(
                 CTy::Void,
                 c_ident(&format!("destroy_array_t{}", elem.0)),
                 p.clone(),
             );
         }
-        for layout in cx.native.structs.values() {
+        for (ty, layout) in &cx.native.structs {
+            if des_redirect(ty) {
+                continue;
+            }
             m.static_proto(
                 CTy::Void,
                 c_ident(&format!("destroy_{}", layout.name)),
                 p.clone(),
             );
         }
-        for layout in cx.native.unions.values() {
+        for (ty, layout) in &cx.native.unions {
+            if des_redirect(ty) {
+                continue;
+            }
             m.static_proto(
                 CTy::Void,
                 c_ident(&format!("destroy_{}", layout.name)),
@@ -210,6 +315,9 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     }
     let array_elems_copy = array_elems.clone();
     for elem in array_elems {
+        if rel_redirect(&elem) {
+            continue;
+        }
         let name = c_ident(&format!("release_array_t{}", elem.0));
         let es = elem_size(cx, elem);
         let mut b = FuncBuilder::new(CTy::Void, name);
@@ -260,16 +368,21 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 )],
             ));
         }
-        b.stmt(Stmt::For {
-            init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
-            cond: Expr::lt(Expr::id("i"), Expr::id("n")),
-            step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
-            body: Box::new(Stmt::block(body)),
-        });
+        if !body.is_empty() {
+            b.stmt(Stmt::For {
+                init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
+                cond: Expr::lt(Expr::id("i"), Expr::id("n")),
+                step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
+                body: Box::new(Stmt::block(body)),
+            });
+        }
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
     }
-    for (_ty, layout) in &cx.native.structs {
+    for (ty, layout) in &cx.native.structs {
+        if rel_redirect(ty) {
+            continue;
+        }
         let name = c_ident(&format!("release_{}", layout.name));
         let mut b = FuncBuilder::new(CTy::Void, name);
         b.static_ = true;
@@ -342,7 +455,10 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
     }
-    for (_ty, layout) in &cx.native.unions {
+    for (ty, layout) in &cx.native.unions {
+        if rel_redirect(ty) {
+            continue;
+        }
         let name = c_ident(&format!("release_{}", layout.name));
         let mut b = FuncBuilder::new(CTy::Void, name);
         b.static_ = true;
@@ -436,25 +552,36 @@ fn emit_destroy_helpers(
     array_elems: &std::collections::BTreeSet<TypeId>,
 ) {
     let interner = cx.interner;
+    let canon = cx.canon_maps();
+    let des_redirect = |ty: &TypeId| canon.destroy.contains_key(ty);
     let p = vec![Param {
         ty: CTy::Ptr,
         name: "p".into(),
     }];
     for elem in array_elems {
+        if des_redirect(elem) {
+            continue;
+        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("destroy_array_t{}", elem.0)),
             p.clone(),
         );
     }
-    for layout in cx.native.structs.values() {
+    for (ty, layout) in &cx.native.structs {
+        if des_redirect(ty) {
+            continue;
+        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("destroy_{}", layout.name)),
             p.clone(),
         );
     }
-    for layout in cx.native.unions.values() {
+    for (ty, layout) in &cx.native.unions {
+        if des_redirect(ty) {
+            continue;
+        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("destroy_{}", layout.name)),
@@ -463,6 +590,9 @@ fn emit_destroy_helpers(
     }
     m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
     for elem in array_elems {
+        if des_redirect(elem) {
+            continue;
+        }
         let name = c_ident(&format!("destroy_array_t{}", elem.0));
         let es = elem_size(cx, *elem);
         let mut b = FuncBuilder::new(CTy::Void, name.clone());
@@ -509,16 +639,21 @@ fn emit_destroy_helpers(
                 )],
             ));
         }
-        b.stmt(Stmt::For {
-            init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
-            cond: Expr::lt(Expr::id("i"), Expr::id("n")),
-            step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
-            body: Box::new(Stmt::block(body)),
-        });
+        if !body.is_empty() {
+            b.stmt(Stmt::For {
+                init: Box::new(Stmt::assign(Expr::id("i"), Expr::i(0))),
+                cond: Expr::lt(Expr::id("i"), Expr::id("n")),
+                step: Box::new(Stmt::Expr(Expr::PostInc(Box::new(Expr::id("i"))))),
+                body: Box::new(Stmt::block(body)),
+            });
+        }
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
     }
-    for (_ty, layout) in &cx.native.structs {
+    for (ty, layout) in &cx.native.structs {
+        if des_redirect(ty) {
+            continue;
+        }
         let name = c_ident(&format!("destroy_{}", layout.name));
         let mut b = FuncBuilder::new(CTy::Void, name.clone());
         b.static_ = true;
@@ -587,7 +722,10 @@ fn emit_destroy_helpers(
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
     }
-    for (_ty, layout) in &cx.native.unions {
+    for (ty, layout) in &cx.native.unions {
+        if des_redirect(ty) {
+            continue;
+        }
         let name = c_ident(&format!("destroy_{}", layout.name));
         let mut b = FuncBuilder::new(CTy::Void, name.clone());
         b.static_ = true;
@@ -660,29 +798,23 @@ fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         Some(Expr::call("dream_object_tag", vec![Expr::id("p")])),
     ));
     let mut arms = Vec::new();
-    for (ty, layout) in &cx.native.structs {
+    for (ty, _layout) in &cx.native.structs {
         if let Some(&tag) = cx.tags.get(ty) {
             arms.push(SwitchArm {
                 keys: vec![CaseKey::Int(tag as i64)],
                 body: vec![
-                    Stmt::call(
-                        c_ident(&format!("destroy_{}", layout.name)),
-                        vec![Expr::id("p")],
-                    ),
+                    Stmt::call(destroy_sym(cx, *ty), vec![Expr::id("p")]),
                     Stmt::Return(None),
                 ],
             });
         }
     }
-    for (ty, layout) in &cx.native.unions {
+    for (ty, _layout) in &cx.native.unions {
         if let Some(&tag) = cx.tags.get(ty) {
             arms.push(SwitchArm {
                 keys: vec![CaseKey::Int(tag as i64)],
                 body: vec![
-                    Stmt::call(
-                        c_ident(&format!("destroy_{}", layout.name)),
-                        vec![Expr::id("p")],
-                    ),
+                    Stmt::call(destroy_sym(cx, *ty), vec![Expr::id("p")]),
                     Stmt::Return(None),
                 ],
             });

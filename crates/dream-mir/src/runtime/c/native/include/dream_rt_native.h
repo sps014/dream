@@ -169,6 +169,46 @@ DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
     dream_free(ptr);
 }
 
+/* Decrement `p`'s refcount; true when the caller must run destroy glue and free
+ * (this was the last reference). Mirrors dream_release's immortal/mt handling so
+ * the generated per-type `release_*` helpers collapse to one call + branch. */
+DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
+    int32_t *rc = (int32_t *)((char *)dream_p(p) - RC_FROM_DATA);
+    int32_t old;
+    if (!dream_rt_mt) {
+        old = *rc;
+        if (old <= 0 || old == INT32_MAX) {
+            return 0;
+        }
+        *rc = old - 1;
+        return old == 1;
+    }
+    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
+        return 0;
+    }
+    return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == 1;
+}
+
+/* True when `p` is an immortal/shared block (`INT32_MAX` rc): never mutate or free. */
+DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
+    return ((int32_t *)((char *)dream_p(p) - RC_FROM_DATA))[0] == INT32_MAX;
+}
+
+/* Bounds-checked element address for a length-prefixed array block. One call
+ * replaces the fully-inlined check+address expansion at every index site (and
+ * lets the compiler CSE the check across read/write pairs). Traps via
+ * `dream_panic` on out-of-range or non-i32-representable indices. */
+void dream_panic(dream_ptr msg);
+DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
+                                         dream_ptr panic_msg) {
+    int32_t len = p ? dream_i32(p)[0] : 0;
+    int32_t t = (int32_t)i;
+    if ((int64_t)i == (int64_t)t && (uint32_t)t >= (uint32_t)len) {
+        dream_panic(panic_msg);
+    }
+    return (char *)dream_p(p) + 4 + (int64_t)t * esize;
+}
+
 dream_ptr dream_malloc(int32_t size, int32_t tag);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
 #ifdef DREAM_WASM32
@@ -261,6 +301,103 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings_into(dream_ptr dest, dream_pt
     }
     p = dream_concat_strings(a, b);
     dream_release(dest);
+    return p;
+}
+
+/* Pre-sized UTF-16 string builder over a heap TAG_STRING block: one allocation
+ * when the reserve bound holds, geometric growth via dream_realloc otherwise.
+ * `finish` stamps the final length and hands back the block as an owned string,
+ * so a whole to_string/interpolation chain costs a single malloc. */
+typedef struct {
+    dream_ptr blk;
+    int32_t len;
+    int32_t cap;
+} dream_strb;
+
+DREAM_ALWAYS_INLINE void dream_strb_reserve(dream_strb *sb, int32_t units) {
+    int32_t cap;
+    if (units < 4) {
+        units = 4;
+    }
+    if (sb->blk != 0 && sb->cap >= units) {
+        return;
+    }
+    cap = sb->blk == 0 ? units : sb->cap;
+    while (cap < units) {
+        cap += (cap >> 1) + 16;
+    }
+    sb->blk = dream_realloc(sb->blk, (int32_t)((size_t)cap * 2 + 8), TAG_STRING);
+    sb->cap = cap;
+}
+
+DREAM_ALWAYS_INLINE void dream_strb_append(dream_strb *sb, dream_ptr s) {
+    int32_t n = dream_str_len(s);
+    uint16_t *d;
+    if (n <= 0) {
+        return;
+    }
+    if (sb->len + n > sb->cap || sb->blk == 0) {
+        dream_strb_reserve(sb, sb->len + n);
+    }
+    d = (uint16_t *)((char *)dream_p(sb->blk) + STRING_UNITS_OFFSET) + sb->len;
+    memcpy(d, dream_str_units(s), (size_t)n << 1);
+    sb->len += n;
+}
+
+DREAM_ALWAYS_INLINE void dream_strb_append_ascii(dream_strb *sb, const char *s) {
+    size_t n = strlen(s);
+    size_t i;
+    uint16_t *d;
+    if (n == 0) {
+        return;
+    }
+    if ((size_t)sb->len + n > (size_t)sb->cap || sb->blk == 0) {
+        dream_strb_reserve(sb, sb->len + (int32_t)n);
+    }
+    d = (uint16_t *)((char *)dream_p(sb->blk) + STRING_UNITS_OFFSET) + sb->len;
+    for (i = 0; i < n; i++) {
+        d[i] = (uint16_t)(unsigned char)s[i];
+    }
+    sb->len += (int32_t)n;
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_strb_finish(dream_strb *sb) {
+    dream_ptr out = sb->blk;
+    if (out == 0) {
+        return 0;
+    }
+    dream_i32(out)[0] = sb->len;
+    dream_str_init_owned(out);
+    sb->blk = 0;
+    sb->len = 0;
+    sb->cap = 0;
+    return out;
+}
+
+/* N-way concat: one length pass, one allocation, one fill. Generalizes the
+ * pairwise left-fold so fixed interpolation chains stop allocating per part. */
+DREAM_ALWAYS_INLINE dream_ptr dream_concat_n(dream_ptr const *parts, int32_t n) {
+    int32_t total = 0;
+    int32_t i;
+    dream_ptr p;
+    uint16_t *d;
+    for (i = 0; i < n; i++) {
+        total += dream_str_len(parts[i]);
+    }
+    if (total <= 0) {
+        return 0;
+    }
+    p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
+    dream_i32(p)[0] = total;
+    dream_str_init_owned(p);
+    d = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
+    for (i = 0; i < n; i++) {
+        int32_t l = dream_str_len(parts[i]);
+        if (l > 0) {
+            memcpy(d, dream_str_units(parts[i]), (size_t)l << 1);
+            d += l;
+        }
+    }
     return p;
 }
 

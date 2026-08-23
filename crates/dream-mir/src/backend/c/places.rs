@@ -489,37 +489,15 @@ impl<'a> Emitter<'a> {
             self.cx
                 .str_sym(crate::backend::shared::panic_msgs::INDEX_OUT_OF_BOUNDS),
         );
-        let idx_e = idx.clone();
-        self.b.expr_block(move |b| {
-            let t_idx = b.temp(CTy::I32, Some(Expr::cast(CTy::I32, idx_e.clone())));
-            let t_len = b.temp(
-                CTy::I32,
-                Some(Expr::ternary(
-                    Expr::local(base.0),
-                    Expr::load(CTy::I32, Expr::dream_p(Expr::local(base.0))),
-                    Expr::i(0),
-                )),
-            );
-            let in_i32 = Expr::eq(
-                Expr::cast(CTy::I64, idx_e.clone()),
-                Expr::cast(CTy::I64, t_idx.clone()),
-            );
-            let oob = Expr::ge(
-                Expr::cast(CTy::U32, t_idx.clone()),
-                Expr::cast(CTy::U32, t_len),
-            );
-            b.stmt(Stmt::if_(
-                Expr::and(in_i32, oob),
-                Stmt::call("dream_panic", vec![panic.clone()]),
-            ));
-            Expr::add(
-                Expr::ptr_add(Expr::local(base.0), super::types::len_prefix()),
-                Expr::mul(
-                    Expr::cast(CTy::I64, idx_e.clone()),
-                    Expr::i(elem_size as i64),
-                ),
-            )
-        })
+        Expr::call(
+            "dream_array_at",
+            vec![
+                Expr::local(base.0),
+                Expr::cast(CTy::I64, idx),
+                Expr::i(elem_size as i64),
+                panic,
+            ],
+        )
     }
 
     fn memcpy_value(

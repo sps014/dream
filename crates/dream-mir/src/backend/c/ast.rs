@@ -173,10 +173,6 @@ impl Expr {
         Expr::bin(BinOp::Lt, lhs, rhs)
     }
 
-    pub fn ge(lhs: Expr, rhs: Expr) -> Self {
-        Expr::bin(BinOp::Ge, lhs, rhs)
-    }
-
     pub fn and(lhs: Expr, rhs: Expr) -> Self {
         Expr::bin(BinOp::And, lhs, rhs)
     }

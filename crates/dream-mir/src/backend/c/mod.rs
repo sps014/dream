@@ -14,6 +14,7 @@ mod native_layout;
 mod places;
 mod print;
 mod protocol;
+mod reach;
 mod release;
 mod rvalue;
 mod statements;
@@ -195,7 +196,7 @@ mod tests {
             ..Default::default()
         };
         let c = emit_c_module(&mir, &i);
-        assert!(c.contains("dream_concat_strings"), "{}", c);
+        assert!(c.contains("dream_concat_n"), "{}", c);
     }
 
     #[test]

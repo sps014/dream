@@ -125,17 +125,17 @@ impl<'a> Emitter<'a> {
         receiver: &Operand,
         iface_id: usize,
         method_slot: usize,
+        sig: TypeId,
         args: &[Operand],
     ) -> Expr {
-        let mut all = vec![self.operand(receiver)];
+        let mut all = vec![Expr::id(format!("dream_iface_{iface_id}_{method_slot}"))];
+        all.push(self.operand(receiver));
         for a in args {
             self.retain_rc_global_sink(true, a);
             all.push(self.operand(a));
         }
-        Expr::call(
-            c_ident(&format!("__iface_dispatch_{iface_id}_{method_slot}")),
-            all,
-        )
+        let (td, _, _) = super::types::fn_ptr_abi(self.cx.interner, sig);
+        Expr::call(c_ident(&format!("__iface_dispatch_{td}")), all)
     }
 
     pub(super) fn js_call_expr(

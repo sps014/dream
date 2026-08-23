@@ -107,7 +107,8 @@ pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) ->
         }
     }
     emit_release_helpers(&mut m, &cx);
-    emit_protocol(&mut m, &cx);
+    let reach = super::reach::compute(&cx);
+    emit_protocol(&mut m, &cx, &reach);
     emit_iface_trampolines(&mut m, &cx);
     for (_, funcs) in &built {
         for func in funcs {
@@ -419,10 +420,13 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         .map(|f| cx.func_index(f))
         .collect();
     if !async_indices.is_empty() {
-        let mut arms = Vec::new();
-        for index in async_indices {
-        arms.push(super::ast::SwitchArm {
-            keys: vec![super::ast::CaseKey::Int(index as i64)],
+        // One arm with stacked case labels: every async entry shares the same
+        // launch-and-drain body, so no per-index duplication.
+        let mut arms = vec![super::ast::SwitchArm {
+            keys: async_indices
+                .iter()
+                .map(|&i| super::ast::CaseKey::Int(i as i64))
+                .collect(),
             body: vec![
                 // The constructor returned a lazy future; launch it before draining.
                 Stmt::call("dream_start", vec![Expr::id("result")]),
@@ -432,8 +436,7 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     Expr::ptr_add(Expr::id("result"), Expr::i(result_off)),
                 ))),
             ],
-        });
-        }
+        }];
         arms.push(super::ast::SwitchArm {
             keys: vec![],
             body: vec![Stmt::Expr(Expr::id("break"))],

@@ -20,6 +20,9 @@ pub(super) struct Cx<'a> {
     /// `Statement::DebugLine` markers then, so their presence is the backend's signal to add
     /// debugger-only views (async future-frame structs).
     pub debug_syms: bool,
+    /// Lazily-computed release/destroy symbol canonicalization (types whose ARC glue
+    /// bodies are byte-identical share one emitted function). See `release::canonical_maps`.
+    pub canon: std::sync::OnceLock<super::release::CanonMaps>,
 }
 
 impl<'a> Cx<'a> {
@@ -44,7 +47,12 @@ impl<'a> Cx<'a> {
             interner,
             target,
             debug_syms,
+            canon: std::sync::OnceLock::new(),
         }
+    }
+
+    pub(super) fn canon_maps(&self) -> &super::release::CanonMaps {
+        self.canon.get_or_init(|| super::release::canonical_maps(self))
     }
 
     pub(super) fn nstruct(&self, ty: TypeId) -> Option<&TypeLayout> {

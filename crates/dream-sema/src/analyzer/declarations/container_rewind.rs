@@ -1,17 +1,16 @@
-//! Compile-time warning for the "rewind without release" ARC leak pattern in hand-written
+//! Compile-time error for the "rewind without release" ARC leak pattern in hand-written
 //! containers: a class owns both a `T[]` buffer field of managed elements and an `int` count-like
-//! field, and some method rewrites the count field without storing into the buffer (directly or
-//! through any same-class method call). Rewinding such a counter leaves dropped elements strongly
-//! referenced from dead slots until those slots happen to be overwritten — the bug class behind
-//! `Queue::clear`/`PriorityQueue::clear` before they zeroed slots.
+//! field, and some method shrinks the counter field without releasing buffer slots (directly or
+//! through any call). Rewinding such a counter leaves dropped elements strongly referenced from
+//! dead slots until those slots happen to be overwritten — the bug class behind
+//! `Queue::clear`/`PriorityQueue::clear` before they zeroed slots. The check is compile-time
+//! only, so release builds carry zero runtime cost.
 //!
-//! The check is deliberately conservative to keep the false-positive rate near zero:
-//! - classes without both a managed-element array field and a scalar int field are skipped;
-//! - any indexed store into a buffer field anywhere in the method covers it;
-//! - any call on `this` (or a bare sibling call) counts as covering, because the callee may zero
-//!   slots — this lint does not build cross-method summaries;
-//! - the `where T : unmanaged` clear idiom compiles to a separate specialization whose element
-//!   type is not managed, so it never reaches this analysis.
+//! Escapes, in order of preference:
+//! - call `Buffer.clear(items)` / `Buffer.truncate(items, n)` (the error suggests these);
+//! - declare the method or class parameter `where T : unmanaged` — nothing to release;
+//! - pass the buffer to any call as an argument (delegated cleanup);
+//! - annotate the method `@allow_rewind` to acknowledge the retention explicitly.
 
 use super::*;
 use dream_syntax::nodes::expression::{LambdaBody, SwitchArmBody};
@@ -42,6 +41,10 @@ impl<'a> Analyzer<'a> {
             let Some(fields) = self.container_fields(struct_decl) else {
                 continue;
             };
+            // A class-level `T : unmanaged` bound means no element can hold a reference.
+            if class_is_unmanaged(struct_decl) {
+                continue;
+            }
             let sibling_names: Vec<String> = struct_decl
                 .methods
                 .iter()
@@ -52,17 +55,29 @@ impl<'a> Analyzer<'a> {
                 if method.is_static || method.is_extern || method.name.text == "constructor" {
                     continue;
                 }
+                // `where T : unmanaged` specializations rewind legitimately; `@allow_rewind`
+                // acknowledges retention explicitly.
+                if method_has_unmanaged_bound(method)
+                    || method
+                        .attributes
+                        .iter()
+                        .any(|a| a.name.text == "allow_rewind")
+                {
+                    continue;
+                }
                 let mut scan = MethodScan::default();
                 scan_statements(method.body, &fields, &sibling_names, &mut scan);
                 if !scan.count_writes.is_empty() && !scan.covered() {
                     diagnostics.file_path = file_path_string(&struct_decl.file_path);
-                    diagnostics.report_warning(
+                    diagnostics.report_error(
                         format!(
-                            "method '{}' of class '{}' writes field '{}' but stores no element into any buffer field ({}); if this shrinks the live element count, managed elements stay retained in dead slots until overwritten — zero the released slots first, or gate the method with 'where T : unmanaged'",
-                            method.name.text,
+                            "'{}.{}' shrinks '{}' without releasing '{}' — dropped elements stay strongly referenced from dead slots until those slots are overwritten. Call `Buffer.clear({})` or `Buffer.truncate({}, n)` before the counter update, pass the buffer to a helper that clears it, or mark the method `where T : unmanaged` / `@allow_rewind` if retention is intentional.",
                             struct_decl.name.text,
-                            scan.count_writes[0],
-                            fields.buffers.join(", "),
+                            method.name.text,
+                            scan.count_writes.join("', '"),
+                            fields.buffers.join("', '"),
+                            fields.buffers.first().cloned().unwrap_or_default(),
+                            fields.buffers.first().cloned().unwrap_or_default(),
                         ),
                         Some(struct_decl.name.position),
                     );
@@ -93,17 +108,32 @@ impl<'a> Analyzer<'a> {
         Some(ContainerFields { buffers, counters })
     }
 
-    /// True when `ty` transitively contains an RC-tracked value: a class, `string`, `object`, or
-    /// arrays of those. Primitives and user value structs are not managed.
+    /// True when `ty` transitively contains an RC-tracked value: a class, `string`, `object`,
+    /// arrays of those, or an unresolved generic parameter (conservative — `Queue<T>`'s `items:
+    /// T[]` must count as managed even though `T` is only known at monomorphization).
+    /// Primitives and user value structs are not managed.
     fn holds_managed(&self, ty: &Type) -> bool {
         match ty {
-            Type::String(_) | Type::Object(_) => true,
+            Type::String(_) | Type::Object(_) | Type::Generic(_) => true,
             Type::Array(inner) => self.holds_managed(inner),
-            Type::Struct(token, _) => self
-                .struct_table
-                .get_struct(&token.text)
-                .map(|i| !i.is_value)
-                .unwrap_or(false),
+            Type::Struct(token, args) => {
+                if let Some(arg0) = args.as_ref().and_then(|a| a.first()) {
+                    // Instantiated container shapes (`List<MaybeManaged>`) follow their argument.
+                    if matches!(
+                        token.text.as_str(),
+                        "List" | "Set" | "Map" | "Option"
+                    ) {
+                        let parts = args.as_ref().unwrap();
+                        return parts.iter().any(|a| self.holds_managed(a));
+                    }
+                    let _ = arg0;
+                }
+                match self.struct_table.get_struct(&token.text) {
+                    Some(info) => !info.is_value,
+                    // Unknown named types are treated as managed to stay conservative.
+                    None => true,
+                }
+            }
             _ => false,
         }
     }
@@ -143,7 +173,8 @@ fn scan_statement(
 ) {
     match stmt {
         StatementNode::Assignment(name_tok, value) => {
-            note_field_write(&name_tok.text, fields, scan);
+            note_counter_write(&name_tok.text, Some(value), fields, scan);
+            note_buffer_reassign(&name_tok.text, fields, scan);
             scan_expression(value, fields, siblings, scan);
         }
         StatementNode::IndexAssignment(target, index, value) => {
@@ -153,7 +184,8 @@ fn scan_statement(
         }
         StatementNode::MemberAssignment(target, name, value) => {
             if is_self_receiver(target) {
-                note_field_write(&name.text, fields, scan);
+                note_counter_write(&name.text, Some(value), fields, scan);
+                note_buffer_reassign(&name.text, fields, scan);
             } else {
                 // `obj.items[i] = v` through another expression still counts as covering.
                 note_buffer_store(target, fields, scan);
@@ -170,6 +202,9 @@ fn scan_statement(
                 scan.called_this = true;
             }
             for a in args {
+                if let Some(t) = buffer_field_arg(a, fields) {
+                    scan.stored_buffers.push(t);
+                }
                 scan_expression(a, fields, siblings, scan);
             }
         }
@@ -178,6 +213,9 @@ fn scan_statement(
                 scan.called_this = true;
             }
             for a in args {
+                if let Some(t) = buffer_field_arg(a, fields) {
+                    scan.stored_buffers.push(t);
+                }
                 scan_expression(a, fields, siblings, scan);
             }
         }
@@ -253,8 +291,13 @@ fn scan_expression(
         ExpressionNode::Unary(_, inner)
         | ExpressionNode::Parenthesized(_, inner)
         | ExpressionNode::Try(inner) => scan_expression(inner, fields, siblings, scan),
-        ExpressionNode::IncDec { target, .. } => {
-            note_field_incdec(target, fields, scan);
+        ExpressionNode::IncDec {
+            is_inc, target, ..
+        } => {
+            // Only decrements can rewind a counter; growth is harmless.
+            if !is_inc {
+                note_field_incdec(target, fields, scan);
+            }
             scan_expression(target, fields, siblings, scan);
         }
         ExpressionNode::ArrayLiteral(_, elems)
@@ -274,7 +317,12 @@ fn scan_expression(
             if siblings.iter().any(|s| s == &callee.text) {
                 scan.called_this = true;
             }
+            // Handing the buffer to any call (`Buffer.clear(this.items)`, `zero(items)`)
+            // delegates its cleanup — conservatively covered.
             for a in args {
+                if let Some(t) = buffer_field_arg(a, fields) {
+                    scan.stored_buffers.push(t);
+                }
                 scan_expression(a, fields, siblings, scan);
             }
         }
@@ -289,11 +337,16 @@ fn scan_expression(
                 scan.called_this = true;
             }
             for a in args {
+                if let Some(t) = buffer_field_arg(a, fields) {
+                    scan.stored_buffers.push(t);
+                }
                 scan_expression(a, fields, siblings, scan);
             }
         }
         ExpressionNode::IndexAccess(base, index) => {
-            note_buffer_store(base, fields, scan);
+            // Reads are not stores: `let v = items[i]` does not release anything. Only
+            // IndexAssignment / MemberAssignment count as covering.
+            scan_expression(base, fields, siblings, scan);
             scan_expression(index, fields, siblings, scan);
         }
         ExpressionNode::Cast(_, _, inner)
@@ -323,14 +376,25 @@ fn scan_expression(
     }
 }
 
-/// Records an indexed store when `base` names a buffer field, either directly (`items[i]`) or
-/// through `this` (`this.items[i]`).
+/// Records an indexed store when `base` names a buffer field: directly (`items[i]`), through
+/// `this` (`this.items[i]`), or into a slot member (`this.slots[i].value = v`, whose target is
+/// an IndexAccess over the buffer).
 fn note_buffer_store(base: &ExpressionNode, fields: &ContainerFields, scan: &mut MethodScan) {
     let name = match base {
         ExpressionNode::Identifier(t) => Some(&t.text),
         ExpressionNode::MemberAccess(recv, member) => {
             matches!(*recv, ExpressionNode::Identifier(t) if t.text == "this")
                 .then_some(&member.text)
+        }
+        ExpressionNode::IndexAccess(inner_base, _) => {
+            match &**inner_base {
+                ExpressionNode::Identifier(t) => Some(&t.text),
+                ExpressionNode::MemberAccess(recv, member) => {
+                    matches!(*recv, ExpressionNode::Identifier(t) if t.text == "this")
+                        .then_some(&member.text)
+                }
+                _ => None,
+            }
         }
         _ => None,
     };
@@ -341,19 +405,57 @@ fn note_buffer_store(base: &ExpressionNode, fields: &ContainerFields, scan: &mut
     }
 }
 
-/// `this.count = …` / bare `count = …` both write the field inside a method body.
-fn note_field_write(name: &str, fields: &ContainerFields, scan: &mut MethodScan) {
-    if fields.counters.iter().any(|c| c == name) && !scan.count_writes.iter().any(|w| w == name) {
+/// `this.count = …` / bare `count = …` both write the counter inside a method body. Only
+/// writes that can *shrink* the count matter — growth (`count + 1`, `count = n`) cannot strand
+/// dead slots, so `push`-style methods stay silent.
+fn note_counter_write(
+    name: &str,
+    value: Option<&ExpressionNode>,
+    fields: &ContainerFields,
+    scan: &mut MethodScan,
+) {
+    if !fields.counters.iter().any(|c| c == name) {
+        return;
+    }
+    let shrinking = match value {
+        Some(ExpressionNode::Literal(Type::Integer(tok))) => tok.text.parse::<i64>().unwrap_or(0) <= 0,
+        Some(ExpressionNode::Binary(lhs, op, _)) => {
+            (op.text == "-" || op.text == "-=") && lhs_refers_to(lhs, name)
+        }
+        // Bare counter reassignment with no visible RHS (`count = x;` where the parser folded
+        // the expression elsewhere): treat as shrinking to stay conservative.
+        None => true,
+        _ => false,
+    };
+    if shrinking && !scan.count_writes.iter().any(|w| w == name) {
         scan.count_writes.push(name.to_string());
     }
 }
 
-/// `count++` / `--this.count`: the target is the field itself, not a member assignment.
-fn note_field_incdec(
-    target: &ExpressionNode,
-    fields: &ContainerFields,
-    scan: &mut MethodScan,
-) {
+/// True when the expression is (or reads through) the named counter, so `count - k` counts as
+/// a shrinking write while `n - k` does not.
+fn lhs_refers_to(e: &ExpressionNode, name: &str) -> bool {
+    match e {
+        ExpressionNode::Identifier(t) => t.text == name,
+        ExpressionNode::MemberAccess(base, member) => {
+            member.text == name
+                && matches!(*base, ExpressionNode::Identifier(t) if t.text == "this")
+        }
+        ExpressionNode::Parenthesized(_, inner) => lhs_refers_to(inner, name),
+        _ => false,
+    }
+}
+
+/// Replacing the whole buffer field (`this.items = Buffer.alloc<T>(n)`) releases every old slot
+/// through array-drop glue, so it covers any counter write in the same method.
+fn note_buffer_reassign(name: &str, fields: &ContainerFields, scan: &mut MethodScan) {
+    if fields.buffers.iter().any(|b| b == name) {
+        scan.stored_buffers.push(name.to_string());
+    }
+}
+
+/// `count--` / `--this.count`: the target is the field itself, not a member assignment.
+fn note_field_incdec(target: &ExpressionNode, fields: &ContainerFields, scan: &mut MethodScan) {
     let name = match target {
         ExpressionNode::Identifier(t) => Some(&t.text),
         ExpressionNode::MemberAccess(recv, member) => {
@@ -363,7 +465,7 @@ fn note_field_incdec(
         _ => None,
     };
     if let Some(name) = name {
-        note_field_write(name, fields, scan);
+        note_counter_write(name, None, fields, scan);
     }
 }
 
@@ -380,4 +482,37 @@ fn is_self_receiver(e: &ExpressionNode) -> bool {
         }
         _ => false,
     }
+}
+
+/// Field name when `e` is a bare buffer-field reference (`items` or `this.items`).
+fn buffer_field_arg(e: &ExpressionNode, fields: &ContainerFields) -> Option<String> {
+    let name = match e {
+        ExpressionNode::Identifier(t) => Some(&t.text),
+        ExpressionNode::MemberAccess(recv, member) => {
+            matches!(*recv, ExpressionNode::Identifier(ref t) if t.text == "this")
+                .then_some(&member.text)
+        }
+        _ => None,
+    };
+    let name = name?;
+    fields
+        .buffers
+        .iter()
+        .find(|b| *b == name)
+        .cloned()
+}
+
+/// True when every generic parameter of the class is bound `unmanaged`.
+fn class_is_unmanaged(decl: &StructDeclarationNode) -> bool {
+    decl.generic_constraints
+        .iter()
+        .any(|c| c.kinds.iter().any(|k| matches!(k, dream_syntax::nodes::ConstraintKind::Unmanaged)))
+}
+
+/// True when the method carries a `where T : unmanaged` attachment constraint.
+fn method_has_unmanaged_bound(method: &dream_syntax::nodes::function::FunctionNode) -> bool {
+    method
+        .where_constraints
+        .iter()
+        .any(|c| c.kinds.iter().any(|k| matches!(k, dream_syntax::nodes::ConstraintKind::Unmanaged)))
 }

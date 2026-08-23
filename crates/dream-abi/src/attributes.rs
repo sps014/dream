@@ -265,6 +265,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Allows a class to participate in a reference cycle (ARC will not free it automatically).",
     },
     AttributeSpec {
+        name: "allow_rewind",
+        targets: &[AttributeTarget::Method],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Silences the container-rewind error for one method: acknowledges that shrinking the counter without clearing buffer slots is intentional (elements are unmanaged, or retention until slot reuse is acceptable).",
+    },
+    AttributeSpec {
         name: "operator",
         targets: &[AttributeTarget::Method],
         args: ArgShape::Args {

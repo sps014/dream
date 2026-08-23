@@ -215,6 +215,13 @@ impl<'a> Analyzer<'a> {
         let mut processed_generics: std::collections::HashSet<String> =
             std::collections::HashSet::new();
         let mut method_index = 0;
+        // A generic whose field types amplify under substitution (e.g. a `List<fun(T): bool>`
+        // field on `class C<T>` combined with something returning `C<fun(T): bool>`) expands
+        // without bound, and each expansion round makes the mangled monomorphized name strictly
+        // longer. Healthy mangled names stay well under a few hundred characters, so watching
+        // for runaway name growth turns an infinite loop into an immediate diagnostic.
+        let mut max_mangled_len: usize = 0;
+        let mut items_processed: usize = 0;
         loop {
             let mut progressed = false;
 
@@ -235,8 +242,15 @@ impl<'a> Analyzer<'a> {
                 let table = self.with_generic_bindings(bindings, |s| {
                     s.analyze_function(template, diagnostics)
                 })?;
-                symbol_table_map.insert(mangled_name, table);
                 progressed = true;
+                items_processed += 1;
+                check_instantiation_bounds(
+                    &mut max_mangled_len,
+                    &mut items_processed,
+                    &mangled_name,
+                    diagnostics,
+                )?;
+                symbol_table_map.insert(mangled_name, table);
             }
 
             // Arrow-lambdas lowered to synthesized top-level functions (see `expressions::lambda`).
@@ -251,6 +265,8 @@ impl<'a> Analyzer<'a> {
                 .collect();
             for name in pending_lambdas {
                 processed_generics.insert(name.clone());
+                items_processed += 1;
+                check_instantiation_bounds(&mut max_mangled_len, &mut items_processed, &name, diagnostics)?;
                 let (template, bindings) = match self.pending_lambdas.get(&name) {
                     Some((t, b)) => (*t, b.clone()),
                     None => continue,
@@ -279,6 +295,8 @@ impl<'a> Analyzer<'a> {
                     &param_types,
                     &mut self.type_ctx,
                 );
+                items_processed += 1;
+                check_instantiation_bounds(&mut max_mangled_len, &mut items_processed, &key, diagnostics)?;
                 symbol_table_map.insert(key, table);
                 progressed = true;
             }
@@ -738,4 +756,36 @@ fn is_compute_elem_type(ty: &Type) -> bool {
         ),
         _ => false,
     }
+}
+
+
+/// Healthy programs monomorphize a few thousand methods with short mangled names. A generic
+/// whose field types amplify under substitution (e.g. a `List<fun(T): bool>` field on
+/// `class C<T>` while something derives `C<fun(T): bool>`) diverges: every expansion round
+/// wraps the type again, so mangled names grow without limit while breadth explodes. Either
+/// signature trips these bounds and turns an infinite loop into an immediate diagnostic.
+const MAX_MANGLED_NAME_LEN: usize = 512;
+const MAX_INSTANTIATION_ITEMS: usize = 50_000;
+
+fn check_instantiation_bounds(
+    max_len: &mut usize,
+    items: &mut usize,
+    name: &str,
+    diagnostics: &mut DiagnosticBag,
+) -> Result<(), SemanticError> {
+    let diverging = *items > MAX_INSTANTIATION_ITEMS;
+    if name.len() > *max_len {
+        *max_len = name.len();
+    }
+    if !diverging && *max_len <= MAX_MANGLED_NAME_LEN {
+        return Ok(());
+    }
+    diagnostics.report_error(
+        format!(
+            "generic instantiation grew too deep while expanding '{}...': monomorphization is diverging, usually because a generic class has a field that wraps its own type parameter (e.g. `ps: List<fun(T): bool>` on `class C<T>`) while something also derives `C<fun(T): bool>` from it; restructure the class so its field types do not nest the parameter deeper",
+            &name[..name.len().min(120)]
+        ),
+        None,
+    );
+    Err(SemanticError::AnalysisFailed)
 }

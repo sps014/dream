@@ -51,14 +51,17 @@ public class Queue<T> : Collection<T> {
         this.count = this.count + 1;
     }
 
-    // Removes and returns the front element, or `None` when empty.
+    // Removes and returns the front element, or `None` when empty. The vacated slot is zeroed
+    // so managed elements release immediately instead of staying retained until overwritten.
     public fun dequeue(): Option<T> {
         if (this.count == 0) {
             return Option.None;
         }
         let v = this.items[this.head];
+        let vacated = this.head;
         this.head = (this.head + 1) % this.items.length;
         this.count = this.count - 1;
+        this.items[vacated] = Buffer.alloc<T>(1)[0];
         return Option.Some(v);
     }
 

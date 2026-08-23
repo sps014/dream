@@ -20,6 +20,8 @@ pub(super) struct Cx<'a> {
     /// `Statement::DebugLine` markers then, so their presence is the backend's signal to add
     /// debugger-only views (async future-frame structs).
     pub debug_syms: bool,
+    /// Emit the exit-time leak report from native `main` unconditionally (debug builds).
+    pub leak_checks: bool,
     /// Lazily-computed release/destroy symbol canonicalization (types whose ARC glue
     /// bodies are byte-identical share one emitted function). See `release::canonical_maps`.
     pub canon: std::sync::OnceLock<super::release::CanonMaps>,
@@ -47,8 +49,20 @@ impl<'a> Cx<'a> {
             interner,
             target,
             debug_syms,
+            leak_checks: false,
             canon: std::sync::OnceLock::new(),
         }
+    }
+
+    pub(super) fn with_leak_checks(
+        mir: &'a Mir,
+        interner: &'a TypeInterner,
+        target: CTarget,
+        leak_checks: bool,
+    ) -> Self {
+        let mut cx = Self::new(mir, interner, target);
+        cx.leak_checks = leak_checks;
+        cx
     }
 
     pub(super) fn canon_maps(&self) -> &super::release::CanonMaps {

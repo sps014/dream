@@ -228,6 +228,9 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let i = this.find(key);
         if (i >= 0) {
             this.slots[i].state = 0 - this.epoch;
+            // Zero both halves of the tombstoned slot so managed keys release immediately,
+            // not just on slot reuse.
+            this.slots[i].key = this.empty_keys[0];
             this.slots[i].value = this.defaults[0];
             this.count = this.count - 1;
             return true;

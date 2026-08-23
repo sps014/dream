@@ -326,6 +326,7 @@ impl Compiler {
         let interner = analyzer.interner();
         let target = &self.target;
         let debug_info = self.debug_info;
+        let debug = self.debug;
 
         // Codegen (MIR lowering/optimization/emission) treats certain lookups - a type's layout, an
         // interned string, a function-table slot - as compiler invariants rather than user errors: a
@@ -376,11 +377,16 @@ impl Compiler {
                     &mir,
                     interner,
                     dream_mir::backend::c::CTarget::Wasm32,
+                    false,
                 )
                 .into_bytes(),
-                Target::NativeC => {
-                    dream_mir::backend::c::emit_c_module(&mir, interner).into_bytes()
-                }
+                Target::NativeC => dream_mir::backend::c::emit_c_module_for(
+                    &mir,
+                    interner,
+                    dream_mir::backend::c::CTarget::Native,
+                    debug && !debug_info,
+                )
+                .into_bytes(),
             };
             (bytes, live_imports, threads, need)
         }));

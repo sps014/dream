@@ -16,12 +16,20 @@ use indexmap::IndexMap;
 const NATIVE_RT_INCLUDE: &str = "\"dream_rt_native.h\"";
 const WASM32_RT_INCLUDE: &str = "\"dream_rt_wasm32.h\"";
 
+/// Native target without leak instrumentation (tests).
 pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
-    emit_c_module_for(mir, interner, CTarget::Native)
+    emit_c_module_for(mir, interner, CTarget::Native, false)
 }
 
-pub fn emit_c_module_for(mir: &Mir, interner: &TypeInterner, target: CTarget) -> String {
-    let cx = Cx::new(mir, interner, target);
+/// `leak_checks` emits the exit-time heap-counter report in native `main` unconditionally
+/// (debug builds); release builds gate it behind `DREAM_DEBUG_LEAKS=1` at runtime instead.
+pub fn emit_c_module_for(
+    mir: &Mir,
+    interner: &TypeInterner,
+    target: CTarget,
+    leak_checks: bool,
+) -> String {
+    let cx = Cx::with_leak_checks(mir, interner, target, leak_checks);
     let mut m = ModuleBuilder::new();
     m.include(if target.is_wasm32() {
         WASM32_RT_INCLUDE
@@ -191,20 +199,28 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
         vec![Expr::id("argc"), Expr::id("argv")],
     );
     let rc = main_fn.temp(CTy::I32, Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])));
-    // `DREAM_DEBUG_LEAKS=1` prints heap counters at exit so golden tests (and users) can assert
-    // that programs which drop everything return the allocator to its post-init state.
-    main_fn.stmt(Stmt::if_(
-        Expr::call("getenv", vec![Expr::cstr("DREAM_DEBUG_LEAKS")]),
-        Stmt::call(
-            "fprintf",
-            vec![
-                Expr::id("stderr"),
-                Expr::cstr("[dream] leak check: live=%d total_allocations=%d\n"),
-                Expr::call("debug_get_live_objects", vec![]),
-                Expr::call("debug_get_total_allocations", vec![]),
-            ],
-        ),
-    ));
+    // Heap-counter leak report. Debug builds always print it so unoptimized `dream run`
+    // surfaces retention by default; release builds opt in via DREAM_DEBUG_LEAKS=1.
+    let leak_report = Stmt::call(
+        "fprintf",
+        vec![
+            Expr::id("stderr"),
+            Expr::cstr("[dream] leak check: live=%d total_allocations=%d\n"),
+            Expr::call("debug_get_live_objects", vec![]),
+            Expr::call("debug_get_total_allocations", vec![]),
+        ],
+    );
+    if cx.leak_checks {
+        main_fn.stmt(leak_report);
+    } else {
+        main_fn.stmt(Stmt::if_(
+            Expr::ne(
+                Expr::call("getenv", vec![Expr::cstr("DREAM_DEBUG_LEAKS")]),
+                Expr::cast(CTy::Ptr, Expr::i(0)),
+            ),
+            leak_report,
+        ));
+    }
     main_fn.ret(Some(rc));
     m.push_func(main_fn);
 }

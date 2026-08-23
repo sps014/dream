@@ -320,6 +320,9 @@ public class List<T> : IndexedCollection<T> {
             Span<T>(this.items, index, n).copy_from(Span<T>(this.items, index + 1, n));
         }
         this.count = this.count - 1;
+        // Zero the vacated tail slot: it still holds a second reference to the last shifted
+        // element and would retain it past the next overwrite.
+        this.items[this.count] = Buffer.alloc<T>(1)[0];
         return true;
     }
 

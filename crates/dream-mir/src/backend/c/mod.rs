@@ -513,7 +513,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32);
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32, false);
         assert!(c.contains("dream_rt_wasm32.h"), "{}", c);
         assert!(
             c.contains(&format!("import_module(\"{HOST_MODULE}\")")),
@@ -571,7 +571,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32);
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32, false);
         assert!(c.contains(field), "{}", c);
         assert!(c.contains(&js_abi::SLOT_SIZE.to_string()), "{}", c);
         assert!(c.contains(&js_abi::tag::INT.to_string()), "{}", c);
@@ -616,7 +616,7 @@ mod tests {
             functions: vec![b.finish()],
             ..Default::default()
         };
-        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32);
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32, false);
         assert!(
             c.contains(&format!(
                 "export_name(\"{}\")",

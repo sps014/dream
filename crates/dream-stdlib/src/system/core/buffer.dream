@@ -43,6 +43,38 @@ public static class Buffer {
         count: int
     ): void;
 
+    // Releases the element in every slot of `arr` by overwriting it with a zero value, so a
+    // container can rewind its length without stranding retained elements in dead slots. This
+    // is the sanctioned way to shrink a managed buffer: each store goes through normal ARC
+    // assignment semantics (release old occupant), unlike bitwise fills which must never touch
+    // reference-typed slots. O(length); unmanaged elements compile to plain stores.
+    public static fun clear<T>(borrow arr: T[]): void {
+        let z = Buffer.alloc<T>(1);
+        let i = 0;
+        let n = arr.length;
+        while (i < n) {
+            arr[i] = z[0];
+            i = i + 1;
+        }
+    }
+
+    // Like `clear`, but releases only slots `[n, arr.length)` — the tail dropped by a shrink to
+    // `n`. Slots below `n` are left untouched.
+    public static fun truncate<T>(borrow arr: T[], n: int): void {
+        if (n < 0) {
+            n = 0;
+        }
+        if (n >= arr.length) {
+            return;
+        }
+        let z = Buffer.alloc<T>(1);
+        let i = n;
+        while (i < arr.length) {
+            arr[i] = z[0];
+            i = i + 1;
+        }
+    }
+
     // Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.
     @intrinsic("array_store16")
     static extern fun store16(borrow arr: byte[], off: int, unit: int): void;

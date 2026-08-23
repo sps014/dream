@@ -8,7 +8,7 @@
 mod cursor;
 mod elision;
 mod insertion;
-mod liveness;
+pub(crate) mod liveness;
 mod tokens;
 mod uniqueness;
 

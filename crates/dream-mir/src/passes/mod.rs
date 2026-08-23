@@ -15,7 +15,7 @@ mod iv;
 mod licm;
 mod loop_unroll;
 mod prop;
-mod rc;
+pub(crate) mod rc;
 mod sccp;
 mod simplify_cfg;
 mod sroa;

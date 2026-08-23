@@ -1,7 +1,7 @@
 //! Backward liveness of locals, used by last-use move in [`super::RcInsertion`].
 
 use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 /// Per-block live-out set: locals that may be read on some path after the block's terminator.
 pub(crate) fn live_out(func: &MirFunction) -> Vec<HashSet<u32>> {
@@ -306,4 +306,81 @@ fn add_place_base_reads(place: &Place, live: &mut HashSet<u32>) {
         }
         Place::Local(_) | Place::Global(_) => {}
     }
+}
+
+/// Interference graph for Future-frame slot sharing: `adj[a]` contains every
+/// local that may be live at the same time as `a`. Two locals with disjoint
+/// lifetimes can share one frame slot, since the frame is canonical storage —
+/// scalars are re-read at poll entry and value locals alias it by pointer.
+///
+/// A definition interferes with everything live after it; an `await` result is
+/// defined at the top of its resume block and therefore interferes with that
+/// block's live-in set.
+pub(crate) fn frame_interference(func: &MirFunction) -> Vec<BTreeSet<u32>> {
+    let n = func.blocks.len();
+    let mut live_out = vec![HashSet::new(); n];
+    let mut live_in = vec![HashSet::new(); n];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for bi in (0..n).rev() {
+            let mut out = HashSet::new();
+            for succ in func.blocks[bi].terminator.successors() {
+                out.extend(&live_in[succ.0 as usize]);
+            }
+            if out != live_out[bi] {
+                live_out[bi] = out;
+                changed = true;
+            }
+            let mut inn = live_out[bi].clone();
+            transfer_block(
+                &func.blocks[bi].stmts,
+                &func.blocks[bi].terminator,
+                &mut inn,
+            );
+            if inn != live_in[bi] {
+                live_in[bi] = inn;
+                changed = true;
+            }
+        }
+    }
+    let mut adj: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); func.locals.len()];
+    let mut interfere = |a: u32, b: u32| {
+        if a != b {
+            adj[a as usize].insert(b);
+            adj[b as usize].insert(a);
+        }
+    };
+    for (block, block_live_out) in func.blocks.iter().zip(live_out.iter()) {
+        // An await binds its result at the top of the resume block.
+        if let Terminator::Await {
+            dest: Some(d), ..
+        } = &block.terminator
+        {
+            for &v in block_live_out.iter() {
+                interfere(v, d.0);
+            }
+        }
+        let mut live = block_live_out.clone();
+        add_terminator_reads(&block.terminator, &mut live);
+        for stmt in block.stmts.iter().rev() {
+            if let Statement::Assign(Place::Local(d), _) = stmt {
+                for &v in live.iter() {
+                    interfere(v, d.0);
+                }
+                live.remove(&d.0);
+            }
+            transfer_stmt(stmt, &mut live);
+        }
+    }
+    // Parameters are written by the constructor before the first poll, so they
+    // all coexist at entry.
+    for p in &func.params {
+        for q in &func.params {
+            if p.0 != q.0 {
+                adj[p.0 as usize].insert(q.0);
+            }
+        }
+    }
+    adj
 }

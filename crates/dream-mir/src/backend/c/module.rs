@@ -946,10 +946,22 @@ fn build_async_pair(
     let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
     let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
     let fut = cx.target.abi().future;
-    let slots = crate::async_emit::layout_async_slots(&body, cx.interner, fut.slots as i32, |ty| {
-        let sz = super::types::native_scalar_size(cx, ty).0.max(8);
-        (sz, cx.interner.is_value_type(ty))
-    });
+    let slots = crate::async_emit::layout_async_slots(
+        &body,
+        cx.interner,
+        fut.slots as i32,
+        |ty| {
+            let sz = super::types::native_scalar_size(cx, ty).0.max(8);
+            (sz, cx.interner.is_value_type(ty))
+        },
+        // Packing shares slots between locals with disjoint lifetimes; disabled
+        // under debug info where the frame view expects one field per local.
+        if !cx.debug_syms {
+            Some(Box::new(|_ty| true))
+        } else {
+            None
+        },
+    );
     let size = slots.frame_size;
     let offs: Vec<i32> = (0..body.locals.len())
         .map(|i| slots.offsets.get(&i).copied().unwrap_or(0))

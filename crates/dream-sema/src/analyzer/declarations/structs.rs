@@ -132,7 +132,6 @@ impl<'a> Analyzer<'a> {
         // last, once every non-generic class's fields are in `self.struct_table` (needed to
         // classify a field's target as a value struct vs. a class).
         self.check_weak_unowned_and_cycles(node, diagnostics);
-        self.check_container_rewinds(node, diagnostics);
 
         // A `ref struct` field would smuggle a stack-only value into a heap-allocated (or
         // otherwise longer-lived) container — reject it regardless of whether the enclosing type

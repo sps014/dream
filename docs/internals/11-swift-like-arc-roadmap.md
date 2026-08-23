@@ -82,21 +82,28 @@ shapes; `new` + share a class graph every iteration will not.
 
 Measure: `./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](https://github.com/sps014/dream/blob/main/tests/bench/BASELINE.md).
 
-## Container slot-zeroing convention (shipped guardrails)
+## Raw-buffer memory model (verified)
 
-A class that owns a `T[]` buffer of managed elements plus a scalar count/length field **must zero
-live slots before rewinding the counter** (`Queue`/`PriorityQueue` follow `List`/`Map`/`Set` here);
-the `where T : unmanaged` overload is the sanctioned rewind-only specialization. Two compile-time /
-runtime guardrails back the convention:
+Hand-rolled containers (`T[]` buffer field + user-managed counter(s)) are **memory-safe by
+construction** — no lint, no annotation, any number of buffers or counters:
 
-1. **Sema lint** — `crates/dream-sema/src/analyzer/declarations/container_rewind.rs` warns when a
-   method writes the counter field with no indexed store into any paired buffer field and no
-   same-class call that might zero slots.
-2. **Shrink-releasing realloc** — `Buffer.realloc` over RC-tracked elements emits
-   `dream_array_realloc_rc` (backend/c), which releases dropped tail slots before `realloc`, so
-   shrinking can never strand retained elements in dead capacity.
+- Indexed loads always retain (`move_source` only recognizes locals), so a read-out element and
+  its slot are both valid owners. Proven: `Debug.ref_count` = 3 after `arr[0] = w; let x =
+  arr[0]` with `w` alive.
+- A counter rewind therefore cannot corrupt memory — dead slots hold valid references until the
+  next overwrite or until the array is freed, at which point `release_array_t{elem}` walks the
+  full length prefix and releases every slot. Reclamation is deferred to free time for any
+  shape; worst-case retention is bounded by live arrays' capacity.
+- Shrinking via `Buffer.realloc` releases dropped tail slots (`dream_array_realloc_rc`,
+  backend/c) so truncation never strands retained elements.
+- Ownership-transferring pops zero their vacated slot (List/Queue/PriorityQueue) purely to
+  reclaim eagerly, not for safety.
 
-Leak checking: `DREAM_DEBUG_LEAKS=1 dream run …` prints `live` / `total_allocations` heap counters
-at exit; `Debug.live_objects()` deltas (see `tests/cases/container_clear_rc.dream`) assert balance
-in goldens. Note the counters include interned strings and boxed print values, so measure into
-locals *before* printing and keep elements as literals.
+Leak checking: `DREAM_DEBUG_LEAKS=1 dream run …` prints heap counters at exit (debug builds print
+unconditionally); `Debug.live_objects()` deltas assert balance in goldens
+(`tests/cases/container_clear_rc.dream`). Note counters include interned strings and boxed print
+values, so measure into locals *before* printing.
+
+Eager reclamation for churn-heavy long-lived containers is opt-in:
+`Buffer.clear<T>(arr)` / `Buffer.truncate<T>(arr, n)` release elements through normal ARC store
+semantics.

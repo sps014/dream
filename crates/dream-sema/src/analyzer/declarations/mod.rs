@@ -28,7 +28,6 @@ mod imports;
 pub(in crate::analyzer) mod operator_overloads;
 pub(in crate::analyzer) mod protocol_hooks;
 mod reference_cycles;
-mod container_rewind;
 mod register_interfaces;
 mod register_methods;
 mod structs;

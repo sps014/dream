@@ -1,0 +1,20 @@
+// P1: copy-read keeps two valid owners.
+module main;
+
+import system;
+
+class Widget {
+    id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun main(): void {
+    let w = Widget(7);
+    let arr = Buffer.alloc<Widget>(4);
+    arr[0] = w;
+    // slot owner + w = 2
+    System.println(Debug.ref_count(w));
+    let x = arr[0];
+    // read adds a retained copy: 3 (slot + w + x)
+    System.println(Debug.ref_count(x));
+}

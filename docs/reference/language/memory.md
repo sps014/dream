@@ -13,6 +13,34 @@ Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored inline �
 
 `js` handles are not Dream heap objects, but they follow the same ownership rules: when the last Dream owner drops, the JS value can be collected. See [The `js` type](js-type.md).
 
+## Raw buffers and custom containers
+
+`T[]` is always safe to use directly — including as the backing storage of your own data
+structure. Three guarantees hold for any array, no matter how you track its contents:
+
+1. **Overwriting a slot releases the old element** immediately.
+2. **Reading a slot retains the element** — both the array and your variable are valid owners,
+   so there is no way to create a dangling or double-freed reference through reads.
+3. **Freeing an array releases every slot**, including slots a counter has already "left
+   behind".
+
+The practical consequence: if you hand-roll a container (`entries: string[]` plus a `count:
+int`), rewinding the counter **without clearing slots is safe**. Old elements stay referenced
+from dead capacity only until they are overwritten or until the array is dropped, then they are
+reclaimed deterministically. Nothing leaks permanently and nothing is freed early — there is no
+rule to remember.
+
+Two opt-ins exist for people writing performance-sensitive containers:
+
+- `Buffer.clear<T>(arr)` / `Buffer.truncate<T>(arr, n)` release elements eagerly (normal ARC
+  store semantics per slot). Use them when one long-lived container churns through many
+  elements and peak memory matters more than microsecond-level cost.
+- Zeroing a vacated slot after moving an element out (`items[i] = Buffer.alloc<T>(1)[0]`,
+  like [`List.pop`](../stdlib/collections.md)) reclaims immediately instead of at overwrite/drop.
+
+The genuinely unsafe tier stays behind [`@unsafe`](memory.md#unsafe-manual-memory-management):
+`Pointer<T>`, `Buffer.realloc`, and `Buffer.free` bypass ARC entirely.
+
 ## How it works
 
 Every heap object tracks how many names still point at it.

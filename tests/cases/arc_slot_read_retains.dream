@@ -1,0 +1,29 @@
+// Indexed loads retain: every live owner adds one to the reference count. This is what makes
+// hand-rolled containers memory-safe — reads can never produce a dangling or under-counted
+// reference, so rewinding a counter without clearing slots defers reclamation but can never
+// corrupt memory.
+//
+//   after store:        w(1) + slot(2)              -> 2
+//   after first read:   w + slot + x                -> 3
+//   after second read:  w + slot + x + y            -> 4
+//   after overwrite:    slot released; w + x + y    -> 3
+
+import system;
+
+public class Widget {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun main(): void {
+    let w = Widget(7);
+    let arr = Buffer.alloc<Widget>(4);
+    arr[0] = w;
+    System.println(Debug.ref_count(w));
+    let x = arr[0];
+    System.println(Debug.ref_count(x));
+    let y = arr[0];
+    System.println(Debug.ref_count(y));
+    arr[0] = Widget(99);
+    System.println(Debug.ref_count(w));
+}

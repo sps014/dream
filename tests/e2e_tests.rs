@@ -24,6 +24,7 @@ const SMOKE_CASES: &[&str] = &[
     "map_basics",
     "map_indexer_missing",
     "container_clear_rc",
+    "arc_slot_read_retains",
     "string_split_once",
     "interfaces",
     "object_protocol",

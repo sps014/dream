@@ -78,6 +78,11 @@ grid[0][0] = 32;
 
 `Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
 
+!!! note "Arrays own their slots"
+    Every slot of a `T[]` is released when the array is dropped, even if your own bookkeeping
+    stopped tracking it earlier — see [Raw buffers and custom containers](memory.md#raw-buffers-and-custom-containers).
+    Overwriting a slot releases its previous occupant immediately.
+
 ## `Span<T>`: a bounds-checked view without copying
 
 `Span<T>` is a [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type) that views a contiguous run of an existing array's elements — no copy, no heap allocation of its own, and its own logical range is enforced independently of the backing array's actual size. Because it is a `ref struct`, the compiler rejects any use that would let one escape the stack frame that created it (a field, a generic type argument, a lambda capture, or an `async` parameter):

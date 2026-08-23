@@ -1,0 +1,13 @@
+module main;
+
+import system;
+
+class Widget {
+    id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun main(): void {
+    let w = Widget(7);
+    System.println(Debug.ref_count(w));
+}

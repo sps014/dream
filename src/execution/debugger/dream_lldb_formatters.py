@@ -80,16 +80,20 @@ def _scalar_text(name, raw):
             return str(int.from_bytes(raw, "little", signed=True))
         if name == "float":
             import struct as _struct
+
             return repr(_struct.unpack("<f", raw)[0])
         if name == "double":
             import struct as _struct
+
             return repr(_struct.unpack("<d", raw)[0])
-        if name.startswith("dream_Str"):
-            addr = int.from_bytes(raw, "little")
-            text = _read_str(_process, addr) if addr else "null"
-            return text if text is not None else "<str>"
         if name.endswith("*"):
-            return "0x%x" % int.from_bytes(raw, "little")
+            addr = int.from_bytes(raw, "little")
+            if addr == 0:
+                return "null"
+            stripped = name.replace("*", "").replace("struct ", "").strip()
+            if stripped.startswith("__dv_"):
+                stripped = stripped[5:]
+            return "%s@0x%x" % (stripped, addr)
     except Exception:
         pass
     return "<e>"
@@ -136,8 +140,37 @@ def _array_summary(struct_value, depth=0):
             continue
         if ename.endswith("*"):
             addr = int.from_bytes(raw, "little")
-            base_name = ename.replace("*", "").strip()
-            parts.append("null" if addr == 0 else "%s@0x%x" % (base_name, addr))
+            if addr == 0:
+                parts.append("null")
+                continue
+            stripped = elem_ty.GetName().replace("const ", "").strip()
+            if depth < MAX_DEPTH:
+                frame = struct_value.GetFrame()
+                stream = lldb.SBStream()
+                struct_value.GetExpressionPath(stream)
+                path = stream.GetData()
+                if frame.IsValid() and path:
+                    # The expression path of the array struct already carries its own
+                    # dereferences (`*(*(__v_pts))`), so members hang off it directly.
+                    ev = frame.EvaluateExpression("(%s).elems[%d]" % (path, i))
+                    if ev.IsValid() and ev.GetError().Success():
+                        inner = ev.Dereference()
+                        if inner is not None and inner.IsValid():
+                            rendered = _dispatch(inner, depth + 1)
+                            if rendered is not None:
+                                parts.append(rendered)
+                                continue
+                    elif ev.IsValid():
+                        summary = ev.GetSummary()
+                        if summary:
+                            parts.append(summary)
+                            continue
+            base_name = (
+                stripped.replace("*", "").replace("struct ", "").strip()
+            )
+            if base_name.startswith("__dv_"):
+                base_name = base_name[5:]
+            parts.append("%s@0x%x" % (base_name, addr))
             continue
         parts.append(_scalar_text(ename, bytes(raw)))
     if length > MAX_ELEMS:
@@ -161,9 +194,8 @@ def _union_summary(struct_value, depth=0):
         f = active.GetChildAtIndex(i)
         if not f.IsValid():
             continue
-        rendered = _elem_text(f, struct_value.GetProcess(), depth)
-        fname = f.GetName() or ""
-        fields.append("%s=%s" % (fname, rendered) if rendered and not rendered.startswith('"') else rendered)
+        fname = f.GetName() or "?"
+        fields.append("%s=%s" % (fname, _elem_text(f, struct_value.GetProcess(), depth)))
     return "%s(%s)" % (name, ", ".join(fields)) if fields else name
 
 
@@ -197,13 +229,23 @@ def view_ptr_summary(valobj, internal_dict):
 
 
 def _dispatch(valobj, depth=0):
+    global _process
     try:
         if depth > MAX_DEPTH:
             return None
         s = _pointee_struct(valobj)
         if s is None:
             return None
+        addr_v = s.AddressOf()
+        if addr_v.IsValid():
+            _process = s.GetProcess()
         name = (s.GetType().GetName() or "").replace("const ", "").strip()
+        # Expression results spell pointer types like `*$0`; drop indirection markers.
+        while name.startswith("*"):
+            name = name[1:].strip()
+        # Struct tags are spelled `__dv_<Alias>`; display uses the alias.
+        if name.startswith("__dv_"):
+            name = name[5:]
         if name == "dream_Str":
             return _string_summary(s)
         if name.startswith("dream_Arr"):
@@ -215,17 +257,17 @@ def _dispatch(valobj, depth=0):
             and s.GetChildMemberWithName("value").IsValid()
         ):
             return _union_summary(s, depth)
-        # Nominal class/value-struct views render compactly as Name{f=v, ...}.
+        # Nominal class/value-struct views render compactly as Name{f=v, ...} from their
+        # DWARF children; pointer-typed fields recurse through _elem_text.
         n = s.GetNumChildren()
-        if n > 0 and name[:1].isupper():
+        if n > 0:
             parts = []
             for i in range(min(n, 8)):
                 f = s.GetChildAtIndex(i)
                 if f.IsValid():
                     fname = f.GetName() or "?"
-                    parts.append(
-                        "%s=%s" % (fname, _elem_text(f, s.GetProcess(), depth))
-                    )
+                    rendered = _elem_text(f, s.GetProcess(), depth)
+                    parts.append("%s=%s" % (fname, rendered))
             if parts:
                 return "%s{%s}" % (name, ", ".join(parts))
         return None

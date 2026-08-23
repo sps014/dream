@@ -11,11 +11,32 @@ use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
 };
 use crate::passes::MirPass;
-use crate::{Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::HashMap;
 
 pub struct RcInsertion;
+
+/// Coarse container-slot identity: field slots by `(base, field)`, index slots by base alone
+/// (dynamic indices are indistinguishable statically). Used only where a liveness guard makes
+/// over-matching safe.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum SlotId {
+    Local(u32),
+    Global(Global),
+    Field(u32, u32),
+    IndexBase(u32),
+}
+
+fn slot_id(place: &Place) -> SlotId {
+    match place {
+        Place::Local(l) => SlotId::Local(l.0),
+        Place::Global(g) => SlotId::Global(*g),
+        Place::Field { base, field } => SlotId::Field(base.0, *field as u32),
+        Place::Index { base, .. } => SlotId::IndexBase(base.0),
+        Place::Deref { ptr, .. } => SlotId::Local(ptr.0),
+    }
+}
 
 impl RcInsertion {
     pub(crate) fn run_with_layouts(
@@ -46,9 +67,59 @@ impl RcInsertion {
         let is_owned = |l: u32| owned_flags.get(l as usize).copied().unwrap_or(false);
         let mut changed = false;
 
+        let mut realloc_readers: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
+        let mut slot_readers: HashMap<SlotId, Vec<u32>> = HashMap::new();
+        let live_out_rc = liveness::live_out(func);
+        for (bi, block) in func.blocks.iter().enumerate() {
+            for (si, stmt) in block.stmts.iter().enumerate() {
+                // Collect locals defined by a direct container read, keyed by source slot. A
+                // self-realloc of that slot (`f = Buffer.realloc(f, ..)`) consumes the old block
+                // outright, so any token still held by such a reader must be dropped *before*
+                // the store (see main loop).
+                if let Statement::Assign(Place::Local(dest), rv) = stmt {
+                    let read_place = match rv {
+                        Rvalue::Use(Operand::Copy(p)) | Rvalue::Cast(Operand::Copy(p), _, _) => {
+                            Some(p)
+                        }
+                        _ => None,
+                    };
+                    if let Some(Place::Field { .. } | Place::Index { .. }) = read_place {
+                        if interner.is_rc_tracked(func.locals[dest.0 as usize].ty) {
+                            slot_readers
+                                .entry(slot_id(read_place.unwrap()))
+                                .or_default()
+                                .push(dest.0);
+                        }
+                    }
+                }
+                let Statement::Assign(dest_place, Rvalue::ArrayRealloc { array, .. }) = stmt
+                else {
+                    continue;
+                };
+                let Operand::Copy(src_place) = array else {
+                    continue;
+                };
+                if slot_id(dest_place) != slot_id(src_place) {
+                    continue;
+                }
+                let Some(readers) = slot_readers.get(&slot_id(src_place)) else {
+                    continue;
+                };
+                let ok: Vec<u32> = readers
+                    .iter()
+                    .copied()
+                    .filter(|&x| is_owned(x) && !live_after_stmt(func, &live_out_rc, bi, si, x))
+                    .collect();
+                if !ok.is_empty() {
+                    realloc_readers.insert((bi, si), ok);
+                }
+            }
+        }
+
         let local_types: Vec<dream_types::TypeId> = func.locals.iter().map(|d| d.ty).collect();
         let take_flags: Vec<bool> = func.locals.iter().map(|d| d.is_take).collect();
         let mut extra_locals: Vec<LocalDecl> = Vec::new();
+
         let temp_base = func.locals.len() as u32;
         for (bi, block) in func.blocks.iter_mut().enumerate() {
             let mut tokens = analysis.token_in[bi].clone();
@@ -86,6 +157,29 @@ impl RcInsertion {
                     })
                     .unwrap_or(false);
                 let container_srcs = container_move_locals(&stmt);
+                // Self-realloc of a slot destroys the block under any read-derived owner of it
+                // (the lowering emits `$realloc` with no release-old step). Release those owners
+                // first: dead ones restore the slot's uniqueness so the move is legitimate.
+                // Liveness-guarded: a reader still used later is left untouched (such code reads
+                // freed memory under any scheme short of copy-on-realloc).
+                let mut pre_releases: Vec<Statement> = Vec::new();
+                if let Some(readers) = realloc_readers.get(&(bi, si)) {
+                    for &x in readers {
+                        if !dest_holds_token(&tokens, x) {
+                            continue;
+                        }
+                        pre_releases.extend(release_and_null(x, false));
+                    }
+                }
+                for r in &pre_releases {
+                    if let Statement::Release(Operand::Copy(Place::Local(l))) = r {
+                        tokens[l.0 as usize] = false;
+                    } else if let Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) = r {
+                        tokens[l.0 as usize] = false;
+                    }
+                    changed = true;
+                }
+                out.extend(pre_releases);
                 apply_stmt_tokens(
                     &stmt,
                     interner,

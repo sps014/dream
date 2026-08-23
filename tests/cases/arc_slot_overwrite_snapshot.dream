@@ -1,0 +1,21 @@
+// Reading a container slot into a local, then overwriting the same slot must keep both
+// references alive (regression: cursor aliasing freed the object at the slot store).
+import system;
+
+class Job {
+    public name: string;
+    public constructor(name: string) { this.name = name; }
+}
+
+class SlotBox {
+    public head: Option<Job>;
+    public constructor() { this.head = Option.None; }
+}
+
+fun main(): void {
+    let q = SlotBox();
+    q.head = Option.Some(Job("j"));
+    let taken = q.head;
+    q.head = Option.None;
+    System.println(taken.unwrap().name);
+}

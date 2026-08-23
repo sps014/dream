@@ -403,6 +403,25 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
         copy = new_size;
     }
     memcpy(dream_p(np), dream_p(ptr), (size_t)copy);
-    dream_free(ptr);
+    /* Share-aware move: the slot's +1 transfers to the new block, but read-derived
+     * aliases (retained field/index snapshots) may still hold their own +1 on the
+     * old block. Drop only this slot's reference; free only on the last one. */
+    {
+        int32_t *rcp = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
+        int32_t old;
+        if (!dream_rt_mt) {
+            old = *rcp;
+            if (old == 1) {
+                dream_free(ptr);
+            } else if (old != INT32_MAX) {
+                *rcp = old - 1;
+            }
+        } else {
+            old = __atomic_load_n(rcp, __ATOMIC_RELAXED);
+            if (old != INT32_MAX && __atomic_fetch_sub(rcp, 1, __ATOMIC_ACQ_REL) == 1) {
+                dream_free(ptr);
+            }
+        }
+    }
     return np;
 }

@@ -13,6 +13,8 @@ mod tokens;
 mod uniqueness;
 
 #[cfg(test)]
+mod cursor_tests;
+#[cfg(test)]
 mod unique_tests;
 
 pub use elision::RcElision;

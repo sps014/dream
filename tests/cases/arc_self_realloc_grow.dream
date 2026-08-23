@@ -1,0 +1,20 @@
+// Regression for ARC handling of `f = Buffer.realloc(f, ..)` self-grow: a field snapshot
+// retained across the grow must be released before the backing block is consumed.
+import system;
+
+class Bucket {
+    public names: List<string>;
+    public constructor() { this.names = List<string>(); }
+}
+
+fun main(): void {
+    let b = Bucket();
+    let i = 0;
+    while (i < 64) {
+        b.names.push("item" + i.to_string());
+        i = i + 1;
+    }
+    System.println(b.names.length);
+    System.println(b.names.get(0));
+    System.println(b.names.get(63));
+}

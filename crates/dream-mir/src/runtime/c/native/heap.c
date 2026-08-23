@@ -272,6 +272,10 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
         copy = new_size;
     }
     dream_mem_copy(np, ptr, (size_t)copy);
-    dream_free(ptr);
+    /* Share-aware move: the slot's +1 transfers to the new block, but read-derived
+     * aliases (retained field/index snapshots) may still hold their own +1 on the
+     * old block. Release instead of freeing outright so those aliases stay valid;
+     * with a single holder this is exactly dream_free. */
+    dream_release(ptr);
     return np;
 }

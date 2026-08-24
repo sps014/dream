@@ -1,0 +1,18 @@
+// Value structs holding class references participate in the cycle graph: C -> Holder -> Data
+// -> C is a detected strong cycle even though Holder is an inline value type.
+
+struct Holder {
+    d: Data;
+}
+
+class Data {
+    back: Option<C>;
+}
+
+class C {
+    h: Holder;
+}
+
+fun main(): void {
+    System.println("unreachable");
+}

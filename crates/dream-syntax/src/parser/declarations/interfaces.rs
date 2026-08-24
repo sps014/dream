@@ -95,6 +95,21 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_extern: _,
         } = self.parse_function_modifiers();
 
+        // Optional receiver-mode qualifier (`[borrow | unique] fun/get/set ...`) — same shape as
+        // class methods. Required on signature-only methods (no body to infer from).
+        let receiver_mode = match self.current_token().kind {
+            TokenKind::BorrowToken | TokenKind::UniqueToken => {
+                let mode = if self.current_token().kind == TokenKind::BorrowToken {
+                    crate::nodes::function::ReceiverMode::Borrow
+                } else {
+                    crate::nodes::function::ReceiverMode::Unique
+                };
+                self.match_token(self.current_token().kind);
+                Some(mode)
+            }
+            _ => None,
+        };
+
         // Property accessor: `get name(): T;` / `set name(v: T) { ... }` — same shape as class
         // accessors, but allowing a trailing `;` for a required (no-default) contract.
         let accessor_kind = if self.current_token().kind == TokenKind::IdentifierToken
@@ -133,6 +148,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_async = is_async;
             node.is_default_impl = is_default;
             node.accessor = Some(accessor_kind);
+            node.receiver_mode = receiver_mode;
             return Ok(node);
         }
 
@@ -169,6 +185,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.is_async = is_async;
         node.is_default_impl = is_default;
         node.generic_constraints = generic_constraints;
+        node.receiver_mode = receiver_mode;
         Ok(node)
     }
 

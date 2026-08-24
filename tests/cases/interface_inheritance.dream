@@ -19,7 +19,7 @@ interface Readable {
 }
 
 interface Writable {
-    fun write(v: int): void;
+    unique fun write(v: int): void;
 }
 
 interface ReadWrite : Readable + Writable {

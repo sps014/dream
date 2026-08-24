@@ -3,5 +3,5 @@ module system.core;
 // Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this.
 // `@next` lives on the implementing class (attributes are not required on the interface).
 public interface Iterator<T> {
-    fun next(): Option<T>;
+    unique fun next(): Option<T>;
 }

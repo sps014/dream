@@ -93,16 +93,32 @@ impl<'a, 'b> Parser<'a, 'b> {
         // pins the method's mutation contract instead of letting the analyzer infer it from the
         // body. Only valid on non-static methods with an implicit `this`; rejected elsewhere
         // during semantic analysis.
-        let receiver_mode = match self.current_token().kind {
-            TokenKind::BorrowToken if self.peek_token(1).kind == TokenKind::FunToken => {
-                let tok = self.match_token(TokenKind::BorrowToken);
-                Some((tok, crate::nodes::function::ReceiverMode::Borrow))
+        // The qualifier also fronts property accessors (`borrow get length()`), whose `get`/
+        // `set` heads are contextual identifiers rather than `fun`.
+        let receiver_mode = {
+            let mode = match self.current_token().kind {
+                TokenKind::BorrowToken => Some(crate::nodes::function::ReceiverMode::Borrow),
+                TokenKind::UniqueToken => Some(crate::nodes::function::ReceiverMode::Unique),
+                _ => None,
+            };
+            let next_kind = self.peek_token(1).kind;
+            let next_is_member_head =
+                matches!(next_kind, TokenKind::FunToken | TokenKind::IdentifierToken);
+            let accessor_ok = matches!(next_kind, TokenKind::IdentifierToken)
+                && matches!(self.peek_token(1).text.as_str(), "get" | "set");
+            match (mode, next_is_member_head, accessor_ok) {
+                (Some(mode), true, _) if next_kind == TokenKind::FunToken => {
+                    self.match_token(self.current_token().kind);
+                    Some(mode)
+                }
+                (Some(mode), _, true) => {
+                    // Accessor form (`borrow get len()`): consume the qualifier; `get`/`set`
+                    // parsing continues below.
+                    self.match_token(self.current_token().kind);
+                    Some(mode)
+                }
+                _ => None,
             }
-            TokenKind::UniqueToken if self.peek_token(1).kind == TokenKind::FunToken => {
-                let tok = self.match_token(TokenKind::UniqueToken);
-                Some((tok, crate::nodes::function::ReceiverMode::Unique))
-            }
-            _ => None,
         };
 
         // Constructor (`constructor`) / destructor (`del`) declarations omit the `fun` keyword and
@@ -219,7 +235,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_async = is_async;
             node.generic_constraints = generic_constraints;
             node.where_constraints = where_constraints;
-            node.receiver_mode = receiver_mode.map(|(_, mode)| mode);
+            node.receiver_mode = receiver_mode;
             return Ok(node);
         }
 
@@ -237,7 +253,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.is_async = is_async;
         node.generic_constraints = generic_constraints;
         node.where_constraints = where_constraints;
-        node.receiver_mode = receiver_mode.map(|(_, mode)| mode);
+        node.receiver_mode = receiver_mode;
         Ok(node)
     }
 

@@ -27,7 +27,10 @@ mod expressions;
 mod generics;
 mod hir_emit;
 mod js_interop;
+mod borrow_check;
+mod closure_cycles;
 mod ownership;
+mod receiver_modes;
 mod statements;
 mod switch_unions;
 mod type_checker;
@@ -349,6 +352,10 @@ pub struct Analyzer<'a> {
     /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
     /// `expressions::lambda` to build the matching `Closure_env_<n>` class + construction site.
     closure_captures: HashMap<String, Vec<(String, Type)>>,
+    /// Resolved receiver modes (`"Owner::method"` -> Borrow/Unique) from the receiver-
+    /// exclusivity pass. Populated by `classify_receiver_modes` after body analysis on clean
+    /// programs; consulted by dispatch metadata and borrow-collision checking.
+    pub(in crate::analyzer) receiver_modes: HashMap<String, dream_syntax::nodes::function::ReceiverMode>,
     /// Fun-typed locals whose initializer/last assignment was a *capturing* `fun(...)` value
     /// (`true`) or a known captureless one (`false`). Used at the JS boundary to reject stashed
     /// capturing lambdas (`let h: fun(js): void = (e) => { use(x); }; el.addEventListener(..., h)`)
@@ -527,6 +534,7 @@ impl<'a> Analyzer<'a> {
             ref_boxed_locals: std::collections::HashSet::new(),
             moved_locals: std::collections::HashSet::new(),
             closure_captures: HashMap::new(),
+            receiver_modes: HashMap::new(),
             capturing_fun_locals: HashMap::new(),
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
@@ -986,6 +994,15 @@ impl<'a> Analyzer<'a> {
         self.register_globals(node, diagnostics);
         self.analyze_function_bodies(node, &mut symbol_table_map, diagnostics)?;
         self.analyze_pending_instantiations(&mut symbol_table_map, diagnostics)?;
+
+        // Inferred receiver exclusivity: classify every method's `this` contract once bodies
+        // are fully analyzed and all types are registered. Runs only on otherwise-clean
+        // programs — a poisoned program fails before codegen anyway.
+        if !diagnostics.has_errors() {
+            self.classify_receiver_modes(node, diagnostics);
+            self.check_borrow_collisions(node, diagnostics);
+            self.check_closure_self_capture(node, diagnostics);
+        }
 
         // Per-statement/expression analysis recovers locally (reporting into the bag and poisoning
         // with `Type::Unknown`) so every independent error in the program is surfaced. The typed

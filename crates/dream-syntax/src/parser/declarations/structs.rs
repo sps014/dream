@@ -106,6 +106,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     | TokenKind::InternalToken
                     | TokenKind::StaticToken
                     | TokenKind::AsyncToken
+                    // Receiver-mode qualifiers (`[borrow | unique] fun ...`) also precede the
+                    // member's core token.
+                    | TokenKind::BorrowToken
+                    | TokenKind::UniqueToken
             ) {
                 m += 1;
             }

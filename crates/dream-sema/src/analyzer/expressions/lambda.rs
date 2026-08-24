@@ -591,6 +591,8 @@ impl<'a> Analyzer<'a> {
             file_path: parent_function.file_path.clone(),
             accessor: None,
             is_default_impl: false,
+            // Synthesized closures/method-groups have no receiver contract.
+            receiver_mode: None,
         };
         let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
 

@@ -144,6 +144,16 @@ impl AccessorKind {
     }
 }
 
+/// The inferred-or-declared mutation contract of a method's implicit `this` receiver:
+/// `Borrow` reads the instance without mutating it, `Unique` may mutate instance state.
+/// `None` on the AST means "infer from the body" (see the receiver-exclusivity pass in
+/// dream-sema); interface signature methods must declare an explicit qualifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReceiverMode {
+    Borrow,
+    Unique,
+}
+
 /// Represents a function declaration in the AST
 #[derive(Debug, Clone)]
 pub struct FunctionNode<'a> {
@@ -182,6 +192,9 @@ pub struct FunctionNode<'a> {
     /// `interface`). Implementing classes that omit the method inherit this body. `false` for
     /// ordinary methods and signature-only interface methods.
     pub is_default_impl: bool,
+    /// Explicit `[borrow | unique] fun` qualifier on a method declaration. `None` = infer
+    /// from the body; only valid on non-static methods with a `this` receiver.
+    pub receiver_mode: Option<ReceiverMode>,
 }
 
 impl<'a> FunctionNode<'a> {
@@ -211,6 +224,7 @@ impl<'a> FunctionNode<'a> {
             file_path: None,
             accessor: None,
             is_default_impl: false,
+            receiver_mode: None,
         }
     }
 }

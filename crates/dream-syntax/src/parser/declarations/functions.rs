@@ -89,6 +89,22 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_extern,
         } = self.parse_function_modifiers();
 
+        // Optional receiver-mode qualifier immediately before `fun` (`[borrow | unique] fun ...`):
+        // pins the method's mutation contract instead of letting the analyzer infer it from the
+        // body. Only valid on non-static methods with an implicit `this`; rejected elsewhere
+        // during semantic analysis.
+        let receiver_mode = match self.current_token().kind {
+            TokenKind::BorrowToken if self.peek_token(1).kind == TokenKind::FunToken => {
+                let tok = self.match_token(TokenKind::BorrowToken);
+                Some((tok, crate::nodes::function::ReceiverMode::Borrow))
+            }
+            TokenKind::UniqueToken if self.peek_token(1).kind == TokenKind::FunToken => {
+                let tok = self.match_token(TokenKind::UniqueToken);
+                Some((tok, crate::nodes::function::ReceiverMode::Unique))
+            }
+            _ => None,
+        };
+
         // Constructor (`constructor`) / destructor (`del`) declarations omit the `fun` keyword and
         // the return type; they are lowered to ordinary methods named `constructor`/`del` and
         // dispatched specially (constructor calls, scope-exit destructor calls). Destructors cannot
@@ -203,6 +219,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_async = is_async;
             node.generic_constraints = generic_constraints;
             node.where_constraints = where_constraints;
+            node.receiver_mode = receiver_mode.map(|(_, mode)| mode);
             return Ok(node);
         }
 
@@ -220,6 +237,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.is_async = is_async;
         node.generic_constraints = generic_constraints;
         node.where_constraints = where_constraints;
+        node.receiver_mode = receiver_mode.map(|(_, mode)| mode);
         Ok(node)
     }
 

@@ -1842,3 +1842,53 @@ fn test_parse_hex_literal() {
         other => panic!("expected hex int literal, got {:?}", other),
     }
 }
+
+#[test]
+fn test_receiver_mode_unique_on_method() {
+    let code = "class C { unique fun bump(v: int): void {} }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    let class = &program.structs[0];
+    let method = &class.methods[0];
+    assert!(matches!(
+        method.receiver_mode,
+        Some(crate::nodes::function::ReceiverMode::Unique)
+    ));
+}
+
+#[test]
+fn test_receiver_mode_borrow_after_visibility() {
+    let code = "class C { public borrow fun value(): int { return 1; } }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    let method = &program.structs[0].methods[0];
+    assert!(matches!(
+        method.receiver_mode,
+        Some(crate::nodes::function::ReceiverMode::Borrow)
+    ));
+}
+
+#[test]
+fn test_receiver_mode_none_without_qualifier() {
+    let code = "class C { fun plain(): void {} }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    assert!(program.structs[0].methods[0].receiver_mode.is_none());
+}
+
+#[test]
+fn test_receiver_mode_on_extern_method_parses() {
+    let code = "class C { extern unique fun host_tick(n: int): void; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    let method = &program.structs[0].methods[0];
+    assert!(method.is_extern);
+    assert!(matches!(
+        method.receiver_mode,
+        Some(crate::nodes::function::ReceiverMode::Unique)
+    ));
+}

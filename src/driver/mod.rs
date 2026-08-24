@@ -18,6 +18,7 @@ pub mod gpu_gen;
 pub mod interface_defaults;
 pub mod js_runtime;
 pub mod prelude;
+pub mod quiet_panic;
 pub mod source_loader;
 #[cfg(feature = "native")]
 pub mod test;

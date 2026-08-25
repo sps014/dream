@@ -43,12 +43,20 @@ fun report(name: string, nanos: long, iters: int): void {
     );
 }
 
+// Sinks must be externally observable or the optimizer deletes the timed loop outright
+// (inlined-and-discarded pure results get DCE'd, reporting `ns_total=0`).
 fun sink_int(x: int): int {
+    bench_sink.v = bench_sink.v + x;
     return x;
 }
 
 fun sink_string(s: string): int {
+    bench_sink.v = bench_sink.v + s.byte_size();
     return s.byte_size();
+}
+
+fun sink_total(): int {
+    return bench_sink.v;
 }
 
 fun bench_arc_locals(iters: int): void {
@@ -82,19 +90,23 @@ fun bench_string_concat(iters: int): void {
 }
 
 fun bench_string_eq(iters: int): void {
-    let lit = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let a = lit.substring(0, lit.length);
-    let b = lit.substring(0, lit.length);
-    let other = "abcdefghijklmnopqrstuvwxyz0123456780";
-    let c = other.substring(0, other.length);
+    // Comparand must vary per iteration or LICM hoists the (pure) comparison out of the
+    // loop entirely and the bench times nothing (`ns_total=0`). variants[0] shares content
+    // (interned) with base -> exercises the pointer-equal fast path; 1..3 force memcmp.
+    let base = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let variants: string[] = [
+        "abcdefghijklmnopqrstuvwxyz0123456789",
+        "abcdefghijklmnopqrstuvwxyz0123456780",
+        "abcdefghijKlmnopqrstuvwxyz0123456789",
+        "abcdefghijklmnopqrstuvwxyz012345678",
+    ];
     let sw = Stopwatch();
     let hits = 0;
     let i = 0;
     while (i < iters) {
-        if (a == b) {
+        if (base == variants[i & 3]) {
             hits = hits + 1;
-        }
-        if (a == c) {
+        } else {
             hits = hits - 1;
         }
         bench_sink.add(hits);
@@ -488,7 +500,495 @@ fun bench_string_builder(iters: int): void {
     sink_string(built);
 }
 
+// =====================================================================
+// Compute kernels — pure FP/int work, no ARC in the inner loops. These
+// measure the optimizer + codegen (autovec, ABC, LICM), not stdlib.
+// =====================================================================
+
+class Body {
+    public x: double;
+    public y: double;
+    public z: double;
+    public vx: double;
+    public vy: double;
+    public vz: double;
+    public mass: double;
+
+    public constructor(x: double, y: double, z: double, vx: double, vy: double, vz: double, mass: double) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.vx = vx;
+        this.vy = vy;
+        this.vz = vz;
+        this.mass = mass;
+    }
+}
+
+// One op = one full timestep over the system (pairwise sqrt interactions).
+fun bench_nbody(iters: int): void {
+    let bodies: Body[] = [
+        Body(0.0d, 0.0d, 0.0d, 0.01d, 0.0d, 0.0d, 1.0d),
+        Body(1.0d, 0.5d, 0.2d, 0.0d, 0.02d, 0.0d, 0.5d),
+        Body(-1.2d, 0.3d, -0.4d, 0.01d, 0.0d, 0.03d, 0.25d),
+        Body(0.4d, -0.9d, 0.8d, -0.02d, 0.01d, 0.0d, 0.125d),
+        Body(0.9d, 0.9d, -0.7d, 0.0d, -0.01d, 0.02d, 0.0625d),
+    ];
+    let n = bodies.length;
+    let dt = 0.01d;
+    let sw = Stopwatch();
+    let i = 0;
+    while (i < iters) {
+        let a = 0;
+        while (a < n) {
+            let bi = bodies[a];
+            let b = a + 1;
+            while (b < n) {
+                let bj = bodies[b];
+                let dx = bj.x - bi.x;
+                let dy = bj.y - bi.y;
+                let dz = bj.z - bi.z;
+                let d2 = dx * dx + dy * dy + dz * dz + 1e-9d;
+                let inv = 1.0d / Math.sqrt(d2).unwrap_or(1e9d);
+                let f = bj.mass * bi.mass * inv * inv * inv * dt;
+                bi.vx = bi.vx + dx * f;
+                bi.vy = bi.vy + dy * f;
+                bi.vz = bi.vz + dz * f;
+                bj.vx = bj.vx - dx * f;
+                bj.vy = bj.vy - dy * f;
+                bj.vz = bj.vz - dz * f;
+                b = b + 1;
+            }
+            a = a + 1;
+        }
+        let k = 0;
+        while (k < n) {
+            let bk = bodies[k];
+            bk.x = bk.x + bk.vx * dt;
+            bk.y = bk.y + bk.vy * dt;
+            bk.z = bk.z + bk.vz * dt;
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("nbody", sw.elapsed_nanos(), iters);
+    sink_int((int)(bodies[0].x * 1000.0d));
+}
+
+// One op = one full 48x64 frame, up to 30 iterations per pixel.
+fun bench_mandelbrot(iters: int): void {
+    // Clock-derived bit keeps cr opaque so SCCP cannot fold the frame away.
+    let jitter = (double)(Time.nano_time() & 1L);
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let row = 0;
+        while (row < 48) {
+            let ci = (double)row / 24.0d - 1.0d;
+            let col = 0;
+            while (col < 64) {
+                let cr = ((double)col + jitter) / 32.0d - 1.5d;
+                let zr = 0.0d;
+                let zi = 0.0d;
+                let k = 0;
+                let escaped = false;
+                while (k < 30 && escaped == false) {
+                    let zr2 = zr * zr - zi * zi + cr;
+                    zi = 2.0d * zr * zi + ci;
+                    zr = zr2;
+                    if (zr * zr + zi * zi > 4.0d) {
+                        escaped = true;
+                    }
+                    k = k + 1;
+                }
+                acc = acc + k;
+                col = col + 1;
+            }
+            row = row + 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("mandelbrot", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+const MAT_N: int = 64;
+
+// One op = one full N x N matrix multiply (i-k-j order, cache friendly).
+fun bench_matmul(iters: int): void {
+    let n = MAT_N;
+    let a = Buffer.alloc<double>(n * n);
+    let b = Buffer.alloc<double>(n * n);
+    let c = Buffer.alloc<double>(n * n);
+    let t = 0;
+    while (t < n * n) {
+        a[t] = (double)(t % 13);
+        b[t] = (double)((t * 7) % 11);
+        c[t] = 0.0d;
+        t = t + 1;
+    }
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < iters) {
+        let i = 0;
+        while (i < n) {
+            let k = 0;
+            while (k < n) {
+                let aik = a[i * n + k];
+                let j = 0;
+                while (j < n) {
+                    c[i * n + j] = c[i * n + j] + aik * b[k * n + j];
+                    j = j + 1;
+                }
+                k = k + 1;
+            }
+            i = i + 1;
+        }
+        r = r + 1;
+    }
+    sw.stop();
+    report("matmul_64", sw.elapsed_nanos(), iters);
+    sink_int((int)c[0]);
+}
+
+fun qsort_range(a: int[], lo: int, hi: int): void {
+    if (lo >= hi) {
+        return;
+    }
+    let p = a[(lo + hi) / 2];
+    let i = lo;
+    let j = hi;
+    while (i <= j) {
+        while (a[i] < p) {
+            i = i + 1;
+        }
+        while (a[j] > p) {
+            j = j - 1;
+        }
+        if (i <= j) {
+            let t = a[i];
+            a[i] = a[j];
+            a[j] = t;
+            i = i + 1;
+            j = j - 1;
+        }
+    }
+    qsort_range(a, lo, j);
+    qsort_range(a, i, hi);
+}
+
+// One op = fill 512 slots from an LCG + full quicksort.
+fun bench_quicksort(iters: int): void {
+    let n = 512;
+    let a = Buffer.alloc<int>(n);
+    let seed = 123456789;
+    let sw = Stopwatch();
+    let r = 0;
+    while (r < iters) {
+        let t = 0;
+        while (t < n) {
+            seed = seed * 1103515245 + 12345;
+            a[t] = (seed >> 16) & 1023;
+            t = t + 1;
+        }
+        qsort_range(a, 0, n - 1);
+        r = r + 1;
+    }
+    sw.stop();
+    report("quicksort", sw.elapsed_nanos(), iters);
+    sink_int(a[0]);
+}
+
+// One op = one sieve to 4096.
+fun bench_sieve(iters: int): void {
+    let n = 4096;
+    let flags = Buffer.alloc<int>(n);
+    let sw = Stopwatch();
+    let acc = 0;
+    let r = 0;
+    while (r < iters) {
+        let t: int = 0;
+        while (t < n) {
+            flags[t] = 1;
+            t = t + 1;
+        }
+        let i: int = 2;
+        while (i * i < n) {
+            if (flags[i] == 1) {
+                let m: int = i * i;
+                while (m < n) {
+                    flags[m] = 0;
+                    m = m + i;
+                }
+            }
+            i = i + 1;
+        }
+        let p: int = 2;
+        while (p < n) {
+            acc = acc + (int)flags[p];
+            p = p + 1;
+        }
+        r = r + 1;
+    }
+    sw.stop();
+    report("sieve", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+// =====================================================================
+// Call / dispatch / recursion.
+// =====================================================================
+
+fun fib(n: int): int {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+// One op = one naive fib(20)/fib(21) (~10k calls; cannot be tail-called).
+fun bench_fib_rec(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        // Arg varies with i so LICM cannot hoist the pure call out of the loop.
+        acc = acc + fib(20 + (i & 1));
+        i = i + 1;
+    }
+    sw.stop();
+    report("fib_rec", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+// Not a timed bench: clang's SCEV reduces a pure tail-recursive integer sum to closed form
+// (~1ns/op), so timing it measures the optimizer, not the language. Kept as a one-shot
+// TCO/stack-safety sentinel — without tail calls 5M frames would blow the native stack.
+fun tco_sum(n: int, acc: int): int {
+    if (n == 0) {
+        return acc;
+    }
+    return tco_sum(n - 1, acc + n);
+}
+
+interface BenchOp {
+    fun apply(x: int): int;
+}
+
+class AddOp : BenchOp {
+    public fun apply(x: int): int {
+        return x + 3;
+    }
+}
+
+class MulOp : BenchOp {
+    public fun apply(x: int): int {
+        return x * 3;
+    }
+}
+
+class SubOp : BenchOp {
+    public fun apply(x: int): int {
+        return x - 3;
+    }
+}
+
+// One op = three interface calls through distinct implementors (devirt/vtable check).
+fun bench_iface_dispatch(iters: int): void {
+    let a: BenchOp = AddOp();
+    let b: BenchOp = MulOp();
+    let c: BenchOp = SubOp();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        acc = acc + a.apply(i) + b.apply(i) + c.apply(i);
+        i = i + 1;
+    }
+    sw.stop();
+    report("iface_dispatch", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+// =====================================================================
+// ARC / allocator reality at scale.
+// =====================================================================
+
+@allow_cycle
+class TreeNode {
+    public left: Option<TreeNode>;
+    public right: Option<TreeNode>;
+
+    public constructor(left: Option<TreeNode>, right: Option<TreeNode>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+
+fun make_tree(depth: int): Option<TreeNode> {
+    let none: Option<TreeNode> = Option.None;
+    if (depth <= 0) {
+        return none;
+    }
+    return Option.Some(TreeNode(make_tree(depth - 1), make_tree(depth - 1)));
+}
+
+// One op = build a depth-12 tree (4095 nodes) then drop it (full recursive ARC release).
+fun bench_binary_trees(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        switch (make_tree(12)) {
+            Some(root) => { acc = acc + 1; }
+            None       => { acc = acc - 1; }
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("binary_trees", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+@allow_cycle
+class LinkNode {
+    public value: int;
+    public next: Option<LinkNode>;
+
+    public constructor(value: int, next: Option<LinkNode>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+fun make_chain(n: int): Option<LinkNode> {
+    let head: Option<LinkNode> = Option.None;
+    let i = 0;
+    while (i < n) {
+        head = Option.Some(LinkNode(i, head));
+        i = i + 1;
+    }
+    return head;
+}
+
+// One op = walk a 1024-node chain summing values (per-node Option match + refcount traffic).
+fun bench_linked_walk(iters: int): void {
+    let head = make_chain(1024);
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let curr = head;
+        let done = false;
+        while (done == false) {
+            switch (curr) {
+                Some(node) => {
+                    acc = acc + node.value;
+                    curr = node.next;
+                }
+                None => { done = true; }
+            }
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("linked_walk", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+// =====================================================================
+// Collections / strings / enums.
+// =====================================================================
+
+// One op = one word processed through Map<string,int> get+set (probe hot path).
+fun bench_wordcount(iters: int): void {
+    let text = "the quick brown fox jumps over the lazy dog the end the fox and the dog run with the quick fox";
+    let words = text.split(' ');
+    let map = Map<string, int>(256);
+    let count = words.length;
+    let sw = Stopwatch();
+    let i = 0;
+    while (i < iters) {
+        let k = 0;
+        while (k < count) {
+            map.set(words[k], map.get_or(words[k], 0) + 1);
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("wordcount", sw.elapsed_nanos(), iters * count);
+    sink_int(map.get_or("the", 0));
+}
+
+// One op = parse one 10-digit string via char_at digit loop (no int.parse host call).
+fun bench_parse_ints(iters: int): void {
+    let src = "1234567890";
+    let n = src.length;
+    let bias = (int)(Time.nano_time() & 1L);
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        let v = bias;
+        let j = 0;
+        while (j < n) {
+            v = v * 10 + ((int)src.char_at(j) - 48);
+            j = j + 1;
+        }
+        acc = acc + v;
+        i = i + 1;
+    }
+    sw.stop();
+    report("parse_ints", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
+// One op = two discriminated-union matches (Some hit + None hit).
+fun bench_sum_options(iters: int): void {
+    let bias = (int)(Time.nano_time() & 1L);
+    let some: Option<int> = Option.Some(7 + bias);
+    let none: Option<int> = Option.None;
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while (i < iters) {
+        switch (some) {
+            Some(v) => { acc = acc + v; }
+            None    => { acc = acc - 1; }
+        }
+        switch (none) {
+            Some(v) => { acc = acc + v; }
+            None    => { acc = acc + 1; }
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("sum_options", sw.elapsed_nanos(), iters);
+    sink_int(acc);
+}
+
 fun run_suite(scale: int): void {
+    // ---- compute kernels (double/float pressure, branching, vectorization) ----
+    bench_nbody(scale / 10);
+    bench_mandelbrot(scale / 100);
+    bench_matmul(scale / 50);
+    bench_quicksort(scale / 20);
+    bench_sieve(scale / 50);
+    // ---- call/dispatch/recursion ----
+    bench_fib_rec(scale / 20);
+    bench_iface_dispatch(scale / 5);
+    // ---- ARC / allocator reality at scale ----
+    bench_binary_trees(scale / 200);
+    bench_linked_walk(scale / 5);
+    // ---- collections / strings / enums ----
+    bench_wordcount(scale / 5);
+    bench_parse_ints(scale);
+    bench_sum_options(scale);
+
     bench_arc_locals(scale);
     bench_string_concat(scale);
     bench_string_eq(scale * 5);
@@ -512,9 +1012,13 @@ fun run_suite(scale: int): void {
 
 fun main(): void {
     let scale = 20000;
+    // TCO sentinel: 5M-deep tail recursion must not overflow the stack (crashes if TCO broke).
+    sink_int(tco_sum(5000000, 0));
     // Warmup (discard): mirrors C# JIT warmup so ratios are not cold-vs-hot.
     measuring = false;
     run_suite(scale);
     measuring = true;
     run_suite(scale);
+    // Observing the sink keeps every `bench_sink` store live across the whole suite.
+    System.println("sink " + sink_total().to_string());
 }

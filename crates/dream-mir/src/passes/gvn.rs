@@ -1,4 +1,4 @@
-//! Common-subexpression elimination for pure integer/boolean arithmetic. A `Binary`/`Unary`
+//! Common-subexpression elimination for pure integer/boolean/float arithmetic. A `Binary`/`Unary`
 //! computation with the same operator and operands as an available earlier result is replaced by a
 //! copy of that result. Copy/constant propagation and DCE then clean up the redundant copy.
 //!
@@ -31,6 +31,10 @@ enum OpKey {
     Long(i64),
     Bool(bool),
     Char(char),
+    /// Floats are keyed on bits, not `PartialEq`: `-0.0 != 0.0` bitwise but compares equal,
+    /// and `x / 0.0` vs `x / -0.0` differ (+inf vs -inf), so they must not share a key.
+    F64(u64),
+    F32(u32),
 }
 
 impl MirPass for Gvn {
@@ -155,7 +159,7 @@ fn key_of(rvalue: &Rvalue) -> Option<Key> {
 }
 
 /// A hashable key for an operand, or `None` for shapes we refuse to number (field/index/global
-/// reads, floats, strings, null). Returning `None` disables CSE for that expression: a shared
+/// reads, strings, null). Returning `None` disables CSE for that expression: a shared
 /// `Opaque` key would make every `s == "int"` match every `s == "string"` (and every `a.x + 1`
 /// match `a.y + 1`), which is how `@json` treated `string` fields as unsupported.
 fn op_key(op: &Operand) -> Option<OpKey> {
@@ -166,6 +170,10 @@ fn op_key(op: &Operand) -> Option<OpKey> {
         Operand::Const(Const::Long(v)) => OpKey::Long(*v),
         Operand::Const(Const::Bool(b)) => OpKey::Bool(*b),
         Operand::Const(Const::Char(c)) => OpKey::Char(*c),
+        // Bit-keyed (see `OpKey::F64`); identical bits give identical results for every
+        // IEEE op we CSE, NaN payloads included.
+        Operand::Const(Const::Float(v)) => OpKey::F64(v.to_bits()),
+        Operand::Const(Const::F32(v)) => OpKey::F32(v.to_bits()),
         Operand::Const(_) => return None,
     })
 }
@@ -320,6 +328,65 @@ mod tests {
                 "s == \"string\" must not CSE to s == \"int\", got {:?}",
                 other
             ),
+        }
+    }
+
+    #[test]
+    fn dedups_repeated_float_binary() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.double());
+        let x = b.new_param(i.double(), Some("x".into()));
+        let a = b.new_temp(i.double());
+        let c = b.new_temp(i.double());
+        let scale = || {
+            Rvalue::Binary(
+                BinOp::Mul,
+                Operand::Copy(Place::Local(x)),
+                Operand::Const(Const::Float(2.5)),
+            )
+        };
+        b.assign(Place::Local(a), scale());
+        b.assign(Place::Local(c), scale());
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
+        let mut func = b.finish();
+        assert!(Gvn.run(&mut func, &i));
+        match &func.blocks[0].stmts[1] {
+            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Local(l)))) => assert_eq!(*l, a),
+            other => panic!("expected float CSE copy, got {:?}", other),
+        }
+    }
+
+    /// `x / 0.0` (+inf) and `x / -0.0` (-inf) differ; the bit-keyed float constants must not
+    /// share a GVN entry.
+    #[test]
+    fn distinguishes_signed_zero_divisors() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.double());
+        let x = b.new_param(i.double(), Some("x".into()));
+        let a = b.new_temp(i.double());
+        let c = b.new_temp(i.double());
+        b.assign(
+            Place::Local(a),
+            Rvalue::Binary(
+                BinOp::Div,
+                Operand::Copy(Place::Local(x)),
+                Operand::Const(Const::Float(0.0)),
+            ),
+        );
+        b.assign(
+            Place::Local(c),
+            Rvalue::Binary(
+                BinOp::Div,
+                Operand::Copy(Place::Local(x)),
+                Operand::Const(Const::Float(-0.0)),
+            ),
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
+        let mut func = b.finish();
+        Gvn.run(&mut func, &i);
+        match &func.blocks[0].stmts[1] {
+            Statement::Assign(_, Rvalue::Binary(..)) => {}
+            other => panic!("1/0 must not CSE to 1/-0, got {:?}", other),
         }
     }
 }

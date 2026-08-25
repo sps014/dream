@@ -153,6 +153,48 @@ Same host as `./scripts/run-microbenches.sh`.
 | scratch_arena | 4 | 1 | C# 4.0× |
 | alloc_churn | 17 | 15 | ~parity |
 
+### Fresh baseline (Aug 2026 — supersedes tables below)
+
+Same host, `./scripts/run-microbenches.sh` — now a **three-way** table: Dream native C
+(cc -O3 LTO), Dream wasm32 under Node (`--wasm --release --runtime --node`), C# RyuJIT.
+Also records `.wasm`/gz/br sizes at `-O3`/`-Os`/`-Oz` into `out/wasm_sizes.txt`.
+New benches this round: `nbody`, `mandelbrot`, `matmul_64`, `quicksort`, `sieve`,
+`fib_rec`, `iface_dispatch`, `binary_trees`, `linked_walk`, `wordcount`, `parse_ints`,
+`sum_options` (+ `tco_sum` as an untimed TCO/stack sentinel in `main`).
+
+| Bench | C | wasm | C# | note |
+|-------|------:|------:|---:|------|
+| nbody | 76 | 64 | 68 | ~parity |
+| mandelbrot | 116k | 108k | 130k | Dream leads |
+| matmul_64 | 238k | 215k | 235k | ~parity |
+| quicksort | 25k | 27k | 52k | C 2.1× |
+| sieve | 3.0k | 5.6k | 6.8k | C 2.2× |
+| fib_rec | 32k | 44k | 38k | ~parity |
+| iface_dispatch | 3.2 | 21 | 32 | devirt+inline wins; wasm dispatch cost visible |
+| binary_trees | 190k | 170k | 56k | **GC 3.4× faster** on tree alloc/free churn |
+| linked_walk | 3.6k | 4.5k | 1.6k | **GC 2.3× faster** pointer chasing |
+| wordcount | 21 | 22 | 24 | parity |
+| substring | 1.4 | 2.8 | 19 | C 13× |
+| char_scan / byte_scan | 16 / 19 | 78 / 176 | 31 / 36 | wasm byte_scan needs work |
+| map_get_set | 5.1 | 19 | 13 | native probe inlined; wasm pays call overhead |
+| regex_find | 741 | 980 | 1378 | C 1.9× vs C# |
+| json_serialize | 182 | 310 | 1428 | C 7.8× |
+| arr_add | 66 | 225 | 475 | autovec fires natively; wasm scalar-ish |
+| vec_add | 30 | 76 | 107 | |
+
+Honest findings from the new compute/ARC benches:
+- **Tracing GC beats ARC on allocation-churn-shaped workloads** (`binary_trees`,
+  `linked_walk`): freeing a whole tree recursively costs per-node release traffic; GC reclaims
+  in bulk. Native ARC is competitive per-node but loses end-to-end there.
+- Wasm vs native gaps concentrate in RC-heavy + bounds-check paths (`byte_scan`,
+  `scratch_arena`, `list_clear_reuse`) — candidate targets for wasm-specific pass tuning.
+- Bench-writing pitfalls locked in by construction (see comments in microbenches.dream): pure
+  invariant calls get LICM-hoisted, pure tail sums get SCEV-closed-formed by clang, discarded
+  pure results get DCE'd — all three silently report `ns_total=0` unless sinks/args vary.
+
+Wasm code sizes for the suite: O3 468.9 KiB (gz 121.5 / br 95.9), Os 396.3 KiB (gz 104.8 /
+br 84.7), Oz 395.2 KiB (gz 102.4 / br 82.8).
+
 ### After (deferred: Pike SOA, typed JSON, vec inline, StringBuilder store16)
 
 Pike `Threadq.clear` rewinds `count` (no per-Step `Buffer.alloc`). Capture arrays come from a

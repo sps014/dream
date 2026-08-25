@@ -75,7 +75,15 @@ impl OptLevel {
             ],
             Self::O1 => &["-O1"],
             Self::O2 => &["-O2"],
-            Self::O3 | Self::O4 => &["-O3", "-flto", "-march=native"],
+            // Hidden visibility + no semantic interposition let clang bind intra-module calls
+            // directly (no PLT indirection) — the emitted module is self-contained by design.
+            Self::O3 | Self::O4 => &[
+                "-O3",
+                "-flto",
+                "-march=native",
+                "-fvisibility=hidden",
+                "-fno-semantic-interposition",
+            ],
             Self::Size => &["-Os"],
             Self::SizeAggressive => &["-Oz"],
         }
@@ -134,13 +142,13 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
     // Dream does not emit DWARF; the WAT assembler still produces a name custom section from `$id`
     // identifiers. Size builds drop that (and producers) so downloadable modules stay compact.
     options.debug_info(false);
-    let size_build = matches!(level, OptLevel::Size | OptLevel::SizeAggressive);
-    if size_build {
+    if matches!(level, OptLevel::Size | OptLevel::SizeAggressive) {
         options.add_pass(Pass::StripDebug);
         options.add_pass(Pass::StripProducers);
-        // `--web` defaults to `-Os`; `-Oz` always converges. Extra compile time, smaller code.
-        options.set_converge();
     }
+    // Converge at every release level: rerun the pass pipeline until fixpoint. Extra compile
+    // time, smaller/faster code — worth it unconditionally now that wasm is a primary target.
+    options.set_converge();
 
     // Codegen unconditionally emits bulk-memory ops (`memory.fill`/`memory.copy`, see
     // `src/mir/emit/emitter/`) and other post-MVP instructions, so `wasm-opt`'s narrow default

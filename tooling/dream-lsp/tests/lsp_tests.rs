@@ -65,10 +65,46 @@ fun main(): void {
 #[test]
 fn formatting_pretty_prints_by_brace_depth() {
     let src = "fun main(): void {\nlet x: int = 1;\nif (x > 0) {\nprintln(x);\n}\n}\n";
-    let formatted = dream_lsp::format::format(src);
+    let formatted = dream_format::format(src);
 
     assert!(formatted.contains("\n    let x: int = 1;"));
     assert!(formatted.contains("\n        println(x);"));
+}
+
+#[test]
+fn formatting_produces_minimal_line_edits() {
+    let old = "fun a(): void {\nlet x = 1;\n}\n\nfun b(): void {\nlet y = 2;\n}\n";
+    let new = dream_format::format(old);
+    let edits = dream_lsp::format::minimal_edits(&new, &new);
+    assert!(edits.is_empty(), "identical documents must produce no edits");
+
+    let edits = dream_lsp::format::minimal_edits(old, &new);
+    assert_eq!(edits.len(), 1, "one contiguous changed region expected");
+    // The edit must not span the whole document when only some lines differ.
+    assert!(
+        edits[0].range.start.line > 0 || edits[0].range.end.line < old.split('\n').count() as u32,
+        "edit should be narrower than the document: {:?}",
+        edits[0].range
+    );
+    // Applying the edit to `old` reproduces `new`.
+    let segs: Vec<&str> = old.split('\n').collect();
+    let s_off: usize = segs[..edits[0].range.start.line as usize]
+        .iter()
+        .map(|l| l.len() + 1)
+        .sum();
+    let e_off: usize = if edits[0].range.end.line as usize >= segs.len() {
+        old.len()
+    } else {
+        segs[..edits[0].range.end.line as usize]
+            .iter()
+            .map(|l| l.len() + 1)
+            .sum()
+    };
+    let mut applied = String::new();
+    applied.push_str(&old[..s_off]);
+    applied.push_str(&edits[0].new_text);
+    applied.push_str(&old[e_off..]);
+    assert_eq!(applied, new);
 }
 
 #[test]

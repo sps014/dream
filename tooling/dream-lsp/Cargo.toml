@@ -7,6 +7,7 @@ description = "Native VS Code Language Server for the Dream language."
 
 [dependencies]
 dream = { path = "../..", default-features = false }
+dream-format = { path = "../../crates/dream-format" }
 dream-sema = { path = "../../crates/dream-sema" }
 dream-stdlib = { path = "../../crates/dream-stdlib" }
 dream-abi = { path = "../../crates/dream-abi" }

@@ -22,6 +22,7 @@ stack-size = "16MiB"
 dream-text = { path = "crates/dream-text" }
 dream-diagnostics = { path = "crates/dream-diagnostics" }
 dream-syntax = { path = "crates/dream-syntax" }
+dream-format = { path = "crates/dream-format" }
 # IR-boundary middle/back-end crates
 dream-types = { path = "crates/dream-types" }
 dream-hir = { path = "crates/dream-hir" }
@@ -119,6 +120,7 @@ members = [
     "crates/dream-text",
     "crates/dream-diagnostics",
     "crates/dream-syntax",
+    "crates/dream-format",
     "crates/dream-types",
     "crates/dream-hir",
     "crates/dream-abi",

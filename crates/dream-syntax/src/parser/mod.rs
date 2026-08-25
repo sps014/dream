@@ -419,34 +419,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
     /// Lookahead over a balanced generic argument list whose first argument token is at peek
-    /// offset `start` (i.e. the opening `<` was already seen). Tracks nesting so multi-argument
-    /// and nested generics (`Pair<Box<int>, int>`, `Box<Box<int>>`) are handled, treating `>>`
-    /// as two closing `>`. Returns the peek offset of the token right after the matching close,
-    /// or `None` if a `;`/end-of-file is hit first (not a generic list). Used only to
-    /// disambiguate generic calls/instantiations from `<`/`>` comparisons.
-    fn scan_generic_args(&self, mut i: usize) -> Option<usize> {
-        let mut depth: i32 = 1;
-        while self.peek_token(i).kind != TokenKind::EndOfFileToken {
-            match self.peek_token(i).kind {
-                TokenKind::SmallerThanToken => depth += 1,
-                TokenKind::GreaterThanToken => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(i + 1);
-                    }
-                }
-                TokenKind::ShiftRightToken => {
-                    depth -= 2;
-                    if depth <= 0 {
-                        return Some(i + 1);
-                    }
-                }
-                TokenKind::SemicolonToken => return None,
-                _ => {}
-            }
-            i += 1;
-        }
-        None
+    /// offset `start` (i.e. the opening `<` was already seen). Returns the peek offset of the
+    /// token right after the matching close, or `None` if a `;`/end-of-file is hit first (not a
+    /// generic list). Used only to disambiguate generic calls/instantiations from `<`/`>`
+    /// comparisons; the balanced scan itself is shared with the formatter via
+    /// [`crate::token::scan::scan_generic_close`].
+    fn scan_generic_args(&self, start: usize) -> Option<usize> {
+        let open = self.current_token_index + start - 1;
+        crate::token::scan::scan_generic_close(&self.tokens, open)
+            .map(|close| close + 1 - self.current_token_index)
     }
     ///parse all tokens from lexer and returns a syntax tree or error
     pub fn parse(&mut self) -> Result<SyntaxTree<'a>, Error> {

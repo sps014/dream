@@ -1,0 +1,13 @@
+[package]
+name = "dream-format"
+version = "0.1.0"
+edition = "2018"
+description = "Lossless source formatter for the Dream language (LSP + `dream fmt`)."
+
+[lib]
+name = "dream_format"
+path = "src/lib.rs"
+
+[dependencies]
+dream-syntax = { path = "../dream-syntax" }
+dream-diagnostics = { path = "../dream-diagnostics" }

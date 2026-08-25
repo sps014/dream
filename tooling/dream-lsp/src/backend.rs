@@ -1286,19 +1286,7 @@ impl LanguageServer for Backend {
         let Some(text) = self.document_text(&key) else {
             return Ok(None);
         };
-        let formatted = crate::format::format(&text);
-        let line_index = LineIndex::new(&text);
-        let end_pos = line_index.position(text.len());
-        Ok(Some(vec![TextEdit {
-            range: Range {
-                start: Position {
-                    line: 0,
-                    character: 0,
-                },
-                end: map_position(end_pos),
-            },
-            new_text: formatted,
-        }]))
+        Ok(crate::format::formatting_edits(&text))
     }
 
     async fn semantic_tokens_full(

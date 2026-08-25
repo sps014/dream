@@ -20,6 +20,7 @@ Examples:
   dream --release run src/main.dream    optimized release binary
   dream test tests/                     run @test functions
   dream run app.dream -- alpha beta     pass arguments to the program
+  dream fmt src/                        format .dream files in place (--check for CI)
 
 Artifacts land under the enclosing project's target/: native C in target/debug (or
 target/release with --release), wasm32 modules in target/web/.";
@@ -132,6 +133,14 @@ enum Command {
         /// Source .dream file
         file: Option<String>,
     },
+    /// Format .dream source files in place
+    Fmt {
+        /// .dream files or directories containing them
+        files: Vec<String>,
+        /// Fail if any file is unformatted instead of rewriting it (CI mode)
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -164,6 +173,7 @@ fn main() -> ExitCode {
         | Some(Command::Run { file, .. })
         | Some(Command::Test { file, .. })
         | Some(Command::DebugAdapter { file }) => file.clone(),
+        Some(Command::Fmt { .. }) => None,
         None => cli.file.clone(),
     };
     let program_args = match &cli.command {
@@ -230,6 +240,10 @@ fn main() -> ExitCode {
             web: cli.web,
         },
     };
+
+    if let Some(Command::Fmt { files, check }) = &cli.command {
+        return run_fmt(&ui, files, *check);
+    }
 
     if run_tests {
         let path = match file_name {
@@ -393,6 +407,83 @@ fn report_tool_error(ui: &Ui, msg: &str) {
     match msg.split_once('\n') {
         Some((head, rest)) => ui.error_with_detail(head, rest),
         None => ui.error(msg),
+    }
+}
+
+/// `dream fmt`: formats the given files/directories in place (or checks them under
+/// `--check`). Files the formatter cannot safely rewrite (lex errors) are reported and
+/// skipped; a directory expands recursively to its `.dream` files.
+fn run_fmt(ui: &Ui, paths: &[String], check: bool) -> ExitCode {
+    let mut files = Vec::new();
+    for raw in paths {
+        let path = Path::new(raw);
+        if !path.exists() {
+            ui.error(&format!("no such file or directory: {raw}"));
+            return ExitCode::FAILURE;
+        }
+        collect_dream_files(path, &mut files);
+    }
+    if files.is_empty() {
+        ui.error("no .dream files found");
+        ui.help("pass a .dream file or a directory containing them");
+        return ExitCode::FAILURE;
+    }
+    // Deterministic order so output is stable regardless of directory iteration.
+    files.sort();
+    files.dedup();
+
+    let mut unformatted: Vec<PathBuf> = Vec::new();
+    for file in &files {
+        let Ok(source) = std::fs::read_to_string(file) else {
+            ui.warning(&format!("could not read {}", file.display()));
+            continue;
+        };
+        let Some(formatted) = dream_format::try_format(&source) else {
+            ui.warning(&format!(
+                "skipped {} (does not lex cleanly — fix syntax errors first)",
+                file.display()
+            ));
+            continue;
+        };
+        if formatted == source {
+            continue;
+        }
+        if check {
+            unformatted.push(file.clone());
+        } else if std::fs::write(file, formatted).is_err() {
+            ui.error(&format!("could not write {}", file.display()));
+            return ExitCode::FAILURE;
+        } else {
+            ui.success(&format!("formatted {}", file.display()));
+        }
+    }
+
+    if check {
+        for file in &unformatted {
+            ui.note(&format!("{} needs formatting", file.display()));
+        }
+        if unformatted.is_empty() {
+            ui.success("all files are formatted");
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        }
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+/// Appends `path` and, for directories, every `.dream` file beneath it (recursively).
+fn collect_dream_files(path: &Path, out: &mut Vec<PathBuf>) {
+    if path.is_dir() {
+        let Ok(entries) = std::fs::read_dir(path) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            collect_dream_files(&entry.path(), out);
+        }
+    } else if path.extension().map(|e| e == "dream").unwrap_or(false) {
+        out.push(path.to_path_buf());
     }
 }
 

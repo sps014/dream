@@ -140,7 +140,7 @@ public class Engine {
     public fun start(): void {
         let we = Weak.make(this);
         this.on_tick = () => {
-            if (!we.is_dead()) { return; }   // engine freed
+            if (we.is_dead()) { return; }   // engine freed
             we.get().do_tick();
         };
     }

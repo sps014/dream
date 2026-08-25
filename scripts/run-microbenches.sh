@@ -29,48 +29,7 @@ else
   echo "(dotnet / tests/bench/csharp not available; skipping C# compare)" | tee "$OUT_DIR/csharp.txt"
 fi
 
-# ---- wasm32 code-size tracking (same suite, three Binaryen levels) ----
-echo "== wasm32 code sizes (--release) =="
-WASM_DIR="$OUT_DIR/wasm"
-mkdir -p "$WASM_DIR"
-: > "$OUT_DIR/wasm_sizes.txt"
-for LEVEL in 3 s z; do
-  STEM="$WASM_DIR/microbenches_O$LEVEL"
-  if "$DREAM" --wasm --release "-O$LEVEL" -o "$STEM" "$BENCH" >&2; then
-    RAW=$(stat -f%z "$STEM.wasm" 2>/dev/null || stat -c%s "$STEM.wasm")
-    GZ=$(stat -f%z "$STEM.wasm.gz" 2>/dev/null || stat -c%s "$STEM.wasm.gz" 2>/dev/null || echo 0)
-    BR=$(stat -f%z "$STEM.wasm.br" 2>/dev/null || stat -c%s "$STEM.wasm.br" 2>/dev/null || echo 0)
-    printf 'level=O%s wasm=%s gz=%s br=%s\n' "$LEVEL" "$RAW" "$GZ" "$BR" | tee -a "$OUT_DIR/wasm_sizes.txt"
-  else
-    echo "level=O$LEVEL compile failed" | tee -a "$OUT_DIR/wasm_sizes.txt"
-  fi
-done
-
-# ---- optional wasm timing under Node >= 18 (third compare column) ----
-if command -v node >/dev/null 2>&1 && [[ $(node -p 'parseInt(process.versions.node)') -ge 18 ]]; then
-  echo "== wasm32 (Node, --release -O3) =="
-  NODE_STEM="$WASM_DIR/timing"
-  if "$DREAM" --wasm --release --runtime --node -o "$NODE_STEM" "$BENCH" >&2; then
-    cat > "$NODE_STEM.runner.mjs" <<'RUNNER'
-const [, , rtPath, wasmPath] = process.argv;
-const rt = await import(new URL(`file://${rtPath}`).href);
-await rt.default.run(wasmPath);
-RUNNER
-    # shellcheck disable=SC2016
-    if node "$NODE_STEM.runner.mjs" "$NODE_STEM.node.runtime.js" "$NODE_STEM.wasm" \
-        2>"$OUT_DIR/wasm.err.txt" | tee "$OUT_DIR/wasm.txt"; then
-      :
-    else
-      echo "(node wasm run failed; see $OUT_DIR/wasm.err.txt)" | tee "$OUT_DIR/wasm.txt"
-    fi
-  else
-    echo "(wasm+runtime build failed; skipping Node timing)" | tee "$OUT_DIR/wasm.txt"
-  fi
-else
-  echo "(node >= 18 not available; skipping wasm timing)" | tee "$OUT_DIR/wasm.txt"
-fi
-
-python3 - "$OUT_DIR/native.txt" "$OUT_DIR/csharp.txt" "$OUT_DIR/wasm.txt" <<'PY' | tee "$OUT_DIR/compare.txt"
+python3 - "$OUT_DIR/native.txt" "$OUT_DIR/csharp.txt" <<'PY' | tee "$OUT_DIR/compare.txt"
 import sys
 from pathlib import Path
 
@@ -105,14 +64,12 @@ def load(path):
 
 native_c = load(sys.argv[1])
 csharp = load(sys.argv[2]) if len(sys.argv) > 2 else {}
-wasm = load(sys.argv[3]) if len(sys.argv) > 3 else {}
-names = list(dict.fromkeys([*native_c.keys(), *csharp.keys(), *wasm.keys()]))
-print(f"{'bench':<18} {'C':>8} {'wasm':>8} {'C#':>8}  note")
-print("-" * 62)
-print("C = Dream native cc -O3; wasm = Dream wasm32 under Node; C# = RyuJIT + GC.")
+names = list(dict.fromkeys([*native_c.keys(), *csharp.keys()]))
+print(f"{'bench':<18} {'C':>8} {'C#':>8}  note")
+print("-" * 44)
+print("C = Dream native cc -O3; C# = RyuJIT + GC.")
 for name in names:
     c = native_c.get(name)
-    w = wasm.get(name)
     n = csharp.get(name)
     def fmt(v):
         return f"{v:8.1f}" if v is not None else f"{'-':>8}"
@@ -123,11 +80,11 @@ for name in names:
     note_parts = []
     if n is not None and c is not None and c != 0:
         r2 = n / c
-        note_parts.append(f"C# {r2:.1f}x vs C" if r2 >= 1 else f"C# {1/r2:.1f}x faster")
-    if w is not None and c is not None and c != 0:
-        r3 = w / c
-        note_parts.append(f"wasm {r3:.1f}x vs C")
-    print(f"{name:<18} {fmt(c)} {fmt(w)} {fmt(n)}  {'; '.join(note_parts)}")
+        if r2 >= 1:
+            note_parts.append(f"C {r2:.1f}x faster")
+        else:
+            note_parts.append(f"C# {1/r2:.1f}x faster")
+    print(f"{name:<18} {fmt(c)} {fmt(n)}  {'; '.join(note_parts)}")
 PY
 
 echo "Wrote results under $OUT_DIR"

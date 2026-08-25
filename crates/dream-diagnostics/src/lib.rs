@@ -19,6 +19,10 @@ pub struct Diagnostic {
     pub file_path: Option<String>,
     /// Follow-up lines rendered after the source excerpt (`note:` dim, `help:` blue).
     pub notes: Vec<DiagnosticNote>,
+    /// Stable machine-readable identity of the error class (`unresolved-name`,
+    /// `missing-member`, …), for tooling that reacts to specific failures (LSP code actions,
+    /// editor suppressions). Absent on most diagnostics; never rendered to users.
+    pub code: Option<&'static str>,
 }
 
 /// One follow-up line attached to a diagnostic.
@@ -43,6 +47,7 @@ impl Diagnostic {
             span,
             file_path,
             notes: Vec::new(),
+            code: None,
         }
     }
 
@@ -54,7 +59,14 @@ impl Diagnostic {
             span,
             file_path,
             notes: Vec::new(),
+            code: None,
         }
+    }
+
+    /// Builder: attaches a stable machine-readable error-class code.
+    pub fn with_code(mut self, code: &'static str) -> Self {
+        self.code = Some(code);
+        self
     }
 
     /// Builder: appends a `help:` follow-up line.

@@ -1,7 +1,7 @@
 // Not every integration-test crate that includes this module exercises every helper.
 #![allow(dead_code)]
 
-use dream_lsp::analysis::{collect_diagnostics, DiagnosticOut};
+use dream_lsp::analysis::{analyze_document, collect_diagnostics, DiagnosticOut};
 use dream_lsp::index::Index;
 
 pub struct TestHarness {
@@ -28,6 +28,16 @@ impl TestHarness {
     pub fn diagnostics(&self) -> Vec<DiagnosticOut> {
         collect_diagnostics(None, &self.src)
     }
+
+    /// Runs full semantic analysis and returns the analyzer's IDE snapshot.
+    pub fn snapshot(&self) -> Option<dream_sema::analyzer::IdeSnapshot> {
+        snapshot_of(&self.src)
+    }
+}
+
+/// Analyzer snapshot for an unmarked source string.
+pub fn snapshot_of(src: &str) -> Option<dream_sema::analyzer::IdeSnapshot> {
+    analyze_document(None, src).sema
 }
 
 /// A tiny deterministic xorshift PRNG so fuzz tests are reproducible (no external crates).
@@ -94,4 +104,17 @@ pub fn exercise_all(src: &str) {
     }
     let _ = idx.document_symbols();
     let _ = collect_diagnostics(None, src);
+
+    // The analyzer-backed query surface must be panic-free on the same inputs.
+    if let Some(snapshot) = analyze_document(None, src).sema {
+        for &probe in &raw {
+            let mut off = probe.min(len);
+            while off > 0 && !src.is_char_boundary(off) {
+                off -= 1;
+            }
+            let _ = dream_lsp::sema_ide::member_completions(&snapshot, src, off);
+            let _ = dream_lsp::sema_ide::hover_at(&snapshot, off);
+            let _ = snapshot.ref_covering(off);
+        }
+    }
 }

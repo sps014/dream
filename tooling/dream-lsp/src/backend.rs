@@ -36,6 +36,10 @@ struct Document {
 struct CachedIndex {
     version: i32,
     index: Arc<Index>,
+    /// The analyzer's IDE snapshot for the same version, when semantic analysis completed
+    /// without panicking. Powers type-aware completion/hover; `None` falls back to the
+    /// AST-index heuristics.
+    sema: Option<Arc<dream_sema::analyzer::IdeSnapshot>>,
 }
 
 #[derive(Debug)]
@@ -46,11 +50,37 @@ pub struct Backend {
     /// The most recently scheduled diagnostics version per document, used to debounce/cancel
     /// superseded passes.
     pending_diagnostics: Arc<DashMap<String, i32>>,
+    /// Cached on-disk workspace symbol scan (see [`crate::workspace`]); invalidated by
+    /// file-watch events and refreshed after a short TTL.
+    workspace_cache: Arc<tokio::sync::Mutex<Option<crate::workspace::WorkspaceIndex>>>,
+}
+
+/// Writes the embedded stdlib source for a `<std>/…` virtual path into `cache_dir` (once, kept
+/// current on toolchain changes) and returns the real path, so go-to-definition can open it in
+/// the editor like any other file.
+pub fn materialize_stdlib(cache_dir: &std::path::Path, virtual_path: &str) -> Option<String> {
+    let rel = virtual_path.strip_prefix("<std>/")?;
+    for pkg in dream_stdlib::STD_PACKAGES {
+        for &(vpath, source) in pkg.files {
+            if vpath != virtual_path {
+                continue;
+            }
+            let target = cache_dir.join(rel);
+            let stale = std::fs::read_to_string(&target)
+                .map(|existing| existing != source)
+                .unwrap_or(true);
+            if stale {
+                target.parent().and_then(|p| std::fs::create_dir_all(p).ok())?;
+                std::fs::write(&target, source).ok()?;
+            }
+            return target.to_str().map(str::to_string);
+        }
+    }
+    None
 }
 
 /// True when an enclosing `dream.toml` declares `type = "lib"` (no Run/Debug CodeLens).
-fn workspace_is_lib_package(file_path: &str) -> bool {
-    let mut dir = std::path::Path::new(file_path)
+fn workspace_is_lib_package(file_path: &str) -> bool {    let mut dir = std::path::Path::new(file_path)
         .parent()
         .map(|p| p.to_path_buf());
     while let Some(d) = dir {
@@ -89,6 +119,7 @@ impl Backend {
             documents: Arc::new(DashMap::new()),
             index_cache: Arc::new(DashMap::new()),
             pending_diagnostics: Arc::new(DashMap::new()),
+            workspace_cache: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -99,7 +130,7 @@ impl Backend {
     }
 
     /// Builds an LSP [`Location`] for a byte span, optionally in another on-disk file. Virtual
-    /// `<std>/…` paths and missing files return `None` (do not jump into the wrong document).
+    /// `<std>/…` paths are materialized to real files first (see [`materialize_stdlib`]).
     fn location_at(
         default_uri: &Url,
         default_text: &str,
@@ -107,6 +138,11 @@ impl Backend {
         end: usize,
         file_path: Option<&str>,
     ) -> Option<Location> {
+        let file_path: Option<String> = match file_path {
+            Some(path) if path.starts_with('<') => Self::stdlib_cache_dir()
+                .and_then(|dir| materialize_stdlib(&dir, path)),
+            other => other.map(str::to_string),
+        };
         match file_path {
             None => {
                 let line_index = LineIndex::new(default_text);
@@ -118,9 +154,8 @@ impl Backend {
                     },
                 })
             }
-            Some(path) if path.starts_with('<') => None,
             Some(path) => {
-                let path_buf = std::path::Path::new(path);
+                let path_buf = std::path::Path::new(&path);
                 if !path_buf.is_file() {
                     return None;
                 }
@@ -138,33 +173,85 @@ impl Backend {
         }
     }
 
+    /// The directory embedded-stdlib sources are materialized into for navigation. Overridable
+    /// via `DREAM_LSP_STD_CACHE` (tests); defaults to the toolchain's own home.
+    fn stdlib_cache_dir() -> Option<std::path::PathBuf> {
+        if let Some(dir) = std::env::var_os("DREAM_LSP_STD_CACHE") {
+            return Some(std::path::PathBuf::from(dir));
+        }
+        std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .map(|home| home.join(".dream").join("std"))
+    }
+
+    /// When the analyzer resolved `offset` to a cross-file-capable entity (anything but a
+    /// function-local or an anonymous expression), returns that target plus the receiver-typed
+    /// reference spans for it in this document (declaration included). Returns `None` for local
+    /// symbols, where scope-based index matching is already exact.
+    fn precise_references(
+        idx: &Index,
+        snapshot: &dream_sema::analyzer::IdeSnapshot,
+        offset: usize,
+    ) -> Option<(
+        dream_sema::analyzer::ide::IdeTarget,
+        Vec<(usize, usize)>,
+    )> {
+        use dream_sema::analyzer::ide::IdeTarget;
+        let r = snapshot.ref_covering(offset)?;
+        if matches!(r.target, IdeTarget::Local { .. } | IdeTarget::Expr) {
+            return None;
+        }
+        let mut spans = crate::sema_ide::references_in(snapshot, &r.target);
+        if let Some((ds, de)) = crate::sema_ide::definition_at(snapshot, idx, offset) {
+            spans.push((ds, de));
+        }
+        spans.sort_unstable();
+        spans.dedup();
+        Some((r.target.clone(), spans))
+    }
+
     /// Returns the current text of a document, if open.
     fn document_text(&self, uri: &str) -> Option<String> {
         self.documents.get(uri).map(|d| d.text.clone())
     }
 
-    /// Returns the symbol index for a document, rebuilding it only when the cached version is
-    /// stale (or absent). The result is shared via [`Arc`] so callers never clone the model.
-    fn index_for(&self, uri: &str, file_path: Option<&str>) -> Option<Arc<Index>> {
+    /// Returns the symbol index (and analyzer snapshot) for a document, rebuilding both only
+    /// when the cached version is stale (or absent). Results are shared via [`Arc`] so callers
+    /// never clone the model.
+    fn models_for(
+        &self,
+        uri: &str,
+        file_path: Option<&str>,
+    ) -> Option<(Arc<Index>, Option<Arc<dream_sema::analyzer::IdeSnapshot>>)> {
         let (text, version) = {
             let doc = self.documents.get(uri)?;
             if let Some(cached) = self.index_cache.get(uri) {
                 if cached.version == doc.version {
-                    return Some(cached.index.clone());
+                    return Some((cached.index.clone(), cached.sema.clone()));
                 }
             }
             (doc.text.clone(), doc.version)
         };
 
         let index = Arc::new(Index::build(file_path, &text));
+        let sema = analysis::analyze_document(file_path, &text)
+            .sema
+            .map(Arc::new);
         self.index_cache.insert(
             uri.to_string(),
             CachedIndex {
                 version,
                 index: index.clone(),
+                sema: sema.clone(),
             },
         );
-        Some(index)
+        Some((index, sema))
+    }
+
+    /// Returns the symbol index for a document, rebuilding it only when the cached version is
+    /// stale (or absent).
+    fn index_for(&self, uri: &str, file_path: Option<&str>) -> Option<Arc<Index>> {
+        self.models_for(uri, file_path).map(|(index, _)| index)
     }
 
     /// Schedules a debounced diagnostics pass for `uri` at `version`. If a newer version is
@@ -319,6 +406,19 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
+        // Register a filesystem watcher so edits to imported `.dream` files (not open in the
+        // editor) invalidate cached models and refresh diagnostics of the importers. Failure is
+        // non-fatal: clients without dynamic registration just keep the old behavior.
+        let _ = self
+            .client
+            .register_capability(vec![Registration {
+                id: "dream-watch-dream-files".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: Some(
+                    serde_json::json!({ "watchers": [{ "globPattern": "**/*.dream" }] }),
+                ),
+            }])
+            .await;
         self.client
             .log_message(MessageType::INFO, "Dream LSP initialized!")
             .await;
@@ -373,6 +473,35 @@ impl LanguageServer for Backend {
         self.pending_diagnostics.remove(&uri);
     }
 
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        use tower_lsp::lsp_types::FileChangeType;
+        // A dependency changed on disk. Cached models embed parsed copies of every imported
+        // file, so drop them all (they rebuild lazily on the next request) and re-publish
+        // diagnostics for every open document.
+        let changed: Vec<String> = params
+            .changes
+            .iter()
+            .filter(|c| c.typ != FileChangeType::DELETED)
+            .filter_map(|c| Self::file_path_of(&c.uri))
+            .filter(|p| p.ends_with(".dream"))
+            .collect();
+        if changed.is_empty() {
+            return;
+        }
+        self.index_cache.clear();
+        *self.workspace_cache.lock().await = None;
+        for entry in self.documents.iter() {
+            let (uri, text, version) = (
+                Url::parse(&entry.key().clone()).ok(),
+                entry.text.clone(),
+                entry.version,
+            );
+            drop(entry);
+            let Some(uri) = uri else { continue };
+            self.schedule_diagnostics(uri, text, version);
+        }
+    }
+
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let uri = params
             .text_document_position_params
@@ -388,7 +517,7 @@ impl LanguageServer for Backend {
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character,
         );
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
         if let Some(located) = idx.hover(&text, offset) {
@@ -402,6 +531,22 @@ impl LanguageServer for Backend {
                     end: map_position(line_index.position(located.end)),
                 }),
             }));
+        }
+        // The AST index only resolves receivers it could type heuristically; the analyzer's
+        // snapshot covers chained/call-result/tuple positions it cannot.
+        if let Some(snapshot) = &sema {
+            if let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset) {
+                return Ok(Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: contents,
+                    }),
+                    range: Some(Range {
+                        start: map_position(line_index.position(start)),
+                        end: map_position(line_index.position(end)),
+                    }),
+                }));
+            }
         }
         Ok(None)
     }
@@ -424,10 +569,14 @@ impl LanguageServer for Backend {
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character,
         );
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        if let Some((start, end, file_path)) = idx.definition(offset) {
+        let sema_loc = sema
+            .as_ref()
+            .and_then(|s| crate::sema_ide::definition_at(s, &idx, offset))
+            .map(|(start, end)| (start, end, None::<String>));
+        if let Some((start, end, file_path)) = idx.definition(offset).or(sema_loc) {
             return Ok(
                 Self::location_at(&uri, &text, start, end, file_path.as_deref())
                     .map(GotoDefinitionResponse::Scalar),
@@ -442,25 +591,90 @@ impl LanguageServer for Backend {
         let Some(text) = self.document_text(&key) else {
             return Ok(None);
         };
+        let file_path = Self::file_path_of(&uri);
         let line_index = LineIndex::new(&text);
         let offset = line_index.offset(
             params.text_document_position.position.line,
             params.text_document_position.position.character,
         );
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, file_path.as_deref()) else {
             return Ok(None);
         };
-        let locations = idx
-            .references(offset, params.context.include_declaration)
-            .into_iter()
-            .map(|(start, end)| Location {
+
+        let include_decl = params.context.include_declaration;
+        let mut locations: Vec<Location> = Vec::new();
+
+        // Cross-document matches first (other open documents), so the primary document's
+        // entries keep the legacy ordering role below.
+        if let Some(snapshot) = &sema {
+            if let Some(r) = snapshot.ref_covering(offset) {
+                if !matches!(r.target, dream_sema::analyzer::ide::IdeTarget::Local { .. }
+                    | dream_sema::analyzer::ide::IdeTarget::Expr)
+                {
+                    for other_key in self.documents.iter().map(|e| e.key().clone()) {
+                        if other_key == key {
+                            continue;
+                        }
+                        let Some(other_uri) = Url::parse(&other_key).ok() else {
+                            continue;
+                        };
+                        let Some((_, other_sema)) =
+                            self.models_for(&other_key, Self::file_path_of(&other_uri).as_deref())
+                        else {
+                            continue;
+                        };
+                        let Some(other_sema) = other_sema else {
+                            continue;
+                        };
+                        let Some(other_text) = self.document_text(&other_key) else {
+                            continue;
+                        };
+                        let other_li = LineIndex::new(&other_text);
+                        for (start, end) in
+                            crate::sema_ide::references_in(&other_sema, &r.target)
+                        {
+                            locations.push(Location {
+                                uri: other_uri.clone(),
+                                range: Range {
+                                    start: map_position(other_li.position(start)),
+                                    end: map_position(other_li.position(end)),
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // This document: sema-precise spans when available, legacy name-based otherwise.
+        let spans = match sema
+            .as_ref()
+            .and_then(|s| Self::precise_references(&idx, s, offset))
+        {
+            Some((_, mut spans)) => {
+                if !include_decl {
+                    // Drop the declaration span (the one that is a declaration, not a use).
+                    if let Some(snapshot) = &sema {
+                        if let Some((ds, de)) =
+                            crate::sema_ide::definition_at(snapshot, &idx, offset)
+                        {
+                            spans.retain(|&(st, en)| (st, en) != (ds, de));
+                        }
+                    }
+                }
+                spans
+            }
+            None => idx.references(offset, include_decl),
+        };
+        for (start, end) in spans {
+            locations.push(Location {
                 uri: uri.clone(),
                 range: Range {
                     start: map_position(line_index.position(start)),
                     end: map_position(line_index.position(end)),
                 },
-            })
-            .collect();
+            });
+        }
         Ok(Some(locations))
     }
 
@@ -482,11 +696,18 @@ impl LanguageServer for Backend {
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character,
         );
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        let highlights = idx
-            .references(offset, true)
+        // When the analyzer resolved this position to a cross-file-capable entity, its
+        // receiver-typed matching is strictly more precise than the index's name-based match
+        // (which collides across same-named members of different types).
+        let highlights_spans = sema
+            .as_ref()
+            .and_then(|s| Self::precise_references(&idx, s, offset))
+            .map(|(_, spans)| spans)
+            .unwrap_or_else(|| idx.references(offset, true));
+        let highlights = highlights_spans
             .into_iter()
             .map(|(start, end)| DocumentHighlight {
                 range: Range {
@@ -546,7 +767,7 @@ impl LanguageServer for Backend {
             params.text_document_position.position.line,
             params.text_document_position.position.character,
         );
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
         let Some(decl) = idx.decl_for_offset(offset) else {
@@ -575,22 +796,67 @@ impl LanguageServer for Backend {
                 data: None,
             });
         }
-        let edits: Vec<TextEdit> = idx
-            .references(offset, true)
-            .into_iter()
-            .map(|(start, end)| TextEdit {
-                range: Range {
-                    start: map_position(line_index.position(start)),
-                    end: map_position(line_index.position(end)),
-                },
-                new_text: new_name.clone(),
-            })
-            .collect();
-        if edits.is_empty() {
+
+        // Resolve the target once, then collect edits per open document. Sema-resolved targets
+        // (fields/methods/enum members/globals) rename across every open document that uses
+        // them, matched by entity identity rather than bare name — renaming `Point.x` never
+        // touches `Size.x`. Locals keep the exact single-document scope behavior.
+        let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
+            std::collections::HashMap::new();
+        let mut push_edits = |uri_key: &str, spans: Vec<(usize, usize)>| {
+            if spans.is_empty() {
+                return;
+            }
+            let Ok(doc_uri) = Url::parse(uri_key) else {
+                return;
+            };
+            let Some(doc_text) = self.document_text(uri_key) else {
+                return;
+            };
+            let doc_li = LineIndex::new(&doc_text);
+            let edits = spans
+                .into_iter()
+                .map(|(start, end)| TextEdit {
+                    range: Range {
+                        start: map_position(doc_li.position(start)),
+                        end: map_position(doc_li.position(end)),
+                    },
+                    new_text: new_name.clone(),
+                })
+                .collect();
+            changes.insert(doc_uri, edits);
+        };
+
+        let target_and_spans = sema
+            .as_ref()
+            .and_then(|s| Self::precise_references(&idx, s, offset));
+        if let Some((target, _)) = &target_and_spans {
+            for entry in self.documents.iter() {
+                let other_key: String = entry.key().clone();
+                drop(entry);
+                let Some(other_uri) = Url::parse(&other_key).ok().filter(|u| *u != uri) else {
+                    continue;
+                };
+                let Some((_, other_sema)) =
+                    self.models_for(&other_key, Self::file_path_of(&other_uri).as_deref())
+                else {
+                    continue;
+                };
+                let Some(other_sema) = other_sema else {
+                    continue;
+                };
+                let spans = crate::sema_ide::references_in(&other_sema, target);
+                push_edits(&other_key, spans);
+            }
+        }
+        let own_spans = target_and_spans
+            .map(|(_, spans)| spans)
+            .unwrap_or_else(|| idx.references(offset, true));
+        push_edits(&key, own_spans);
+
+        if changes.is_empty() {
             return Ok(None);
         }
-        let mut changes = std::collections::HashMap::new();
-        changes.insert(uri, edits);
         Ok(Some(WorkspaceEdit {
             changes: Some(changes),
             document_changes: None,
@@ -643,17 +909,18 @@ impl LanguageServer for Backend {
     ) -> Result<Option<Vec<SymbolInformation>>> {
         let query = params.query;
         let mut out = Vec::new();
-        // Workspace symbols are gathered from every currently-open document. Each document's index
-        // is version-cached, so repeated lookups are cheap.
+
+        // 1) Every currently-open document (its in-editor version is authoritative). Each
+        // document's index is version-cached, so repeated lookups are cheap.
         let keys: Vec<String> = self.documents.iter().map(|e| e.key().clone()).collect();
-        for key in keys {
-            let Ok(uri) = Url::parse(&key) else {
+        for key in &keys {
+            let Ok(uri) = Url::parse(key) else {
                 continue;
             };
-            let Some(text) = self.document_text(&key) else {
+            let Some(text) = self.document_text(key) else {
                 continue;
             };
-            let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+            let Some(idx) = self.index_for(key, Self::file_path_of(&uri).as_deref()) else {
                 continue;
             };
             let line_index = LineIndex::new(&text);
@@ -678,6 +945,64 @@ impl LanguageServer for Backend {
                 });
             }
         }
+
+        // 2) Files on disk under the project root (skipping files already open above). The scan
+        // is cached briefly and invalidated by file-watch events.
+        let open_paths: Vec<String> = keys
+            .iter()
+            .filter_map(|k| Url::parse(k).ok())
+            .filter_map(|u| Self::file_path_of(&u))
+            .collect();
+        if !open_paths.is_empty() {
+            if let Some(root) = crate::workspace::project_root(&open_paths) {
+                let mut cache = self.workspace_cache.lock().await;
+                let fresh = cache
+                    .as_ref()
+                    .is_some_and(|w| w.is_fresh(&root));
+                if !fresh {
+                    let symbols = crate::workspace::scan(&root);
+                    *cache = Some(crate::workspace::WorkspaceIndex::new(root, symbols));
+                }
+                if let Some(index) = cache.as_ref() {
+                    let open_set: std::collections::HashSet<&String> = open_paths.iter().collect();
+                    let lower_query = query.to_lowercase();
+                    for s in &index.symbols {
+                        if open_set.contains(&s.path) {
+                            continue;
+                        }
+                        if !s.name.to_lowercase().contains(&lower_query) {
+                            continue;
+                        }
+                        let Ok(path) = std::path::PathBuf::from(&s.path).canonicalize() else {
+                            continue;
+                        };
+                        let Some(text) = std::fs::read_to_string(&path).ok() else {
+                            continue;
+                        };
+                        let Some(uri) = Url::from_file_path(&path).ok() else {
+                            continue;
+                        };
+                        let line_index = LineIndex::new(&text);
+                        #[allow(deprecated)]
+                        out.push(SymbolInformation {
+                            name: s.name.clone(),
+                            kind: symbol_kind(s.kind),
+                            tags: None,
+                            deprecated: None,
+                            location: Location {
+                                uri,
+                                range: Range {
+                                    start: map_position(line_index.position(s.start)),
+                                    end: map_position(line_index.position(s.end)),
+                                },
+                            },
+                            container_name: None,
+                        });
+                    }
+                }
+            }
+        }
+
         Ok(Some(out))
     }
 
@@ -727,10 +1052,30 @@ impl LanguageServer for Backend {
             params.text_document_position.position.line,
             params.text_document_position.position.character,
         );
-        let Some(idx) = self.index_for(&key, file_path.as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, file_path.as_deref()) else {
             return Ok(None);
         };
-        let completions = idx.completions(file_path.as_deref(), &text, offset);
+
+        // Member completion after `.`: the analyzer's snapshot resolves the receiver's real
+        // Member completion after `.`: the analyzer's snapshot resolves the receiver's real
+        // type (locals, chained calls, call results, tuples, loop variables), so it leads the
+        // list; AST-index heuristic items are appended for anything lazy instantiation hasn't
+        // materialized yet (e.g. `extend T[]` methods never called in this document).
+        let mut completions = idx.completions(file_path.as_deref(), &text, offset);
+        if index::is_member_completion_context(&text, offset) {
+            if let Some(snapshot) = &sema {
+                if let Some(items) = crate::sema_ide::member_completions(snapshot, &text, offset)
+                {
+                    let seen: std::collections::HashSet<String> =
+                        completions.iter().map(|(n, ..)| n.clone()).collect();
+                    completions.extend(
+                        items
+                            .into_iter()
+                            .filter(|(n, ..)| !seen.contains(n)),
+                    );
+                }
+            }
+        }
         let import_replace = index::import_path_partial(&text, offset).map(|(start, _)| start);
         let in_attr_name = index::attribute_name_partial(&text, offset).is_some();
         let in_attr_args = index::attribute_arg_context(&text, offset).is_some();
@@ -965,7 +1310,12 @@ impl LanguageServer for Backend {
         let Some(text) = self.document_text(&key) else {
             return Ok(None);
         };
-        let tokens = semantic_tokens::compute(Self::file_path_of(&uri).as_deref(), &text);
+        // Serve from the cached index (semantic tokens consult the symbol model); building a
+        // fresh Index here would re-parse the document + all imports on every token request.
+        let Some((idx, _)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
+            return Ok(None);
+        };
+        let tokens = semantic_tokens::compute_cached(&idx, &text);
         Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
             result_id: None,
             data: tokens,

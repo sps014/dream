@@ -6,4 +6,6 @@ pub mod format;
 pub mod index;
 pub mod position;
 pub mod semantic_tokens;
+pub mod sema_ide;
 pub mod tokens;
+pub mod workspace;

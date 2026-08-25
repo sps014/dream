@@ -24,6 +24,7 @@ mod await_rules;
 mod calls;
 mod declarations;
 mod expressions;
+pub mod ide;
 mod generics;
 mod hir_emit;
 mod js_interop;
@@ -34,6 +35,8 @@ mod receiver_modes;
 mod statements;
 mod switch_unions;
 mod type_checker;
+
+pub use ide::{IdeSnapshot, TypeSummary};
 
 /// Converts an AST node's `Rc<str>` source-file tag into the `String` form stored on the
 /// diagnostic bag (used to attribute each semantic error to its originating file).
@@ -67,17 +70,47 @@ fn report(
     SemanticError::reported(message, span)
 }
 
-/// Like [`report`], attaching follow-up `help:` lines (e.g. did-you-mean suggestions).
+/// Like [`report`], attaching follow-up `help:` lines (e.g. did-you-mean suggestions) and an
+/// optional stable machine-readable error-class code (see [`report_with_code`]).
 fn report_with_notes(
     diagnostics: &mut DiagnosticBag,
     message: String,
     span: Option<TextSpan>,
     notes: Vec<String>,
 ) -> SemanticError {
+    report_noted(diagnostics, message, span, notes, None)
+}
+
+/// The shared implementation behind [`report_with_notes`] and [`report_with_code`].
+fn report_noted(
+    diagnostics: &mut DiagnosticBag,
+    message: String,
+    span: Option<TextSpan>,
+    notes: Vec<String>,
+    code: Option<&'static str>,
+) -> SemanticError {
     let mut diag = Diagnostic::new(message.clone(), span, diagnostics.file_path.clone());
+    if let Some(code) = code {
+        diag = diag.with_code(code);
+    }
     for n in notes {
         diag = diag.with_help(n);
     }
+    diagnostics.report(diag);
+    SemanticError::reported(message, span)
+}
+
+/// Like [`report`], attaching a stable machine-readable error-class code (`unresolved-name`,
+/// `missing-member`, …) so tooling (the LSP's auto-import code action) can react to this
+/// specific failure without sniffing message text.
+fn report_with_code(
+    diagnostics: &mut DiagnosticBag,
+    message: String,
+    span: Option<TextSpan>,
+    code: &'static str,
+) -> SemanticError {
+    let diag = Diagnostic::new(message.clone(), span, diagnostics.file_path.clone())
+        .with_code(code);
     diagnostics.report(diag);
     SemanticError::reported(message, span)
 }
@@ -503,6 +536,9 @@ pub struct Analyzer<'a> {
     /// `DefId` here and AST type annotations lower to interned `TypeId`s, so type identity,
     /// compatibility, and monomorphization keys move off strings onto the structured type system.
     type_ctx: TypeCtx,
+    /// IDE side table: every name/member/call resolution recorded during body analysis (see
+    /// [`ide`]). Purely additive — nothing in analysis reads it, so compiler output is unaffected.
+    ide_refs: Vec<ide::IdeRef>,
     /// Interleaved HIR-emission state and the accumulated emitted functions.
     hir: hir_emit::HirEmit,
     /// `lib` rejects a top-level `main` in the primary compilation file; `bin` (default) allows it.
@@ -574,6 +610,7 @@ impl<'a> Analyzer<'a> {
             globals: Vec::new(),
             global_symbol_table: Rc::new(RefCell::new(SymbolTable::new(None))),
             type_ctx: TypeCtx::new(),
+            ide_refs: Vec::new(),
             hir: hir_emit::HirEmit::default(),
             crate_type: CrateType::Bin,
             primary_file: None,

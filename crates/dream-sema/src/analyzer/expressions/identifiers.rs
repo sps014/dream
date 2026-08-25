@@ -65,6 +65,15 @@ impl<'a> Analyzer<'a> {
                         let box_ret = Self::async_return_type(true, sig.return_type.clone());
                         let func_ty = Type::Function(params, Box::new(box_ret.clone()));
                         self.hir_set_func_value(&id.text, &func_ty, &box_ret);
+                        let summary = self.ide_summary(&func_ty);
+                        self.record_ide_ref(
+                            id.position,
+                            ide::IdeTarget::Callee {
+                                key: id.text.clone(),
+                                label: id.text.clone(),
+                            },
+                            summary,
+                        );
                         return Ok(func_ty);
                     }
                     let params = sig
@@ -75,6 +84,15 @@ impl<'a> Analyzer<'a> {
                     let ret = sig.return_type.clone().unwrap_or(Type::Void);
                     let func_ty = Type::Function(params, Box::new(ret.clone()));
                     self.hir_set_func_value(&id.text, &func_ty, &ret);
+                    let summary = self.ide_summary(&func_ty);
+                    self.record_ide_ref(
+                        id.position,
+                        ide::IdeTarget::Callee {
+                            key: id.text.clone(),
+                            label: id.text.clone(),
+                        },
+                        summary,
+                    );
                     return Ok(func_ty);
                 }
                 // A generic function used as a value: with a `fun(...)` context, instantiate now;
@@ -95,7 +113,12 @@ impl<'a> Analyzer<'a> {
                 }
                 // Unresolved name: report and short-circuit. Statement-level callers recover
                 // (poisoning the binding with `Type::Unknown`) so sibling errors still surface.
-                return Err(report(diagnostics, e.to_string(), Some(id.position)));
+                return Err(report_with_code(
+                    diagnostics,
+                    e.to_string(),
+                    Some(id.position),
+                    "unresolved-name",
+                ));
             }
         };
         // File/module-level visibility (Axis 2): a non-public top-level variable is only readable
@@ -124,6 +147,21 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
+        let is_local = (*symbol_table)
+            .as_ref()
+            .borrow()
+            .resolves_before_global_root(&id.text);
+        let target = if is_local {
+            ide::IdeTarget::Local {
+                name: id.text.clone(),
+            }
+        } else {
+            ide::IdeTarget::Global {
+                name: id.text.clone(),
+            }
+        };
+        let summary = self.ide_summary(&r);
+        self.record_ide_ref(id.position, target, summary);
         self.hir_set_var(&id.text);
         Ok(r)
     }

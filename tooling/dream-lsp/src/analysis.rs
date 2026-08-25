@@ -14,6 +14,14 @@ use dream_stdlib::std_package_from_slash_path;
 
 use crate::position::LineIndex;
 
+/// The full front-end result for one document version: user-facing diagnostics plus, when
+/// analysis completed without panicking, the analyzer's IDE snapshot (resolved references and
+/// rendered member tables) that powers type-aware completion and hover.
+pub struct AnalysisOutcome {
+    pub diagnostics: Vec<DiagnosticOut>,
+    pub sema: Option<dream_sema::analyzer::IdeSnapshot>,
+}
+
 #[derive(Debug, Clone)]
 pub struct DiagnosticOut {
     pub range: crate::position::Range,
@@ -29,10 +37,11 @@ pub struct DiagnosticOut {
 pub const MAIN_FILE: &str = "main.dream";
 
 /// Runs the full front-end over `text` and returns the diagnostics that belong to the user's
-/// document, with byte spans converted to LSP ranges.
-pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<DiagnosticOut> {
+/// document (with byte spans converted to LSP ranges) plus the analyzer's IDE snapshot.
+pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome {
     let arena = Bump::new();
     let line_index = LineIndex::new(text);
+    let mut sema: Option<dream_sema::analyzer::IdeSnapshot> = None;
 
     let mut diagnostics = DiagnosticBag::new(None);
 
@@ -166,16 +175,20 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
             acc.all_globals,
         );
         let tree = SyntaxTree::new(combined);
+        // The snapshot is extracted inside the same scope as the analyzer (it borrows the
+        // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut analyzer = Analyzer::new(&tree, &arena).with_file_modules(file_modules);
             let _ = analyzer.analyze(&mut diagnostics);
+            analyzer.ide_snapshot()
         }));
-        if let Err(payload) = result {
-            report_analyzer_panic(&mut diagnostics, &payload);
+        match result {
+            Ok(snapshot) => sema = Some(snapshot),
+            Err(payload) => report_analyzer_panic(&mut diagnostics, &payload),
         }
     }
 
-    diagnostics
+    let diagnostics: Vec<DiagnosticOut> = diagnostics
         .diagnostics
         .iter()
         .filter(|d| matches!(d.file_path.as_deref(), None | Some(MAIN_FILE)))
@@ -197,21 +210,20 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
                     Severity::Warning => "warning",
                 },
                 message: d.message.clone(),
-                code: diagnostic_code(&d.message),
+                code: d.code,
             })
         })
-        .collect()
+        .collect();
+
+    AnalysisOutcome {
+        diagnostics,
+        sema,
+    }
 }
 
-fn diagnostic_code(message: &str) -> Option<&'static str> {
-    if message.contains("does not exist")
-        || message.contains("not found")
-        || message.contains("Function does not exist")
-    {
-        Some("unresolved-name")
-    } else {
-        None
-    }
+/// Diagnostics-only variant of [`analyze_document`] (the snapshot is dropped).
+pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<DiagnosticOut> {
+    analyze_document(file_path, text).diagnostics
 }
 
 fn program_uses_json_attr(acc: &dream::driver::source_loader::ProgramAccumulator<'_>) -> bool {

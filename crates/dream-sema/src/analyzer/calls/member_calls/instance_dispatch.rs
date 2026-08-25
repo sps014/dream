@@ -391,7 +391,7 @@ impl<'a> Analyzer<'a> {
                         .iter()
                         .map(|m| format!("similar method exists: '{}.{}'", struct_name, m))
                         .collect();
-                    return Err(report_with_notes(
+                    return Err(report_noted(
                         diagnostics,
                         format!(
                             "Type '{}' has no method '{}'",
@@ -400,6 +400,7 @@ impl<'a> Analyzer<'a> {
                         ),
                         Some(method.position),
                         notes,
+                        Some("missing-member"),
                     ));
                 }
             }
@@ -517,6 +518,15 @@ impl<'a> Analyzer<'a> {
         // Non-overloaded methods keep their base-mangled name.
         self.hir_set_method_call(receiver, &store_sig.name, arg_hirs, &ret_type);
         self.note_sink_arg_moves(params, &arg_types, &expected_is_take, false, diagnostics);
+        let call_summary = self.ide_summary(&ret_type);
+        self.record_ide_ref(
+            method.position,
+            ide::IdeTarget::Callee {
+                key: store_sig.name.clone(),
+                label: method.text.clone(),
+            },
+            call_summary,
+        );
         Ok(ret_type)
     }
 
@@ -703,6 +713,15 @@ impl<'a> Analyzer<'a> {
         let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
         // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
         self.hir_set_generic_method_call(receiver, base, instance, arg_hirs, &ret_type);
+        let call_summary = self.ide_summary(&ret_type);
+        self.record_ide_ref(
+            method.position,
+            ide::IdeTarget::Callee {
+                key: mangled_name,
+                label: method.text.clone(),
+            },
+            call_summary,
+        );
         Ok(ret_type)
     }
 

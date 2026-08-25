@@ -266,6 +266,23 @@ pub fn compute(file_path: Option<&str>, text: &str) -> Vec<SemanticToken> {
     let mut lexer = Lexer::new(text.to_string());
     let tokens = lexer.lex_all(&mut scratch);
     let idx = Index::build(file_path, text);
+    compute_from(&idx, tokens, text)
+}
+
+/// Like [`compute`], but reuses a caller-supplied [`Index`] (the per-document cached model) and
+/// lexes only — no second parse/index walk.
+pub fn compute_cached(idx: &Index, text: &str) -> Vec<SemanticToken> {
+    let mut scratch = DiagnosticBag::new(None);
+    let mut lexer = Lexer::new(text.to_string());
+    let tokens = lexer.lex_all(&mut scratch);
+    compute_from(idx, tokens, text)
+}
+
+fn compute_from(
+    idx: &Index,
+    tokens: Vec<SyntaxToken>,
+    text: &str,
+) -> Vec<SemanticToken> {
     let line_index = LineIndex::new(text);
 
     let mut semantic_tokens = Vec::new();

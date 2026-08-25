@@ -105,7 +105,7 @@ impl<'a> Analyzer<'a> {
             match self.function_table.get_function(&base) {
                 Ok(s) => s.clone(),
                 Err(_) => {
-                    return Err(report(
+                    return Err(report_with_code(
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
@@ -113,6 +113,7 @@ impl<'a> Analyzer<'a> {
                             method.text
                         ),
                         Some(method.position),
+                        "missing-member",
                     ));
                 }
             }
@@ -243,6 +244,15 @@ impl<'a> Analyzer<'a> {
         // receiver). Overloaded names resolve to the selected overload's emitted key (each a
         // distinct `DefId`), matching free-function / instance-method overload emission.
         self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
+        let call_summary = self.ide_summary(&ret_type);
+        self.record_ide_ref(
+            method.position,
+            ide::IdeTarget::Callee {
+                key: store_sig.name.clone(),
+                label: method.text.clone(),
+            },
+            call_summary,
+        );
         Ok(ret_type)
     }
 }

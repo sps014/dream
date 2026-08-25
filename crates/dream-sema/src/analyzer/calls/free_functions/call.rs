@@ -397,6 +397,14 @@ impl<'a> Analyzer<'a> {
                         .type_ctx
                         .defs
                         .lookup(dream_types::DefKind::Function, &ctor_def_name);
+                    let ctor_summary = self.ide_summary(&t);
+                    self.record_ide_ref(
+                        name.position,
+                        ide::IdeTarget::Constructor {
+                            type_key: t.get_type(),
+                        },
+                        ctor_summary,
+                    );
                     self.hir_set_new(&name.text, ctor, arg_hirs, &t);
                     if let Ok(info) = self.function_table.get_function(&ctor_def_name) {
                         self.note_sink_arg_moves(
@@ -466,7 +474,12 @@ impl<'a> Analyzer<'a> {
             match self.function_table.get_function(&function_name) {
                 Ok(sig) => sig,
                 Err(e) => {
-                    return Err(report(diagnostics, e.to_string(), Some(name.position)));
+                    return Err(report_with_code(
+                        diagnostics,
+                        e.to_string(),
+                        Some(name.position),
+                        "unresolved-name",
+                    ));
                 }
             }
         };
@@ -578,6 +591,15 @@ impl<'a> Analyzer<'a> {
             &store_sig.is_take,
             false,
             diagnostics,
+        );
+        let call_summary = self.ide_summary(&ret_type);
+        self.record_ide_ref(
+            name.position,
+            ide::IdeTarget::Callee {
+                key: store_sig.name.clone(),
+                label: name.text.clone(),
+            },
+            call_summary,
         );
         Ok(ret_type)
     }

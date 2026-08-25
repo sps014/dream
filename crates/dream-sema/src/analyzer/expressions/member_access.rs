@@ -97,6 +97,15 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             )? {
                 // `analyze_variant_construction` records the `UnionNew` (or clears `last`) itself.
+                let summary = self.ide_summary(&t);
+                self.record_ide_ref(
+                    member.position,
+                    ide::IdeTarget::UnionVariant {
+                        union_key: t.get_type(),
+                        variant: member.text.clone(),
+                    },
+                    summary,
+                );
                 return Ok(t);
             }
         }
@@ -114,6 +123,15 @@ impl<'a> Analyzer<'a> {
                         self.hir_none();
                     }
                 }
+                let enum_summary = self.ide_summary(&enum_ty);
+                self.record_ide_ref(
+                    member.position,
+                    ide::IdeTarget::EnumMember {
+                        enum_name: id.text.clone(),
+                        member: member.text.clone(),
+                    },
+                    enum_summary,
+                );
                 return Ok(enum_ty);
             }
         }
@@ -188,6 +206,10 @@ impl<'a> Analyzer<'a> {
                 return Ok(Type::Unknown);
             }
             let elem_ty = elems[idx].clone();
+            let tuple_summary = TypeSummary::Tuple {
+                elems: self.ide_tuple_elems(&obj_type),
+            };
+            self.record_ide_ref(member.position, ide::IdeTarget::Expr, tuple_summary);
             self.hir_set_field(obj_hir, idx, &elem_ty);
             return Ok(elem_ty);
         }
@@ -203,6 +225,10 @@ impl<'a> Analyzer<'a> {
         if member.text == dream_abi::intrinsics::LENGTH {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
+                self.record_ide_ref(member.position, ide::IdeTarget::Expr, TypeSummary::Named {
+                    key: Some("int".to_string()),
+                    display: "int".to_string(),
+                });
                 self.hir_set_array_len(obj_hir);
                 return Ok(Type::Integer(synthetic_token(
                     TokenKind::DataTypeToken,
@@ -251,6 +277,15 @@ impl<'a> Analyzer<'a> {
                     Some(index) => self.hir_set_field(obj_hir, index, &field_type),
                     None => self.hir_none(),
                 }
+                let field_summary = self.ide_summary(&field_type);
+                self.record_ide_ref(
+                    member.position,
+                    ide::IdeTarget::Field {
+                        type_key: struct_name,
+                        name: member.text.clone(),
+                    },
+                    field_summary,
+                );
                 Ok(field_type)
             }
             MemberField::NotAStruct => {
@@ -293,7 +328,7 @@ impl<'a> Analyzer<'a> {
                     Ok(func_ty)
                 } else {
                     self.hir_none();
-                    Err(report(
+                    Err(report_with_code(
                         diagnostics,
                         format!(
                             "Field '{}' not found in class '{}'",
@@ -301,6 +336,7 @@ impl<'a> Analyzer<'a> {
                             self.ty_str_display(&struct_name)
                         ),
                         Some(member.position),
+                        "missing-member",
                     ))
                 }
             }

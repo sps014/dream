@@ -11,3 +11,9 @@
 int32_t *dream_wasm32_meta_i32(int32_t off);
 
 #endif
+
+/* Weak-handle slots (Weak stdlib class) — mirrors native/weak.c. */
+dream_ptr dream_weak_slot_make(dream_ptr value);
+dream_ptr dream_weak_slot_load(dream_ptr slot_box);
+int32_t dream_weak_slot_dead(dream_ptr slot_box);
+void dream_weak_slot_release(dream_ptr target, dream_ptr slot_box);

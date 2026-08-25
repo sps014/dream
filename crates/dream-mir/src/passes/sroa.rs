@@ -145,8 +145,12 @@ fn analyze_simple_ctor(
                     return None;
                 }
                 // Reject effectful / complex bodies even when they don't mention this.
+                // NOTE: every `Assign` here targets something other than a field of `this`
+                // (those were handled above), so it is an observable side effect — globals,
+                // temps read later, anything. Expansion deletes the ctor body at call sites,
+                // so all such assigns must disqualify the ctor. `is_pure_field_store` used to
+                // admit Binary/Use rvalues here, silently dropping global writes.
                 match stmt {
-                    Statement::Assign(_, rv) if is_pure_field_store(rv) => {}
                     Statement::Assign(_, _) => return None,
                     Statement::Call { .. }
                     | Statement::JsCall { .. }
@@ -417,6 +421,8 @@ fn zero_for(interner: &TypeInterner, ty: TypeId) -> Const {
 }
 
 /// Pure field stores SROA accepts: no calls/allocations that would observe the object identity.
+/// Pure rvalues (no calls) — safe to recompute/drop ONLY when nothing observable depends on
+/// the assignment's target.
 fn is_pure_field_store(rv: &Rvalue) -> bool {
     matches!(
         rv,

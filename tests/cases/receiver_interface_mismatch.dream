@@ -1,0 +1,18 @@
+// Implementors must match the interface's declared receiver mode.
+
+interface Repository {
+    unique fun save(id: int): void;
+}
+
+class MemoryRepo : Repository {
+    saved: int;
+    public constructor() { this.saved = 0; }
+    // Inferred borrow (read-only body) but interface declares unique — mismatch.
+    public fun save(id: int): void {
+        System.println(id);
+    }
+}
+
+fun main(): void {
+    let r = MemoryRepo();
+}

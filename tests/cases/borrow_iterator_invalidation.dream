@@ -1,0 +1,12 @@
+// Mutating a list while an iterator cursor is live is a compile-time error.
+
+import system;
+import system.collections;
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(1);
+    let cur = xs.iterator();
+    xs.push(2);
+    System.println(cur.next().unwrap_or(-1));
+}

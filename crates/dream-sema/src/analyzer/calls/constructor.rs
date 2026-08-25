@@ -64,6 +64,15 @@ impl<'a> Analyzer<'a> {
         }
 
         let init_name = constructor_fn(&struct_name);
+        if std::env::var("DREAM_TRACE_CTOR").is_ok() {
+            eprintln!(
+                "[ctor] {} init_name={} has_fn={} overloaded={}",
+                struct_name,
+                init_name,
+                self.function_table.get_function(&init_name).is_ok(),
+                self.function_table.is_overloaded(&init_name),
+            );
+        }
         // A struct with more than one `constructor` overload is resolved exactly like an
         // overloaded free function/method: the implicit `this` (the struct itself) plus the given
         // argument types are matched against every registered overload's full parameter list.

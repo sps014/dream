@@ -99,16 +99,29 @@ impl<'a> Analyzer<'a> {
             }
         };
         // File/module-level visibility (Axis 2): a non-public top-level variable is only readable
-        // from its declaring file. (Locals/params never appear in `self.globals`, so a shadowing
-        // local of the same name is unaffected.)
-        if let Some(global) = self.globals.iter().find(|g| g.name == id.text) {
-            if !self.visible_across_files(
-                &global.file_path,
-                global.visibility,
-                self.current_file.as_ref(),
-            ) {
-                let decl_file = global.file_path.clone();
-                self.report_not_public("Variable", &id.text, &decl_file, id.position, diagnostics);
+        // from its declaring file — and ONLY when the identifier actually resolved to that global.
+        // A function-local of the same name shadows it and must not trip this check (regex.dream's
+        // local `g` vs a user file's top-level `g` used to collide here).
+        if !(*symbol_table)
+            .as_ref()
+            .borrow()
+            .resolves_before_global_root(&id.text)
+        {
+            if let Some(global) = self.globals.iter().find(|g| g.name == id.text) {
+                if !self.visible_across_files(
+                    &global.file_path,
+                    global.visibility,
+                    self.current_file.as_ref(),
+                ) {
+                    let decl_file = global.file_path.clone();
+                    self.report_not_public(
+                        "Variable",
+                        &id.text,
+                        &decl_file,
+                        id.position,
+                        diagnostics,
+                    );
+                }
             }
         }
         self.hir_set_var(&id.text);

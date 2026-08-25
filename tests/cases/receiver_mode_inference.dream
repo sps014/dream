@@ -1,0 +1,28 @@
+// Receiver modes are inferred from bodies: reads-only = borrow, writes/mutating-calls = unique.
+// This golden proves that mixed methods compile and behave correctly without any annotations.
+
+import system;
+
+public class IntStack {
+    items: int[];
+    count: int;
+    public constructor() {
+        this.items = Buffer.alloc<int>(16);
+        this.count = 0;
+    }
+    public fun push(v: int): void {
+        if (this.count == this.items.length) { return; }
+        this.items[this.count] = v;
+        this.count = this.count + 1;
+    }
+    public fun peek(): int { return this.items[this.count - 1]; }
+    public fun depth(): int { return this.count; }
+}
+
+fun main(): void {
+    let s = IntStack();
+    s.push(10);
+    s.push(20);
+    System.println(s.peek().to_string());
+    System.println(s.depth().to_string());
+}

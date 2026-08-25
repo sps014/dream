@@ -1,0 +1,11 @@
+// Mutating through one name while a Span views the same storage via another is caught.
+
+import system;
+import system.collections;
+
+fun main(): void {
+    let items = List<int>();
+    items.push(10);
+    let cur = items.iterator();
+    items.push(99);
+}

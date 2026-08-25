@@ -1,0 +1,15 @@
+// A method declared `borrow fun` cannot mutate instance state — the declaration is a contract.
+
+class Ledger {
+    balance: int;
+    public constructor() { this.balance = 0; }
+
+    borrow fun audit(): void {
+        this.balance = this.balance + 999;
+    }
+}
+
+fun main(): void {
+    let l = Ledger();
+    l.audit();
+}

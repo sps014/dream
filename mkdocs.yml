@@ -103,6 +103,7 @@ nav:
         - Compute shaders: reference/language/compute.md
         - Vertex & fragment shaders: reference/language/shaders.md
         - Memory Management: reference/language/memory.md
+        - Memory Safety Guide: reference/language/memory-safety.md
         - Ownership: reference/language/ownership.md
       - Metaprogramming:
         - Source Generators: reference/language/generators.md

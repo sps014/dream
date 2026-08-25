@@ -100,6 +100,21 @@ impl SymbolTable {
         }
     }
 
+    /// True when `name` resolves through this scope chain *without* reaching the root table
+    /// (which holds top-level globals). Function locals/params and block scopes return true;
+    /// names that only exist in the global root return false. Used so file-visibility checks
+    /// for top-level globals never fire on shadowing function locals.
+    pub fn resolves_before_global_root(&self, name: &str) -> bool {
+        if self.symbols.contains_key(name) {
+            // Found in this scope: local unless this scope has no parent (the global root).
+            return self.parent.is_some();
+        }
+        match self.parent {
+            Some(ref parent) => parent.as_ref().borrow().resolves_before_global_root(name),
+            None => false,
+        }
+    }
+
     pub fn get_symbol(&self, name: &SyntaxToken) -> Result<Type, SymbolError> {
         if let Some(symbol) = self.symbols.get(&name.text) {
             return Ok(symbol.clone());

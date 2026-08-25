@@ -70,6 +70,75 @@ void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
     weak_unlock();
 }
 
+/* Removes every registration whose slot-box is `slot` (weak handle dropped early). */
+void dream_weak_unregister_by_slot(dream_ptr slot_box) {
+    if (!slot_box || !dream_weak_any) {
+        return;
+    }
+    dream_weak_node *dead = NULL;
+    weak_lock();
+    {
+        dream_weak_node **link = &weak_list_head;
+        while (*link) {
+            dream_weak_node *node = *link;
+            if (node->slot == slot_box) {
+                *link = node->next;
+                node->next = dead;
+                dead = node;
+            } else {
+                link = &node->next;
+            }
+        }
+        dream_weak_any = weak_list_head != NULL;
+    }
+    weak_unlock();
+    while (dead) {
+        dream_weak_node *node = dead;
+        dead = node->next;
+        dream_free((dream_ptr)(uintptr_t)node);
+    }
+}
+
+int64_t weakBind(dream_ptr value) {
+    if (!value) {
+        return 0;
+    }
+    dream_ptr box = dream_malloc((int32_t)sizeof(dream_ptr), 0);
+    *(dream_ptr *)dream_p(box) = value;
+    dream_weak_register(value, box, 2, 0);
+    return (int64_t)(uintptr_t)box;
+}
+
+dream_ptr weakLoad(int64_t slot) {
+    dream_ptr box = (dream_ptr)(int32_t)slot;
+    if (!box) {
+        return 0;
+    }
+    dream_ptr v = *(dream_ptr *)dream_p(box);
+    if (!v) {
+        return 0;
+    }
+    ((int32_t *)((char *)dream_p(v) - 4))[0] += 1;
+    return v;
+}
+
+int32_t weakDead(int64_t slot) {
+    dream_ptr box = (dream_ptr)(int32_t)slot;
+    if (!box) {
+        return 1;
+    }
+    return *(dream_ptr *)dream_p(box) == 0;
+}
+
+void weakReleaseRaw(int64_t slot) {
+    dream_ptr box = (dream_ptr)(int32_t)slot;
+    if (!box) {
+        return;
+    }
+    dream_weak_unregister_by_slot(box);
+    dream_free(box);
+}
+
 void dream_weak_clear_all(dream_ptr obj) {
     dream_weak_node *dead = NULL;
     if (weak_list_head == NULL) {
@@ -81,7 +150,10 @@ void dream_weak_clear_all(dream_ptr obj) {
         while (*link) {
             dream_weak_node *node = *link;
             if (node->target == obj) {
-                if (node->kind == 0) {
+                if (node->kind == 2) {
+                    /* Weak handle: target died — mark the slot dead (null payload). */
+                    *(dream_ptr *)dream_p(node->slot) = 0;
+                } else if (node->kind == 0) {
                     *(dream_ptr *)dream_p(node->slot) = node->extra;
                     *(dream_ptr *)((char *)dream_p(node->slot) + sizeof(dream_ptr)) = 0;
                 } else {
@@ -104,4 +176,40 @@ void dream_weak_clear_all(dream_ptr obj) {
         dead = node->next;
         dream_free((dream_ptr)(uintptr_t)node);
     }
+}
+
+
+/* --- Weak-handle slots (Weak<T> stdlib class) — mirrors native/weak.c ---------------- */
+
+dream_ptr dream_weak_slot_make(dream_ptr value) {
+    if (!value) {
+        return 0;
+    }
+    dream_ptr box = dream_malloc((int32_t)sizeof(dream_ptr), 0);
+    *(dream_ptr *)dream_p(box) = value;
+    dream_weak_register(value, box, 2, 0);
+    return box;
+}
+
+dream_ptr dream_weak_slot_load(dream_ptr slot_box) {
+    if (!slot_box) {
+        return 0;
+    }
+    dream_ptr v = *(dream_ptr *)dream_p(slot_box);
+    if (!v) {
+        return 0;
+    }
+    ((int32_t *)((char *)dream_p(v) - 4))[0] += 1;
+    return v;
+}
+
+int32_t dream_weak_slot_dead(dream_ptr slot_box) {
+    if (!slot_box) {
+        return 1;
+    }
+    return *(dream_ptr *)dream_p(slot_box) == 0;
+}
+
+void dream_weak_slot_release(dream_ptr target, dream_ptr slot_box) {
+    dream_weak_unregister(target, slot_box);
 }

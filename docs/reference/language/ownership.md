@@ -127,12 +127,60 @@ class Bag {
 
 Giving a new value to the same name (`items = List<int>();`) makes the name usable again.
 
+## Receiver modes: inferred borrow and unique
+
+Every non-static method's implicit `this` receiver has a **mutation contract** the compiler infers from the body:
+
+- **Borrow**: reads `this` without mutating it. Always safe to call.
+- **Unique**: may mutate instance state (field writes, calls to other Unique methods).
+
+You never write these — they are inferred. Two rules are enforced:
+
+1. A method declared `borrow fun` cannot mutate `this`.
+2. When a class implements an interface, implementor modes must match.
+
+To pin a contract explicitly:
+```dream
+class Counter {
+    count: int;
+    borrow fun value(): int { return this.count; }
+    unique fun increment(): void { this.count += 1; }
+}
+```
+
 ## What is *not* a move
 
 - Last **read**, then the function does other work: the value is still released at the **end** of the function, not the moment you finish reading it.
 - `struct` assign or pass: always a byte copy. Last use of a struct **local** does not retain nested share fields; a field or `list[i]` still does.
 - Reading `obj.field` or `xs[i]` into a sink: always a copy; the object/array still owns its slot.
 - `borrow` / `ref` arguments: never consumed.
+
+## Receiver modes: inferred borrow and unique
+
+Every non-static method's implicit `this` has a **mutation contract** the compiler infers from the body:
+
+- **Borrow**: reads `this` without mutating it. Always safe to call.
+- **Unique**: may mutate instance state (field writes, calls to mutating methods).
+
+You never write these — they are inferred from what the method does:
+
+```dream
+class Counter {
+    count: int;
+
+    // Inferred borrow: reads only.
+    public fun value(): int { return this.count; }
+
+    // Inferred unique: writes this.count.
+    public fun increment(): void { this.count = this.count + 1; }
+}
+```
+
+Two rules are enforced:
+1. A method declared `borrow fun` cannot mutate `this` (the declaration is a contract).
+2. When a class implements an interface, implementor modes must match.
+
+Pin a contract explicitly with `[borrow | unique] fun` when inference isn't what you want.
 
 ## What to write in practice
 

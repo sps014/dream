@@ -1016,6 +1016,12 @@ extern int dream_weak_any;
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 
+/* Weak-handle slots (Weak stdlib class). */
+dream_ptr dream_weak_slot_make(dream_ptr value);
+dream_ptr dream_weak_slot_load(dream_ptr slot_box);
+int32_t dream_weak_slot_dead(dream_ptr slot_box);
+void dream_weak_slot_release(dream_ptr target, dream_ptr slot_box);
+
 int64_t regex_compile(dream_ptr pattern, int32_t flags);
 void regex_free(int64_t h);
 int32_t regex_group_count(int64_t h);

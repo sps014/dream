@@ -1,0 +1,16 @@
+// Mutating after the cursor's final read is legal — the borrow has ended.
+
+import system;
+import system.collections;
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    let cur = xs.iterator();
+    System.println(cur.next().unwrap_or(-1));
+    // Cursor not used again — safe to mutate.
+    xs.push(3);
+    xs.sort();
+    System.println(xs.length.to_string());
+}

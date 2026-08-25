@@ -1,0 +1,69 @@
+module system.core;
+
+// A weak handle to a class instance: holding it does NOT keep the target alive.
+//
+// Use it to break reference cycles that static analysis cannot see — most commonly a
+// callback stored on an object that must call back into that same object:
+//
+// ```dream
+// let wb = Weak.make(engine);
+// engine.on_tick = () => {
+//     if (!wb.is_dead()) {
+//         let e = wb.get();   // retained for immediate use
+//         e.tick();
+//     }
+// };
+// ```
+//
+// Capture the handle (`wb`) in closures, never the raw object — capturing the object
+// directly recreates the cycle.
+//
+// When the target is freed, the slot is marked dead automatically: `is_dead()` flips to
+// true and stays true. The registration is removed when either side dies (target free or
+// handle drop), so nothing dangles.
+
+public class Weak<T> {
+    /// Registered slot-box pointer (raw; owned by the weak registry).
+    slot: long;
+
+    public constructor(target_obj: T) {
+        this.slot = Weak.bind(target_obj);
+    }
+
+    /// Convenience constructor.
+    public static fun make(target_obj: T): Weak<T> {
+        return Weak<T>(target_obj);
+    }
+
+    /// True once the tracked object has been freed.
+    public fun is_dead(): bool {
+        return Weak<T>.dead(this.slot);
+    }
+
+    /// The tracked object, retained for the caller. Call `is_dead()` first; loading a dead
+    /// handle is a fatal error rather than silent corruption.
+    public fun get(): T {
+        return Weak<T>.load(this.slot);
+    }
+
+    /// Removes the registration early (optional — happens automatically when either side dies).
+    public fun release(): void {
+        Weak<T>.release_raw(this.slot);
+    }
+
+    del() {
+        Weak<T>.release_raw(this.slot);
+    }
+
+    @runtime("weakBind")
+    static extern fun bind(borrow target_obj: T): long;
+
+    @runtime("weakDead")
+    static extern fun dead(slot: long): bool;
+
+    @runtime("weakLoad")
+    static extern fun load(slot: long): T;
+
+    @runtime("weakReleaseRaw")
+    static extern fun release_raw(slot: long): void;
+}

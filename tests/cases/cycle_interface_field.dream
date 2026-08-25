@@ -1,0 +1,21 @@
+// An interface-typed field that could hold a back-reference to the enclosing class
+// is conservatively treated as a strong reference: Node -> Handler -> Impl -> Node.
+
+interface Handler {
+    borrow fun handle(): void;
+}
+
+class Node {
+    handler: Option<Handler>;
+    public constructor() { this.handler = Option.None; }
+}
+
+class HandlerImpl : Handler {
+    node: Option<Node>;
+    public constructor() { this.node = Option.None; }
+    public fun handle(): void {}
+}
+
+fun main(): void {
+    
+}

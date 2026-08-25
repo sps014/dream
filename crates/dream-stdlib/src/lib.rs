@@ -61,6 +61,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/string_builder.dream"),
             ),
             (
+                "<std>/system/core/weak.dream",
+                include_str!("system/core/weak.dream"),
+            ),
+            (
                 "<std>/system/core/collection_tuning.dream",
                 include_str!("system/core/collection_tuning.dream"),
             ),

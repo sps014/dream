@@ -13,6 +13,21 @@ Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored inline �
 
 `js` handles are not Dream heap objects, but they follow the same ownership rules: when the last Dream owner drops, the JS value can be collected. See [The `js` type](js-type.md).
 
+## Safety guarantees
+
+Dream's type system and compiler enforce the following in safe code — no `unsafe` block, no annotation, no discipline required:
+
+| Guarantee | How |
+|---|---|
+| No use-after-free | ARC retains on every read; both owners hold valid references |
+| No double-free | Each release path decrements exactly once |
+| No out-of-bounds read | Bounds-checked indexing panics with a clear message |
+| Cycle leaks rejected | Compile-time reference-cycle detection covers direct, indirect, tuple, value-struct, interface-typed, and closure-capture shapes |
+| Constructor side effects preserved | Constructor bodies always run at allocation sites |
+| Global/local scope separation | Top-level variables are file-scoped; function locals shadow them cleanly |
+
+When these guarantees are not enough, the `@unsafe` tier (`Pointer<T>`, `Buffer.realloc`, `Buffer.free`) provides manual control with explicit opt-in.
+
 ## Raw buffers and custom containers
 
 `T[]` is always safe to use directly — including as the backing storage of your own data
@@ -61,6 +76,17 @@ fun main() {
     println(result[0]);
 } // result leaves scope -> count 0 -> freed instantly
 ```
+
+## Known boundaries
+
+The following are documented limitations, not silent unsoundness — each degrades to a
+detectable pattern or an explicit opt-out rather than memory corruption:
+
+| Boundary | Status |
+|---|---|
+| Cycles routed through `object`-typed loose references | Deferred: requires runtime type introspection to trace |
+| JS↔Dream cross-collector cycles | Interop boundary is weak-by-convention; use id-based protocols |
+| Data races across threads | Conventional locks (`@shared` + `Lock`); compiler-proven freedom deferred |
 
 ## Advanced: reference cycles
 

@@ -256,7 +256,21 @@ impl<'a> Analyzer<'a> {
                         }
                         out
                     }
-                    _ => Vec::new(),
+                    // Interface-typed fields: resolve to every implementing class —
+                    // a conservative over-approximation that catches cross-interface cycles.
+                    _ => {
+                        if self.is_interface_name(&token.text) {
+                            let mut out = Vec::new();
+                            for (class_name, ifaces) in &self.implements {
+                                if ifaces.iter().any(|i| i == &token.text) {
+                                    out.push(class_name.clone());
+                                }
+                            }
+                            out
+                        } else {
+                            Vec::new()
+                        }
+                    }
                 }
             }
             _ => Vec::new(),

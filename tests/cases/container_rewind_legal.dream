@@ -1,0 +1,29 @@
+// Rewinding a counter without clearing slots is safe — dead slots hold valid references
+// until the array is dropped, at which point every slot releases. No compile error.
+
+import system;
+import system.collections;
+
+class Cache {
+    entries: string[];
+    count: int;
+    public constructor() {
+        this.entries = Buffer.alloc<string>(16);
+        this.count = 0;
+    }
+    public fun add(v: string): void {
+        if (this.count >= this.entries.length) { return; }
+        this.entries[this.count] = v;
+        this.count = this.count + 1;
+    }
+    public fun reset(): void { this.count = 0; }
+    public fun len(): int { return this.count; }
+}
+
+fun main(): void {
+    let c = Cache();
+    c.add("hello");
+    c.add("world");
+    c.reset();
+    System.println(c.len().to_string());
+}

@@ -1,0 +1,23 @@
+// `Buffer.clear` and `Buffer.truncate` eagerly release managed elements through normal ARC
+// store semantics. After clearing, the heap returns to its pre-allocation state.
+
+import system;
+import system.collections;
+
+fun churn(): void {
+    let buf = Buffer.alloc<string>(16);
+    buf[0] = "alpha";
+    buf[1] = "beta";
+    buf[2] = "gamma";
+    Buffer.truncate(buf, 2);
+    let before = Debug.live_objects();
+    Buffer.clear(buf);
+    System.println("cleared");
+}
+
+fun main(): void {
+    let base = Debug.live_objects();
+    churn();
+    let delta = Debug.live_objects() - base;
+    System.println(delta.to_string());
+}

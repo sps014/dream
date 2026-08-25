@@ -322,6 +322,16 @@ impl<'a> Analyzer<'a> {
         // Constructor call: `Struct(args)` / `Struct<T>(args)`. Only treated as a constructor
         // when no free function (concrete or generic) shadows the name, so prelude factory
         // functions such as `List<T>()` keep their behaviour.
+        if std::env::var("DREAM_TRACE_CTOR").is_ok() {
+            eprintln!(
+                "[gate] {} fn_exists={} overloaded={} generic_fn={} is_struct={}",
+                function_name,
+                self.function_table.get_function(&function_name).is_ok(),
+                self.function_table.is_overloaded(&function_name),
+                self.generic_functions.contains_key(&function_name),
+                self.struct_table.get_struct(&function_name).is_some(),
+            );
+        }
         if self.function_table.get_function(&function_name).is_err()
             && !self.function_table.is_overloaded(&function_name)
             && !self.generic_functions.contains_key(&function_name)
@@ -337,6 +347,9 @@ impl<'a> Analyzer<'a> {
                     .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
                     .collect()
             });
+            if std::env::var("DREAM_TRACE_CTOR").is_ok() {
+                eprintln!("[ctor-path] reached for {}", name.text);
+            }
             let (t, resolved_ctor_name) = self.analyze_constructor_call(
                 name,
                 &concrete_generic_args,
@@ -369,6 +382,17 @@ impl<'a> Analyzer<'a> {
                     // re-deriving the (now ambiguous) bare `{concrete_name}_constructor` name.
                     let ctor_def_name =
                         resolved_ctor_name.unwrap_or_else(|| constructor_fn(&concrete_name));
+                    if std::env::var("DREAM_TRACE_CTOR").is_ok() {
+                        eprintln!(
+                            "[new] {} ctor_def={} found={}",
+                            concrete_name,
+                            ctor_def_name,
+                            self.type_ctx
+                                .defs
+                                .lookup(dream_types::DefKind::Function, &ctor_def_name)
+                                .is_some()
+                        );
+                    }
                     let ctor = self
                         .type_ctx
                         .defs

@@ -22,6 +22,7 @@ use super::*;
 use dream_syntax::nodes::function::ReceiverMode;
 use dream_syntax::nodes::statement::StatementNode;
 use dream_text::text_span::TextSpan;
+use std::collections::HashMap as StdHashMap;
 
 /// Flat events emitted in source order by the structural walk; interpreted afterwards.
 #[derive(Debug, Clone)]
@@ -44,6 +45,8 @@ enum Ev {
         name: String,
         span: TextSpan,
     },
+    /// `let to = from;` / `to = from;` where `from` is an object-typed name — the two names
+    /// may reference the same instance (proven-alias edge for group tracking).
     /// For-each loop opens an anonymous borrow on the iterable for its body.
     ScopedOpen {
         underlying: String,
@@ -79,26 +82,17 @@ fn type_owner_name(ty: &Type) -> Option<String> {
     }
 }
 
-fn canonical_recv(
-    expr: &ExpressionNode,
-    aliases_this: &[String],
-) -> Option<String> {
+
+/// Builds a dotted-chain key from any member-access expression rooted at an identifier.
+/// `o.inner.items` -> `"o.inner.items"`; non-member roots return the expression's own key.
+fn canonical_chain_from(expr: &ExpressionNode) -> Option<String> {
     match expr {
-        ExpressionNode::Identifier(t) => {
-            if t.text == "this" || aliases_this.contains(&t.text) {
-                Some("this".to_string())
-            } else {
-                Some(t.text.clone())
-            }
-        }
+        ExpressionNode::Identifier(t) => Some(t.text.clone()),
         ExpressionNode::MemberAccess(base, member) => {
-            let base_key = match &**base {
-                ExpressionNode::Identifier(t) if t.text == "this" => "this".to_string(),
-                _ => return None,
-            };
+            let base_key = canonical_chain_from(base)?;
             Some(format!("{base_key}.{}", member.text))
         }
-        ExpressionNode::Parenthesized(_, inner) => canonical_recv(inner, aliases_this),
+        ExpressionNode::Parenthesized(_, inner) => canonical_chain_from(inner),
         _ => None,
     }
 }
@@ -164,26 +158,9 @@ impl<'s> Extractor<'s> {
     /// Canonical key for a receiver we can track; also records local-class inference for
     /// constructor-initialized locals.
     fn recv_key(&mut self, expr: &ExpressionNode) -> Option<String> {
-        match expr {
-            ExpressionNode::Identifier(t) => {
-                if t.text == "this" || self.aliases_this.contains(&t.text) {
-                    Some("this".to_string())
-                } else {
-                    Some(t.text.clone())
-                }
-            }
-            ExpressionNode::MemberAccess(base, member) => {
-                let base_is_this =
-                    matches!(&**base, ExpressionNode::Identifier(ref t) if t.text == "this");
-                if base_is_this {
-                    Some(format!("this.{}", member.text))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+        canonical_chain_from(expr)
     }
+
 
     /// Kills any prior binding of `name`, walks the initializer (so nested calls/refs are seen),
     /// then opens/aliases when the initializer produces a view.
@@ -335,33 +312,22 @@ fn compute_view_summaries<'a>(node: &'a ProgramNode<'a>) -> HashMap<String, View
     out
 }
 
-/// Interprets the flat event stream, reporting violations.
-#[allow(clippy::too_many_arguments)]
+/// Interprets the flat event stream with **group-keyed** tracking: names proven to reference
+/// the same instance (assignment, view construction) share a group root, so a mutation through
+/// one name conflicts with live views opened through any other name in the group.
 fn interpret_events(
     events: &[Ev],
     owner: &str,
     receiver_modes: &HashMap<String, ReceiverMode>,
-    field_types: &indexmap::IndexMap<String, String>,
+    chain_owners: &StdHashMap<String, String>,
     local_class: &[(String, String)],
     file_path: &Option<Rc<str>>,
     diagnostics: &mut DiagnosticBag,
 ) {
     use std::collections::HashMap as StdHashMap;
 
-    // Precompute the LAST event index referencing each name over the whole stream — a cursor
-    // is "still needed" at a mutation point iff its final reference comes later. Computing
-    // this incrementally during the forward walk would miss future references entirely.
+    // --- Last-reference precompute: final index of each tracked name ----------------------
     let mut last_ref: StdHashMap<String, usize> = StdHashMap::new();
-    let mut scoped: Vec<(String, TextSpan)> = Vec::new(); // (underlying, opened)
-    let mut live: Vec<(String, String)> = Vec::new();
-
-    if std::env::var("DREAM_TRACE_BORROW").is_ok() {
-        for (i, ev) in events.iter().enumerate() {
-            eprintln!("[borrow {i}] {:?}", ev);
-        }
-        eprintln!("local_class: {:?}", local_class);
-    }
-    let _ = std::env::var("DREAM_TRACE_BORROW");
     for (idx, ev) in events.iter().enumerate() {
         let named: Option<&String> = match ev {
             Ev::Open { cursor, .. } => Some(cursor),
@@ -376,60 +342,58 @@ fn interpret_events(
                 .or_insert(idx);
         }
     }
+    let mut scoped: Vec<(String, TextSpan)> = Vec::new();
+    let mut live_cursors: Vec<(String, String)> = Vec::new(); // (cursor, underlying key)
+
+    // --- Alias groups --------------------------------------------------------------------
+    // name -> group root. Groups merge on object aliasing; views record the GROUP ROOT of
+    // their underlying so mutations through any group member are caught.
+    // Alias groups: names assigned from each other share a group root. Views record the
+    // group root of their underlying so mutations through any group member are caught.
+    if std::env::var("DREAM_TRACE_BORROW").is_ok() {
+        for (i, ev) in events.iter().enumerate() {
+            eprintln!("[borrow {i}] {:?}", ev);
+        }
+    }
+    let _ = std::env::var("DREAM_TRACE_BORROW");
+
     for (i, ev) in events.iter().enumerate() {
         match ev {
             Ev::Open { cursor, underlying, .. } => {
-                live.retain(|(n, _)| n != cursor);
-                live.push((cursor.clone(), underlying.clone()));
+                live_cursors.retain(|(n, _)| n != cursor);
+                live_cursors.push((cursor.clone(), underlying.clone()));
             }
             Ev::Alias { from, to } => {
-                if let Some(u) = live.iter().find(|(n, _)| n == from).map(|(_, u)| u.clone()) {
-                    live.retain(|(n, _)| n != to);
-                    live.push((to.clone(), u));
+                if let Some(u) = live_cursors
+                    .iter()
+                    .find(|(n, _)| n == from)
+                    .map(|(_, u)| u.clone())
+                {
+                    live_cursors.retain(|(n, _)| n != to);
+                    live_cursors.push((to.clone(), u));
                 }
             }
             Ev::Ref { .. } | Ev::Rebind { .. } => {}
             Ev::ScopedOpen { underlying, span } => {
-                scoped.push((underlying.clone(), *span));
+                let root = underlying.clone();
+                scoped.push((root, *span));
             }
             Ev::ScopedClose => {
                 scoped.pop();
             }
             Ev::UniqueCandidate { recv, name: callee, span } => {
-                if std::env::var("DREAM_TRACE_BORROW").is_ok() {
-                    eprintln!(
-                        "[cand {i}] recv={recv} callee={callee} cls={:?} mode={:?} live={:?} scoped={:?}",
-                        local_class.iter().rev().find(|(n, _)| n == recv).map(|(_, c)| c),
-                        receiver_modes.get(&format!(
-                            "{}::{callee}",
-                            if recv == "this" {
-                                owner.to_string()
-                            } else if let Some(f) = recv.strip_prefix("this.") {
-                                field_types.get(f).cloned().unwrap_or_default()
-                            } else {
-                                local_class
-                                    .iter()
-                                    .rev()
-                                    .find(|(n, _)| n == recv)
-                                    .map(|(_, c)| c.clone())
-                                    .unwrap_or_default()
-                            }
-                        )),
-                        live,
-                        scoped,
-                    );
-                }
-                // Resolve the callee's receiver mode.
+                // Resolve receiver's class + its group root. Deep chains (`this.a.b`) walk
+                // the precomputed chain-owner table.
                 let cls = if recv == "this" {
                     Some(owner.to_string())
-                } else if let Some(f) = recv.strip_prefix("this.") {
-                    field_types.get(f).cloned()
-                } else {
+                } else if !recv.contains('.') {
                     local_class
                         .iter()
                         .rev()
                         .find(|(n, _)| n == recv)
                         .map(|(_, c)| c.clone())
+                } else {
+                    chain_owners.get(recv).cloned()
                 };
                 let Some(cls) = cls else { continue };
                 let mode = receiver_modes
@@ -439,37 +403,36 @@ fn interpret_events(
                 if mode != ReceiverMode::Unique {
                     continue;
                 }
-                // Strong cursors on this underlying, still referenced later?
-                let strong_hit = live
+                let recv_root = recv.clone();
+                // Strong cursor on this group, still referenced later?
+                let strong_hit = live_cursors
                     .iter()
-                    .find(|(_, u)| u == recv)
+                    .find(|(_, u)| u == &recv_root)
                     .and_then(|(n, _)| last_ref.get(n))
                     .map(|&last| last > i)
                     .unwrap_or(false);
-                let scoped_hit = scoped.iter().any(|(u, _)| u == recv);
+                let scoped_hit = scoped.iter().any(|(u, _)| *u == recv_root);
                 if std::env::var("DREAM_TRACE_BORROW").is_ok() {
                     eprintln!(
-                        "[verdict] recv={recv} callee={callee} strong={strong_hit} scoped={scoped_hit} live={live:?} last_cur={:?}",
-                        live
-                            .iter()
-                            .find(|(n, _)| n == "cur")
-                            .and_then(|(n, _)| last_ref.get(n)),
+                        "[verdict] recv={recv} callee={callee} strong={strong_hit} scoped={scoped_hit} cursors={live_cursors:?}"
                     );
                 }
                 if strong_hit || scoped_hit {
                     let opened = scoped
                         .iter()
-                        .find(|(u, _)| u == recv)
+                        .find(|(u, _)| *u == recv_root)
                         .map(|(_, s)| *s)
                         .or_else(|| {
-                            live.iter()
+                            live_cursors
+                                .iter()
                                 .rev()
                                 .find(|(n, u)| {
-                                    u == recv && last_ref.get(n).map(|&l| l > i).unwrap_or(false)
+                                    u == &recv_root
+                                        && last_ref.get(n).map(|&l| l > i).unwrap_or(false)
                                 })
-                                .and_then(|(n, _)| {
+                                .and_then(|(cn, _)| {
                                     events.iter().find_map(|ev| match ev {
-                                        Ev::Open { cursor, span, .. } if cursor == n => {
+                                        Ev::Open { cursor, span, .. } if cursor == cn => {
                                             Some(*span)
                                         }
                                         _ => None,
@@ -496,8 +459,7 @@ fn interpret_events(
 }
 
 impl<'a> Analyzer<'a> {
-    /// W6-B entry point. Runs on clean programs after receiver modes are known.
-    pub(in crate::analyzer) fn check_borrow_collisions(
+pub(in crate::analyzer) fn check_borrow_collisions(
         &mut self,
         node: &'a ProgramNode<'a>,
         diagnostics: &mut DiagnosticBag,
@@ -514,6 +476,24 @@ impl<'a> Analyzer<'a> {
                     field_types.insert(f.name.text.clone(), owner);
                 }
                 class_fields.push(f.name.text.clone());
+            }
+
+            // Deep-chain owner table: `"this.a.b" -> OwnerOfB` for chains of fields whose
+            // types resolve through the struct table (depth ≤ 3).
+            let mut chain_owners: StdHashMap<String, String> = StdHashMap::new();
+            for f in s.fields.iter() {
+                let fname = f.name.text.clone();
+                if let Some(owner1) = type_owner_name(&f.field_type) {
+                    chain_owners.insert(format!("this.{fname}"), owner1.clone());
+                    if let Some(info1) = self.struct_table.get_struct(&owner1) {
+                        for (sub_name, sub_info) in info1.fields.iter() {
+                            if let Some(owner2) = type_owner_name(&sub_info.type_) {
+                                let key = format!("this.{fname}.{sub_name}");
+                                chain_owners.insert(key, owner2);
+                            }
+                        }
+                    }
+                }
             }
 
             for m in &s.methods {
@@ -534,7 +514,7 @@ impl<'a> Analyzer<'a> {
                     &ex.events,
                     &s.name.text,
                     &self.receiver_modes,
-                    &field_types,
+                    &chain_owners,
                     &ex.local_class,
                     &s.file_path,
                     diagnostics,
@@ -556,12 +536,35 @@ impl<'a> Analyzer<'a> {
                 local_class: Vec::new(),
             };
             ex.walk_block(f.body, &indexmap::IndexMap::new(), &[]);
+            if std::env::var("DREAM_TRACE_BORROW").is_ok() {
+                eprintln!("[free-fn {}] {} events", f.name.text, ex.events.len());
+            }
 
+            // Local-rooted chains: `o.inner.items` -> resolve o's class, then walk fields.
+            let mut chain_owners: StdHashMap<String, String> = StdHashMap::new();
+            for (local_name, local_cls) in &ex.local_class {
+                if let Some(info) = self.struct_table.get_struct(local_cls) {
+                    for (fname, finfo) in info.fields.iter() {
+                        let key = format!("{local_name}.{fname}");
+                        if let Some(owner1) = type_owner_name(&finfo.type_) {
+                            chain_owners.insert(key.clone(), owner1.clone());
+                            if let Some(sub) = self.struct_table.get_struct(&owner1) {
+                                for (sub_name, sub_finfo) in sub.fields.iter() {
+                                    let deep = format!("{key}.{sub_name}");
+                                    if let Some(owner2) = type_owner_name(&sub_finfo.type_) {
+                                        chain_owners.insert(deep, owner2.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             interpret_events(
                 &ex.events,
                 "",
                 &self.receiver_modes,
-                &indexmap::IndexMap::new(),
+                &chain_owners,
                 &ex.local_class,
                 &f.file_path,
                 diagnostics,
@@ -611,7 +614,7 @@ impl<'s> Extractor<'s> {
         field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
-        match canonical_recv(receiver, &self.aliases_this) {
+        match canonical_chain_from(receiver) {
             Some(recv_key) => {
                 // Calling through a cursor keeps it alive — record the reference.
                 self.events.push(Ev::Ref {
@@ -702,7 +705,7 @@ impl<'s> Extractor<'s> {
                 self.emit_binding_and_init(&name_tok.text, value, field_types, class_fields);
             }
             StatementNode::MemberAssignment(target, name, value) => {
-                if let Some(key) = canonical_recv(target, &self.aliases_this) {
+                if let Some(key) = canonical_chain_from(target) {
                     if let Some(span) = Some(name.position) {
                         self.events.push(Ev::UniqueCandidate {
                             recv: key.clone(),
@@ -723,7 +726,7 @@ impl<'s> Extractor<'s> {
                 self.walk_expr(value, field_types, class_fields);
             }
             StatementNode::IndexAssignment(target, index, value) => {
-                if let Some(key) = canonical_recv(target, &self.aliases_this) {
+                if let Some(key) = canonical_chain_from(target) {
                     if let Some(span) = target_span_opt(target) {
                         self.events.push(Ev::UniqueCandidate {
                             recv: key.clone(),
@@ -783,7 +786,7 @@ impl<'s> Extractor<'s> {
             StatementNode::Labeled(_, inner) => self.walk_stmt(inner, field_types, class_fields),
             StatementNode::ForEach(_, iterable, _, _, body) => {
                 if let (Some(u), Some(span)) =
-                    (canonical_recv(iterable, &self.aliases_this), init_span(iterable))
+                    (canonical_chain_from(iterable), init_span(iterable))
                 {
                     self.events.push(Ev::ScopedOpen { underlying: u, span });
                     self.walk_block(body, field_types, class_fields);
@@ -838,7 +841,7 @@ impl<'s> Extractor<'s> {
                 self.walk_expr(inner, field_types, class_fields)
             }
             ExpressionNode::IncDec { target, .. } => {
-                if let Some(key) = canonical_recv(target, &self.aliases_this) {
+                if let Some(key) = canonical_chain_from(target) {
                     if let Some(span) = target_span_opt(target) {
                         self.events.push(Ev::UniqueCandidate {
                             recv: key,

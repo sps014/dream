@@ -129,8 +129,13 @@ impl Lowerer<'_> {
         let union_ty = scrutinee.ty;
         let ptr = self.lower_operand(scrutinee);
         let disc = self.b.new_temp(self.interner.int());
-        self.b
-            .assign(Place::Local(disc), Rvalue::Discriminant(ptr.clone()));
+        self.b.assign(
+            Place::Local(disc),
+            Rvalue::Discriminant {
+                base: ptr.clone(),
+                ty: union_ty,
+            },
+        );
 
         let default_blk = self.b.new_block();
         let join = self.b.new_block();

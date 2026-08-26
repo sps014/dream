@@ -23,7 +23,9 @@ interface Writable {
 }
 
 interface ReadWrite : Readable + Writable {
-    fun flush(): void;
+    // Implementors reset state here, so the contract must grant mutation rights
+    // (signature-only methods default to borrow; a mutating body infers unique).
+    unique fun flush(): void;
 }
 
 class Store : ReadWrite {

@@ -166,7 +166,23 @@ enum Either {
 }
 ```
 
-This relaxation is opt-in via `@stack` rather than automatic, because some existing patterns (a `weak` field typed `Option<SomeClass>`, for instance) depend on `Option<T>` staying a heap reference whenever `T` itself is a reference type — see [Memory](memory.md).
+This relaxation is opt-in via `@stack` rather than automatic, because a union with several
+reference payloads across variants has no single niche to exploit. Unions with *exactly one*
+reference payload (see the next section) are handled automatically instead.
+
+#### Niche unions: `Option<Class>` is the pointer itself
+
+A union with **exactly two variants — one empty, one carrying a single reference-typed
+payload** (`Option<TreeNode>`, `Option<string>`, ...) gets a third representation: the value
+*is* the payload pointer. `None` is null, `Some(x)` is `x` — no envelope block, no allocation,
+and no retain/release pair per edge beyond the payload's own refcount. Pattern matching still
+works unchanged (`switch` on the subject compiles to a null test), and `weak` fields typed
+`Option<Class>` store the raw pointer, reset to null when the referent dies.
+
+Like value unions this is decided per concrete instantiation (`Option<int>` stays an inline
+value union; `Option<JsValue>`-style unions with more than two variants or extra payloads keep
+the heap representation). See the [nullable design note](../internals/09-nullable-purge-design-note.md)
+for why this coexists with the "no `TyKind::Nullable`" rule from the purge.
 
 ### JSON with `@json`
 

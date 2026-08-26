@@ -75,6 +75,9 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         };
         functions.push(lower_function(&init_fn, interner));
     }
+    for f in &mut functions {
+        canonicalize_niche_unions(f, interner, &hir.layouts);
+    }
     let globals = hir
         .globals
         .iter()
@@ -97,6 +100,51 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
 
 fn stmts_have_defer(stmts: &[HStmt]) -> bool {
     stmts.iter().any(stmt_has_defer)
+}
+
+/// Rewrite niche-union constructions into plain scalar assignments before any pass (notably RC
+/// insertion) models them. A niche union *is* its payload pointer, so `Some(x)` is a copy of `x`
+/// and `None` is null — the fresh-allocation semantics `UnionNew` normally carries would
+/// under-/over-count ownership for this representation.
+///
+/// Weak/unowned destinations are exempt: storing into them must not consume the source's
+/// ownership token (the referent stays owned by the lexical local until scope end), which is
+/// exactly the non-move "callee-style retain" semantics the untouched `UnionNew` keeps.
+fn canonicalize_niche_unions(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
+) {
+    let non_strong_dest = |func: &MirFunction, place: &Place| -> bool {
+        let Place::Field { base, field, .. } = place else {
+            return false;
+        };
+        layouts
+            .get(func.local_ty(*base))
+            .and_then(|layout| layout.fields.get(*field))
+            .map(|f| f.is_weak || f.is_unowned)
+            .unwrap_or(false)
+    };
+    for bi in 0..func.blocks.len() {
+        for si in 0..func.blocks[bi].stmts.len() {
+            let can_rewrite = match &func.blocks[bi].stmts[si] {
+                Statement::Assign(place @ Place::Field { .. }, Rvalue::UnionNew { ty, .. }) => {
+                    interner.is_niche_union(*ty) && !non_strong_dest(func, place)
+                }
+                Statement::Assign(_, Rvalue::UnionNew { ty, .. }) => interner.is_niche_union(*ty),
+                _ => false,
+            };
+            if !can_rewrite {
+                continue;
+            }
+            let (place, arg) = match &func.blocks[bi].stmts[si] {
+                Statement::Assign(p, Rvalue::UnionNew { args, .. }) => (p.clone(), args.first().cloned()),
+                _ => unreachable!("checked above"),
+            };
+            let v = arg.unwrap_or(Operand::Const(Const::Null));
+            func.blocks[bi].stmts[si] = Statement::Assign(place, Rvalue::Use(v));
+        }
+    }
 }
 
 fn stmt_has_defer(stmt: &HStmt) -> bool {
@@ -198,7 +246,12 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
 /// `switch`, ternary arms). `return` becomes [`Terminator::AsyncComplete`]; falling off the end
 /// completes the task with no value. The async backend ([`crate::async_emit`]) turns each
 /// `Await`'s `resume` block id into the saved poll state.
-pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFunction {
+#[allow(clippy::too_many_arguments)]
+pub fn lower_async_poll_body(
+    func: &HFunction,
+    interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
+) -> MirFunction {
     let (b, locals) = init_builder(func, true);
     let mut lo = Lowerer {
         b,
@@ -215,6 +268,9 @@ pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFu
     }
     let mut f = lo.b.finish();
     f.ret = func.ret;
+    // Poll bodies are lowered on demand by the backend (bypassing `lower_program`), so they
+    // need the same niche-union canonicalization as ordinary functions.
+    canonicalize_niche_unions(&mut f, interner, layouts);
     f
 }
 

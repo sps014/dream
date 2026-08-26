@@ -49,7 +49,7 @@ pub(super) fn compute(cx: &Cx<'_>) -> ProtocolReach {
         .filter_map(|f| {
             f.hir_fn
                 .as_ref()
-                .map(|hir| crate::lower::lower_async_poll_body(hir, cx.interner))
+                .map(|hir| crate::lower::lower_async_poll_body(hir, cx.interner, &cx.mir.layouts))
         })
         .collect();
     funcs.extend(lowered.iter());

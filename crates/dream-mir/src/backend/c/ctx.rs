@@ -77,6 +77,23 @@ impl<'a> Cx<'a> {
         self.native.unions.get(&ty)
     }
 
+    /// For a niche union, `(payload-variant discriminant, empty-variant discriminant)`. The
+    /// classification guarantees exactly one variant of each shape.
+    pub(super) fn niche_variant_discriminants(&self, ty: TypeId) -> Option<(i32, i32)> {
+        if !self.interner.is_niche_union(ty) {
+            return None;
+        }
+        let u = self.nunion(ty)?;
+        let (some, none) = u
+            .variants
+            .iter()
+            .partition::<Vec<_>, _>(|v| !v.fields.is_empty());
+        match (some.first(), none.first()) {
+            (Some(s), Some(n)) => Some((s.discriminant, n.discriminant)),
+            _ => None,
+        }
+    }
+
     pub(super) fn str_sym(&self, s: &str) -> &str {
         self.strings.get(s).unwrap_or_else(|| {
             crate::internal_error!("string literal {s:?} was not interned before C codegen")

@@ -7,5 +7,8 @@ fun main(): void {
     let items = List<int>();
     items.push(10);
     let cur = items.iterator();
+    // The cursor's last reference is *after* this mutation, so the live view makes it a
+    // compile error. (A cursor never read again would be dead by last-use liveness.)
     items.push(99);
+    System.println(cur.next().unwrap_or(-1));
 }

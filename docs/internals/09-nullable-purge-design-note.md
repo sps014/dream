@@ -85,6 +85,17 @@ Net effect: `Option<StructType>` now costs the same as `StructType?` did before 
 null-checkable inline slot, zero heap allocation — closing the one deliberate regression this note
 originally accepted.
 
+**Second superseding decision (Aug 2026): niche unions for single-reference payloads.** The
+remaining shape — exactly two variants, one empty, one carrying a *single reference-typed*
+payload (`Option<Class>`, `Option<string>`) — is now represented as the payload pointer itself
+(`None` = null, `Some(x)` = `x`). This is still not an `Option`-specific path (the rule is
+structural: variant/payload shape), so the no-bifurcation principle holds; it is a third
+representation class beside value unions, keyed per monomorphized `TypeId`
+(`TypeInterner::mark_niche_union`). It eliminates the last per-edge taxes on optional
+references: the envelope allocation and its retain/release pair. `weak` fields typed
+`Option<Class>` store the raw pointer and are reset to null by the weak registry on referent
+death (registry kind 2), which is simpler than the boxed scheme they previously required.
+
 ## Net effect on migration
 
 With these three decisions fixed, `removal-nullable-implementation` reduces to:

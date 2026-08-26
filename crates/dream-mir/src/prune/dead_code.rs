@@ -311,7 +311,7 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         | Rvalue::ConcatInt { .. }
         | Rvalue::EnumName { .. }
         | Rvalue::ArrayLen(_)
-        | Rvalue::Discriminant(_) => {}
+        | Rvalue::Discriminant { .. } => {}
     }
 }
 
@@ -658,7 +658,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
-        | Rvalue::Discriminant(o)
+        | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::EnumName { value: o, .. }

@@ -974,7 +974,7 @@ fn build_async_pair(
         poll.ret(Some(Expr::i(0)));
         return (build_sync(cx, stub), poll);
     };
-    let mut body = crate::lower::lower_async_poll_body(hir, cx.interner);
+    let mut body = crate::lower::lower_async_poll_body(hir, cx.interner, &cx.mir.layouts);
     let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
     let fut = cx.target.abi().future;
     let slots = crate::async_emit::layout_async_slots(
@@ -1324,7 +1324,7 @@ fn emit_fn_typedefs(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         }
         if f.is_async {
             if let Some(hir) = f.hir_fn.as_ref() {
-                let body = crate::lower::lower_async_poll_body(hir, cx.interner);
+                let body = crate::lower::lower_async_poll_body(hir, cx.interner, &cx.mir.layouts);
                 for decl in &body.locals {
                     add(decl.ty);
                 }

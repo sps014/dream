@@ -145,7 +145,7 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
-        | Rvalue::Discriminant(o)
+        | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => operand_local_reads(o, local),

@@ -14,9 +14,35 @@ pub(super) fn retain_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
     }
 }
 
+/// For a niche union, the release/destroy symbol of its single reference payload. A niche
+/// envelope *is* the payload pointer, so ARC ops must run the payload's own cascade (a flat
+/// `dream_release` would free a class node without tearing down its fields). All generated
+/// `release_*`/`destroy_*` bodies start with their own null check, so forwarding is safe.
+pub(super) fn niche_payload_glue(cx: &Cx<'_>, ty: TypeId, destroy: bool) -> Option<String> {
+    if !cx.interner.is_niche_union(ty) {
+        return None;
+    }
+    let u = cx.mir.layouts.unions.get(&ty)?;
+    let field = u
+        .variants
+        .iter()
+        .find(|v| !v.fields.is_empty())?
+        .fields
+        .first()?;
+    Some(if destroy {
+        destroy_sym(cx, field.ty)
+    } else {
+        release_sym(cx, field.ty)
+    })
+}
+
 pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
     let interner = cx.interner;
     let mir = cx.mir;
+    // A niche union *is* its payload pointer — run the payload's release cascade.
+    if let Some(sym) = niche_payload_glue(cx, ty, false) {
+        return sym;
+    }
     match interner.kind(ty) {
         TyKind::Js if cx.target.is_wasm32() => "js_release".into(),
         TyKind::Struct(..) | TyKind::Union(..) => {
@@ -40,6 +66,10 @@ pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
 }
 
 pub(super) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
+    // A niche union *is* its payload pointer — destroying it uniquely destroys the payload.
+    if let Some(sym) = niche_payload_glue(cx, ty, true) {
+        return sym;
+    }
     if matches!(cx.interner.kind(ty), TyKind::Js | TyKind::Func(..))
         || cx.interner.is_shared_type(ty)
         || matches!(cx.interner.kind(ty), TyKind::Prim(dream_types::PrimTy::String))
@@ -236,7 +266,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         collect_array_elems(interner, f, &mut array_elems);
         if f.is_async {
             if let Some(hir) = f.hir_fn.as_ref() {
-                let body = crate::lower::lower_async_poll_body(hir, interner);
+                let body = crate::lower::lower_async_poll_body(hir, interner, &cx.mir.layouts);
                 collect_array_elems(interner, &body, &mut array_elems);
             }
         }

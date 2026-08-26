@@ -557,6 +557,44 @@ impl<'a> Emitter<'a> {
         rv: &crate::Rvalue,
         rhs: Expr,
     ) -> Expr {
+        // Niche-encoded weak field: the slot holds the raw payload pointer (`None` = NULL).
+        // Registered with kind 2, so when the referent dies the runtime nulls the slot
+        // directly — no unmanaged envelope box, and an overwrite just swaps the pointer.
+        if self.cx.interner.is_niche_union(fld.ty) {
+            let slot = Expr::field_ptr(base.0, fld.offset);
+            // The niche `UnionNew` emitter retained a non-moved payload (callee-style copy).
+            // A weak slot takes no ownership, so drop that retain again — exactly what the
+            // boxed path did by releasing the temp union after memcpy.
+            let retain_copy = unique_move_src(self.f, self.cx.interner, rv).is_none();
+            return self.b.expr_block(|b| {
+                let new = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
+                let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
+                b.stmt(Stmt::store(CTy::Ptr, slot.clone(), new.clone()));
+                b.stmt(Stmt::if_(
+                    old.clone(),
+                    Stmt::call(
+                        "dream_weak_unregister",
+                        vec![old.clone(), Expr::cast(CTy::Ptr, slot.clone())],
+                    ),
+                ));
+                b.stmt(Stmt::if_(
+                    new.clone(),
+                    Stmt::call(
+                        "dream_weak_register",
+                        vec![
+                            new.clone(),
+                            Expr::cast(CTy::Ptr, slot.clone()),
+                            Expr::i(2),
+                            Expr::i(0),
+                        ],
+                    ),
+                ));
+                if retain_copy {
+                    b.call("dream_release", vec![new.clone()]);
+                }
+                new
+            });
+        }
         let Some(u) = self.cx.nunion(fld.ty) else {
             let slot = Expr::field_ptr(base.0, fld.offset);
             return self.b.expr_block(|b| {

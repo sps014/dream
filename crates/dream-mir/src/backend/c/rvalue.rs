@@ -230,13 +230,29 @@ impl<'a> Emitter<'a> {
                 )
             }
             Rvalue::Cast(v, from, to) => self.emit_cast(v, *from, *to),
-            Rvalue::Discriminant(o) => Expr::load(CTy::I32, Expr::dream_p(self.operand(o))),
+            Rvalue::Discriminant { base, ty } => {
+                // Niche union: the discriminant is recovered from nullness — exactly one
+                // payload variant and one empty variant (guaranteed by the classification).
+                if let Some((some_disc, none_disc)) = self.cx.niche_variant_discriminants(*ty) {
+                    let p = self.operand(base);
+                    return Expr::ternary(
+                        Expr::ne(p.clone(), Expr::Null),
+                        Expr::i(some_disc as i64),
+                        Expr::i(none_disc as i64),
+                    );
+                }
+                Expr::load(CTy::I32, Expr::dream_p(self.operand(base)))
+            }
             Rvalue::UnionField {
                 base,
                 ty,
                 variant,
                 field,
             } => {
+                // Niche union: the payload is the value itself — identity, no offset.
+                if self.cx.interner.is_niche_union(*ty) {
+                    return self.operand(base);
+                }
                 let u = self
                     .cx
                     .nunion(*ty)
@@ -275,8 +291,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn operand_kind(&self, o: &crate::Operand) -> Option<&TyKind> {
-        match o {
+    fn operand_kind(&self, o: &crate::Operand) -> Option<&TyKind> {        match o {
             crate::Operand::Copy(crate::Place::Local(l)) => {
                 Some(self.cx.interner.kind(self.f.local_ty(*l)))
             }
@@ -487,6 +502,40 @@ impl<'a> Emitter<'a> {
         variant: usize,
         args: &[crate::Operand],
     ) -> Expr {
+        // Niche union: the value *is* the payload pointer (`None` = NULL). No block, no malloc.
+        // A payload that is not a proven unique move is retained here (callee-style), matching
+        // `union_new_at`; the RC pass keeps such args Shared so the source outlives this
+        // statement — which is what weak-field stores of niche unions rely on.
+        if self.cx.interner.is_niche_union(ty) {
+            let arg = match args {
+                [a] => a.clone(),
+                _ => return Expr::Null,
+            };
+            let e = self.operand(&arg);
+            let moved = crate::backend::shared::unique_container_move_local(
+                self.f,
+                self.cx.interner,
+                &arg,
+            );
+            if moved.is_some() {
+                return e;
+            }
+            let payload_ty = self
+                .cx
+                .nunion(ty)
+                .and_then(|u| u.variants.iter().find(|v| !v.fields.is_empty()))
+                .and_then(|v| v.fields.first())
+                .map(|f| f.ty);
+            let Some(payload_ty) = payload_ty else {
+                return e;
+            };
+            let retain = crate::backend::c::release::retain_sym(self.cx, payload_ty).to_string();
+            return self.b.expr_block(|b| {
+                let t = b.temp(CTy::Ptr, Some(e));
+                b.stmt(Stmt::call(retain, vec![t.clone()]));
+                t
+            });
+        }
         let size = self
             .cx
             .nunion(ty)

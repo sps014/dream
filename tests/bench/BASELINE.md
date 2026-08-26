@@ -155,6 +155,13 @@ Same host as `./scripts/run-microbenches.sh`.
 
 ### Fresh baseline (Aug 2026 — supersedes tables below)
 
+> **Niche unions landed after this snapshot was taken**: `Option<ref>` is now the payload
+> pointer itself (`None` = null). Effects vs the table below: **binary_trees 190k → ~70-100k
+> ns/op (2-2.8×, at or better than C# 72k)**, json_deserialize 965→~900, regex_find 741→~700,
+> string/alloc rows all slightly better; linked_walk unchanged (~4-5k, C# 1.7k still ahead on
+> pointer chasing). The old headline finding "tracing GC beats ARC on tree churn" no longer
+> holds natively.
+
 Same host, `./scripts/run-microbenches.sh` — now a **three-way** table: Dream native C
 (cc -O3 LTO), Dream wasm32 under Node (`--wasm --release --runtime --node`), C# RyuJIT.
 Also records `.wasm`/gz/br sizes at `-O3`/`-Os`/`-Oz` into `out/wasm_sizes.txt`.

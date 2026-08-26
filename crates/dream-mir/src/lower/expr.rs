@@ -148,7 +148,10 @@ impl Lowerer<'_> {
                 let idx = self.lower_operand(index);
                 Rvalue::Use(Operand::Copy(Place::index(base, idx)))
             }
-            HExprKind::Discriminant(v) => Rvalue::Discriminant(self.lower_operand(v)),
+            HExprKind::Discriminant(v) => Rvalue::Discriminant {
+                base: self.lower_operand(v),
+                ty: v.ty,
+            },
             HExprKind::IsType { value, target } => {
                 Rvalue::IsType(self.lower_operand(value), *target)
             }

@@ -37,6 +37,11 @@ pub struct TypeInterner {
     /// value/primitive, e.g. `Option<int>`). Unlike value structs (marked per-`DefId`) value-ness is
     /// per-`TypeId`, because `Option<int>` (value) and `Option<string>` (heap) share one `DefId`.
     value_unions: HashSet<TypeId>,
+    /// Interned ids of *niche* unions: exactly one variant carries exactly one reference-typed
+    /// payload and every other variant is empty (`Option<TreeNode>`, `Option<string>`). Such a union
+    /// is represented as the payload pointer itself — `None` is `NULL`, `Some(x)` is `x` — so no
+    /// envelope block exists and no per-type release glue is needed.
+    niche_unions: HashSet<TypeId>,
 }
 
 impl Default for TypeInterner {
@@ -56,6 +61,7 @@ impl TypeInterner {
             static_defs: HashSet::new(),
             value_layouts: HashMap::new(),
             value_unions: HashSet::new(),
+            niche_unions: HashSet::new(),
         };
         // Pre-intern the nullary types so their ids are stable and cheap to reach.
         for prim in [
@@ -245,6 +251,17 @@ impl TypeInterner {
     /// True when `id` names a value union.
     pub fn is_value_union(&self, id: TypeId) -> bool {
         self.value_unions.contains(&id)
+    }
+
+    /// Records `id` as a *niche* union (single reference-payload variant + empty variants;
+    /// represented as the payload pointer itself, `None` = `NULL`). Idempotent.
+    pub fn mark_niche_union(&mut self, id: TypeId) {
+        self.niche_unions.insert(id);
+    }
+
+    /// True when `id` names a niche union (see [`Self::mark_niche_union`]).
+    pub fn is_niche_union(&self, id: TypeId) -> bool {
+        self.niche_unions.contains(&id)
     }
 
     /// True if `id` names a value type — a value (`struct`) type, a value union, or a tuple. All

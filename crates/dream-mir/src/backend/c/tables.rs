@@ -38,12 +38,13 @@ pub(super) fn intern_strings(
     mir: &Mir,
     interner: &dream_types::TypeInterner,
 ) -> IndexMap<String, String> {
+    let _ = &mir.layouts;
     let mut found = Vec::new();
     for f in &mir.functions {
         scan_func(f, &mut found);
         if f.is_async {
             if let Some(hir) = f.hir_fn.as_ref() {
-                let body = crate::lower::lower_async_poll_body(hir, interner);
+                let body = crate::lower::lower_async_poll_body(hir, interner, &mir.layouts);
                 scan_func(&body, &mut found);
             }
         }
@@ -239,7 +240,7 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::ArrayLen(o)
-        | Rvalue::Discriminant(o)
+        | Rvalue::Discriminant { base: o, .. }
         | Rvalue::IsType(o, _) => strings_in_op(o, out),
         Rvalue::Select {
             cond,

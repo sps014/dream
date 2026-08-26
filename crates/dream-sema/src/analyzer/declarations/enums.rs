@@ -248,6 +248,26 @@ impl<'a> Analyzer<'a> {
             );
         }
 
+        // A *niche* union is represented as the payload pointer itself (`None` = `NULL`,
+        // `Some(x)` = `x`): no envelope block, no per-type release glue, and every
+        // `Option<Class>` edge stops paying an allocation plus a retain/release pair.
+        // Restricted to exactly two variants — one empty, one carrying a single
+        // reference-typed field — so a null/non-null test unambiguously recovers the
+        // discriminant. Value unions are decided first and take precedence.
+        if variant_infos.len() == 2 {
+            let (payload_variants, _empty): (Vec<_>, Vec<_>) = variant_infos
+                .iter()
+                .partition(|v| !v.fields.is_empty());
+            if payload_variants.len() == 1 && payload_variants[0].fields.len() == 1 {
+                let ftid = self.type_ctx.lower(&payload_variants[0].fields[0].type_);
+                if !self.type_ctx.interner.is_value_type(ftid)
+                    && self.type_ctx.interner.is_reference(ftid)
+                {
+                    self.type_ctx.interner.mark_niche_union(union_tid);
+                }
+            }
+        }
+
         self.union_table.insert(
             union_name.to_string(),
             UnionInfo {

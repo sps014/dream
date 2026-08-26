@@ -281,7 +281,9 @@ fn rvalue(r: &Rvalue) -> String {
         ),
         Rvalue::EnumName { value, .. } => format!("enum_name({})", operand(value)),
         Rvalue::Cast(o, from, ty) => format!("{} as ty{} (from ty{})", operand(o), ty.0, from.0),
-        Rvalue::Discriminant(o) => format!("discriminant({})", operand(o)),
+        Rvalue::Discriminant { base, ty } => {
+            format!("discriminant<{}>({})", ty.0, operand(base))
+        }
         Rvalue::IsType(o, ty) => format!("{} is ty{}", operand(o), ty.0),
         Rvalue::UnionField {
             base,

@@ -564,8 +564,10 @@ pub enum Rvalue {
     /// correct widening/narrowing instruction.
     Cast(Operand, TypeId, TypeId),
     /// The active-variant discriminant of a union value (the `i32` at offset 0). Used to drive a
-    /// `match` on union variants.
-    Discriminant(Operand),
+    /// `match` on union variants. Carries the union's interned type so niche-encoded unions
+    /// (represented as the payload pointer itself) derive the discriminant from nullness even when
+    /// copy propagation has replaced the operand with something of a different type.
+    Discriminant { base: Operand, ty: TypeId },
     /// Reads one payload field of a union variant: `base` is the union pointer, `ty` its interned
     /// union type (the layout key), `variant` the discriminant, and `field` the payload field index.
     /// The backend resolves the byte offset + load width from the union layout. Only sound in an arm

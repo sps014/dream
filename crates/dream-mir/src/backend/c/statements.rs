@@ -167,13 +167,31 @@ impl<'a> Emitter<'a> {
             }
             Statement::Release(o) => {
                 let ty = self.operand_ty(o);
-                let release = if self.cx.interner.is_rc_tracked(ty) {
-                    crate::backend::c::release::release_sym(self.cx, ty)
-                } else {
-                    "dream_release".into()
-                };
                 let a = self.operand(o);
-                self.b.call(release, vec![a]);
+                // Inline fast path: null-check + decrement happen right here (dream_rc_last is
+                // always_inline), so the overwhelmingly common not-last case emits no call.
+                // Only the actual free transition calls the teardown tail.
+                if let Some(tail) = crate::backend::c::release::release_into_sym(self.cx, ty) {
+                    let block = self.b.expr_block(|b| {
+                        let t = b.temp(CTy::Ptr, Some(a));
+                        b.stmt(Stmt::if_(
+                            t.clone(),
+                            Stmt::if_(
+                                Expr::call("dream_rc_last", vec![t.clone()]),
+                                Stmt::call(tail, vec![t.clone()]),
+                            ),
+                        ));
+                        t
+                    });
+                    self.b.expr_stmt(block);
+                } else {
+                    let release = if self.cx.interner.is_rc_tracked(ty) {
+                        crate::backend::c::release::release_sym(self.cx, ty)
+                    } else {
+                        "dream_release".into()
+                    };
+                    self.b.call(release, vec![a]);
+                }
             }
             Statement::ReleaseUnique(o) => {
                 let ty = self.operand_ty(o);

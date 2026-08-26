@@ -37,7 +37,7 @@ pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
 pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
-pub use rc::{RcElision, RcInsertion};
+pub use rc::{HopElision, RcElision, RcInsertion};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa};
@@ -96,6 +96,7 @@ impl PassManager {
         pm.add(SimplifyCfg);
         pm.add(Tco);
         pm.add(Dce);
+        pm.add(HopElision);
         pm.add(RcElision);
         // RC *insertion* is a module-wide phase that must run once before inlining (see
         // `optimize_module`); the per-function pipeline only *elides* redundant RC. Running
@@ -129,6 +130,7 @@ impl PassManager {
         pm.add(SimplifyCfg);
         pm.add(Tco);
         pm.add(Dce);
+        pm.add(HopElision);
         pm.add(RcElision);
         debug_assert!(pm.passes.iter().all(|p| p.name() != "autovec"));
         pm

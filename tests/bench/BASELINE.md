@@ -156,11 +156,18 @@ Same host as `./scripts/run-microbenches.sh`.
 ### Fresh baseline (Aug 2026 — supersedes tables below)
 
 > **Niche unions landed after this snapshot was taken**: `Option<ref>` is now the payload
-> pointer itself (`None` = null). Effects vs the table below: **binary_trees 190k → ~70-100k
-> ns/op (2-2.8×, at or better than C# 72k)**, json_deserialize 965→~900, regex_find 741→~700,
+> pointer itself (`None` = null). Effects vs the table below: **binary_trees 190k → ~60-70k
+> ns/op (2.8-3×, at or better than C# 72k)**, json_deserialize 965→~900, regex_find 741→~700,
 > string/alloc rows all slightly better; linked_walk unchanged (~4-5k, C# 1.7k still ahead on
 > pointer chasing). The old headline finding "tracing GC beats ARC on tree churn" no longer
 > holds natively.
+>
+> **ARC fast paths + chain-hop elision landed after that**: release glue split into an inline
+> null-check + decrement at every Release site (call only on the free transition), plus a new
+> `rc-hop-elision` pass that sinks the holder's release below a chain extract and cancels the
+> borrow bracket on switch-arm bindings. Effects (quiet machine): **linked_walk ~4.5k → 1.5k
+> ns/op — beats C# (1.7-2.0k)**; binary_trees ~57-70k; arc_locals 7→6; no regressions
+> elsewhere. Per list hop: 3 RMWs + 2 calls → 1 RMW + 1 transition-only call.
 
 Same host, `./scripts/run-microbenches.sh` — now a **three-way** table: Dream native C
 (cc -O3 LTO), Dream wasm32 under Node (`--wasm --release --runtime --node`), C# RyuJIT.

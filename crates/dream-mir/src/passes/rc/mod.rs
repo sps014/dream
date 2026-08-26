@@ -7,6 +7,7 @@
 
 mod cursor;
 mod elision;
+mod hop;
 mod insertion;
 pub(crate) mod liveness;
 mod tokens;
@@ -18,6 +19,7 @@ mod cursor_tests;
 mod unique_tests;
 
 pub use elision::RcElision;
+pub use hop::HopElision;
 pub use insertion::RcInsertion;
 pub(crate) use liveness::stmt_reads_local;
 pub(crate) use uniqueness::container_move_locals;

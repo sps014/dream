@@ -36,6 +36,37 @@ pub(super) fn niche_payload_glue(cx: &Cx<'_>, ty: TypeId, destroy: bool) -> Opti
     })
 }
 
+/// The split-tail variant of a locally-generated release glue symbol, when one exists.
+/// `Statement::Release` inlines the null-check + decrement at the call site and calls this
+/// tail only on the free transition, so the common not-last case is call-free.
+pub(super) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
+    // Niche unions forward to their payload's glue (recursion terminates: payloads shrink).
+    if cx.interner.is_niche_union(ty) {
+        let u = cx.mir.layouts.unions.get(&ty)?;
+        let field = u
+            .variants
+            .iter()
+            .find(|v| !v.fields.is_empty())?
+            .fields
+            .first()?;
+        return release_into_sym(cx, field.ty);
+    }
+    if !cx.interner.is_rc_tracked(ty) {
+        return None;
+    }
+    let raw = match cx.interner.kind(ty) {
+        TyKind::Struct(..) => c_ident(&format!("release_{}", cx.mir.layouts.structs.get(&ty)?.name)),
+        TyKind::Union(..) => c_ident(&format!("release_{}", cx.mir.layouts.unions.get(&ty)?.name)),
+        TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
+            c_ident(&format!("release_array_t{}", e.0))
+        }
+        _ => return None,
+    };
+    // Follow canonicalization to the representative body's tail.
+    let final_sym = cx.canon_maps().release.get(&ty).cloned().unwrap_or(raw);
+    Some(format!("{final_sym}_into"))
+}
+
 pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
     let interner = cx.interner;
     let mir = cx.mir;
@@ -286,6 +317,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             c_ident(&format!("release_array_t{}", elem.0)),
             p.clone(),
         );
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("release_array_t{}_into", elem.0)),
+            p.clone(),
+        );
     }
     for (ty, layout) in &cx.native.structs {
         if rel_redirect(ty) {
@@ -296,6 +332,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             c_ident(&format!("release_{}", layout.name)),
             p.clone(),
         );
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("release_{}_into", layout.name)),
+            p.clone(),
+        );
     }
     for (ty, layout) in &cx.native.unions {
         if rel_redirect(ty) {
@@ -304,6 +345,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         m.static_proto(
             CTy::Void,
             c_ident(&format!("release_{}", layout.name)),
+            p.clone(),
+        );
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("release_{}_into", layout.name)),
             p.clone(),
         );
     }
@@ -348,26 +394,23 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         if rel_redirect(&elem) {
             continue;
         }
-        let name = c_ident(&format!("release_array_t{}", elem.0));
         let es = elem_size(cx, elem);
-        let mut b = FuncBuilder::new(CTy::Void, name);
+        // Tail (`_into`) assumes the caller already ran the null-check + rc decrement
+        // (Statement::Release inlines both so the not-last case is call-free).
+        let tail_name = c_ident(&format!("release_array_t{}_into", elem.0));
+        let mut b = FuncBuilder::new(CTy::Void, tail_name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
         b.stmt(Stmt::decl(CTy::I32, "n", None));
         b.stmt(Stmt::decl(CTy::I32, "i", None));
-        b.stmt(Stmt::if_(
-            Expr::unary(UnOp::Not, Expr::id("p")),
-            Stmt::Return(None),
-        ));
-        b.stmt(rc_header());
+        b.assign(
+            Expr::id("n"),
+            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+        );
         maybe_defer(
             &mut b,
             &c_ident(&format!("destroy_array_t{}", elem.0)),
             mir.uses_defer,
-        );
-        b.assign(
-            Expr::id("n"),
-            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
         );
         let mut body = Vec::new();
         if interner.is_value_type(elem) {
@@ -408,20 +451,27 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         }
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
+        // Wrapper keeps the classic contract (null-check + decrement + tail call).
+        let wrap_name = c_ident(&format!("release_array_t{}", elem.0));
+        let mut w = FuncBuilder::new(CTy::Void, wrap_name);
+        w.static_ = true;
+        w.param(CTy::Ptr, "p");
+        w.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(None),
+        ));
+        w.stmt(rc_header());
+        w.call(tail_name, vec![Expr::id("p")]);
+        m.push_func(w);
     }
     for (ty, layout) in &cx.native.structs {
         if rel_redirect(ty) {
             continue;
         }
-        let name = c_ident(&format!("release_{}", layout.name));
-        let mut b = FuncBuilder::new(CTy::Void, name);
+        let tail_name = c_ident(&format!("release_{}_into", layout.name));
+        let mut b = FuncBuilder::new(CTy::Void, tail_name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
-        b.stmt(Stmt::if_(
-            Expr::unary(UnOp::Not, Expr::id("p")),
-            Stmt::Return(None),
-        ));
-        b.stmt(rc_header());
         maybe_defer(
             &mut b,
             &c_ident(&format!("destroy_{}", layout.name)),
@@ -484,20 +534,27 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         }
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
+        // Wrapper keeps the classic contract (null-check + decrement + tail call).
+        let wrap_name = c_ident(&format!("release_{}", layout.name));
+        let mut w = FuncBuilder::new(CTy::Void, wrap_name);
+        w.static_ = true;
+        w.param(CTy::Ptr, "p");
+        w.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(None),
+        ));
+        w.stmt(rc_header());
+        w.call(tail_name, vec![Expr::id("p")]);
+        m.push_func(w);
     }
     for (ty, layout) in &cx.native.unions {
         if rel_redirect(ty) {
             continue;
         }
-        let name = c_ident(&format!("release_{}", layout.name));
-        let mut b = FuncBuilder::new(CTy::Void, name);
+        let tail_name = c_ident(&format!("release_{}_into", layout.name));
+        let mut b = FuncBuilder::new(CTy::Void, tail_name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
-        b.stmt(Stmt::if_(
-            Expr::unary(UnOp::Not, Expr::id("p")),
-            Stmt::Return(None),
-        ));
-        b.stmt(rc_header());
         maybe_defer(
             &mut b,
             &c_ident(&format!("destroy_{}", layout.name)),
@@ -543,6 +600,18 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         });
         b.call("dream_free", vec![Expr::id("p")]);
         m.push_func(b);
+        // Wrapper keeps the classic contract (null-check + decrement + tail call).
+        let wrap_name = c_ident(&format!("release_{}", layout.name));
+        let mut w = FuncBuilder::new(CTy::Void, wrap_name);
+        w.static_ = true;
+        w.param(CTy::Ptr, "p");
+        w.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(None),
+        ));
+        w.stmt(rc_header());
+        w.call(tail_name, vec![Expr::id("p")]);
+        m.push_func(w);
     }
     if mir.uses_defer {
         emit_release_string(m);

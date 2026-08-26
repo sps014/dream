@@ -46,15 +46,16 @@ public static class Program
     static void Report(string name, long elapsedNanos, int iters)
     {
         if (IsWarmup) return;
-        long csharpNs = elapsedNanos / iters;
-        Console.WriteLine($"bench {name} ns_per_op={csharpNs}");
+        // Fractional ns/op: integer division truncates sub-nanosecond benches to 0-1.
+        double csharpNs = (double)elapsedNanos / iters;
+        Console.WriteLine($"bench {name} ns_per_op={csharpNs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}");
         if (DreamScores.TryGetValue(name, out long dreamNs) && dreamNs > 0)
         {
-            double ratio = (double)csharpNs / dreamNs;
+            double ratio = csharpNs / dreamNs;
             string cmp = ratio > 1.0
                 ? $"C# is {ratio:F1}x slower"
                 : $"C# is {(1.0 / ratio):F1}x faster";
-            Console.Error.WriteLine($"  compare {name,-18} C#={csharpNs,6} Dream={dreamNs,6} | {cmp}");
+            Console.Error.WriteLine($"  compare {name,-18} C#={csharpNs,6:F1} Dream={dreamNs,6} | {cmp}");
         }
     }
 

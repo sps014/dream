@@ -1,5 +1,19 @@
 # Microbench baseline and C# parity notes
 
+## Measurement protocol (read before comparing numbers)
+
+`./scripts/run-microbenches.sh` runs the whole suite `REPS` times (default 5; override with
+`REPS=7`) wrapped in `caffeinate`, then reports per-bench **median**, **min**, and spread%
+(`(max-min)/median`, flagged `!` above 15%). Rules for honest numbers:
+
+- **Compare `min` columns** — the minimum converges to true cost even on a loaded machine;
+  the median tracks ambient load. Two back-to-back runs on this host agreed within 0-2% on
+  compute kernels (`json_*`, `iface_dispatch`) and ~10-15% elsewhere while load average was
+  6-7 (opencode/VS Code/Chrome running). On an idle machine (load < 1) expect 1-3%.
+- Rows flagged `!` are load-sensitive; re-run before trusting a regression there.
+- ns_per_op values are fractional now (integer division used to truncate sub-ns benches to
+  0-1); the comparator recomputes from `ns_total/iters`.
+
 Recorded with `./scripts/run-microbenches.sh` (Dream `--release` native C, optional
 `dotnet run -c Release` from `tests/bench/csharp`). Absolute values vary by host — use
 relative deltas. Dream and C# are **different substrates** (Wasm+ARC vs native JIT+GC);

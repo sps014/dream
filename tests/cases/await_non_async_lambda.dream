@@ -1,0 +1,8 @@
+// A non-async lambda may never contain `await`, even inside an async enclosing function: the
+// lambda is its own function for await-placement purposes.
+import system;
+async fun work(): int { return 1; }
+async fun outer() {
+    let g = () => await work();
+}
+fun main() { }

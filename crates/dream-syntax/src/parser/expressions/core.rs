@@ -238,7 +238,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             // value, so codegen can emit `i32.const <value>`. Escapes like '\n', '\t', '\\', '\''
             // and '\0' are supported.
             let tok = self.next_token();
-            let value = Self::char_literal_value(&tok.text);
+            let value = self.char_literal_value(&tok);
             let char_token =
                 SyntaxToken::new(TokenKind::CharToken, tok.position, value.to_string());
             let expr = ExpressionNode::Literal(Type::Char(char_token));

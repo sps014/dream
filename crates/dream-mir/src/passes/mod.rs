@@ -136,6 +136,26 @@ impl PassManager {
         pm
     }
 
+    /// A pipeline safe for `mir.polls` (async coroutine bodies).
+    /// Omits `RcElision` (which is unsafe across `Await` suspend points), `Tco` (tail calls are invalid
+    /// in coroutines), and `SimplifyCfg` (which can mangle the `$__pc` dispatch block).
+    pub fn async_poll_pipeline() -> Self {
+        let mut pm = PassManager::new();
+        pm.add(GlobalProp);
+        pm.add(Sccp);
+        pm.add(ConstFold);
+        pm.add(Algebraic);
+        pm.add(Gvn);
+        pm.add(Licm);
+        pm.add(Abc);
+        pm.add(LoopUnroll);
+        pm.add(Sroa);
+        pm.add(Dse);
+        pm.add(Dce);
+        pm.add(HopElision);
+        pm
+    }
+
     /// A minimal, value-preserving pipeline for debug-info builds. It deliberately omits every pass
     /// that can eliminate, fold, or coalesce user locals (const/copy propagation, SCCP, GVN, DCE,
     /// DSE), so each declared variable still lives in a distinct slot the debugger can read at every
@@ -196,7 +216,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
     let layouts = mir.layouts.clone();
-    for f in &mut mir.functions {
+    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         RcInsertion::run_with_layouts(f, interner, &layouts);
     }
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee

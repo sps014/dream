@@ -1,0 +1,9 @@
+fun f() {
+    while (true) {
+        defer {
+            break;
+            continue;
+            return;
+        }
+    }
+}

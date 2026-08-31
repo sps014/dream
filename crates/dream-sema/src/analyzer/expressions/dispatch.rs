@@ -19,8 +19,39 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::Literal(number) => {
-                let ty =
+                let mut ty =
                     Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
+
+                if let Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::ULong(t) | Type::Byte(t) = &ty {
+                    if matches!(ty, Type::ULong(_)) {
+                        if dream_syntax::number::parse_u64_literal(&t.text).is_none() {
+                            diagnostics.report_error(
+                                format!("integer literal '{}' is out of range or malformed", t.text),
+                                number.get_span(),
+                            );
+                        }
+                    } else if let Some(val) = dream_syntax::number::parse_int_literal(&t.text) {
+                        let err = match &ty {
+                            Type::Integer(_) => val < i32::MIN as i64 || val > i32::MAX as i64,
+                            Type::Byte(_) => !(0i64..=255).contains(&val),
+                            Type::UInt(_) => val < 0 || val > u32::MAX as i64,
+                            Type::Long(_) => false,
+                            _ => false,
+                        };
+                        if err && matches!(ty, Type::Integer(_)) {
+                            ty = Type::Long(t.clone());
+                        } else if err {
+                            diagnostics.report_error(format!("literal {} does not fit in {}", t.text, ty.get_type()), number.get_span());
+                        }
+                    } else {
+                        diagnostics.report_error(format!("integer literal '{}' is out of range or malformed", t.text), number.get_span());
+                    }
+                } else if let Type::Float(t) | Type::Double(t) = &ty {
+                    if dream_syntax::number::parse_float_literal(&t.text).is_none() {
+                        diagnostics.report_error(format!("float literal '{}' is out of range or malformed", t.text), number.get_span());
+                    }
+                }
+
                 self.hir_set_literal(&ty);
                 Ok(ty)
             }
@@ -587,13 +618,14 @@ impl<'a> Analyzer<'a> {
                 self.check_type_not_static_class(right_type, diagnostics);
                 let left_hir = self.hir_take();
                 let left_name = left_type.get_type();
-                let right_name = right_type.get_type();
                 if left_type.is_unknown() {
                     self.hir_none();
                 } else if left_name == "object" || self.is_interface_name(&left_name) {
                     self.hir_set_is_type(left_hir, right_type);
                 } else {
-                    self.hir_set_bool(left_name == right_name);
+                    let left_id = self.type_ctx.lower(&left_type);
+                    let right_id = self.type_ctx.lower(right_type);
+                    self.hir_set_bool(left_id == right_id);
                 }
                 Ok(Type::Boolean(synthetic_token(
                     TokenKind::BooleanToken,
@@ -909,7 +941,11 @@ impl<'a> Analyzer<'a> {
     fn retarget_numeric_literal(lit: &Type, expected: Option<&Type>) -> Type {
         match (expected, lit) {
             (Some(Type::Double(_)), Type::Float(t) | Type::Integer(t)) => Type::Double(t.clone()),
+            (Some(Type::Float(_)), Type::Integer(t)) => Type::Float(t.clone()),
             (Some(Type::UInt(_)), Type::Integer(t) | Type::UInt(t)) => Type::UInt(t.clone()),
+            (Some(Type::Long(_)), Type::Integer(t)) => Type::Long(t.clone()),
+            (Some(Type::ULong(_)), Type::Integer(t)) => Type::ULong(t.clone()),
+            (Some(Type::Byte(_)), Type::Integer(t)) => Type::Byte(t.clone()),
             _ => lit.clone(),
         }
     }

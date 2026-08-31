@@ -1,0 +1,3 @@
+'break' cannot be used inside 'defer'
+'continue' cannot be used inside 'defer'
+'return' cannot be used inside 'defer'

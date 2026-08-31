@@ -77,4 +77,13 @@ impl PatternNode {
             _ => false,
         }
     }
+
+    /// This pattern's match alternatives: an or-pattern's elements, otherwise just the pattern
+    /// itself.
+    pub fn or_alternatives(&self) -> &[PatternNode] {
+        match self {
+            PatternNode::Or(alts) => alts,
+            other => std::slice::from_ref(other),
+        }
+    }
 }

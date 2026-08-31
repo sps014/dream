@@ -49,7 +49,7 @@ pub fn emit_c_module_for(
     }
     emit_string_table(&mut m, &cx);
     emit_globals(&mut m, &cx);
-    let async_n = mir.functions.iter().filter(|f| f.is_async).count();
+    let async_n = mir.polls.len();
     let import_async_n = mir
         .imports
         .iter()
@@ -70,8 +70,9 @@ pub fn emit_c_module_for(
     for f in &mir.functions {
         let builders: Vec<FuncBuilder> = if f.is_async {
             let poll_idx = mir.functions.len() + 1 + user_async_i;
+            let pre_lowered_poll = &mir.polls[user_async_i];
             user_async_i += 1;
-            let (stub, poll) = build_async_pair(&cx, f, poll_idx as i32);
+            let (stub, poll) = build_async_pair(&cx, f, pre_lowered_poll, poll_idx as i32);
             vec![stub, poll]
         } else {
             vec![build_sync(&cx, f)]
@@ -723,7 +724,7 @@ fn emit_ftable_decl(m: &mut ModuleBuilder, cx: &Cx<'_>, async_n: usize) {
 fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _ft_extra: usize) {
     let mut b = FuncBuilder::new(CTy::Void, "dream_init_ft");
     b.static_ = true;
-    let coroutine_n = cx.mir.functions.iter().filter(|f| f.is_async).count();
+    let coroutine_n = cx.mir.polls.len();
     for f in &cx.mir.functions {
         let i = cx.func_index(f);
         let name = c_ident(&func_symbol(f));
@@ -966,19 +967,19 @@ fn pad_to(cursor: &mut u32, target: u32, pad: &mut u32, elem: CTy) -> Option<(CT
 fn build_async_pair(
     cx: &Cx<'_>,
     stub: &MirFunction,
+    pre_lowered_poll: &MirFunction,
     poll_idx: i32,
 ) -> (FuncBuilder, FuncBuilder) {
-    let Some(hir) = stub.hir_fn.as_ref() else {
+    if stub.hir_fn.is_none() {
         let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
         poll.param(CTy::Ptr, "__self");
         poll.ret(Some(Expr::i(0)));
         return (build_sync(cx, stub), poll);
-    };
-    let mut body = crate::lower::lower_async_poll_body(hir, cx.interner, &cx.mir.layouts);
-    let _ = crate::passes::RcInsertion::run_with_layouts(&mut body, cx.interner, &cx.mir.layouts);
+    }
+    let body = pre_lowered_poll;
     let fut = cx.target.abi().future;
     let slots = crate::async_emit::layout_async_slots(
-        &body,
+        body,
         cx.interner,
         fut.slots as i32,
         |ty| {
@@ -1036,7 +1037,7 @@ fn build_async_pair(
     let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
     poll.param(CTy::Ptr, "__self");
     if cx.debug_syms && !cx.target.is_wasm32() {
-        for s in future_frame_debug_view(cx, &body, &offs) {
+        for s in future_frame_debug_view(cx, body, &offs) {
             poll.stmt(s);
         }
     }
@@ -1065,7 +1066,7 @@ fn build_async_pair(
             ));
         }
     }
-    for s in super::debugviews::local_debug_views(cx, &body) {
+    for s in super::debugviews::local_debug_views(cx, body) {
         poll.stmt(s);
     }
     poll.stmt(Stmt::decl(
@@ -1175,7 +1176,7 @@ fn build_async_pair(
             }
         }
         {
-            let mut e = Emitter::new(cx, &body, &mut poll);
+            let mut e = Emitter::new(cx, body, &mut poll);
             e.stmts(&block.stmts);
         }
         // Spill back only the locals this block *modified*: every poll invocation reloads all
@@ -1211,7 +1212,7 @@ fn build_async_pair(
             ));
         }
         {
-            let mut e = Emitter::new(cx, &body, &mut poll);
+            let mut e = Emitter::new(cx, body, &mut poll);
             e.term(&block.terminator);
         }
     }
@@ -1322,24 +1323,21 @@ fn emit_fn_typedefs(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         for decl in &f.locals {
             add(decl.ty);
         }
-        if f.is_async {
-            if let Some(hir) = f.hir_fn.as_ref() {
-                let body = crate::lower::lower_async_poll_body(hir, cx.interner, &cx.mir.layouts);
-                for decl in &body.locals {
-                    add(decl.ty);
-                }
-                for b in &body.blocks {
-                    for s in &b.stmts {
-                        match s {
-                            Statement::IndirectCall { sig, .. } => add(*sig),
-                            Statement::Assign(_, Rvalue::IndirectCall { sig, .. }) => add(*sig),
-                            _ => {}
-                        }
-                    }
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::IndirectCall { sig, .. } => add(*sig),
+                    Statement::Assign(_, Rvalue::IndirectCall { sig, .. }) => add(*sig),
+                    _ => {}
                 }
             }
         }
-        for b in &f.blocks {
+    }
+    for p in &cx.mir.polls {
+        for decl in &p.locals {
+            add(decl.ty);
+        }
+        for b in &p.blocks {
             for s in &b.stmts {
                 match s {
                     Statement::IndirectCall { sig, .. } => add(*sig),

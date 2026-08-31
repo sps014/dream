@@ -1,0 +1,9 @@
+// `await` inside a tuple-destructure initializer of a non-async function must be rejected
+// (TupleDeclaration was previously missing from the await-placement walk).
+import system;
+async fun work(): int { return 1; }
+fun f() {
+    let (a, b) = (await work(), 1);
+    System.println(a + b);
+}
+fun main() { }

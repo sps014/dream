@@ -36,7 +36,19 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
-        let size = self.sizeof_bytes(&type_name);
+        let size = match self.sizeof_bytes(&type_name) {
+            Some(s) => s,
+            None => {
+                self.hir_none();
+                report(
+                    diagnostics,
+                    format!("sizeof: unknown type '{}'", type_name),
+                    ty.get_span(),
+                );
+                return Ok(Type::Unknown);
+            }
+        };
+
         let int_ty = Self::type_from_name("int");
         let ty_id = self.type_ctx.interner.int();
         self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::IntLit(size as i64))));
@@ -44,21 +56,31 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Byte size of a type name under Dream's ABI (matches `scalar_size` / struct tables).
-    fn sizeof_bytes(&self, type_name: &str) -> u32 {
+    fn sizeof_bytes(&self, type_name: &str) -> Option<u32> {
         if let Some(info) = self.struct_table.get_struct(type_name) {
             if info.is_value {
-                return info.size as u32;
+                return Some(info.size as u32);
             }
-            return 4;
+            return Some(4);
         }
         if type_name.ends_with("[]") {
-            return 4;
+            return Some(4);
         }
+        if type_name == "string" || type_name == "object" || type_name == "js" || type_name == "void" {
+            return Some(4);
+        }
+        if self.enum_table.contains_key(type_name) { return Some(4); }
+        if self.interface_methods.contains_key(type_name) { return Some(4); }
+        if type_name.starts_with("fun(") { return Some(4); }
+        if type_name.starts_with("Future<") { return Some(4); }
+        if type_name.starts_with("Result<") { return Some(4); }
+        if type_name.starts_with("Option<") { return Some(4); }
+
         match type_name {
             "int" | "uint" | "float" | "char" | "byte" | "bool" | "long" | "ulong" | "double" => {
-                value_size_align(type_name).0 as u32
+                Some(value_size_align(type_name).0 as u32)
             }
-            _ => 4, // string/object/js/enums/funs/interfaces/unresolved nominals
+            _ => None,
         }
     }
 

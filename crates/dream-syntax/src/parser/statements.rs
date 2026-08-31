@@ -43,10 +43,10 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Computes the integer code point of a char literal token (text still includes the
     /// surrounding single quotes), resolving common escape sequences.
-    pub(super) fn char_literal_value(text: &str) -> i32 {
-        let inner = text.trim_matches('\'');
+    pub(super) fn char_literal_value(&mut self, tok: &SyntaxToken) -> i32 {
+        let inner = tok.text.trim_matches('\'');
         let mut chars = inner.chars();
-        match chars.next() {
+        let value = match chars.next() {
             Some('\\') => match chars.next() {
                 Some('n') => '\n' as i32,
                 Some('t') => '\t' as i32,
@@ -55,12 +55,37 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some('\\') => '\\' as i32,
                 Some('\'') => '\'' as i32,
                 Some('"') => '"' as i32,
-                Some(other) => other as i32,
-                None => 0,
+                Some(other) => {
+                    self.diagnostics.report_error(
+                        format!("unknown character escape '\\{}'", other),
+                        Some(tok.position),
+                    );
+                    other as i32
+                }
+                None => {
+                    self.diagnostics.report_error(
+                        "empty character escape".to_string(),
+                        Some(tok.position),
+                    );
+                    0
+                }
             },
             Some(c) => c as i32,
-            None => 0,
+            None => {
+                self.diagnostics.report_error(
+                    "empty character literal".to_string(),
+                    Some(tok.position),
+                );
+                0
+            }
+        };
+        if chars.next().is_some() {
+            self.diagnostics.report_error(
+                "character literal may only contain one character".to_string(),
+                Some(tok.position),
+            );
         }
+        value
     }
 
     /// The source text for a plain binary operator token, used when synthesizing nodes for

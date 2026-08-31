@@ -28,25 +28,66 @@ mod switch;
 /// Symbol/name of the synthesized module-init function; the backend wires it to `(start ...)`.
 pub const INIT_FN_NAME: &str = "__dream_init";
 
-/// True if `a` and `b` are both a bare read of the same local/global binding (e.g. both `this`).
-/// Used to recognize the `obj.f = Buffer.realloc<T>(obj.f, n)` self-realloc idiom in
-/// [`Lowerer::lower_stmt`] without attempting any deeper structural comparison (a `Field`/`Index`
-/// base expression is conservatively never treated as matching).
-fn same_local_var(a: &HExpr, b: &HExpr) -> bool {
-    matches!(
-        (&a.kind, &b.kind),
-        (HExprKind::Var(Binding::Local(l1)), HExprKind::Var(Binding::Local(l2))) if l1 == l2
-    ) || matches!(
-        (&a.kind, &b.kind),
-        (HExprKind::Var(Binding::Global(g1)), HExprKind::Var(Binding::Global(g2))) if g1 == g2
-    )
+/// True if `a` and `b` are structurally identical and side-effect free.
+/// Used to recognize the `obj.f = Buffer.realloc<T>(obj.f, n)` self-realloc idiom.
+fn same_expr(a: &HExpr, b: &HExpr) -> bool {
+    match (&a.kind, &b.kind) {
+        (HExprKind::Var(v1), HExprKind::Var(v2)) => v1 == v2,
+        (HExprKind::Field { obj: o1, field: f1 }, HExprKind::Field { obj: o2, field: f2 }) => {
+            f1 == f2 && same_expr(o1, o2)
+        }
+        (HExprKind::Index { array: a1, index: i1 }, HExprKind::Index { array: a2, index: i2 }) => {
+            same_expr(a1, a2) && same_expr(i1, i2)
+        }
+        (HExprKind::IntLit(v1), HExprKind::IntLit(v2)) => v1 == v2,
+        (HExprKind::BoolLit(v1), HExprKind::BoolLit(v2)) => v1 == v2,
+        (HExprKind::CharLit(v1), HExprKind::CharLit(v2)) => v1 == v2,
+        _ => false,
+    }
+}
+
+fn same_place_expr(place: &HPlace, expr: &HExpr) -> bool {
+    match (place, &expr.kind) {
+        (HPlace::Local(l1), HExprKind::Var(Binding::Local(l2))) => l1 == l2,
+        (HPlace::Global(g1), HExprKind::Var(Binding::Global(g2))) => g1 == g2,
+        (HPlace::Field { obj: o1, field: f1 }, HExprKind::Field { obj: o2, field: f2 }) => {
+            f1 == f2 && same_expr(o1, o2)
+        }
+        (HPlace::Index { array: a1, index: i1 }, HExprKind::Index { array: a2, index: i2 }) => {
+            same_expr(a1, a2) && same_expr(i1, i2)
+        }
+        _ => false,
+    }
+}
+
+fn is_pure_expr(e: &HExpr) -> bool {
+    match &e.kind {
+        HExprKind::Var(_) => true,
+        HExprKind::Field { obj, .. } => is_pure_expr(obj),
+        HExprKind::Index { array, index } => is_pure_expr(array) && is_pure_expr(index),
+        HExprKind::IntLit(_) | HExprKind::BoolLit(_) | HExprKind::CharLit(_) => true,
+        _ => false,
+    }
+}
+
+fn is_pure_place(p: &HPlace) -> bool {
+    match p {
+        HPlace::Local(_) | HPlace::Global(_) => true,
+        HPlace::Field { obj, .. } => is_pure_expr(obj),
+        HPlace::Index { array, index } => is_pure_expr(array) && is_pure_expr(index),
+    }
 }
 
 /// Lowers a whole HIR program to MIR.
 pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
     let mut functions = Vec::new();
+    let mut polls = Vec::new();
     for f in &hir.functions {
-        functions.push(lower_function(f, interner));
+        let (stub, poll_opt) = lower_function(f, interner, &hir.layouts);
+        functions.push(stub);
+        if let Some(poll) = poll_opt {
+            polls.push(poll);
+        }
     }
     // Synthesize a module-init function from the global initializers, so a `(start ...)` can run
     // them before `main`. Reserves a sentinel `DefId` that no real declaration uses.
@@ -73,10 +114,14 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             file: None,
             prefer_inline: false,
         };
-        functions.push(lower_function(&init_fn, interner));
+        let (stub, _) = lower_function(&init_fn, interner, &hir.layouts);
+        functions.push(stub);
     }
     for f in &mut functions {
         canonicalize_niche_unions(f, interner, &hir.layouts);
+    }
+    for p in &mut polls {
+        canonicalize_niche_unions(p, interner, &hir.layouts);
     }
     let globals = hir
         .globals
@@ -88,6 +133,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         .collect();
     Mir {
         functions,
+        polls,
         globals,
         layouts: hir.layouts.clone(),
         imports: hir.imports.clone(),
@@ -169,15 +215,14 @@ fn stmt_has_defer(stmt: &HStmt) -> bool {
     }
 }
 
-/// Lowers a single function.
-pub fn lower_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {
+/// Lowers a single function, returning its main MIR body (stub for async) and an optional poll body.
+pub fn lower_function(func: &HFunction, interner: &TypeInterner, layouts: &dream_hir::LayoutTable) -> (MirFunction, Option<MirFunction>) {
     if func.is_async {
-        // The pipeline representation of an async function is a stub carrying the HIR body; the poll
-        // state machine is lowered from it at emit time (see [`lower_async_poll_body`]), where each
-        // `await` becomes a CFG suspend point — so no statement-position normalization is needed.
-        return lower_async_stub(func);
+        let stub = lower_async_stub(func);
+        let poll = lower_async_poll_body(func, interner, layouts);
+        return (stub, Some(poll));
     }
-    lower_sync_function(func, interner)
+    (lower_sync_function(func, interner), None)
 }
 
 /// Creates a [`FunctionBuilder`] for `func` (return type, def, source file, async flag) and registers
@@ -335,38 +380,22 @@ impl Lowerer<'_> {
                 // than going through `lower_rvalue`/`lower_place` independently. Local-variable
                 // self-realloc (`x = Buffer.realloc<T>(x, n)`) does not need this: `lower_operand`
                 // already returns a direct `Place::Local` copy with no temp in that case.
-                if let (
-                    HPlace::Field {
-                        obj,
-                        field: dst_field,
-                    },
-                    HExprKind::ArrayRealloc {
-                        elem_ty,
-                        array,
-                        new_len,
-                    },
-                ) = (place, &value.kind)
+                if let HExprKind::ArrayRealloc {
+                    elem_ty,
+                    array,
+                    new_len,
+                } = &value.kind
                 {
-                    if let HExprKind::Field {
-                        obj: src_obj,
-                        field: src_field,
-                    } = &array.kind
-                    {
-                        if dst_field == src_field && same_local_var(obj, src_obj) {
-                            let base = self.operand_into_local(obj);
-                            let dest = Place::Field {
-                                base,
-                                field: *dst_field,
-                            };
-                            let new_len_op = self.lower_operand(new_len);
-                            let rv = Rvalue::ArrayRealloc {
-                                elem_ty: *elem_ty,
-                                array: Operand::Copy(dest.clone()),
-                                new_len: new_len_op,
-                            };
-                            self.b.assign(dest, rv);
-                            return;
-                        }
+                    if same_place_expr(place, array) && is_pure_place(place) {
+                        let dest = self.lower_place(place);
+                        let new_len_op = self.lower_operand(new_len);
+                        let rv = Rvalue::ArrayRealloc {
+                            elem_ty: *elem_ty,
+                            array: Operand::Copy(dest.clone()),
+                            new_len: new_len_op,
+                        };
+                        self.b.assign(dest, rv);
+                        return;
                     }
                 }
                 let rv = self.lower_rvalue(value);
@@ -567,7 +596,11 @@ impl Lowerer<'_> {
 fn const_int_value(e: &HExpr) -> Option<i64> {
     match &e.kind {
         HExprKind::IntLit(v) | HExprKind::EnumValue(v) => Some(*v),
+        HExprKind::BoolLit(v) => Some(*v as i64),
         HExprKind::CharLit(c) => Some(*c as i64),
+        HExprKind::Unary { op: dream_hir::UnOp::Neg, operand } => {
+            const_int_value(operand).map(|v| -v)
+        }
         _ => None,
     }
 }
@@ -618,7 +651,7 @@ mod tests {
             ],
         };
 
-        let mir = lower_function(&func, &ctx.interner);
+        let (mir, _) = lower_function(&func, &ctx.interner, &dream_hir::LayoutTable::default());
         // entry ends in a two-way branch.
         assert!(matches!(
             mir.blocks[mir.entry.0 as usize].terminator,

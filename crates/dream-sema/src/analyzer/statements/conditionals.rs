@@ -57,7 +57,9 @@ impl<'a> Analyzer<'a> {
                 let runtime =
                     left_t.is_object() || left_t.is_unknown() || self.is_interface_name(&left_name);
                 if !runtime {
-                    if left_t.get_type() == right_type.get_type() {
+                    let left_id = self.type_ctx.lower(&left_t);
+                    let right_id = self.type_ctx.lower(right_type);
+                    if left_id == right_id {
                         let branch_scope = self.branch_scope(ctx.symbol_table);
                         self.hir_open_block();
                         self.declare_is_bindings(&bindings, &branch_scope, ctx, diagnostics)?;

@@ -36,18 +36,15 @@ pub(super) fn struct_tags(mir: &Mir) -> HashMap<TypeId, i32> {
 
 pub(super) fn intern_strings(
     mir: &Mir,
-    interner: &dream_types::TypeInterner,
+    _interner: &dream_types::TypeInterner,
 ) -> IndexMap<String, String> {
     let _ = &mir.layouts;
     let mut found = Vec::new();
     for f in &mir.functions {
         scan_func(f, &mut found);
-        if f.is_async {
-            if let Some(hir) = f.hir_fn.as_ref() {
-                let body = crate::lower::lower_async_poll_body(hir, interner, &mir.layouts);
-                scan_func(&body, &mut found);
-            }
-        }
+    }
+    for p in &mir.polls {
+        scan_func(p, &mut found);
     }
     for s in protocol_strings(mir) {
         found.push(s);

@@ -1,0 +1,16 @@
+import system;
+fun pick(b: bool): string {
+    return switch (b) {
+        true => "yes",
+        false => "no",
+    };
+}
+fun main() {
+    System.println(pick(true));
+    System.println(pick(false));
+    let flag = false;
+    switch (flag) {
+        case true: System.println("t");
+        default: System.println("d");
+    }
+}

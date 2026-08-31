@@ -1,0 +1,16 @@
+// `await` inside a `lock` block is rejected in async functions: locks are held per OS thread and
+// all coroutines share one thread, so a suspend point under a lock would silently break mutual
+// exclusion between tasks.
+import system;
+@shared
+class Cell {
+    public v: int;
+    public constructor() { this.v = 0; }
+}
+async fun work(): int { return 1; }
+async fun f(c: Cell): int {
+    lock (c) {
+        return await work();
+    }
+}
+fun main() { }

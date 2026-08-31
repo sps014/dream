@@ -1,0 +1,10 @@
+import system;
+enum E { A, B }
+class Foo { public val: E; public constructor() { this.val = E.A; } }
+fun main() {
+    let f = Foo();
+    switch (E.A) {
+        case f.val: System.println("matched");
+        default: System.println("no");
+    }
+}

@@ -1,27 +1,49 @@
 //! Shared numeric-literal parsing. Lexer, classifier, HIR, and pattern ranges all go through
 //! these helpers so `0xFF` / `0b101` / `1e-3` never silently fail a `str::parse`.
 
-/// Integer value of a suffix-stripped numeric token (`42`, `0xFF`, `-0b101`, `0o77`).
+fn parse_u64_magnitude(s: &str) -> Option<u64> {
+    if let Some(hex) = strip_prefix_ci(s, "0x") {
+        u64::from_str_radix(hex, 16).ok()
+    } else if let Some(bin) = strip_bin_body(s) {
+        u64::from_str_radix(bin, 2).ok()
+    } else if let Some(oct) = strip_prefix_ci(s, "0o") {
+        u64::from_str_radix(oct, 8).ok()
+    } else {
+        s.parse::<u64>().ok()
+    }
+}
+
+/// Signed integer value of a suffix-stripped numeric token (`42`, `0xFF`, `-0b101`, `0o77`).
+/// Values outside `i64` (including unsigned magnitudes above `i64::MAX`) yield `None`.
 pub fn parse_int_literal(text: &str) -> Option<i64> {
     let t = text.trim();
     let (neg, s) = match t.strip_prefix('-') {
         Some(rest) => (true, rest),
         None => (false, t),
     };
-    let v = if let Some(hex) = strip_prefix_ci(s, "0x") {
-        i64::from_str_radix(hex, 16).ok()?
-    } else if let Some(bin) = strip_bin_body(s) {
-        i64::from_str_radix(bin, 2).ok()?
-    } else if let Some(oct) = strip_prefix_ci(s, "0o") {
-        i64::from_str_radix(oct, 8).ok()?
-    } else {
-        s.parse::<i64>().ok()?
-    };
+    let u = parse_u64_magnitude(s)?;
     if neg {
-        v.checked_neg()
+        if u == (i64::MAX as u64) + 1 {
+            Some(i64::MIN)
+        } else if u <= i64::MAX as u64 {
+            Some(-(u as i64))
+        } else {
+            None
+        }
+    } else if u <= i64::MAX as u64 {
+        Some(u as i64)
     } else {
-        Some(v)
+        None
     }
+}
+
+/// Unsigned integer value of a suffix-stripped token. Rejects a leading `-`.
+pub fn parse_u64_literal(text: &str) -> Option<u64> {
+    let t = text.trim();
+    if t.starts_with('-') {
+        return None;
+    }
+    parse_u64_magnitude(t)
 }
 
 /// Unsigned 32-bit value of a numeric token. Rejects negatives and values above `u32::MAX`.
@@ -201,9 +223,15 @@ mod tests {
         assert_eq!(parse_int_literal("0b101"), Some(5));
         assert_eq!(parse_int_literal("0o77"), Some(63));
         assert_eq!(parse_int_literal("42"), Some(42));
+        assert_eq!(parse_int_literal("9223372036854775807"), Some(i64::MAX));
+        assert_eq!(parse_int_literal("9223372036854775808"), None);
+        assert_eq!(parse_int_literal("-9223372036854775808"), Some(i64::MIN));
         assert_eq!(parse_u32_literal("0x40"), Some(64));
         assert_eq!(parse_u32_literal("0b101"), Some(5));
         assert_eq!(parse_u32_literal("-1"), None);
+        assert_eq!(parse_u64_literal("18446744073709551615"), Some(u64::MAX));
+        assert_eq!(parse_u64_literal("-1"), None);
+        assert_eq!(parse_u64_literal("18446744073709551616"), None);
     }
 
     #[test]

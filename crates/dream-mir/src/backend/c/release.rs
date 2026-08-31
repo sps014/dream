@@ -54,16 +54,22 @@ pub(super) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
     if !cx.interner.is_rc_tracked(ty) {
         return None;
     }
-    let raw = match cx.interner.kind(ty) {
-        TyKind::Struct(..) => c_ident(&format!("release_{}", cx.mir.layouts.structs.get(&ty)?.name)),
-        TyKind::Union(..) => c_ident(&format!("release_{}", cx.mir.layouts.unions.get(&ty)?.name)),
+    let (raw, map_key) = match cx.interner.kind(ty) {
+        TyKind::Struct(..) => (
+            c_ident(&format!("release_{}", cx.mir.layouts.structs.get(&ty)?.name)),
+            ty,
+        ),
+        TyKind::Union(..) => (
+            c_ident(&format!("release_{}", cx.mir.layouts.unions.get(&ty)?.name)),
+            ty,
+        ),
         TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
-            c_ident(&format!("release_array_t{}", e.0))
+            (c_ident(&format!("release_array_t{}", e.0)), *e)
         }
         _ => return None,
     };
     // Follow canonicalization to the representative body's tail.
-    let final_sym = cx.canon_maps().release.get(&ty).cloned().unwrap_or(raw);
+    let final_sym = cx.canon_maps().release.get(&map_key).cloned().unwrap_or(raw);
     Some(format!("{final_sym}_into"))
 }
 
@@ -295,12 +301,9 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     }
     for f in &mir.functions {
         collect_array_elems(interner, f, &mut array_elems);
-        if f.is_async {
-            if let Some(hir) = f.hir_fn.as_ref() {
-                let body = crate::lower::lower_async_poll_body(hir, interner, &cx.mir.layouts);
-                collect_array_elems(interner, &body, &mut array_elems);
-            }
-        }
+    }
+    for p in &mir.polls {
+        collect_array_elems(interner, p, &mut array_elems);
     }
     let p = vec![Param {
         ty: CTy::Ptr,

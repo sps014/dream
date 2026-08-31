@@ -6,7 +6,9 @@
 
 use super::Analyzer;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode};
+use dream_syntax::nodes::{
+    ExpressionNode, FunctionNode, LambdaBody, LambdaNode, StatementNode,
+};
 
 impl<'a> Analyzer<'a> {
     /// Awaiting is allowed anywhere inside an `async` function; in a non-async function every
@@ -19,12 +21,31 @@ impl<'a> Analyzer<'a> {
         if function.is_async {
             return;
         }
+        let message = "'await' can only be used inside an 'async' function";
         for stmt in function.body.iter() {
-            self.forbid_await_in_stmt(
-                stmt,
-                "'await' can only be used inside an 'async' function",
-                diagnostics,
-            );
+            self.forbid_await_in_stmt(stmt, message, diagnostics);
+        }
+    }
+
+    /// Lambdas are functions of their own: `await` inside a non-async lambda is an error whether
+    /// the lambda sits in a sync or an `async` function (the enclosing function's
+    /// [`Self::check_await_positions`] walk stops at the lambda boundary).
+    pub(in crate::analyzer) fn check_lambda_awaits(
+        &self,
+        lambda: &LambdaNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if lambda.is_async {
+            return;
+        }
+        let message = "'await' can only be used inside an 'async' function";
+        match &lambda.body {
+            LambdaBody::Expr(e) => self.scan_expr_await(e, message, diagnostics),
+            LambdaBody::Block(stmts) => {
+                for s in stmts.iter() {
+                    self.forbid_await_in_stmt(s, message, diagnostics);
+                }
+            }
         }
     }
 
@@ -46,6 +67,9 @@ impl<'a> Analyzer<'a> {
             | StatementNode::ExpressionStatement(e)
             | StatementNode::MemberAssignment(_, _, e) => {
                 self.scan_expr_await(e, message, diagnostics);
+            }
+            StatementNode::TupleDeclaration { init, .. } => {
+                self.scan_expr_await(init, message, diagnostics);
             }
             StatementNode::Return(Some(e)) => self.scan_expr_await(e, message, diagnostics),
             StatementNode::FunctionInvocation(_, _, args) => {
@@ -181,6 +205,43 @@ impl<'a> Analyzer<'a> {
                     self.scan_expr_await(e, message, diagnostics);
                 }
             }
+            ExpressionNode::ArrayRepeat(_, value, len) => {
+                self.scan_expr_await(value, message, diagnostics);
+                self.scan_expr_await(len, message, diagnostics);
+            }
+            ExpressionNode::TupleLiteral(_, elems) | ExpressionNode::SetLiteral(_, elems) => {
+                for e in elems {
+                    self.scan_expr_await(e, message, diagnostics);
+                }
+            }
+            ExpressionNode::MapLiteral(_, pairs) => {
+                for (k, v) in pairs {
+                    self.scan_expr_await(k, message, diagnostics);
+                    self.scan_expr_await(v, message, diagnostics);
+                }
+            }
+            ExpressionNode::Switch(_, subject, arms) => {
+                self.scan_expr_await(subject, message, diagnostics);
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.scan_expr_await(g, message, diagnostics);
+                    }
+                    match &arm.body {
+                        dream_syntax::nodes::SwitchArmBody::Expr(e) => {
+                            self.scan_expr_await(e, message, diagnostics)
+                        }
+                        dream_syntax::nodes::SwitchArmBody::Block(stmts) => {
+                            for s in stmts.iter() {
+                                self.forbid_await_in_stmt(s, message, diagnostics);
+                            }
+                        }
+                    }
+                }
+            }
+            ExpressionNode::NamedArg(_, e) | ExpressionNode::RefArgument(_, e) => {
+                self.scan_expr_await(e, message, diagnostics)
+            }
+            ExpressionNode::Lambda(l) => self.check_lambda_awaits(l, diagnostics),
             ExpressionNode::IndexAccess(a, i) => {
                 self.scan_expr_await(a, message, diagnostics);
                 self.scan_expr_await(i, message, diagnostics);

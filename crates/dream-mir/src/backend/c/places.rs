@@ -683,6 +683,31 @@ impl<'a> Emitter<'a> {
     }
 }
 
+fn eq_operand(a: &crate::Operand, b: &crate::Operand) -> bool {
+    match (a, b) {
+        (crate::Operand::Copy(p1), crate::Operand::Copy(p2)) => eq_place(p1, p2),
+        (crate::Operand::Const(c1), crate::Operand::Const(c2)) => c1 == c2,
+        _ => false,
+    }
+}
+
+fn eq_place(a: &Place, b: &Place) -> bool {
+    match (a, b) {
+        (Place::Local(l1), Place::Local(l2)) => l1 == l2,
+        (Place::Global(g1), Place::Global(g2)) => g1 == g2,
+        (Place::Field { base: b1, field: f1 }, Place::Field { base: b2, field: f2 }) => {
+            b1 == b2 && f1 == f2
+        }
+        (Place::Index { base: b1, index: i1, .. }, Place::Index { base: b2, index: i2, .. }) => {
+            b1 == b2 && eq_operand(i1, i2)
+        }
+        (Place::Deref { ptr: p1, elem_ty: t1 }, Place::Deref { ptr: p2, elem_ty: t2 }) => {
+            p1 == p2 && t1 == t2
+        }
+        _ => false,
+    }
+}
+
 fn realloc_self_store(place: &Place, rv: &crate::Rvalue) -> bool {
     let crate::Rvalue::ArrayRealloc { array, .. } = rv else {
         return false;
@@ -690,21 +715,7 @@ fn realloc_self_store(place: &Place, rv: &crate::Rvalue) -> bool {
     let Operand::Copy(src) = array else {
         return false;
     };
-    match (place, src) {
-        (
-            Place::Field {
-                base: b1,
-                field: f1,
-            },
-            Place::Field {
-                base: b2,
-                field: f2,
-            },
-        ) => b1 == b2 && f1 == f2,
-        (Place::Local(l1), Place::Local(l2)) => l1 == l2,
-        (Place::Global(g1), Place::Global(g2)) => g1 == g2,
-        _ => false,
-    }
+    eq_place(place, src)
 }
 
 fn borrowed_ref_store(rv: &crate::Rvalue) -> bool {

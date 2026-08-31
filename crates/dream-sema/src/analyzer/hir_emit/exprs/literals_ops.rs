@@ -10,7 +10,9 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let kind = match lit {
-            Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::ULong(t) | Type::Byte(t) => {
+            Type::ULong(t) => dream_syntax::number::parse_u64_literal(&t.text)
+                .map(|u| HExprKind::IntLit(u as i64)),
+            Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::Byte(t) => {
                 dream_syntax::number::parse_int_literal(&t.text).map(HExprKind::IntLit)
             }
             Type::Float(t) | Type::Double(t) => {
@@ -28,15 +30,7 @@ impl<'a> Analyzer<'a> {
             Type::String(t) => Some(HExprKind::StringLit(string_lit_value(&t.text))),
             _ => None,
         };
-        let mut ty = self.type_ctx.lower(lit);
-        // An `int`-typed literal whose value doesn't fit in `i32` is really a `long`: promote its HIR
-        // type so the backend emits `i64.const` instead of an out-of-range `i32.const`. (The parser
-        // types decimal integer literals as `int` regardless of magnitude.)
-        if let Some(HExprKind::IntLit(v)) = &kind {
-            if matches!(lit, Type::Integer(_)) && (*v > i32::MAX as i64 || *v < i32::MIN as i64) {
-                ty = self.type_ctx.interner.long();
-            }
-        }
+        let ty = self.type_ctx.lower(lit);
         self.hir.last = kind.map(|k| HExpr::new(ty, k));
     }
 

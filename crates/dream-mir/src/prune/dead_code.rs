@@ -494,12 +494,20 @@ fn prune_functions(mir: &mut Mir) {
     let mut keep = reachable.into_iter().collect::<Vec<_>>();
     keep.sort_unstable();
     let mut kept = Vec::with_capacity(keep.len());
+    let mut kept_polls = Vec::new();
+    let mut poll_iter = std::mem::take(&mut mir.polls).into_iter();
     for (i, f) in std::mem::take(&mut mir.functions).into_iter().enumerate() {
+        let is_async = f.is_async;
+        let poll = if is_async { poll_iter.next() } else { None };
         if keep.binary_search(&i).is_ok() {
             kept.push(f);
+            if let Some(p) = poll {
+                kept_polls.push(p);
+            }
         }
     }
     mir.functions = kept;
+    mir.polls = kept_polls;
 }
 
 /// Drops module globals that no surviving function reads. A global whose only writes are pure (no
@@ -509,7 +517,7 @@ fn prune_functions(mir: &mut Mir) {
 /// backend emits `$g{id}` by id, not by position), so dropping entries never renumbers survivors.
 fn prune_dead_globals(mir: &mut Mir) {
     let mut read: HashSet<Global> = HashSet::new();
-    for f in &mir.functions {
+    for f in mir.functions.iter().chain(mir.polls.iter()) {
         for b in &f.blocks {
             for s in &b.stmts {
                 collect_global_reads_stmt(s, &mut read);
@@ -518,7 +526,7 @@ fn prune_dead_globals(mir: &mut Mir) {
         }
     }
     // Remove pure stores to never-read globals.
-    for f in &mut mir.functions {
+    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         for b in &mut f.blocks {
             b.stmts.retain(|s| match s {
                 Statement::Assign(Place::Global(g), rv) => {
@@ -530,7 +538,7 @@ fn prune_dead_globals(mir: &mut Mir) {
     }
     // A global stays if it is still read or still written by a surviving (impure) store.
     let mut referenced = read;
-    for f in &mir.functions {
+    for f in mir.functions.iter().chain(mir.polls.iter()) {
         for b in &f.blocks {
             for s in &b.stmts {
                 if let Statement::Assign(Place::Global(g), _) = s {

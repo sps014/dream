@@ -1,265 +1,236 @@
-use dream_syntax::nodes::{
-    ExpressionNode, FunctionNode, StatementNode, SwitchArm, SwitchArmBody, Type,
-};
-use std::cell::RefCell;
-use std::io::Error;
-use std::rc::Rc;
+use dream_diagnostics::DiagnosticBag;
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, SwitchArmBody, Type};
 
-#[derive(Debug, Clone)]
-struct FlowNode {
-    child_nodes: Vec<Rc<RefCell<FlowNode>>>,
-    has_return: bool,
-}
-impl FlowNode {
-    fn new() -> Self {
-        FlowNode {
-            child_nodes: Vec::new(),
-            has_return: false,
-        }
-    }
-    fn from(has_return: bool) -> Self {
-        FlowNode {
-            child_nodes: Vec::new(),
-            has_return,
-        }
-    }
-}
-#[derive(Debug)]
-pub struct FunctionControlGraph<'a> {
-    root_node: Option<Rc<RefCell<FlowNode>>>,
-    function: &'a FunctionNode<'a>,
+#[derive(Clone, Copy, Default)]
+struct Flow {
+    returns: bool,
+    breaks: bool,
+    continues: bool,
+    falls_through: bool,
 }
 
-impl<'a> FunctionControlGraph<'a> {
-    pub fn new(function: &'a FunctionNode<'a>) -> FunctionControlGraph<'a> {
+impl Flow {
+    fn new_fallthrough() -> Self {
         Self {
-            root_node: None,
-            function,
+            returns: false,
+            breaks: false,
+            continues: false,
+            falls_through: true,
         }
     }
-    pub fn build(&mut self) -> Result<(), Error> {
-        if self.function.is_extern
-            || self.function.return_type.is_none()
-            || self.function.return_type.as_ref().unwrap() == &Type::Void
-        {
-            return Ok(());
+
+    fn merge_branch(self, other: Self) -> Self {
+        Self {
+            returns: self.returns || other.returns,
+            breaks: self.breaks || other.breaks,
+            continues: self.continues || other.continues,
+            falls_through: self.falls_through || other.falls_through,
         }
-        self.create_graph()?;
-
-        // do not check for non void as it is checked in the analyzer already
-        self.check_non_void_return()?;
-        Ok(())
     }
-    fn check_non_void_return(&mut self) -> Result<(), Error> {
-        let root_node = &(*self.root_node.as_ref().unwrap()).as_ref().clone();
+}
 
-        if self.dfs(&Rc::new(root_node.clone())) {
-            return Ok(());
+pub struct FunctionControlGraph<'a, 'd> {
+    function: &'a FunctionNode<'a>,
+    diagnostics: &'d mut DiagnosticBag,
+}
+
+impl<'a, 'd> FunctionControlGraph<'a, 'd> {
+    pub fn new(function: &'a FunctionNode<'a>, diagnostics: &'d mut DiagnosticBag) -> Self {
+        Self { function, diagnostics }
+    }
+
+    pub fn build(&mut self) {
+        if self.function.is_extern {
+            return;
         }
-        Err(Error::other(format!(
-            "function '{}': not all code paths return a value",
-            self.function.name.text
-        )))
-    }
-    //use dfs  and visit from right side depth by depth, if right most is true then all left will be true
-    fn dfs(&mut self, node: &Rc<RefCell<FlowNode>>) -> bool {
-        let new = &node.as_ref().borrow();
-        let mut ct_all_true = 0; //keep count of no of true paths
 
-        for i in (0..new.child_nodes.len()).rev() {
-            //check if sub nodes of child are true are not
-            let is_child_true = self.dfs(&new.child_nodes[i]);
+        let flow = self.visit_block(self.function.body);
 
-            if is_child_true {
-                ct_all_true += 1; //child path is true
+        if flow.falls_through {
+            if let Some(ret) = &self.function.return_type {
+                if ret != &Type::Void {
+                    self.diagnostics.report_error(
+                        format!(
+                            "function '{}': not all code paths return a value",
+                            self.function.name.text
+                        ),
+                        Some(self.function.name.position),
+                    );
+                }
             }
-            //if right most node is return then we can directly say all left sub nodes will be true
-            if is_child_true && new.child_nodes[i].as_ref().borrow().has_return {
-                return true;
-            }
         }
+    }
 
-        //if all children are true then this node is true or if the node is a return node
-        if (!new.child_nodes.is_empty() && ct_all_true == new.child_nodes.len()) || new.has_return {
-            return true;
-        }
+    fn visit_block(&mut self, stmts: &[StatementNode<'a>]) -> Flow {
+        let mut current = Flow::new_fallthrough();
+        let mut unreachable_reported = false;
 
-        false
-    }
-    fn create_graph(&mut self) -> Result<(), Error> {
-        self.root_node = Some(Rc::new(RefCell::new(FlowNode::from(false))));
-        self.visit_block(self.function.body, &self.root_node.clone().unwrap())?;
-        Ok(())
-    }
-    //visit a block and pass parent accordingly
-    fn visit_block(
-        &mut self,
-        nodes: &[StatementNode<'a>],
-        parent: &Rc<RefCell<FlowNode>>,
-    ) -> Result<(), Error> {
-        let node = parent.clone();
-        for i in nodes.iter() {
-            self.visit_node(i, &node)?;
+        for stmt in stmts {
+            if !current.falls_through {
+                if !unreachable_reported {
+                    // Only warn on actual statements that emit code or affect flow
+                    self.diagnostics.report_warning(
+                        "unreachable code".to_string(),
+                        stmt_position(stmt),
+                    );
+                    unreachable_reported = true;
+                }
+                // Even if unreachable, we can keep walking to validate children or just skip.
+                // We just skip execution flow since it's dead.
+            } else {
+                let stmt_flow = self.visit_stmt(stmt);
+                current.returns |= stmt_flow.returns;
+                current.breaks |= stmt_flow.breaks;
+                current.continues |= stmt_flow.continues;
+                current.falls_through = stmt_flow.falls_through;
+            }
         }
-        Ok(())
+        current
     }
-    // only two statements have impact on control path return and branches and we can ignore the rest of  the branches
-    fn visit_node(
-        &mut self,
-        statement: &StatementNode<'a>,
-        parent: &Rc<RefCell<FlowNode>>,
-    ) -> Result<(), Error> {
-        match statement {
-            // Both `return expr;` and a bare `return;` terminate the current path. The latter is
-            // only valid in void functions (checked by the analyzer); handling it here without a
-            // value avoids panicking on malformed `return;` inside a non-void function.
-            StatementNode::Return(_) => self.visit_return(parent)?,
-            StatementNode::IfElse(_, if_body, else_pair, else_body) => {
-                self.visit_if_else(if_body, else_pair, else_body, parent)?
+
+    fn visit_stmt(&mut self, stmt: &StatementNode<'a>) -> Flow {
+        match stmt {
+            StatementNode::Return(_) => Flow {
+                returns: true,
+                breaks: false,
+                continues: false,
+                falls_through: false,
+            },
+            StatementNode::Break(_) => Flow {
+                returns: false,
+                breaks: true,
+                continues: false,
+                falls_through: false,
+            },
+            StatementNode::Continue(_) => Flow {
+                returns: false,
+                breaks: false,
+                continues: true,
+                falls_through: false,
+            },
+            StatementNode::IfElse(_, if_body, else_ifs, else_body) => {
+                let mut f = self.visit_block(if_body);
+                for (_, elif_body) in else_ifs {
+                    f = f.merge_branch(self.visit_block(elif_body));
+                }
+                if let Some(eb) = else_body {
+                    f = f.merge_branch(self.visit_block(eb));
+                } else {
+                    f.falls_through = true;
+                }
+                f
             }
-            StatementNode::Switch(_, cases, default) => {
-                self.visit_switch(cases, default, parent)?
+            StatementNode::Switch(_, cases, default_body) => {
+                let mut f = Flow::default();
+                for (_, body) in cases {
+                    f = f.merge_branch(self.visit_block(body));
+                }
+                if let Some(db) = default_body {
+                    f = f.merge_branch(self.visit_block(db));
+                } else {
+                    f.falls_through = true;
+                }
+                f
             }
-            // Pattern `switch` in statement position is parsed as an expression statement. Each
-            // arm is an independent path; exhaustiveness is a separate check, so there is no
-            // synthetic "missing default" branch.
             StatementNode::ExpressionStatement(ExpressionNode::Switch(_, _, arms)) => {
-                self.visit_pattern_switch(arms, parent)?
+                if arms.is_empty() {
+                    return Flow::new_fallthrough();
+                }
+                let mut f = Flow::default();
+                for arm in arms {
+                    let mut arm_flow = match &arm.body {
+                        SwitchArmBody::Block(body) => self.visit_block(body),
+                        SwitchArmBody::Expr(_) => Flow::new_fallthrough(), // expression branches fall through
+                    };
+                    if arm.guard.is_some() {
+                        // A failing guard continues to later arms; conservatively the switch
+                        // may also fall out of the statement (exhaustiveness is a separate check).
+                        arm_flow.falls_through = true;
+                    }
+                    f = f.merge_branch(arm_flow);
+                }
+                f
             }
-            // `lock (target) { body }` runs `body` exactly once (unlike `if`/`switch`, it is not a
-            // set of alternative paths), so for return-coverage purposes it is transparent: fold
-            // its body straight into the current path.
-            StatementNode::Lock(_, body) => self.visit_block(body, parent)?,
-            StatementNode::Defer(_, body) => self.visit_block(body, parent)?,
-            _ => {}
-        };
-        Ok(())
-    }
-    fn visit_if_else(
-        &mut self,
-        if_body: &[StatementNode<'a>],
-        else_if: &Vec<(ExpressionNode<'a>, &'a [StatementNode<'a>])>,
-        else_body: &Option<&'a [StatementNode<'a>]>,
-        parent: &Rc<RefCell<FlowNode>>,
-    ) -> Result<(), Error> {
-        //if body
-        let mut if_body_node = Rc::new(RefCell::new(FlowNode::new()));
-        // add current to parent
-        (*parent)
-            .as_ref()
-            .borrow_mut()
-            .child_nodes
-            .push(if_body_node.clone());
-        //visit it's body for sub nodes
-        self.visit_block(if_body, &if_body_node)?;
-
-        //check same for else if blocks
-        for i in else_if.iter() {
-            if_body_node = Rc::new(RefCell::new(FlowNode::new()));
-            //add to parent
-            (*parent)
-                .as_ref()
-                .borrow_mut()
-                .child_nodes
-                .push(if_body_node.clone());
-            //visit it's body for sub nodes
-            self.visit_block(i.1, &if_body_node)?;
-        }
-        match else_body {
-            //if we have else body add it to the graph
-            Some(else_body) => {
-                if_body_node = Rc::new(RefCell::new(FlowNode::new()));
-                (*parent)
-                    .as_ref()
-                    .borrow_mut()
-                    .child_nodes
-                    .push(if_body_node.clone());
-                self.visit_block(else_body, &if_body_node)?;
+            StatementNode::While(cond, body) => {
+                let body_flow = self.visit_block(body);
+                let is_true = is_literal_true(cond);
+                Flow {
+                    returns: body_flow.returns,
+                    falls_through: !is_true || body_flow.breaks,
+                    ..Flow::default()
+                }
             }
-            //if we dont have else body then we need to add an artificial body less else block
-            None => {
-                if_body_node = Rc::new(RefCell::new(FlowNode::new()));
-                (*parent)
-                    .as_ref()
-                    .borrow_mut()
-                    .child_nodes
-                    .push(if_body_node.clone());
+            StatementNode::DoWhile(body, cond) => {
+                let body_flow = self.visit_block(body);
+                let is_true = is_literal_true(cond);
+                Flow {
+                    returns: body_flow.returns,
+                    falls_through: body_flow.breaks
+                        || ((body_flow.falls_through || body_flow.continues) && !is_true),
+                    ..Flow::default()
+                }
             }
-        };
-
-        Ok(())
-    }
-
-    // A `switch` statement returns on all paths only if every `case` body returns AND there is a
-    // `default` body that also returns (there is no implicit fallthrough between cases, so each
-    // body is an independent path, just like `if`/`else if`/`else` branches). A missing `default`
-    // is treated the same way as a missing `else`: an artificial empty (non-returning) branch,
-    // since this checker doesn't know whether the `case` labels exhaust the subject's values.
-    fn visit_switch(
-        &mut self,
-        cases: &Vec<(Vec<ExpressionNode<'a>>, &'a [StatementNode<'a>])>,
-        default: &Option<&'a [StatementNode<'a>]>,
-        parent: &Rc<RefCell<FlowNode>>,
-    ) -> Result<(), Error> {
-        for (_, body) in cases.iter() {
-            let case_node = Rc::new(RefCell::new(FlowNode::new()));
-            (*parent)
-                .as_ref()
-                .borrow_mut()
-                .child_nodes
-                .push(case_node.clone());
-            self.visit_block(body, &case_node)?;
-        }
-
-        let default_node = Rc::new(RefCell::new(FlowNode::new()));
-        (*parent)
-            .as_ref()
-            .borrow_mut()
-            .child_nodes
-            .push(default_node.clone());
-        if let Some(default_body) = default {
-            self.visit_block(default_body, &default_node)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_pattern_switch(
-        &mut self,
-        arms: &[SwitchArm<'a>],
-        parent: &Rc<RefCell<FlowNode>>,
-    ) -> Result<(), Error> {
-        if arms.is_empty() {
-            (*parent)
-                .as_ref()
-                .borrow_mut()
-                .child_nodes
-                .push(Rc::new(RefCell::new(FlowNode::new())));
-            return Ok(());
-        }
-        for arm in arms {
-            let arm_node = Rc::new(RefCell::new(FlowNode::new()));
-            (*parent)
-                .as_ref()
-                .borrow_mut()
-                .child_nodes
-                .push(arm_node.clone());
-            match &arm.body {
-                SwitchArmBody::Block(body) => self.visit_block(body, &arm_node)?,
-                SwitchArmBody::Expr(_) => {}
+            StatementNode::For(_, cond, _, body) => {
+                let body_flow = self.visit_block(body);
+                let is_true = cond.as_ref().map(|c| is_literal_true(c)).unwrap_or(true);
+                Flow {
+                    returns: body_flow.returns,
+                    falls_through: !is_true || body_flow.breaks,
+                    ..Flow::default()
+                }
             }
+            StatementNode::ForEach(_, _, _, _, body) => {
+                let body_flow = self.visit_block(body);
+                Flow {
+                    returns: body_flow.returns,
+                    falls_through: true,
+                    ..Flow::default()
+                }
+            }
+            StatementNode::Labeled(_, inner) => self.visit_stmt(inner),
+            StatementNode::Lock(_, body) => self.visit_block(body),
+            StatementNode::Defer(_, body) => {
+                // Walk for nested unreachable warnings, but defer runs on scope exit so it
+                // must not count as the enclosing function returning or stopping fallthrough.
+                let _ = self.visit_block(body);
+                Flow::new_fallthrough()
+            }
+            _ => Flow::new_fallthrough(),
         }
-        Ok(())
     }
+}
 
-    //add return node to parent block and mark: has return
-    fn visit_return(&mut self, parent: &Rc<RefCell<FlowNode>>) -> Result<(), Error> {
-        let return_flow = Rc::new(RefCell::new(FlowNode::from(true)));
-        (*parent)
-            .as_ref()
-            .borrow_mut()
-            .child_nodes
-            .push(return_flow.clone());
-        Ok(())
+fn is_literal_true(expr: &ExpressionNode) -> bool {
+    matches!(expr, ExpressionNode::Literal(Type::Boolean(t)) if t.text == "true")
+}
+
+fn stmt_position(stmt: &StatementNode) -> Option<dream_text::text_span::TextSpan> {
+    match stmt {
+        StatementNode::Assignment(t, _) => Some(t.position),
+        StatementNode::IndexAssignment(e, _, _) => e.position(),
+        StatementNode::MemberAssignment(e, _, _) => e.position(),
+        StatementNode::Declaration(t, _, _, _) => Some(t.position),
+        StatementNode::TupleDeclaration { pattern, .. } => pattern.position(),
+        StatementNode::FunctionInvocation(t, _, _) => Some(t.position),
+        StatementNode::MethodInvocation(e, _, _, _) => e.position(),
+        StatementNode::Return(Some(e)) => e.position(),
+        StatementNode::Return(None) => None,
+        StatementNode::IfElse(e, _, _, _) => e.position(),
+        StatementNode::While(e, _) => e.position(),
+        StatementNode::DoWhile(_, e) => e.position(),
+        StatementNode::For(None, None, None, _) => None,
+        StatementNode::For(Some(i), _, _, _) => stmt_position(i),
+        StatementNode::For(None, Some(c), _, _) => c.position(),
+        StatementNode::For(None, None, Some(i), _) => stmt_position(i),
+        StatementNode::ExpressionStatement(e) => e.position(),
+        StatementNode::AwaitStmt(e) => e.position(),
+        StatementNode::ForEach(t, _, _, _, _) => Some(t.position),
+        StatementNode::Switch(e, _, _) => e.position(),
+        StatementNode::Lock(e, _) => e.position(),
+        StatementNode::Defer(Some(budget), _) => budget.position(),
+        StatementNode::Defer(None, _) => None,
+        StatementNode::Break(_) | StatementNode::Continue(_) => None,
+        StatementNode::Labeled(_, s) => stmt_position(s),
+        StatementNode::WorkgroupDecl(t, _, _) => Some(t.position),
     }
 }

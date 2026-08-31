@@ -36,6 +36,9 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        // A lambda is its own function for `await` purposes: a non-async lambda may not await
+        // even inside an `async` enclosing function.
+        self.check_lambda_awaits(lambda, diagnostics);
         // `ref` lambda parameters are supported: the expected `fun(...)` type encodes each `ref`
         // slot as `RefBox<T>` (see `fun(ref T)` in the type grammar), and the synthesized
         // function uses `HParam.is_ref` like a named `ref` function.

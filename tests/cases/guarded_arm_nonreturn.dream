@@ -1,0 +1,6 @@
+fun f(x: int): int {
+    switch (x) {
+        1 if undeclared => { return 1; }
+        2 => { return 2; }
+    }
+}

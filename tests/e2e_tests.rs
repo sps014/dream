@@ -51,6 +51,20 @@ const SMOKE_CASES: &[&str] = &[
     "simd_f32x4",
     "autovec_arr_add",
     "heap_large_array",
+    "case_negative",
+    "case_duplicate",
+    "case_runtime_field",
+    "switch_bool",
+    "nested_self_realloc",
+    "literal_overflow",
+    "sizeof_unknown",
+    "guarded_arm_nonreturn",
+    "char_literal_errors",
+    "defer_break",
+    "lock_await_rejected",
+    "await_non_async_lambda",
+    "await_sync_map_literal",
+    "await_sync_tuple_destructure",
 ];
 
 fn collect_case_paths() -> Vec<PathBuf> {

@@ -357,8 +357,17 @@ impl Compiler {
             } else {
                 dream_mir::passes::PassManager::native_c_pipeline()
             };
+            let poll_pipeline = if debug_info {
+                dream_mir::passes::PassManager::new()
+            } else {
+                dream_mir::passes::PassManager::async_poll_pipeline()
+            };
+
             for f in &mut mir.functions {
                 pipeline.run(f, interner);
+            }
+            for p in &mut mir.polls {
+                poll_pipeline.run(p, interner);
             }
             let live_imports: Vec<(String, String)> = mir
                 .imports

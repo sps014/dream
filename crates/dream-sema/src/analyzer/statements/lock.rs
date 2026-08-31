@@ -43,6 +43,18 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         )?;
         let body_hir = self.hir_close_block();
+        // Locks are held per OS thread and every coroutine shares one thread, so releasing only
+        // on suspend would be required to keep mutual exclusion across an `await` — instead,
+        // suspension inside a lock is rejected outright.
+        if self.current_function_is_async {
+            for s in body.iter() {
+                self.forbid_await_in_stmt(
+                    s,
+                    "'await' cannot be used inside a 'lock' block",
+                    diagnostics,
+                );
+            }
+        }
         self.hir_lock(target_hir, body_hir);
         Ok(())
     }

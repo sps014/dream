@@ -59,6 +59,9 @@ pub struct Global(pub u32);
 #[derive(Debug, Default)]
 pub struct Mir {
     pub functions: Vec<MirFunction>,
+    /// Pre-lowered async poll bodies corresponding to the async functions in `functions`
+    /// (in the exact same order). Separated so `functions.len()` maps 1:1 to user functions.
+    pub polls: Vec<MirFunction>,
     /// Module-level variable slots, so the backend can declare a WASM global per slot.
     pub globals: Vec<MirGlobal>,
     /// Field/offset layout of every nominal type, carried from HIR for the backend to lower
@@ -659,10 +662,14 @@ mod tests {
             )))],
         };
 
-        let mut mir = lower_function(&func, &ctx.interner);
+        let (mut mir, mut poll) = lower_function(&func, &ctx.interner, &dream_hir::LayoutTable::default());
         PassManager::default_pipeline().run(&mut mir, &ctx.interner);
+        if let Some(p) = &mut poll {
+            PassManager::async_poll_pipeline().run(p, &ctx.interner);
+        }
         let program = crate::Mir {
             functions: vec![mir],
+            polls: poll.into_iter().collect(),
             ..Default::default()
         };
         let c = super::backend::c::emit_c_module(&program, &ctx.interner).into_bytes();

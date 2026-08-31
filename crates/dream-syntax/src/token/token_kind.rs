@@ -22,7 +22,7 @@ pub enum TokenKind {
     #[regex(r#"\$""#, lex_interpolated_string)]
     InterpolatedStringToken,
 
-    #[regex(r#"'(\\.|[^'\\])'"#)]
+    #[regex(r#"'([^'\\]*(\\.[^'\\]*)*)'"#)]
     CharToken,
 
     #[token("true")]

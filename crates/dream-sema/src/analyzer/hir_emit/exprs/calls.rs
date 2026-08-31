@@ -528,7 +528,7 @@ impl<'a> Analyzer<'a> {
                     place: HPlace::Local(box_local),
                     value: clear,
                 });
-                self.hir.last = Some(HExpr::new(ret_ty, HExprKind::IntLit(0)));
+                self.hir.last = None;
             } else {
                 let result_local = LocalId(self.hir.next_local);
                 self.hir.next_local += 1;

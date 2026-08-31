@@ -191,7 +191,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::StringToken => Ok(Type::String(self.match_token(TokenKind::StringToken))),
             TokenKind::CharToken => {
                 let tok = self.next_token();
-                let value = Self::char_literal_value(&tok.text);
+                let value = self.char_literal_value(&tok);
                 let char_token =
                     SyntaxToken::new(TokenKind::CharToken, tok.position, value.to_string());
                 Ok(Type::Char(char_token))

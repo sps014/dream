@@ -151,6 +151,7 @@ impl<'a> Analyzer<'a> {
         // index/array locals are internal to the MIR `Foreach` lowering and get no HIR slot, so a
         // body that reads the index variable will (correctly) fall out of HIR coverage.
         let elem_slot = self.hir_alloc_local(&element.text, &element_type);
+        let entry_moved = self.snapshot_moved();
         self.hir_open_block();
         self.analyze_body(
             body,
@@ -160,6 +161,9 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         )?;
         let body_hir = self.hir_close_block();
+        let exit_moved = self.snapshot_moved();
+        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        self.restore_moved(merged);
         self.hir_foreach(elem_slot, iter_hir, body_hir, label);
         Ok(())
     }
@@ -171,6 +175,7 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
+        let entry_moved = self.snapshot_moved();
         let label = self.pending_loop_label.take();
         // An `is`-with-binding in the loop condition narrows a local for the body: the body only runs
         // when the condition holds, so the cast is sound and is re-established at the top of each
@@ -191,17 +196,21 @@ impl<'a> Analyzer<'a> {
         self.declare_is_bindings(&bindings, &body_scope, &ctx, diagnostics)?;
         self.analyze_body(body, parent_function, Some(&body_scope), true, diagnostics)?;
         let body_hir = self.hir_close_block();
+        let exit_moved = self.snapshot_moved();
+        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        self.restore_moved(merged);
         self.hir_while(cond_hir, body_hir, label);
         Ok(())
     }
     pub(in crate::analyzer) fn analyze_do_while(
         &mut self,
-        condition: &ExpressionNode<'a>,
         body: &[StatementNode<'a>],
+        condition: &ExpressionNode<'a>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
+        let entry_moved = self.snapshot_moved();
         let label = self.pending_loop_label.take();
         let cond_type = self
             .analyze_expression(condition, parent_function, symbol_table, diagnostics)
@@ -211,6 +220,9 @@ impl<'a> Analyzer<'a> {
         self.hir_open_block();
         self.analyze_body(body, parent_function, Some(symbol_table), true, diagnostics)?;
         let body_hir = self.hir_close_block();
+        let exit_moved = self.snapshot_moved();
+        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        self.restore_moved(merged);
         self.hir_do_while(cond_hir, body_hir, label);
         Ok(())
     }
@@ -243,6 +255,8 @@ impl<'a> Analyzer<'a> {
         }
         let init_hir = self.hir_close_block();
 
+        let entry_moved = self.snapshot_moved();
+
         let mut cond_hir = None;
         if let Some(cond_expr) = condition {
             let cond_type = self
@@ -273,6 +287,10 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         )?;
         let body_hir = self.hir_close_block();
+
+        let exit_moved = self.snapshot_moved();
+        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        self.restore_moved(merged);
 
         self.hir_for(init_hir, cond_hir, step_hir, body_hir, label);
         Ok(())

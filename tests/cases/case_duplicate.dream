@@ -1,0 +1,7 @@
+fun main() {
+    switch (1) {
+        case 1: 
+        case 0x1:
+        default:
+    }
+}

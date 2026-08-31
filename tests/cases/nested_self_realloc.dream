@@ -1,0 +1,30 @@
+import system;
+
+struct Nested {
+    public arr: int[];
+}
+class Holder {
+    public inner: Nested;
+    public constructor() {
+        this.inner = Nested();
+        this.inner.arr = Buffer.alloc<int>(2);
+        this.inner.arr[0] = 10;
+        this.inner.arr[1] = 20;
+    }
+}
+@unsafe
+fun main() {
+    let h = Holder();
+    h.inner.arr = Buffer.realloc<int>(h.inner.arr, 4);
+    h.inner.arr[2] = 30;
+    h.inner.arr[3] = 40;
+    System.println(h.inner.arr[0]);
+    System.println(h.inner.arr[3]);
+
+    let outer = [Buffer.alloc<int>(1)];
+    outer[0][0] = 100;
+    outer[0] = Buffer.realloc<int>(outer[0], 2);
+    outer[0][1] = 200;
+    System.println(outer[0][0]);
+    System.println(outer[0][1]);
+}

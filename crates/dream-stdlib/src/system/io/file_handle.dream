@@ -139,8 +139,6 @@ public class FileHandle {
                 acc.push(b);
             }
         }
-        let eof: Option<string> = Option.None;
-        return Result.Ok(eof);
     }
 
     // Writes UTF-8 bytes of `text` at the current position.

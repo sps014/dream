@@ -41,18 +41,7 @@ impl ProtocolReach {
 pub(super) fn compute(cx: &Cx<'_>) -> ProtocolReach {
     let mut reach = ProtocolReach::default();
     let mut funcs: Vec<&crate::MirFunction> = cx.mir.functions.iter().collect();
-    let lowered: Vec<crate::MirFunction> = cx
-        .mir
-        .functions
-        .iter()
-        .filter(|f| f.is_async)
-        .filter_map(|f| {
-            f.hir_fn
-                .as_ref()
-                .map(|hir| crate::lower::lower_async_poll_body(hir, cx.interner, &cx.mir.layouts))
-        })
-        .collect();
-    funcs.extend(lowered.iter());
+    funcs.extend(cx.mir.polls.iter());
     for f in &funcs {
         for block in &f.blocks {
             for stmt in &block.stmts {

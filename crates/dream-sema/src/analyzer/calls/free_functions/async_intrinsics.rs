@@ -1,43 +1,19 @@
-//! The async built-ins: `sleep(ms): Future<void>`, `all(xs): Future<T[]>`, and
-//! `any`/`race(xs): Future<T>`.
+//! Promise combinators: `all(xs): Future<T[]>` and `any`/`race(xs): Future<T>`.
 
 use super::*;
 use dream_abi::intrinsics;
 use dream_syntax::nodes::ExpressionNode;
 
 impl<'a> Analyzer<'a> {
-    /// Types the async intrinsics: `sleep(ms: int): Future<void>`, `all(xs: Future<T>[]):
-    /// Future<T[]>`, `any`/`race(xs: Future<T>[]): Future<T>`.
+    /// Types `all(xs: Future<T>[]): Future<T[]>` and `any`/`race(xs: Future<T>[]): Future<T>`.
     pub(crate) fn analyze_async_intrinsic(
         &mut self,
         name: &SyntaxToken,
-        params: &Vec<ExpressionNode<'a>>,
+        params: &[ExpressionNode<'a>],
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        if name.text == intrinsics::SLEEP {
-            if params.len() != 1 {
-                diagnostics.report_error(
-                    format!(
-                        "'sleep' expects exactly 1 argument (milliseconds), got {}",
-                        params.len()
-                    ),
-                    Some(name.position),
-                );
-            }
-            for p in params {
-                let pt = self.analyze_expression(p, parent_function, symbol_table, diagnostics)?;
-                if !pt.is_int() {
-                    diagnostics.report_error(
-                        format!("'sleep' expects an int argument, got {}", self.ty_display(&pt)),
-                        p.position(),
-                    );
-                }
-            }
-            return Ok(Type::Unknown);
-        }
-
         // all/any/race take a single `Future<T>[]` argument.
         if params.len() != 1 {
             diagnostics.report_error(

@@ -52,10 +52,8 @@ impl<'a> Analyzer<'a> {
             .borrow()
             .report_unused_locals(diagnostics);
         // check return
-        let mut graph = FunctionControlGraph::new(function);
-        if let Err(e) = graph.build() {
-            diagnostics.report_error(e.to_string(), Some(function.name.position));
-        }
+        let mut graph = FunctionControlGraph::new(function, diagnostics);
+        graph.build();
         Ok(param_table.clone())
     }
 
@@ -217,7 +215,7 @@ impl<'a> Analyzer<'a> {
                 self.analyze_while(condition, body, parent_function, symbol_table, diagnostics)?
             }
             StatementNode::DoWhile(body, condition) => {
-                self.analyze_do_while(condition, body, parent_function, symbol_table, diagnostics)?
+                self.analyze_do_while(body, condition, parent_function, symbol_table, diagnostics)?
             }
             StatementNode::Lock(target, body) => self.analyze_lock(
                 target,

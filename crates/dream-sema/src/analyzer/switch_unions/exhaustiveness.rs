@@ -281,6 +281,18 @@ impl<'a> Analyzer<'a> {
             return;
         }
 
+        // `bool` isn't a union, so coverage is just "both constructors appeared".
+        if subject_base == "bool" {
+            if !self.patterns_exhaustive(subject_type, &patterns) {
+                diagnostics.report_error(
+                    "Non-exhaustive switch on 'bool': cover both `true` and `false`, or add a `_` arm"
+                        .to_string(),
+                    position,
+                );
+            }
+            return;
+        }
+
         if let Some(info) = union_info {
             // A variant is covered when a matching arm reaches it and (recursively) its payload
             // sub-patterns cover the field types — so `Wrap(A(n))` + `Wrap(B)` together cover `Wrap`.
@@ -322,6 +334,23 @@ impl<'a> Analyzer<'a> {
             return true;
         }
         let base = ty.get_type();
+        // `bool` has exactly two constructors; `true` + `false` arms (possibly combined in
+        // or-patterns) cover it without a `_`.
+        if base == "bool" {
+            let alts = patterns.iter().flat_map(|p| p.or_alternatives());
+            let mut saw_true = false;
+            let mut saw_false = false;
+            for p in alts {
+                if let PatternNode::Literal(Type::Boolean(t)) = p {
+                    if t.text == "true" {
+                        saw_true = true;
+                    } else {
+                        saw_false = true;
+                    }
+                }
+            }
+            return saw_true && saw_false;
+        }
         let Some(info) = self.union_table.get(&base).cloned() else {
             return false;
         };

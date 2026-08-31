@@ -191,8 +191,8 @@ tarballs under `dl/` (separate trees). Max package tarball size is **10 MiB**.
 - **CLI:** `dreamer search <query>` — matches package name, description, and keywords.
 - **Web:** [sps014.github.io/dream-registry](https://sps014.github.io/dream-registry/) — browse and copy install commands.
 
-The first published library is [`semver`](https://github.com/sps014/dream/tree/main/packages/semver)
-(`dreamer add semver`).
+The first published library is [`semver`](https://github.com/sps014/dream-packages/tree/main/semver)
+(`dreamer add semver`). Official libraries live in [`sps014/dream-packages`](https://github.com/sps014/dream-packages).
 
 ## Dependency resolution
 

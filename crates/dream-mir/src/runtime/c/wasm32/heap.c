@@ -348,26 +348,13 @@ static void free_large_locked(int32_t block, int32_t sz) {
     i32_put(block, sz);
 }
 
-__attribute__((export_name(DREAM_SYM_FREE)))
-void dream_free(dream_ptr ptr) {
+static void recycle_locked(dream_ptr ptr) {
     int32_t block_start;
     int32_t idx;
     int32_t sz;
-    if (!ptr) {
-        return;
-    }
-    /* Substring slices retain their parent; release it before the block leaves the live
-     * set. Weak slots pointing at this object are reset first so `del`-time observers see
-     * the cleared state (mirrors native/heap.c). */
-    dream_str_fini(ptr);
-    if (dream_weak_any) {
-        dream_weak_clear_all(ptr);
-    }
-    alloc_lock();
     block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
     sz = i32_at(block_start);
     if (sz == 0) {
-        alloc_unlock();
         return;
     }
     live_objects -= 1;
@@ -379,7 +366,30 @@ void dream_free(dream_ptr ptr) {
     } else {
         class_push(idx, block_start);
     }
+}
+
+void dream_recycle(dream_ptr ptr) {
+    if (!ptr) {
+        return;
+    }
+    if (dream_weak_any) {
+        dream_weak_clear_all(ptr);
+    }
+    alloc_lock();
+    recycle_locked(ptr);
     alloc_unlock();
+}
+
+__attribute__((export_name(DREAM_SYM_FREE)))
+void dream_free(dream_ptr ptr) {
+    if (!ptr) {
+        return;
+    }
+    /* Substring slices retain their parent; release it before the block leaves the live
+     * set. Weak slots pointing at this object are reset first so `del`-time observers see
+     * the cleared state (mirrors native/heap.c). */
+    dream_str_fini(ptr);
+    dream_recycle(ptr);
 }
 
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {

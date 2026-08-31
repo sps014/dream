@@ -99,8 +99,8 @@ construction** — no lint, no annotation, any number of buffers or counters:
 - Ownership-transferring pops zero their vacated slot (List/Queue/PriorityQueue) purely to
   reclaim eagerly, not for safety.
 
-Leak checking: `DREAM_DEBUG_LEAKS=1 dream run …` prints heap counters at exit (debug builds print
-unconditionally); `Debug.live_objects()` deltas assert balance in goldens
+Leak checking: debug `dream run` (including `-g`) always prints heap counters at exit;
+`--release` opt-in is `DREAM_DEBUG_LEAKS=1`. `Debug.live_objects()` deltas assert balance in goldens
 (`tests/cases/container_clear_rc.dream`). Note counters include interned strings and boxed print
 values, so measure into locals *before* printing.
 

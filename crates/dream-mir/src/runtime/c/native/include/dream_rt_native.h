@@ -122,6 +122,9 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
 }
 
 void dream_free(dream_ptr ptr);
+/* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
+ * uses this; string destroy still goes through `dream_free`. */
+void dream_recycle(dream_ptr ptr);
 
 extern _Thread_local int32_t dream_defer_depth;
 extern _Thread_local int32_t dream_defer_busy;
@@ -192,6 +195,14 @@ DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
 /* True when `p` is an immortal/shared block (`INT32_MAX` rc): never mutate or free. */
 DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
     return ((int32_t *)((char *)dream_p(p) - RC_FROM_DATA))[0] == INT32_MAX;
+}
+
+/* Peek: this pointer is the unique remaining holder (`rc == 1`). Destroy glue uses this
+ * to skip the decrement and call `destroy_*` on uniquely owned fields. */
+DREAM_ALWAYS_INLINE int dream_rc_one(dream_ptr p) {
+    int32_t *rc = (int32_t *)((char *)dream_p(p) - RC_FROM_DATA);
+    int32_t v = dream_rt_mt ? __atomic_load_n(rc, __ATOMIC_RELAXED) : *rc;
+    return v == 1;
 }
 
 /* Bounds-checked element address for a length-prefixed array block. One call

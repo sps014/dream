@@ -385,6 +385,42 @@ mod tests {
     }
 
     #[test]
+    fn unique_destroy_cascades_rc_one_fields() {
+        use dream_hir::{LayoutTable, TypeLayout};
+        use dream_types::{DefKind, TypeCtx};
+
+        let mut ctx = TypeCtx::new();
+        let def = ctx.register(DefKind::Struct, "Node", vec![]);
+        let ty = ctx.interner.struct_ty(def, vec![]);
+        let layout = TypeLayout::from_fields(
+            &ctx.interner,
+            "Node",
+            vec![("left".into(), ty, false, false)],
+        );
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_param(ty, Some("x".into()));
+        b.push(Statement::ReleaseUnique(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut layouts = LayoutTable::default();
+        layouts.insert(ty, layout);
+        let mir = Mir {
+            functions: vec![b.finish()],
+            layouts,
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &ctx.interner);
+        assert!(
+            c.contains("dream_rc_one"),
+            "unique destroy should cascade rc==1 fields:\n{}",
+            c
+        );
+        assert!(
+            super::types::native_header_declares("dream_rc_one"),
+            "dream_rc_one must be in the native header"
+        );
+    }
+
+    #[test]
     fn dense_switch_is_computed_goto() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("disp", i.int());

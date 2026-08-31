@@ -34,8 +34,8 @@ static int nchunks;
 static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
 int dream_rt_mt;
 
-/* One exclusive block per size class: alloc/free of short-lived strings (arc_locals,
- * substring slices) skip the locked freelist after the first churn. */
+/* Per-thread LIFO of exact size-class blocks. Tree/array churn stays off the process-wide
+ * list (the old one-slot TLS overflowed after the first free of each class). */
 static _Thread_local char *tls_free[NCLASS];
 
 static void heap_lock(void) {
@@ -86,6 +86,38 @@ static void *large_next(char *block) {
 
 static void large_set_next(char *block, void *next) {
     memcpy(block + 8, &next, sizeof(next));
+}
+
+static void *class_next(char *block) {
+    void *next = NULL;
+    memcpy(&next, block + 8, sizeof(next));
+    if (next == (void *)block) {
+        return NULL;
+    }
+    return next;
+}
+
+static void class_set_next(char *block, void *next) {
+    memcpy(block + 8, &next, sizeof(next));
+}
+
+static void account_alloc(void) {
+    live_objects += 1;
+    total_allocations += 1;
+}
+
+static void account_free(void) {
+    last_freed += 1;
+    if (live_objects > 0) {
+        live_objects -= 1;
+    }
+}
+
+static void activate(char *block, int32_t tag) {
+    ((uint32_t *)block)[1] = MAGIC_LIVE;
+    ((int32_t *)block)[2] = tag;
+    ((int32_t *)block)[3] = 1;
+    account_alloc();
 }
 
 static char *large_try_take(int32_t need) {
@@ -144,12 +176,8 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
         alloc_size = class_bytes(idx);
         block = tls_free[idx];
         if (block != NULL) {
-            tls_free[idx] = NULL;
-            ((uint32_t *)block)[1] = MAGIC_LIVE;
-            ((int32_t *)block)[2] = tag;
-            ((int32_t *)block)[3] = 1;
-            live_objects += 1;
-            total_allocations += 1;
+            tls_free[idx] = class_next(block);
+            activate(block, tag);
             return (dream_ptr)(block + 16);
         }
     }
@@ -165,11 +193,7 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
                 break;
             }
             {
-                void *next = NULL;
-                memcpy(&next, block + 8, sizeof(next));
-                if (next == (void *)block) {
-                    next = NULL;
-                }
+                void *next = class_next(block);
                 freelist[idx] = (dream_ptr)(uintptr_t)next;
             }
             break;
@@ -179,11 +203,7 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
         block = bump((size_t)alloc_size);
         ((int32_t *)block)[0] = alloc_size;
     }
-    ((uint32_t *)block)[1] = MAGIC_LIVE;
-    ((int32_t *)block)[2] = tag;
-    ((int32_t *)block)[3] = 1;
-    live_objects += 1;
-    total_allocations += 1;
+    activate(block, tag);
     heap_unlock();
     return (dream_ptr)(block + 16);
 }
@@ -196,14 +216,13 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 int32_t debug_get_heap_ptr(void) { return (int32_t)arena_off; }
 int32_t debug_get_free_list_head(void) { return last_freed; }
 
-void dream_free(dream_ptr ptr) {
+void dream_recycle(dream_ptr ptr) {
     char *block;
     int32_t sz;
     int idx;
     if (ptr == 0) {
         return;
     }
-    dream_str_fini(ptr);
     if (dream_weak_any) {
         dream_weak_clear_all(ptr);
     }
@@ -213,42 +232,25 @@ void dream_free(dream_ptr ptr) {
         return;
     }
     idx = size_class(sz);
+    ((uint32_t *)block)[1] = MAGIC_FREE;
+    account_free();
     if (idx > 12) {
         heap_lock();
-        ((uint32_t *)block)[1] = MAGIC_FREE;
         large_set_next(block, dream_p(large_freelist));
         large_freelist = (dream_ptr)block;
-        last_freed += 1;
-        if (live_objects > 0) {
-            live_objects -= 1;
-        }
         heap_unlock();
         return;
     }
-    if (tls_free[idx] == NULL) {
-        ((uint32_t *)block)[1] = MAGIC_FREE;
-        last_freed += 1;
-        if (live_objects > 0) {
-            live_objects -= 1;
-        }
-        tls_free[idx] = block;
+    class_set_next(block, tls_free[idx]);
+    tls_free[idx] = block;
+}
+
+void dream_free(dream_ptr ptr) {
+    if (ptr == 0) {
         return;
     }
-    heap_lock();
-    ((uint32_t *)block)[1] = MAGIC_FREE;
-    {
-        void *next = dream_p(freelist[idx]);
-        if (next == (void *)block) {
-            next = NULL;
-        }
-        memcpy(block + 8, &next, sizeof(next));
-    }
-    freelist[idx] = (dream_ptr)block;
-    last_freed += 1;
-    if (live_objects > 0) {
-        live_objects -= 1;
-    }
-    heap_unlock();
+    dream_str_fini(ptr);
+    dream_recycle(ptr);
 }
 
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {

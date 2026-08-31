@@ -258,6 +258,30 @@ fn unique_header() -> Stmt {
     )
 }
 
+/// Last-ref field drop: if the payload is uniquely owned (`rc == 1`), skip the decrement
+/// and run `destroy_*` (tree free). Shared / immortal payloads still go through `release_*`.
+fn drop_rc_slot(cx: &Cx<'_>, ty: TypeId, loaded: Expr, tmp: &mut u32) -> Stmt {
+    let rel = release_sym(cx, ty);
+    let des = destroy_sym(cx, ty);
+    if rel == des {
+        return Stmt::call(rel, vec![loaded]);
+    }
+    let n = *tmp;
+    *tmp += 1;
+    let c = format!("c{n}");
+    Stmt::block(vec![
+        Stmt::decl(CTy::Ptr, c.clone(), Some(loaded)),
+        Stmt::if_(
+            Expr::id(c.clone()),
+            Stmt::if_else(
+                Expr::call("dream_rc_one", vec![Expr::id(c.clone())]),
+                Stmt::call(des, vec![Expr::id(c.clone())]),
+                Stmt::call(rel, vec![Expr::id(c)]),
+            ),
+        ),
+    ])
+}
+
 fn maybe_defer(b: &mut FuncBuilder, destroy: &str, uses_defer: bool) {
     if !uses_defer {
         return;
@@ -356,39 +380,39 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             p.clone(),
         );
     }
+    let des_redirect = |ty: &TypeId| canon.destroy.contains_key(ty);
+    for elem in &array_elems {
+        if des_redirect(elem) {
+            continue;
+        }
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("destroy_array_t{}", elem.0)),
+            p.clone(),
+        );
+    }
+    for (ty, layout) in &cx.native.structs {
+        if des_redirect(ty) {
+            continue;
+        }
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("destroy_{}", layout.name)),
+            p.clone(),
+        );
+    }
+    for (ty, layout) in &cx.native.unions {
+        if des_redirect(ty) {
+            continue;
+        }
+        m.static_proto(
+            CTy::Void,
+            c_ident(&format!("destroy_{}", layout.name)),
+            p.clone(),
+        );
+    }
+    m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
     if mir.uses_defer {
-        let des_redirect = |ty: &TypeId| canon.destroy.contains_key(ty);
-        for elem in &array_elems {
-            if des_redirect(elem) {
-                continue;
-            }
-            m.static_proto(
-                CTy::Void,
-                c_ident(&format!("destroy_array_t{}", elem.0)),
-                p.clone(),
-            );
-        }
-        for (ty, layout) in &cx.native.structs {
-            if des_redirect(ty) {
-                continue;
-            }
-            m.static_proto(
-                CTy::Void,
-                c_ident(&format!("destroy_{}", layout.name)),
-                p.clone(),
-            );
-        }
-        for (ty, layout) in &cx.native.unions {
-            if des_redirect(ty) {
-                continue;
-            }
-            m.static_proto(
-                CTy::Void,
-                c_ident(&format!("destroy_{}", layout.name)),
-                p.clone(),
-            );
-        }
-        m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
         m.static_proto(CTy::Void, "release_string", p.clone());
         m.static_proto(CTy::Void, "destroy_string", p.clone());
     }
@@ -429,10 +453,11 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             );
             body.extend(value_ref_stmts(cx, elem, at, false));
         } else if interner.is_rc_tracked(elem) {
-            let rel = release_sym(cx, elem);
-            body.push(Stmt::call(
-                rel,
-                vec![Expr::load(
+            let mut tmp = 0u32;
+            body.push(drop_rc_slot(
+                cx,
+                elem,
+                Expr::load(
                     CTy::Ptr,
                     Expr::add(
                         Expr::ptr_add(Expr::id("p"), super::types::len_prefix()),
@@ -441,7 +466,8 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                             Expr::i(es as i64),
                         ),
                     ),
-                )],
+                ),
+                &mut tmp,
             ));
         }
         if !body.is_empty() {
@@ -452,7 +478,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 body: Box::new(Stmt::block(body)),
             });
         }
-        b.call("dream_free", vec![Expr::id("p")]);
+        b.call("dream_recycle", vec![Expr::id("p")]);
         m.push_func(b);
         // Wrapper keeps the classic contract (null-check + decrement + tail call).
         let wrap_name = c_ident(&format!("release_array_t{}", elem.0));
@@ -493,6 +519,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             ));
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
+        let mut tmp = 0u32;
         for f in &layout.fields {
             if f.is_weak {
                 continue;
@@ -525,17 +552,18 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     b.stmt(s);
                 }
             } else if interner.is_rc_tracked(f.ty) {
-                let rel = release_sym(cx, f.ty);
-                b.call(
-                    rel,
-                    vec![Expr::load(
+                b.stmt(drop_rc_slot(
+                    cx,
+                    f.ty,
+                    Expr::load(
                         CTy::Ptr,
                         Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                    )],
-                );
+                    ),
+                    &mut tmp,
+                ));
             }
         }
-        b.call("dream_free", vec![Expr::id("p")]);
+        b.call("dream_recycle", vec![Expr::id("p")]);
         m.push_func(b);
         // Wrapper keeps the classic contract (null-check + decrement + tail call).
         let wrap_name = c_ident(&format!("release_{}", layout.name));
@@ -563,6 +591,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             &c_ident(&format!("destroy_{}", layout.name)),
             cx.mir.uses_defer,
         );
+        let mut tmp = 0u32;
         let mut arms = Vec::new();
         for variant in &layout.variants {
             let mut body = Vec::new();
@@ -577,13 +606,14 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     );
                     body.extend(value_ref_stmts(cx, field.ty, at, false));
                 } else if interner.is_rc_tracked(field.ty) {
-                    let rel = release_sym(cx, field.ty);
-                    body.push(Stmt::call(
-                        rel,
-                        vec![Expr::load(
+                    body.push(drop_rc_slot(
+                        cx,
+                        field.ty,
+                        Expr::load(
                             CTy::Ptr,
                             Expr::ptr_add(Expr::id("p"), Expr::i(field.offset as i64)),
-                        )],
+                        ),
+                        &mut tmp,
                     ));
                 }
             }
@@ -601,7 +631,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             expr: Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
             arms,
         });
-        b.call("dream_free", vec![Expr::id("p")]);
+        b.call("dream_recycle", vec![Expr::id("p")]);
         m.push_func(b);
         // Wrapper keeps the classic contract (null-check + decrement + tail call).
         let wrap_name = c_ident(&format!("release_{}", layout.name));
@@ -726,10 +756,11 @@ fn emit_destroy_helpers(
             );
             body.extend(value_ref_stmts(cx, *elem, at, false));
         } else if interner.is_rc_tracked(*elem) {
-            let rel = release_sym(cx, *elem);
-            body.push(Stmt::call(
-                rel,
-                vec![Expr::load(
+            let mut tmp = 0u32;
+            body.push(drop_rc_slot(
+                cx,
+                *elem,
+                Expr::load(
                     CTy::Ptr,
                     Expr::add(
                         Expr::ptr_add(Expr::id("p"), super::types::len_prefix()),
@@ -738,7 +769,8 @@ fn emit_destroy_helpers(
                             Expr::i(es as i64),
                         ),
                     ),
-                )],
+                ),
+                &mut tmp,
             ));
         }
         if !body.is_empty() {
@@ -749,7 +781,7 @@ fn emit_destroy_helpers(
                 body: Box::new(Stmt::block(body)),
             });
         }
-        b.call("dream_free", vec![Expr::id("p")]);
+        b.call("dream_recycle", vec![Expr::id("p")]);
         m.push_func(b);
     }
     for (ty, layout) in &cx.native.structs {
@@ -779,6 +811,7 @@ fn emit_destroy_helpers(
             ));
             b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
         }
+        let mut tmp = 0u32;
         for f in &layout.fields {
             if f.is_weak {
                 continue;
@@ -811,17 +844,18 @@ fn emit_destroy_helpers(
                     b.stmt(s);
                 }
             } else if interner.is_rc_tracked(f.ty) {
-                let rel = release_sym(cx, f.ty);
-                b.call(
-                    rel,
-                    vec![Expr::load(
+                b.stmt(drop_rc_slot(
+                    cx,
+                    f.ty,
+                    Expr::load(
                         CTy::Ptr,
                         Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                    )],
-                );
+                    ),
+                    &mut tmp,
+                ));
             }
         }
-        b.call("dream_free", vec![Expr::id("p")]);
+        b.call("dream_recycle", vec![Expr::id("p")]);
         m.push_func(b);
     }
     for (ty, layout) in &cx.native.unions {
@@ -838,6 +872,7 @@ fn emit_destroy_helpers(
         ));
         b.stmt(unique_header());
         maybe_defer(&mut b, &name, cx.mir.uses_defer);
+        let mut tmp = 0u32;
         let mut arms = Vec::new();
         for variant in &layout.variants {
             let mut body = Vec::new();
@@ -852,13 +887,14 @@ fn emit_destroy_helpers(
                     );
                     body.extend(value_ref_stmts(cx, field.ty, at, false));
                 } else if interner.is_rc_tracked(field.ty) {
-                    let rel = release_sym(cx, field.ty);
-                    body.push(Stmt::call(
-                        rel,
-                        vec![Expr::load(
+                    body.push(drop_rc_slot(
+                        cx,
+                        field.ty,
+                        Expr::load(
                             CTy::Ptr,
                             Expr::ptr_add(Expr::id("p"), Expr::i(field.offset as i64)),
-                        )],
+                        ),
+                        &mut tmp,
                     ));
                 }
             }
@@ -876,7 +912,7 @@ fn emit_destroy_helpers(
             expr: Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
             arms,
         });
-        b.call("dream_free", vec![Expr::id("p")]);
+        b.call("dream_recycle", vec![Expr::id("p")]);
         m.push_func(b);
     }
     if cx.mir.uses_defer {

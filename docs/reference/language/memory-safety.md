@@ -169,7 +169,7 @@ Shrinking via `Buffer.realloc` automatically releases dropped tail slots — tru
 
 ## Debugging retention
 
-Debug builds print heap counters at exit:
+Debug builds (including `-g`) always print heap counters at exit:
 ```
 [dream] leak check: live=0 total_allocations=6
 ```

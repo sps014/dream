@@ -21,8 +21,8 @@ pub fn emit_c_module(mir: &Mir, interner: &TypeInterner) -> String {
     emit_c_module_for(mir, interner, CTarget::Native, false)
 }
 
-/// `leak_checks` emits the exit-time heap-counter report in native `main` unconditionally
-/// (debug builds); release builds gate it behind `DREAM_DEBUG_LEAKS=1` at runtime instead.
+/// `leak_checks` (debug / non-`--release`) always prints the exit-time heap-counter report
+/// in native `main`. Release builds gate it behind `DREAM_DEBUG_LEAKS=1` at runtime.
 pub fn emit_c_module_for(
     mir: &Mir,
     interner: &TypeInterner,
@@ -200,8 +200,9 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
         vec![Expr::id("argc"), Expr::id("argv")],
     );
     let rc = main_fn.temp(CTy::I32, Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])));
-    // Heap-counter leak report. Debug builds always print it so unoptimized `dream run`
-    // surfaces retention by default; release builds opt in via DREAM_DEBUG_LEAKS=1.
+    // Heap-counter leak report. Debug builds always print it so `dream run` / `-g` show
+    // retention; release builds opt in via DREAM_DEBUG_LEAKS=1. Counters themselves always
+    // update so `Debug.live_objects()` is valid in `--release` goldens.
     let leak_report = Stmt::call(
         "fprintf",
         vec![

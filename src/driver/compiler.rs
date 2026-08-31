@@ -385,7 +385,7 @@ impl Compiler {
                     &mir,
                     interner,
                     dream_mir::backend::c::CTarget::Native,
-                    debug && !debug_info,
+                    debug,
                 )
                 .into_bytes(),
             };

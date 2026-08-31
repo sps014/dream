@@ -1,0 +1,10 @@
+enum Secret {
+    A,
+    B,
+}
+
+public fun leak(): Secret {
+    return Secret.A;
+}
+
+fun main(): void {}

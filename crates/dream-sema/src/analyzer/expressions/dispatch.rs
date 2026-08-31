@@ -480,6 +480,8 @@ impl<'a> Analyzer<'a> {
                                 format!("! operator requires bool, got {}", self.ty_display(&right_type)),
                                 Some(opr.position),
                             );
+                            self.hir_none();
+                            return Ok(Type::Unknown);
                         }
                         let result = Type::Boolean(opr.clone());
                         self.hir_set_unary(opr, operand, &result);
@@ -514,6 +516,8 @@ impl<'a> Analyzer<'a> {
                                 ),
                                 Some(opr.position),
                             );
+                            self.hir_none();
+                            return Ok(Type::Unknown);
                         }
                         self.hir_set_unary(opr, operand, &right_type);
                         Ok(right_type)
@@ -530,6 +534,8 @@ impl<'a> Analyzer<'a> {
                                 ),
                                 Some(opr.position),
                             );
+                            self.hir_none();
+                            return Ok(Type::Unknown);
                         }
                         self.hir_set_unary(opr, operand, &right_type);
                         Ok(right_type)
@@ -540,7 +546,7 @@ impl<'a> Analyzer<'a> {
                             Some(opr.position),
                         );
                         self.hir_none();
-                        Ok(right_type)
+                        Ok(Type::Unknown)
                     }
                 }
             }

@@ -280,23 +280,11 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             )
         }
         "inverse" => {
-            if let Some(arg) = args.first() {
-                let m_ty = infer_wgsl_ty(arg, ctx);
-                let m = emit_expr(arg, ctx);
-                if m_ty.starts_with("mat2") {
-                    format!(
-                        "(mat2x2<f32>(vec2<f32>({m}[1].y, -{m}[0].y), vec2<f32>(-{m}[1].x, {m}[0].x)) * (1.0 / determinant({m})))"
-                    )
-                } else {
-                    ctx.report_error(
-                        format!("inverse() for {} is not implemented in the WGSL backend yet", m_ty),
-                        arg.position(),
-                    );
-                    m
-                }
-            } else {
-                "m".into()
-            }
+            let m = args
+                .first()
+                .map(|a| emit_expr(a, ctx))
+                .unwrap_or_else(|| "m".into());
+            format!("inverse({m})")
         }
         "splat" => {
             ctx.report_error(

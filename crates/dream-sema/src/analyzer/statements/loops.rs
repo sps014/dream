@@ -123,7 +123,7 @@ impl<'a> Analyzer<'a> {
                     ),
                     iterable.position(),
                 );
-                Type::Void
+                Type::Unknown
             }
         };
 

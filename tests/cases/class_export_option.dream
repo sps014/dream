@@ -1,0 +1,12 @@
+class Hidden {
+    public x: int;
+    public constructor(x: int) {
+        this.x = x;
+    }
+}
+
+public fun leak(): Option<Hidden> {
+    return Option.None;
+}
+
+fun main(): void {}

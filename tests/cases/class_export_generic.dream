@@ -1,0 +1,19 @@
+class Hidden {
+    public x: int;
+    public constructor(x: int) {
+        this.x = x;
+    }
+}
+
+public class Box<T> {
+    public v: T;
+    public constructor(v: T) {
+        this.v = v;
+    }
+}
+
+public fun leak(): Box<Hidden> {
+    return Box(Hidden(1));
+}
+
+fun main(): void {}

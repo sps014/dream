@@ -1,0 +1,22 @@
+// Option (and other union) fields on a class deep-copy across the JS boundary:
+// None → JS null, Some(x) → x. Assigning a JS object back fills those fields.
+//
+//   cargo run -- --wasm --runtime --node sample/interop/option_fields.dream
+
+import system;
+
+class Profile {
+    public name: string;
+    public nickname: Option<string>;
+    public constructor(name: string, nickname: Option<string>) {
+        this.name = name;
+        this.nickname = nickname;
+    }
+}
+
+fun main(): void {
+    js.global.receiveProfile(Profile("Ada", Option.Some("A")));
+    js.global.receiveProfile(Profile("Bob", Option.None));
+    let p: Profile = js.global.makeProfile();
+    System.println(p.name);
+}

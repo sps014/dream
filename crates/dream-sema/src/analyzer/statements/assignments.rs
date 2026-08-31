@@ -400,6 +400,8 @@ impl<'a> Analyzer<'a> {
                 ),
                 Some(op.position),
             );
+            self.hir_fail();
+            return Ok(Type::Unknown);
         }
 
         let tmp_name = format!("__incdec_{}", op.position.start);

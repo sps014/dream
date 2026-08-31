@@ -74,7 +74,7 @@ impl<'a> Analyzer<'a> {
                     ),
                     Some(opr.position),
                 );
-                return Ok(right_value);
+                return Ok(Type::Unknown);
             };
             if base != "Option" || args.len() != 1 {
                 diagnostics.report_error(
@@ -84,7 +84,7 @@ impl<'a> Analyzer<'a> {
                     ),
                     Some(opr.position),
                 );
-                return Ok(right_value);
+                return Ok(Type::Unknown);
             }
             self.ensure_union_instantiated("Option", &args, &opr.position, diagnostics);
             let inner = args[0].clone();
@@ -197,6 +197,7 @@ impl<'a> Analyzer<'a> {
                     format!("Cannot perform operation {} on string", opr.text),
                     Some(opr.position),
                 );
+                return Ok(Type::Unknown);
             }
             (_, _) => {}
         };

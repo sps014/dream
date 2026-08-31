@@ -2159,3 +2159,145 @@ fn test_missing_method_pretty_prints_generic_receiver() {
         joined
     );
 }
+
+fn error_messages(diagnostics: &dream_diagnostics::DiagnosticBag) -> Vec<String> {
+    diagnostics
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == dream_diagnostics::Severity::Error)
+        .map(|d| d.message.clone())
+        .collect()
+}
+
+#[test]
+fn test_coalesce_non_option_is_poison() {
+    let code = "
+        fun takes_int(n: int): int { return n; }
+        fun main(): void {
+            let x: int = 1 ?? 2;
+            let y: int = takes_int(1 ?? 2);
+        }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors.iter().all(|m| m.contains("'??' requires an Option")),
+        "expected only ?? errors, got: {:?}",
+        errors
+    );
+    assert_eq!(errors.len(), 2, "got: {:?}", errors);
+}
+
+#[test]
+fn test_illegal_string_operator_is_poison() {
+    let code = "
+        fun takes_string(s: string): void {}
+        fun main(): void {
+            takes_string(\"a\" - \"b\");
+        }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert_eq!(errors.len(), 1, "got: {:?}", errors);
+    assert!(
+        errors[0].contains("Cannot perform operation"),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_bad_unary_is_poison() {
+    let code = "
+        fun takes_int(n: int): int { return n; }
+        fun main(): void {
+            let x: int = !5 + 1;
+            let y: int = takes_int(!5);
+        }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors.iter().all(|m| m.contains("! operator requires bool")),
+        "expected only unary errors, got: {:?}",
+        errors
+    );
+    assert_eq!(errors.len(), 2, "got: {:?}", errors);
+}
+
+#[test]
+fn test_inc_non_integer_is_poison() {
+    let code = "
+        fun takes_bool(b: bool): void {}
+        fun main(): void {
+            let b = true;
+            takes_bool(b++);
+        }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert_eq!(errors.len(), 1, "got: {:?}", errors);
+    assert!(
+        errors[0].contains("'++'/'--' require an integer"),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_foreach_non_iterable_is_poison_not_void() {
+    let code = "
+        fun takes_int(n: int): void {}
+        fun main(): void {
+            for (let x in 123) {
+                takes_int(x);
+            }
+        }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert_eq!(errors.len(), 1, "got: {:?}", errors);
+    assert!(
+        errors[0].contains("for-each can only iterate"),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_public_fn_exposes_private_generic_arg() {
+    let code = "
+        class Hidden {
+            public x: int;
+            public constructor(x: int) { this.x = x; }
+        }
+        public class Box<T> {
+            public v: T;
+            public constructor(v: T) { this.v = v; }
+        }
+        public fun leak(): Box<Hidden> {
+            return Box(Hidden(1));
+        }
+        fun main(): void {}
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors
+            .iter()
+            .any(|m| m.contains("exposes private class 'Hidden'")),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_public_fn_exposes_private_enum() {
+    let code = "
+        enum Secret { A, B }
+        public fun leak(): Secret { return Secret.A; }
+        fun main(): void {}
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors
+            .iter()
+            .any(|m| m.contains("exposes private type 'Secret'")),
+        "got: {:?}",
+        errors
+    );
+}

@@ -340,7 +340,7 @@ fn main() -> ExitCode {
     if let Err(e) = result {
         use dream::driver::error::CompileError;
         match e {
-            CompileError::Syntax | CompileError::Semantic | CompileError::Generator => {}
+            CompileError::Syntax(_) | CompileError::Semantic(_) | CompileError::Generator(_) => {}
             CompileError::Io(err) => ui.error(&format!("{err}")),
             CompileError::Internal(msg) => {
                 report_tool_error(&ui, &msg);

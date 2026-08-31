@@ -65,7 +65,28 @@ const SMOKE_CASES: &[&str] = &[
     "await_non_async_lambda",
     "await_sync_map_literal",
     "await_sync_tuple_destructure",
+    "class_export",
+    "class_export_generic",
+    "class_export_option",
+    "class_export_enum",
+    "panic_div_zero",
 ];
+
+fn assert_needles(haystack: &str, expected: &str, dream_file: &Path, kind: &str) {
+    let needles: Vec<&str> = expected
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    for needle in needles {
+        assert!(
+            haystack.contains(needle),
+            "{kind} for {:?} missing {:?}\n--- output ---\n{haystack}",
+            dream_file,
+            needle
+        );
+    }
+}
 
 fn collect_case_paths() -> Vec<PathBuf> {
     let cases_dir = Path::new("tests/cases");
@@ -210,11 +231,16 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let compile_result = compiler.compile(&src, &dest);
 
     if expected_error_file.exists() {
-        assert!(
-            compile_result.is_err(),
-            "Expected compilation to fail for {:?}",
-            dream_file
-        );
+        let err = match compile_result {
+            Err(e) => e,
+            Ok(()) => panic!("Expected compilation to fail for {:?}", dream_file),
+        };
+        let rendered = err
+            .diagnostic_text()
+            .unwrap_or("")
+            .to_string();
+        let expected = fs::read_to_string(&expected_error_file).unwrap_or_default();
+        assert_needles(&rendered, &expected, dream_file, "compile error");
         let _ = fs::remove_file(&c_path);
         let _ = fs::remove_file(c_path.with_extension("o"));
         return;
@@ -276,7 +302,11 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let _ = fs::remove_file(c_path.with_extension("bin"));
 
     if expects_trap {
-        assert!(run.is_err(), "expected trap for {:?}", dream_file);
+        let err = match run {
+            Err(e) => e.to_string(),
+            Ok(_) => panic!("expected trap for {:?}", dream_file),
+        };
+        assert_needles(&err, &expected_output, dream_file, "trap");
         return;
     }
     let actual = run.unwrap_or_else(|e| panic!("run failed for {:?}: {}", dream_file, e));
@@ -511,6 +541,7 @@ fn wasm_compiles_js_interop_samples() {
         "sample/interop/slots.dream",
         "sample/interop/structs.dream",
         "sample/interop/value_structs.dream",
+        "sample/interop/option_fields.dream",
     ] {
         let src = Path::new(rel);
         if !src.exists() {
@@ -530,6 +561,33 @@ fn wasm_compiles_js_interop_samples() {
         let _ = fs::remove_file(dest.with_extension("c"));
         let _ = fs::remove_file(dest.with_extension("abi.json"));
     }
+}
+
+#[test]
+fn wasm32_js_option_struct_fields_are_marshaled() {
+    let src = Path::new("sample/interop/option_fields.dream");
+    let dest = std::env::temp_dir().join("dream_js_option_fields.wat");
+    let src_s = src.to_str().unwrap().to_string();
+    let dest_s = dest.to_str().unwrap().to_string();
+    Compiler::new(Target::Wasm32)
+        .compile(&src_s, &dest_s)
+        .unwrap_or_else(|e| panic!("option_fields should compile to wasm32: {}", e));
+    let c_path = dest.with_extension("c");
+    let c = fs::read_to_string(&c_path).unwrap_or_else(|e| panic!("read {}: {e}", c_path.display()));
+    assert!(
+        c.contains("jsIsNull") && c.contains("jsNull"),
+        "Option fields must marshal None as JS null, got marshaler without jsIsNull/jsNull:\n{}",
+        c
+    );
+    assert!(
+        c.contains("Profile_to_js"),
+        "expected Profile_to_js marshaler:\n{}",
+        c
+    );
+    let _ = fs::remove_file(&dest);
+    let _ = fs::remove_file(dest.with_extension("wasm"));
+    let _ = fs::remove_file(&c_path);
+    let _ = fs::remove_file(dest.with_extension("abi.json"));
 }
 
 #[test]

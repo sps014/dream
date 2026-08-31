@@ -87,6 +87,7 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
         "".into(),
     ];
     v.push("length".into());
+    v.push("type".into());
     for (_ty, layout) in &mir.layouts.structs {
         v.push(format!("{} {{ ", layout.name));
         for (i, f) in layout.fields.iter().enumerate() {
@@ -101,19 +102,22 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
     }
     for layout in mir.layouts.unions.values() {
         for variant in &layout.variants {
-            if variant.fields.is_empty() {
-                v.push(variant.name.clone());
-            } else {
-                v.push(format!("{}(", variant.name));
-                for (i, f) in variant.fields.iter().enumerate() {
-                    v.push(if i == 0 {
-                        format!("{}: ", f.name)
-                    } else {
-                        format!(", {}: ", f.name)
-                    });
-                }
-                v.push(")".into());
+            v.push(variant.name.clone());
+            for f in &variant.fields {
+                v.push(f.name.clone());
             }
+            if variant.fields.is_empty() {
+                continue;
+            }
+            v.push(format!("{}(", variant.name));
+            for (i, f) in variant.fields.iter().enumerate() {
+                v.push(if i == 0 {
+                    format!("{}: ", f.name)
+                } else {
+                    format!(", {}: ", f.name)
+                });
+            }
+            v.push(")".into());
         }
     }
     v

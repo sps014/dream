@@ -14,7 +14,7 @@ use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::attributes::CompileTargets;
-use dream_diagnostics::{render_with, DiagnosticBag};
+use dream_diagnostics::{format_diagnostics, render_with, DiagnosticBag};
 use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
@@ -217,12 +217,11 @@ impl Compiler {
             &mut diagnostics,
         );
         if diagnostics.has_errors() {
-            render_with(
+            return Err(fail_diagnostics(
+                CompileError::Syntax,
                 &diagnostics,
                 &acc.file_contents,
-                Some(highlight_dream_line),
-            );
-            return Err(CompileError::Syntax);
+            ));
         }
 
         // Source generators: `@json` derive and registered `@generator`s (executed `GenContext`
@@ -245,12 +244,11 @@ impl Compiler {
         );
 
         if diagnostics.has_errors() {
-            render_with(
+            return Err(fail_diagnostics(
+                CompileError::Generator,
                 &diagnostics,
                 &acc.file_contents,
-                Some(highlight_dream_line),
-            );
-            return Err(CompileError::Generator);
+            ));
         }
 
         let combined_program = ProgramNode::new(
@@ -283,12 +281,11 @@ impl Compiler {
         let symbol_info = match analyzer.analyze(&mut diagnostics) {
             Ok(info) => info,
             Err(_) => {
-                render_with(
-                &diagnostics,
-                &acc.file_contents,
-                Some(highlight_dream_line),
-            );
-                return Err(CompileError::Semantic);
+                return Err(fail_diagnostics(
+                    CompileError::Semantic,
+                    &diagnostics,
+                    &acc.file_contents,
+                ));
             }
         };
 
@@ -308,12 +305,11 @@ impl Compiler {
         // half-written `.wat` behind a generator error.
         let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
         if diagnostics.has_errors() {
-            render_with(
+            return Err(fail_diagnostics(
+                CompileError::Generator,
                 &diagnostics,
                 &acc.file_contents,
-                Some(highlight_dream_line),
-            );
-            return Err(CompileError::Generator);
+            ));
         }
 
         info!("starting code generation");
@@ -489,6 +485,24 @@ impl Compiler {
 
         Ok(())
     }
+}
+
+fn fail_diagnostics(
+    ctor: fn(String) -> CompileError,
+    diagnostics: &DiagnosticBag,
+    file_contents: &std::collections::HashMap<String, String>,
+) -> CompileError {
+    render_with(
+        diagnostics,
+        file_contents,
+        Some(highlight_dream_line),
+    );
+    ctor(format_diagnostics(
+        diagnostics,
+        file_contents,
+        false,
+        Some(highlight_dream_line),
+    ))
 }
 
 /// Extracts a human-readable message from a caught panic payload (the `Any` that

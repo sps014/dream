@@ -181,7 +181,7 @@ works unchanged (`switch` on the subject compiles to a null test), and `weak` fi
 
 Like value unions this is decided per concrete instantiation (`Option<int>` stays an inline
 value union; `Option<JsValue>`-style unions with more than two variants or extra payloads keep
-the heap representation). See the [nullable design note](../internals/09-nullable-purge-design-note.md)
+the heap representation). See the [nullable design note](../../internals/09-nullable-purge-design-note.md)
 for why this coexists with the "no `TyKind::Nullable`" rule from the purge.
 
 ### JSON with `@json`

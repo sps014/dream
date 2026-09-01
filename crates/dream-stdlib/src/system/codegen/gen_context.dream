@@ -152,9 +152,6 @@ public class GenContext {
                 return Result.Err("failed to read snapshot: " + e.message());
             }
         }
-        // Unreachable: every arm above returns; satisfies the flow checker, which treats a
-        // `switch` statement without a `default` arm as a non-exhaustive branch.
-        return Result.Err("unreachable");
     }
 
     // Every snapshotted `name { ... }` call site (e.g. `ctx.syntax_blocks("quote")`).

@@ -54,10 +54,8 @@ impl<'a> Emitter<'a> {
             return;
         }
         let a = self.operand(arg);
-        self.b.call(
-            crate::backend::c::release::retain_sym(self.cx, ty),
-            vec![a],
-        );
+        self.b
+            .call(crate::backend::c::release::retain_sym(self.cx, ty), vec![a]);
     }
 
     fn sb_push_expr(&mut self, args: &[Operand]) -> Option<Expr> {
@@ -228,7 +226,9 @@ impl<'a> Emitter<'a> {
                     );
                     match store {
                         "i64.store" => b.stmt(Stmt::store(CTy::I64, pay, payload)),
-                        "f64.store" => b.stmt(Stmt::store(CTy::F64, pay, Expr::cast(CTy::F64, payload))),
+                        "f64.store" => {
+                            b.stmt(Stmt::store(CTy::F64, pay, Expr::cast(CTy::F64, payload)))
+                        }
                         "f32.store" => b.stmt(Stmt::store(CTy::F32, pay, payload)),
                         _ => b.stmt(Stmt::store(CTy::I32, pay, payload)),
                     }

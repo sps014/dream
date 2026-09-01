@@ -63,11 +63,7 @@ pub(super) fn module_alias_items(cx: &Cx<'_>) -> Vec<Item> {
     if !enabled(cx) {
         return vec![];
     }
-    let mut defs: Vec<(String, CTy, bool)> = vec![(
-        "dream_Str".into(),
-        str_view_ty(),
-        false,
-    )];
+    let mut defs: Vec<(String, CTy, bool)> = vec![("dream_Str".into(), str_view_ty(), false)];
     let push_def = |defs: &mut Vec<(String, CTy, bool)>, ty: TypeId| {
         let Some(name) = alias_for(cx, ty) else {
             return;
@@ -265,14 +261,10 @@ pub(super) fn local_debug_views(cx: &Cx<'_>, f: &MirFunction) -> Vec<Stmt> {
         let kind = cx.interner.kind(decl.ty);
         let is_value = cx.interner.is_value_type(decl.ty);
         let pointee: Option<CTy> = match kind {
-            TyKind::Prim(PrimTy::String) | TyKind::Struct(_, _) | TyKind::Union(_, _) => alias_for(
-                cx,
-                decl.ty,
-            )
-            .map(|alias| CTy::ptr_to(CTy::Ident(alias))),
-            TyKind::Array(elem) => {
-                Some(CTy::ptr_to(CTy::Ident(arr_alias(cx, *elem))))
+            TyKind::Prim(PrimTy::String) | TyKind::Struct(_, _) | TyKind::Union(_, _) => {
+                alias_for(cx, decl.ty).map(|alias| CTy::ptr_to(CTy::Ident(alias)))
             }
+            TyKind::Array(elem) => Some(CTy::ptr_to(CTy::Ident(arr_alias(cx, *elem)))),
             _ if is_value && !is_param => match kind {
                 TyKind::Struct(_, _) => alias_for(cx, decl.ty).map(|a| CTy::ptr_to(CTy::Ident(a))),
                 TyKind::Tuple(elems) => Some(CTy::ptr_to(CTy::Struct {
@@ -292,17 +284,11 @@ pub(super) fn local_debug_views(cx: &Cx<'_>, f: &MirFunction) -> Vec<Stmt> {
         // pointer into the `__vs` buffer is enough.
         let (ty, init) = if is_value {
             debug_assert!(!is_param);
-            let init = Expr::cast(
-                pointee.clone(),
-                Expr::addr_of(Expr::id(format!("__vs{i}"))),
-            );
+            let init = Expr::cast(pointee.clone(), Expr::addr_of(Expr::id(format!("__vs{i}"))));
             (pointee, init)
         } else {
             let slot_ty = CTy::ptr_to(pointee.clone());
-            let init = Expr::cast(
-                slot_ty.clone(),
-                Expr::addr_of(Expr::local(i as u32)),
-            );
+            let init = Expr::cast(slot_ty.clone(), Expr::addr_of(Expr::local(i as u32)));
             (slot_ty, init)
         };
         out.push(Stmt::Decl {

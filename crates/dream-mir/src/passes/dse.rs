@@ -74,6 +74,8 @@ impl MirPass for Dse {
                     | Statement::LockAcquire(_)
                     | Statement::LockRelease(_)
                     | Statement::DeferEnter
+                    | Statement::RegionEnter
+                    | Statement::RegionLeave
                     | Statement::DeferLeave(_)
                     | Statement::SimdV128 { .. }
                     | Statement::ValueDrop(_)

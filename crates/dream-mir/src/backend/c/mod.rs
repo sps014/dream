@@ -127,7 +127,8 @@ mod tests {
         let after_16 = out.rfind("#line 16").expect("16 directive");
         assert!(
             out[after_16..].contains("return"),
-            "return must follow the line-16 directive:\n{}", out
+            "return must follow the line-16 directive:\n{}",
+            out
         );
         // Functions after a `#line`-carrying one must not inherit its attribution.
         assert!(
@@ -163,11 +164,7 @@ mod tests {
         };
         let c = emit_c_module(&mir, &i);
         assert!(c.contains("dream_funcbox_env"), "{}", c);
-        assert!(
-            !c.contains("int32_t t0 = dream_funcbox_env"),
-            "{}",
-            c
-        );
+        assert!(!c.contains("int32_t t0 = dream_funcbox_env"), "{}", c);
         assert!(
             c.contains("int64_t t0 = dream_funcbox_env")
                 || c.contains("dream_ptr t0 = dream_funcbox_env"),
@@ -233,7 +230,9 @@ mod tests {
         assert!(strings.contains("return dream_substring"));
         assert!(!strings.contains("dream_string_alloc(len)"));
         assert!(super::types::native_header_declares("dream_substring_into"));
-        assert!(super::types::native_header_declares("dream_concat_strings_into"));
+        assert!(super::types::native_header_declares(
+            "dream_concat_strings_into"
+        ));
         assert!(super::types::native_header_declares(
             "dream_concat_str_int_str_into"
         ));
@@ -331,7 +330,9 @@ mod tests {
         let fdef = ctx.register(DefKind::Function, "f", vec![]);
         let mut foo_fn = FunctionBuilder::new("foo", ctx.interner.int());
         foo_fn.set_def(foo, vec![]);
-        foo_fn.terminate(Terminator::Return(Some(Operand::Const(crate::Const::Int(0)))));
+        foo_fn.terminate(Terminator::Return(Some(Operand::Const(crate::Const::Int(
+            0,
+        )))));
         let mut b = FunctionBuilder::new("f", ctx.interner.void());
         b.set_def(fdef, vec![]);
         let obj = b.new_param(cell_ty, Some("o".into()));
@@ -418,6 +419,11 @@ mod tests {
             super::types::native_header_declares("dream_rc_one"),
             "dream_rc_one must be in the native header"
         );
+        assert!(
+            super::types::native_header_declares("dream_region_enter")
+                && super::types::native_header_declares("dream_region_leave"),
+            "unique-region enter/leave must be in the native header"
+        );
     }
 
     #[test]
@@ -490,7 +496,9 @@ mod tests {
         assert!(super::types::native_header_declares("simd_lane_count"));
         assert!(super::types::native_header_declares("dream_malloc"));
         assert!(super::types::native_header_declares("dream_ffi_read_ptr"));
-        assert!(super::types::native_header_declares("dream_ffi_read_cstring"));
+        assert!(super::types::native_header_declares(
+            "dream_ffi_read_cstring"
+        ));
         assert!(!super::types::native_header_declares("not_a_real_host_fn"));
     }
 
@@ -544,7 +552,7 @@ mod tests {
                 param_by_ref: vec![],
                 ret: Some(i.int()),
                 is_async: true,
-            async_host: false,
+                async_host: false,
                 c_wide_strings: false,
             }],
             ..Default::default()

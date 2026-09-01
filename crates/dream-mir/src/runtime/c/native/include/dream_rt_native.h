@@ -130,6 +130,8 @@ extern _Thread_local int32_t dream_defer_depth;
 extern _Thread_local int32_t dream_defer_busy;
 void dream_defer_enter(void);
 void dream_defer_leave(uint32_t q);
+void dream_region_enter(void);
+void dream_region_leave(void);
 int dream_defer_try_enqueue(dream_ptr p, void (*fn)(dream_ptr));
 void dream_defer_drain_all(void);
 

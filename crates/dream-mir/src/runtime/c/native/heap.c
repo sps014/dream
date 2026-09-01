@@ -38,6 +38,24 @@ int dream_rt_mt;
  * list (the old one-slot TLS overflowed after the first free of each class). */
 static _Thread_local char *tls_free[NCLASS];
 
+/* Unique-graph bump region: mallocs while depth > 0 come from a rewindable TLS slab so
+ * `dream_region_leave` reclaims the whole graph in O(1). Independent of the process arena so
+ * workers cannot rewind each other's bump pointer. */
+#define REGION_MAX_DEPTH 8
+#define REGION_CHUNK (1u << 23)
+static _Thread_local int region_depth;
+static _Thread_local char *region_base;
+static _Thread_local size_t region_len;
+static _Thread_local size_t region_off;
+static _Thread_local int32_t region_nalloc;
+static _Thread_local size_t region_off_mark[REGION_MAX_DEPTH];
+static _Thread_local int32_t region_nalloc_mark[REGION_MAX_DEPTH];
+
+static int region_owns_block(char *block) {
+    return region_depth > 0 && region_base != NULL && block >= region_base
+        && (size_t)(block - region_base) < region_len;
+}
+
 static void heap_lock(void) {
     if (dream_rt_mt) {
         pthread_mutex_lock(&heap_mu);
@@ -161,6 +179,57 @@ static char *bump(size_t n) {
     }
 }
 
+static dream_ptr region_malloc(int32_t alloc_size, int32_t tag) {
+    char *block;
+    size_t n = (size_t)alloc_size;
+    if (region_base == NULL) {
+        region_base = (char *)map_chunk(REGION_CHUNK);
+        if (region_base == NULL) {
+            abort();
+        }
+        region_len = REGION_CHUNK;
+        region_off = 0;
+    }
+    if (region_off > region_len || n > region_len - region_off) {
+        abort();
+    }
+    block = region_base + region_off;
+    region_off += n;
+    ((int32_t *)block)[0] = alloc_size;
+    activate(block, tag);
+    region_nalloc += 1;
+    return (dream_ptr)(block + 16);
+}
+
+void dream_region_enter(void) {
+    if (region_depth >= REGION_MAX_DEPTH) {
+        abort();
+    }
+    region_off_mark[region_depth] = region_off;
+    region_nalloc_mark[region_depth] = region_nalloc;
+    region_depth += 1;
+}
+
+void dream_region_leave(void) {
+    int32_t n;
+    if (region_depth <= 0) {
+        return;
+    }
+    region_depth -= 1;
+    n = region_nalloc - region_nalloc_mark[region_depth];
+    if (n < 0) {
+        n = 0;
+    }
+    last_freed += n;
+    if (live_objects >= n) {
+        live_objects -= n;
+    } else {
+        live_objects = 0;
+    }
+    region_nalloc = region_nalloc_mark[region_depth];
+    region_off = region_off_mark[region_depth];
+}
+
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
     int32_t total;
     int idx;
@@ -174,6 +243,11 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     alloc_size = total;
     if (idx >= 0 && idx <= 12) {
         alloc_size = class_bytes(idx);
+    }
+    if (region_depth > 0) {
+        return region_malloc(alloc_size, tag);
+    }
+    if (idx >= 0 && idx <= 12) {
         block = tls_free[idx];
         if (block != NULL) {
             tls_free[idx] = class_next(block);
@@ -227,6 +301,9 @@ void dream_recycle(dream_ptr ptr) {
         dream_weak_clear_all(ptr);
     }
     block = (char *)dream_p(ptr) - 16;
+    if (region_owns_block(block)) {
+        return;
+    }
     sz = ((int32_t *)block)[0];
     if (sz == 0 || ((uint32_t *)block)[1] != MAGIC_LIVE) {
         return;

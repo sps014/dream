@@ -1,8 +1,8 @@
 use super::ast::{CTy, CaseKey, Expr, Param, Stmt, SwitchArm, UnOp};
 use super::builder::{FuncBuilder, ModuleBuilder};
 use super::ctx::Cx;
-use super::rvalue::{hash_code_of, to_string_fn};
 use super::reach::ProtocolReach;
+use super::rvalue::{hash_code_of, to_string_fn};
 use super::types::{c_ident, elem_size, load_cast};
 use crate::backend::shared::func_symbol;
 use dream_types::{PrimTy, TyKind, TypeId};
@@ -186,7 +186,10 @@ fn emit_array_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, elem: TypeId) {
         vec![
             sb_addr(),
             Expr::add(
-                Expr::mul(Expr::cast(CTy::I64, Expr::id("n")), Expr::i(elem_units_bound(cx, elem))),
+                Expr::mul(
+                    Expr::cast(CTy::I64, Expr::id("n")),
+                    Expr::i(elem_units_bound(cx, elem)),
+                ),
                 Expr::i(2),
             ),
         ],

@@ -12,6 +12,32 @@ int32_t total_allocations;
 int32_t last_freed;
 int32_t free_list_head;
 
+#define REGION_MAX_DEPTH 8
+#define REGION_PAYLOAD (4 << 20)
+#ifdef DREAM_WASM32_THREADS
+#define REGION_TLS _Thread_local
+#else
+#define REGION_TLS
+#endif
+static REGION_TLS int region_depth;
+static REGION_TLS dream_ptr region_slab;
+static REGION_TLS int32_t region_cap;
+static REGION_TLS int32_t region_off;
+static REGION_TLS int32_t region_nalloc;
+static REGION_TLS int32_t region_off_mark[REGION_MAX_DEPTH];
+static REGION_TLS int32_t region_nalloc_mark[REGION_MAX_DEPTH];
+
+static int region_owns(dream_ptr ptr) {
+    int32_t p;
+    int32_t b;
+    if (region_depth <= 0 || region_slab == 0) {
+        return 0;
+    }
+    p = (int32_t)ptr;
+    b = (int32_t)region_slab;
+    return p >= b && p < b + region_cap;
+}
+
 #ifdef __wasm__
 extern unsigned char __heap_base;
 
@@ -256,12 +282,93 @@ static void free_insert(int32_t block, int32_t sz) {
     }
 }
 
+static dream_ptr malloc_locked(int32_t size, int32_t tag);
+static void recycle_locked(dream_ptr ptr);
+
+static dream_ptr region_malloc_locked(int32_t size, int32_t tag) {
+    int32_t block;
+    int32_t total;
+    total = round_total(size);
+    if (region_off == 0) {
+        /* Payload of the slab is 16-aligned; wasm blocks must start at 4 (mod 16). */
+        region_off = 4;
+    }
+    if (total < 0 || region_off > region_cap - total) {
+        abort();
+    }
+    block = (int32_t)region_slab + region_off;
+    region_off += total;
+    i32_put(block, total);
+    i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
+    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
+    live_objects += 1;
+    total_allocations += 1;
+    region_nalloc += 1;
+    return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+}
+
+void dream_region_enter(void) {
+    alloc_lock();
+    if (region_depth >= REGION_MAX_DEPTH) {
+        alloc_unlock();
+        abort();
+    }
+    if (region_depth == 0) {
+        region_slab = malloc_locked(REGION_PAYLOAD, 0);
+        region_cap = round_total(REGION_PAYLOAD) - (int32_t)HEAP_HEADER_SIZE;
+        region_off = 0;
+        region_nalloc = 0;
+    }
+    region_off_mark[region_depth] = region_off;
+    region_nalloc_mark[region_depth] = region_nalloc;
+    region_depth += 1;
+    alloc_unlock();
+}
+
+void dream_region_leave(void) {
+    int32_t n;
+    dream_ptr slab;
+    alloc_lock();
+    if (region_depth <= 0) {
+        alloc_unlock();
+        return;
+    }
+    region_depth -= 1;
+    n = region_nalloc - region_nalloc_mark[region_depth];
+    if (n < 0) {
+        n = 0;
+    }
+    last_freed += n;
+    if (live_objects >= n) {
+        live_objects -= n;
+    } else {
+        live_objects = 0;
+    }
+    region_nalloc = region_nalloc_mark[region_depth];
+    region_off = region_off_mark[region_depth];
+    if (region_depth == 0) {
+        slab = region_slab;
+        region_slab = 0;
+        region_cap = 0;
+        region_off = 0;
+        region_nalloc = 0;
+        if (slab) {
+            recycle_locked(slab);
+        }
+    }
+    alloc_unlock();
+}
+
 static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     int32_t idx;
     int32_t *head;
     int32_t block = 0;
     int32_t next;
     int32_t new_heap;
+
+    if (region_depth > 0 && region_slab != 0) {
+        return region_malloc_locked(size, tag);
+    }
 
     size = round_total(size);
     idx = size_class(size);
@@ -352,6 +459,9 @@ static void recycle_locked(dream_ptr ptr) {
     int32_t block_start;
     int32_t idx;
     int32_t sz;
+    if (region_owns(ptr)) {
+        return;
+    }
     block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
     sz = i32_at(block_start);
     if (sz == 0) {

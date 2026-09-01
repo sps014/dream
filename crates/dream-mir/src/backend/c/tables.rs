@@ -164,7 +164,7 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         | Statement::LockAcquire(arg)
         | Statement::LockRelease(arg)
         | Statement::DeferLeave(arg) => strings_in_op(arg, out),
-        Statement::DeferEnter => {}
+        Statement::DeferEnter | Statement::RegionEnter | Statement::RegionLeave => {}
         Statement::ArrayElemsCopy {
             dst,
             dst_off,

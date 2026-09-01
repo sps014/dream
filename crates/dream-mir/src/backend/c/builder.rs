@@ -159,14 +159,10 @@ fn contains_label(s: &Stmt) -> bool {
         Stmt::If { then_s, else_s, .. } => {
             contains_label(then_s) || else_s.as_ref().is_some_and(|e| contains_label(e))
         }
-        Stmt::Switch { arms, .. } => arms
-            .iter()
-            .any(|arm| arm.body.iter().any(contains_label)),
+        Stmt::Switch { arms, .. } => arms.iter().any(|arm| arm.body.iter().any(contains_label)),
         Stmt::For {
             init, step, body, ..
-        } => {
-            contains_label(init) || contains_label(step) || contains_label(body)
-        }
+        } => contains_label(init) || contains_label(step) || contains_label(body),
         _ => false,
     }
 }
@@ -231,11 +227,7 @@ fn rewrite_vec(
     out
 }
 
-fn rewrite_owned(
-    s: Stmt,
-    refs: &std::collections::HashMap<String, u32>,
-    jump_table: bool,
-) -> Stmt {
+fn rewrite_owned(s: Stmt, refs: &std::collections::HashMap<String, u32>, jump_table: bool) -> Stmt {
     let mut v = rewrite_vec(vec![s], refs, jump_table);
     v.pop().expect("rewrite preserves the single statement")
 }

@@ -429,8 +429,8 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         c
     );
     assert!(
-        c.contains("dream_free(p);"),
-        "release must free the block:\n{}",
+        c.contains("dream_recycle(p);"),
+        "typed last-ref destroy recycles the block:\n{}",
         c
     );
 }

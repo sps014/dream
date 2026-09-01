@@ -25,6 +25,7 @@ const SMOKE_CASES: &[&str] = &[
     "map_basics",
     "map_indexer_missing",
     "container_clear_rc",
+    "unique_region_tree",
         "cycle_tuple_field",
         "cycle_via_value_struct",
         "cycle_interface_field",

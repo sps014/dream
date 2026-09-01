@@ -140,7 +140,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
             subst_operand(o, known)
         }
-        Statement::DeferEnter => false,
+        Statement::DeferEnter | Statement::RegionEnter | Statement::RegionLeave => false,
         Statement::SimdV128 {
             dest,
             lhs,

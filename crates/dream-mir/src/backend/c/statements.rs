@@ -91,7 +91,10 @@ impl<'a> Emitter<'a> {
                 Statement::Assign(Place::Local(tmp), rv),
                 Statement::Release(Operand::Copy(Place::Local(rel)))
                 | Statement::ReleaseUnique(Operand::Copy(Place::Local(rel))),
-                Statement::Assign(Place::Local(dest), Rvalue::Use(Operand::Copy(Place::Local(src)))),
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Use(Operand::Copy(Place::Local(src))),
+                ),
             ) = (&stmts[i], &stmts[i + 1], &stmts[i + 2])
             {
                 if src.0 == tmp.0
@@ -138,7 +141,12 @@ impl<'a> Emitter<'a> {
                 }
                 if let (
                     Place::Local(l),
-                    crate::Rvalue::New { def, ty, ctor, args },
+                    crate::Rvalue::New {
+                        def,
+                        ty,
+                        ctor,
+                        args,
+                    },
                 ) = (place, rv)
                 {
                     if self.cx.interner.is_value_type(self.f.local_ty(*l))
@@ -160,10 +168,8 @@ impl<'a> Emitter<'a> {
             Statement::Retain(o) => {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);
-                self.b.call(
-                    crate::backend::c::release::retain_sym(self.cx, ty),
-                    vec![a],
-                );
+                self.b
+                    .call(crate::backend::c::release::retain_sym(self.cx, ty), vec![a]);
             }
             Statement::Release(o) => {
                 let ty = self.operand_ty(o);
@@ -312,9 +318,16 @@ impl<'a> Emitter<'a> {
             Statement::DeferEnter => {
                 self.b.call("dream_defer_enter", vec![]);
             }
+            Statement::RegionEnter => {
+                self.b.call("dream_region_enter", vec![]);
+            }
+            Statement::RegionLeave => {
+                self.b.call("dream_region_leave", vec![]);
+            }
             Statement::DeferLeave(o) => {
                 let a = self.operand(o);
-                self.b.call("dream_defer_leave", vec![Expr::cast(CTy::U32, a)]);
+                self.b
+                    .call("dream_defer_leave", vec![Expr::cast(CTy::U32, a)]);
             }
             Statement::SimdV128 {
                 dest,
@@ -508,7 +521,8 @@ impl<'a> Emitter<'a> {
         let crate::Rvalue::Cast(o, from, to) = rv else {
             return false;
         };
-        if !matches!(self.cx.interner.kind(*from), TyKind::Js) || !self.cx.interner.is_value_type(*to)
+        if !matches!(self.cx.interner.kind(*from), TyKind::Js)
+            || !self.cx.interner.is_value_type(*to)
         {
             return false;
         }

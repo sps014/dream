@@ -365,6 +365,7 @@ impl Compiler {
             for p in &mut mir.polls {
                 poll_pipeline.run(p, interner);
             }
+            dream_mir::passes::run_late_module_passes(&mut mir, interner);
             let live_imports: Vec<(String, String)> = mir
                 .imports
                 .iter()

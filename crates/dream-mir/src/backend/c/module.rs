@@ -199,7 +199,10 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
         "dream_process_capture_args",
         vec![Expr::id("argc"), Expr::id("argv")],
     );
-    let rc = main_fn.temp(CTy::I32, Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])));
+    let rc = main_fn.temp(
+        CTy::I32,
+        Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])),
+    );
     // Heap-counter leak report. Debug builds always print it so `dream run` / `-g` show
     // retention; release builds opt in via DREAM_DEBUG_LEAKS=1. Counters themselves always
     // update so `Debug.live_objects()` is valid in `--release` goldens.
@@ -561,7 +564,13 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
                     name: "__f".into(),
                 }];
                 proto_params.extend(params.iter().cloned());
-                m.import_proto(CTy::Void, host.clone(), proto_params, import_mod, import_field);
+                m.import_proto(
+                    CTy::Void,
+                    host.clone(),
+                    proto_params,
+                    import_mod,
+                    import_field,
+                );
             } else if delegate_host {
                 let mut host_params = vec![Param {
                     ty: CTy::Ptr,
@@ -649,14 +658,10 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
                 ));
             } else if host_ret == CTy::Void {
                 poll.call(host.clone(), saved_args);
-                poll.call(
-                    "dream_async_complete",
-                    vec![Expr::id("__self"), Expr::i(0)],
-                );
+                poll.call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
             } else {
                 let host_call = Expr::call(host.clone(), saved_args);
-                let as_ptr =
-                    Expr::cast(CTy::Ptr, Expr::cast(CTy::Named("intptr_t"), host_call));
+                let as_ptr = Expr::cast(CTy::Ptr, Expr::cast(CTy::Named("intptr_t"), host_call));
                 poll.call("dream_async_complete", vec![Expr::id("__self"), as_ptr]);
             }
             poll.stmt(Stmt::store(
@@ -786,10 +791,7 @@ fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     if cx.target.is_wasm32() {
         b.export = Some(crate::abi::EXPORT_RUNTIME_INIT.to_string());
     }
-    b.stmt(Stmt::if_(
-        Expr::id("dream_rt_inited"),
-        Stmt::Return(None),
-    ));
+    b.stmt(Stmt::if_(Expr::id("dream_rt_inited"), Stmt::Return(None)));
     b.assign(Expr::id("dream_rt_inited"), Expr::i(1));
     if cx.target.is_wasm32() {
         b.call("dream_heap_init", vec![]);
@@ -802,10 +804,7 @@ fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             vec![
                 Expr::id("dream_string_alloc"),
                 Expr::id("dream_array_new"),
-                Expr::cast(
-                    CTy::VoidPtr,
-                    Expr::id("dream_complete_foreign"),
-                ),
+                Expr::cast(CTy::VoidPtr, Expr::id("dream_complete_foreign")),
             ],
         );
     }
@@ -941,10 +940,7 @@ fn future_frame_debug_view(cx: &Cx<'_>, body: &MirFunction, offs: &[i32]) -> Vec
             const_: true,
             ty: CTy::PtrTo(Box::new(view.clone())),
             name: "__dbg_self".into(),
-            init: Some(Expr::cast(
-                CTy::ptr_to(view),
-                Expr::id("__dbg_raw"),
-            )),
+            init: Some(Expr::cast(CTy::ptr_to(view), Expr::id("__dbg_raw"))),
         },
     ]
 }
@@ -1142,7 +1138,7 @@ fn build_async_pair(
                     ),
                 ]));
             } else {
-            let ty = local_c_ty(cx, dest_ty);
+                let ty = local_c_ty(cx, dest_ty);
                 let value = match cx.interner.kind(dest_ty) {
                     TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
                         Expr::load(
@@ -1410,7 +1406,10 @@ mod tests {
         let offs = vec![fut.slots as i32, fut.slots as i32 + 8];
         let stmts = future_frame_debug_view(&cx, &body, &offs);
         assert_eq!(stmts.len(), 2);
-        let Stmt::Decl { ty, init: Some(_), .. } = &stmts[1] else {
+        let Stmt::Decl {
+            ty, init: Some(_), ..
+        } = &stmts[1]
+        else {
             panic!("expected view decl");
         };
         let CTy::PtrTo(view) = ty else {
@@ -1421,7 +1420,9 @@ mod tests {
         };
         // Header starts at state and ends at wide; slot fields carry source names.
         assert_eq!(fields[0].1, "state");
-        assert!(fields.iter().any(|(ty, n)| matches!(ty, CTy::I64) && n == "wide"));
+        assert!(fields
+            .iter()
+            .any(|(ty, n)| matches!(ty, CTy::I64) && n == "wide"));
         let names: Vec<&String> = fields.iter().map(|(_, n)| n).collect();
         assert!(names.contains(&&"v_base".to_string()));
         assert!(names.contains(&&"v_sum".to_string()));
@@ -1446,6 +1447,5 @@ mod tests {
             cursor, fut.slots,
             "header fields + padding must reach the slots boundary"
         );
-
     }
 }

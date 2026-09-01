@@ -326,7 +326,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
         Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
             operand_reads(o, f)
         }
-        Statement::DeferEnter => {}
+        Statement::DeferEnter | Statement::RegionEnter | Statement::RegionLeave => {}
         Statement::SimdV128 {
             dest,
             lhs,

@@ -76,6 +76,9 @@ levers (no SSO / `@stack` class / value collections):
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
    [`ownership.md`](../reference/language/ownership.md)).
+6. **Inferred unique region** — a `x = f(); … ReleaseUnique x` graph whose callee only `New`s
+   `del`-free classes is allocated from a TLS bump slab and rewound in O(1) (`dream_region_enter` /
+   `leave`). Silent; not user `@stack`.
 
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.

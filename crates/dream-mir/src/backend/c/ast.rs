@@ -17,12 +17,19 @@ pub enum CTy {
     VoidPtr,
     CharPtr,
     PtrTo(Box<CTy>),
-    Array { elem: Box<CTy>, len: usize },
+    Array {
+        elem: Box<CTy>,
+        len: usize,
+    },
     Named(&'static str),
     Ident(String),
-    Struct { fields: Vec<(CTy, String)> },
+    Struct {
+        fields: Vec<(CTy, String)>,
+    },
     /// Anonymous C union; used by debugger-only views over discriminated unions.
-    Union { fields: Vec<(CTy, String)> },
+    Union {
+        fields: Vec<(CTy, String)>,
+    },
 }
 
 impl CTy {
@@ -259,9 +266,11 @@ impl Expr {
             | Expr::Unary { expr, .. }
             | Expr::Deref(expr)
             | Expr::AddrOf(expr) => expr.has_side_effect(),
-            Expr::Binary { lhs, rhs, .. } | Expr::Index { base: lhs, index: rhs } => {
-                lhs.has_side_effect() || rhs.has_side_effect()
-            }
+            Expr::Binary { lhs, rhs, .. }
+            | Expr::Index {
+                base: lhs,
+                index: rhs,
+            } => lhs.has_side_effect() || rhs.has_side_effect(),
             Expr::Ternary {
                 cond,
                 then_e,
@@ -323,7 +332,10 @@ pub enum Stmt {
     Return(Option<Expr>),
     Block(Vec<Stmt>),
     /// `#line N "path.dream"` for DWARF (from MIR `DebugLine` when `-g`).
-    Line { file: String, line: u32 },
+    Line {
+        file: String,
+        line: u32,
+    },
 }
 
 impl Stmt {
@@ -420,7 +432,10 @@ pub enum Item {
     },
     /// `typedef struct <tag> <name>;` — forward declaration so view aliases may reference
     /// each other regardless of emission order (`-g` builds).
-    AliasFwd { tag: String, name: String },
+    AliasFwd {
+        tag: String,
+        name: String,
+    },
     /// Full definition backing an [`Item::AliasFwd`] (`-g` builds). `packed` marks the struct
     /// `__attribute__((packed))` — required for array views whose elements the runtime stores
     /// unaligned (right after the 4-byte length word).

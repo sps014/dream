@@ -232,14 +232,7 @@ impl<'a> Emitter<'a> {
                         rv,
                         crate::Rvalue::Use(Operand::Copy(Place::Global(src))) if src == g
                     );
-                    return self.memcpy_value(
-                        rv,
-                        rhs,
-                        ty,
-                        Expr::global(g.0),
-                        true,
-                        !alias,
-                    );
+                    return self.memcpy_value(rv, rhs, ty, Expr::global(g.0), true, !alias);
                 }
                 if let Some(ty) = gty.filter(|ty| self.cx.interner.is_rc_tracked(*ty)) {
                     if realloc_self_store(place, rv) {
@@ -695,15 +688,38 @@ fn eq_place(a: &Place, b: &Place) -> bool {
     match (a, b) {
         (Place::Local(l1), Place::Local(l2)) => l1 == l2,
         (Place::Global(g1), Place::Global(g2)) => g1 == g2,
-        (Place::Field { base: b1, field: f1 }, Place::Field { base: b2, field: f2 }) => {
-            b1 == b2 && f1 == f2
-        }
-        (Place::Index { base: b1, index: i1, .. }, Place::Index { base: b2, index: i2, .. }) => {
-            b1 == b2 && eq_operand(i1, i2)
-        }
-        (Place::Deref { ptr: p1, elem_ty: t1 }, Place::Deref { ptr: p2, elem_ty: t2 }) => {
-            p1 == p2 && t1 == t2
-        }
+        (
+            Place::Field {
+                base: b1,
+                field: f1,
+            },
+            Place::Field {
+                base: b2,
+                field: f2,
+            },
+        ) => b1 == b2 && f1 == f2,
+        (
+            Place::Index {
+                base: b1,
+                index: i1,
+                ..
+            },
+            Place::Index {
+                base: b2,
+                index: i2,
+                ..
+            },
+        ) => b1 == b2 && eq_operand(i1, i2),
+        (
+            Place::Deref {
+                ptr: p1,
+                elem_ty: t1,
+            },
+            Place::Deref {
+                ptr: p2,
+                elem_ty: t2,
+            },
+        ) => p1 == p2 && t1 == t2,
         _ => false,
     }
 }

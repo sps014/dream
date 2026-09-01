@@ -121,7 +121,8 @@ fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>) {
                 TyKind::Array(e) => *e,
                 _ => d,
             };
-            if (cx.nstruct(dep_key).is_some() || cx.nunion(dep_key).is_some()) && set.insert(dep_key)
+            if (cx.nstruct(dep_key).is_some() || cx.nunion(dep_key).is_some())
+                && set.insert(dep_key)
             {
                 work.push(d);
             }

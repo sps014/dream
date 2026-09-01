@@ -272,6 +272,14 @@ pub enum Statement {
     DeferEnter,
     /// Leaves a `defer` pool: drain at most `Operand` (`uint`) last-ref destroys, then `depth--`.
     DeferLeave(Operand),
+    /// Begin a unique-graph bump region: subsequent heap `New`s while the region is active come
+    /// from a rewindable TLS slab. Inserted only when the matching [`Statement::RegionLeave`]
+    /// reclaims a uniquely owned graph with no `del`.
+    RegionEnter,
+    /// Rewind the current unique-graph region (O(1) free of every block allocated since the
+    /// matching [`Statement::RegionEnter`]). Replaces [`Statement::ReleaseUnique`] of the graph
+    /// root so destroy does not walk/recycle per node.
+    RegionLeave,
     /// `out[i..i+L] = a[i..i+L] ⊕ b[i..i+L]` (or splat RHS) as one WASM `v128` op.
     SimdV128 {
         lane: SimdLane,

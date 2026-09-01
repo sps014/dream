@@ -31,10 +31,7 @@ fn is_synthetic(s: &str) -> bool {
 /// coroutine polls' `__self` are left alone.
 pub(super) fn apply_local_names(f: &MirFunction, func: &mut Func) {
     let names = resolve_names(f, &func.body);
-    let renamed = names
-        .iter()
-        .enumerate()
-        .any(|(i, n)| *n != format!("l{i}"));
+    let renamed = names.iter().enumerate().any(|(i, n)| *n != format!("l{i}"));
     if !renamed {
         return;
     }
@@ -211,7 +208,11 @@ fn collect_expr(e: &Expr, set: &mut HashSet<String>) {
         | Expr::Deref(expr)
         | Expr::AddrOf(expr)
         | Expr::PostInc(expr) => collect_expr(expr, set),
-        Expr::Binary { lhs, rhs, .. } | Expr::Index { base: lhs, index: rhs } => {
+        Expr::Binary { lhs, rhs, .. }
+        | Expr::Index {
+            base: lhs,
+            index: rhs,
+        } => {
             collect_expr(lhs, set);
             collect_expr(rhs, set);
         }
@@ -344,7 +345,11 @@ fn rewrite_expr(e: &mut Expr, names: &[String]) {
         | Expr::Deref(expr)
         | Expr::AddrOf(expr)
         | Expr::PostInc(expr) => rewrite_expr(expr, names),
-        Expr::Binary { lhs, rhs, .. } | Expr::Index { base: lhs, index: rhs } => {
+        Expr::Binary { lhs, rhs, .. }
+        | Expr::Index {
+            base: lhs,
+            index: rhs,
+        } => {
             rewrite_expr(lhs, names);
             rewrite_expr(rhs, names);
         }
@@ -424,10 +429,7 @@ mod tests {
     #[test]
     fn source_names_win_and_sanitize() {
         let f = func(&[Some("count"), Some("a-b")], &[0]);
-        assert_eq!(
-            base_names(&f),
-            vec!["count".to_string(), "a_b".to_string()]
-        );
+        assert_eq!(base_names(&f), vec!["count".to_string(), "a_b".to_string()]);
     }
 
     #[test]
@@ -493,7 +495,8 @@ mod tests {
                 assert_eq!(name, "l1");
                 assert!(
                     matches!(init.as_ref(), Some(Expr::Ident(s)) if s == "total"),
-                    "expected init `total`, got {:?}", init
+                    "expected init `total`, got {:?}",
+                    init
                 );
             }
             other => panic!("unexpected: {:?}", other),
@@ -502,11 +505,13 @@ mod tests {
             Stmt::Assign { dest, src } => {
                 assert!(
                     matches!(dest, Expr::Ident(s) if s == "l1"),
-                    "expected dest `l1`, got {:?}", dest
+                    "expected dest `l1`, got {:?}",
+                    dest
                 );
                 assert!(
                     matches!(src, Expr::Ident(s) if s == "total"),
-                    "expected src `total`, got {:?}", src
+                    "expected src `total`, got {:?}",
+                    src
                 );
             }
             other => panic!("unexpected: {:?}", other),

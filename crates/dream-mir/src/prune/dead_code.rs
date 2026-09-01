@@ -254,6 +254,8 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
         | Statement::DeferEnter
+        | Statement::RegionEnter
+        | Statement::RegionLeave
         | Statement::DeferLeave(_)
         | Statement::SimdV128 { .. }
         | Statement::ValueDrop(_)
@@ -627,7 +629,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
         Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
             collect_global_reads_operand(o, out)
         }
-        Statement::DeferEnter => {}
+        Statement::DeferEnter | Statement::RegionEnter | Statement::RegionLeave => {}
         Statement::SimdV128 {
             dest,
             lhs,

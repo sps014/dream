@@ -176,7 +176,7 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
         Statement::LockAcquire(o) | Statement::LockRelease(o) | Statement::DeferLeave(o) => {
             read_operand(o, read)
         }
-        Statement::DeferEnter => {}
+        Statement::DeferEnter | Statement::RegionEnter | Statement::RegionLeave => {}
         Statement::SimdV128 {
             dest,
             lhs,

@@ -56,7 +56,10 @@ pub(super) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
     }
     let (raw, map_key) = match cx.interner.kind(ty) {
         TyKind::Struct(..) => (
-            c_ident(&format!("release_{}", cx.mir.layouts.structs.get(&ty)?.name)),
+            c_ident(&format!(
+                "release_{}",
+                cx.mir.layouts.structs.get(&ty)?.name
+            )),
             ty,
         ),
         TyKind::Union(..) => (
@@ -69,7 +72,12 @@ pub(super) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
         _ => return None,
     };
     // Follow canonicalization to the representative body's tail.
-    let final_sym = cx.canon_maps().release.get(&map_key).cloned().unwrap_or(raw);
+    let final_sym = cx
+        .canon_maps()
+        .release
+        .get(&map_key)
+        .cloned()
+        .unwrap_or(raw);
     Some(format!("{final_sym}_into"))
 }
 
@@ -109,7 +117,10 @@ pub(super) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
     }
     if matches!(cx.interner.kind(ty), TyKind::Js | TyKind::Func(..))
         || cx.interner.is_shared_type(ty)
-        || matches!(cx.interner.kind(ty), TyKind::Prim(dream_types::PrimTy::String))
+        || matches!(
+            cx.interner.kind(ty),
+            TyKind::Prim(dream_types::PrimTy::String)
+        )
     {
         return release_sym(cx, ty);
     }
@@ -153,15 +164,31 @@ pub(super) fn canonical_maps(cx: &Cx<'_>) -> CanonMaps {
         let Some(key) = struct_profile_key(cx, *ty) else {
             continue;
         };
-        rel.push((format!("S|rel|{key}"), *ty, c_ident(&format!("release_{}", layout.name))));
-        des.push((format!("S|des|{key}"), *ty, c_ident(&format!("destroy_{}", layout.name))));
+        rel.push((
+            format!("S|rel|{key}"),
+            *ty,
+            c_ident(&format!("release_{}", layout.name)),
+        ));
+        des.push((
+            format!("S|des|{key}"),
+            *ty,
+            c_ident(&format!("destroy_{}", layout.name)),
+        ));
     }
     for (ty, layout) in &cx.native.unions {
         let Some(key) = union_profile_key(cx, *ty) else {
             continue;
         };
-        rel.push((format!("U|rel|{key}"), *ty, c_ident(&format!("release_{}", layout.name))));
-        des.push((format!("U|des|{key}"), *ty, c_ident(&format!("destroy_{}", layout.name))));
+        rel.push((
+            format!("U|rel|{key}"),
+            *ty,
+            c_ident(&format!("release_{}", layout.name)),
+        ));
+        des.push((
+            format!("U|des|{key}"),
+            *ty,
+            c_ident(&format!("destroy_{}", layout.name)),
+        ));
     }
     // Arrays are excluded from dedup: their bodies embed the element type's own
     // release symbol, so identical-looking shapes (a plain ref union vs string)
@@ -243,10 +270,7 @@ fn union_profile_key(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
 
 fn rc_header() -> Stmt {
     Stmt::if_(
-        Expr::unary(
-            UnOp::Not,
-            Expr::call("dream_rc_last", vec![Expr::id("p")]),
-        ),
+        Expr::unary(UnOp::Not, Expr::call("dream_rc_last", vec![Expr::id("p")])),
         Stmt::Return(None),
     )
 }

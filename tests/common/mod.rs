@@ -146,6 +146,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
+        dream_mir::passes::run_late_module_passes(&mut mir, interner);
         dream_mir::backend::c::emit_c_module(&mir, interner)
     })
 }
@@ -159,6 +160,7 @@ pub fn emit_hir_to_c_optimized(code: &str) -> String {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
+        dream_mir::passes::run_late_module_passes(&mut mir, interner);
         dream_mir::backend::c::emit_c_module(&mir, interner)
     })
 }

@@ -27,10 +27,14 @@ pub(super) fn js_bridge(cx: &Cx<'_>, method: &str) -> String {
 pub(super) fn cast_c_sym(cx: &Cx<'_>, from: TypeId, to: TypeId) -> Option<String> {
     let is_js = |t: TypeId| matches!(cx.interner.kind(t), TyKind::Js);
     if is_js(to) {
-        return cx.nstruct(from).map(|l| c_js_sym(&js_abi::struct_to_js_sym(&l.name)));
+        return cx
+            .nstruct(from)
+            .map(|l| c_js_sym(&js_abi::struct_to_js_sym(&l.name)));
     }
     if is_js(from) {
-        return cx.nstruct(to).map(|l| c_js_sym(&js_abi::js_to_struct_sym(&l.name)));
+        return cx
+            .nstruct(to)
+            .map(|l| c_js_sym(&js_abi::js_to_struct_sym(&l.name)));
     }
     None
 }
@@ -173,11 +177,9 @@ fn is_marshalable_rec(cx: &Cx<'_>, ty: TypeId, stack: &mut Vec<TypeId>) -> bool 
         TyKind::Array(elem) => is_marshalable_rec(cx, *elem, stack),
         TyKind::Struct(..) => true,
         TyKind::Union(..) => cx.nunion(ty).is_some_and(|u| {
-            u.variants.iter().all(|v| {
-                v.fields
-                    .iter()
-                    .all(|f| is_marshalable_rec(cx, f.ty, stack))
-            })
+            u.variants
+                .iter()
+                .all(|v| v.fields.iter().all(|f| is_marshalable_rec(cx, f.ty, stack)))
         }),
         _ => false,
     };
@@ -335,11 +337,7 @@ fn value_from_js(cx: &Cx<'_>, jsval: Expr, ty: TypeId) -> Option<Expr> {
         TyKind::Prim(p) => {
             let (method, demote) = unbox_prim(*p);
             let v = Expr::call(js_bridge(cx, method), vec![jsval]);
-            Some(if demote {
-                Expr::cast(CTy::F32, v)
-            } else {
-                v
-            })
+            Some(if demote { Expr::cast(CTy::F32, v) } else { v })
         }
         TyKind::Enum(_) => Some(Expr::call(js_bridge(cx, "as_int"), vec![jsval])),
         TyKind::Js => Some(jsval),
@@ -388,10 +386,7 @@ fn emit_struct_to_js(m: &mut ModuleBuilder, cx: &Cx<'_>, layout: &dream_hir::Typ
     let mut b = FuncBuilder::new(CTy::Ptr, c_js_sym(&js_abi::struct_to_js_sym(&layout.name)));
     b.static_ = true;
     b.param(CTy::Ptr, "this");
-    let o = b.temp(
-        CTy::Ptr,
-        Some(Expr::call(js_bridge(cx, "object"), vec![])),
-    );
+    let o = b.temp(CTy::Ptr, Some(Expr::call(js_bridge(cx, "object"), vec![])));
     for f in &layout.fields {
         let addr = Expr::add(Expr::id("this"), Expr::i(f.offset as i64));
         let Some(val) = value_to_js(cx, addr, f.ty) else {
@@ -440,10 +435,7 @@ fn emit_js_to_struct(
         let dst = Expr::add(base.clone(), Expr::i(f.offset as i64));
         let jsval = Expr::call(
             js_bridge(cx, "get"),
-            vec![
-                Expr::id("j"),
-                Expr::id(cx.str_sym(&f.name).to_string()),
-            ],
+            vec![Expr::id("j"), Expr::id(cx.str_sym(&f.name).to_string())],
         );
         if let Some(st) = write_from_js(cx, dst, jsval, f.ty) {
             b.stmt(st);
@@ -494,9 +486,8 @@ fn emit_union_to_js(
         let Some(payload_ty) = payload_ty else {
             crate::internal_error!("niche union missing payload field");
         };
-        let some = held_to_js(cx, this.clone(), payload_ty).unwrap_or_else(|| {
-            crate::internal_error!("niche union payload should be marshalable")
-        });
+        let some = held_to_js(cx, this.clone(), payload_ty)
+            .unwrap_or_else(|| crate::internal_error!("niche union payload should be marshalable"));
         b.ret(Some(Expr::ternary(
             Expr::eq(this, Expr::Null),
             js_null(cx),
@@ -532,10 +523,7 @@ fn emit_union_to_js(
         m.push_func(b);
         return;
     }
-    let o = b.temp(
-        CTy::Ptr,
-        Some(Expr::call(js_bridge(cx, "object"), vec![])),
-    );
+    let o = b.temp(CTy::Ptr, Some(Expr::call(js_bridge(cx, "object"), vec![])));
     let disc = b.temp(
         CTy::I32,
         Some(Expr::load(CTy::I32, Expr::dream_p(this.clone()))),
@@ -560,11 +548,7 @@ fn emit_union_to_js(
             };
             body.push(Stmt::call(
                 js_bridge(cx, "set"),
-                vec![
-                    o.clone(),
-                    Expr::id(cx.str_sym(&f.name).to_string()),
-                    val,
-                ],
+                vec![o.clone(), Expr::id(cx.str_sym(&f.name).to_string()), val],
             ));
         }
         body.push(Stmt::Return(Some(o.clone())));
@@ -629,9 +613,8 @@ fn emit_js_to_union(
             .and_then(|v| v.fields.first())
             .map(|f| f.ty)
             .unwrap_or_else(|| crate::internal_error!("niche union missing payload"));
-        let some = value_from_js(cx, j.clone(), payload_ty).unwrap_or_else(|| {
-            crate::internal_error!("niche union payload should be marshalable")
-        });
+        let some = value_from_js(cx, j.clone(), payload_ty)
+            .unwrap_or_else(|| crate::internal_error!("niche union payload should be marshalable"));
         b.ret(Some(Expr::ternary(js_is_null(cx, j), Expr::Null, some)));
         m.push_func(b);
         return;

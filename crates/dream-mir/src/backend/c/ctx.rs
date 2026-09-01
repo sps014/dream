@@ -35,9 +35,11 @@ impl<'a> Cx<'a> {
             ft.insert((f.def, f.instance.clone()), idx);
         }
         let debug_syms = mir.functions.iter().any(|f| {
-            f.blocks
-                .iter()
-                .any(|b| b.stmts.iter().any(|s| matches!(s, crate::Statement::DebugLine(_))))
+            f.blocks.iter().any(|b| {
+                b.stmts
+                    .iter()
+                    .any(|s| matches!(s, crate::Statement::DebugLine(_)))
+            })
         });
         Self {
             strings: intern_strings(mir, interner),
@@ -66,7 +68,8 @@ impl<'a> Cx<'a> {
     }
 
     pub(super) fn canon_maps(&self) -> &super::release::CanonMaps {
-        self.canon.get_or_init(|| super::release::canonical_maps(self))
+        self.canon
+            .get_or_init(|| super::release::canonical_maps(self))
     }
 
     pub(super) fn nstruct(&self, ty: TypeId) -> Option<&TypeLayout> {

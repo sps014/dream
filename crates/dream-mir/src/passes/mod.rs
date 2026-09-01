@@ -20,6 +20,7 @@ mod sccp;
 mod simplify_cfg;
 mod sroa;
 mod tco;
+mod unique_region;
 
 pub use abc::Abc;
 pub use algebraic::Algebraic;
@@ -42,6 +43,7 @@ pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa};
 pub use tco::Tco;
+pub use unique_region::UniqueRegion;
 
 use super::{Mir, MirFunction};
 use dream_types::TypeInterner;
@@ -226,6 +228,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
     if !inline {
         let _ = ExpandSimpleCtors.run(mir, interner);
+        let _ = UniqueRegion.run(mir, interner);
         return;
     }
     let _ = Devirt.run(mir, interner);
@@ -243,4 +246,11 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     // After inlining, lower simple user-ctors to `New { ctor: None }` + field stores so per-function
     // SROA can promote non-escaping Acc(n)-style instances.
     let _ = ExpandSimpleCtors.run(mir, interner);
+    let _ = UniqueRegion.run(mir, interner);
+}
+
+/// After per-function opts, drop inferred regions whose leave is followed by a still-live
+/// ref use (CFG simplify can merge a join with JSON `as_string` / `unwrap` after wrap).
+pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner) {
+    let _ = unique_region::strip_escaped_regions(mir, interner);
 }

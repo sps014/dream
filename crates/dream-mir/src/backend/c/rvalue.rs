@@ -224,10 +224,7 @@ impl<'a> Emitter<'a> {
                         vec![arr, len, Expr::i(es as i64), Expr::id(&rel)],
                     );
                 }
-                Expr::call(
-                    "dream_array_realloc",
-                    vec![arr, len, Expr::i(es as i64)],
-                )
+                Expr::call("dream_array_realloc", vec![arr, len, Expr::i(es as i64)])
             }
             Rvalue::Cast(v, from, to) => self.emit_cast(v, *from, *to),
             Rvalue::Discriminant { base, ty } => {
@@ -291,7 +288,8 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn operand_kind(&self, o: &crate::Operand) -> Option<&TyKind> {        match o {
+    fn operand_kind(&self, o: &crate::Operand) -> Option<&TyKind> {
+        match o {
             crate::Operand::Copy(crate::Place::Local(l)) => {
                 Some(self.cx.interner.kind(self.f.local_ty(*l)))
             }
@@ -377,8 +375,14 @@ impl<'a> Emitter<'a> {
         }
         let arg_es: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
         let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
-        self.b
-            .call("memset", vec![Expr::dream_p(dest.clone()), Expr::i(0), Expr::i(layout.size as i64)]);
+        self.b.call(
+            "memset",
+            vec![
+                Expr::dream_p(dest.clone()),
+                Expr::i(0),
+                Expr::i(layout.size as i64),
+            ],
+        );
         if let Some(name) = ctor_name {
             let mut call_args = vec![dest];
             call_args.extend(arg_es);
@@ -512,11 +516,8 @@ impl<'a> Emitter<'a> {
                 _ => return Expr::Null,
             };
             let e = self.operand(&arg);
-            let moved = crate::backend::shared::unique_container_move_local(
-                self.f,
-                self.cx.interner,
-                &arg,
-            );
+            let moved =
+                crate::backend::shared::unique_container_move_local(self.f, self.cx.interner, &arg);
             if moved.is_some() {
                 return e;
             }
@@ -717,7 +718,9 @@ impl<'a> Emitter<'a> {
             if matches!(tk, TyKind::Js) {
                 if let TyKind::Prim(p) = fk {
                     let (method, promote) = match p {
-                        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("box_int", false),
+                        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
+                            ("box_int", false)
+                        }
                         PrimTy::Long | PrimTy::ULong => ("box_long", false),
                         PrimTy::Float => ("box_double", true),
                         PrimTy::Double => ("box_double", false),
@@ -735,7 +738,9 @@ impl<'a> Emitter<'a> {
             if matches!(fk, TyKind::Js) {
                 if let TyKind::Prim(p) = tk {
                     let (method, demote) = match p {
-                        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("as_int", false),
+                        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
+                            ("as_int", false)
+                        }
                         PrimTy::Long | PrimTy::ULong => ("as_long", false),
                         PrimTy::Float => ("as_double", true),
                         PrimTy::Double => ("as_double", false),
@@ -743,11 +748,7 @@ impl<'a> Emitter<'a> {
                         PrimTy::String => ("as_string", false),
                     };
                     let v = Expr::call(super::js_marshal::js_bridge(self.cx, method), vec![src]);
-                    return if demote {
-                        Expr::cast(CTy::F32, v)
-                    } else {
-                        v
-                    };
+                    return if demote { Expr::cast(CTy::F32, v) } else { v };
                 }
             }
         }

@@ -163,7 +163,12 @@ fn collect_stmt(stmt: &Stmt, set: &mut HashSet<String>) {
                 collect_stmt(s, set);
             }
         }
-        Stmt::Goto(_) | Stmt::Label(_) | Stmt::Return(None) | Stmt::Line { .. } => {}
+        Stmt::Goto(_)
+        | Stmt::Label(_)
+        | Stmt::Break
+        | Stmt::Continue
+        | Stmt::Return(None)
+        | Stmt::Line { .. } => {}
     }
 }
 
@@ -299,7 +304,12 @@ fn rewrite_stmt(stmt: &mut Stmt, names: &[String]) {
                 rewrite_stmt(s, names);
             }
         }
-        Stmt::Goto(_) | Stmt::Label(_) | Stmt::Return(None) | Stmt::Line { .. } => {}
+        Stmt::Goto(_)
+        | Stmt::Label(_)
+        | Stmt::Break
+        | Stmt::Continue
+        | Stmt::Return(None)
+        | Stmt::Line { .. } => {}
     }
 }
 

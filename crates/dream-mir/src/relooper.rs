@@ -1,10 +1,9 @@
-//! Relooper: reconstruct structured control flow (WASM `block`/`loop`/`if`) from the MIR CFG.
+//! Relooper: reconstruct structured control flow (`for`/`if`/`switch` in C) from the MIR CFG.
 //!
 //! Dream's surface language only produces reducible CFGs, so the classic Relooper shapes suffice:
 //! [`Shape::Simple`] (a basic block followed by the structured remainder), [`Shape::Loop`] (a
 //! cyclic region wrapped in a `loop`), and [`Shape::Multiple`] (independent branch arms joined by a
-//! following region). The WAT backend ([`crate::backend::wasm`]) walks this tree to place `block`/`loop` scopes
-//! and turn CFG edges into `br`/`br_if`.
+//! following region). The C99 backend (`crate::backend::c`) walks this tree for **sync** functions.
 
 use super::{BlockId, MirFunction};
 use std::collections::{BTreeSet, VecDeque};

@@ -118,7 +118,7 @@ Do not implement these (decision record: `docs/internals/10-stack-alloc-and-mono
 
 Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/internals/11-swift-like-arc-roadmap.md`.
 
-Sync functions emit structured C control flow (`while`/`goto` from relooper shapes); async poll functions keep `$__pc` + dispatch (suspend/resume).
+Sync functions emit structured C control flow (`for (;;)` / `if` / `switch` from relooper shapes); async poll functions keep `$__pc` + dispatch (suspend/resume).
 
 ## Error handling model
 

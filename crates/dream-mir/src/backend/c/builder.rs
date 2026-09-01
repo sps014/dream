@@ -61,6 +61,23 @@ impl FuncBuilder {
         self.stmts.push(Stmt::Label(name.into()));
     }
 
+    /// Run `f` on a nested builder that shares temp numbering; returns its statements untidied.
+    pub fn nested(&mut self, f: impl FnOnce(&mut FuncBuilder)) -> Vec<Stmt> {
+        let mut inner = FuncBuilder {
+            attr: None,
+            export: None,
+            static_: false,
+            ret: CTy::Void,
+            name: String::new(),
+            params: Vec::new(),
+            stmts: Vec::new(),
+            next_temp: self.next_temp,
+        };
+        f(&mut inner);
+        self.next_temp = inner.next_temp;
+        inner.stmts
+    }
+
     fn fresh_name(&mut self) -> String {
         let n = self.next_temp;
         self.next_temp += 1;
@@ -229,7 +246,7 @@ fn rewrite_vec(
 
 fn rewrite_owned(s: Stmt, refs: &std::collections::HashMap<String, u32>, jump_table: bool) -> Stmt {
     let mut v = rewrite_vec(vec![s], refs, jump_table);
-    v.pop().expect("rewrite preserves the single statement")
+    v.pop().unwrap_or_else(|| Stmt::Block(vec![]))
 }
 
 #[derive(Default)]

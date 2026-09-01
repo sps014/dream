@@ -175,8 +175,9 @@ impl<'a> Emitter<'a> {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);
                 // Inline fast path: null-check + decrement happen right here (dream_rc_last is
-                // always_inline), so the overwhelmingly common not-last case emits no call.
-                // Only the actual free transition calls the teardown tail.
+                // always_inline). The free tail runs only on the last-ref transition.
+                // Do not `__builtin_expect` that branch: last-ref is rare for shared
+                // objects and the common case for drop-everything kernels (binary_trees).
                 if let Some(tail) = crate::backend::c::release::release_into_sym(self.cx, ty) {
                     let block = self.b.expr_block(|b| {
                         let t = b.temp(CTy::Ptr, Some(a));

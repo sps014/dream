@@ -97,7 +97,7 @@ pub fn emit_c_module_for(
     for (_, funcs) in &built {
         let def = &funcs[0];
         m.push(Item::Proto {
-            static_: false,
+            static_: def.static_,
             ret: def.ret.clone(),
             name: def.name.clone(),
             params: def.params.clone(),
@@ -105,14 +105,14 @@ pub fn emit_c_module_for(
             export: None,
         });
         if let Some(poll) = funcs.get(1) {
-            m.proto(
-                CTy::I32,
-                poll.name.clone(),
-                vec![Param {
-                    ty: CTy::Ptr,
-                    name: "__self".into(),
-                }],
-            );
+            m.push(Item::Proto {
+                static_: poll.static_,
+                ret: poll.ret.clone(),
+                name: poll.name.clone(),
+                params: poll.params.clone(),
+                import: None,
+                export: None,
+            });
         }
     }
     emit_release_helpers(&mut m, &cx);
@@ -831,6 +831,8 @@ fn proto_parts(cx: &Cx<'_>, f: &MirFunction) -> (CTy, String, Vec<Param>, Option
     let name = c_ident(&func_symbol(f));
     let attr = if name.to_ascii_lowercase().contains("sink") {
         Some("__attribute__((noinline, noclone))")
+    } else if f.prefer_inline {
+        Some("__attribute__((always_inline))")
     } else {
         None
     };
@@ -974,6 +976,7 @@ fn build_async_pair(
     if stub.hir_fn.is_none() {
         let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
         poll.param(CTy::Ptr, "__self");
+        poll.static_ = true;
         poll.ret(Some(Expr::i(0)));
         return (build_sync(cx, stub), poll);
     }
@@ -1002,6 +1005,7 @@ fn build_async_pair(
     let (ret, name, params, attr) = proto_parts(cx, stub);
     let mut stub_fn = FuncBuilder::new(ret, name);
     stub_fn.attr = attr;
+    stub_fn.static_ = true;
     stub_fn.params = params;
     stub_fn.stmt(Stmt::decl(
         CTy::Ptr,
@@ -1036,6 +1040,7 @@ fn build_async_pair(
     stub_fn.ret(Some(Expr::id("__self")));
 
     let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
+    poll.static_ = true;
     poll.param(CTy::Ptr, "__self");
     if cx.debug_syms && !cx.target.is_wasm32() {
         for s in future_frame_debug_view(cx, body, &offs) {
@@ -1225,6 +1230,7 @@ fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
     let (ret, name, params, attr) = proto_parts(cx, f);
     let mut b = FuncBuilder::new(ret, name);
     b.attr = attr;
+    b.static_ = true;
     b.params = params;
     for p in &f.params {
         let ty = f.local_ty(*p);
@@ -1299,15 +1305,7 @@ fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
     for s in super::debugviews::local_debug_views(cx, f) {
         b.stmt(s);
     }
-    b.goto(format!("L{}", f.entry.0));
-    for (bi, block) in f.blocks.iter().enumerate() {
-        b.label(format!("L{bi}"));
-        {
-            let mut e = Emitter::new(cx, f, &mut b);
-            e.stmts(&block.stmts);
-            e.term(&block.terminator);
-        }
-    }
+    super::shape::emit_sync_body(cx, f, &mut b);
     b
 }
 

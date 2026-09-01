@@ -24,6 +24,8 @@ typedef uintptr_t dream_ptr;
 extern int dream_rt_mt;
 
 #define DREAM_ALWAYS_INLINE static inline __attribute__((always_inline))
+#define DREAM_LIKELY(x) __builtin_expect(!!(x), 1)
+#define DREAM_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
 #ifdef DREAM_WASM32
 dream_ptr dream_g0_get(void);

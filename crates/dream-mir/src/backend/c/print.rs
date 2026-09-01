@@ -143,12 +143,12 @@ fn print_item(out: &mut String, item: &Item) {
 
 pub(super) fn print_func(out: &mut String, f: &Func) {
     print_linkage(out, None, f.export.as_deref());
+    if f.static_ {
+        out.push_str("static ");
+    }
     if let Some(attr) = f.attr {
         out.push_str(attr);
         out.push(' ');
-    }
-    if f.static_ {
-        out.push_str("static ");
     }
     print_ty(out, &f.ret);
     out.push(' ');
@@ -401,14 +401,32 @@ fn print_stmt(out: &mut String, stmt: &Stmt, ind: usize, nl: bool) {
             body,
         } => {
             indent(out, ind);
-            out.push_str("for (");
-            print_for_clause(out, init);
-            out.push_str("; ");
-            print_expr(out, cond, 0);
-            out.push_str("; ");
-            print_for_clause(out, step);
-            out.push_str(") ");
+            if is_empty_clause(init) && matches!(cond, Expr::Int(1)) && is_empty_clause(step) {
+                out.push_str("for (;;) ");
+            } else {
+                out.push_str("for (");
+                print_for_clause(out, init);
+                out.push_str("; ");
+                print_expr(out, cond, 0);
+                out.push_str("; ");
+                print_for_clause(out, step);
+                out.push_str(") ");
+            }
             print_stmt_inline(out, body, ind);
+            if nl {
+                out.push('\n');
+            }
+        }
+        Stmt::Break => {
+            indent(out, ind);
+            out.push_str("break;");
+            if nl {
+                out.push('\n');
+            }
+        }
+        Stmt::Continue => {
+            indent(out, ind);
+            out.push_str("continue;");
             if nl {
                 out.push('\n');
             }
@@ -518,7 +536,14 @@ fn print_stmt_inline(out: &mut String, stmt: &Stmt, ind: usize) {
     }
 }
 
+fn is_empty_clause(stmt: &Stmt) -> bool {
+    matches!(stmt, Stmt::Block(v) if v.is_empty())
+}
+
 fn print_for_clause(out: &mut String, stmt: &Stmt) {
+    if is_empty_clause(stmt) {
+        return;
+    }
     match stmt {
         Stmt::Assign { dest, src } => print_assign(out, dest, src),
         Stmt::Expr(Expr::PostInc(e)) => {

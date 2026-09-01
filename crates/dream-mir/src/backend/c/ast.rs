@@ -329,6 +329,8 @@ pub enum Stmt {
     Goto(String),
     GotoIndirect(Expr),
     Label(String),
+    Break,
+    Continue,
     Return(Option<Expr>),
     Block(Vec<Stmt>),
     /// `#line N "path.dream"` for DWARF (from MIR `DebugLine` when `-g`).

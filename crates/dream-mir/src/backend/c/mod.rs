@@ -17,6 +17,7 @@ mod protocol;
 mod reach;
 mod release;
 mod rvalue;
+mod shape;
 mod statements;
 mod tables;
 mod target;
@@ -34,6 +35,7 @@ pub use target::CTarget;
 mod tests {
     use super::emit_c_module;
     use crate::build::FunctionBuilder;
+    use crate::BinOp;
     use crate::{Callee, Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
     use dream_types::TypeInterner;
 
@@ -455,6 +457,162 @@ mod tests {
     }
 
     #[test]
+    fn if_diamond_emits_structured_if() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("classify", i.int());
+        let n = b.new_param(i.int(), Some("n".into()));
+        let then_blk = b.new_block();
+        let else_blk = b.new_block();
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(n)),
+            then_blk,
+            else_blk,
+        });
+        b.switch_to(then_blk);
+        b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(1)))));
+        b.switch_to(else_blk);
+        b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(2)))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("if ("), "expected structured if:\n{}", c);
+        assert!(c.contains("else"), "expected else arm:\n{}", c);
+        assert!(
+            !c.contains("goto L"),
+            "diamond should not use goto for the branch:\n{}",
+            c
+        );
+        assert!(c.contains("static "), "user fn should be static:\n{}", c);
+    }
+
+    #[test]
+    fn dense_switch_arms_goto_join() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("disp", i.int());
+        let v = b.new_param(i.int(), Some("v".into()));
+        let ok = b.new_block();
+        let err = b.new_block();
+        let join = b.new_block();
+        b.terminate(Terminator::Switch {
+            value: Operand::Copy(Place::Local(v)),
+            targets: vec![(0, ok), (1, err)],
+            default: join,
+        });
+        b.switch_to(ok);
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(err);
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(join);
+        b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("goto *"), "dense jump table:\n{}", c);
+        let ok_pos = c.find("L1:;").or_else(|| c.find("L1:")).unwrap_or(0);
+        let err_pos = c.find("L2:;").or_else(|| c.find("L2:")).unwrap_or(0);
+        let between = if err_pos > ok_pos {
+            &c[ok_pos..err_pos]
+        } else {
+            ""
+        };
+        assert!(
+            between.contains("goto "),
+            "Ok arm must jump to join, not fall into Err:\n{}",
+            c
+        );
+    }
+
+    #[test]
+    fn counting_while_inverts_exit() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("count", i.int());
+        let n = b.new_param(i.int(), Some("n".into()));
+        let acc = b.new_temp(i.int());
+        let cmp = b.new_temp(i.int());
+        b.assign(
+            Place::Local(acc),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
+        let header = b.new_block();
+        let body = b.new_block();
+        let done = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.assign(
+            Place::Local(cmp),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Copy(Place::Local(acc)),
+                Operand::Copy(Place::Local(n)),
+            ),
+        );
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(cmp)),
+            then_blk: body,
+            else_blk: done,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(acc),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(acc)),
+                Operand::Const(Const::Int(1)),
+            ),
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(done);
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(acc)))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("for (;;)"), "loop:\n{}", c);
+        assert!(
+            c.contains("if (!") || c.contains("if (!("),
+            "exit should be inverted if (!cond) break:\n{}",
+            c
+        );
+    }
+
+    #[test]
+    fn while_loop_emits_for_forever() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("count", i.int());
+        let cond = b.new_block();
+        let body = b.new_block();
+        let after = b.new_block();
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(cond);
+        b.terminate(Terminator::If {
+            cond: Operand::Const(Const::Bool(true)),
+            then_blk: body,
+            else_blk: after,
+        });
+        b.switch_to(body);
+        b.terminate(Terminator::Goto(cond));
+        b.switch_to(after);
+        b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("for (;;)"), "expected C loop:\n{}", c);
+        assert!(c.contains("break"), "loop exit should be break:\n{}", c);
+        assert!(
+            !c.contains("goto L"),
+            "header back-edge should not be a goto:\n{}",
+            c
+        );
+    }
+
+    #[test]
     fn dense_switch_is_computed_goto() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("disp", i.int());
@@ -480,6 +638,11 @@ mod tests {
         let c = emit_c_module(&mir, &i);
         assert!(!c.contains("65536"), "{}", c);
         assert!(c.contains("dream_fn_"), "{}", c);
+        assert!(
+            c.contains("goto *"),
+            "dense switch uses computed goto:\n{}",
+            c
+        );
     }
 
     #[test]

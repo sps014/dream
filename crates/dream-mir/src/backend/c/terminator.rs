@@ -4,6 +4,12 @@ use super::places::{is_alias_value_local, is_moved_into_union, is_value_copy_loc
 use crate::{BlockId, Local, Operand, Place, Terminator};
 use dream_types::TyKind;
 
+pub(super) fn is_dense_switch(targets: &[(i64, BlockId)]) -> bool {
+    let mut keys: Vec<i64> = targets.iter().map(|(k, _)| *k).collect();
+    keys.sort_unstable();
+    !keys.is_empty() && keys[0] == 0 && keys.windows(2).all(|w| w[1] == w[0] + 1) && keys.len() >= 2
+}
+
 impl<'a> Emitter<'a> {
     pub(super) fn term(&mut self, t: &Terminator) {
         match t {
@@ -152,14 +158,8 @@ impl<'a> Emitter<'a> {
 
     fn switch(&mut self, value: &Operand, targets: &[(i64, BlockId)], default: BlockId) {
         let v = self.operand(value);
-        let mut keys: Vec<i64> = targets.iter().map(|(k, _)| *k).collect();
-        keys.sort_unstable();
-        let dense = !keys.is_empty()
-            && keys[0] == 0
-            && keys.windows(2).all(|w| w[1] == w[0] + 1)
-            && keys.len() >= 2;
-        if dense {
-            let max = keys.last().copied().unwrap() as usize;
+        if is_dense_switch(targets) {
+            let max = targets.iter().map(|(k, _)| *k).max().unwrap() as usize;
             let mut map = vec![default; max + 1];
             for (k, b) in targets {
                 map[*k as usize] = *b;

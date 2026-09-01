@@ -4,8 +4,8 @@
 //! Where HIR keeps structured control flow, MIR desugars everything (if/while/for/foreach/switch/
 //! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Reference-counting
 //! (`Retain`/`Release`) and allocation are explicit [`Statement`]s, which lets the optimization
-//! passes reason about them with ordinary dataflow. The backend  reconstructs
-//! structured WASM control flow from this CFG via a relooper.
+//! passes reason about them with ordinary dataflow. The C backend reconstructs structured control
+//! flow from this CFG via a relooper (sync functions); async polls keep a program-counter dispatch.
 
 pub mod abi;
 pub mod async_emit;
@@ -578,7 +578,10 @@ pub enum Rvalue {
     /// `match` on union variants. Carries the union's interned type so niche-encoded unions
     /// (represented as the payload pointer itself) derive the discriminant from nullness even when
     /// copy propagation has replaced the operand with something of a different type.
-    Discriminant { base: Operand, ty: TypeId },
+    Discriminant {
+        base: Operand,
+        ty: TypeId,
+    },
     /// Reads one payload field of a union variant: `base` is the union pointer, `ty` its interned
     /// union type (the layout key), `variant` the discriminant, and `field` the payload field index.
     /// The backend resolves the byte offset + load width from the union layout. Only sound in an arm
@@ -670,7 +673,8 @@ mod tests {
             )))],
         };
 
-        let (mut mir, mut poll) = lower_function(&func, &ctx.interner, &dream_hir::LayoutTable::default());
+        let (mut mir, mut poll) =
+            lower_function(&func, &ctx.interner, &dream_hir::LayoutTable::default());
         PassManager::default_pipeline().run(&mut mir, &ctx.interner);
         if let Some(p) = &mut poll {
             PassManager::async_poll_pipeline().run(p, &ctx.interner);

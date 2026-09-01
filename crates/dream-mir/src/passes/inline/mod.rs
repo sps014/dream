@@ -203,11 +203,6 @@ fn eligible(
     if addr_taken.contains(key) {
         return false;
     }
-    // Inlining a looping callee (rehash, probe, grow-loops) into a wrapper makes a multi-entry
-    // loop; shape emit then falls back to `$__pc`/`br_table` for the whole wrapper.
-    if cfg_has_cycle(g) {
-        return false;
-    }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let (max_stmts, max_blocks) = if g.prefer_inline {
         (128, 24)
@@ -236,33 +231,6 @@ fn eligible(
         }
     }
     true
-}
-
-fn cfg_has_cycle(func: &crate::MirFunction) -> bool {
-    let n = func.blocks.len();
-    if n == 0 {
-        return false;
-    }
-    let mut visiting = vec![false; n];
-    let mut seen = vec![false; n];
-    fn rec(func: &crate::MirFunction, b: usize, visiting: &mut [bool], seen: &mut [bool]) -> bool {
-        if visiting[b] {
-            return true;
-        }
-        if seen[b] {
-            return false;
-        }
-        visiting[b] = true;
-        for s in func.blocks[b].terminator.successors() {
-            if rec(func, s.0 as usize, visiting, seen) {
-                return true;
-            }
-        }
-        visiting[b] = false;
-        seen[b] = true;
-        false
-    }
-    rec(func, func.entry.0 as usize, &mut visiting, &mut seen)
 }
 
 /// Remaps a callee [`LocalDecl`] into the caller using the callee's [`ValueFrame`] classification:
@@ -576,6 +544,65 @@ mod tests {
         assert!(
             caller_still_calls(&mir),
             "unflagged fat callee should stay a call"
+        );
+    }
+
+    #[test]
+    fn inlines_small_looping_callee() {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let callee_def = ctx.register(DefKind::Function, "looping", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+        let callee = {
+            let mut b = FunctionBuilder::new("looping", int);
+            b.set_def(callee_def, vec![]);
+            let n = b.new_param(int, Some("n".into()));
+            let acc = b.new_temp(int);
+            let cmp = b.new_temp(int);
+            b.assign(
+                Place::Local(acc),
+                Rvalue::Use(Operand::Const(Const::Int(0))),
+            );
+            let header = b.new_block();
+            let body = b.new_block();
+            let done = b.new_block();
+            b.terminate(Terminator::Goto(header));
+            b.switch_to(header);
+            b.assign(
+                Place::Local(cmp),
+                Rvalue::Binary(
+                    crate::BinOp::Lt,
+                    Operand::Copy(Place::Local(acc)),
+                    Operand::Copy(Place::Local(n)),
+                ),
+            );
+            b.terminate(Terminator::If {
+                cond: Operand::Copy(Place::Local(cmp)),
+                then_blk: body,
+                else_blk: done,
+            });
+            b.switch_to(body);
+            b.assign(
+                Place::Local(acc),
+                Rvalue::Binary(
+                    crate::BinOp::Add,
+                    Operand::Copy(Place::Local(acc)),
+                    Operand::Const(Const::Int(1)),
+                ),
+            );
+            b.terminate(Terminator::Goto(header));
+            b.switch_to(done);
+            b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(acc)))));
+            b.finish()
+        };
+        let mut mir = crate::Mir {
+            functions: vec![callee, caller_of(callee_def, caller_def, int)],
+            ..Default::default()
+        };
+        assert!(Inliner.run(&mut mir, &ctx.interner));
+        assert!(
+            !caller_still_calls(&mir),
+            "small looping callee should inline; C shape emit uses labeled gotos for multi-entry loops"
         );
     }
 

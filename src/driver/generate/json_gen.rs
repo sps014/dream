@@ -778,10 +778,7 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
 }
 
 #[cfg(feature = "native")]
-fn write_unique_snapshot(
-    c_path: &str,
-    snapshot: &str,
-) -> Result<std::path::PathBuf, JsonGenError> {
+fn write_unique_snapshot(c_path: &str, snapshot: &str) -> Result<std::path::PathBuf, JsonGenError> {
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let dir = std::path::Path::new(c_path)
         .parent()
@@ -968,6 +965,8 @@ fn cached_harness_c() -> Result<String, String> {
         include_str!("../../../crates/dream-mir/src/backend/c/rvalue.rs"),
         include_str!("../../../crates/dream-mir/src/backend/c/module.rs"),
         include_str!("../../../crates/dream-mir/src/backend/c/print.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/c/shape.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/c/builder.rs"),
         &format!(
             "{}:{}",
             dream_mir::abi::STRING_HEADER_SIZE,

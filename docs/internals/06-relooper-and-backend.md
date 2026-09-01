@@ -17,7 +17,7 @@ flowchart TD
 ```
 
 - `relooper::reloop(func) -> Option<Shape>` recovers structured shapes from the CFG.
-- `backend::c::emit_c_module_for(mir, interner, target)` walks each function into C statements. Sync functions emit structured C control flow (`while`/`goto` from relooper shapes); async poll functions keep a `$__pc` program counter + dispatch `switch` for suspend/resume. Guest runtime helpers are C units under `runtime/c/wasm32/` plus shared `runtime/c/native/` (compiled by wasi-sdk — see `src/driver/c_wasm32.rs`); PCRE2 regex links `runtime/c/regex.c` + `runtime/c/pcre2/`.
+- `backend::c::emit_c_module_for(mir, interner, target)` walks each function into C statements. Sync functions walk [`relooper::reloop`](../../crates/dream-mir/src/relooper.rs) into nested `for (;;)` / `if` / `switch` (`backend/c/shape.rs`), with `goto` only for leftover join edges. Async poll functions keep a `$__pc` program counter + dispatch `switch` for suspend/resume. Guest runtime helpers are C units under `runtime/c/wasm32/` plus shared `runtime/c/native/` (compiled by wasi-sdk — see `src/driver/c_wasm32.rs`); PCRE2 regex links `runtime/c/regex.c` + `runtime/c/pcre2/`.
 
 ## The relooper
 
@@ -66,17 +66,21 @@ Because Dream's surface syntax only generates reducible CFGs, `reloop` always re
 
 ### Sync: structured C control flow
 
-Sync functions are emitted as relooper-informed structured C — nested `while`/`if` with labels and
-`goto` only where a shape's exit arms need them. MIR terminators map directly onto C statements:
-`Goto` → `goto L<block>`, `If` → `if`/`else`, `Switch` → a C `switch`.
+Sync functions are emitted by walking the relooper shape tree (`backend/c/shape.rs`) when every
+`Loop` has a single Simple header — nested `for (;;)` / `if` / `switch`, with labels and `goto`
+only where a shape's exit cannot be a `break`/`continue`/fallthrough. Functions whose reloop tree
+contains a multi-entry loop (`Loop` wrapping `Multiple`) keep the label+goto walk, which is the
+safe lowering after inlining a looping callee. MIR terminators map onto C statements: fallthrough
+`Goto` is omitted, a back-edge to a single-header loop is `continue` (or `goto Lheader`), a loop
+exit is `break`, `If` folds into `if`/`else` when the next shape is `Multiple`, and `Switch` is a
+C `switch` (dense 0..n tables still use computed `goto *`).
 
 ```c
-L0:;
-  while 1 {
-    /* … body … */
-    goto L0;   /* back-edge to the loop header */
-  }
-  /* exit arm(s) */
+for (;;) {
+  if (!cond) break;
+  /* … body; fallthrough continues the loop … */
+}
+/* exit arm(s) */
 ```
 
 **Async poll functions** keep a `$__pc` + dispatch-`switch` resume loop: suspend/resume must save and

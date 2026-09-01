@@ -5,7 +5,7 @@ use logos::Logos;
 pub enum TokenKind {
     EndOfFileToken,
 
-    #[regex(r"[ \t\n\f]+")]
+    #[regex(r"[ \t\r\n\f]+")]
     WhiteSpaceToken,
 
     BadToken,

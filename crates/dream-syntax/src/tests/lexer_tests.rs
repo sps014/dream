@@ -218,6 +218,25 @@ fn test_lex_trivia() {
 }
 
 #[test]
+fn test_lex_crlf_is_whitespace() {
+    let lf = "fun main() {\n}\n";
+    let crlf = lf.replace('\n', "\r\n");
+
+    let mut lf_lexer = Lexer::new(lf.to_string());
+    let mut crlf_lexer = Lexer::new(crlf);
+    let mut lf_diagnostics = DiagnosticBag::new(None);
+    let mut crlf_diagnostics = DiagnosticBag::new(None);
+    let lf_tokens = lf_lexer.lex_all(&mut lf_diagnostics);
+    let crlf_tokens = crlf_lexer.lex_all(&mut crlf_diagnostics);
+
+    assert_eq!(lf_diagnostics.has_errors(), false);
+    assert_eq!(crlf_diagnostics.has_errors(), false);
+    let lf_kinds: Vec<TokenKind> = lf_tokens.iter().map(|t| t.kind).collect();
+    let crlf_kinds: Vec<TokenKind> = crlf_tokens.iter().map(|t| t.kind).collect();
+    assert_eq!(lf_kinds, crlf_kinds);
+}
+
+#[test]
 fn test_lex_struct_keyword() {
     let mut lexer = Lexer::new("struct Vec2 { }".to_string());
     let mut diagnostics = DiagnosticBag::new(None);

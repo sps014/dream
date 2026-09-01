@@ -17,7 +17,7 @@ flowchart TD
 ```
 
 - `relooper::reloop(func) -> Option<Shape>` recovers structured shapes from the CFG.
-- `backend::c::emit_c_module_for(mir, interner, target)` walks each function into C statements. Sync functions walk [`relooper::reloop`](../../crates/dream-mir/src/relooper.rs) into nested `for (;;)` / `if` / `switch` (`backend/c/shape.rs`), with `goto` only for leftover join edges. Async poll functions keep a `$__pc` program counter + dispatch `switch` for suspend/resume. Guest runtime helpers are C units under `runtime/c/wasm32/` plus shared `runtime/c/native/` (compiled by wasi-sdk — see `src/driver/c_wasm32.rs`); PCRE2 regex links `runtime/c/regex.c` + `runtime/c/pcre2/`.
+- `backend::c::emit_c_module_for(mir, interner, target)` walks each function into C statements. Sync functions walk [`relooper::reloop`](https://github.com/sps014/dream/blob/main/crates/dream-mir/src/relooper.rs) into nested `for (;;)` / `if` / `switch` (`backend/c/shape.rs`), with `goto` only for leftover join edges. Async poll functions keep a `$__pc` program counter + dispatch `switch` for suspend/resume. Guest runtime helpers are C units under `runtime/c/wasm32/` plus shared `runtime/c/native/` (compiled by wasi-sdk — see `src/driver/c_wasm32.rs`); PCRE2 regex links `runtime/c/regex.c` + `runtime/c/pcre2/`.
 
 ## The relooper
 

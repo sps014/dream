@@ -37,9 +37,16 @@ fn same_expr(a: &HExpr, b: &HExpr) -> bool {
         (HExprKind::Field { obj: o1, field: f1 }, HExprKind::Field { obj: o2, field: f2 }) => {
             f1 == f2 && same_expr(o1, o2)
         }
-        (HExprKind::Index { array: a1, index: i1 }, HExprKind::Index { array: a2, index: i2 }) => {
-            same_expr(a1, a2) && same_expr(i1, i2)
-        }
+        (
+            HExprKind::Index {
+                array: a1,
+                index: i1,
+            },
+            HExprKind::Index {
+                array: a2,
+                index: i2,
+            },
+        ) => same_expr(a1, a2) && same_expr(i1, i2),
         (HExprKind::IntLit(v1), HExprKind::IntLit(v2)) => v1 == v2,
         (HExprKind::BoolLit(v1), HExprKind::BoolLit(v2)) => v1 == v2,
         (HExprKind::CharLit(v1), HExprKind::CharLit(v2)) => v1 == v2,
@@ -54,9 +61,16 @@ fn same_place_expr(place: &HPlace, expr: &HExpr) -> bool {
         (HPlace::Field { obj: o1, field: f1 }, HExprKind::Field { obj: o2, field: f2 }) => {
             f1 == f2 && same_expr(o1, o2)
         }
-        (HPlace::Index { array: a1, index: i1 }, HExprKind::Index { array: a2, index: i2 }) => {
-            same_expr(a1, a2) && same_expr(i1, i2)
-        }
+        (
+            HPlace::Index {
+                array: a1,
+                index: i1,
+            },
+            HExprKind::Index {
+                array: a2,
+                index: i2,
+            },
+        ) => same_expr(a1, a2) && same_expr(i1, i2),
         _ => false,
     }
 }
@@ -185,7 +199,9 @@ fn canonicalize_niche_unions(
                 continue;
             }
             let (place, arg) = match &func.blocks[bi].stmts[si] {
-                Statement::Assign(p, Rvalue::UnionNew { args, .. }) => (p.clone(), args.first().cloned()),
+                Statement::Assign(p, Rvalue::UnionNew { args, .. }) => {
+                    (p.clone(), args.first().cloned())
+                }
                 _ => unreachable!("checked above"),
             };
             let v = arg.unwrap_or(Operand::Const(Const::Null));
@@ -202,9 +218,9 @@ fn stmt_has_defer(stmt: &HStmt) -> bool {
             else_branch,
             ..
         } => stmts_have_defer(then_branch) || stmts_have_defer(else_branch),
-        HStmt::While { body, .. }
-        | HStmt::DoWhile { body, .. }
-        | HStmt::Lock { body, .. } => stmts_have_defer(body),
+        HStmt::While { body, .. } | HStmt::DoWhile { body, .. } | HStmt::Lock { body, .. } => {
+            stmts_have_defer(body)
+        }
         HStmt::For {
             init, step, body, ..
         } => stmts_have_defer(init) || stmts_have_defer(step) || stmts_have_defer(body),
@@ -217,7 +233,11 @@ fn stmt_has_defer(stmt: &HStmt) -> bool {
 }
 
 /// Lowers a single function, returning its main MIR body (stub for async) and an optional poll body.
-pub fn lower_function(func: &HFunction, interner: &TypeInterner, layouts: &dream_hir::LayoutTable) -> (MirFunction, Option<MirFunction>) {
+pub fn lower_function(
+    func: &HFunction,
+    interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
+) -> (MirFunction, Option<MirFunction>) {
     if func.is_async {
         let stub = lower_async_stub(func);
         let poll = lower_async_poll_body(func, interner, layouts);
@@ -599,9 +619,10 @@ fn const_int_value(e: &HExpr) -> Option<i64> {
         HExprKind::IntLit(v) | HExprKind::EnumValue(v) => Some(*v),
         HExprKind::BoolLit(v) => Some(*v as i64),
         HExprKind::CharLit(c) => Some(*c as i64),
-        HExprKind::Unary { op: dream_hir::UnOp::Neg, operand } => {
-            const_int_value(operand).map(|v| -v)
-        }
+        HExprKind::Unary {
+            op: dream_hir::UnOp::Neg,
+            operand,
+        } => const_int_value(operand).map(|v| -v),
         _ => None,
     }
 }

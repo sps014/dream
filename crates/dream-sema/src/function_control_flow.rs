@@ -36,7 +36,10 @@ pub struct FunctionControlGraph<'a, 'd> {
 
 impl<'a, 'd> FunctionControlGraph<'a, 'd> {
     pub fn new(function: &'a FunctionNode<'a>, diagnostics: &'d mut DiagnosticBag) -> Self {
-        Self { function, diagnostics }
+        Self {
+            function,
+            diagnostics,
+        }
     }
 
     pub fn build(&mut self) {
@@ -69,10 +72,8 @@ impl<'a, 'd> FunctionControlGraph<'a, 'd> {
             if !current.falls_through {
                 if !unreachable_reported {
                     // Only warn on actual statements that emit code or affect flow
-                    self.diagnostics.report_warning(
-                        "unreachable code".to_string(),
-                        stmt_position(stmt),
-                    );
+                    self.diagnostics
+                        .report_warning("unreachable code".to_string(), stmt_position(stmt));
                     unreachable_reported = true;
                 }
                 // Even if unreachable, we can keep walking to validate children or just skip.

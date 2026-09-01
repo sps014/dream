@@ -44,10 +44,8 @@ fn brotli_path(path: &Path) -> std::path::PathBuf {
 
 fn write_gzip(path: &Path, raw: &[u8]) -> std::io::Result<u64> {
     let out_path = gzip_path(path);
-    let mut encoder = flate2::write::GzEncoder::new(
-        fs::File::create(&out_path)?,
-        flate2::Compression::best(),
-    );
+    let mut encoder =
+        flate2::write::GzEncoder::new(fs::File::create(&out_path)?, flate2::Compression::best());
     encoder.write_all(raw)?;
     encoder.finish()?;
     Ok(fs::metadata(&out_path)?.len())

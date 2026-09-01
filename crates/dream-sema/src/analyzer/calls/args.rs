@@ -353,7 +353,11 @@ impl<'a> Analyzer<'a> {
                 };
                 let Some(field_idx) = self.struct_field_index(&struct_name, &member.text) else {
                     diagnostics.report_error(
-                        format!("'{}' has no field '{}'", self.ty_str_display(&struct_name), member.text),
+                        format!(
+                            "'{}' has no field '{}'",
+                            self.ty_str_display(&struct_name),
+                            member.text
+                        ),
                         Some(member.position),
                     );
                     self.hir_none();

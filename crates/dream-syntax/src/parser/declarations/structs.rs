@@ -105,21 +105,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::SemicolonToken {
             self.match_token(TokenKind::SemicolonToken);
         } else {
-        self.match_token(TokenKind::CurlyOpenBracketToken);
+            self.match_token(TokenKind::CurlyOpenBracketToken);
 
-        while self.current_token().kind != TokenKind::CurlyCloseBracketToken
-            && self.current_token().kind != TokenKind::EndOfFileToken
-        {
-            let iter = self.current_token_index;
-            let field_attributes = self.parse_attributes();
+            while self.current_token().kind != TokenKind::CurlyCloseBracketToken
+                && self.current_token().kind != TokenKind::EndOfFileToken
+            {
+                let iter = self.current_token_index;
+                let field_attributes = self.parse_attributes();
 
-            // Classify the member by looking past any leading `public`/`static`/`async`: a
-            // method (`fun`, `static fun`, `constructor`/`del`, `extern fun`) is dispatched to
-            // `parse_function` (which consumes its own modifiers), otherwise it is a field.
-            let mut m = 0;
-            while matches!(
-                self.peek_token(m).kind,
-                TokenKind::PublicToken
+                // Classify the member by looking past any leading `public`/`static`/`async`: a
+                // method (`fun`, `static fun`, `constructor`/`del`, `extern fun`) is dispatched to
+                // `parse_function` (which consumes its own modifiers), otherwise it is a field.
+                let mut m = 0;
+                while matches!(
+                    self.peek_token(m).kind,
+                    TokenKind::PublicToken
                     | TokenKind::InternalToken
                     | TokenKind::StaticToken
                     | TokenKind::AsyncToken
@@ -128,89 +128,89 @@ impl<'a, 'b> Parser<'a, 'b> {
                     | TokenKind::OverrideToken
                     | TokenKind::BorrowToken
                     | TokenKind::UniqueToken
-            ) {
-                m += 1;
-            }
-            let core = self.peek_token(m);
-            let is_ctor_dtor = core.kind == TokenKind::IdentifierToken
-                && crate::nodes::types::is_special_member_name(&core.text)
-                && self.peek_token(m + 1).kind == TokenKind::OpenParenthesisToken;
-
-            // TypeScript-style property accessor: `get name(...)` / `set name(...)`. `get`/`set`
-            // are contextual keywords (still ordinary identifiers/field names elsewhere), so this
-            // only binds when the next token is a property name followed by a parameter list.
-            let is_accessor = core.kind == TokenKind::IdentifierToken
-                && crate::nodes::function::AccessorKind::from_keyword(&core.text).is_some()
-                && self.peek_token(m + 1).kind == TokenKind::IdentifierToken
-                && self.peek_token(m + 2).kind == TokenKind::OpenParenthesisToken;
-            if core.kind == TokenKind::FunToken
-                || core.kind == TokenKind::ExternToken
-                || is_ctor_dtor
-                || is_accessor
-            {
-                methods.push(self.parse_function(Some(field_attributes))?);
-            } else {
-                // Fields are private by default; an explicit `public`/`internal` exposes them.
-                // `weak`/`unowned` are storage qualifiers that break ARC reference cycles (see
-                // `docs/language/memory.md`); any order/combination with the visibility modifier is
-                // accepted here, with `weak`+`unowned` together rejected during semantic analysis.
-                //
-                // Doc comments attach to the first token of the field (`public`, or the name when
-                // bare). Capture before consuming modifiers and splice onto the name for LSP.
-                let first_trivia = self.current_token().leading_trivia.clone();
-                let doc_trivia = Self::recover_doc_trivia(first_trivia, &field_attributes);
-                let mut field_visibility = Visibility::Private;
-                let mut field_weak = false;
-                let mut field_unowned = false;
-                loop {
-                    if self.try_consume_visibility(&mut field_visibility) {
-                        continue;
-                    }
-                    match self.current_token().kind {
-                        TokenKind::WeakToken => {
-                            self.match_token(TokenKind::WeakToken);
-                            field_weak = true;
-                        }
-                        TokenKind::UnownedToken => {
-                            self.match_token(TokenKind::UnownedToken);
-                            field_unowned = true;
-                        }
-                        _ => break,
-                    }
+                ) {
+                    m += 1;
                 }
-                let mut field_name = self.match_token(TokenKind::IdentifierToken);
-                // Bare `/// doc\n name: T` already carries trivia on the identifier; only splice
-                // when a modifier/attribute ate it (`public name`, `@loc name`).
-                if field_name.leading_trivia.is_empty() {
-                    Self::splice_leading_trivia(&mut field_name, doc_trivia);
+                let core = self.peek_token(m);
+                let is_ctor_dtor = core.kind == TokenKind::IdentifierToken
+                    && crate::nodes::types::is_special_member_name(&core.text)
+                    && self.peek_token(m + 1).kind == TokenKind::OpenParenthesisToken;
+
+                // TypeScript-style property accessor: `get name(...)` / `set name(...)`. `get`/`set`
+                // are contextual keywords (still ordinary identifiers/field names elsewhere), so this
+                // only binds when the next token is a property name followed by a parameter list.
+                let is_accessor = core.kind == TokenKind::IdentifierToken
+                    && crate::nodes::function::AccessorKind::from_keyword(&core.text).is_some()
+                    && self.peek_token(m + 1).kind == TokenKind::IdentifierToken
+                    && self.peek_token(m + 2).kind == TokenKind::OpenParenthesisToken;
+                if core.kind == TokenKind::FunToken
+                    || core.kind == TokenKind::ExternToken
+                    || is_ctor_dtor
+                    || is_accessor
+                {
+                    methods.push(self.parse_function(Some(field_attributes))?);
+                } else {
+                    // Fields are private by default; an explicit `public`/`internal` exposes them.
+                    // `weak`/`unowned` are storage qualifiers that break ARC reference cycles (see
+                    // `docs/language/memory.md`); any order/combination with the visibility modifier is
+                    // accepted here, with `weak`+`unowned` together rejected during semantic analysis.
+                    //
+                    // Doc comments attach to the first token of the field (`public`, or the name when
+                    // bare). Capture before consuming modifiers and splice onto the name for LSP.
+                    let first_trivia = self.current_token().leading_trivia.clone();
+                    let doc_trivia = Self::recover_doc_trivia(first_trivia, &field_attributes);
+                    let mut field_visibility = Visibility::Private;
+                    let mut field_weak = false;
+                    let mut field_unowned = false;
+                    loop {
+                        if self.try_consume_visibility(&mut field_visibility) {
+                            continue;
+                        }
+                        match self.current_token().kind {
+                            TokenKind::WeakToken => {
+                                self.match_token(TokenKind::WeakToken);
+                                field_weak = true;
+                            }
+                            TokenKind::UnownedToken => {
+                                self.match_token(TokenKind::UnownedToken);
+                                field_unowned = true;
+                            }
+                            _ => break,
+                        }
+                    }
+                    let mut field_name = self.match_token(TokenKind::IdentifierToken);
+                    // Bare `/// doc\n name: T` already carries trivia on the identifier; only splice
+                    // when a modifier/attribute ate it (`public name`, `@loc name`).
+                    if field_name.leading_trivia.is_empty() {
+                        Self::splice_leading_trivia(&mut field_name, doc_trivia);
+                    }
+                    self.match_token(TokenKind::ColonToken);
+
+                    // Parse the full type (supporting generic args like `Map<string, JsonValue>`
+                    // and arrays) and store its canonical spelling on the field.
+                    let type_position = self.current_token().position;
+                    let parsed_type = self.parse_type()?;
+                    let field_type_token = crate::token::syntax_token::SyntaxToken::new(
+                        TokenKind::IdentifierToken,
+                        type_position,
+                        parsed_type.get_type(),
+                    );
+
+                    self.match_token(TokenKind::SemicolonToken);
+                    fields.push(crate::nodes::struct_node::StructFieldNode {
+                        attributes: field_attributes,
+                        name: field_name,
+                        visibility: field_visibility,
+                        is_weak: field_weak,
+                        is_unowned: field_unowned,
+                        type_token: field_type_token,
+                        field_type: parsed_type,
+                    });
                 }
-                self.match_token(TokenKind::ColonToken);
-
-                // Parse the full type (supporting generic args like `Map<string, JsonValue>`
-                // and arrays) and store its canonical spelling on the field.
-                let type_position = self.current_token().position;
-                let parsed_type = self.parse_type()?;
-                let field_type_token = crate::token::syntax_token::SyntaxToken::new(
-                    TokenKind::IdentifierToken,
-                    type_position,
-                    parsed_type.get_type(),
-                );
-
-                self.match_token(TokenKind::SemicolonToken);
-                fields.push(crate::nodes::struct_node::StructFieldNode {
-                    attributes: field_attributes,
-                    name: field_name,
-                    visibility: field_visibility,
-                    is_weak: field_weak,
-                    is_unowned: field_unowned,
-                    type_token: field_type_token,
-                    field_type: parsed_type,
-                });
+                self.ensure_progress(iter);
             }
-            self.ensure_progress(iter);
-        }
 
-        self.match_token(TokenKind::CurlyCloseBracketToken);
+            self.match_token(TokenKind::CurlyCloseBracketToken);
         }
 
         if had_primary {

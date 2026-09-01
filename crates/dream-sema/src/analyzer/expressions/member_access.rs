@@ -63,7 +63,11 @@ impl<'a> Analyzer<'a> {
             self.in_methods_of(parent_function, &base_name),
         ) {
             diagnostics.report_error(
-                format!("'{}' is private to '{}'", member.text, self.ty_display(obj_type)),
+                format!(
+                    "'{}' is private to '{}'",
+                    member.text,
+                    self.ty_display(obj_type)
+                ),
                 Some(member.position),
             );
         }
@@ -225,10 +229,14 @@ impl<'a> Analyzer<'a> {
         if member.text == dream_abi::intrinsics::LENGTH {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
-                self.record_ide_ref(member.position, ide::IdeTarget::Expr, TypeSummary::Named {
-                    key: Some("int".to_string()),
-                    display: "int".to_string(),
-                });
+                self.record_ide_ref(
+                    member.position,
+                    ide::IdeTarget::Expr,
+                    TypeSummary::Named {
+                        key: Some("int".to_string()),
+                        display: "int".to_string(),
+                    },
+                );
                 self.hir_set_array_len(obj_hir);
                 return Ok(Type::Integer(synthetic_token(
                     TokenKind::DataTypeToken,

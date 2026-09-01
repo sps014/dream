@@ -1,8 +1,8 @@
 //! Compile generated MIR C with the native runtime and run the resulting binary.
 
 pub mod abi;
-pub mod webview;
 mod cc;
+pub mod webview;
 
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};

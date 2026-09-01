@@ -743,10 +743,7 @@ pub(crate) fn take_owned_arg_locals(
 }
 
 /// Borrowed or taken call arguments may be retained by the callee; Unique last-use destroy is unsound.
-pub(crate) fn call_escape_locals(
-    stmt: &Statement,
-    is_owned_ref: &dyn Fn(u32) -> bool,
-) -> Vec<u32> {
+pub(crate) fn call_escape_locals(stmt: &Statement, is_owned_ref: &dyn Fn(u32) -> bool) -> Vec<u32> {
     let Some((_, args)) = sink_call_args(stmt) else {
         return Vec::new();
     };

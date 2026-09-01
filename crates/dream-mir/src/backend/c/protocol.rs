@@ -360,28 +360,27 @@ fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<String>, St
         return (v.name.clone(), Vec::new(), String::new());
     }
     let prefix = format!("{}(", v.name);
-    let labels = v
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(i, f)| {
-            let positional = f
-                .name
-                .strip_prefix('_')
-                .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()));
-            if positional {
-                if i == 0 {
-                    String::new()
+    let labels =
+        v.fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let positional = f.name.strip_prefix('_').is_some_and(|rest| {
+                    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+                });
+                if positional {
+                    if i == 0 {
+                        String::new()
+                    } else {
+                        ", ".to_string()
+                    }
+                } else if i == 0 {
+                    format!("{}: ", f.name)
                 } else {
-                    ", ".to_string()
+                    format!(", {}: ", f.name)
                 }
-            } else if i == 0 {
-                format!("{}: ", f.name)
-            } else {
-                format!(", {}: ", f.name)
-            }
-        })
-        .collect();
+            })
+            .collect();
     (prefix, labels, ")".to_string())
 }
 

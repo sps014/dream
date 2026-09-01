@@ -48,10 +48,7 @@ enum Ev {
     /// `let to = from;` / `to = from;` where `from` is an object-typed name — the two names
     /// may reference the same instance (proven-alias edge for group tracking).
     /// For-each loop opens an anonymous borrow on the iterable for its body.
-    ScopedOpen {
-        underlying: String,
-        span: TextSpan,
-    },
+    ScopedOpen { underlying: String, span: TextSpan },
     /// End of a for-each body: the anonymous borrow dies.
     ScopedClose,
 }
@@ -81,7 +78,6 @@ fn type_owner_name(ty: &Type) -> Option<String> {
         _ => None,
     }
 }
-
 
 /// Builds a dotted-chain key from any member-access expression rooted at an identifier.
 /// `o.inner.items` -> `"o.inner.items"`; non-member roots return the expression's own key.
@@ -140,7 +136,6 @@ struct ViewSummary {
     source: ViewSource,
 }
 
-
 struct Extractor<'s> {
     summaries: &'s HashMap<String, ViewSummary>,
     /// Names of declared classes — used to infer local types from constructor calls.
@@ -161,7 +156,6 @@ impl<'s> Extractor<'s> {
         canonical_chain_from(expr)
     }
 
-
     /// Kills any prior binding of `name`, walks the initializer (so nested calls/refs are seen),
     /// then opens/aliases when the initializer produces a view.
     fn emit_binding_and_init(
@@ -175,9 +169,7 @@ impl<'s> Extractor<'s> {
             name: name.to_string(),
         });
         if let Some((_kind, recv_expr)) = view_construction(init) {
-            if let (Some(underlying), Some(span)) =
-                (self.recv_key(recv_expr), init_span(init))
-            {
+            if let (Some(underlying), Some(span)) = (self.recv_key(recv_expr), init_span(init)) {
                 self.events.push(Ev::Open {
                     cursor: name.to_string(),
                     underlying,
@@ -196,15 +188,13 @@ impl<'s> Extractor<'s> {
         // B2 summary call: `let cur = get_view(list);` / `let v = obj.view();`
         let summary = match init {
             ExpressionNode::FunctionCall(callee, _, _) => self.summaries.get(&callee.text),
-            ExpressionNode::MethodCall(recv, nm, _, _) => {
-                match &**recv {
-                    ExpressionNode::Identifier(t) if t.text == "this" => {
-                        let key = format!("{}::{}", self._owner, nm.text);
-                        self.summaries.get(&key)
-                    }
-                    _ => None,
+            ExpressionNode::MethodCall(recv, nm, _, _) => match &**recv {
+                ExpressionNode::Identifier(t) if t.text == "this" => {
+                    let key = format!("{}::{}", self._owner, nm.text);
+                    self.summaries.get(&key)
                 }
-            }
+                _ => None,
+            },
             _ => None,
         };
         if let Some(summary) = summary {
@@ -220,9 +210,7 @@ impl<'s> Extractor<'s> {
                 _ => None,
             };
             if let Some(borrowed) = borrowed {
-                if let (Some(underlying), Some(span)) =
-                    (self.recv_key(borrowed), init_span(init))
-                {
+                if let (Some(underlying), Some(span)) = (self.recv_key(borrowed), init_span(init)) {
                     self.events.push(Ev::Open {
                         cursor: name.to_string(),
                         underlying,
@@ -284,9 +272,7 @@ fn compute_view_summaries<'a>(node: &'a ProgramNode<'a>) -> HashMap<String, View
             f.parameters.iter().map(|p| p.name.text.as_str()).collect();
         for stmt in f.body {
             if let StatementNode::Return(Some(e)) = stmt {
-                if let Some(source) =
-                    view_return_source(e, owner.is_some(), &param_positions)
-                {
+                if let Some(source) = view_return_source(e, owner.is_some(), &param_positions) {
                     out.insert(key.clone(), ViewSummary { source });
                     return;
                 }
@@ -359,7 +345,9 @@ fn interpret_events(
 
     for (i, ev) in events.iter().enumerate() {
         match ev {
-            Ev::Open { cursor, underlying, .. } => {
+            Ev::Open {
+                cursor, underlying, ..
+            } => {
                 live_cursors.retain(|(n, _)| n != cursor);
                 live_cursors.push((cursor.clone(), underlying.clone()));
             }
@@ -381,7 +369,11 @@ fn interpret_events(
             Ev::ScopedClose => {
                 scoped.pop();
             }
-            Ev::UniqueCandidate { recv, name: callee, span } => {
+            Ev::UniqueCandidate {
+                recv,
+                name: callee,
+                span,
+            } => {
                 // Resolve receiver's class + its group root. Deep chains (`this.a.b`) walk
                 // the precomputed chain-owner table.
                 let cls = if recv == "this" {
@@ -459,7 +451,7 @@ fn interpret_events(
 }
 
 impl<'a> Analyzer<'a> {
-pub(in crate::analyzer) fn check_borrow_collisions(
+    pub(in crate::analyzer) fn check_borrow_collisions(
         &mut self,
         node: &'a ProgramNode<'a>,
         diagnostics: &mut DiagnosticBag,
@@ -653,12 +645,10 @@ impl<'s> Extractor<'s> {
                     ExpressionNode::FunctionCall(callee, _, _) => {
                         self.class_names.get(&callee.text)
                     }
-                    ExpressionNode::Call(callee_expr, _, _) => {
-                        match &**callee_expr {
-                            ExpressionNode::Identifier(t) => self.class_names.get(&t.text),
-                            _ => None,
-                        }
-                    }
+                    ExpressionNode::Call(callee_expr, _, _) => match &**callee_expr {
+                        ExpressionNode::Identifier(t) => self.class_names.get(&t.text),
+                        _ => None,
+                    },
                     _ => None,
                 };
                 if let Some(class) = ctor_class {
@@ -668,22 +658,24 @@ impl<'s> Extractor<'s> {
                 } else if std::env::var("DREAM_TRACE_BORROW").is_ok() {
                     eprintln!(
                         "[borrow] no ctor class for '{}' init={:?}",
-                        name_tok.text,
-                        init,
+                        name_tok.text, init,
                     );
                 }
                 match init {
                     ExpressionNode::ArrayLiteral(..) => {
                         self.local_class.retain(|(n, _)| n != &name_tok.text);
-                        self.local_class.push((name_tok.text.clone(), "__array".to_string()));
+                        self.local_class
+                            .push((name_tok.text.clone(), "__array".to_string()));
                     }
                     ExpressionNode::SetLiteral(..) => {
                         self.local_class.retain(|(n, _)| n != &name_tok.text);
-                        self.local_class.push((name_tok.text.clone(), "Set".to_string()));
+                        self.local_class
+                            .push((name_tok.text.clone(), "Set".to_string()));
                     }
                     ExpressionNode::MapLiteral(..) => {
                         self.local_class.retain(|(n, _)| n != &name_tok.text);
-                        self.local_class.push((name_tok.text.clone(), "Map".to_string()));
+                        self.local_class
+                            .push((name_tok.text.clone(), "Map".to_string()));
                     }
                     _ => {}
                 }
@@ -785,10 +777,12 @@ impl<'s> Extractor<'s> {
             }
             StatementNode::Labeled(_, inner) => self.walk_stmt(inner, field_types, class_fields),
             StatementNode::ForEach(_, iterable, _, _, body) => {
-                if let (Some(u), Some(span)) =
-                    (canonical_chain_from(iterable), init_span(iterable))
+                if let (Some(u), Some(span)) = (canonical_chain_from(iterable), init_span(iterable))
                 {
-                    self.events.push(Ev::ScopedOpen { underlying: u, span });
+                    self.events.push(Ev::ScopedOpen {
+                        underlying: u,
+                        span,
+                    });
                     self.walk_block(body, field_types, class_fields);
                     self.events.push(Ev::ScopedClose);
                 } else {
@@ -837,9 +831,7 @@ impl<'s> Extractor<'s> {
             }
             ExpressionNode::Unary(_, inner)
             | ExpressionNode::Parenthesized(_, inner)
-            | ExpressionNode::Try(inner) => {
-                self.walk_expr(inner, field_types, class_fields)
-            }
+            | ExpressionNode::Try(inner) => self.walk_expr(inner, field_types, class_fields),
             ExpressionNode::IncDec { target, .. } => {
                 if let Some(key) = canonical_chain_from(target) {
                     if let Some(span) = target_span_opt(target) {
@@ -880,9 +872,7 @@ impl<'s> Extractor<'s> {
             }
             ExpressionNode::Cast(_, _, inner)
             | ExpressionNode::IsExpression(inner, _, _)
-            | ExpressionNode::Await(_, inner) => {
-                self.walk_expr(inner, field_types, class_fields)
-            }
+            | ExpressionNode::Await(_, inner) => self.walk_expr(inner, field_types, class_fields),
             ExpressionNode::MemberAccess(base, _) => {
                 self.walk_expr(base, field_types, class_fields)
             }

@@ -10,16 +10,25 @@ use dream_syntax::nodes::{ExpressionNode, StatementNode, Type};
 impl<'a> Analyzer<'a> {
     fn const_case_key(&self, e: &dream_hir::HExpr) -> Option<String> {
         match &e.kind {
-            dream_hir::HExprKind::IntLit(v) | dream_hir::HExprKind::EnumValue(v) => Some(v.to_string()),
+            dream_hir::HExprKind::IntLit(v) | dream_hir::HExprKind::EnumValue(v) => {
+                Some(v.to_string())
+            }
             dream_hir::HExprKind::BoolLit(v) => Some(v.to_string()),
             dream_hir::HExprKind::CharLit(c) => Some((*c as u32).to_string()),
             dream_hir::HExprKind::StringLit(s) => Some(s.clone()),
             dream_hir::HExprKind::FloatLit(f) => Some(f.to_string()),
-            dream_hir::HExprKind::Unary { op: dream_hir::UnOp::Neg, operand } => {
+            dream_hir::HExprKind::Unary {
+                op: dream_hir::UnOp::Neg,
+                operand,
+            } => {
                 if let dream_hir::HExprKind::IntLit(0) = operand.kind {
                     Some("0".to_string())
                 } else if let dream_hir::HExprKind::FloatLit(f) = operand.kind {
-                    if f == 0.0 { Some("0".to_string()) } else { Some(format!("-{f}")) }
+                    if f == 0.0 {
+                        Some("0".to_string())
+                    } else {
+                        Some(format!("-{f}"))
+                    }
                 } else {
                     self.const_case_key(operand).map(|s| format!("-{s}"))
                 }

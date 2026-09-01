@@ -71,14 +71,12 @@ impl<'a> Analyzer<'a> {
                 if is_expression {
                     match arm_value_type {
                         None => *arm_value_type = Some(t.clone()),
-                        Some(prev) => {
-                            self.compare_data_type(
-                                prev,
-                                &t,
-                                &expr.position().unwrap_or_else(empty_span),
-                                diagnostics,
-                            )?
-                        }
+                        Some(prev) => self.compare_data_type(
+                            prev,
+                            &t,
+                            &expr.position().unwrap_or_else(empty_span),
+                            diagnostics,
+                        )?,
                     }
                     if result_temp.is_none() {
                         *result_temp = self.hir_alloc_local("__switch_result", &t);

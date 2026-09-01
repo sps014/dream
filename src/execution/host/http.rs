@@ -261,7 +261,10 @@ mod tests {
     }
 
     fn split_body(wire: &[u8]) -> &[u8] {
-        let sep = wire.windows(2).position(|w| w == b"\n\n").expect("head/body");
+        let sep = wire
+            .windows(2)
+            .position(|w| w == b"\n\n")
+            .expect("head/body");
         &wire[sep + 2..]
     }
 

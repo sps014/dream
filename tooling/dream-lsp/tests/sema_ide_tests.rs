@@ -11,7 +11,9 @@ use dream_lsp::sema_ide;
 
 fn completion_names(src: &str) -> Vec<String> {
     let harness = TestHarness::new(src);
-    let snapshot = harness.snapshot().expect("analysis should produce a snapshot");
+    let snapshot = harness
+        .snapshot()
+        .expect("analysis should produce a snapshot");
     sema_ide::member_completions(&snapshot, &harness.src, harness.offset)
         .expect("receiver should resolve through the analyzer")
         .into_iter()
@@ -34,9 +36,8 @@ fn tuple_element_completions() {
 fn tuple_destructure_binds_element_types() {
     // `text` is bound to the *string* element, so `.|` offers string methods (length etc.),
     // not tuple elements.
-    let comps = completion_names(
-        "fun main(): void {\n    let (num, text) = (1, \"a\");\n    text.|\n}\n",
-    );
+    let comps =
+        completion_names("fun main(): void {\n    let (num, text) = (1, \"a\");\n    text.|\n}\n");
     assert!(
         comps.iter().any(|n| n == "length"),
         "expected string members on destructured tuple element, got {comps:?}"
@@ -161,8 +162,9 @@ fn goto_definition_through_chain() {
 
 #[test]
 fn hover_on_enum_member() {
-    let harness =
-        TestHarness::new("enum Color { Red, Green }\nfun main(): void {\n    let c = Color.Re|d;\n}\n");
+    let harness = TestHarness::new(
+        "enum Color { Red, Green }\nfun main(): void {\n    let c = Color.Re|d;\n}\n",
+    );
     let snapshot = harness.snapshot().expect("snapshot");
     let (_, _, contents) =
         sema_ide::hover_at(&snapshot, harness.offset).expect("hover on enum member");
@@ -174,8 +176,7 @@ fn hover_on_enum_member() {
 
 #[test]
 fn hover_on_local_shows_resolved_type() {
-    let harness =
-        TestHarness::new("fun main(): void {\n    let n = 41 + 1;\n    return |n;\n}\n");
+    let harness = TestHarness::new("fun main(): void {\n    let n = 41 + 1;\n    return |n;\n}\n");
     let snapshot = harness.snapshot().expect("snapshot");
     let (_, _, contents) = sema_ide::hover_at(&snapshot, harness.offset).expect("hover on local");
     assert!(

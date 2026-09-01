@@ -171,11 +171,7 @@ pub(crate) fn process_wait(handle: i32) -> Vec<u8> {
     };
     drop(table);
     match child.child.wait() {
-        Ok(status) => status
-            .code()
-            .unwrap_or(-2)
-            .to_string()
-            .into_bytes(),
+        Ok(status) => status.code().unwrap_or(-2).to_string().into_bytes(),
         Err(_) => b"-1".to_vec(),
     }
 }

@@ -63,19 +63,15 @@ impl<'a, 'b> Parser<'a, 'b> {
                     other as i32
                 }
                 None => {
-                    self.diagnostics.report_error(
-                        "empty character escape".to_string(),
-                        Some(tok.position),
-                    );
+                    self.diagnostics
+                        .report_error("empty character escape".to_string(), Some(tok.position));
                     0
                 }
             },
             Some(c) => c as i32,
             None => {
-                self.diagnostics.report_error(
-                    "empty character literal".to_string(),
-                    Some(tok.position),
-                );
+                self.diagnostics
+                    .report_error("empty character literal".to_string(), Some(tok.position));
                 0
             }
         };

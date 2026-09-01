@@ -194,10 +194,7 @@ impl<'a> Analyzer<'a> {
                 };
                 if !ok {
                     diagnostics.report_error(
-                        format!(
-                            "'next' method '{}' must return Option<T>",
-                            method.name.text
-                        ),
+                        format!("'next' method '{}' must return Option<T>", method.name.text),
                         Some(method.name.position),
                     );
                     return;

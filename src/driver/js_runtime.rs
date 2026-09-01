@@ -225,7 +225,9 @@ pub(crate) fn assemble_selective_runtime(
             continue;
         }
         if let Some(factory) = &chunk.factory {
-            out.push_str(&format!("  Object.assign(parts, {factory}(getInstance));\n"));
+            out.push_str(&format!(
+                "  Object.assign(parts, {factory}(getInstance));\n"
+            ));
         }
     }
     out.push_str("  return parts;\n}\n");
@@ -296,13 +298,11 @@ fn minify_js_source(source: &str) -> Result<String, String> {
     let source_type = oxc_span::SourceType::mjs();
     let parser_return = oxc_parser::Parser::new(&allocator, source, source_type).parse();
     if !parser_return.diagnostics.is_empty() {
-        return Err(
-            parser_return
-                .diagnostics
-                .first()
-                .map(|e| e.to_string())
-                .unwrap_or_else(|| "parse failed".to_string()),
-        );
+        return Err(parser_return
+            .diagnostics
+            .first()
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "parse failed".to_string()));
     }
     let mut program = parser_return.program;
     oxc_minifier::Minifier::new(oxc_minifier::MinifierOptions::default())

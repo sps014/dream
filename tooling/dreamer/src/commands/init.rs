@@ -185,4 +185,3 @@ fn write_index_html(dir: &Path) -> Result<()> {
     std::fs::write(&path, html).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
 }
-

@@ -88,7 +88,13 @@ struct Cli {
     wasm: bool,
 
     /// Runtime availability target for semantic checks (default: native)
-    #[arg(long, value_name = "TARGET", value_enum, ignore_case = true, global = true)]
+    #[arg(
+        long,
+        value_name = "TARGET",
+        value_enum,
+        ignore_case = true,
+        global = true
+    )]
     target: Option<TargetArg>,
 
     /// Emit tree-shaken *.(web|node).runtime.js hosts (requires --web and/or --node)
@@ -104,7 +110,13 @@ struct Cli {
     node: bool,
 
     /// Library vs binary crate (libs reject a primary-file `main`)
-    #[arg(long, value_name = "TYPE", value_enum, ignore_case = true, global = true)]
+    #[arg(
+        long,
+        value_name = "TYPE",
+        value_enum,
+        ignore_case = true,
+        global = true
+    )]
     crate_type: Option<CrateTypeArg>,
 }
 
@@ -199,7 +211,9 @@ fn main() -> ExitCode {
     let native_c = !cli.wasm && runtimes.is_empty();
     if !native_c && (run_after_compile || run_tests || debug_adapter) {
         ui.error("`run`, `test`, and `debug-adapter` execute natively");
-        ui.help("drop --wasm/--web/--node here, or use `dream build --wasm <file>` for a wasm32 module");
+        ui.help(
+            "drop --wasm/--web/--node here, or use `dream build --wasm <file>` for a wasm32 module",
+        );
         return ExitCode::FAILURE;
     }
 
@@ -283,9 +297,8 @@ fn main() -> ExitCode {
 
     let Some(file_name) = file_name.or_else(|| {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        dream::driver::generate::default_compile_entry(&cwd).and_then(|p| {
-            p.to_str().map(|s| s.to_string())
-        })
+        dream::driver::generate::default_compile_entry(&cwd)
+            .and_then(|p| p.to_str().map(|s| s.to_string()))
     }) else {
         ui.error("no source file given");
         ui.help("pass a .dream file, or run from a project with package.entry in dream.toml (`dreamer run`)");
@@ -294,7 +307,11 @@ fn main() -> ExitCode {
 
     ui.step(
         "Compiling",
-        &format!("{}{}", file_name, if cli.release { " (--release)" } else { "" }),
+        &format!(
+            "{}{}",
+            file_name,
+            if cli.release { " (--release)" } else { "" }
+        ),
     );
 
     let out_path = match &cli.output {

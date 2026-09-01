@@ -22,11 +22,19 @@ impl<'a> Analyzer<'a> {
                 let mut ty =
                     Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
 
-                if let Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::ULong(t) | Type::Byte(t) = &ty {
+                if let Type::Integer(t)
+                | Type::Long(t)
+                | Type::UInt(t)
+                | Type::ULong(t)
+                | Type::Byte(t) = &ty
+                {
                     if matches!(ty, Type::ULong(_)) {
                         if dream_syntax::number::parse_u64_literal(&t.text).is_none() {
                             diagnostics.report_error(
-                                format!("integer literal '{}' is out of range or malformed", t.text),
+                                format!(
+                                    "integer literal '{}' is out of range or malformed",
+                                    t.text
+                                ),
                                 number.get_span(),
                             );
                         }
@@ -41,14 +49,23 @@ impl<'a> Analyzer<'a> {
                         if err && matches!(ty, Type::Integer(_)) {
                             ty = Type::Long(t.clone());
                         } else if err {
-                            diagnostics.report_error(format!("literal {} does not fit in {}", t.text, ty.get_type()), number.get_span());
+                            diagnostics.report_error(
+                                format!("literal {} does not fit in {}", t.text, ty.get_type()),
+                                number.get_span(),
+                            );
                         }
                     } else {
-                        diagnostics.report_error(format!("integer literal '{}' is out of range or malformed", t.text), number.get_span());
+                        diagnostics.report_error(
+                            format!("integer literal '{}' is out of range or malformed", t.text),
+                            number.get_span(),
+                        );
                     }
                 } else if let Type::Float(t) | Type::Double(t) = &ty {
                     if dream_syntax::number::parse_float_literal(&t.text).is_none() {
-                        diagnostics.report_error(format!("float literal '{}' is out of range or malformed", t.text), number.get_span());
+                        diagnostics.report_error(
+                            format!("float literal '{}' is out of range or malformed", t.text),
+                            number.get_span(),
+                        );
                     }
                 }
 
@@ -428,7 +445,10 @@ impl<'a> Analyzer<'a> {
                     (_, Type::Unknown) => Type::Unknown,
                     (_, other) => {
                         diagnostics.report_error(
-                            format!("Cannot index into non-array type {}", self.ty_display(&other)),
+                            format!(
+                                "Cannot index into non-array type {}",
+                                self.ty_display(&other)
+                            ),
                             array_expr.position(),
                         );
                         Type::Unknown
@@ -477,7 +497,10 @@ impl<'a> Analyzer<'a> {
                     TokenKind::BangToken => {
                         if !right_type.is_unknown() && !right_type.is_bool() {
                             diagnostics.report_error(
-                                format!("! operator requires bool, got {}", self.ty_display(&right_type)),
+                                format!(
+                                    "! operator requires bool, got {}",
+                                    self.ty_display(&right_type)
+                                ),
                                 Some(opr.position),
                             );
                             self.hir_none();
@@ -751,7 +774,10 @@ impl<'a> Analyzer<'a> {
                         self.hir_none();
                         Err(report(
                             diagnostics,
-                            format!("'await' expects a Future value, got {}", self.ty_display(&fut)),
+                            format!(
+                                "'await' expects a Future value, got {}",
+                                self.ty_display(&fut)
+                            ),
                             inner.position(),
                         ))
                     }

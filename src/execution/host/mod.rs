@@ -11,7 +11,9 @@ pub(crate) mod process_host;
 pub(crate) mod tz;
 pub(crate) mod webview;
 
-pub use c_link::{cc_link_flags, find_library_path, read_c_libs_from_abi, search_roots_for_artifact};
+pub use c_link::{
+    cc_link_flags, find_library_path, read_c_libs_from_abi, search_roots_for_artifact,
+};
 pub use gpu::{attach_abi_from_wat_path, set_packaged_app_icon};
 
 #[cfg(test)]
@@ -76,22 +78,19 @@ mod contract_tests {
         let mut out = Vec::new();
         for line in src.lines() {
             let t = line.trim();
-            let t = t.strip_prefix("pub unsafe extern \"C\" fn ").or_else(|| {
-                t.strip_prefix("pub extern \"C\" fn ")
-            });
+            let t = t
+                .strip_prefix("pub unsafe extern \"C\" fn ")
+                .or_else(|| t.strip_prefix("pub extern \"C\" fn "));
             let Some(t) = t else { continue };
-                if let Some(end) = t.find('(') {
-                    let name = t[..end].trim();
-                    // `<Host>Async` fns are the deferred variants of an existing `@runtime`
-                    // host (same wire format, plus a leading future arg), not standalone
-                    // entry points — they share their base name's prelude declaration.
-                    if !name.is_empty()
-                        && name != "dream_host_bind"
-                        && !name.ends_with("Async")
-                    {
-                        out.push(name.to_string());
-                    }
+            if let Some(end) = t.find('(') {
+                let name = t[..end].trim();
+                // `<Host>Async` fns are the deferred variants of an existing `@runtime`
+                // host (same wire format, plus a leading future arg), not standalone
+                // entry points — they share their base name's prelude declaration.
+                if !name.is_empty() && name != "dream_host_bind" && !name.ends_with("Async") {
+                    out.push(name.to_string());
                 }
+            }
         }
         out
     }
@@ -133,8 +132,7 @@ mod contract_tests {
     const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
     // Satisfied by the runtime C archive (runtime/c/weak.c + wasm32/weak_stub.c), not by any
     // JS host or libdream ABI table — so they are exempt from the prelude/host parity check.
-    const RUNTIME_ARCHIVE_KEYS: &[&str] =
-        &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
+    const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
     const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
 
     fn js_host_export_keys(src: &str) -> HashSet<String> {

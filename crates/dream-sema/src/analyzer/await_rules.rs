@@ -6,9 +6,7 @@
 
 use super::Analyzer;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{
-    ExpressionNode, FunctionNode, LambdaBody, LambdaNode, StatementNode,
-};
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, LambdaBody, LambdaNode, StatementNode};
 
 impl<'a> Analyzer<'a> {
     /// Awaiting is allowed anywhere inside an `async` function; in a non-async function every

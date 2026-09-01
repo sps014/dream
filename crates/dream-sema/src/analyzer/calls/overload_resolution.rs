@@ -25,7 +25,8 @@ impl<'a> Analyzer<'a> {
                 Err(_) => Err(format!("Could not resolve function '{}'", key)),
             },
             OverloadResolution::None => {
-                let pretty: Vec<String> = arg_types.iter().map(|t| self.ty_str_display(t)).collect();
+                let pretty: Vec<String> =
+                    arg_types.iter().map(|t| self.ty_str_display(t)).collect();
                 Err(format!(
                     "No overload of '{}' matches argument types ({})",
                     base,
@@ -33,7 +34,8 @@ impl<'a> Analyzer<'a> {
                 ))
             }
             OverloadResolution::Ambiguous(keys) => {
-                let pretty: Vec<String> = arg_types.iter().map(|t| self.ty_str_display(t)).collect();
+                let pretty: Vec<String> =
+                    arg_types.iter().map(|t| self.ty_str_display(t)).collect();
                 Err(format!(
                     "Ambiguous call to '{}' with argument types ({}); candidates: {}",
                     base,

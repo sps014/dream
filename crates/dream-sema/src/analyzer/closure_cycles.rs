@@ -189,9 +189,7 @@ impl<'d, 'a> SelfCaptureWalker<'d, 'a> {
             | E::NamedArg(_, inner)
             | E::RefArgument(_, inner) => self.walk_expression(inner),
             E::IncDec { target, .. } => self.walk_expression(target),
-            E::ArrayLiteral(_, elems)
-            | E::TupleLiteral(_, elems)
-            | E::SetLiteral(_, elems) => {
+            E::ArrayLiteral(_, elems) | E::TupleLiteral(_, elems) | E::SetLiteral(_, elems) => {
                 for x in elems {
                     self.walk_expression(x);
                 }

@@ -66,15 +66,31 @@ impl<'a> Analyzer<'a> {
         if type_name.ends_with("[]") {
             return Some(4);
         }
-        if type_name == "string" || type_name == "object" || type_name == "js" || type_name == "void" {
+        if type_name == "string"
+            || type_name == "object"
+            || type_name == "js"
+            || type_name == "void"
+        {
             return Some(4);
         }
-        if self.enum_table.contains_key(type_name) { return Some(4); }
-        if self.interface_methods.contains_key(type_name) { return Some(4); }
-        if type_name.starts_with("fun(") { return Some(4); }
-        if type_name.starts_with("Future<") { return Some(4); }
-        if type_name.starts_with("Result<") { return Some(4); }
-        if type_name.starts_with("Option<") { return Some(4); }
+        if self.enum_table.contains_key(type_name) {
+            return Some(4);
+        }
+        if self.interface_methods.contains_key(type_name) {
+            return Some(4);
+        }
+        if type_name.starts_with("fun(") {
+            return Some(4);
+        }
+        if type_name.starts_with("Future<") {
+            return Some(4);
+        }
+        if type_name.starts_with("Result<") {
+            return Some(4);
+        }
+        if type_name.starts_with("Option<") {
+            return Some(4);
+        }
 
         match type_name {
             "int" | "uint" | "float" | "char" | "byte" | "bool" | "long" | "ulong" | "double" => {

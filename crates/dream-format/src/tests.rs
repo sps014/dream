@@ -40,11 +40,7 @@ fn else_joins_closing_brace() {
 #[test]
 fn do_while_joins_closing_brace() {
     let out = format("fun f():void{do{x=x+1;}while(x<10);}");
-    assert!(
-        out.contains("} while (x < 10);"),
-        "got:\n{}",
-        out
-    );
+    assert!(out.contains("} while (x < 10);"), "got:\n{}", out);
 }
 
 #[test]
@@ -71,7 +67,8 @@ fn keeps_for_header_semicolons_inline() {
     let out = format("fun main():void{for(let i=0;i<10;i=i+1){println(i);}}");
     assert!(
         out.contains("for (let i = 0; i < 10; i = i + 1)"),
-        "for header should stay one line, got:\n{}", out
+        "for header should stay one line, got:\n{}",
+        out
     );
 }
 
@@ -114,7 +111,8 @@ fn nested_generic_call_arguments() {
     let out = format("process<Pair<Box<int>,int>,string>(pair);");
     assert!(
         out.contains("process<Pair<Box<int>, int>, string>(pair);"),
-        "got:\n{}", out
+        "got:\n{}",
+        out
     );
 }
 
@@ -172,10 +170,7 @@ class Empty {}
 #[test]
 fn chained_calls_have_no_spaces_around_dots() {
     let out = format("let s:string=list.map(f).filter(g).join(\", \");");
-    assert!(
-        out.contains("list.map(f).filter(g).join"),
-        "got:\n{}", out
-    );
+    assert!(out.contains("list.map(f).filter(g).join"), "got:\n{}", out);
 }
 
 #[test]

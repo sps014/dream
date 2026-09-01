@@ -44,7 +44,11 @@ fn test_hir_emission_arithmetic_function() {
         count, 1,
         "the single free function should be emitted as HIR"
     );
-    assert!(c.contains("int32_t add("), "missing emitted function:\n{}", c);
+    assert!(
+        c.contains("int32_t add("),
+        "missing emitted function:\n{}",
+        c
+    );
     let body = c_func_body(&c, "add");
     assert!(body.contains('+'), "missing arithmetic:\n{}", c);
 }
@@ -55,7 +59,11 @@ fn test_hir_emission_locals_and_assignment() {
     let code = "fun calc(n: int): int { let x: int = n; let y: int = x + 1; y = y + n; return y; }";
     let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1);
-    assert!(c.contains("int32_t calc("), "missing emitted function:\n{}", c);
+    assert!(
+        c.contains("int32_t calc("),
+        "missing emitted function:\n{}",
+        c
+    );
 }
 
 #[test]
@@ -82,10 +90,18 @@ fn test_hir_emission_while_loop() {
     let code = "fun count(n: int): int { let s: int = 0; while (s < n) { s = s + 1; } return s; }";
     let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the while function should be emitted as HIR");
-    assert!(c.contains("int32_t count("), "missing emitted function:\n{}", c);
+    assert!(
+        c.contains("int32_t count("),
+        "missing emitted function:\n{}",
+        c
+    );
     let body = c_func_body(&c, "count");
     assert!(body.contains('<'), "missing loop comparison:\n{}", c);
-    assert!(body.contains("goto L"), "missing CFG back-edge:\n{}", c);
+    assert!(
+        body.contains("for (;;)"),
+        "while should emit a C for-loop:\n{}",
+        c
+    );
 }
 
 #[test]
@@ -120,7 +136,11 @@ fn test_hir_emission_for_loop() {
     ";
     let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the for-loop function should be emitted as HIR");
-    assert!(c.contains("int32_t sum("), "missing emitted function:\n{}", c);
+    assert!(
+        c.contains("int32_t sum("),
+        "missing emitted function:\n{}",
+        c
+    );
     let body = c_func_body(&c, "sum");
     assert!(body.contains('+'), "missing arithmetic:\n{}", c);
 }
@@ -626,7 +646,11 @@ fn test_hir_emission_extern_import_with_result() {
         "defaulted extern should declare its result-bearing symbol:\n{}",
         c
     );
-    assert!(c.contains("now()"), "call should resolve to the symbol:\n{}", c);
+    assert!(
+        c.contains("now()"),
+        "call should resolve to the symbol:\n{}",
+        c
+    );
 }
 
 #[test]
@@ -702,11 +726,7 @@ fn test_hir_emission_print_bool_float_double_long() {
         "print_double(",
         "dream_long_to_string(",
     ] {
-        assert!(
-            c.contains(helper),
-            "missing {helper} in print:\n{}",
-            c
-        );
+        assert!(c.contains(helper), "missing {helper} in print:\n{}", c);
     }
 }
 
@@ -1081,11 +1101,7 @@ fn test_indirect_call_emits_table_and_signature() {
         "indirect call through the table missing:\n{}",
         c
     );
-    assert!(
-        c.contains("dream_ft_get"),
-        "table accessor missing:\n{}",
-        c
-    );
+    assert!(c.contains("dream_ft_get"), "table accessor missing:\n{}", c);
 }
 
 #[cfg(feature = "native")]
@@ -1400,11 +1416,7 @@ fn test_hir_emission_enum_value() {
     ";
     let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 1, "the enum-returning function should be emitted");
-    assert!(
-        c.contains("int32_t pick("),
-        "missing enum function:\n{}",
-        c
-    );
+    assert!(c.contains("int32_t pick("), "missing enum function:\n{}", c);
     // `Color.Green` is the second member, value 1.
     let pick = c_func_body(&c, "pick");
     assert!(pick.contains("return 1"), "missing enum constant:\n{}", c);
@@ -1782,16 +1794,8 @@ fn test_async_emits_scheduler_runtime_and_poll() {
         async fun main(): void {{ await delay(); }}"
     );
     let c = emit_hir_to_module(&code);
-    assert!(
-        c.contains("dream_run_loop"),
-        "scheduler missing:\n{}",
-        c
-    );
-    assert!(
-        c.contains("int32_t poll_delay("),
-        "poll fn missing:\n{}",
-        c
-    );
+    assert!(c.contains("dream_run_loop"), "scheduler missing:\n{}", c);
+    assert!(c.contains("int32_t poll_delay("), "poll fn missing:\n{}", c);
     assert!(
         c.contains("dream_new_future("),
         "constructor missing:\n{}",
@@ -1877,11 +1881,7 @@ fn test_js_fuses_get_as_string_at_typed_boundary() {
     );
     let (c, _count) = emit_hir_to_c(&code);
     let entry = c_func_body(&c, "entry");
-    assert!(
-        entry.contains("jsGetAsString("),
-        "fused get+unbox:\n{}",
-        c
-    );
+    assert!(entry.contains("jsGetAsString("), "fused get+unbox:\n{}", c);
     assert!(
         !entry.contains("jsGetV("),
         "should not emit plain js.get:\n{}",
@@ -1905,11 +1905,7 @@ fn test_js_fuses_get_call_chain() {
     );
     let (c, _count) = emit_hir_to_c(&code);
     let entry = c_func_body(&c, "entry");
-    assert!(
-        entry.contains("dream_js_call("),
-        "fused get+call:\n{}",
-        c
-    );
+    assert!(entry.contains("dream_js_call("), "fused get+call:\n{}", c);
     assert!(
         !entry.contains("jsGetV("),
         "should not emit separate js.get:\n{}",

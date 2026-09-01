@@ -278,11 +278,7 @@ pub fn compute_cached(idx: &Index, text: &str) -> Vec<SemanticToken> {
     compute_from(idx, tokens, text)
 }
 
-fn compute_from(
-    idx: &Index,
-    tokens: Vec<SyntaxToken>,
-    text: &str,
-) -> Vec<SemanticToken> {
+fn compute_from(idx: &Index, tokens: Vec<SyntaxToken>, text: &str) -> Vec<SemanticToken> {
     let line_index = LineIndex::new(text);
 
     let mut semantic_tokens = Vec::new();

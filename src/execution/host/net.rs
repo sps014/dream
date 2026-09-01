@@ -75,7 +75,12 @@ pub(crate) fn tcp_connect(host: &str, port: i32, timeout_ms: i32) -> Vec<u8> {
         match ok {
             Some(s) => s,
             None => {
-                return wire_text("-1", &last.map(|e| e.to_string()).unwrap_or_else(|| "timeout".into()));
+                return wire_text(
+                    "-1",
+                    &last
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "timeout".into()),
+                );
             }
         }
     } else {
@@ -180,7 +185,9 @@ pub(crate) fn ws_receive(handle: i32) -> Vec<u8> {
             Ok(Message::Binary(b)) => return wire_bytes("binary", &b),
             Ok(Message::Close(frame)) => {
                 let (code, reason) = match frame {
-                    Some(CloseFrame { code, reason }) => (u16::from(code) as i32, reason.into_owned()),
+                    Some(CloseFrame { code, reason }) => {
+                        (u16::from(code) as i32, reason.into_owned())
+                    }
                     None => (1000, String::new()),
                 };
                 drop(table);
@@ -234,7 +241,11 @@ mod tests {
             .unwrap();
         assert!(handle > 0, "{:?}", String::from_utf8_lossy(&wire));
         let sent = tcp_send(handle, b"ping");
-        assert!(sent.starts_with(b"4\n"), "{:?}", String::from_utf8_lossy(&sent));
+        assert!(
+            sent.starts_with(b"4\n"),
+            "{:?}",
+            String::from_utf8_lossy(&sent)
+        );
         let got = tcp_receive(handle, 16);
         assert_eq!(&got[..5], b"data\n");
         assert_eq!(&got[5..], b"ping");

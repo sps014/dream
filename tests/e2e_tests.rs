@@ -26,14 +26,14 @@ const SMOKE_CASES: &[&str] = &[
     "map_indexer_missing",
     "container_clear_rc",
     "unique_region_tree",
-        "cycle_tuple_field",
-        "cycle_via_value_struct",
-        "cycle_interface_field",
-        "receiver_mode_inference",
-        "weak_handle_lifecycle",
-        "borrow_after_last_use",
-        "buffer_clear_truncate",
-        "container_rewind_legal",
+    "cycle_tuple_field",
+    "cycle_via_value_struct",
+    "cycle_interface_field",
+    "receiver_mode_inference",
+    "weak_handle_lifecycle",
+    "borrow_after_last_use",
+    "buffer_clear_truncate",
+    "container_rewind_legal",
     "arc_slot_read_retains",
     "string_split_once",
     "interfaces",
@@ -137,10 +137,7 @@ fn read_http_request(stream: &mut std::net::TcpStream) -> Option<MockRequest> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 1024];
     let head_end = loop {
-        if let Some(pos) = buf
-            .windows(4)
-            .position(|w| w == b"\r\n\r\n")
-        {
+        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
             break pos;
         }
         let n = stream.read(&mut chunk).ok()?;
@@ -244,10 +241,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
             Err(e) => e,
             Ok(()) => panic!("Expected compilation to fail for {:?}", dream_file),
         };
-        let rendered = err
-            .diagnostic_text()
-            .unwrap_or("")
-            .to_string();
+        let rendered = err.diagnostic_text().unwrap_or("").to_string();
         let expected = fs::read_to_string(&expected_error_file).unwrap_or_default();
         assert_needles(&rendered, &expected, dream_file, "compile error");
         let _ = fs::remove_file(&c_path);
@@ -300,12 +294,12 @@ fn run_native_case(dream_file: &Path, release: bool) {
         env.push(("DREAM_E2E_HTTP_PORT", port.to_string()));
     }
     let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let run = if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty()
-    {
-        compile_and_capture_ex(c_str, opt, &env_refs, extra_args, stdin, timeout_secs)
-    } else {
-        compile_and_capture(c_str, opt)
-    };
+    let run =
+        if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty() {
+            compile_and_capture_ex(c_str, opt, &env_refs, extra_args, stdin, timeout_secs)
+        } else {
+            compile_and_capture(c_str, opt)
+        };
     let _ = fs::remove_file(&c_path);
     let _ = fs::remove_file(c_path.with_extension("o"));
     let _ = fs::remove_file(c_path.with_extension("bin"));
@@ -472,7 +466,8 @@ fn wasm_js_success_stems() -> Vec<String> {
                 if !p.with_extension("expected").exists() {
                     return None;
                 }
-                let jsonish = stem.contains("json") || stem == "struct_json" || stem == "tuple_json";
+                let jsonish =
+                    stem.contains("json") || stem == "struct_json" || stem == "tuple_json";
                 if stem.starts_with("webworker_") || jsonish {
                     Some(stem)
                 } else {
@@ -530,11 +525,7 @@ fn wasm_js_compile_errors_match_native() {
         let src_s = src.to_str().unwrap().to_string();
         let dest_s = dest.to_str().unwrap().to_string();
         let err = Compiler::new(Target::Wasm32).compile(&src_s, &dest_s);
-        assert!(
-            err.is_err(),
-            "{} should fail to compile for wasm",
-            stem
-        );
+        assert!(err.is_err(), "{} should fail to compile for wasm", stem);
         let _ = fs::remove_file(&dest);
         let _ = fs::remove_file(dest.with_extension("c"));
         let _ = fs::remove_file(dest.with_extension("wasm"));
@@ -582,7 +573,8 @@ fn wasm32_js_option_struct_fields_are_marshaled() {
         .compile(&src_s, &dest_s)
         .unwrap_or_else(|e| panic!("option_fields should compile to wasm32: {}", e));
     let c_path = dest.with_extension("c");
-    let c = fs::read_to_string(&c_path).unwrap_or_else(|e| panic!("read {}: {e}", c_path.display()));
+    let c =
+        fs::read_to_string(&c_path).unwrap_or_else(|e| panic!("read {}: {e}", c_path.display()));
     assert!(
         c.contains("jsIsNull") && c.contains("jsNull"),
         "Option fields must marshal None as JS null, got marshaler without jsIsNull/jsNull:\n{}",

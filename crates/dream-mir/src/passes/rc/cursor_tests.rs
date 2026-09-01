@@ -134,8 +134,8 @@ fn self_realloc_releases_snapshot_before_store() {
     let release_pos = stmts.iter().position(
         |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == snap),
     );
-    let release_pos = release_pos
-        .unwrap_or_else(|| panic!("snapshot token must be released: {:?}", stmts));
+    let release_pos =
+        release_pos.unwrap_or_else(|| panic!("snapshot token must be released: {:?}", stmts));
     assert!(
         release_pos < realloc_pos,
         "snapshot release must precede the self-realloc (release at {}, realloc at {}): {:?}",

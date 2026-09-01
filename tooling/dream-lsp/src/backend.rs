@@ -70,7 +70,9 @@ pub fn materialize_stdlib(cache_dir: &std::path::Path, virtual_path: &str) -> Op
                 .map(|existing| existing != source)
                 .unwrap_or(true);
             if stale {
-                target.parent().and_then(|p| std::fs::create_dir_all(p).ok())?;
+                target
+                    .parent()
+                    .and_then(|p| std::fs::create_dir_all(p).ok())?;
                 std::fs::write(&target, source).ok()?;
             }
             return target.to_str().map(str::to_string);
@@ -80,7 +82,8 @@ pub fn materialize_stdlib(cache_dir: &std::path::Path, virtual_path: &str) -> Op
 }
 
 /// True when an enclosing `dream.toml` declares `type = "lib"` (no Run/Debug CodeLens).
-fn workspace_is_lib_package(file_path: &str) -> bool {    let mut dir = std::path::Path::new(file_path)
+fn workspace_is_lib_package(file_path: &str) -> bool {
+    let mut dir = std::path::Path::new(file_path)
         .parent()
         .map(|p| p.to_path_buf());
     while let Some(d) = dir {
@@ -139,8 +142,9 @@ impl Backend {
         file_path: Option<&str>,
     ) -> Option<Location> {
         let file_path: Option<String> = match file_path {
-            Some(path) if path.starts_with('<') => Self::stdlib_cache_dir()
-                .and_then(|dir| materialize_stdlib(&dir, path)),
+            Some(path) if path.starts_with('<') => {
+                Self::stdlib_cache_dir().and_then(|dir| materialize_stdlib(&dir, path))
+            }
             other => other.map(str::to_string),
         };
         match file_path {
@@ -192,10 +196,7 @@ impl Backend {
         idx: &Index,
         snapshot: &dream_sema::analyzer::IdeSnapshot,
         offset: usize,
-    ) -> Option<(
-        dream_sema::analyzer::ide::IdeTarget,
-        Vec<(usize, usize)>,
-    )> {
+    ) -> Option<(dream_sema::analyzer::ide::IdeTarget, Vec<(usize, usize)>)> {
         use dream_sema::analyzer::ide::IdeTarget;
         let r = snapshot.ref_covering(offset)?;
         if matches!(r.target, IdeTarget::Local { .. } | IdeTarget::Expr) {
@@ -608,9 +609,11 @@ impl LanguageServer for Backend {
         // entries keep the legacy ordering role below.
         if let Some(snapshot) = &sema {
             if let Some(r) = snapshot.ref_covering(offset) {
-                if !matches!(r.target, dream_sema::analyzer::ide::IdeTarget::Local { .. }
-                    | dream_sema::analyzer::ide::IdeTarget::Expr)
-                {
+                if !matches!(
+                    r.target,
+                    dream_sema::analyzer::ide::IdeTarget::Local { .. }
+                        | dream_sema::analyzer::ide::IdeTarget::Expr
+                ) {
                     for other_key in self.documents.iter().map(|e| e.key().clone()) {
                         if other_key == key {
                             continue;
@@ -630,9 +633,7 @@ impl LanguageServer for Backend {
                             continue;
                         };
                         let other_li = LineIndex::new(&other_text);
-                        for (start, end) in
-                            crate::sema_ide::references_in(&other_sema, &r.target)
-                        {
+                        for (start, end) in crate::sema_ide::references_in(&other_sema, &r.target) {
                             locations.push(Location {
                                 uri: other_uri.clone(),
                                 range: Range {
@@ -956,9 +957,7 @@ impl LanguageServer for Backend {
         if !open_paths.is_empty() {
             if let Some(root) = crate::workspace::project_root(&open_paths) {
                 let mut cache = self.workspace_cache.lock().await;
-                let fresh = cache
-                    .as_ref()
-                    .is_some_and(|w| w.is_fresh(&root));
+                let fresh = cache.as_ref().is_some_and(|w| w.is_fresh(&root));
                 if !fresh {
                     let symbols = crate::workspace::scan(&root);
                     *cache = Some(crate::workspace::WorkspaceIndex::new(root, symbols));
@@ -1064,15 +1063,10 @@ impl LanguageServer for Backend {
         let mut completions = idx.completions(file_path.as_deref(), &text, offset);
         if index::is_member_completion_context(&text, offset) {
             if let Some(snapshot) = &sema {
-                if let Some(items) = crate::sema_ide::member_completions(snapshot, &text, offset)
-                {
+                if let Some(items) = crate::sema_ide::member_completions(snapshot, &text, offset) {
                     let seen: std::collections::HashSet<String> =
                         completions.iter().map(|(n, ..)| n.clone()).collect();
-                    completions.extend(
-                        items
-                            .into_iter()
-                            .filter(|(n, ..)| !seen.contains(n)),
-                    );
+                    completions.extend(items.into_iter().filter(|(n, ..)| !seen.contains(n)));
                 }
             }
         }

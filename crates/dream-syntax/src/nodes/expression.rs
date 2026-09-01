@@ -16,7 +16,11 @@ pub enum ExpressionNode<'a> {
     /// Nesting composes (`[[0; 3]; 5]`); the analyzer decides between zero-init allocation,
     /// single-evaluation fill, and per-slot re-evaluation based on what `value` is. The
     /// `SyntaxToken` is the opening `[`.
-    ArrayRepeat(SyntaxToken, Box<ExpressionNode<'a>>, Box<ExpressionNode<'a>>),
+    ArrayRepeat(
+        SyntaxToken,
+        Box<ExpressionNode<'a>>,
+        Box<ExpressionNode<'a>>,
+    ),
     /// `(e1, e2, …)` — a positional tuple literal (arity ≥ 2). Distinguised from
     /// [`Parenthesized`] by a comma after the first element. The `SyntaxToken` is the opening `(`.
     TupleLiteral(SyntaxToken, Vec<ExpressionNode<'a>>),

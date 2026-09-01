@@ -188,9 +188,7 @@ fn escape_slot_overwrite_readers(
         .iter()
         .flat_map(|block| &block.stmts)
         .filter_map(|stmt| match stmt {
-            Statement::Assign(Place::Local(dest), rvalue)
-                if candidates.contains(&dest.0) =>
-            {
+            Statement::Assign(Place::Local(dest), rvalue) if candidates.contains(&dest.0) => {
                 cursor_source_slot(rvalue).map(|slot| (dest.0, slot))
             }
             _ => None,

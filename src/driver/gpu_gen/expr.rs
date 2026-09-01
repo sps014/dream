@@ -43,15 +43,8 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 .unwrap_or_else(|| "0".into());
             format!("atomicLoad(&{buf}[u32({idx})])")
         }
-        "atomic_store"
-        | "atomic_add"
-        | "atomic_sub"
-        | "atomic_min"
-        | "atomic_max"
-        | "atomic_and"
-        | "atomic_or"
-        | "atomic_xor"
-        | "atomic_exchange" => {
+        "atomic_store" | "atomic_add" | "atomic_sub" | "atomic_min" | "atomic_max"
+        | "atomic_and" | "atomic_or" | "atomic_xor" | "atomic_exchange" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
             let buf = args_s.first().cloned().unwrap_or_else(|| "buf".into());
             let idx = args
@@ -317,8 +310,8 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
         | "tan" | "asin" | "acos" | "atan" | "atan2" | "normalize" | "length" | "dot" | "cross"
         | "reflect" | "refract" | "faceforward" | "distance" | "mix" | "pow" | "exp" | "exp2"
         | "log" | "log2" | "round" | "trunc" | "radians" | "degrees" | "sign" | "saturate"
-        | "step" | "smoothstep" | "fma" | "inversesqrt" | "determinant" | "dpdx"
-        | "dpdy" | "fwidth" => {
+        | "step" | "smoothstep" | "fma" | "inversesqrt" | "determinant" | "dpdx" | "dpdy"
+        | "fwidth" => {
             let arg_tys: Vec<String> = args.iter().map(|a| infer_wgsl_ty(a, ctx)).collect();
             let any_vec = arg_tys.iter().any(|t| is_vec_wgsl(t));
             let any_mat = arg_tys.iter().any(|t| is_mat_wgsl(t));
@@ -404,25 +397,9 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                     args_s.get(1).cloned().unwrap_or_else(|| "0.0".into()),
                     args_s.get(2).cloned().unwrap_or_else(|| "0.0".into())
                 ),
-                "normalize"
-                | "length"
-                | "cross"
-                | "reflect"
-                | "dot"
-                | "exp"
-                | "exp2"
-                | "log"
-                | "log2"
-                | "round"
-                | "trunc"
-                | "radians"
-                | "degrees"
-                | "sign"
-                | "inversesqrt"
-                | "determinant"
-                | "dpdx"
-                | "dpdy"
-                | "fwidth" => {
+                "normalize" | "length" | "cross" | "reflect" | "dot" | "exp" | "exp2" | "log"
+                | "log2" | "round" | "trunc" | "radians" | "degrees" | "sign" | "inversesqrt"
+                | "determinant" | "dpdx" | "dpdy" | "fwidth" => {
                     format!("{}({})", name, args_s.join(", "))
                 }
                 other => format!(

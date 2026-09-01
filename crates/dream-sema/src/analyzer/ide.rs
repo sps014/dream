@@ -472,7 +472,10 @@ impl<'a> Analyzer<'a> {
         let types = if info.parameter_types.len() == info.parameters.len() {
             info.parameter_types.clone()
         } else {
-            info.parameters.iter().map(|p| Self::type_from_name(p)).collect()
+            info.parameters
+                .iter()
+                .map(|p| Self::type_from_name(p))
+                .collect()
         };
         let is_method = info.param_names.first().is_some_and(|n| n == "this");
         let mut params = Vec::with_capacity(types.len());

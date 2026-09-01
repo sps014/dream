@@ -68,18 +68,22 @@ impl MirPass for HopElision {
                     i += 1;
                     continue;
                 }
-                let Some(j) = next_matching(&block.stmts[i + 1..], |s| matches!(
-                    s,
-                    Statement::Retain(Operand::Copy(Place::Local(l))) if *l == n
-                ))
+                let Some(j) = next_matching(&block.stmts[i + 1..], |s| {
+                    matches!(
+                        s,
+                        Statement::Retain(Operand::Copy(Place::Local(l))) if *l == n
+                    )
+                })
                 .map(|off| i + 1 + off) else {
                     i += 1;
                     continue;
                 };
-                let Some(k) = next_matching(&block.stmts[j + 1..], |s| matches!(
-                    s,
-                    Statement::Release(Operand::Copy(Place::Local(l))) if *l == base
-                ))
+                let Some(k) = next_matching(&block.stmts[j + 1..], |s| {
+                    matches!(
+                        s,
+                        Statement::Release(Operand::Copy(Place::Local(l))) if *l == base
+                    )
+                })
                 .map(|off| j + 1 + off) else {
                     i += 1;
                     continue;
@@ -93,10 +97,12 @@ impl MirPass for HopElision {
                 // Every read of `n` must now precede the sunk release; `Release(n)` after it
                 // provides the matching half of the bracket to cancel.
                 let last_read = last_read_of(&block.stmts[..k], n);
-                let rel_n = next_matching(&block.stmts[k + 1..], |s| matches!(
-                    s,
-                    Statement::Release(Operand::Copy(Place::Local(l2))) if *l2 == n
-                ))
+                let rel_n = next_matching(&block.stmts[k + 1..], |s| {
+                    matches!(
+                        s,
+                        Statement::Release(Operand::Copy(Place::Local(l2))) if *l2 == n
+                    )
+                })
                 .map(|off| k + 1 + off);
                 if let (Some(_), Some(l)) = (last_read, rel_n) {
                     block.stmts[j] = Statement::Nop;
@@ -223,7 +229,10 @@ mod tests {
             },
         );
         b.push(Statement::Release(Operand::Copy(Place::Local(curr))));
-        b.assign(Place::Local(curr), Rvalue::Use(Operand::Copy(Place::Local(t))));
+        b.assign(
+            Place::Local(curr),
+            Rvalue::Use(Operand::Copy(Place::Local(t))),
+        );
         b.push(Statement::Retain(Operand::Copy(Place::Local(curr))));
         b.push(Statement::Release(Operand::Copy(Place::Local(n))));
         b.terminate(Terminator::Return(None));
@@ -256,16 +265,17 @@ mod tests {
         assert!(extract < rel_base, "extract must precede the sunk release");
     }
 
-
     #[test]
     fn leaves_unmatched_shapes_alone() {
         let i = TypeInterner::new();
         let (mut func, curr, n, _t) = hop_mir();
         // Remove Release(n): the bracket has no matching half, so nothing may be cancelled.
-        func.blocks[0].stmts.retain(|s| !matches!(
-            s,
-            Statement::Release(Operand::Copy(Place::Local(l))) if *l == n && *l != curr
-        ));
+        func.blocks[0].stmts.retain(|s| {
+            !matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l))) if *l == n && *l != curr
+            )
+        });
         let retain_count = func.blocks[0]
             .stmts
             .iter()

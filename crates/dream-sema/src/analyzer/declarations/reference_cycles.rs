@@ -335,9 +335,9 @@ impl<'a> Analyzer<'a> {
                 let holds = decl.fields.iter().any(|f| match &f.field_type {
                     Type::String(_) | Type::Object(_) | Type::Generic(_) => true,
                     Type::Array(inner) => self.value_struct_array_holds(inner.as_ref(), out),
-                    Type::Tuple(elements) => elements
-                        .iter()
-                        .any(|e| self.holds_managed_shallow(e, out)),
+                    Type::Tuple(elements) => {
+                        elements.iter().any(|e| self.holds_managed_shallow(e, out))
+                    }
                     Type::Struct(tok, _) => match self.struct_table.get_struct(&tok.text) {
                         // Another value struct: resolved by a later fixed-point pass.
                         Some(i) if i.is_value => out.contains(&tok.text),

@@ -62,12 +62,7 @@ impl Layout {
     /// True when the output already sits on an empty line with a blank above it — used to
     /// avoid stacking a second blank.
     pub fn has_pending_blank(&self) -> bool {
-        self.cur.is_empty()
-            && self
-                .lines
-                .last()
-                .map(|l| l.is_empty())
-                .unwrap_or(false)
+        self.cur.is_empty() && self.lines.last().map(|l| l.is_empty()).unwrap_or(false)
     }
 
     /// Flushes the current line, drops trailing blanks, and guarantees one trailing newline.

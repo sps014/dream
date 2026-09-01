@@ -22,7 +22,11 @@ fn view_typedef_names(c_src: &str) -> Vec<String> {
         if !plain.starts_with("typedef struct") || plain.contains('(') {
             continue;
         }
-        if let Some(name) = line.rsplit('}').next().and_then(|t| t.trim_end().strip_suffix(';')) {
+        if let Some(name) = line
+            .rsplit('}')
+            .next()
+            .and_then(|t| t.trim_end().strip_suffix(';'))
+        {
             let name = name.trim();
             if !name.is_empty() {
                 names.push(name.to_string());
@@ -88,7 +92,10 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
     // the other artifacts and imported at session start via `initCommands`. lldb forbids dots in
     // module names, so the stem joins with underscores rather than `with_extension`.
     let c_path_p = Path::new(c_path);
-    let stem = c_path_p.file_stem().and_then(|s| s.to_str()).unwrap_or("dream");
+    let stem = c_path_p
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("dream");
     let formatters = c_path_p.with_file_name(format!("{stem}_lldb_dream.py"));
     std::fs::write(&formatters, LLDB_FORMATTERS)?;
     // The import hook reads this generated list to know which typedef names get summaries.
@@ -186,7 +193,8 @@ fn merge_init_commands(msg: &mut Value, extra: &[String]) {
     args.insert("initCommands".into(), Value::Array(commands));
 }
 
-fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, String)]) {    let args = msg
+fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, String)]) {
+    let args = msg
         .as_object_mut()
         .and_then(|o| o.get_mut("arguments"))
         .and_then(|a| a.as_object_mut());

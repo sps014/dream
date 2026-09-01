@@ -57,7 +57,11 @@ fn concurrent_native_compiles_all_succeed() {
 
     for handle in handles {
         let result = handle.join().expect("worker panicked");
-        assert!(result.is_ok(), "concurrent compile failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "concurrent compile failed: {:?}",
+            result.err()
+        );
     }
 
     // Cleanup best-effort; failures here must not fail the test.

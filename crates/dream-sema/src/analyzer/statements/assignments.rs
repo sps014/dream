@@ -259,9 +259,7 @@ impl<'a> Analyzer<'a> {
                     .and_then(|info| info.fields.get(&member.text))
                     .map(|f| f.is_unowned)
                     .unwrap_or(false);
-                if is_unowned_field
-                    && matches!(right, ExpressionNode::FunctionCall(_, _, _))
-                {
+                if is_unowned_field && matches!(right, ExpressionNode::FunctionCall(_, _, _)) {
                     diagnostics.report_warning(
                         format!(
                             "'{}' does not retain its referent; the object created here is dropped at the end of this statement",

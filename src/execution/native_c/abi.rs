@@ -882,7 +882,12 @@ pub unsafe extern "C" fn httpRequestAsync(
     );
     std::thread::spawn(move || {
         let out = crate::execution::host::http::perform_http(
-            &args.0, &args.1, &args.2, args.3, timeout_ms, http_version,
+            &args.0,
+            &args.1,
+            &args.2,
+            args.3,
+            timeout_ms,
+            http_version,
         );
         let payload = alloc_bytes(&out);
         complete_foreign_future(future, payload);
@@ -925,7 +930,12 @@ pub unsafe extern "C" fn httpRequestBytesAsync(
     let payload_in = read_bytes(body);
     std::thread::spawn(move || {
         let out = crate::execution::host::http::perform_http(
-            &args.0, &args.1, &args.2, payload_in, timeout_ms, http_version,
+            &args.0,
+            &args.1,
+            &args.2,
+            payload_in,
+            timeout_ms,
+            http_version,
         );
         let payload = alloc_bytes(&out);
         complete_foreign_future(future, payload);
@@ -1122,9 +1132,7 @@ pub extern "C" fn processReadStream(handle: i32, stream: i32, max_bytes: i32) ->
 
 #[no_mangle]
 pub extern "C" fn processReadStreamLine(handle: i32, stream: i32) -> usize {
-    alloc_bytes(&crate::execution::host::process_host::process_read_stream_line(
-        handle, stream,
-    ))
+    alloc_bytes(&crate::execution::host::process_host::process_read_stream_line(handle, stream))
 }
 
 #[no_mangle]

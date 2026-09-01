@@ -2039,7 +2039,12 @@ fn test_extend_static_class_static_members_ok() {
         }
     ";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), false, "{:?}", diagnostics.diagnostics);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
 }
 
 #[test]
@@ -2181,7 +2186,9 @@ fn test_bad_unary_is_poison() {
     ";
     let errors = error_messages(&analyze_code(code));
     assert!(
-        errors.iter().all(|m| m.contains("! operator requires bool")),
+        errors
+            .iter()
+            .all(|m| m.contains("! operator requires bool")),
         "expected only unary errors, got: {:?}",
         errors
     );

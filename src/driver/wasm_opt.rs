@@ -108,7 +108,10 @@ impl FromStr for OptLevel {
         // `-O=Oz`, `-Oz`, `--optimize=Os` all appear on the CLI; keep the token after an optional
         // `-` / `O` prefix so users can spell Binaryen's flag or just the level letter.
         let t = s.trim().trim_start_matches('-');
-        let t = t.strip_prefix('O').or_else(|| t.strip_prefix('o')).unwrap_or(t);
+        let t = t
+            .strip_prefix('O')
+            .or_else(|| t.strip_prefix('o'))
+            .unwrap_or(t);
         match t {
             "0" => Ok(OptLevel::O0),
             "1" => Ok(OptLevel::O1),

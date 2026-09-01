@@ -795,7 +795,9 @@ fn levenshtein(a: &str, b: &str) -> usize {
             cur.push((prev[j2] + cost).min(cur[j2] + 1).min(prev[j2 + 1] + 1));
         }
         prev = cur;
-        if i > 40 { break; }
+        if i > 40 {
+            break;
+        }
     }
     *prev.last().unwrap_or(&usize::MAX)
 }

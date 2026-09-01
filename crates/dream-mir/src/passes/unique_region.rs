@@ -318,8 +318,7 @@ fn wrap_sites(
                 ) if d.0 != s.0 => {
                     from.entry(d.0).or_default().insert(s.0);
                 }
-                Statement::Retain(Operand::Copy(Place::Local(l)))
-                | Statement::ValueRetain(l) => {
+                Statement::Retain(Operand::Copy(Place::Local(l))) | Statement::ValueRetain(l) => {
                     retained.insert(l.0);
                 }
                 Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
@@ -1117,13 +1116,10 @@ mod tests {
         assert!(strip_escaped_regions(&mut mir, &ctx.interner));
         let drop_fn = &mir.functions[1];
         assert!(
-            !drop_fn
-                .blocks
+            !drop_fn.blocks.iter().any(|b| b
+                .stmts
                 .iter()
-                .any(|b| b
-                    .stmts
-                    .iter()
-                    .any(|s| matches!(s, Statement::RegionEnter | Statement::RegionLeave))),
+                .any(|s| matches!(s, Statement::RegionEnter | Statement::RegionLeave))),
             "{:?}",
             drop_fn.blocks[0].stmts
         );

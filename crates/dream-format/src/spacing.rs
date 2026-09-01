@@ -136,8 +136,10 @@ fn is_word_like(kind: TokenKind) -> bool {
 /// A token that can end an operand — when one precedes `-`/`+`, those are binary operators;
 /// otherwise (`(`, `,`, `=`, `return`, …) they are signed-literal prefixes.
 fn ends_operand(kind: TokenKind) -> bool {
-    matches!(kind, TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken)
-        || is_word_like(kind)
+    matches!(
+        kind,
+        TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken
+    ) || is_word_like(kind)
 }
 
 /// Decides whether a single space belongs between `prev` and `cur`.
@@ -172,23 +174,24 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
     }
 
     // `foo(` / `foo[` — no space between a callee/subscriptee and its opening delimiter.
-    if matches!(cur, TokenKind::OpenParenthesisToken | TokenKind::OpenBracketToken)
-        && matches!(
-            prev,
-            TokenKind::IdentifierToken
-                | TokenKind::CloseParenthesisToken
-                | TokenKind::CloseBracketToken
-                | TokenKind::GreaterThanToken
-                | TokenKind::ShiftRightToken
-                | TokenKind::DataTypeToken
-                | TokenKind::BooleanToken
-                | TokenKind::StringToken
-                | TokenKind::InterpolatedStringToken
-                | TokenKind::CharToken
-                | TokenKind::NumberToken
-                | TokenKind::CurlyCloseBracketToken
-        )
-    {
+    if matches!(
+        cur,
+        TokenKind::OpenParenthesisToken | TokenKind::OpenBracketToken
+    ) && matches!(
+        prev,
+        TokenKind::IdentifierToken
+            | TokenKind::CloseParenthesisToken
+            | TokenKind::CloseBracketToken
+            | TokenKind::GreaterThanToken
+            | TokenKind::ShiftRightToken
+            | TokenKind::DataTypeToken
+            | TokenKind::BooleanToken
+            | TokenKind::StringToken
+            | TokenKind::InterpolatedStringToken
+            | TokenKind::CharToken
+            | TokenKind::NumberToken
+            | TokenKind::CurlyCloseBracketToken
+    ) {
         return false;
     }
 
@@ -217,10 +220,7 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
     }
 
     // Space after `,` `:` `;` (`;` usually already newline'd).
-    if matches!(
-        prev,
-        TokenKind::CommaToken | TokenKind::SemicolonToken
-    ) {
+    if matches!(prev, TokenKind::CommaToken | TokenKind::SemicolonToken) {
         return true;
     }
 
@@ -238,7 +238,8 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
     }
 
     // Consecutive attributes: `@a @b`.
-    if cur == TokenKind::AtToken && (is_word_like(prev) || prev == TokenKind::CurlyCloseBracketToken)
+    if cur == TokenKind::AtToken
+        && (is_word_like(prev) || prev == TokenKind::CurlyCloseBracketToken)
     {
         return true;
     }

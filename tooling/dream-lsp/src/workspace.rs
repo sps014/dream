@@ -140,17 +140,18 @@ pub fn file_symbols(text: &str, path: &str) -> Vec<WsSymbol> {
     let program = ast.get_root();
 
     let mut out = Vec::new();
-    let mut push = |name: &str, kind: SymKind, token: &dream::syntax::token::syntax_token::SyntaxToken| {
-        if !name.is_empty() {
-            out.push(WsSymbol {
-                name: name.to_string(),
-                kind,
-                path: path.to_string(),
-                start: token.position.start,
-                end: token.position.end,
-            });
-        }
-    };
+    let mut push =
+        |name: &str, kind: SymKind, token: &dream::syntax::token::syntax_token::SyntaxToken| {
+            if !name.is_empty() {
+                out.push(WsSymbol {
+                    name: name.to_string(),
+                    kind,
+                    path: path.to_string(),
+                    start: token.position.start,
+                    end: token.position.end,
+                });
+            }
+        };
 
     for s in &program.structs {
         push(&s.name.text, SymKind::Class, &s.name);

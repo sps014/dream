@@ -218,7 +218,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 // A bare identifier may be followed by `{ ... }` (syntax DSL block) or a
                 // index/member/method postfix chain.
-                if !self.in_condition && self.peek_token(1).kind == TokenKind::CurlyOpenBracketToken {
+                if !self.in_condition && self.peek_token(1).kind == TokenKind::CurlyOpenBracketToken
+                {
                     return self.parse_syntax_block();
                 }
                 let expr = ExpressionNode::Identifier(self.next_token());

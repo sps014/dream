@@ -37,8 +37,7 @@ fn missing_member_carries_code_not_unresolved_name() {
 fn unrelated_errors_have_no_code() {
     // Type mismatches are not resolution failures: they must stay uncoded so code actions
     // never offer auto-import on them.
-    let outcome =
-        analyze_document(None, "fun main(): void {\n    let x: int = \"oops\";\n}\n");
+    let outcome = analyze_document(None, "fun main(): void {\n    let x: int = \"oops\";\n}\n");
     let diag = outcome
         .diagnostics
         .iter()
@@ -51,15 +50,16 @@ fn unrelated_errors_have_no_code() {
 
 #[test]
 fn materializes_stdlib_source_for_navigation() {
-    let dir = std::env::temp_dir().join(format!(
-        "dream-lsp-test-std-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("dream-lsp-test-std-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let path = dream_lsp::backend::materialize_stdlib(&dir, "<std>/system/collections/list.dream")
         .expect("embedded list.dream should resolve");
     let text = fs::read_to_string(&path).expect("materialized file should exist");
-    assert!(text.contains("class List"), "unexpected content: {}", &text[..200.min(text.len())]);
+    assert!(
+        text.contains("class List"),
+        "unexpected content: {}",
+        &text[..200.min(text.len())]
+    );
 
     // Unknown virtual paths fail cleanly.
     assert!(dream_lsp::backend::materialize_stdlib(&dir, "<std>/nope/nope.dream").is_none());
@@ -78,7 +78,11 @@ fn scans_workspace_files_for_symbols() {
         "fun main(): void {}\nclass Helper {}\n",
     )
     .unwrap();
-    fs::write(sub.join("util.dream"), "public fun util_add(a: int, b: int): int { return a + b; }\n").unwrap();
+    fs::write(
+        sub.join("util.dream"),
+        "public fun util_add(a: int, b: int): int { return a + b; }\n",
+    )
+    .unwrap();
     // Skipped directories must not contribute.
     fs::create_dir_all(root.join("target")).unwrap();
     fs::write(root.join("target/junk.dream"), "class ShouldNotAppear {}\n").unwrap();
@@ -107,9 +111,15 @@ fn same_named_fields_do_not_collide_in_references() {
     // Query the `s.x` access directly: only that use may match. The legacy bare-name match
     // would also return `a` (p.x).
     let sx_pos = src.find("s.x").unwrap() + "s.".len();
-    let r = snapshot.ref_covering(sx_pos).expect("field use under cursor");
+    let r = snapshot
+        .ref_covering(sx_pos)
+        .expect("field use under cursor");
     let spans = sema_ide::references_in(&snapshot, &r.target);
-    assert_eq!(spans.len(), 1, "only the matching field's uses, got {spans:?}");
+    assert_eq!(
+        spans.len(),
+        1,
+        "only the matching field's uses, got {spans:?}"
+    );
     let (start, end) = spans[0];
     assert_eq!(&src[start..end], "x");
 }

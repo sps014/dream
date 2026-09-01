@@ -76,7 +76,10 @@ fn formatting_produces_minimal_line_edits() {
     let old = "fun a(): void {\nlet x = 1;\n}\n\nfun b(): void {\nlet y = 2;\n}\n";
     let new = dream_format::format(old);
     let edits = dream_lsp::format::minimal_edits(&new, &new);
-    assert!(edits.is_empty(), "identical documents must produce no edits");
+    assert!(
+        edits.is_empty(),
+        "identical documents must produce no edits"
+    );
 
     let edits = dream_lsp::format::minimal_edits(old, &new);
     assert_eq!(edits.len(), 1, "one contiguous changed region expected");

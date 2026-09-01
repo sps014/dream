@@ -30,16 +30,16 @@ pub fn refresh_host_aliases(
 
     copy_required(&web_dir, &web_dir, &format!("{entry_stem}.wasm"))?;
     if web {
-        copy_required(
-            &web_dir,
-            &web_dir,
-            &format!("{entry_stem}.web.runtime.js"),
-        )?;
+        copy_required(&web_dir, &web_dir, &format!("{entry_stem}.web.runtime.js"))?;
     }
     let _ = copy_if_present(&web_dir, &web_dir, &format!("{entry_stem}.abi.json"));
 
     if node {
-        refresh_node(&web_dir, &project_root.join("target").join("node"), entry_stem)?;
+        refresh_node(
+            &web_dir,
+            &project_root.join("target").join("node"),
+            entry_stem,
+        )?;
     }
     Ok(())
 }
@@ -130,12 +130,18 @@ mod tests {
 
         refresh_host_aliases(root, "main", true, true).unwrap();
 
-        assert_eq!(fs::read(root.join("target/web/main.wasm")).unwrap(), b"wasm");
+        assert_eq!(
+            fs::read(root.join("target/web/main.wasm")).unwrap(),
+            b"wasm"
+        );
         assert_eq!(
             fs::read(root.join("target/node/main.node.runtime.js")).unwrap(),
             b"node"
         );
-        assert_eq!(fs::read(root.join("target/node/main.wasm")).unwrap(), b"wasm");
+        assert_eq!(
+            fs::read(root.join("target/node/main.wasm")).unwrap(),
+            b"wasm"
+        );
     }
 
     #[test]

@@ -27,10 +27,7 @@ pub fn minimal_edits(old: &str, new: &str) -> Vec<TextEdit> {
     let new_segs: Vec<&str> = new.split('\n').collect();
 
     let mut start = 0usize;
-    while start < old_segs.len()
-        && start < new_segs.len()
-        && old_segs[start] == new_segs[start]
-    {
+    while start < old_segs.len() && start < new_segs.len() && old_segs[start] == new_segs[start] {
         start += 1;
     }
     let mut end_old = old_segs.len();

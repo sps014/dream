@@ -145,10 +145,7 @@ mod tests {
     #[test]
     fn parse_package_entry_reads_quoted_path() {
         let toml = "[package]\nname = \"x\"\nentry = \"src/main.dream\"\n";
-        assert_eq!(
-            parse_package_entry(toml).as_deref(),
-            Some("src/main.dream")
-        );
+        assert_eq!(parse_package_entry(toml).as_deref(), Some("src/main.dream"));
     }
 
     #[test]

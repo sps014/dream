@@ -153,10 +153,7 @@ fn format_one(
     let padding = " ".repeat(start_col);
     let squiggly = "^".repeat(squiggly_len);
     let caret = paint(color, &format!("{BOLD}{RED}"), &squiggly);
-    out.push_str(&format!(
-        "{:>gutter$} {bar} {padding}{caret}\n",
-        ""
-    ));
+    out.push_str(&format!("{:>gutter$} {bar} {padding}{caret}\n", ""));
 
     for note in &diag.notes {
         let label = match note.kind {
@@ -186,7 +183,10 @@ mod tests {
         let src = "fun main() {\n    let x: int = \"hi\";\n}\n";
         let lt = Rc::new(LineText::new(src.to_string()));
         // "hi" starts around the assignment; pick a span on line 2.
-        let span = TextSpan::new((src.find("\"hi\"").unwrap(), src.find("\"hi\"").unwrap() + 4), &lt);
+        let span = TextSpan::new(
+            (src.find("\"hi\"").unwrap(), src.find("\"hi\"").unwrap() + 4),
+            &lt,
+        );
         bag.report_error("cannot convert from string to int".to_string(), Some(span));
         let mut files = HashMap::new();
         files.insert("demo.dream".to_string(), src.to_string());

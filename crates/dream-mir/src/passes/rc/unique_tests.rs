@@ -158,18 +158,16 @@ fn same_stmt_field_store_of_self_is_copy() {
     let n = b.new_local(ty, Some("n".into()));
     b.assign(Place::Local(n), new_obj(def, ty));
     b.assign(
-        Place::Field {
-            base: n,
-            field: 0,
-        },
+        Place::Field { base: n, field: 0 },
         Rvalue::Use(Operand::Copy(Place::Local(n))),
     );
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    let rel = func.blocks[0].stmts.iter().any(|s| {
-        matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == n)
-    });
+    let rel = func.blocks[0]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == n));
     let uniq = func.blocks[0]
         .stmts
         .iter()
@@ -223,10 +221,7 @@ fn self_ref_field_call_is_not_container_move() {
     let n = b.new_local(ty, Some("n".into()));
     b.assign(Place::Local(n), new_obj(def, ty));
     b.assign(
-        Place::Field {
-            base: n,
-            field: 0,
-        },
+        Place::Field { base: n, field: 0 },
         Rvalue::Call {
             callee: Callee {
                 def: step,
@@ -234,10 +229,7 @@ fn self_ref_field_call_is_not_container_move() {
                 ret: ty,
                 take_params: vec![false],
             },
-            args: vec![Operand::Copy(Place::Field {
-                base: n,
-                field: 0,
-            })],
+            args: vec![Operand::Copy(Place::Field { base: n, field: 0 })],
         },
     );
     b.terminate(Terminator::Return(None));
@@ -351,11 +343,7 @@ fn take_param_last_use_is_ordinary_release() {
         .iter()
         .flat_map(|bb| &bb.stmts)
         .any(|s| matches!(s, Statement::ReleaseUnique(_)));
-    assert!(
-        !uniq,
-        "take params may be caller copies: {:?}",
-        func.blocks
-    );
+    assert!(!uniq, "take params may be caller copies: {:?}", func.blocks);
 }
 
 #[test]

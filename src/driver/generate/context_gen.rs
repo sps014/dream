@@ -88,7 +88,6 @@ fn run_context_body(
     gen: &RegisteredGenerator,
     snapshot: &str,
 ) -> Result<super::syntax_gen::HarnessOutput, HarnessError> {
-
     let gen_path = Path::new(&gen.file_path);
     let Some(dir) = gen_path.parent() else {
         return Err(HarnessError::General(format!(
@@ -190,11 +189,7 @@ fn compile_harness(src_path: &Path) -> Result<PathBuf, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    c_path.push(format!(
-        "dream-ctx-gen-{}-{}.c",
-        std::process::id(),
-        unique
-    ));
+    c_path.push(format!("dream-ctx-gen-{}-{}.c", std::process::id(), unique));
     let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::NativeC)
         .with_skip_generators(true)
         .with_release(true);

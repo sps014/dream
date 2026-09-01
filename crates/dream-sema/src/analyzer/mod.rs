@@ -21,15 +21,15 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 mod await_rules;
+mod borrow_check;
 mod calls;
+mod closure_cycles;
 mod declarations;
 mod expressions;
-pub mod ide;
 mod generics;
 mod hir_emit;
+pub mod ide;
 mod js_interop;
-mod borrow_check;
-mod closure_cycles;
 mod ownership;
 mod receiver_modes;
 mod statements;
@@ -109,8 +109,8 @@ fn report_with_code(
     span: Option<TextSpan>,
     code: &'static str,
 ) -> SemanticError {
-    let diag = Diagnostic::new(message.clone(), span, diagnostics.file_path.clone())
-        .with_code(code);
+    let diag =
+        Diagnostic::new(message.clone(), span, diagnostics.file_path.clone()).with_code(code);
     diagnostics.report(diag);
     SemanticError::reported(message, span)
 }
@@ -388,7 +388,8 @@ pub struct Analyzer<'a> {
     /// Resolved receiver modes (`"Owner::method"` -> Borrow/Unique) from the receiver-
     /// exclusivity pass. Populated by `classify_receiver_modes` after body analysis on clean
     /// programs; consulted by dispatch metadata and borrow-collision checking.
-    pub(in crate::analyzer) receiver_modes: HashMap<String, dream_syntax::nodes::function::ReceiverMode>,
+    pub(in crate::analyzer) receiver_modes:
+        HashMap<String, dream_syntax::nodes::function::ReceiverMode>,
     /// Fun-typed locals whose initializer/last assignment was a *capturing* `fun(...)` value
     /// (`true`) or a known captureless one (`false`). Used at the JS boundary to reject stashed
     /// capturing lambdas (`let h: fun(js): void = (e) => { use(x); }; el.addEventListener(..., h)`)

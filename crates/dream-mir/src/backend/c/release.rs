@@ -977,10 +977,7 @@ fn emit_object_tag_dispatch(
             };
             arms.push(SwitchArm {
                 keys: vec![CaseKey::Int(tag as i64)],
-                body: vec![
-                    Stmt::call(sym, vec![Expr::id("p")]),
-                    Stmt::Return(None),
-                ],
+                body: vec![Stmt::call(sym, vec![Expr::id("p")]), Stmt::Return(None)],
             });
         }
     }
@@ -993,10 +990,7 @@ fn emit_object_tag_dispatch(
             };
             arms.push(SwitchArm {
                 keys: vec![CaseKey::Int(tag as i64)],
-                body: vec![
-                    Stmt::call(sym, vec![Expr::id("p")]),
-                    Stmt::Return(None),
-                ],
+                body: vec![Stmt::call(sym, vec![Expr::id("p")]), Stmt::Return(None)],
             });
         }
     }

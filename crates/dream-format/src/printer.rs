@@ -346,12 +346,7 @@ impl Printer {
     }
 
     fn top_block_is_switch_body(&self) -> bool {
-        matches!(
-            self.ctxs.last(),
-            Some(Ctx::Block {
-                switch_body: true
-            })
-        )
+        matches!(self.ctxs.last(), Some(Ctx::Block { switch_body: true }))
     }
 
     fn update_prev_tracking(&mut self, token: &SyntaxToken) {

@@ -129,8 +129,11 @@ impl<'a> Analyzer<'a> {
         // --- Collect entries + raw facts ----------------------------------------------------
         for struct_decl in node.structs.iter() {
             let owner = struct_decl.name.text.clone();
-            let field_names: Vec<String> =
-                struct_decl.fields.iter().map(|f| f.name.text.clone()).collect();
+            let field_names: Vec<String> = struct_decl
+                .fields
+                .iter()
+                .map(|f| f.name.text.clone())
+                .collect();
             for method in &struct_decl.methods {
                 if method.is_static {
                     continue;
@@ -194,7 +197,7 @@ impl<'a> Analyzer<'a> {
                         &[],
                         &mut entry.direct_unique,
                         &mut entry.first_mutate_span,
-                            &mut entry.raw_calls,
+                        &mut entry.raw_calls,
                     );
                 }
                 registry.insert(key, entry);
@@ -213,12 +216,12 @@ impl<'a> Analyzer<'a> {
                 for (recv, name, span) in &e.raw_calls {
                     let target_owner: Option<String> = match recv {
                         RecvKind::This => Some(e.owner.clone()),
-                        RecvKind::Field(f) => {
-                            match self.struct_table.get_struct(&e.owner) {
-                                Some(info) => info.fields.get(f).and_then(|fi| type_owner_name(&fi.type_)),
-                                None => None,
+                        RecvKind::Field(f) => match self.struct_table.get_struct(&e.owner) {
+                            Some(info) => {
+                                info.fields.get(f).and_then(|fi| type_owner_name(&fi.type_))
                             }
-                        }
+                            None => None,
+                        },
                     };
                     if let Some(owner) = target_owner {
                         let k = format!("{owner}::{name}");
@@ -265,7 +268,9 @@ impl<'a> Analyzer<'a> {
             // plus whether any edge reaches a unique method.
             if e.explicit == Some(ReceiverMode::Borrow)
                 && (e.direct_unique
-                    || resolved_edges[key].iter().any(|(t, _)| registry[t].is_unique()))
+                    || resolved_edges[key]
+                        .iter()
+                        .any(|(t, _)| registry[t].is_unique()))
             {
                 // Only override the bag's current file when the owner's own file is known;
                 // otherwise the diagnostic renders against a stale path.
@@ -301,12 +306,15 @@ impl<'a> Analyzer<'a> {
                     continue;
                 }
                 for (mname, imode) in required {
-                    let own = s.methods.iter().find(|m| {
-                        !m.is_static && m.name.text == mname
-                    });
+                    let own = s
+                        .methods
+                        .iter()
+                        .find(|m| !m.is_static && m.name.text == mname);
                     let Some(own) = own else { continue };
                     let impl_key = format!("{}::{mname}", s.name.text);
-                    let Some(e) = registry.get(&impl_key) else { continue };
+                    let Some(e) = registry.get(&impl_key) else {
+                        continue;
+                    };
                     let impl_mode = e.effective_mode();
                     if impl_mode != imode {
                         let file = file_for_owner(node, &e.owner);
@@ -359,7 +367,10 @@ impl<'a> Analyzer<'a> {
                 if m.is_static {
                     continue;
                 }
-                let mode = registry_lookup(&self.receiver_modes, &format!("{iface_name}::{}", m.name.text));
+                let mode = registry_lookup(
+                    &self.receiver_modes,
+                    &format!("{iface_name}::{}", m.name.text),
+                );
                 out.push((m.name.text.clone(), mode));
             }
             return;
@@ -371,7 +382,10 @@ fn registry_lookup(
     modes: &HashMap<String, dream_syntax::nodes::function::ReceiverMode>,
     key: &str,
 ) -> dream_syntax::nodes::function::ReceiverMode {
-    modes.get(key).copied().unwrap_or(dream_syntax::nodes::function::ReceiverMode::Borrow)
+    modes
+        .get(key)
+        .copied()
+        .unwrap_or(dream_syntax::nodes::function::ReceiverMode::Borrow)
 }
 
 fn file_for_owner<'a>(node: &'a ProgramNode<'a>, owner: &str) -> Option<Rc<str>> {
@@ -458,7 +472,7 @@ fn walk_statements(
             aliases,
             direct_unique,
             first_mutate_span,
-                raw_calls,
+            raw_calls,
         );
     }
 }
@@ -477,98 +491,307 @@ fn walk_statement(
             if field_names.contains(&name_tok.text) {
                 mark_mutation(name_tok, direct_unique, first_mutate_span);
             }
-            walk_expression(value, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                value,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         StatementNode::Declaration(name_tok, _, init, _) => {
             // `let alias = this;` tracks the local as a `this` alias for receiver classification.
             if is_self_expr(init, aliases) {
                 aliases.push(name_tok.text.clone());
             }
-            walk_expression(init, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                init,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
-        StatementNode::TupleDeclaration { init, .. } => {
-            walk_expression(init, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
+        StatementNode::TupleDeclaration { init, .. } => walk_expression(
+            init,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         StatementNode::MemberAssignment(target, name, value) => {
             if is_self_expr(target, aliases) {
                 mark_mutation(name, direct_unique, first_mutate_span);
             } else {
                 note_chain_write(target, direct_unique, first_mutate_span);
-                walk_expression(target, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    target,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
-            walk_expression(value, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                value,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         StatementNode::IndexAssignment(target, index, value) => {
             note_chain_write(target, direct_unique, first_mutate_span);
-            walk_expression(index, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_expression(value, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                index,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_expression(
+                value,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         StatementNode::FunctionInvocation(callee, _, args) => {
             raw_calls.push((RecvKind::This, callee.text.clone(), callee.position));
-            note_sink_args(args, aliases, field_names, direct_unique, first_mutate_span, raw_calls);
+            note_sink_args(
+                args,
+                aliases,
+                field_names,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         StatementNode::MethodInvocation(receiver, name, _, args) => {
             if let Some(kind) = classify_receiver(receiver, aliases) {
                 raw_calls.push((kind, name.text.clone(), name.position));
             }
-            walk_expression(receiver, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                receiver,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
             for a in args {
-                walk_expression(a, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    a,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
-        StatementNode::Return(Some(e)) => {
-            walk_expression(e, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
+        StatementNode::Return(Some(e)) => walk_expression(
+            e,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-            walk_expression(cond, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_statements(then_b, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                cond,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_statements(
+                then_b,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
             for (c, b) in elifs {
-                walk_expression(c, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-                walk_statements(b, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    c,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
+                walk_statements(
+                    b,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
             if let Some(b) = else_b {
-                walk_statements(b, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_statements(
+                    b,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         StatementNode::While(cond, body) | StatementNode::DoWhile(body, cond) => {
-            walk_expression(cond, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_statements(body, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                cond,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_statements(
+                body,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(s) = init {
-                walk_statement(s, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_statement(
+                    s,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
             if let Some(c) = cond {
-                walk_expression(c, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    c,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
             if let Some(s) = step {
-                walk_statement(s, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_statement(
+                    s,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
-            walk_statements(body, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_statements(
+                body,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
-        StatementNode::Labeled(_, inner) => {
-            walk_statement(inner, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
+        StatementNode::Labeled(_, inner) => walk_statement(
+            inner,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         StatementNode::ForEach(_, iterable, _, _, body) => {
-            walk_expression(iterable, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_statements(body, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                iterable,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_statements(
+                body,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         StatementNode::Switch(subject, arms, default_b) => {
-            walk_expression(subject, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                subject,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
             for (_, body) in arms {
-                walk_statements(body, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_statements(
+                    body,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
             if let Some(b) = default_b {
-                walk_statements(b, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_statements(
+                    b,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         StatementNode::Lock(target, body) => {
-            walk_expression(target, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_statements(body, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                target,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_statements(
+                body,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
-        StatementNode::ExpressionStatement(e) | StatementNode::AwaitStmt(e) => {
-            walk_expression(e, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
+        StatementNode::ExpressionStatement(e) | StatementNode::AwaitStmt(e) => walk_expression(
+            e,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         _ => {}
     }
 }
@@ -584,7 +807,14 @@ fn note_sink_args(
     raw_calls: &mut Vec<(RecvKind, String, TextSpan)>,
 ) {
     for a in args {
-        walk_expression(a, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+        walk_expression(
+            a,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        );
     }
 }
 
@@ -654,19 +884,59 @@ fn walk_expression(
 ) {
     match e {
         ExpressionNode::Binary(lhs, _, rhs) => {
-            walk_expression(lhs, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_expression(rhs, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                lhs,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_expression(
+                rhs,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         ExpressionNode::Ternary(cond, then_e, else_e) => {
-            walk_expression(cond, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_expression(then_e, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_expression(else_e, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                cond,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_expression(
+                then_e,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_expression(
+                else_e,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         ExpressionNode::Unary(_, inner)
         | ExpressionNode::Parenthesized(_, inner)
-        | ExpressionNode::Try(inner) => {
-            walk_expression(inner, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
+        | ExpressionNode::Try(inner) => walk_expression(
+            inner,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         ExpressionNode::IncDec { target, .. } => {
             note_chain_write(target, direct_unique, first_mutate_span);
             if let ExpressionNode::Identifier(t) = &**target {
@@ -677,31 +947,80 @@ fn walk_expression(
                     }
                 }
             }
-            walk_expression(target, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                target,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         ExpressionNode::ArrayLiteral(_, elems)
         | ExpressionNode::TupleLiteral(_, elems)
         | ExpressionNode::SetLiteral(_, elems) => {
             for x in elems {
-                walk_expression(x, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    x,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         ExpressionNode::MapLiteral(_, pairs) => {
             for (k, v) in pairs {
-                walk_expression(k, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-                walk_expression(v, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    k,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
+                walk_expression(
+                    v,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         ExpressionNode::FunctionCall(callee, _, args) => {
             raw_calls.push((RecvKind::This, callee.text.clone(), callee.position));
             for a in args {
-                walk_expression(a, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    a,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         ExpressionNode::Call(callee, _, args) => {
-            walk_expression(callee, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                callee,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
             for a in args {
-                walk_expression(a, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    a,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         ExpressionNode::MethodCall(receiver, name, _, args) => {
@@ -709,36 +1028,81 @@ fn walk_expression(
                 raw_calls.push((kind, name.text.clone(), name.position));
             }
             for a in args {
-                walk_expression(a, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+                walk_expression(
+                    a,
+                    field_names,
+                    aliases,
+                    direct_unique,
+                    first_mutate_span,
+                    raw_calls,
+                );
             }
         }
         ExpressionNode::IndexAccess(base, index) => {
-            walk_expression(base, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
-            walk_expression(index, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                base,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
+            walk_expression(
+                index,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
         }
         ExpressionNode::Cast(_, _, inner)
         | ExpressionNode::IsExpression(inner, _, _)
-        | ExpressionNode::Await(_, inner) => {
-            walk_expression(inner, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
-        ExpressionNode::MemberAccess(base, _) => {
-            walk_expression(base, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-        }
+        | ExpressionNode::Await(_, inner) => walk_expression(
+            inner,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
+        ExpressionNode::MemberAccess(base, _) => walk_expression(
+            base,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         ExpressionNode::Switch(_, subject, arms) => {
-            walk_expression(subject, field_names, aliases, direct_unique, first_mutate_span, raw_calls);
+            walk_expression(
+                subject,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            );
             for arm in arms {
                 match &arm.body {
-                    dream_syntax::nodes::expression::SwitchArmBody::Expr(expr) => {
-                        walk_expression(expr, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
-                    }
-                    dream_syntax::nodes::expression::SwitchArmBody::Block(stmts) => walk_statements(
-                        stmts,
+                    dream_syntax::nodes::expression::SwitchArmBody::Expr(expr) => walk_expression(
+                        expr,
                         field_names,
                         aliases,
                         direct_unique,
                         first_mutate_span,
-                                        raw_calls,
+                        raw_calls,
                     ),
+                    dream_syntax::nodes::expression::SwitchArmBody::Block(stmts) => {
+                        walk_statements(
+                            stmts,
+                            field_names,
+                            aliases,
+                            direct_unique,
+                            first_mutate_span,
+                            raw_calls,
+                        )
+                    }
                 }
             }
         }
@@ -748,7 +1112,14 @@ fn walk_expression(
             let _ = l;
         }
         ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
-            walk_expression(inner, field_names, aliases, direct_unique, first_mutate_span, raw_calls)
+            walk_expression(
+                inner,
+                field_names,
+                aliases,
+                direct_unique,
+                first_mutate_span,
+                raw_calls,
+            )
         }
         _ => {}
     }

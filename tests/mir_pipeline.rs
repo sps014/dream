@@ -146,7 +146,11 @@ fn hir_to_c_pipeline_emits_expected_shape() {
     assert!(c.contains('+'), "missing arithmetic:\n{}", c);
     // The loop comparison lowers to a less-than.
     assert!(c.contains('<'), "missing loop comparison:\n{}", c);
-    assert!(c.contains("while") || c.contains("goto"), "missing loop:\n{}", c);
+    assert!(
+        c.contains("while") || c.contains("goto"),
+        "missing loop:\n{}",
+        c
+    );
 }
 
 #[test]

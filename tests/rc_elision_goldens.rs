@@ -273,12 +273,7 @@ fn rc_golden_unique_class_no_retain() {
         }
     "#;
     let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    assert_eq!(
-        user_retains(&c),
-        0,
-        "unique Box should not retain:\n{}",
-        c
-    );
+    assert_eq!(user_retains(&c), 0, "unique Box should not retain:\n{}", c);
     assert!(
         c.contains("destroy_Box(b);"),
         "unique Box should unique-destroy:\n{}",

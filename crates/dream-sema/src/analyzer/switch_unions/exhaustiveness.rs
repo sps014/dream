@@ -86,7 +86,8 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "Variant qualifier '{}' does not match the matched enum '{}'",
-                                q.text, self.ty_str_display(&expected_base)
+                                q.text,
+                                self.ty_str_display(&expected_base)
                             ),
                             Some(q.position),
                         );
@@ -97,7 +98,11 @@ impl<'a> Analyzer<'a> {
                     Some(v) => v.clone(),
                     None => {
                         diagnostics.report_error(
-                            format!("Enum '{}' has no variant '{}'", self.ty_str_display(&expected_base), variant.text),
+                            format!(
+                                "Enum '{}' has no variant '{}'",
+                                self.ty_str_display(&expected_base),
+                                variant.text
+                            ),
                             Some(variant.position),
                         );
                         for sub in subs {

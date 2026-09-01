@@ -315,7 +315,10 @@ impl<'a> Analyzer<'a> {
                     self.hir_await_stmt(fut_hir);
                 } else if Self::future_inner_type(&fut).is_none() {
                     diagnostics.report_error(
-                        format!("'await' expects a Future value, got {}", self.ty_display(&fut)),
+                        format!(
+                            "'await' expects a Future value, got {}",
+                            self.ty_display(&fut)
+                        ),
                         future_expr.position(),
                     );
                     self.hir_fail();

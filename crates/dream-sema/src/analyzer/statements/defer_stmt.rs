@@ -67,22 +67,14 @@ impl<'a> Analyzer<'a> {
         };
         match stmt {
             StatementNode::Return(_) => {
-                diagnostics.report_error(
-                    "'return' cannot be used inside 'defer'".to_string(),
-                    pos,
-                );
+                diagnostics.report_error("'return' cannot be used inside 'defer'".to_string(), pos);
             }
             StatementNode::Break(_) => {
-                diagnostics.report_error(
-                    "'break' cannot be used inside 'defer'".to_string(),
-                    pos,
-                );
+                diagnostics.report_error("'break' cannot be used inside 'defer'".to_string(), pos);
             }
             StatementNode::Continue(_) => {
-                diagnostics.report_error(
-                    "'continue' cannot be used inside 'defer'".to_string(),
-                    pos,
-                );
+                diagnostics
+                    .report_error("'continue' cannot be used inside 'defer'".to_string(), pos);
             }
             StatementNode::IfElse(_, if_body, else_ifs, else_body) => {
                 for s in *if_body {

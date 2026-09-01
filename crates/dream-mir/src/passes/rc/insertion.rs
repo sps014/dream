@@ -11,7 +11,9 @@ use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
 };
 use crate::passes::MirPass;
-use crate::{Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use dream_types::TypeInterner;
 use std::collections::HashMap;
 
@@ -92,8 +94,7 @@ impl RcInsertion {
                         }
                     }
                 }
-                let Statement::Assign(dest_place, Rvalue::ArrayRealloc { array, .. }) = stmt
-                else {
+                let Statement::Assign(dest_place, Rvalue::ArrayRealloc { array, .. }) = stmt else {
                     continue;
                 };
                 let Operand::Copy(src_place) = array else {
@@ -275,7 +276,13 @@ impl RcInsertion {
                         if had_dest {
                             out.push(release_one(
                                 dest.0,
-                                unique_destroy(interner, &local_types, &take_flags, dest.0, had_unique),
+                                unique_destroy(
+                                    interner,
+                                    &local_types,
+                                    &take_flags,
+                                    dest.0,
+                                    had_unique,
+                                ),
                             ));
                         }
                         for r in sink_retains {

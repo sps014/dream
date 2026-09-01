@@ -100,7 +100,6 @@ fn test_comma_literal_still_parses_alongside_repeat_syntax() {
 
 #[test]
 fn test_parse_array_declaration_and_assignment() {
-
     let code = "fun test(): void { let arr: int[] = [1, 2, 3]; arr[0] = 5; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);

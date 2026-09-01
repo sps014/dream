@@ -2,16 +2,16 @@
 
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
-use dream_text::line_text::LineText;
-use dream_text::text_span::TextSpan;
 use dream_syntax::lexer::Lexer;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::{
     ExpressionNode, LambdaBody, LambdaNode, PatternNode, StatementNode, SwitchArm, SwitchArmBody,
     SyntaxBlockNode, SyntaxBlockPart,
 };
-use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::parser::Parser;
+use dream_syntax::token::syntax_token::SyntaxToken;
+use dream_text::line_text::LineText;
+use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use std::io::Error;
 
@@ -111,7 +111,15 @@ pub fn rewrite_function_body<'a>(
     let mut changed = false;
     let mut out = Vec::with_capacity(body.len());
     for s in body {
-        out.push(rewrite_stmt(arena, s, by_site, diagnostics, &mut changed, file, file_contents)?);
+        out.push(rewrite_stmt(
+            arena,
+            s,
+            by_site,
+            diagnostics,
+            &mut changed,
+            file,
+            file_contents,
+        )?);
     }
     if changed {
         Ok(arena.alloc_slice_fill_iter(out))
@@ -200,18 +208,66 @@ fn rewrite_expr<'a>(
     }
     Ok(match expr {
         ExpressionNode::Binary(l, op, r) => ExpressionNode::Binary(
-            arena.alloc(rewrite_expr(arena, l, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                l,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
             op.clone(),
-            arena.alloc(rewrite_expr(arena, r, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                r,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::Ternary(c, t, e) => ExpressionNode::Ternary(
-            arena.alloc(rewrite_expr(arena, c, by_site, diagnostics, changed, file, file_contents)?),
-            arena.alloc(rewrite_expr(arena, t, by_site, diagnostics, changed, file, file_contents)?),
-            arena.alloc(rewrite_expr(arena, e, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                c,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
+            arena.alloc(rewrite_expr(
+                arena,
+                t,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
+            arena.alloc(rewrite_expr(
+                arena,
+                e,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::Unary(op, x) => ExpressionNode::Unary(
             op.clone(),
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::IncDec {
             prefix,
@@ -221,53 +277,155 @@ fn rewrite_expr<'a>(
         } => ExpressionNode::IncDec {
             prefix: *prefix,
             is_inc: *is_inc,
-            target: arena.alloc(rewrite_expr(arena, target, by_site, diagnostics, changed, file, file_contents)?),
+            target: arena.alloc(rewrite_expr(
+                arena,
+                target,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
             op: op.clone(),
         },
         ExpressionNode::Parenthesized(open, x) => ExpressionNode::Parenthesized(
             open.clone(),
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::Await(await_tok, x) => ExpressionNode::Await(
             await_tok.clone(),
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
-        ExpressionNode::Try(x) => {
-            ExpressionNode::Try(arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?))
-        }
+        ExpressionNode::Try(x) => ExpressionNode::Try(arena.alloc(rewrite_expr(
+            arena,
+            x,
+            by_site,
+            diagnostics,
+            changed,
+            file,
+            file_contents,
+        )?)),
         ExpressionNode::Cast(open, ty, x) => ExpressionNode::Cast(
             open.clone(),
             ty.clone(),
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::IsExpression(x, ty, b) => ExpressionNode::IsExpression(
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
             ty.clone(),
             b.clone(),
         ),
         ExpressionNode::IndexAccess(a, i) => ExpressionNode::IndexAccess(
-            arena.alloc(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?),
-            arena.alloc(rewrite_expr(arena, i, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                a,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
+            arena.alloc(rewrite_expr(
+                arena,
+                i,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::MemberAccess(r, m) => ExpressionNode::MemberAccess(
-            arena.alloc(rewrite_expr(arena, r, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                r,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
             m.clone(),
         ),
         ExpressionNode::RefArgument(ref_tok, x) => ExpressionNode::RefArgument(
             ref_tok.clone(),
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::NamedArg(n, x) => ExpressionNode::NamedArg(
             n.clone(),
-            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::Call(c, gens, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             ExpressionNode::Call(
-                arena.alloc(rewrite_expr(arena, c, by_site, diagnostics, changed, file, file_contents)?),
+                arena.alloc(rewrite_expr(
+                    arena,
+                    c,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?),
                 gens.clone(),
                 nargs,
             )
@@ -275,10 +433,26 @@ fn rewrite_expr<'a>(
         ExpressionNode::MethodCall(r, name, gens, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             ExpressionNode::MethodCall(
-                arena.alloc(rewrite_expr(arena, r, by_site, diagnostics, changed, file, file_contents)?),
+                arena.alloc(rewrite_expr(
+                    arena,
+                    r,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?),
                 name.clone(),
                 gens.clone(),
                 nargs,
@@ -287,33 +461,81 @@ fn rewrite_expr<'a>(
         ExpressionNode::FunctionCall(name, gens, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             ExpressionNode::FunctionCall(name.clone(), gens.clone(), nargs)
         }
         ExpressionNode::ArrayLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             ExpressionNode::ArrayLiteral(open.clone(), nargs)
         }
         ExpressionNode::ArrayRepeat(open, v, n) => ExpressionNode::ArrayRepeat(
             open.clone(),
-            Box::new(rewrite_expr(arena, v, by_site, diagnostics, changed, file, file_contents)?),
-            Box::new(rewrite_expr(arena, n, by_site, diagnostics, changed, file, file_contents)?),
+            Box::new(rewrite_expr(
+                arena,
+                v,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
+            Box::new(rewrite_expr(
+                arena,
+                n,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         ExpressionNode::TupleLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             ExpressionNode::TupleLiteral(open.clone(), nargs)
         }
         ExpressionNode::SetLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             ExpressionNode::SetLiteral(open.clone(), nargs)
         }
@@ -328,19 +550,48 @@ fn rewrite_expr<'a>(
             ExpressionNode::MapLiteral(open.clone(), nentries)
         }
         ExpressionNode::Switch(switch_tok, subj, arms) => {
-            let nsubj = arena.alloc(rewrite_expr(arena, subj, by_site, diagnostics, changed, file, file_contents)?);
+            let nsubj = arena.alloc(rewrite_expr(
+                arena,
+                subj,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?);
             let mut narms = Vec::new();
             for arm in arms {
                 let guard = match &arm.guard {
-                    Some(g) => Some(rewrite_expr(arena, g, by_site, diagnostics, changed, file, file_contents)?),
+                    Some(g) => Some(rewrite_expr(
+                        arena,
+                        g,
+                        by_site,
+                        diagnostics,
+                        changed,
+                        file,
+                        file_contents,
+                    )?),
                     None => None,
                 };
                 let body = match &arm.body {
-                    SwitchArmBody::Expr(e) => {
-                        SwitchArmBody::Expr(rewrite_expr(arena, e, by_site, diagnostics, changed, file, file_contents)?)
-                    }
+                    SwitchArmBody::Expr(e) => SwitchArmBody::Expr(rewrite_expr(
+                        arena,
+                        e,
+                        by_site,
+                        diagnostics,
+                        changed,
+                        file,
+                        file_contents,
+                    )?),
                     SwitchArmBody::Block(stmts) => {
-                        let nb = rewrite_function_body(arena, stmts, by_site, diagnostics, file, file_contents)?;
+                        let nb = rewrite_function_body(
+                            arena,
+                            stmts,
+                            by_site,
+                            diagnostics,
+                            file,
+                            file_contents,
+                        )?;
                         SwitchArmBody::Block(nb)
                     }
                 };
@@ -360,11 +611,17 @@ fn rewrite_expr<'a>(
                     by_site,
                     diagnostics,
                     changed,
-                    file, file_contents,
+                    file,
+                    file_contents,
                 )?)),
-                LambdaBody::Block(stmts) => {
-                    LambdaBody::Block(rewrite_function_body(arena, stmts, by_site, diagnostics, file, file_contents)?)
-                }
+                LambdaBody::Block(stmts) => LambdaBody::Block(rewrite_function_body(
+                    arena,
+                    stmts,
+                    by_site,
+                    diagnostics,
+                    file,
+                    file_contents,
+                )?),
             };
             let mut nl = (*l).clone();
             nl.body = body;
@@ -395,14 +652,27 @@ fn rewrite_stmt<'a>(
             by_site,
             diagnostics,
             changed,
-                file, file_contents,
+            file,
+            file_contents,
         )?),
-        StatementNode::AwaitStmt(e) => {
-            StatementNode::AwaitStmt(rewrite_expr(arena, e, by_site, diagnostics, changed, file, file_contents)?)
-        }
-        StatementNode::Return(Some(e)) => {
-            StatementNode::Return(Some(rewrite_expr(arena, e, by_site, diagnostics, changed, file, file_contents)?))
-        }
+        StatementNode::AwaitStmt(e) => StatementNode::AwaitStmt(rewrite_expr(
+            arena,
+            e,
+            by_site,
+            diagnostics,
+            changed,
+            file,
+            file_contents,
+        )?),
+        StatementNode::Return(Some(e)) => StatementNode::Return(Some(rewrite_expr(
+            arena,
+            e,
+            by_site,
+            diagnostics,
+            changed,
+            file,
+            file_contents,
+        )?)),
         StatementNode::Return(None) => StatementNode::Return(None),
         StatementNode::Assignment(n, e) => StatementNode::Assignment(
             n.clone(),
@@ -422,41 +692,106 @@ fn rewrite_stmt<'a>(
         } => StatementNode::TupleDeclaration {
             pattern: pattern.clone(),
             ty: ty.clone(),
-            init: rewrite_expr(arena, init, by_site, diagnostics, changed, file, file_contents)?,
+            init: rewrite_expr(
+                arena,
+                init,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?,
             is_const: *is_const,
         },
         StatementNode::IndexAssignment(a, i, v) => StatementNode::IndexAssignment(
-            arena.alloc(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?),
-            arena.alloc(rewrite_expr(arena, i, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                a,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
+            arena.alloc(rewrite_expr(
+                arena,
+                i,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
             rewrite_expr(arena, v, by_site, diagnostics, changed, file, file_contents)?,
         ),
         StatementNode::MemberAssignment(r, m, v) => StatementNode::MemberAssignment(
-            arena.alloc(rewrite_expr(arena, r, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_expr(
+                arena,
+                r,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
             m.clone(),
             rewrite_expr(arena, v, by_site, diagnostics, changed, file, file_contents)?,
         ),
         StatementNode::FunctionInvocation(n, g, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             StatementNode::FunctionInvocation(n.clone(), g.clone(), nargs)
         }
         StatementNode::MethodInvocation(r, n, g, args) => {
             let mut nargs = Vec::new();
             for a in args {
-                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed, file, file_contents)?);
+                nargs.push(rewrite_expr(
+                    arena,
+                    a,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?);
             }
             StatementNode::MethodInvocation(
-                arena.alloc(rewrite_expr(arena, r, by_site, diagnostics, changed, file, file_contents)?),
+                arena.alloc(rewrite_expr(
+                    arena,
+                    r,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?),
                 n.clone(),
                 g.clone(),
                 nargs,
             )
         }
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-            let ncond = rewrite_expr(arena, cond, by_site, diagnostics, changed, file, file_contents)?;
-            let nthen = rewrite_function_body(arena, then_b, by_site, diagnostics, file, file_contents)?;
+            let ncond = rewrite_expr(
+                arena,
+                cond,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?;
+            let nthen =
+                rewrite_function_body(arena, then_b, by_site, diagnostics, file, file_contents)?;
             let mut nelifs = Vec::new();
             for (c, b) in elifs {
                 nelifs.push((
@@ -465,45 +800,104 @@ fn rewrite_stmt<'a>(
                 ));
             }
             let nelse = match else_b {
-                Some(b) => Some(rewrite_function_body(arena, b, by_site, diagnostics, file, file_contents)?),
+                Some(b) => Some(rewrite_function_body(
+                    arena,
+                    b,
+                    by_site,
+                    diagnostics,
+                    file,
+                    file_contents,
+                )?),
                 None => None,
             };
             StatementNode::IfElse(ncond, nthen, nelifs, nelse)
         }
         StatementNode::While(cond, body) => StatementNode::While(
-            rewrite_expr(arena, cond, by_site, diagnostics, changed, file, file_contents)?,
+            rewrite_expr(
+                arena,
+                cond,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?,
             rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
         ),
         StatementNode::Lock(cond, body) => StatementNode::Lock(
-            rewrite_expr(arena, cond, by_site, diagnostics, changed, file, file_contents)?,
+            rewrite_expr(
+                arena,
+                cond,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?,
             rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
         ),
         StatementNode::Defer(budget, body) => StatementNode::Defer(
             match budget {
-                Some(q) => Some(rewrite_expr(arena, q, by_site, diagnostics, changed, file, file_contents)?),
+                Some(q) => Some(rewrite_expr(
+                    arena,
+                    q,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?),
                 None => None,
             },
             rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
         ),
         StatementNode::DoWhile(body, cond) => StatementNode::DoWhile(
             rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
-            rewrite_expr(arena, cond, by_site, diagnostics, changed, file, file_contents)?,
+            rewrite_expr(
+                arena,
+                cond,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?,
         ),
         StatementNode::For(init, cond, inc, body) => {
             let ninit = match init {
-                Some(s) => {
-                    Some(&*arena.alloc(rewrite_stmt(arena, s, by_site, diagnostics, changed, file, file_contents)?))
-                }
+                Some(s) => Some(&*arena.alloc(rewrite_stmt(
+                    arena,
+                    s,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?)),
                 None => None,
             };
             let ncond = match cond {
-                Some(e) => Some(rewrite_expr(arena, e, by_site, diagnostics, changed, file, file_contents)?),
+                Some(e) => Some(rewrite_expr(
+                    arena,
+                    e,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?),
                 None => None,
             };
             let ninc = match inc {
-                Some(s) => {
-                    Some(&*arena.alloc(rewrite_stmt(arena, s, by_site, diagnostics, changed, file, file_contents)?))
-                }
+                Some(s) => Some(&*arena.alloc(rewrite_stmt(
+                    arena,
+                    s,
+                    by_site,
+                    diagnostics,
+                    changed,
+                    file,
+                    file_contents,
+                )?)),
                 None => None,
             };
             StatementNode::For(
@@ -515,18 +909,42 @@ fn rewrite_stmt<'a>(
         }
         StatementNode::ForEach(n, iter, a, b, body) => StatementNode::ForEach(
             n.clone(),
-            rewrite_expr(arena, iter, by_site, diagnostics, changed, file, file_contents)?,
+            rewrite_expr(
+                arena,
+                iter,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?,
             a.clone(),
             b.clone(),
             rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
         ),
         StatementNode::Switch(subj, cases, default) => {
-            let nsubj = rewrite_expr(arena, subj, by_site, diagnostics, changed, file, file_contents)?;
+            let nsubj = rewrite_expr(
+                arena,
+                subj,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?;
             let mut ncases = Vec::new();
             for (labels, body) in cases {
                 let mut nlabels = Vec::new();
                 for l in labels {
-                    nlabels.push(rewrite_expr(arena, l, by_site, diagnostics, changed, file, file_contents)?);
+                    nlabels.push(rewrite_expr(
+                        arena,
+                        l,
+                        by_site,
+                        diagnostics,
+                        changed,
+                        file,
+                        file_contents,
+                    )?);
                 }
                 ncases.push((
                     nlabels,
@@ -534,14 +952,29 @@ fn rewrite_stmt<'a>(
                 ));
             }
             let ndef = match default {
-                Some(b) => Some(rewrite_function_body(arena, b, by_site, diagnostics, file, file_contents)?),
+                Some(b) => Some(rewrite_function_body(
+                    arena,
+                    b,
+                    by_site,
+                    diagnostics,
+                    file,
+                    file_contents,
+                )?),
                 None => None,
             };
             StatementNode::Switch(nsubj, ncases, ndef)
         }
         StatementNode::Labeled(l, inner) => StatementNode::Labeled(
             l.clone(),
-            arena.alloc(rewrite_stmt(arena, inner, by_site, diagnostics, changed, file, file_contents)?),
+            arena.alloc(rewrite_stmt(
+                arena,
+                inner,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
         ),
         StatementNode::Break(x) => StatementNode::Break(x.clone()),
         StatementNode::Continue(x) => StatementNode::Continue(x.clone()),
@@ -592,8 +1025,6 @@ impl SpanMap {
         }
     }
 }
-
-
 
 /// Rebuilds `e` with every token position mapped through `map`. Mirrors the variant
 /// enumeration in [`rewrite_expr`]; `Type` payloads are passed through unshifted (their
@@ -661,17 +1092,18 @@ fn shift_expr<'a>(map: &SpanMap, arena: &'a Bump, e: &ExpressionNode<'a>) -> Exp
             arena.alloc(shift_expr(map, arena, a)),
             arena.alloc(shift_expr(map, arena, i)),
         ),
-        ExpressionNode::Cast(t, ty, x) => {
-            ExpressionNode::Cast(map.token(t), ty.clone(), arena.alloc(shift_expr(map, arena, x)))
-        }
+        ExpressionNode::Cast(t, ty, x) => ExpressionNode::Cast(
+            map.token(t),
+            ty.clone(),
+            arena.alloc(shift_expr(map, arena, x)),
+        ),
         ExpressionNode::SizeOf(t, ty) => ExpressionNode::SizeOf(map.token(t), ty.clone()),
         ExpressionNode::NameOf(t, path) => {
             ExpressionNode::NameOf(map.token(t), path.iter().map(|p| map.token(p)).collect())
         }
-        ExpressionNode::MemberAccess(x, t) => ExpressionNode::MemberAccess(
-            arena.alloc(shift_expr(map, arena, x)),
-            map.token(t),
-        ),
+        ExpressionNode::MemberAccess(x, t) => {
+            ExpressionNode::MemberAccess(arena.alloc(shift_expr(map, arena, x)), map.token(t))
+        }
         ExpressionNode::IsExpression(x, ty, bind) => ExpressionNode::IsExpression(
             arena.alloc(shift_expr(map, arena, x)),
             ty.clone(),
@@ -693,14 +1125,14 @@ fn shift_expr<'a>(map: &SpanMap, arena: &'a Bump, e: &ExpressionNode<'a>) -> Exp
         }
         ExpressionNode::Switch(t, subject, arms) => {
             let subject = arena.alloc(shift_expr(map, arena, subject));
-            let arms_v: Vec<SwitchArm> = arms
-                .iter()
-                .map(|arm| shift_arm(map, arena, arm))
-                .collect();
+            let arms_v: Vec<SwitchArm> =
+                arms.iter().map(|arm| shift_arm(map, arena, arm)).collect();
             ExpressionNode::Switch(map.token(t), subject, arms_v)
         }
         ExpressionNode::Try(x) => ExpressionNode::Try(arena.alloc(shift_expr(map, arena, x))),
-        ExpressionNode::Lambda(l) => ExpressionNode::Lambda(arena.alloc(shift_lambda(map, arena, l))),
+        ExpressionNode::Lambda(l) => {
+            ExpressionNode::Lambda(arena.alloc(shift_lambda(map, arena, l)))
+        }
         ExpressionNode::NamedArg(t, x) => {
             ExpressionNode::NamedArg(map.token(t), arena.alloc(shift_expr(map, arena, x)))
         }
@@ -803,12 +1235,9 @@ fn shift_stmt<'a>(map: &SpanMap, arena: &'a Bump, st: &StatementNode<'a>) -> Sta
             map.token(t),
             shift_expr(map, arena, v),
         ),
-        StatementNode::Declaration(t, ty, e, c) => StatementNode::Declaration(
-            map.token(t),
-            ty.clone(),
-            shift_expr(map, arena, e),
-            *c,
-        ),
+        StatementNode::Declaration(t, ty, e, c) => {
+            StatementNode::Declaration(map.token(t), ty.clone(), shift_expr(map, arena, e), *c)
+        }
         StatementNode::TupleDeclaration {
             pattern,
             ty,
@@ -882,10 +1311,7 @@ fn shift_stmt<'a>(map: &SpanMap, arena: &'a Bump, st: &StatementNode<'a>) -> Sta
                     .iter()
                     .map(|(labels, body)| {
                         (
-                            labels
-                                .iter()
-                                .map(|l| shift_expr(map, arena, l))
-                                .collect(),
+                            labels.iter().map(|l| shift_expr(map, arena, l)).collect(),
                             shift_stmts(map, arena, body),
                         )
                     })
@@ -894,9 +1320,10 @@ fn shift_stmt<'a>(map: &SpanMap, arena: &'a Bump, st: &StatementNode<'a>) -> Sta
             },
             default_b.map(|b| shift_stmts(map, arena, b)),
         ),
-        StatementNode::Lock(target, body) => {
-            StatementNode::Lock(shift_expr(map, arena, target), shift_stmts(map, arena, body))
-        }
+        StatementNode::Lock(target, body) => StatementNode::Lock(
+            shift_expr(map, arena, target),
+            shift_stmts(map, arena, body),
+        ),
         StatementNode::Defer(q, body) => StatementNode::Defer(
             q.as_ref().map(|x| shift_expr(map, arena, x)),
             shift_stmts(map, arena, body),

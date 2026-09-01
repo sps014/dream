@@ -215,8 +215,7 @@ pub fn wasm32_linked_units(need: RuntimeNeed) -> Vec<Wasm32LinkedUnit> {
         if !need.contains(m.need) {
             continue;
         }
-        let mut dirs: Vec<PathBuf> =
-            vec![c.join("include"), native_runtime_include_dir()];
+        let mut dirs: Vec<PathBuf> = vec![c.join("include"), native_runtime_include_dir()];
         for rel in m.include_dirs {
             let d = c.join(rel);
             if !dirs.contains(&d) {

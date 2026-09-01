@@ -175,7 +175,10 @@ mod tests {
     #[test]
     fn generic_params_and_annotations() {
         // `class List<T> : Iface` — parameter list with a colon follower.
-        assert_eq!(regions("public class List<T>: IndexedCollection<T> { }").len(), 2);
+        assert_eq!(
+            regions("public class List<T>: IndexedCollection<T> { }").len(),
+            2
+        );
         // Bounds inside generic parameters; the nested bound region counts separately.
         assert_eq!(
             regions("fun f<T: Comparable<T>>(a: T): int { return 0; }").len(),

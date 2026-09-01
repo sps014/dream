@@ -74,8 +74,8 @@ impl Printer {
             return;
         }
         let non_blank: Vec<&&str> = rest.iter().filter(|l| !l.trim().is_empty()).collect();
-        let star_aligned = !non_blank.is_empty()
-            && non_blank.iter().all(|l| l.trim_start().starts_with('*'));
+        let star_aligned =
+            !non_blank.is_empty() && non_blank.iter().all(|l| l.trim_start().starts_with('*'));
         let base = non_blank
             .iter()
             .map(|l| l.len() - l.trim_start().len())

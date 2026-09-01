@@ -7,7 +7,7 @@
 //! results, tuple elements, and loop variables all resolve exactly as the compiler sees them.
 
 use dream_sema::analyzer::ide::{
-    IdeRef, IdeSnapshot, IdeTarget, MemberKind, MemberInfo, TypeSummary,
+    IdeRef, IdeSnapshot, IdeTarget, MemberInfo, MemberKind, TypeSummary,
 };
 
 use crate::index::{detail_belongs_to, is_ident_byte, type_base, Decl, Index, SymKind};
@@ -122,14 +122,7 @@ pub fn member_completions(
     Some(
         members
             .iter()
-            .map(|m| {
-                (
-                    m.name.clone(),
-                    member_sym_kind(m),
-                    m.detail.clone(),
-                    None,
-                )
-            })
+            .map(|m| (m.name.clone(), member_sym_kind(m), m.detail.clone(), None))
             .collect(),
     )
 }
@@ -207,11 +200,7 @@ fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
 
 /// Go-to-definition for positions the AST index cannot resolve (chained receivers, call
 /// results): maps the analyzer's resolved target back to the indexed declaration.
-pub fn definition_at(
-    snapshot: &IdeSnapshot,
-    idx: &Index,
-    offset: usize,
-) -> Option<(usize, usize)> {
+pub fn definition_at(snapshot: &IdeSnapshot, idx: &Index, offset: usize) -> Option<(usize, usize)> {
     let r = snapshot.ref_covering(offset)?;
     let decl: Option<&Decl> = match &r.target {
         IdeTarget::Local { name } | IdeTarget::Global { name } => idx
@@ -233,16 +222,17 @@ pub fn definition_at(
             // their bare name. Prefer the method interpretation when the key carries a `_`.
             idx.decls
                 .iter()
-                .find(|d| d.kind == SymKind::Method && d.name == *label && method_matches_key(d, key))
+                .find(|d| {
+                    d.kind == SymKind::Method && d.name == *label && method_matches_key(d, key)
+                })
                 .or_else(|| {
-                    idx.decls.iter().find(|d| {
-                        d.kind == SymKind::Function && d.name == *label
-                    })
+                    idx.decls
+                        .iter()
+                        .find(|d| d.kind == SymKind::Function && d.name == *label)
                 })
         }
         IdeTarget::Constructor { type_key } => idx.decls.iter().find(|d| {
-            matches!(d.kind, SymKind::Class | SymKind::Struct)
-                && d.name == type_base(type_key)
+            matches!(d.kind, SymKind::Class | SymKind::Struct) && d.name == type_base(type_key)
         }),
         IdeTarget::EnumMember { enum_name, member } => idx.decls.iter().find(|d| {
             d.kind == SymKind::EnumMember

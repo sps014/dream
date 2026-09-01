@@ -317,7 +317,12 @@ impl<'a> Analyzer<'a> {
             for name in pending_lambdas {
                 processed_generics.insert(name.clone());
                 items_processed += 1;
-                check_instantiation_bounds(&mut max_mangled_len, &mut items_processed, &name, diagnostics)?;
+                check_instantiation_bounds(
+                    &mut max_mangled_len,
+                    &mut items_processed,
+                    &name,
+                    diagnostics,
+                )?;
                 let (template, bindings) = match self.pending_lambdas.get(&name) {
                     Some((t, b)) => (*t, b.clone()),
                     None => continue,
@@ -347,7 +352,12 @@ impl<'a> Analyzer<'a> {
                     &mut self.type_ctx,
                 );
                 items_processed += 1;
-                check_instantiation_bounds(&mut max_mangled_len, &mut items_processed, &key, diagnostics)?;
+                check_instantiation_bounds(
+                    &mut max_mangled_len,
+                    &mut items_processed,
+                    &key,
+                    diagnostics,
+                )?;
                 symbol_table_map.insert(key, table);
                 progressed = true;
             }
@@ -492,7 +502,11 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn validate_vertex_shader(&mut self, function: &FunctionNode<'a>, diagnostics: &mut DiagnosticBag) {
+    fn validate_vertex_shader(
+        &mut self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
         if function.is_async {
             diagnostics.report_error(
                 format!("@vertex shader '{}' cannot be async", function.name.text),
@@ -808,7 +822,6 @@ fn is_compute_elem_type(ty: &Type) -> bool {
         _ => false,
     }
 }
-
 
 /// Healthy programs monomorphize a few thousand methods with short mangled names. A generic
 /// whose field types amplify under substitution (e.g. a `List<fun(T): bool>` field on

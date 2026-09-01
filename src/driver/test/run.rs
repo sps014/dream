@@ -49,7 +49,11 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
                 ui.error(&e);
             }
         }
-        debug!("{} finished in {:.2}s", file.display(), start.elapsed().as_secs_f64());
+        debug!(
+            "{} finished in {:.2}s",
+            file.display(),
+            start.elapsed().as_secs_f64()
+        );
     }
 
     if result.files_failed > 0 {
@@ -145,11 +149,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         compiler = compiler.with_optimize(Some(level));
     }
     let runner_str = runner_path.to_string_lossy().into_owned();
-    debug!(
-        "running {} ({} test(s))",
-        path.display(),
-        tests.len()
-    );
+    debug!("running {} ({} test(s))", path.display(), tests.len());
     let c_path = out_dir.join(format!("{stem}.c"));
     let c_str = c_path.to_string_lossy().into_owned();
     compiler

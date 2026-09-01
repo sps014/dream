@@ -102,7 +102,11 @@ fn clang_name() -> &'static str {
 
 /// Cache root for precompiled wasm32 runtime objects, keyed by opt level + threads
 /// (`~/.dream/cache/wasm32-rt/<subdir>`). `None` when there is no HOME to cache under.
-fn rt_cache_dir(opt: OptLevel, threads: bool, need: dream_mir::runtime::RuntimeNeed) -> Option<PathBuf> {
+fn rt_cache_dir(
+    opt: OptLevel,
+    threads: bool,
+    need: dream_mir::runtime::RuntimeNeed,
+) -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     let sub = format!(
         "{}{}-need{:x}",
@@ -212,19 +216,34 @@ fn cached_runtime_objects(
     let sources = dream_mir::runtime::wasm32_runtime_c_files();
     let linked = dream_mir::runtime::wasm32_linked_units(need);
     let fallback = || {
-        let mut objs = compile_runtime_units(clang, &sources, includes, threads, opt, |i| {
-            format!("{stem}_rt_{i}.o")
-        }, obj_dir)?;
-        objs.extend(compile_linked_units(clang, &linked, includes, threads, opt, |i| {
-            format!("{stem}_lib_{i}.o")
-        }, obj_dir)?);
+        let mut objs = compile_runtime_units(
+            clang,
+            &sources,
+            includes,
+            threads,
+            opt,
+            |i| format!("{stem}_rt_{i}.o"),
+            obj_dir,
+        )?;
+        objs.extend(compile_linked_units(
+            clang,
+            &linked,
+            includes,
+            threads,
+            opt,
+            |i| format!("{stem}_lib_{i}.o"),
+            obj_dir,
+        )?);
         Ok(objs)
     };
     let Some(cache) = rt_cache_dir(opt, threads, need) else {
         return fallback();
     };
     if let Err(e) = std::fs::create_dir_all(&cache) {
-        eprintln!("warning: wasm32 runtime cache unavailable ({}); compiling in place", e);
+        eprintln!(
+            "warning: wasm32 runtime cache unavailable ({}); compiling in place",
+            e
+        );
         return fallback();
     }
     let _ = &linked;
@@ -241,13 +260,13 @@ fn cached_runtime_objects(
     let mut objs: Vec<PathBuf> = (0..sources.len())
         .map(|i| cache.join(format!("{i}.o")))
         .collect();
-    objs.extend(
-        (0..linked.len()).map(|i| cache.join(format!("lib{i}.o"))),
-    );
+    objs.extend((0..linked.len()).map(|i| cache.join(format!("lib{i}.o"))));
     let stamp = cache.join(".stamp");
     let stale = match (
         runtime_input_mtimes(&sources, includes, &linked),
-        std::fs::metadata(&stamp).ok().and_then(|m| m.modified().ok()),
+        std::fs::metadata(&stamp)
+            .ok()
+            .and_then(|m| m.modified().ok()),
     ) {
         (Some(src), Some(st)) => src > st,
         _ => true,
@@ -255,12 +274,24 @@ fn cached_runtime_objects(
     if !stale && objs.iter().all(|o| o.is_file()) {
         return Ok(objs);
     }
-    let mut built = compile_runtime_units(clang, &sources, includes, threads, opt, |i| {
-        format!("{i}.o")
-    }, &cache)?;
-    built.extend(compile_linked_units(clang, &linked, includes, threads, opt, |i| {
-        format!("lib{i}.o")
-    }, &cache)?);
+    let mut built = compile_runtime_units(
+        clang,
+        &sources,
+        includes,
+        threads,
+        opt,
+        |i| format!("{i}.o"),
+        &cache,
+    )?;
+    built.extend(compile_linked_units(
+        clang,
+        &linked,
+        includes,
+        threads,
+        opt,
+        |i| format!("lib{i}.o"),
+        &cache,
+    )?);
     std::fs::write(&stamp, b"ok").map_err(|e| e.to_string())?;
     debug_assert_eq!(built.len(), objs.len());
     Ok(built)
@@ -304,7 +335,10 @@ fn compile_linked_units(
             if opt != OptLevel::O0 {
                 cmd.arg("-flto");
             }
-            cmd.arg(format!("-ffile-prefix-map={}=lib{i}.c", unit.path.display()));
+            cmd.arg(format!(
+                "-ffile-prefix-map={}=lib{i}.c",
+                unit.path.display()
+            ));
             if threads {
                 cmd.args(["-matomics", "-DDREAM_WASM32_THREADS"]);
             }
@@ -360,15 +394,7 @@ pub fn compile_c_to_wasm32(
         .unwrap_or("dream");
     let mut objs: Vec<PathBuf> = Vec::new();
     let guest_o = obj_dir.join(format!("{stem}_guest.o"));
-    compile_unit(
-        &clang,
-        c_path,
-        &guest_o,
-        &includes,
-        threads,
-        opt,
-        "guest.c",
-    )?;
+    compile_unit(&clang, c_path, &guest_o, &includes, threads, opt, "guest.c")?;
     objs.push(guest_o);
     objs.extend(cached_runtime_objects(
         &clang, &includes, threads, need, opt, stem, obj_dir,
@@ -396,8 +422,8 @@ pub fn compile_c_to_wasm32(
         cmd.arg(format!("-zstack-size={stack}"));
     }
     if threads {
-        let max_bytes = u64::from(dream_mir::abi::MAX_MEMORY_PAGES)
-            * u64::from(dream_mir::abi::WASM_PAGE_SIZE);
+        let max_bytes =
+            u64::from(dream_mir::abi::MAX_MEMORY_PAGES) * u64::from(dream_mir::abi::WASM_PAGE_SIZE);
         cmd.arg("--shared-memory");
         cmd.arg(format!("--max-memory={max_bytes}"));
         // Clang's wasm32 default feature set is wider than atomics/bulk-memory. Restricting

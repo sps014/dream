@@ -151,7 +151,10 @@ impl<'a> Analyzer<'a> {
                     let guard_hir = self.hir_take();
                     if !gt.is_bool() && !gt.is_unknown() {
                         diagnostics.report_error(
-                            format!("switch arm guard must be bool, got {}", self.ty_display(&gt)),
+                            format!(
+                                "switch arm guard must be bool, got {}",
+                                self.ty_display(&gt)
+                            ),
                             guard.position(),
                         );
                     }

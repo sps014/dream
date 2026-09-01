@@ -26,9 +26,9 @@ impl CompileError {
     /// Colorless diagnostic text when this error came from the user-facing pipeline.
     pub fn diagnostic_text(&self) -> Option<&str> {
         match self {
-            CompileError::Syntax(s)
-            | CompileError::Semantic(s)
-            | CompileError::Generator(s) => Some(s.as_str()),
+            CompileError::Syntax(s) | CompileError::Semantic(s) | CompileError::Generator(s) => {
+                Some(s.as_str())
+            }
             _ => None,
         }
     }

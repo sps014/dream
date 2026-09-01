@@ -227,10 +227,7 @@ impl<'a> Analyzer<'a> {
         if let Some(kind_text) = method.cast_kind.as_deref() {
             let Some(kind) = CastKind::from_attr_str(kind_text) else {
                 diagnostics.report_error(
-                    format!(
-                        "'{}' must be implicit or explicit",
-                        kind_text
-                    ),
+                    format!("'{}' must be implicit or explicit", kind_text),
                     Some(method.name.position),
                 );
                 return;

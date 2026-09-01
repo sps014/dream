@@ -215,10 +215,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         })
         .collect();
 
-    AnalysisOutcome {
-        diagnostics,
-        sema,
-    }
+    AnalysisOutcome { diagnostics, sema }
 }
 
 /// Diagnostics-only variant of [`analyze_document`] (the snapshot is dropped).

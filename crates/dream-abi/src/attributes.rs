@@ -909,12 +909,7 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
     if extern_binding_conflict(attrs) {
         let pos = attrs
             .iter()
-            .find(|a| {
-                matches!(
-                    a.name.text.as_str(),
-                    "c" | "js" | "runtime" | "intrinsic"
-                )
-            })
+            .find(|a| matches!(a.name.text.as_str(), "c" | "js" | "runtime" | "intrinsic"))
             .map(|a| a.name.position);
         diagnostics.report_error(
             "an extern function cannot combine `@c`, `@js`, `@runtime`, or `@intrinsic`"

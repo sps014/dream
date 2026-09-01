@@ -292,11 +292,7 @@ impl Compiler {
             };
             info!("finished semantic analysis");
             if !diagnostics.diagnostics.is_empty() {
-                render_with(
-                    &diagnostics,
-                    file_contents,
-                    Some(highlight_dream_line),
-                );
+                render_with(&diagnostics, file_contents, Some(highlight_dream_line));
             }
             let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
             if diagnostics.has_errors() {
@@ -426,13 +422,8 @@ impl Compiler {
         }
 
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        let abi_artifacts = emit_wasm_and_abi(
-            out_path,
-            ast.get_root(),
-            &gpu,
-            &live_imports,
-            self.emit_abi,
-        )?;
+        let abi_artifacts =
+            emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);
         }
@@ -477,11 +468,7 @@ fn fail_diagnostics(
     diagnostics: &DiagnosticBag,
     file_contents: &std::collections::HashMap<String, String>,
 ) -> CompileError {
-    render_with(
-        diagnostics,
-        file_contents,
-        Some(highlight_dream_line),
-    );
+    render_with(diagnostics, file_contents, Some(highlight_dream_line));
     ctor(format_diagnostics(
         diagnostics,
         file_contents,

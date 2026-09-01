@@ -248,12 +248,17 @@ fn dap_breakpoint_stack_variables_step_continue() {
         .filter_map(|v| v["name"].as_str().map(String::from))
         .collect();
     assert!(
-        ["a", "b", "sum"].iter().all(|n| names.contains(&n.to_string())),
+        ["a", "b", "sum"]
+            .iter()
+            .all(|n| names.contains(&n.to_string())),
         "expected DWARF locals under their Dream names (a, b, sum), got: {:?}",
         names
     );
 
-    client.request("continue", serde_json::json!({ "threadId": stopped["body"]["threadId"] }));
+    client.request(
+        "continue",
+        serde_json::json!({ "threadId": stopped["body"]["threadId"] }),
+    );
     client.wait_response("continue");
 
     // Program output is surfaced as `output` events; expect the printed total.

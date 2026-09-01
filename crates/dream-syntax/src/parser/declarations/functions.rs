@@ -134,9 +134,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 visibility
             };
-            let mut node = FunctionNode::new(
-                attributes, ctor_name, None, None, params, block, ctor_vis,
-            );
+            let mut node =
+                FunctionNode::new(attributes, ctor_name, None, None, params, block, ctor_vis);
             node.is_override = is_override;
             return Ok(node);
         }

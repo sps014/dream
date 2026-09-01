@@ -212,9 +212,11 @@ impl<'a> Analyzer<'a> {
         // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
         // `let n: int = el.count` work without an explicit conversion).
         if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_) | TyKind::Struct(..)) {
-            return self
-                .box_to_js(value, None, None)
-                .expect("box_to_js handles all Prim and Struct types");
+            if let Some(boxed) = self.box_to_js(value.clone(), None, None) {
+                return boxed;
+            }
+            self.hir_fail();
+            return value;
         }
         if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_) | TyKind::Struct(..)) {
             return self.unbox_from_js(value, target);

@@ -464,6 +464,22 @@ fn transfer_block(
         }
     }
 
+    if let Terminator::Await {
+        future: Operand::Copy(Place::Local(l)),
+        dest,
+        resume,
+    } = &block.terminator
+    {
+        if dest != &Some(*l)
+            && (flow.is_owned)(l.0)
+            && tokens[l.0 as usize]
+            && !live_in_of(flow.func, flow.live_out, resume.0 as usize).contains(&l.0)
+        {
+            tokens[l.0 as usize] = false;
+            unique[l.0 as usize] = false;
+        }
+    }
+
     let mut end = BTreeSet::new();
     if !flow.has_await {
         for (local, slot) in tokens.iter_mut().enumerate() {

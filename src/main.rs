@@ -15,7 +15,9 @@ use tracing_subscriber::FmtSubscriber;
 
 const EXAMPLES: &str = "\
 Examples:
-  dream run src/main.dream              compile natively and execute
+  dreamer run                           project: uses package.entry from dream.toml
+  dream run                             same, if dream.toml is in this directory (or above)
+  dream run src/main.dream              compile natively and execute a file
   dream build --web src/app.dream       wasm32 module + browser JS host in target/web/
   dream --release run src/main.dream    optimized release binary
   dream test tests/                     run @test functions
@@ -23,7 +25,8 @@ Examples:
   dream fmt src/                        format .dream files in place (--check for CI)
 
 Artifacts land under the enclosing project's target/: native C in target/debug (or
-target/release with --release), wasm32 modules in target/web/.";
+target/release with --release), wasm32 modules in target/web/. Prefer `dreamer run`
+for packages (deps, web/node hosts). Use `dream run <file>` for a one-off source file.";
 
 #[derive(Copy, Clone, ValueEnum)]
 enum TargetArg {
@@ -278,9 +281,14 @@ fn main() -> ExitCode {
         };
     }
 
-    let Some(file_name) = file_name else {
+    let Some(file_name) = file_name.or_else(|| {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        dream::driver::generate::default_compile_entry(&cwd).and_then(|p| {
+            p.to_str().map(|s| s.to_string())
+        })
+    }) else {
         ui.error("no source file given");
-        ui.help("pass a .dream file, e.g. `dream run src/main.dream`");
+        ui.help("pass a .dream file, or run from a project with package.entry in dream.toml (`dreamer run`)");
         return ExitCode::FAILURE;
     };
 

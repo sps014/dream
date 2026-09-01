@@ -20,7 +20,8 @@ public class WebWorkerPool {
         this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker.funcidx(wrapped);
         let env = WebWorker.env(wrapped);
-        return Bytes.fromWire<TOut>(await WebWorkerPool.dispatch_host(id, funcidx, env, ""));
+        let wire = await WebWorkerPool.dispatch_host(id, funcidx, env, "");
+        return Bytes.fromWire<TOut>(wire);
     }
 
     public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>): TOut {
@@ -31,7 +32,8 @@ public class WebWorkerPool {
         this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker.funcidx_async(wrapped);
         let env = WebWorker.env_async(wrapped);
-        return Bytes.fromWire<TOut>(await WebWorkerPool.dispatch_host(id, funcidx, env, ""));
+        let wire = await WebWorkerPool.dispatch_host(id, funcidx, env, "");
+        return Bytes.fromWire<TOut>(wire);
     }
 
     public fun shutdown(): void {

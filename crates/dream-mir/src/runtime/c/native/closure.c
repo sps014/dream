@@ -48,6 +48,6 @@ void dream_release_funcbox(dream_ptr box) {
     }
     env = funcbox_get_env(box);
     funcbox_set_env(box, zero);
-    dream_release(env);
+    dream_release_object(env);
     dream_free(box);
 }

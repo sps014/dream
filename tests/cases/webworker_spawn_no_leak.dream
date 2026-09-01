@@ -1,0 +1,19 @@
+// Finished spawn must join and drop env/funcbox; live_objects must not grow with N.
+
+import system;
+
+fun work(): int {
+    return 1;
+}
+
+async fun main(): void {
+    let _ = await WebWorker.spawn(() => work());
+    let _ = await WebWorker.spawn(() => work());
+    let base = Debug.live_objects();
+    let i = 0;
+    while (i < 20) {
+        let _ = await WebWorker.spawn(() => work());
+        i = i + 1;
+    }
+    System.println((Debug.live_objects() - base).to_string());
+}

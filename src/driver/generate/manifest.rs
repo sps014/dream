@@ -42,6 +42,67 @@ pub fn load_manifest_generators(entry_file: &str) -> Vec<String> {
     parse_generators_from_manifest(&candidate, &dir)
 }
 
+/// Walks from `start` (a file or directory) upward looking for `dream.toml`.
+pub fn find_project_root_from(start: &Path) -> Option<PathBuf> {
+    let mut dir = if start.is_file() {
+        start.parent()?.to_path_buf()
+    } else {
+        start.to_path_buf()
+    };
+    loop {
+        if dir.join("dream.toml").is_file() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+/// `[package].entry` from `dream.toml`, resolved against the manifest directory.
+pub fn package_entry_path(project_root: &Path) -> Option<PathBuf> {
+    let text = std::fs::read_to_string(project_root.join("dream.toml")).ok()?;
+    let rel = parse_package_entry(&text)?;
+    if rel.trim().is_empty() {
+        return None;
+    }
+    Some(project_root.join(rel))
+}
+
+/// Default compile root when the CLI is given no file: nearest `dream.toml` + `[package].entry`.
+pub fn default_compile_entry(cwd: &Path) -> Option<PathBuf> {
+    let root = find_project_root_from(cwd)?;
+    package_entry_path(&root)
+}
+
+fn parse_package_entry(text: &str) -> Option<String> {
+    let mut in_package = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("entry") else {
+            continue;
+        };
+        let rest = rest.trim();
+        if !rest.starts_with('=') {
+            continue;
+        }
+        let path = rest[1..].trim().trim_matches('"').trim_matches('\'');
+        if path.is_empty() {
+            return None;
+        }
+        return Some(path.to_string());
+    }
+    None
+}
+
 /// Minimal extraction of `[[generators]]` `path = "..."` entries (no full TOML dependency).
 fn parse_generators_from_manifest(manifest: &Path, base: &Path) -> Vec<String> {
     let Ok(text) = std::fs::read_to_string(manifest) else {
@@ -75,4 +136,47 @@ fn parse_generators_from_manifest(manifest: &Path, base: &Path) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_package_entry_reads_quoted_path() {
+        let toml = "[package]\nname = \"x\"\nentry = \"src/main.dream\"\n";
+        assert_eq!(
+            parse_package_entry(toml).as_deref(),
+            Some("src/main.dream")
+        );
+    }
+
+    #[test]
+    fn parse_package_entry_ignores_other_tables() {
+        let toml = "[dependencies]\nentry = \"nope.dream\"\n[package]\nentry = \"src/app.dream\"\n";
+        assert_eq!(parse_package_entry(toml).as_deref(), Some("src/app.dream"));
+    }
+
+    #[test]
+    fn default_compile_entry_joins_manifest_dir() {
+        let root = std::env::temp_dir().join(format!(
+            "dream-entry-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(
+            root.join("dream.toml"),
+            "[package]\nname = \"t\"\nentry = \"src/main.dream\"\n",
+        )
+        .unwrap();
+        std::fs::write(root.join("src/main.dream"), "fun main() {}\n").unwrap();
+        let nested = root.join("src");
+        let entry = default_compile_entry(&nested).unwrap();
+        assert_eq!(entry, root.join("src/main.dream"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

@@ -85,6 +85,25 @@ fn copy_if_present(src_dir: &Path, dest_dir: &Path, name: &str) -> Result<bool> 
     Ok(true)
 }
 
+/// Contents of `run.mjs` for a given compile-root stem (`main` → `target/node/main.wasm`).
+pub fn node_runner_source(stem: &str) -> String {
+    format!(
+        "import {{ run }} from \"./target/node/{stem}.node.runtime.js\";\nawait run(\"./target/node/{stem}.wasm\");\n"
+    )
+}
+
+/// Write `run.mjs` when missing so `dreamer run --target node` works after `"node"` is added to
+/// `package.targets` without re-running `dreamer init --runtime node`.
+pub fn ensure_node_runner(project_root: &Path, stem: &str) -> Result<()> {
+    let path = project_root.join("run.mjs");
+    if path.is_file() {
+        return Ok(());
+    }
+    fs::write(&path, node_runner_source(stem))
+        .with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
+}
+
 /// File stem of the package compile root (`src/main.dream` → `main`).
 pub fn entry_stem(compile_root: &Path) -> Result<String> {
     compile_root
@@ -131,5 +150,18 @@ mod tests {
         refresh_host_aliases(root, "app", true, false).unwrap();
         assert!(root.join("target/web/app.wasm").is_file());
         assert!(!root.join("target/node").exists());
+    }
+
+    #[test]
+    fn ensure_node_runner_writes_stem_paths() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        ensure_node_runner(root, "app").unwrap();
+        let body = fs::read_to_string(root.join("run.mjs")).unwrap();
+        assert!(body.contains("target/node/app.node.runtime.js"));
+        assert!(body.contains("target/node/app.wasm"));
+        ensure_node_runner(root, "other").unwrap();
+        let again = fs::read_to_string(root.join("run.mjs")).unwrap();
+        assert_eq!(body, again);
     }
 }

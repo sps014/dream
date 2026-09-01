@@ -16,9 +16,9 @@ pub enum CompileError {
     /// An I/O failure during the pipeline (reading sources, writing artifacts).
     Io(std::io::Error),
     /// Code generation hit an internal invariant violation (see `crate::internal_error!`) - a
-    /// compiler bug on an otherwise-valid program, not a problem with the user's source. Caught at
-    /// the top of [`crate::driver::compiler::Compiler::compile`] so it surfaces as a clean message
-    /// instead of an unwinding panic with a raw Rust backtrace.
+    /// compiler bug on an otherwise-valid program, not a problem with the user's source. Caught
+    /// around analysis and code generation in [`crate::driver::compiler::Compiler::compile`] so it
+    /// surfaces as a clean message instead of an unwinding panic with a raw Rust backtrace.
     Internal(String),
 }
 

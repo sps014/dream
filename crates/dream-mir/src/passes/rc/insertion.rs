@@ -375,10 +375,10 @@ impl RcInsertion {
 
         if !analysis.has_await {
             insert_early_value_drops(func, interner, &mut changed);
-            // Resume-block future release is last-use destroy of the awaited handle. Async frames
-            // keep that handle until `AsyncComplete` (see `async_rc_alias` live_delta).
-            insert_await_resume_releases(func, interner, &mut changed);
         }
+        // Last-use of an awaited handle: resume copies the result, then this drop frees the
+        // future. Token flow also drops the handle at Await so AsyncComplete does not double-free.
+        insert_await_resume_releases(func, interner, &mut changed);
         mark_returned_value_locals_moved(func, interner, &mut changed);
 
         let ret_is_ref = interner.is_rc_tracked(func.ret);
@@ -485,10 +485,18 @@ fn insert_await_resume_releases(
     let live_out = liveness::live_out(func);
     let mut resume_releases: Vec<(usize, u32)> = Vec::new();
     for block in &func.blocks {
-        if let Terminator::Await { future, resume, .. } = &block.terminator {
+        if let Terminator::Await {
+            future,
+            dest,
+            resume,
+        } = &block.terminator
+        {
             let Operand::Copy(Place::Local(l)) = future else {
                 continue;
             };
+            if dest == &Some(*l) {
+                continue;
+            }
             if !is_owned(l.0) {
                 continue;
             }

@@ -201,7 +201,15 @@ impl<'a> Emitter<'a> {
                     TyKind::Prim(PrimTy::String) => from_bytes,
                     TyKind::Prim(_) | TyKind::Enum(_) => {
                         let cast = load_cast(self.cx, *ty);
-                        Expr::load(cast, Expr::dream_p(from_bytes))
+                        self.b.expr_block(move |b| {
+                            let box_ = b.temp(CTy::Ptr, Some(from_bytes));
+                            let val = b.temp(
+                                cast.clone(),
+                                Some(Expr::load(cast, Expr::dream_p(box_.clone()))),
+                            );
+                            b.call("dream_release", vec![box_]);
+                            val
+                        })
                     }
                     _ => from_bytes,
                 }

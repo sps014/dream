@@ -249,7 +249,8 @@ are reported (targets are never silently skipped). Libraries cannot be packed.
 Per host:
 
 - **native** — `dream run [--release] <entry> [args…]`.
-- **node** — compile with `--runtime --node` (refreshing `target/node/`), then `node run.mjs`.
+- **node** — write `run.mjs` from `package.entry` if it is missing, compile with `--runtime --node`
+  (refreshing `target/node/`), then `node run.mjs`.
 - **web** — compile with `--runtime --web` (wasm in `target/web/`), then serve the project root on
   `http://127.0.0.1:8787/index.html` by default (colored log; Ctrl-C to stop). A later
   `dreamer run --target web` restarts that server on the same port. Override with `--port`.

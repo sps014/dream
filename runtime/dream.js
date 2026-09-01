@@ -4812,13 +4812,16 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
 
   const publish = (ptr) => {
     const n = Number(ptr ?? 0);
-    if (!n || typeof getInstance !== "function") return;
-    try {
-      const pub = getInstance().exports && getInstance().exports.dream_publish;
-      if (typeof pub === "function") pub(n);
-    } catch (_) {
-      /* instance not ready */
+    if (!n) return;
+    if (typeof getInstance !== "function") {
+      throw new Error("dream_publish: Wasm instance is not ready");
     }
+    const inst = getInstance();
+    const pub = inst && inst.exports && inst.exports.dream_publish;
+    if (typeof pub !== "function") {
+      throw new Error("dream_publish export is missing");
+    }
+    pub(n);
   };
 
   const spawnWorker = (fnIndex, env) => {

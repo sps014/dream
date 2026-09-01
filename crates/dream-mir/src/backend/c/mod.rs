@@ -174,6 +174,34 @@ mod tests {
     }
 
     #[test]
+    fn from_bytes_prim_releases_temp_box() {
+        let mut i = TypeInterner::new();
+        let bytes_ty = i.array(i.byte());
+        let mut b = FunctionBuilder::new("parse", i.int());
+        let bytes = b.new_param(bytes_ty, Some("bytes".into()));
+        let n = b.new_local(i.int(), Some("n".into()));
+        b.assign(
+            Place::Local(n),
+            Rvalue::FromBytes {
+                bytes: Operand::Copy(Place::Local(bytes)),
+                ty: i.int(),
+            },
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(n)))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_from_bytes"), "{}", c);
+        assert!(
+            c.contains("dream_release"),
+            "prim from_bytes must free the scratch box:\n{}",
+            c
+        );
+    }
+
+    #[test]
     fn concat_uses_memcpy_helper() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("cat", i.string());
@@ -464,6 +492,7 @@ mod tests {
         let format = include_str!("../../runtime/c/native/format.c");
         assert!(panic.contains("dream_panic"));
         assert!(closure.contains("dream_funcbox_new"));
+        assert!(closure.contains("dream_release_object"));
         assert!(heap.contains("dream_malloc"));
         assert!(heap.contains("dream_malloc_shared"));
         assert!(strings.contains("dream_string_alloc"));

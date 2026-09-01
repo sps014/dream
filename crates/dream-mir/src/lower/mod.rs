@@ -19,6 +19,7 @@ use super::build::FunctionBuilder;
 use super::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::{Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir};
 use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
+// Lookup only (HIR local → MIR local). Never iterated into emission order.
 use std::collections::HashMap;
 
 mod control_flow;

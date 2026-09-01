@@ -6,7 +6,9 @@ Dream's [`async`/`await`](async.md) is a *single-threaded* scheduler: tasks inte
 
 `await WebWorker.spawn(() => …)` starts a body on its own OS thread (native) or Web Worker (browser) and waits for the result — the same shape as C# `Task.Run` / Swift `Task { }`. There is no spawn message and no `join()`. Each worker has its own **private heap slab** (ordinary `new`, strings, lists: non-atomic ARC, no alloc lock) plus **private globals**. `@shared class` instances, `Lock` / `Semaphore`, and `CancellationToken` live on a **shared subheap** in the same address space (native process / wasm `SharedArrayBuffer`) so pointers and `lock` still work across workers.
 
-Captures and the body's return type must be **`shared`** (Dream's Sendable analogue): a blittable value, `string`, a value struct of `shared` fields, or an `@shared class`. Ordinary classes, arrays, and `List` are a compile error.
+Captures and the body's return type must be **`shared`** (Dream's Sendable analogue): a blittable value, `string`, a value struct of `shared` fields, or an `@shared class`. Ordinary classes, arrays, and `List` may **move** into the worker (exclusive ownership; the sender cannot use the binding afterwards). Capturing them by shared reference is a compile error.
+
+Spawn **publishes** the captured environment: `dream_publish` sets `TAG_SHARED` on the env object and walks nested heap refs (closure env fields, arrays of refs, string slices) so cross-thread ARC is atomic. Objects that stay worker-local keep non-atomic RC on the private slab.
 
 !!! note "Browser status"
     The browser runtime (`runtime/dream.js`) imports the same shared `WebAssembly.Memory` (`SharedArrayBuffer`) into every spawned `Worker`, matching native — but the host page must be served with the [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated) headers (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, or `credentialless`) or `SharedArrayBuffer` allocation fails silently in some browsers. `@shared` capture across workers needs those headers.
@@ -34,7 +36,7 @@ Captures and the body's return type must be **`shared`** (Dream's Sendable analo
 ```
 
 - **The worker body is a function value** — a top-level function or a lambda. Its function-table index is portable across every instance of the module.
-- **Captures must be `shared`.** Overlap work by not awaiting yet: `let a = WebWorker.spawn(...); let b = WebWorker.spawn(...); await a; await b;`.
+- **Captures must be `shared` or moved.** Overlap work by not awaiting yet: `let a = WebWorker.spawn(...); let b = WebWorker.spawn(...); await a; await b;`.
 
 ## API
 
@@ -178,7 +180,7 @@ src.cancel();
 let _ = await w;
 ```
 
-**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the worker immediately. The browser terminates the worker; native `dream run` does the same. Hard abort does **not** run Dream `finally` — prefer the token when `@shared` state must stay consistent.
+**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the worker immediately. The browser terminates the worker; native `dream run` detaches the OS thread if the body is still running. Hard abort does **not** run Dream `finally` and may abandon that worker's private slab — prefer the token when `@shared` state must stay consistent. A worker that has already finished its body is joined and its env is released (`Debug.live_objects` stays flat across repeated `spawn`).
 
 ## Async worker bodies
 
@@ -221,7 +223,8 @@ Capture rules match `spawn`. Async bodies use `dispatch_async`.
 ## Notes and limits
 
 - Body is `fun(): TOut` (`spawn`) or `fun(): Future<TOut>` (`spawn_async`).
-- `TOut` and captures must be `shared`. Arrays / `List` / ordinary classes are not.
+- `TOut` must be `shared`. Captures must be `shared` **or moved** (ordinary arrays / `List` / classes transfer ownership; see [Sharing state safely](#sharing-state-safely)).
+- A moved or captured heap value is published (`TAG_SHARED`) so retain/release is atomic while both sides can observe it. Worker-local `new` / strings stay on the private slab with non-atomic RC.
 - `T : shared` is the generic kind constraint (same family as `T : unmanaged`).
 
 ## See also

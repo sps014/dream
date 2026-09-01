@@ -85,7 +85,11 @@ pub fn run(
         write_index_html(dir)?;
     }
     if targets.contains(&RunTarget::Node) {
-        write_run_mjs(dir)?;
+        let stem = std::path::Path::new(&source_rel)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("main");
+        crate::artifact_alias::ensure_node_runner(dir, stem)?;
     }
 
     println!("Created Dream project '{}' at {}", name, dir.display());
@@ -182,14 +186,3 @@ fn write_index_html(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_run_mjs(dir: &Path) -> Result<()> {
-    let path = dir.join("run.mjs");
-    if path.exists() {
-        return Ok(());
-    }
-    let body = r#"import { run } from "./target/node/main.node.runtime.js";
-await run("./target/node/main.wasm");
-"#;
-    std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
-}

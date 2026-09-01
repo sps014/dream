@@ -12,6 +12,7 @@ mod syntax;
 mod syntax_gen;
 
 pub use context::GeneratorContext;
+pub use manifest::{default_compile_entry, find_project_root, find_project_root_from};
 pub use registration::{discover_generators, RegisteredGenerator};
 pub use semantic::{
     SemanticModel, Symbol, SymbolKind, TypeKind, TypeSymbol, Visibility as SymVisibility,

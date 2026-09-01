@@ -71,6 +71,9 @@ const SMOKE_CASES: &[&str] = &[
     "class_export_option",
     "class_export_enum",
     "panic_div_zero",
+    "webworker_basic",
+    "webworker_local_alloc",
+    "webworker_spawn_no_leak",
 ];
 
 fn assert_needles(haystack: &str, expected: &str, dream_file: &Path, kind: &str) {

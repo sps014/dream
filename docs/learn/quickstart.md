@@ -43,6 +43,8 @@ cd hello
 dreamer run
 ```
 
+`dream run` with no file argument uses `[package].entry` from the nearest `dream.toml`. Prefer `dreamer run` for packages (dependencies and web/node hosts).
+
 `dreamer init` creates `dream.toml`, `src/main.dream`, and a `.gitignore`. Edit `src/main.dream`:
 
 ```dream

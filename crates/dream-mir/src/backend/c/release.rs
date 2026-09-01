@@ -436,6 +436,7 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         );
     }
     m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
+    m.proto(CTy::Void, "dream_release_object", p.clone());
     if mir.uses_defer {
         m.static_proto(CTy::Void, "release_string", p.clone());
         m.static_proto(CTy::Void, "destroy_string", p.clone());
@@ -943,17 +944,24 @@ fn emit_destroy_helpers(
         emit_destroy_string(m);
     }
     emit_destroy_object(m, cx);
+    emit_release_object(m, cx);
 }
 
-fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
-    let mut b = FuncBuilder::new(CTy::Void, c_ident("destroy_object"));
-    b.static_ = true;
+fn emit_object_tag_dispatch(
+    m: &mut ModuleBuilder,
+    cx: &Cx<'_>,
+    name: &str,
+    static_: bool,
+    destroy: bool,
+) {
+    let mut b = FuncBuilder::new(CTy::Void, name);
+    b.static_ = static_;
     b.param(CTy::Ptr, "p");
     b.stmt(Stmt::if_(
         Expr::unary(UnOp::Not, Expr::id("p")),
         Stmt::Return(None),
     ));
-    maybe_defer(&mut b, "destroy_object", cx.mir.uses_defer);
+    maybe_defer(&mut b, name, cx.mir.uses_defer);
     b.stmt(Stmt::decl(
         CTy::I32,
         "tag",
@@ -962,10 +970,15 @@ fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let mut arms = Vec::new();
     for (ty, _layout) in &cx.native.structs {
         if let Some(&tag) = cx.tags.get(ty) {
+            let sym = if destroy {
+                destroy_sym(cx, *ty)
+            } else {
+                release_sym(cx, *ty)
+            };
             arms.push(SwitchArm {
                 keys: vec![CaseKey::Int(tag as i64)],
                 body: vec![
-                    Stmt::call(destroy_sym(cx, *ty), vec![Expr::id("p")]),
+                    Stmt::call(sym, vec![Expr::id("p")]),
                     Stmt::Return(None),
                 ],
             });
@@ -973,10 +986,15 @@ fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     }
     for (ty, _layout) in &cx.native.unions {
         if let Some(&tag) = cx.tags.get(ty) {
+            let sym = if destroy {
+                destroy_sym(cx, *ty)
+            } else {
+                release_sym(cx, *ty)
+            };
             arms.push(SwitchArm {
                 keys: vec![CaseKey::Int(tag as i64)],
                 body: vec![
-                    Stmt::call(destroy_sym(cx, *ty), vec![Expr::id("p")]),
+                    Stmt::call(sym, vec![Expr::id("p")]),
                     Stmt::Return(None),
                 ],
             });
@@ -998,4 +1016,12 @@ fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         arms,
     });
     m.push_func(b);
+}
+
+fn emit_destroy_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    emit_object_tag_dispatch(m, cx, "destroy_object", true, true);
+}
+
+fn emit_release_object(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    emit_object_tag_dispatch(m, cx, "dream_release_object", false, false);
 }

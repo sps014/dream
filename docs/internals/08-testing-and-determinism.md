@@ -43,6 +43,7 @@ Compiles the same input twice and asserts byte-identical output. This guards the
 This is non-negotiable: it makes builds reproducible, caching sound, and diffs meaningful. The only realistic way to break it is **iteration order of a hash map**. Rules:
 
 - **Never iterate `std::collections::HashMap`** in any code that influences emission (or its ordering).
+- Lookup-only `HashMap`s (HIR local id → MIR `Local` in lowering, intra-block copy-prop maps) are fine: they are never walked to decide instruction or symbol order.
 - Use `indexmap::IndexMap` when you need insertion-order iteration with hash lookup, or `BTreeMap` when you need sorted iteration. The emission-driving maps (struct/union/enum/symbol tables, codegen string/function/global maps) already standardize on `IndexMap`.
 - The `TypeInterner` assigns ids in first-seen order and stores them in a `Vec`, so iterating types by `TypeId` is deterministic.
 - When you add a lookup structure to a pass or the emitter, pick `IndexMap`/`BTreeMap` deliberately, and extend a determinism assertion if it feeds output.

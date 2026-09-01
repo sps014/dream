@@ -75,6 +75,11 @@ pub fn compile_entry(
 
     cmd.arg(&compile_root);
 
+    if want_node {
+        let stem = artifact_alias::entry_stem(&compile_root)?;
+        artifact_alias::ensure_node_runner(&workspace.root, &stem)?;
+    }
+
     let status = cmd
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;

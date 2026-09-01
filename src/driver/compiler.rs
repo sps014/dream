@@ -276,69 +276,36 @@ impl Compiler {
             .with_crate_type(self.crate_type, Some(main_file_path.clone()))
             .with_compile_targets(self.compile_targets);
         analyzer.set_debug_info(self.debug_info);
-        // `analyze` reports each error into the bag and returns a typed failure once any error was
-        // recorded, short-circuiting before code generation runs on a poisoned program.
-        let symbol_info = match analyzer.analyze(&mut diagnostics) {
-            Ok(info) => info,
-            Err(_) => {
-                return Err(fail_diagnostics(
-                    CompileError::Semantic,
-                    &diagnostics,
-                    &acc.file_contents,
-                ));
-            }
-        };
-
-        info!("finished semantic analysis");
-
-        // Warnings (e.g. the unowned-field lint, unused locals) render even when the
-        // compile succeeds; errors short-circuit earlier via has_errors().
-        if !diagnostics.diagnostics.is_empty() {
-            render_with(
-                &diagnostics,
-                &acc.file_contents,
-                Some(highlight_dream_line),
-            );
-        }
-
-        // Validate GPU shaders (unsupported stmts / stage rules) before MIR so failures don't leave a
-        // half-written `.wat` behind a generator error.
-        let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
-        if diagnostics.has_errors() {
-            return Err(fail_diagnostics(
-                CompileError::Generator,
-                &diagnostics,
-                &acc.file_contents,
-            ));
-        }
-
-        info!("starting code generation");
-
-        // Lower the analyzer-emitted HIR to MIR, optimize, and emit a self-contained module.
-        // Destructuring moves the owned `hir` out and drops `symbol_info`'s borrowing references,
-        // releasing the `&mut analyzer` borrow so the shared interner can be read (the HIR references
-        // its `TypeId`s, so both must come from this same analyzer instance).
-        let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
-        let interner = analyzer.interner();
+        let file_contents = &acc.file_contents;
+        // Analyzer panics (`internal_error!`) share this ICE net with codegen: `SemanticInfo`
+        // borrows the analyzer, so analysis and emission run in one `catch_unwind`.
+        let _quiet = crate::driver::quiet_panic::QuietPanics::new();
         let target = &self.target;
         let debug_info = self.debug_info;
         let debug = self.debug;
+        let pipeline_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let symbol_info = match analyzer.analyze(&mut diagnostics) {
+                Ok(info) => info,
+                Err(_) => {
+                    return Err("semantic");
+                }
+            };
+            info!("finished semantic analysis");
+            if !diagnostics.diagnostics.is_empty() {
+                render_with(
+                    &diagnostics,
+                    file_contents,
+                    Some(highlight_dream_line),
+                );
+            }
+            let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
+            if diagnostics.has_errors() {
+                return Err("generator");
+            }
 
-        // Codegen (MIR lowering/optimization/emission) treats certain lookups - a type's layout, an
-        // interned string, a function-table slot - as compiler invariants rather than user errors: a
-        // miss means the analyzer and codegen disagree about a well-typed program, i.e. a compiler
-        // bug (see `crate::internal_error!`). Catching the resulting panic here turns that into a
-        // clean, typed `CompileError::Internal` instead of an unwinding panic with a raw backtrace
-        // reaching the user.
-        // Suppress the default panic hook's raw "thread 'main' panicked at ..." dump for the
-        // duration of this call: the panic is already a well-formed internal-error message (see
-        // `render_internal_error` below), and we don't want a Rust backtrace header confusing users
-        // who never expect to see a stack trace from a compiler CLI.
-        // Thread-local suppression instead of a global hook swap: concurrent `compile()` calls
-        // (e.g. the e2e corpus on a rayon pool) no longer serialize behind a mutex held across
-        // codegen, and genuine panics on *other* threads keep printing while this thread is quiet.
-        let _quiet = crate::driver::quiet_panic::QuietPanics::new();
-        let codegen_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            info!("starting code generation");
+            let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
+            let interner = analyzer.interner();
             let mut mir = dream_mir::lower::lower_program(&hir, interner);
             // Whole-module optimization: tree-shaking + reference-counting insertion + function
             // inlining (see `mir::passes::optimize_module`). RC is inserted there, before inlining,
@@ -390,14 +357,31 @@ impl Compiler {
                 )
                 .into_bytes(),
             };
-            (bytes, live_imports, threads, need)
+            Ok((bytes, live_imports, threads, need, gpu))
         }));
 
-        let (bytes, live_imports, threads, need) = codegen_result.map_err(|panic_payload| {
-            let message = panic_message(&panic_payload);
-            render_internal_error(&message);
-            CompileError::Internal(message)
-        })?;
+        let (bytes, live_imports, threads, need, gpu) = match pipeline_result {
+            Ok(Ok(tuple)) => tuple,
+            Ok(Err("semantic")) => {
+                return Err(fail_diagnostics(
+                    CompileError::Semantic,
+                    &diagnostics,
+                    &acc.file_contents,
+                ));
+            }
+            Ok(Err(_)) => {
+                return Err(fail_diagnostics(
+                    CompileError::Generator,
+                    &diagnostics,
+                    &acc.file_contents,
+                ));
+            }
+            Err(panic_payload) => {
+                let message = panic_message(&panic_payload);
+                render_internal_error(&message);
+                return Err(CompileError::Internal(message));
+            }
+        };
 
         info!("finished code generation");
         if matches!(self.target, Target::NativeC) {

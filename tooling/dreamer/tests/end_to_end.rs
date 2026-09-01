@@ -268,6 +268,23 @@ fn init_runtime_web_only_skips_run_mjs() {
 }
 
 #[test]
+fn node_runner_is_written_when_missing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project_dir = tmp.path().join("browser-then-node");
+    commands::init::run(
+        &project_dir,
+        Some("browser_then_node".to_string()),
+        Some("web".to_string()),
+        false,
+    )
+    .unwrap();
+    assert!(!project_dir.join("run.mjs").exists());
+    dreamer::artifact_alias::ensure_node_runner(&project_dir, "main").unwrap();
+    let mjs = std::fs::read_to_string(project_dir.join("run.mjs")).unwrap();
+    assert!(mjs.contains("target/node/main.node.runtime.js"));
+}
+
+#[test]
 fn init_lib_has_no_entry_and_run_rejects() {
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join("http-utils");

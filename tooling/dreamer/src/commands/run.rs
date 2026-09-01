@@ -78,14 +78,9 @@ fn run_native(workspace: &Workspace, flags: &CompileFlags, extra_args: &[String]
 }
 
 fn run_node(workspace: &Workspace, flags: &CompileFlags, extra_args: &[String]) -> Result<()> {
+    let stem = crate::artifact_alias::entry_stem(&workspace.compile_root_path()?)?;
+    crate::artifact_alias::ensure_node_runner(&workspace.root, &stem)?;
     let run_mjs = workspace.root.join("run.mjs");
-    if !run_mjs.is_file() {
-        bail!(
-            "missing {}; re-run `dreamer init --runtime node` or add a Node runner that imports \
-             the entry's *.node.runtime.js from target/node/",
-            run_mjs.display()
-        );
-    }
 
     super::build::compile_entry(workspace, flags, Some(RunTarget::Node))?;
 

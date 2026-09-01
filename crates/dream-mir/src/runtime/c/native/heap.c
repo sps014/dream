@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -123,9 +124,26 @@ static void account_alloc(void) {
     __atomic_fetch_add(&total_allocations, 1, __ATOMIC_RELAXED);
 }
 
+static void live_objects_sub(int32_t n) {
+    int32_t v;
+    int32_t next;
+    if (n <= 0) {
+        return;
+    }
+    for (;;) {
+        v = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+        next = v > n ? v - n : 0;
+        if (__atomic_compare_exchange_n(
+                &live_objects, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED
+            )) {
+            return;
+        }
+    }
+}
+
 static void account_free(void) {
     __atomic_fetch_add(&last_freed, 1, __ATOMIC_RELAXED);
-    __atomic_fetch_sub(&live_objects, 1, __ATOMIC_RELAXED);
+    live_objects_sub(1);
 }
 
 static void activate(char *block, int32_t tag) {
@@ -236,7 +254,7 @@ void dream_region_leave(void) {
         n = 0;
     }
     __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
-    __atomic_fetch_sub(&live_objects, n, __ATOMIC_RELAXED);
+    live_objects_sub(n);
     region_nalloc = region_nalloc_mark[region_depth];
     region_off = region_off_mark[region_depth];
 }
@@ -316,16 +334,76 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     return (dream_ptr)(block + 16);
 }
 
-void dream_publish(dream_ptr ptr) {
+#define PUBLISH_SEEN_MAX 256
+
+static int native_is_live_ptr(dream_ptr ptr) {
+    char *block;
+    if (ptr == 0 || (ptr & (sizeof(dream_ptr) - 1)) != 0) {
+        return 0;
+    }
+    block = (char *)dream_p(ptr) - (int)NATIVE_HEAP_HEADER_SIZE;
+    return ((uint32_t *)block)[1] == MAGIC_LIVE;
+}
+
+static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen);
+
+static void publish_walk_payload(dream_ptr ptr, dream_ptr *seen, int *nseen) {
+    char *block;
+    char *data;
+    int32_t sz;
+    int32_t payload;
+    int32_t off;
+    block = (char *)dream_p(ptr) - (int)NATIVE_HEAP_HEADER_SIZE;
+    sz = ((int32_t *)block)[0];
+    payload = sz - (int32_t)NATIVE_HEAP_HEADER_SIZE;
+    data = (char *)dream_p(ptr);
+    for (off = 0; off + (int32_t)sizeof(dream_ptr) <= payload; off += (int32_t)sizeof(dream_ptr)) {
+        dream_ptr child = 0;
+        memcpy(&child, data + off, sizeof(child));
+        if (native_is_live_ptr(child)) {
+            publish_rec(child, seen, nseen);
+        }
+    }
+}
+
+static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
     int32_t *tag;
-    if (ptr == 0) {
+    int32_t kind;
+    int i;
+    if (!native_is_live_ptr(ptr)) {
         return;
     }
+    for (i = 0; i < *nseen; i++) {
+        if (seen[i] == ptr) {
+            return;
+        }
+    }
+    if (*nseen < PUBLISH_SEEN_MAX) {
+        seen[(*nseen)++] = ptr;
+    }
     tag = (int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA);
-    if ((*tag & TAG_VALUE_MASK) == 0) {
+    kind = *tag & TAG_VALUE_MASK;
+    if (kind == 0) {
         return;
     }
     *tag |= TAG_SHARED;
+    if (kind == TAG_STRING) {
+        if (dream_i32(ptr)[1] == DREAM_STR_SLICE) {
+            dream_ptr parent = 0;
+            memcpy(&parent, (char *)dream_p(ptr) + 8, sizeof(parent));
+            publish_rec(parent, seen, nseen);
+        }
+        return;
+    }
+    if (kind == TAG_ARRAY || kind >= TAG_STRUCT_BASE) {
+        publish_walk_payload(ptr, seen, nseen);
+    }
+}
+
+void dream_publish(dream_ptr ptr) {
+    dream_ptr seen[PUBLISH_SEEN_MAX];
+    int nseen = 0;
+    publish_rec(ptr, seen, &nseen);
 }
 
 int32_t debug_get_live_objects(void) {

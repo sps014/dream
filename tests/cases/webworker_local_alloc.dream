@@ -13,8 +13,15 @@ fun churn(): string {
 }
 
 async fun main(): void {
+    let base = Debug.live_objects();
     let a = WebWorker.spawn(() => churn());
     let b = WebWorker.spawn(() => churn());
     System.println(await a);
     System.println(await b);
+    let delta = Debug.live_objects() - base;
+    if (delta < 0) {
+        System.println("live_objects_went_negative");
+    } else {
+        System.println("live_ok");
+    }
 }

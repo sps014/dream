@@ -69,11 +69,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TARGET_FLAG=()
+          # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            TARGET_FLAG=(--target "${{ matrix.rust_target }}")
+            cargo build --release -p dream -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+          else
+            cargo build --release -p dream -p dreamer -p dream-lsp
           fi
-          cargo build --release -p dream -p dreamer -p dream-lsp "${TARGET_FLAG[@]}"
 
       - name: Package archive
         shell: bash

@@ -98,8 +98,9 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
         free(n);
         return;
     }
-    /* Foreign results imply cross-thread RC from here on. */
-    dream_rt_mt = 1;
+    /* Foreign Future/result are published so host pthreads use atomic RC. */
+    dream_publish(f);
+    dream_publish(res);
     pthread_mutex_lock(&wake_mu);
     /* Publish under the lock so a concurrent dream_await cannot set its waker between our
      * status flip and our waker read (lost-wakeup guard). */
@@ -168,7 +169,7 @@ static void foreign_drain(void) {
 __attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
 #endif
 dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind) {
-    dream_ptr p = dream_malloc(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, 0);
+    dream_ptr p = dream_malloc_shared(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, 0);
     memset(dream_p(p), 0, (size_t)(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size));
     i32_at(p, F_POLL)[0] = poll;
     i32_at(p, F_KIND)[0] = kind;

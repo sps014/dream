@@ -14,28 +14,18 @@ int32_t free_list_head;
 
 #define REGION_MAX_DEPTH 8
 #define REGION_PAYLOAD (4 << 20)
-#ifdef DREAM_WASM32_THREADS
-#define REGION_TLS _Thread_local
-#else
-#define REGION_TLS
-#endif
-static REGION_TLS int region_depth;
-static REGION_TLS dream_ptr region_slab;
-static REGION_TLS int32_t region_cap;
-static REGION_TLS int32_t region_off;
-static REGION_TLS int32_t region_nalloc;
-static REGION_TLS int32_t region_off_mark[REGION_MAX_DEPTH];
-static REGION_TLS int32_t region_nalloc_mark[REGION_MAX_DEPTH];
 
 static int region_owns(dream_ptr ptr) {
     int32_t p;
     int32_t b;
-    if (region_depth <= 0 || region_slab == 0) {
+    int32_t cap;
+    if (dream_region_depth_get() <= 0 || dream_region_slab_get() == 0) {
         return 0;
     }
     p = (int32_t)ptr;
-    b = (int32_t)region_slab;
-    return p >= b && p < b + region_cap;
+    b = dream_region_slab_get();
+    cap = dream_region_cap_get();
+    return p >= b && p < b + cap;
 }
 
 #ifdef __wasm__
@@ -285,78 +275,167 @@ static void free_insert(int32_t block, int32_t sz) {
 static dream_ptr malloc_locked(int32_t size, int32_t tag);
 static void recycle_locked(dream_ptr ptr);
 
+#define PRIV_SLAB (2 << 20)
+
+static void account_alloc(void) {
+    __atomic_fetch_add(&live_objects, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&total_allocations, 1, __ATOMIC_RELAXED);
+}
+
+static void account_free_n(int32_t n) {
+    __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
+    __atomic_fetch_sub(&live_objects, n, __ATOMIC_RELAXED);
+}
+
+static int32_t claim_bytes(int32_t n) {
+    int32_t start;
+#ifdef DREAM_WASM32_THREADS
+    start = __atomic_fetch_add(meta_i32(META_HEAP_PTR), n, __ATOMIC_RELAXED);
+#else
+    start = heap_ptr_get();
+    heap_ptr_set(start + n);
+#endif
+    ensure_pages(start + n);
+    return start;
+}
+
+static void priv_class_push(int32_t idx, int32_t block) {
+    int32_t head = dream_priv_fl_get(idx);
+    blk_set_next(block, head);
+    dream_priv_fl_set(idx, block);
+}
+
+static dream_ptr finish_block(int32_t block, int32_t tag) {
+    i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
+    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
+    account_alloc();
+    return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+}
+
+static void priv_refill(int32_t need) {
+    int32_t n = need > PRIV_SLAB ? need : PRIV_SLAB;
+    n = (n + 15) & -16;
+    dream_priv_slab_set(claim_bytes(n));
+    dream_priv_off_set(0);
+    dream_priv_cap_set(n);
+}
+
+static dream_ptr malloc_private(int32_t size, int32_t tag) {
+    int32_t total;
+    int32_t idx;
+    int32_t block;
+    int32_t next;
+    int32_t off;
+    int32_t cap;
+    int32_t slab;
+    total = round_total(size);
+    idx = size_class(total);
+    if (idx <= 12) {
+        block = dream_priv_fl_get(idx);
+        if (block) {
+            next = blk_next(block);
+            dream_priv_fl_set(idx, next);
+            return finish_block(block, tag);
+        }
+    }
+    off = dream_priv_off_get();
+    cap = dream_priv_cap_get();
+    if (cap - off < total) {
+        priv_refill(total);
+        off = 0;
+    }
+    slab = dream_priv_slab_get();
+    block = slab + off;
+    dream_priv_off_set(off + total);
+    i32_put(block, total);
+    return finish_block(block, tag);
+}
+
+static int32_t *region_mark_off(void) {
+    int32_t p = dream_region_marks_get();
+    return (int32_t *)(uintptr_t)(uint32_t)p;
+}
+
+static int32_t *region_mark_nalloc(void) {
+    return region_mark_off() + REGION_MAX_DEPTH;
+}
+
 static dream_ptr region_malloc_locked(int32_t size, int32_t tag) {
     int32_t block;
     int32_t total;
+    int32_t off = dream_region_off_get();
+    int32_t cap = dream_region_cap_get();
     total = round_total(size);
-    if (region_off == 0) {
+    if (off == 0) {
         /* Payload of the slab is 16-aligned; wasm blocks must start at 4 (mod 16). */
-        region_off = 4;
+        off = 4;
     }
-    if (total < 0 || region_off > region_cap - total) {
+    if (total < 0 || off > cap - total) {
         abort();
     }
-    block = (int32_t)region_slab + region_off;
-    region_off += total;
+    block = dream_region_slab_get() + off;
+    dream_region_off_set(off + total);
     i32_put(block, total);
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
     i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
-    live_objects += 1;
-    total_allocations += 1;
-    region_nalloc += 1;
+    account_alloc();
+    dream_region_nalloc_set(dream_region_nalloc_get() + 1);
     return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
 }
 
 void dream_region_enter(void) {
-    alloc_lock();
-    if (region_depth >= REGION_MAX_DEPTH) {
-        alloc_unlock();
+    int32_t depth = dream_region_depth_get();
+    int32_t *off_m;
+    int32_t *n_m;
+    if (depth >= REGION_MAX_DEPTH) {
         abort();
     }
-    if (region_depth == 0) {
-        region_slab = malloc_locked(REGION_PAYLOAD, 0);
-        region_cap = round_total(REGION_PAYLOAD) - (int32_t)HEAP_HEADER_SIZE;
-        region_off = 0;
-        region_nalloc = 0;
+    if (dream_region_marks_get() == 0) {
+        dream_region_marks_set((int32_t)malloc_private(REGION_MAX_DEPTH * 8, 0));
     }
-    region_off_mark[region_depth] = region_off;
-    region_nalloc_mark[region_depth] = region_nalloc;
-    region_depth += 1;
-    alloc_unlock();
+    if (depth == 0) {
+        dream_region_slab_set((int32_t)malloc_private(REGION_PAYLOAD, 0));
+        dream_region_cap_set(round_total(REGION_PAYLOAD) - (int32_t)HEAP_HEADER_SIZE);
+        dream_region_off_set(0);
+        dream_region_nalloc_set(0);
+    }
+    off_m = region_mark_off();
+    n_m = region_mark_nalloc();
+    off_m[depth] = dream_region_off_get();
+    n_m[depth] = dream_region_nalloc_get();
+    dream_region_depth_set(depth + 1);
 }
 
 void dream_region_leave(void) {
     int32_t n;
+    int32_t depth = dream_region_depth_get();
+    int32_t *off_m;
+    int32_t *n_m;
     dream_ptr slab;
-    alloc_lock();
-    if (region_depth <= 0) {
-        alloc_unlock();
+    if (depth <= 0) {
         return;
     }
-    region_depth -= 1;
-    n = region_nalloc - region_nalloc_mark[region_depth];
+    depth -= 1;
+    dream_region_depth_set(depth);
+    off_m = region_mark_off();
+    n_m = region_mark_nalloc();
+    n = dream_region_nalloc_get() - n_m[depth];
     if (n < 0) {
         n = 0;
     }
-    last_freed += n;
-    if (live_objects >= n) {
-        live_objects -= n;
-    } else {
-        live_objects = 0;
-    }
-    region_nalloc = region_nalloc_mark[region_depth];
-    region_off = region_off_mark[region_depth];
-    if (region_depth == 0) {
-        slab = region_slab;
-        region_slab = 0;
-        region_cap = 0;
-        region_off = 0;
-        region_nalloc = 0;
+    account_free_n(n);
+    dream_region_nalloc_set(n_m[depth]);
+    dream_region_off_set(off_m[depth]);
+    if (depth == 0) {
+        slab = (dream_ptr)dream_region_slab_get();
+        dream_region_slab_set(0);
+        dream_region_cap_set(0);
+        dream_region_off_set(0);
+        dream_region_nalloc_set(0);
         if (slab) {
-            recycle_locked(slab);
+            dream_recycle(slab);
         }
     }
-    alloc_unlock();
 }
 
 static dream_ptr malloc_locked(int32_t size, int32_t tag) {
@@ -364,9 +443,8 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     int32_t *head;
     int32_t block = 0;
     int32_t next;
-    int32_t new_heap;
 
-    if (region_depth > 0 && region_slab != 0) {
+    if ((tag & TAG_SHARED) == 0 && dream_region_depth_get() > 0 && dream_region_slab_get() != 0) {
         return region_malloc_locked(size, tag);
     }
 
@@ -386,10 +464,7 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     }
 
     if (!block) {
-        block = heap_ptr_get();
-        new_heap = block + size;
-        ensure_pages(new_heap);
-        heap_ptr_set(new_heap);
+        block = claim_bytes(size);
         i32_put(block, size);
     } else if (i32_at(block) >= size + MIN_SPLIT) {
         /* Split a reused block much bigger than this request. */
@@ -398,13 +473,16 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
 
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
     i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
-    live_objects += 1;
-    total_allocations += 1;
+    account_alloc();
     return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
 }
 
-int32_t debug_get_live_objects(void) { return live_objects; }
-int32_t debug_get_total_allocations(void) { return total_allocations; }
+int32_t debug_get_live_objects(void) {
+    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+}
+int32_t debug_get_total_allocations(void) {
+    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
+}
 int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? ((int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA))[0] : 0;
 }
@@ -415,11 +493,34 @@ int32_t debug_get_free_list_head(void) { return last_freed; }
 
 __attribute__((export_name(DREAM_SYM_MALLOC)))
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
+    if (dream_region_depth_get() > 0 && dream_region_slab_get() != 0) {
+        return region_malloc_locked(size, tag);
+    }
+    return malloc_private(size, tag);
+}
+
+dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     dream_ptr p;
+    if (tag != 0) {
+        tag |= TAG_SHARED;
+    }
     alloc_lock();
     p = malloc_locked(size, tag);
     alloc_unlock();
     return p;
+}
+
+__attribute__((export_name("dream_publish")))
+void dream_publish(dream_ptr ptr) {
+    int32_t *tag;
+    if (!ptr) {
+        return;
+    }
+    tag = (int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA);
+    if ((*tag & TAG_VALUE_MASK) == 0) {
+        return;
+    }
+    *tag |= TAG_SHARED;
 }
 
 /* Free a large block, merging with physically adjacent free neighbors (the large list is
@@ -467,8 +568,7 @@ static void recycle_locked(dream_ptr ptr) {
     if (sz == 0) {
         return;
     }
-    live_objects -= 1;
-    last_freed += 1;
+    account_free_n(1);
     free_list_head = block_start;
     idx = size_class(sz);
     if (idx > 12 || sz != class_bytes(idx)) {
@@ -479,14 +579,37 @@ static void recycle_locked(dream_ptr ptr) {
 }
 
 void dream_recycle(dream_ptr ptr) {
+    int32_t block_start;
+    int32_t idx;
+    int32_t sz;
     if (!ptr) {
         return;
     }
     if (dream_weak_any) {
         dream_weak_clear_all(ptr);
     }
+    if (region_owns(ptr)) {
+        return;
+    }
+    if (dream_tag_shared(ptr)) {
+        alloc_lock();
+        recycle_locked(ptr);
+        alloc_unlock();
+        return;
+    }
+    block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
+    sz = i32_at(block_start);
+    if (sz == 0) {
+        return;
+    }
+    account_free_n(1);
+    idx = size_class(sz);
+    if (idx <= 12 && sz == class_bytes(idx)) {
+        priv_class_push(idx, block_start);
+        return;
+    }
     alloc_lock();
-    recycle_locked(ptr);
+    free_large_locked(block_start, sz);
     alloc_unlock();
 }
 
@@ -517,31 +640,12 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
     if (new_total <= old_total) {
         return ptr;
     }
-    np = dream_malloc(new_size, tag);
+    np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
     copy = old_total - (int32_t)HEAP_HEADER_SIZE;
     if (copy > new_size) {
         copy = new_size;
     }
     memcpy(dream_p(np), dream_p(ptr), (size_t)copy);
-    /* Share-aware move: the slot's +1 transfers to the new block, but read-derived
-     * aliases (retained field/index snapshots) may still hold their own +1 on the
-     * old block. Drop only this slot's reference; free only on the last one. */
-    {
-        int32_t *rcp = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
-        int32_t old;
-        if (!dream_rt_mt) {
-            old = *rcp;
-            if (old == 1) {
-                dream_free(ptr);
-            } else if (old != INT32_MAX) {
-                *rcp = old - 1;
-            }
-        } else {
-            old = __atomic_load_n(rcp, __ATOMIC_RELAXED);
-            if (old != INT32_MAX && __atomic_fetch_sub(rcp, 1, __ATOMIC_ACQ_REL) == 1) {
-                dream_free(ptr);
-            }
-        }
-    }
+    dream_release(ptr);
     return np;
 }

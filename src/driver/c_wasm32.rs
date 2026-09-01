@@ -383,6 +383,7 @@ pub fn compile_c_to_wasm32(
         "--export=__stack_pointer",
         "--export=__tls_base",
         "--export=dream_malloc",
+        "--export=dream_publish",
         "--gc-sections",
         "--strip-debug",
     ]);

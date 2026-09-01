@@ -465,6 +465,7 @@ mod tests {
         assert!(panic.contains("dream_panic"));
         assert!(closure.contains("dream_funcbox_new"));
         assert!(heap.contains("dream_malloc"));
+        assert!(heap.contains("dream_malloc_shared"));
         assert!(strings.contains("dream_string_alloc"));
         assert!(object.contains("dream_box_int"));
         assert!(format.contains("dream_double_to_string"));

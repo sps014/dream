@@ -37,6 +37,9 @@ int dream_rt_mt;
 /* Per-thread LIFO of exact size-class blocks. Tree/array churn stays off the process-wide
  * list (the old one-slot TLS overflowed after the first free of each class). */
 static _Thread_local char *tls_free[NCLASS];
+static _Thread_local char *tls_arena;
+static _Thread_local size_t tls_arena_off;
+static _Thread_local size_t tls_arena_len;
 
 /* Unique-graph bump region: mallocs while depth > 0 come from a rewindable TLS slab so
  * `dream_region_leave` reclaims the whole graph in O(1). Independent of the process arena so
@@ -57,15 +60,11 @@ static int region_owns_block(char *block) {
 }
 
 static void heap_lock(void) {
-    if (dream_rt_mt) {
-        pthread_mutex_lock(&heap_mu);
-    }
+    pthread_mutex_lock(&heap_mu);
 }
 
 static void heap_unlock(void) {
-    if (dream_rt_mt) {
-        pthread_mutex_unlock(&heap_mu);
-    }
+    pthread_mutex_unlock(&heap_mu);
 }
 
 static int size_class(int32_t size) {
@@ -120,15 +119,13 @@ static void class_set_next(char *block, void *next) {
 }
 
 static void account_alloc(void) {
-    live_objects += 1;
-    total_allocations += 1;
+    __atomic_fetch_add(&live_objects, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&total_allocations, 1, __ATOMIC_RELAXED);
 }
 
 static void account_free(void) {
-    last_freed += 1;
-    if (live_objects > 0) {
-        live_objects -= 1;
-    }
+    __atomic_fetch_add(&last_freed, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_sub(&live_objects, 1, __ATOMIC_RELAXED);
 }
 
 static void activate(char *block, int32_t tag) {
@@ -156,6 +153,24 @@ static char *large_try_take(int32_t need) {
         curr = (dream_ptr)(uintptr_t)next;
     }
     return NULL;
+}
+
+static char *tls_bump(size_t n) {
+    size_t aligned = (n + 15u) & ~15u;
+    if (tls_arena == NULL || aligned > tls_arena_len || tls_arena_off > tls_arena_len - aligned) {
+        size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
+        tls_arena = (char *)map_chunk(map_len);
+        tls_arena_off = 0;
+        tls_arena_len = map_len;
+        if (tls_arena == NULL) {
+            abort();
+        }
+    }
+    {
+        char *p = tls_arena + tls_arena_off;
+        tls_arena_off += aligned;
+        return p;
+    }
 }
 
 static char *bump(size_t n) {
@@ -220,12 +235,8 @@ void dream_region_leave(void) {
     if (n < 0) {
         n = 0;
     }
-    last_freed += n;
-    if (live_objects >= n) {
-        live_objects -= n;
-    } else {
-        live_objects = 0;
-    }
+    __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
+    __atomic_fetch_sub(&live_objects, n, __ATOMIC_RELAXED);
     region_nalloc = region_nalloc_mark[region_depth];
     region_off = region_off_mark[region_depth];
 }
@@ -255,6 +266,29 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
             return (dream_ptr)(block + 16);
         }
     }
+    block = tls_bump((size_t)alloc_size);
+    ((int32_t *)block)[0] = alloc_size;
+    activate(block, tag);
+    return (dream_ptr)(block + 16);
+}
+
+dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
+    int32_t total;
+    int idx;
+    char *block = NULL;
+    int32_t alloc_size;
+    if (size < 0 || size > (INT32_MAX - 31)) {
+        abort();
+    }
+    total = ((size + 15) & -16) + 16;
+    idx = size_class(total);
+    alloc_size = total;
+    if (idx >= 0 && idx <= 12) {
+        alloc_size = class_bytes(idx);
+    }
+    if (tag != 0) {
+        tag |= TAG_SHARED;
+    }
     heap_lock();
     if (idx > 12) {
         block = large_try_take(alloc_size);
@@ -282,8 +316,24 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     return (dream_ptr)(block + 16);
 }
 
-int32_t debug_get_live_objects(void) { return live_objects; }
-int32_t debug_get_total_allocations(void) { return total_allocations; }
+void dream_publish(dream_ptr ptr) {
+    int32_t *tag;
+    if (ptr == 0) {
+        return;
+    }
+    tag = (int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA);
+    if ((*tag & TAG_VALUE_MASK) == 0) {
+        return;
+    }
+    *tag |= TAG_SHARED;
+}
+
+int32_t debug_get_live_objects(void) {
+    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+}
+int32_t debug_get_total_allocations(void) {
+    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
+}
 int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? __atomic_load_n((int32_t *)((char *)dream_p(ptr) - 4), __ATOMIC_RELAXED) : 0;
 }
@@ -311,10 +361,15 @@ void dream_recycle(dream_ptr ptr) {
     idx = size_class(sz);
     ((uint32_t *)block)[1] = MAGIC_FREE;
     account_free();
-    if (idx > 12) {
+    if (dream_tag_shared(ptr) || idx > 12) {
         heap_lock();
-        large_set_next(block, dream_p(large_freelist));
-        large_freelist = (dream_ptr)block;
+        if (idx > 12) {
+            large_set_next(block, dream_p(large_freelist));
+            large_freelist = (dream_ptr)block;
+        } else {
+            class_set_next(block, dream_p(freelist[idx]));
+            freelist[idx] = (dream_ptr)block;
+        }
         heap_unlock();
         return;
     }
@@ -345,7 +400,7 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
     if ((uint32_t)new_total <= (uint32_t)old_total) {
         return ptr;
     }
-    np = dream_malloc(new_size, tag);
+    np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
     copy = old_total - 16;
     if (copy > new_size) {
         copy = new_size;

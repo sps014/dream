@@ -20,6 +20,10 @@ pub const TAG_ULONG: i32 = 10;
 pub const TAG_BYTE: i32 = 11;
 /// Structs/unions are assigned consecutive tags starting here, ordered by sorted type name.
 pub const TAG_STRUCT_BASE: i32 = 12;
+/// Header tag high bit: object is concurrently refcounted (`@shared` / published worker
+/// env and wire / foreign futures). Mask with [`TAG_VALUE_MASK`] before comparing type tags.
+pub const TAG_SHARED: i32 = 1 << 30;
+pub const TAG_VALUE_MASK: i32 = TAG_SHARED - 1;
 
 // -- Heap block layout ---------------------------------------------------------------------------
 //
@@ -112,15 +116,14 @@ pub const DREAM_REGEX_DOTALL: i32 = 8;
 // Two more coordination words are reserved at 44/48 — deliberately *not* overlapping freelist
 // heads — both well below `STRING_BASE` (1024) so they can never collide with static data:
 //
-// - `ALLOC_LOCK_ADDR`: a spinlock (0 = free, 1 = held) serializing every `$malloc`/`$free` body. The
-//   owner instance and every `WebWorker` instance of the same module import the *same*
-//   shared linear memory, so without this lock two threads racing the free-list/bump-pointer
-//   logic concurrently would corrupt the heap (lost updates, double-allocated blocks).
+// - `ALLOC_LOCK_ADDR`: a spinlock (0 = free, 1 = held) serializing the *shared* subheap
+//   (`dream_malloc_shared` / published `@shared` objects). Ordinary `dream_malloc` bumps a
+//   per-instance slab claimed via atomic `HEAP_PTR` fetch-add (one RMW per slab, not per object).
 // - `HEAP_PTR_ADDR`: the bump-pointer high-water mark, moved out of a WASM global (which is
-//   per-*instance*, not per-memory) into shared memory so every thread bumps the same pointer.
-//   Initialized exactly once across however many instances share this memory, via an atomic
-//   compare-exchange from 0 in `$__runtime_init` (see `emit/module.rs`) — whichever instance runs
-//   first wins the exchange, every later instantiation's exchange is a no-op.
+//   per-*instance*, not per-memory) into shared memory so slab claims and shared bump-allocs
+//   draw from one address space. Initialized exactly once across however many instances share
+//   this memory, via an atomic compare-exchange from 0 in `$__runtime_init` — whichever
+//   instance runs first wins the exchange, every later instantiation's exchange is a no-op.
 pub const ALLOC_LOCK_ADDR: u32 = 44;
 pub const HEAP_PTR_ADDR: u32 = 48;
 
@@ -428,6 +431,8 @@ mod abi_h_lockstep {
         assert_eq!(header_define(h, "TAG_ULONG"), TAG_ULONG as i64);
         assert_eq!(header_define(h, "TAG_BYTE"), TAG_BYTE as i64);
         assert_eq!(header_define(h, "TAG_STRUCT_BASE"), TAG_STRUCT_BASE as i64);
+        assert_eq!(header_define(h, "TAG_SHARED"), TAG_SHARED as i64);
+        assert_eq!(header_define(h, "TAG_VALUE_MASK"), TAG_VALUE_MASK as i64);
         assert_eq!(
             header_define(h, "HEAP_HEADER_SIZE"),
             HEAP_HEADER_SIZE as i64

@@ -4,7 +4,7 @@
 
 Dream's [`async`/`await`](async.md) is a *single-threaded* scheduler: tasks interleave at `await` points but never run at the same instant. When you need more than one core — CPU-bound work or parallel pipelines — use a **`WebWorker`**.
 
-`await WebWorker.spawn(() => …)` starts a body on its own OS thread (native) or Web Worker (browser) and waits for the result — the same shape as C# `Task.Run` / Swift `Task { }`. There is no spawn message and no `join()`. Each worker has its own private globals, but **shares the same heap memory** with the owner. Heap objects (`@shared class`, `Lock` / `Semaphore`, `CancellationToken`) are visible across workers — real parallelism with shared state, guarded by `@shared` / `lock`.
+`await WebWorker.spawn(() => …)` starts a body on its own OS thread (native) or Web Worker (browser) and waits for the result — the same shape as C# `Task.Run` / Swift `Task { }`. There is no spawn message and no `join()`. Each worker has its own **private heap slab** (ordinary `new`, strings, lists: non-atomic ARC, no alloc lock) plus **private globals**. `@shared class` instances, `Lock` / `Semaphore`, and `CancellationToken` live on a **shared subheap** in the same address space (native process / wasm `SharedArrayBuffer`) so pointers and `lock` still work across workers.
 
 Captures and the body's return type must be **`shared`** (Dream's Sendable analogue): a blittable value, `string`, a value struct of `shared` fields, or an `@shared class`. Ordinary classes, arrays, and `List` are a compile error.
 
@@ -16,6 +16,7 @@ Captures and the body's return type must be **`shared`** (Dream's Sendable analo
 ```
 ┌────────────────────────────┐            ┌────────────────────────────┐
 │      Owner instance        │            │      Worker instance       │
+│      private heap slab     │            │      private heap slab     │
 │                            │            │                            │
 │  await WebWorker.spawn(    │── env ────►│       body(): TOut         │
 │        () => body)         │  captures  │    (starts immediately)    │
@@ -27,8 +28,8 @@ Captures and the body's return type must be **`shared`** (Dream's Sendable analo
               └──────────────────┬───────────────────────┘
                                  ▼
                 ┌────────────────────────────────────────┐
-                │         Shared linear memory           │
-                │  @shared mutations visible both sides  │
+                │     Shared subheap (same address       │
+                │     space)  @shared / lock / moves     │
                 └────────────────────────────────────────┘
 ```
 
@@ -213,9 +214,9 @@ Capture rules match `spawn`. Async bodies use `dispatch_async`.
 
 | Runtime | Notes |
 |---------|--------|
-| Native (`dream run`) | One OS thread per worker; shared heap with the owner. |
-| Browser | One `Worker` per worker; shared memory needs COOP/COEP on the host page. |
-| Node | One `worker_threads.Worker` per worker; same shared-memory model. |
+| Native (`dream run`) | One OS thread per worker; private TLS heap plus a shared subheap for `@shared`. |
+| Browser | One `Worker` per worker; private per-instance slab; `@shared` needs COOP/COEP (SAB). |
+| Node | One `worker_threads.Worker` per worker; same hybrid memory model. |
 
 ## Notes and limits
 

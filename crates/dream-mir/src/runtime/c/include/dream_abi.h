@@ -16,6 +16,10 @@
 #define TAG_ULONG 10
 #define TAG_BYTE 11
 #define TAG_STRUCT_BASE 12
+/* High bit on the header tag: object is concurrently refcounted (`@shared`, published
+ * worker env/wire, foreign futures). Ordinary worker-local objects leave this clear. */
+#define TAG_SHARED 1073741824
+#define TAG_VALUE_MASK 1073741823
 
 #define HEAP_HEADER_SIZE 12
 #define HEADER_TAG_OFFSET 4

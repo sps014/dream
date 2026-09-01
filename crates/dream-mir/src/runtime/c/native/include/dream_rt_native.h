@@ -11,6 +11,7 @@
 #endif
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 #include <string.h>
 
 #ifdef DREAM_WASM32
@@ -19,7 +20,7 @@ typedef int32_t dream_ptr;
 typedef uintptr_t dream_ptr;
 #endif
 
-/* 0 until `workerSpawn`; retain/malloc then skip atomics/mutexes. */
+/* 0 until `workerSpawn`; leftover for non-RC MT paths. RC uses `TAG_SHARED`. */
 extern int dream_rt_mt;
 
 #define DREAM_ALWAYS_INLINE static inline __attribute__((always_inline))
@@ -29,6 +30,26 @@ dream_ptr dream_g0_get(void);
 void dream_g0_set(dream_ptr v);
 int32_t dream_instance_tid(void);
 int32_t dream_next_tid(void);
+int32_t dream_priv_slab_get(void);
+void dream_priv_slab_set(int32_t v);
+int32_t dream_priv_off_get(void);
+void dream_priv_off_set(int32_t v);
+int32_t dream_priv_cap_get(void);
+void dream_priv_cap_set(int32_t v);
+int32_t dream_priv_fl_get(int32_t idx);
+void dream_priv_fl_set(int32_t idx, int32_t v);
+int32_t dream_region_depth_get(void);
+void dream_region_depth_set(int32_t v);
+int32_t dream_region_slab_get(void);
+void dream_region_slab_set(int32_t v);
+int32_t dream_region_cap_get(void);
+void dream_region_cap_set(int32_t v);
+int32_t dream_region_off_get(void);
+void dream_region_off_set(int32_t v);
+int32_t dream_region_nalloc_get(void);
+void dream_region_nalloc_set(int32_t v);
+int32_t dream_region_marks_get(void);
+void dream_region_marks_set(int32_t v);
 #else
 extern _Thread_local dream_ptr g0;
 DREAM_ALWAYS_INLINE dream_ptr dream_g0_get(void) { return g0; }
@@ -103,19 +124,27 @@ DREAM_ALWAYS_INLINE void dream_mem_copy(dream_ptr dst, dream_ptr src, size_t n) 
     memcpy(dream_p(dst), dream_p(src), n);
 }
 
+DREAM_ALWAYS_INLINE int dream_tag_shared(dream_ptr ptr) {
+    int32_t t = ((int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA))[0];
+    /* Tag 0 is Future / untyped frames — concurrently refcounted, bit left clear so JS
+     * `tag === 0` still recognizes a Future. */
+    if ((t & TAG_VALUE_MASK) == 0) {
+        return 1;
+    }
+    return (t & TAG_SHARED) != 0;
+}
+
 DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     int32_t *rc;
     if (ptr == 0) {
         return;
     }
     rc = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
-    if (!dream_rt_mt) {
-        if (*rc != INT32_MAX) {
-            *rc += 1;
-        }
+    if (*rc == INT32_MAX) {
         return;
     }
-    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
+    if (!dream_tag_shared(ptr)) {
+        *rc += 1;
         return;
     }
     __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
@@ -142,18 +171,15 @@ DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
         return;
     }
     rc = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
-    if (!dream_rt_mt) {
-        if (*rc == INT32_MAX) {
-            return;
-        }
+    if (*rc == INT32_MAX) {
+        return;
+    }
+    if (!dream_tag_shared(ptr)) {
         old = *rc;
         *rc = old - 1;
         if (old == 1) {
             dream_free(ptr);
         }
-        return;
-    }
-    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
         return;
     }
     old = __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL);
@@ -180,16 +206,16 @@ DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
 DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
     int32_t *rc = (int32_t *)((char *)dream_p(p) - RC_FROM_DATA);
     int32_t old;
-    if (!dream_rt_mt) {
+    if (*rc == INT32_MAX) {
+        return 0;
+    }
+    if (!dream_tag_shared(p)) {
         old = *rc;
-        if (old <= 0 || old == INT32_MAX) {
+        if (old <= 0) {
             return 0;
         }
         *rc = old - 1;
         return old == 1;
-    }
-    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == INT32_MAX) {
-        return 0;
     }
     return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == 1;
 }
@@ -203,7 +229,7 @@ DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
  * to skip the decrement and call `destroy_*` on uniquely owned fields. */
 DREAM_ALWAYS_INLINE int dream_rc_one(dream_ptr p) {
     int32_t *rc = (int32_t *)((char *)dream_p(p) - RC_FROM_DATA);
-    int32_t v = dream_rt_mt ? __atomic_load_n(rc, __ATOMIC_RELAXED) : *rc;
+    int32_t v = dream_tag_shared(p) ? __atomic_load_n(rc, __ATOMIC_RELAXED) : *rc;
     return v == 1;
 }
 
@@ -223,6 +249,8 @@ DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
 }
 
 dream_ptr dream_malloc(int32_t size, int32_t tag);
+dream_ptr dream_malloc_shared(int32_t size, int32_t tag);
+void dream_publish(dream_ptr ptr);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
 #ifdef DREAM_WASM32
 void dream_heap_init(void);
@@ -239,7 +267,7 @@ DREAM_ALWAYS_INLINE int dream_str_unique_owned(dream_ptr p) {
     if (p == 0 || dream_str_rc(p) != 1) {
         return 0;
     }
-    if (((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] != TAG_STRING) {
+    if ((((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] & TAG_VALUE_MASK) != TAG_STRING) {
         return 0;
     }
     if (dream_i32(p)[1] == DREAM_STR_SLICE) {
@@ -560,15 +588,7 @@ DREAM_ALWAYS_INLINE void dream_substring_clamp(dream_ptr s, int32_t *start, int3
 }
 
 DREAM_ALWAYS_INLINE void dream_slice_retain_parent(dream_ptr s) {
-    int32_t *rc = (int32_t *)((char *)dream_p(s) - RC_FROM_DATA);
-    if (*rc == INT32_MAX) {
-        return;
-    }
-    if (!dream_rt_mt) {
-        *rc += 1;
-    } else {
-        dream_retain(s);
-    }
+    dream_retain(s);
 }
 
 DREAM_ALWAYS_INLINE void dream_slice_fill(dream_ptr p, dream_ptr s, int32_t n,
@@ -583,7 +603,7 @@ DREAM_ALWAYS_INLINE int dream_slice_unique(dream_ptr p) {
     if (p == 0 || dream_str_rc(p) != 1) {
         return 0;
     }
-    if (((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] != TAG_STRING) {
+    if ((((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] & TAG_VALUE_MASK) != TAG_STRING) {
         return 0;
     }
     return dream_i32(p)[1] == DREAM_STR_SLICE;
@@ -811,7 +831,7 @@ DREAM_ALWAYS_INLINE int32_t dream_object_tag(dream_ptr p) {
     if (p == 0) {
         return 0;
     }
-    return ((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0];
+    return ((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] & TAG_VALUE_MASK;
 }
 
 DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {

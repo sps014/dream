@@ -109,7 +109,7 @@ self.onmessage = (e) => {
  * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
  * Dream's scheduler.
  */
-function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
+function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
   const reg = new Map();
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
@@ -150,7 +150,19 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
     }
   };
 
+  const publish = (ptr) => {
+    const n = Number(ptr ?? 0);
+    if (!n || typeof getInstance !== "function") return;
+    try {
+      const pub = getInstance().exports && getInstance().exports.dream_publish;
+      if (typeof pub === "function") pub(n);
+    } catch (_) {
+      /* instance not ready */
+    }
+  };
+
   const spawnWorker = (fnIndex, env) => {
+    publish(env);
     const state = {
       worker: null,
       fnIndex: Number(fnIndex ?? 0),
@@ -228,6 +240,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
       new Promise((resolve) => {
         const s = reg.get(id);
         if (!s) return resolve("");
+        publish(env);
         s.pending.push(resolve);
         postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: packWire(msg) });
       }),

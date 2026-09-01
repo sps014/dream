@@ -426,7 +426,7 @@ class DreamInstance {
   __awaitWorkerResult(r) {
     const F_RESULT = 8;
     if (!r) return Promise.resolve("");
-    const tag = this.i32(r - 8); // mirrors the WASM `$object_tag` helper
+    const tag = this.i32(r - 8) & 0x3fffffff; // TAG_VALUE_MASK; Future frames are tag 0
     if (tag !== 0) return Promise.resolve(this.readString(r));
     return this.__awaitFuture(r).then(() => this.readString(this.i32(r + F_RESULT)));
   }
@@ -460,7 +460,7 @@ class DreamInstance {
     }
     const r = this.exports.main();
     if (!r) return Promise.resolve();
-    const tag = this.i32(r - 8);
+    const tag = this.i32(r - 8) & 0x3fffffff;
     if (tag !== 0) return Promise.resolve(r);
     return this.__awaitFuture(r);
   }
@@ -4769,7 +4769,7 @@ self.onmessage = (e) => {
  * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
  * Dream's scheduler.
  */
-function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
+function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
   const reg = new Map();
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
@@ -4810,7 +4810,19 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
     }
   };
 
+  const publish = (ptr) => {
+    const n = Number(ptr ?? 0);
+    if (!n || typeof getInstance !== "function") return;
+    try {
+      const pub = getInstance().exports && getInstance().exports.dream_publish;
+      if (typeof pub === "function") pub(n);
+    } catch (_) {
+      /* instance not ready */
+    }
+  };
+
   const spawnWorker = (fnIndex, env) => {
+    publish(env);
     const state = {
       worker: null,
       fnIndex: Number(fnIndex ?? 0),
@@ -4888,6 +4900,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate) {
       new Promise((resolve) => {
         const s = reg.get(id);
         if (!s) return resolve("");
+        publish(env);
         s.pending.push(resolve);
         postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: packWire(msg) });
       }),
@@ -5114,7 +5127,7 @@ async function load(source, options = {}) {
   const builtinDream = {
     ...composeHosts(getInstance),
     ...(typeof makeWorkerModule === "function"
-      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate)
+      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate, getInstance)
       : {}),
   };
   if (typeof builtinDream.__attachGpuAbi === "function") {

@@ -55,6 +55,7 @@ static void *worker_main(void *arg) {
          * releases it; releasing here too over-frees the posted wire string. */
         free(j);
         pthread_mutex_lock(&w->mu);
+        dream_publish(r);
         w->reply = r;
         w->has_reply = 1;
         pthread_cond_signal(&w->cv);
@@ -79,6 +80,7 @@ int32_t workerSpawn(int32_t fn, int64_t env) {
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->fn = fn;
     w->env = (dream_ptr)(uintptr_t)env;
+    dream_publish(w->env);
     pthread_mutex_init(&w->mu, NULL);
     pthread_cond_init(&w->cv, NULL);
     pthread_mutex_lock(&reg_mu);
@@ -109,6 +111,7 @@ void workerPost(int32_t id, dream_ptr msg) {
     j->fn = w->fn;
     j->env = w->env;
     j->msg = msg;
+    dream_publish(msg);
     dream_retain(msg);
     pthread_mutex_lock(&w->mu);
     if (w->tail) {
@@ -134,6 +137,8 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg)
     j->fn = fn;
     j->env = (dream_ptr)(uintptr_t)env;
     j->msg = msg;
+    dream_publish(j->env);
+    dream_publish(msg);
     dream_retain(msg);
     pthread_mutex_lock(&w->mu);
     if (w->tail) {

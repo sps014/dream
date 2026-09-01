@@ -1,0 +1,20 @@
+// Worker-local string churn: private slab + non-atomic RC (not the shared subheap).
+
+import system;
+fun churn(): string {
+    let n = 0;
+    let i = 0;
+    while (i < 100) {
+        let s = i.to_string() + "x";
+        n = n + s.length;
+        i = i + 1;
+    }
+    return n.to_string();
+}
+
+async fun main(): void {
+    let a = WebWorker.spawn(() => churn());
+    let b = WebWorker.spawn(() => churn());
+    System.println(await a);
+    System.println(await b);
+}

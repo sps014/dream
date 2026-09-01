@@ -289,7 +289,8 @@ public static class GpuMath {
         return 0.0;
     }
 
-    // Multiplicative inverse of a 2x2 matrix: `m^-1` such that `m * m^-1 = I` (WGSL `inverse`).
+    // Multiplicative inverse of a 2x2 matrix: `m^-1` such that `m * m^-1 = I`.
+    // WGSL has no `inverse` builtin; shaders lower this to adjugate / `determinant`.
     public static fun inverse(m: GpuMat2): GpuMat2 {
         let det = GpuMath.determinant(m);
         if (det == 0.0) { return GpuMat2.identity(); }

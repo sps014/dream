@@ -352,7 +352,7 @@ export class DreamInstance {
   __awaitWorkerResult(r) {
     const F_RESULT = 8;
     if (!r) return Promise.resolve("");
-    const tag = this.i32(r - 8); // mirrors the WASM `$object_tag` helper
+    const tag = this.i32(r - 8) & 0x3fffffff; // TAG_VALUE_MASK; Future frames are tag 0
     if (tag !== 0) return Promise.resolve(this.readString(r));
     return this.__awaitFuture(r).then(() => this.readString(this.i32(r + F_RESULT)));
   }
@@ -386,7 +386,7 @@ export class DreamInstance {
     }
     const r = this.exports.main();
     if (!r) return Promise.resolve();
-    const tag = this.i32(r - 8);
+    const tag = this.i32(r - 8) & 0x3fffffff;
     if (tag !== 0) return Promise.resolve(r);
     return this.__awaitFuture(r);
   }

@@ -334,12 +334,17 @@ impl<'a> Emitter<'a> {
             self.retain_rc_global_sink(true, a);
         }
         let arg_es: Vec<Expr> = args.iter().map(|a| self.operand(a)).collect();
+        let malloc = if self.cx.interner.is_shared_type(ty) {
+            "dream_malloc_shared"
+        } else {
+            "dream_malloc"
+        };
         let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
         self.b.expr_block(move |b| {
             let o = b.temp(
                 CTy::Ptr,
                 Some(Expr::call(
-                    "dream_malloc",
+                    malloc,
                     vec![Expr::i(size as i64), Expr::i(tag as i64)],
                 )),
             );

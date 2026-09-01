@@ -205,7 +205,7 @@ export async function load(source, options = {}) {
   const builtinDream = {
     ...composeHosts(getInstance),
     ...(typeof makeWorkerModule === "function"
-      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate)
+      ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate, getInstance)
       : {}),
   };
   if (typeof builtinDream.__attachGpuAbi === "function") {

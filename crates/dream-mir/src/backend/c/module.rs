@@ -183,6 +183,10 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
     if cx.mir.uses_defer {
         entry.call("dream_defer_drain_all", vec![]);
     }
+    if main.is_async && !cx.target.is_wasm32() {
+        // Wasm32 returns the Future to the JS host (`Instance.run`). Native owns it.
+        entry.call("dream_release", vec![Expr::id("__mf")]);
+    }
     if cx.target.is_wasm32() && main.is_async {
         entry.ret(Some(Expr::cast(CTy::I32, Expr::id("__mf"))));
     } else {

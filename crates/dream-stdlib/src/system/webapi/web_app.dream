@@ -1,0 +1,395 @@
+module system.webapi;
+
+// FastAPI-style listen options. Empty `docs_url` / `openapi_url` disables that route.
+public class WebAppOptions {
+    public title: string;
+    public version: string;
+    public docs_url: string;
+    public openapi_url: string;
+
+    public constructor(
+        title: string = "Dream API",
+        version: string = "0.1.0",
+        docs_url: string = "/docs",
+        openapi_url: string = "/openapi.json"
+    ) {
+        this.title = title;
+        this.version = version;
+        this.docs_url = docs_url;
+        this.openapi_url = openapi_url;
+    }
+}
+
+let webapi_middlewares: List<Middleware> = List<Middleware>();
+let webapi_server_handle: int = 0;
+let webapi_gen_mw_done: bool = false;
+// `Promise.start` does not retain; keep fire-and-forget tasks alive until process exit.
+let webapi_tasks: List<object> = List<object>();
+
+public class WebApp {
+    @native
+    @runtime("httpServerListen")
+    static extern fun host_listen(host: string, port: int): char[];
+
+    @native
+    @async_host
+    @runtime("httpServerAccept")
+    static extern async fun host_accept(server: int): char[];
+
+    @native
+    @runtime("httpServerReadBody")
+    internal static extern fun host_read_body(req: int, max_bytes: int): byte[];
+
+    @native
+    @runtime("httpServerRespond")
+    static extern fun host_respond(req: int, status: int, headers: string, body: byte[]): int;
+
+    @native
+    @runtime("httpServerShutdown")
+    static extern fun host_shutdown(server: int): int;
+
+    @native
+    @async_host
+    @runtime("httpServerWait")
+    static extern async fun host_wait(server: int): char[];
+
+    public static fun use(mw: Middleware): void {
+        webapi_middlewares.push(mw);
+    }
+
+    public static fun begin_generated_middleware(): bool {
+        if webapi_gen_mw_done {
+            return false;
+        }
+        webapi_gen_mw_done = true;
+        return true;
+    }
+
+    public static fun match_path(pattern: string, path: string): Option<Map<string, string>> {
+        let p_parts = WebApp.split_path(pattern);
+        let s_parts = WebApp.split_path(path);
+        if p_parts.length != s_parts.length {
+            let none: Option<Map<string, string>> = Option.None;
+            return none;
+        }
+        let params = Map<string, string>();
+        let i = 0;
+        while i < p_parts.length {
+            let pat = p_parts.get(i);
+            let seg = s_parts.get(i);
+            if pat.length >= 3 && pat.starts_with("{") && pat.ends_with("}") {
+                let name = pat.substring(1, pat.length - 1);
+                params.set(name, seg);
+            } else if pat != seg {
+                let none2: Option<Map<string, string>> = Option.None;
+                return none2;
+            }
+            i = i + 1;
+        }
+        return Option.Some(params);
+    }
+
+    public static fun query_value(query: string, name: string): Option<string> {
+        if query.is_empty() {
+            let none: Option<string> = Option.None;
+            return none;
+        }
+        let parts = query.split('&');
+        let i = 0;
+        while i < parts.length {
+            let part = parts[i];
+            let eq = part.index_of('=');
+            if eq.is_some() {
+                let e = eq.unwrap_or(0);
+                let key = part.substring(0, e);
+                if key == name {
+                    return Option.Some(part.substring(e + 1, part.length));
+                }
+            } else if part == name {
+                return Option.Some(string.empty);
+            }
+            i = i + 1;
+        }
+        let none2: Option<string> = Option.None;
+        return none2;
+    }
+
+    public static fun cookie_value(header: string, name: string): Option<string> {
+        let parts = header.split(';');
+        let i = 0;
+        while i < parts.length {
+            let part = parts[i].trim();
+            let eq = part.index_of('=');
+            if eq.is_some() {
+                let e = eq.unwrap_or(0);
+                if part.substring(0, e) == name {
+                    return Option.Some(part.substring(e + 1, part.length));
+                }
+            }
+            i = i + 1;
+        }
+        let none: Option<string> = Option.None;
+        return none;
+    }
+
+    static fun split_path(path: string): List<string> {
+        let out = List<string>();
+        if path.is_empty() || path == "/" {
+            return out;
+        }
+        let raw = path;
+        if raw.starts_with("/") {
+            raw = raw.substring(1, raw.length);
+        }
+        if raw.ends_with("/") && raw.length > 0 {
+            raw = raw.substring(0, raw.length - 1);
+        }
+        if raw.is_empty() {
+            return out;
+        }
+        let parts = raw.split('/');
+        let i = 0;
+        while i < parts.length {
+            if !parts[i].is_empty() {
+                out.push(parts[i]);
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public static fun json_escape(s: string): string {
+        let sb = StringBuilder();
+        sb.append_char('"');
+        let i = 0;
+        while i < s.length {
+            let c = s.char_at(i);
+            if c == '"' {
+                sb.append("\\\"");
+            } else if c == '\\' {
+                sb.append("\\\\");
+            } else if c == '\n' {
+                sb.append("\\n");
+            } else if c == '\r' {
+                sb.append("\\r");
+            } else {
+                sb.append_char(c);
+            }
+            i = i + 1;
+        }
+        sb.append_char('"');
+        return sb.build();
+    }
+
+    public static fun swagger_html(title: string, openapi_url: string): string {
+        return "<!DOCTYPE html><html><head><title>"
+            + title
+            + "</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>window.onload=function(){window.ui=SwaggerUIBundle({url:"
+            + WebApp.json_escape(openapi_url)
+            + ",dom_id:'#swagger-ui'});};</script></body></html>";
+    }
+
+    // Host `char[]` wires store one raw byte per element (same as `NetWireReader`).
+    static fun slice_wire(data: char[], start: int, len: int): string {
+        let off = start;
+        if off < 0 {
+            off = 0;
+        }
+        if off > data.length {
+            off = data.length;
+        }
+        let n = len;
+        if n < 0 {
+            n = 0;
+        }
+        if off + n > data.length {
+            n = data.length - off;
+        }
+        let result = string.alloc(n);
+        let i = 0;
+        while i < n {
+            string.set(result, i, data[off + i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    static fun wire_starts(data: char[], prefix: string): bool {
+        let n = prefix.length;
+        if data.length < n {
+            return false;
+        }
+        return WebApp.slice_wire(data, 0, n) == prefix;
+    }
+
+    static fun next_nl(data: char[], start: int): int {
+        let i = start;
+        let n = data.length;
+        while i < n {
+            if data[i] == '\n' {
+                return i;
+            }
+            i = i + 1;
+        }
+        return n;
+    }
+
+    static fun parse_incoming(wire: char[]): Option<HttpIncoming> {
+        if WebApp.wire_starts(wire, "shutdown") || WebApp.wire_starts(wire, "err") {
+            let none: Option<HttpIncoming> = Option.None;
+            return none;
+        }
+        let a = WebApp.next_nl(wire, 0);
+        if WebApp.slice_wire(wire, 0, a) != "ok" {
+            let none2: Option<HttpIncoming> = Option.None;
+            return none2;
+        }
+        let b0 = a + 1;
+        let b = WebApp.next_nl(wire, b0);
+        let c0 = b + 1;
+        let c = WebApp.next_nl(wire, c0);
+        let d0 = c + 1;
+        let d = WebApp.next_nl(wire, d0);
+        let e0 = d + 1;
+        let e = WebApp.next_nl(wire, e0);
+        let f0 = e + 1;
+        let f = WebApp.next_nl(wire, f0);
+        if f0 > wire.length {
+            let none3: Option<HttpIncoming> = Option.None;
+            return none3;
+        }
+        let id = int.parse(WebApp.slice_wire(wire, b0, b - b0)).unwrap_or(0);
+        let headers = HttpHeaders.from_wire(WebApp.slice_wire(wire, f0, f - f0));
+        return Option.Some(HttpIncoming(
+            id,
+            WebApp.slice_wire(wire, c0, c - c0),
+            WebApp.slice_wire(wire, d0, d - d0),
+            WebApp.slice_wire(wire, e0, e - e0),
+            headers
+        ));
+    }
+
+    static fun send_outgoing(req_id: int, res: HttpOutgoing): void {
+        if res.use_bytes {
+            let _ = WebApp.host_respond(req_id, res.status, res.headers.to_wire(), res.body_bytes);
+        } else {
+            let _ = WebApp.host_respond(req_id, res.status, res.headers.to_wire(), Encoding.utf8_encode(res.body));
+        }
+    }
+
+    @native
+    static async fun handle_one(req: HttpIncoming, options: WebAppOptions): void {
+        let ctx = RequestContext(req);
+        let leaf: fun(): Future<HttpOutgoing> = async () => {
+            if !options.openapi_url.is_empty() && req.method == "GET" && req.path == options.openapi_url {
+                return HttpOutgoing.json_text(WebApp.openapi_document(options), 200);
+            }
+            if !options.docs_url.is_empty() && req.method == "GET" && req.path == options.docs_url {
+                return HttpOutgoing.html(WebApp.swagger_html(options.title, options.openapi_url), 200);
+            }
+            return await WebApp.generated_dispatch(req);
+        };
+        let res = await WebApp.run_middleware(ctx, 0, leaf);
+        WebApp.send_outgoing(req.req_id, res);
+    }
+
+    public static async fun run_middleware(
+        ctx: RequestContext,
+        index: int,
+        leaf: fun(): Future<HttpOutgoing>
+    ): HttpOutgoing {
+        if index >= webapi_middlewares.length {
+            return await leaf();
+        }
+        let mw = webapi_middlewares.get(index);
+        let next = Next(async () => {
+            return await WebApp.run_middleware(ctx, index + 1, leaf);
+        });
+        return await mw.invoke(ctx, next);
+    }
+
+    @native
+    static async fun serve_loop(server: int, options: WebAppOptions): void {
+        while true {
+            let wire = await WebApp.host_accept(server);
+            if WebApp.wire_starts(wire, "shutdown") {
+                return;
+            }
+            if WebApp.wire_starts(wire, "err") {
+                return;
+            }
+            let parsed = WebApp.parse_incoming(wire);
+            if parsed.is_none() {
+                continue;
+            }
+            let req = parsed.unwrap();
+            let task: object = WebApp.handle_one(req, options);
+            webapi_tasks.push(task);
+            Promise.start(task);
+        }
+    }
+
+    // Bind, start the accept loop in the background, return the bound port (`0` picks ephemeral).
+    @native
+    public static async fun listen(host: string, port: int): int {
+        return await WebApp.listen_with(host, port, WebAppOptions());
+    }
+
+    @native
+    public static async fun listen_with(host: string, port: int, options: WebAppOptions): int {
+        WebApp.generated_install_middleware();
+        let raw = WebApp.host_listen(host, port);
+        let a = WebApp.next_nl(raw, 0);
+        if WebApp.slice_wire(raw, 0, a) != "ok" {
+            return 0 - 1;
+        }
+        let b0 = a + 1;
+        let b = WebApp.next_nl(raw, b0);
+        let c0 = b + 1;
+        let c = WebApp.next_nl(raw, c0);
+        let handle = int.parse(WebApp.slice_wire(raw, b0, b - b0)).unwrap_or(0);
+        let bound = int.parse(WebApp.slice_wire(raw, c0, c - c0)).unwrap_or(0);
+        webapi_server_handle = handle;
+        let serve_fut: object = WebApp.serve_loop(handle, options);
+        webapi_tasks.push(serve_fut);
+        Promise.start(serve_fut);
+        return bound;
+    }
+
+    @native
+    public static async fun run(host: string, port: int): void {
+        let _ = await WebApp.listen(host, port);
+        await WebApp.wait();
+    }
+
+    @native
+    public static async fun run_with(host: string, port: int, options: WebAppOptions): void {
+        let _ = await WebApp.listen_with(host, port, options);
+        await WebApp.wait();
+    }
+
+    @native
+    public static fun shutdown(): void {
+        if webapi_server_handle != 0 {
+            let _ = WebApp.host_shutdown(webapi_server_handle);
+        }
+    }
+
+    @native
+    public static async fun wait(): void {
+        if webapi_server_handle != 0 {
+            let _ = await WebApp.host_wait(webapi_server_handle);
+        }
+    }
+
+    public static fun openapi_document(options: WebAppOptions): string {
+        let paths = WebApp.generated_openapi_paths();
+        return "{\"openapi\":\"3.0.3\",\"info\":{\"title\":"
+            + WebApp.json_escape(options.title)
+            + ",\"version\":"
+            + WebApp.json_escape(options.version)
+            + "},\"paths\":"
+            + paths
+            + "}";
+    }
+}

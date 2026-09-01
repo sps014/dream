@@ -54,6 +54,14 @@ Small programs you can copy. Start with the first three if you are new; GPU and 
 
     [:octicons-arrow-right-24: Recipe](quote-generator.md)
 
+-   :material-api: **JSON HTTP API**
+
+    ---
+
+    Native `WebApp` with `/docs` (Swagger).
+
+    [:octicons-arrow-right-24: Recipe](webapi.md)
+
 </div>
 
 </div>

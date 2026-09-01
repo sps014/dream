@@ -3,6 +3,7 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native_c::{compile_and_capture, compile_and_capture_ex};
+use dream_abi::attributes::CompileTargets;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
 use std::fs;
@@ -75,6 +76,13 @@ const SMOKE_CASES: &[&str] = &[
     "webworker_local_alloc",
     "webworker_spawn_no_leak",
     "hello_println",
+    "webapi_duplicate_route",
+    "webapi_missing_path_param",
+    "webapi_dep_cycle",
+    "webapi_basic",
+    "webapi_mw_short",
+    "webapi_docs_off",
+    "webapi_cors",
     "primary_constructor",
     "unit_variant_bare",
     "union_named_single_field",
@@ -272,7 +280,13 @@ fn run_native_case(dream_file: &Path, release: bool) {
     } else {
         None
     };
-    let timeout_secs = if stem == "http_get_local" || stem == "http_methods_local" {
+    let timeout_secs = if stem == "http_get_local"
+        || stem == "http_methods_local"
+        || stem == "webapi_basic"
+        || stem == "webapi_mw_short"
+        || stem == "webapi_docs_off"
+        || stem == "webapi_cors"
+    {
         20
     } else {
         8
@@ -593,6 +607,29 @@ fn wasm32_js_option_struct_fields_are_marshaled() {
 }
 
 #[test]
+fn webapi_listen_not_available_on_wasm32() {
+    let src = Path::new("tests/cases/webapi_basic.dream");
+    let dest = std::env::temp_dir().join("dream_webapi_wasm32.wat");
+    let src_s = src.to_str().unwrap().to_string();
+    let dest_s = dest.to_str().unwrap().to_string();
+    let err = Compiler::new(Target::Wasm32)
+        .with_compile_targets(CompileTargets {
+            native: false,
+            node: false,
+            web: true,
+        })
+        .compile(&src_s, &dest_s)
+        .expect_err("WebApp.listen is native-only");
+    let text = err.diagnostic_text().unwrap_or("");
+    assert!(
+        text.contains("not available") || text.contains("native"),
+        "expected native-only diagnostic, got:\n{}",
+        text
+    );
+    let _ = fs::remove_file(&dest);
+}
+
+#[test]
 fn wasm_compiles_webgpu_samples() {
     for rel in [
         "sample/compute/gpu_ext.dream",
@@ -648,6 +685,13 @@ fn run_file_http_parity_e2e() {
             "tcp_client_connect_fail",
             "websocket_unsupported_scheme",
             "websocket_connect_fail",
+            "webapi_duplicate_route",
+            "webapi_missing_path_param",
+            "webapi_dep_cycle",
+            "webapi_basic",
+            "webapi_mw_short",
+            "webapi_docs_off",
+            "webapi_cors",
         ]),
     );
 }

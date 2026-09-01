@@ -1,0 +1,16 @@
+import system.webapi;
+
+async fun a(@dep(b) x: int): int {
+    return x;
+}
+
+async fun b(@dep(a) y: int): int {
+    return y;
+}
+
+@get("/x")
+async fun x(@dep(a) n: int): int {
+    return n;
+}
+
+fun main() {}

@@ -40,7 +40,7 @@ dream_ptr dream_string_alloc(int32_t units) {
     return p;
 }
 
-dream_ptr dream_array_new(int32_t len, int32_t esize) {
+static dream_ptr array_new_with(int32_t len, int32_t esize, int shared) {
     int32_t size;
     dream_ptr p;
     if (len < 0) {
@@ -53,10 +53,19 @@ dream_ptr dream_array_new(int32_t len, int32_t esize) {
         abort();
     }
     size = 4 + len * esize;
-    p = dream_malloc(size, TAG_ARRAY);
+    p = shared ? dream_malloc_shared(size, TAG_ARRAY) : dream_malloc(size, TAG_ARRAY);
     memset(dream_p(p), 0, (size_t)size);
     dream_i32(p)[0] = len;
     return p;
+}
+
+dream_ptr dream_array_new(int32_t len, int32_t esize) {
+    return array_new_with(len, esize, 0);
+}
+
+/* Host pthreads (`@async_host`) must not bump the guest thread-local arena. */
+dream_ptr dream_array_new_shared(int32_t len, int32_t esize) {
+    return array_new_with(len, esize, 1);
 }
 
 /* Builder buffers are never read past `count` before being written, so growing them can

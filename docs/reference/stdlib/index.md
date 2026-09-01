@@ -42,6 +42,7 @@ The standard library ships with the compiler. Import each package you need — t
 | --- | --- |
 | [Files](file.md) | `import system.io;` |
 | [HTTP](http.md) | `import system.net;` |
+| [Web API](webapi.md) | `import system.webapi;` |
 | [Raw sockets](net.md) | `import system.net;` |
 
 ## GPU

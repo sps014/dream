@@ -18,10 +18,16 @@ impl<'a> Emitter<'a> {
                 self.operand(else_val),
             ),
             Rvalue::Binary(op, a, b) => {
-                if *op == crate::BinOp::Eq
+                if matches!(*op, crate::BinOp::Eq | crate::BinOp::Ne)
                     && matches!(self.operand_kind(a), Some(TyKind::Prim(PrimTy::String)))
                 {
-                    return Expr::call("dream_string_eq", vec![self.operand(a), self.operand(b)]);
+                    let eq =
+                        Expr::call("dream_string_eq", vec![self.operand(a), self.operand(b)]);
+                    return if *op == crate::BinOp::Eq {
+                        eq
+                    } else {
+                        Expr::unary(UnOp::Not, eq)
+                    };
                 }
                 if matches!(op, crate::BinOp::Div | crate::BinOp::Rem) && self.is_integer_operand(a)
                 {

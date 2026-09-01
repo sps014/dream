@@ -4,6 +4,7 @@
 mod context;
 mod context_gen;
 mod json_gen;
+mod webapi_gen;
 mod manifest;
 mod registration;
 mod rewrite;
@@ -68,6 +69,9 @@ fn run_generators_inner<'a>(
     let mut ctx = GeneratorContext::build(acc, registered);
 
     json_gen::expand_from_acc(&mut ctx, acc, &acc.all_structs, &acc.all_enums, diagnostics);
+    ctx.apply_emits(arena, acc, diagnostics)?;
+
+    webapi_gen::expand_from_acc(&mut ctx, acc, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;
 
     let handled = context_gen::expand_context_generators(&mut ctx, diagnostics);

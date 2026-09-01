@@ -135,6 +135,7 @@ nav:
       - I/O:
         - File I/O: reference/stdlib/file.md
         - HTTP: reference/stdlib/http.md
+        - Web API: reference/stdlib/webapi.md
         - Raw sockets: reference/stdlib/net.md
       - GPU & compute:
         - system.gpu: reference/stdlib/gpu.md
@@ -152,6 +153,7 @@ nav:
     - GPU SAXPY: cookbook/gpu-saxpy.md
     - GPU triangle: cookbook/gpu-triangle.md
     - Quote generator: cookbook/quote-generator.md
+    - JSON HTTP API: cookbook/webapi.md
   - Internals:
     - Overview: internals/README.md
     - Pipeline: internals/01-pipeline-overview.md

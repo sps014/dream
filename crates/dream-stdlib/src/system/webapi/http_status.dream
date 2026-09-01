@@ -1,0 +1,44 @@
+module system.webapi;
+
+// HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`).
+public class HttpStatus {
+    public code: int;
+    public message: string;
+
+    public constructor(code: int, message: string = "") {
+        this.code = code;
+        this.message = message;
+    }
+
+    public static fun bad_request(): HttpStatus {
+        return HttpStatus(400, "Bad Request");
+    }
+
+    public static fun unauthorized(): HttpStatus {
+        return HttpStatus(401, "Unauthorized");
+    }
+
+    public static fun forbidden(): HttpStatus {
+        return HttpStatus(403, "Forbidden");
+    }
+
+    public static fun not_found(): HttpStatus {
+        return HttpStatus(404, "Not Found");
+    }
+
+    public static fun conflict(): HttpStatus {
+        return HttpStatus(409, "Conflict");
+    }
+
+    public static fun unprocessable(): HttpStatus {
+        return HttpStatus(422, "Unprocessable Entity");
+    }
+
+    public static fun too_many(): HttpStatus {
+        return HttpStatus(429, "Too Many Requests");
+    }
+
+    public static fun internal(): HttpStatus {
+        return HttpStatus(500, "Internal Server Error");
+    }
+}

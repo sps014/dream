@@ -1,0 +1,8 @@
+import system.webapi;
+
+@get("/items/{id}")
+fun get_item(): string {
+    return "x";
+}
+
+fun main() {}

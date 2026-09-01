@@ -1,0 +1,48 @@
+module system.webapi;
+
+// Per-request bag shared by middleware and `@dep` functions.
+public class RequestContext {
+    public incoming: HttpIncoming;
+    public state: Map<string, string>;
+
+    public constructor(incoming: HttpIncoming) {
+        this.incoming = incoming;
+        this.state = Map<string, string>();
+    }
+
+    public fun set(key: string, value: string): void {
+        this.state.set(key, value);
+    }
+
+    public fun get(key: string): Option<string> {
+        return this.state.get(key);
+    }
+}
+
+// Continues the middleware onion toward the route handler.
+public class Next {
+    step: fun(): Future<HttpOutgoing>;
+
+    public constructor(step: fun(): Future<HttpOutgoing>) {
+        this.step = step;
+    }
+
+    public async fun call(): HttpOutgoing {
+        let step = this.step;
+        return await step();
+    }
+}
+
+// One onion layer: `invoke` may short-circuit or `await next.call()`.
+public class Middleware {
+    handler: fun(RequestContext, Next): Future<HttpOutgoing>;
+
+    public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>) {
+        this.handler = handler;
+    }
+
+    public async fun invoke(ctx: RequestContext, next: Next): HttpOutgoing {
+        let handler = this.handler;
+        return await handler(ctx, next);
+    }
+}

@@ -1,0 +1,38 @@
+import system;
+import system.net;
+import system.webapi;
+
+@get("/health")
+fun health(): string {
+    return "ok";
+}
+
+async fun main(): void {
+    WebApp.use(CORS(CorsOptions()));
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    let h = HttpHeaders();
+    h.set("Origin", "http://example.com");
+    switch (await client.get_with("/health", h)) {
+        Ok(r) => {
+            System.println(r.status());
+            System.println(r.header("access-control-allow-origin"));
+            System.println(r.text());
+        },
+        Err(e) => System.println(e.message()),
+    }
+    let pre = HttpHeaders();
+    pre.set("Origin", "http://example.com");
+    pre.set("Access-Control-Request-Method", "POST");
+    pre.set("Access-Control-Request-Headers", "content-type");
+    switch (await client.request("OPTIONS", "/health", "", pre)) {
+        Ok(r) => {
+            System.println(r.status());
+            System.println(r.header("access-control-allow-origin"));
+            System.println(r.header("access-control-allow-methods").contains("POST"));
+            System.println(r.header("access-control-allow-headers").contains("content-type"));
+        },
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

@@ -1154,3 +1154,68 @@ pub unsafe extern "C" fn dateZoneOffsetMinutes(zone_name: usize, epoch_millis: i
 pub extern "C" fn dateLocalZoneName() -> usize {
     alloc_string(&crate::execution::host::tz::local_zone_name())
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerListen(host: usize, port: i32) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::listen(
+        &read_string(host),
+        port,
+    ))
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerAccept(server: i32) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::accept(server))
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerAcceptAsync(future: usize, server: i32) -> i32 {
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http_server::accept(server);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerReadBody(req: i32, max_bytes: i32) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::read_body(
+        req, max_bytes,
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerRespond(
+    req: i32,
+    status: i32,
+    headers: usize,
+    body: usize,
+) -> i32 {
+    crate::execution::host::http_server::respond(
+        req,
+        status,
+        &read_string(headers),
+        read_bytes(body),
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerShutdown(server: i32) -> i32 {
+    crate::execution::host::http_server::shutdown(server)
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerWait(server: i32) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::wait(server))
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerWaitAsync(future: usize, server: i32) -> i32 {
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http_server::wait(server);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}

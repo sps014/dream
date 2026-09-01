@@ -78,7 +78,17 @@ static Node *fq_tail;
 static int32_t foreign_pending;
 
 void dream_foreign_work_begin(void) {
+    pthread_mutex_lock(&wake_mu);
     foreign_pending += 1;
+    pthread_mutex_unlock(&wake_mu);
+}
+
+void dream_foreign_work_end(void) {
+    pthread_mutex_lock(&wake_mu);
+    if (foreign_pending > 0) {
+        foreign_pending -= 1;
+    }
+    pthread_mutex_unlock(&wake_mu);
 }
 
 static void fq_push_locked(Node *n) {
@@ -142,9 +152,6 @@ static void foreign_drain(void) {
         {
             dream_ptr f = n->f;
             free(n);
-            if (i32_at(f, F_QUEUED)[0]) {
-                continue;
-            }
             {
                 dream_ptr w = ptr_at(f, F_WAKER)[0];
                 if (!w) {
@@ -326,6 +333,10 @@ void dream_run_loop(void) {
         }
 #ifndef DREAM_WASM32
         foreign_drain();
+        /* Drain can enqueue waiters onto rq; run them before parking or returning. */
+        if (rq_head) {
+            continue;
+        }
         if (!timer_head && !fq_head && foreign_pending == 0) {
             return;
         }

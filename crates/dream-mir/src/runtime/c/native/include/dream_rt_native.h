@@ -849,6 +849,7 @@ DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
 int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
+dream_ptr dream_array_new_shared(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
 dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
                                  void (*release)(dream_ptr));
@@ -1147,6 +1148,8 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res);
 /* Called by a delegate-shape poll thunk after handing work to a deferred host: keeps
  * dream_run_loop parked while the work is in flight. */
 void dream_foreign_work_begin(void);
+/* Undo `dream_foreign_work_begin` when the host completed inline (returned 0). */
+void dream_foreign_work_end(void);
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 int32_t workerSpawn(int32_t fn, int64_t env);
 int32_t workerPoolSpawn(void);

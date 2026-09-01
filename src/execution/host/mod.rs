@@ -6,6 +6,7 @@ mod c_link;
 pub(crate) mod crypto;
 pub(crate) mod gpu;
 pub(crate) mod http;
+pub(crate) mod http_server;
 pub(crate) mod net;
 pub(crate) mod process_host;
 pub(crate) mod tz;
@@ -138,6 +139,15 @@ mod contract_tests {
     // JS host or libdream ABI table — so they are exempt from the prelude/host parity check.
     const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
     const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
+    // Native `system.webapi` (`@native` only; no JS/wasm listen in v1).
+    const NATIVE_ONLY_HOST_KEYS: &[&str] = &[
+        "httpServerListen",
+        "httpServerAccept",
+        "httpServerReadBody",
+        "httpServerRespond",
+        "httpServerShutdown",
+        "httpServerWait",
+    ];
 
     fn js_host_export_keys(src: &str) -> HashSet<String> {
         let lines: Vec<&str> = src.lines().collect();
@@ -214,6 +224,7 @@ mod contract_tests {
         let mut prelude_only: Vec<&String> = declared.difference(&js_keys).collect();
         prelude_only.retain(|n| !COMPILER_EMITTED_JS_RC.contains(&n.as_str()));
         prelude_only.retain(|n| !RUNTIME_ARCHIVE_KEYS.contains(&n.as_str()));
+        prelude_only.retain(|n| !NATIVE_ONLY_HOST_KEYS.contains(&n.as_str()));
         assert!(
             js_only.is_empty() && prelude_only.is_empty(),
             "JS Dream host keys and prelude `@runtime` / `@js(\"Dream\", …)` declarations have drifted.\n\

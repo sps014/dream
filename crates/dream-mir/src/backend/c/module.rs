@@ -646,6 +646,9 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
                 // The async host owns the future now: it completes it from a foreign thread via
                 // the bound dream_complete_foreign. A truthy return means deferred work, so the
                 // loop must stay parked for it; a zero return was completed synchronously.
+                // Count the outstanding host before the call so a fast complete_foreign
+                // cannot decrement-skip and leave the loop with a stale pending count.
+                poll.stmt(Stmt::call("dream_foreign_work_begin", vec![]));
                 poll.stmt(Stmt::decl(
                     CTy::I32,
                     "__deferred",
@@ -657,8 +660,8 @@ fn emit_imports(m: &mut ModuleBuilder, cx: &Cx<'_>, import_poll_base: usize) {
                     )),
                 ));
                 poll.stmt(Stmt::if_(
-                    Expr::id("__deferred"),
-                    Stmt::call("dream_foreign_work_begin", vec![]),
+                    Expr::bin(crate::BinOp::Eq, Expr::id("__deferred"), Expr::i(0)),
+                    Stmt::call("dream_foreign_work_end", vec![]),
                 ));
             } else if host_ret == CTy::Void {
                 poll.call(host.clone(), saved_args);
@@ -807,7 +810,7 @@ fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             "dream_host_bind",
             vec![
                 Expr::id("dream_string_alloc"),
-                Expr::id("dream_array_new"),
+                Expr::id("dream_array_new_shared"),
                 Expr::cast(CTy::VoidPtr, Expr::id("dream_complete_foreign")),
             ],
         );

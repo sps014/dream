@@ -1,0 +1,50 @@
+module system.webapi;
+
+// One inbound HTTP request (headers + routing fields). Body is read through `req_id`.
+public class HttpIncoming {
+    public req_id: int;
+    public method: string;
+    public path: string;
+    public query: string;
+    public headers: HttpHeaders;
+
+    public constructor(
+        req_id: int,
+        method: string,
+        path: string,
+        query: string,
+        headers: HttpHeaders
+    ) {
+        this.req_id = req_id;
+        this.method = method;
+        this.path = path;
+        this.query = query;
+        this.headers = headers;
+    }
+
+    public fun query_param(name: string): Option<string> {
+        return WebApp.query_value(this.query, name);
+    }
+
+    public fun header(name: string): Option<string> {
+        return this.headers.get(name);
+    }
+
+    public fun cookie(name: string): Option<string> {
+        let header = this.headers.get("Cookie");
+        if header.is_none() {
+            let none: Option<string> = Option.None;
+            return none;
+        }
+        return WebApp.cookie_value(header.unwrap_or(string.empty), name);
+    }
+
+    public fun read_body_text(): string {
+        let bytes = WebApp.host_read_body(this.req_id, 0);
+        return string.from_utf8(bytes);
+    }
+
+    public fun read_body_bytes(): byte[] {
+        return WebApp.host_read_body(this.req_id, 0);
+    }
+}

@@ -180,7 +180,7 @@ fun main() {
     ---
 
     [File](reference/stdlib/file.md) · [HTTP](reference/stdlib/http.md) ·
-    [Sockets](reference/stdlib/net.md)
+    [Web API](reference/stdlib/webapi.md) · [Sockets](reference/stdlib/net.md)
 
 -   :material-gpu: **GPU**
 

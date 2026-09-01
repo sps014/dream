@@ -1,0 +1,31 @@
+module system.webapi;
+
+// `Authorization: Bearer <token>` → the token, or 401.
+public async fun BearerToken(@header("Authorization") value: string): Result<string, HttpStatus> {
+    if !value.starts_with("Bearer ") {
+        return Result.Err(HttpStatus.unauthorized());
+    }
+    if value.length <= 7 {
+        return Result.Err(HttpStatus.unauthorized());
+    }
+    return Result.Ok(value.substring(7, value.length));
+}
+
+// Header named `X-Api-Key` (or pass `@header` yourself by wrapping).
+public async fun ApiKeyHeader(@header("X-Api-Key") value: string): Result<string, HttpStatus> {
+    if value.is_empty() {
+        return Result.Err(HttpStatus(401, "missing API key"));
+    }
+    return Result.Ok(value);
+}
+
+// `Authorization: Basic <base64>` → the raw header value after "Basic ".
+public async fun BasicAuth(@header("Authorization") value: string): Result<string, HttpStatus> {
+    if !value.starts_with("Basic ") {
+        return Result.Err(HttpStatus.unauthorized());
+    }
+    if value.length <= 6 {
+        return Result.Err(HttpStatus.unauthorized());
+    }
+    return Result.Ok(value.substring(6, value.length));
+}

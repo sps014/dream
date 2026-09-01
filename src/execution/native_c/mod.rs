@@ -161,20 +161,8 @@ fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
 fn libdream_dir() -> Option<PathBuf> {
     let name = libdream_name();
     let mut dirs = Vec::new();
-    // `~/.dream/bin/dream` is a symlink; `current_exe` is often the link path, which does
-    // not contain libdream. Prefer DREAM_HOME / the canonical binary dir.
-    if let Ok(home) = std::env::var("DREAM_HOME") {
-        if !home.is_empty() {
-            let home = PathBuf::from(home);
-            push_libdream_dir(&mut dirs, home.clone());
-            push_libdream_dir(&mut dirs, home.join("bin"));
-        }
-    }
-    if let Ok(bin) = std::env::var("DREAM_BIN") {
-        if let Some(p) = Path::new(&bin).parent() {
-            push_libdream_dir(&mut dirs, p.to_path_buf());
-        }
-    }
+    // Prefer the dylib next to this process (cargo test / `target/debug/dream`) so newly added
+    // host symbols link; `DREAM_HOME` may point at an older installed toolchain.
     if let Ok(exe) = std::env::current_exe() {
         if let Ok(canon) = exe.canonicalize() {
             push_exe_parent(&mut dirs, &canon);
@@ -187,6 +175,18 @@ fn libdream_dir() -> Option<PathBuf> {
     }
     push_libdream_dir(&mut dirs, PathBuf::from("target/debug"));
     push_libdream_dir(&mut dirs, PathBuf::from("target/release"));
+    if let Ok(home) = std::env::var("DREAM_HOME") {
+        if !home.is_empty() {
+            let home = PathBuf::from(home);
+            push_libdream_dir(&mut dirs, home.clone());
+            push_libdream_dir(&mut dirs, home.join("bin"));
+        }
+    }
+    if let Ok(bin) = std::env::var("DREAM_BIN") {
+        if let Some(p) = Path::new(&bin).parent() {
+            push_libdream_dir(&mut dirs, p.to_path_buf());
+        }
+    }
     if let Ok(user) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
         if !user.is_empty() {
             push_libdream_dir(&mut dirs, PathBuf::from(user).join(".dream").join("bin"));

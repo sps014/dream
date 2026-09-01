@@ -1,0 +1,23 @@
+import system;
+import system.net;
+import system.webapi;
+
+@get("/secret")
+fun secret(): string {
+    return "nope";
+}
+
+@middleware
+async fun deny(ctx: RequestContext, next: Next): HttpOutgoing {
+    return HttpOutgoing.from_status(HttpStatus.unauthorized());
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    switch (await client.get("/secret")) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

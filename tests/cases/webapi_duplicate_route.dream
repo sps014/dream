@@ -1,0 +1,13 @@
+import system.webapi;
+
+@get("/a")
+fun one(): string {
+    return "a";
+}
+
+@get("/a")
+fun two(): string {
+    return "b";
+}
+
+fun main() {}

@@ -1,0 +1,64 @@
+module system.webapi;
+
+// Outbound HTTP response built by handlers and middleware.
+public class HttpOutgoing {
+    public status: int;
+    public headers: HttpHeaders;
+    public body: string;
+    public body_bytes: byte[];
+    public use_bytes: bool;
+
+    public constructor(status: int, body: string = "") {
+        this.status = status;
+        this.headers = HttpHeaders();
+        this.body = body;
+        this.body_bytes = Buffer.alloc<byte>(0);
+        this.use_bytes = false;
+    }
+
+    public fun set_header(name: string, value: string): HttpOutgoing {
+        this.headers.set(name, value);
+        return this;
+    }
+
+    public static fun text(body: string, status: int = 200): HttpOutgoing {
+        let res = HttpOutgoing(status, body);
+        res.headers.set("Content-Type", "text/plain; charset=utf-8");
+        return res;
+    }
+
+    public static fun html(body: string, status: int = 200): HttpOutgoing {
+        let res = HttpOutgoing(status, body);
+        res.headers.set("Content-Type", "text/html; charset=utf-8");
+        return res;
+    }
+
+    public static fun json_text(body: string, status: int = 200): HttpOutgoing {
+        let res = HttpOutgoing(status, body);
+        res.headers.set("Content-Type", "application/json; charset=utf-8");
+        return res;
+    }
+
+    public static fun bytes(data: byte[], status: int = 200): HttpOutgoing {
+        let res = HttpOutgoing(status, string.empty);
+        res.body_bytes = data;
+        res.use_bytes = true;
+        return res;
+    }
+
+    public static fun from_status(st: HttpStatus): HttpOutgoing {
+        let msg = st.message;
+        if msg.is_empty() {
+            msg = "Error";
+        }
+        return HttpOutgoing.text(msg, st.code);
+    }
+
+    public static fun not_found(): HttpOutgoing {
+        return HttpOutgoing.from_status(HttpStatus.not_found());
+    }
+
+    public static fun empty(status: int = 204): HttpOutgoing {
+        return HttpOutgoing(status, string.empty);
+    }
+}

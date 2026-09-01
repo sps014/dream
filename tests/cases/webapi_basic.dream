@@ -1,0 +1,70 @@
+import system;
+import system.net;
+import system.json;
+import system.webapi;
+
+@json
+class Item {
+    public id: int;
+    public name: string;
+
+    public constructor(id: int, name: string) {
+        this.id = id;
+        this.name = name;
+    }
+}
+
+@get("/health")
+fun health(): string {
+    return "ok";
+}
+
+@get("/items/{id}")
+fun get_item(id: int, @query q: Option<string>): string {
+    let extra = q.unwrap_or("");
+    return id.to_string() + extra;
+}
+
+@post("/items")
+fun create(@body item: Item): Item {
+    return item;
+}
+
+@middleware
+async fun request_id(ctx: RequestContext, next: Next): HttpOutgoing {
+    ctx.set("rid", "1");
+    let res = await next.call();
+    res.set_header("X-Request-Id", ctx.get("rid").unwrap_or("0"));
+    return res;
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let base = "http://127.0.0.1:" + port.to_string();
+    let client = HttpClient(base);
+    switch (await client.get("/health")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/items/7?q=z")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.post("/items", "{\"id\":1,\"name\":\"a\"}")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/openapi.json")) {
+        Ok(r) => {
+            let t = r.text();
+            System.println(t.contains("/health"));
+            System.println(t.contains("/items/{id}"));
+        },
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/docs")) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

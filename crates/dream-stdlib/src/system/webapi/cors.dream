@@ -1,0 +1,134 @@
+module system.webapi;
+
+// FastAPI / Starlette `CORSMiddleware` options. Origins, methods, and headers are comma-separated
+// (`"*"` means any). `allow_credentials` cannot be combined with origin `*` (the request Origin is
+// echoed instead, matching Starlette).
+public class CorsOptions {
+    public allow_origins: string;
+    public allow_methods: string;
+    public allow_headers: string;
+    public expose_headers: string;
+    public allow_credentials: bool;
+    public max_age: int;
+
+    public constructor(
+        allow_origins: string = "*",
+        allow_methods: string = "*",
+        allow_headers: string = "*",
+        expose_headers: string = "",
+        allow_credentials: bool = false,
+        max_age: int = 600
+    ) {
+        this.allow_origins = allow_origins;
+        this.allow_methods = allow_methods;
+        this.allow_headers = allow_headers;
+        this.expose_headers = expose_headers;
+        this.allow_credentials = allow_credentials;
+        this.max_age = max_age;
+    }
+}
+
+public class Cors {
+    opts: CorsOptions;
+
+    public constructor(opts: CorsOptions) {
+        this.opts = opts;
+    }
+
+    public async fun invoke(ctx: RequestContext, next: Next): HttpOutgoing {
+        let origin = ctx.incoming.header("Origin").unwrap_or(string.empty);
+        if origin.is_empty() {
+            return await next.call();
+        }
+        if !Cors.origin_ok(this.opts, origin) {
+            if Cors.is_preflight(ctx) {
+                return HttpOutgoing.empty(400);
+            }
+            return await next.call();
+        }
+        if Cors.is_preflight(ctx) {
+            return this.preflight(ctx, origin);
+        }
+        let res = await next.call();
+        this.apply_simple(res, origin);
+        return res;
+    }
+
+    static fun is_preflight(ctx: RequestContext): bool {
+        if ctx.incoming.method != "OPTIONS" {
+            return false;
+        }
+        return ctx.incoming.header("Access-Control-Request-Method").is_some();
+    }
+
+    static fun origin_ok(opts: CorsOptions, origin: string): bool {
+        let raw = opts.allow_origins.trim();
+        if raw == "*" {
+            return true;
+        }
+        let parts = raw.split(',');
+        let i = 0;
+        while i < parts.length {
+            if parts[i].trim() == origin {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fun allow_origin_value(origin: string): string {
+        if this.opts.allow_credentials {
+            return origin;
+        }
+        if this.opts.allow_origins.trim() == "*" {
+            return "*";
+        }
+        return origin;
+    }
+
+    fun apply_simple(res: HttpOutgoing, origin: string): void {
+        res.set_header("Access-Control-Allow-Origin", this.allow_origin_value(origin));
+        if this.opts.allow_credentials {
+            res.set_header("Access-Control-Allow-Credentials", "true");
+        }
+        let expose = this.opts.expose_headers.trim();
+        if !expose.is_empty() {
+            res.set_header("Access-Control-Expose-Headers", expose);
+        }
+        if this.opts.allow_origins.trim() != "*" || this.opts.allow_credentials {
+            res.set_header("Vary", "Origin");
+        }
+    }
+
+    fun preflight(ctx: RequestContext, origin: string): HttpOutgoing {
+        let res = HttpOutgoing.empty(200);
+        this.apply_simple(res, origin);
+        let methods = this.opts.allow_methods.trim();
+        if methods == "*" {
+            methods = "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS";
+        }
+        res.set_header("Access-Control-Allow-Methods", methods);
+        let req_headers = ctx.incoming.header("Access-Control-Request-Headers").unwrap_or(string.empty);
+        let allow_h = this.opts.allow_headers.trim();
+        if allow_h == "*" {
+            if req_headers.is_empty() {
+                allow_h = "*";
+            } else {
+                allow_h = req_headers;
+            }
+        }
+        if !allow_h.is_empty() {
+            res.set_header("Access-Control-Allow-Headers", allow_h);
+        }
+        res.set_header("Access-Control-Max-Age", this.opts.max_age.to_string());
+        return res;
+    }
+}
+
+// `WebApp.use(CORS(CorsOptions()))` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
+public fun CORS(opts: CorsOptions): Middleware {
+    return Middleware(async (ctx: RequestContext, next: Next) => {
+        return await Cors(opts).invoke(ctx, next);
+    });
+}

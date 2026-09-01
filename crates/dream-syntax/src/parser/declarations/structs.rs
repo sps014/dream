@@ -290,7 +290,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             .collect();
         let this_tok = crate::token::syntax_token::SyntaxToken::new(
             TokenKind::IdentifierToken,
-            struct_name.position.clone(),
+            struct_name.position,
             "this".to_string(),
         );
         let mut stmts = Vec::new();
@@ -308,7 +308,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let body = self.arena.alloc_slice_clone(&stmts);
         let name = crate::token::syntax_token::SyntaxToken::new(
             TokenKind::IdentifierToken,
-            struct_name.position.clone(),
+            struct_name.position,
             CONSTRUCTOR_NAME.to_string(),
         );
         FunctionNode::new(

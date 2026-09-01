@@ -4,6 +4,7 @@ use super::context::GeneratorContext;
 use crate::driver::source_loader::ProgramAccumulator;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::FunctionNode;
+use dream_syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream_syntax::nodes::{AttributeNode, Type};
 use indexmap::IndexMap;
 use std::collections::HashSet;
@@ -17,10 +18,27 @@ pub fn expand_from_acc(
 ) {
     let wants_pkg = acc.requested_std_packages.contains("system.webapi");
     let mut has_routes = false;
-    for f in &acc.all_functions {
-        if route_attr(&f.attributes).is_some() || has_attr(&f.attributes, "middleware") {
+    'detect: for f in &acc.all_functions {
+        if route_kind(&f.attributes).is_some() || has_attr(&f.attributes, "middleware") {
             has_routes = true;
-            break;
+            break 'detect;
+        }
+    }
+    if !has_routes {
+        for s in &acc.all_structs {
+            if is_std_file(s.file_path.as_deref()) {
+                continue;
+            }
+            if has_attr(&s.attributes, "http_group") {
+                has_routes = true;
+                break;
+            }
+            for m in &s.methods {
+                if route_kind(&m.attributes).is_some() {
+                    has_routes = true;
+                    break;
+                }
+            }
         }
     }
     if !wants_pkg && !has_routes {
@@ -48,24 +66,101 @@ pub fn expand_from_acc(
         }
         fns.entry(f.name.text.clone()).or_insert(f);
     }
+    for s in &acc.all_structs {
+        if is_std_file(s.file_path.as_deref()) {
+            continue;
+        }
+        for m in &s.methods {
+            fns.entry(m.name.text.clone()).or_insert(m);
+        }
+    }
 
     let mut errors = false;
     let mut routes: Vec<Route> = Vec::new();
     let mut seen_keys: HashSet<(String, String)> = HashSet::new();
+
+    let mut candidates: Vec<RouteCandidate<'_>> = Vec::new();
     for f in &acc.all_functions {
         if is_std_file(f.file_path.as_deref()) {
             continue;
         }
-        let Some((method, path)) = route_attr(&f.attributes) else {
+        let Some(kind) = route_kind(&f.attributes) else {
             continue;
         };
+        candidates.push(RouteCandidate {
+            f,
+            kind,
+            prefix: String::new(),
+            class_uses: Vec::new(),
+            call: f.name.text.clone(),
+        });
+    }
+    for s in &acc.all_structs {
+        if is_std_file(s.file_path.as_deref()) {
+            continue;
+        }
+        let prefix = attr_string(&s.attributes, "http_group").unwrap_or_default();
+        let class_uses = attr_enum_names(&s.attributes, "use");
+        for m in &s.methods {
+            if m.name.text == CONSTRUCTOR_NAME {
+                continue;
+            }
+            let Some(kind) = route_kind(&m.attributes) else {
+                continue;
+            };
+            if !m.is_static {
+                report(
+                    diagnostics,
+                    m,
+                    "HTTP route methods on a class must be static".to_string(),
+                );
+                errors = true;
+                continue;
+            }
+            candidates.push(RouteCandidate {
+                f: m,
+                kind,
+                prefix: prefix.clone(),
+                class_uses: class_uses.clone(),
+                call: format!("{}.{}", s.name.text, m.name.text),
+            });
+        }
+    }
+
+    for c in candidates {
+        let (method, raw_path, websocket) = match &c.kind {
+            RouteKind::Http { method, path } => (method.clone(), path.clone(), false),
+            RouteKind::WebSocket { path } => ("GET".into(), path.clone(), true),
+        };
+        let path = join_http_path(&c.prefix, &raw_path);
         let key = (method.clone(), path.clone());
         if !seen_keys.insert(key) {
-            report(diagnostics, f, format!("duplicate {} route '{}'", method, path));
+            report(
+                diagnostics,
+                c.f,
+                format!("duplicate {} route '{}'", method, path),
+            );
             errors = true;
             continue;
         }
-        match build_route(f, &method, &path, &fns, &json_names, acc, diagnostics) {
+        let mut uses = c.class_uses.clone();
+        uses.extend(attr_enum_names(&c.f.attributes, "use"));
+        if !validate_uses(&uses, c.f, &fns, diagnostics) {
+            errors = true;
+            continue;
+        }
+        match build_route(
+            c.f,
+            &method,
+            &path,
+            &c.call,
+            uses,
+            websocket,
+            &fns,
+            &json_names,
+            acc,
+            diagnostics,
+        ) {
             Some(r) => routes.push(r),
             None => errors = true,
         }
@@ -105,7 +200,16 @@ fn has_attr(attrs: &[AttributeNode], name: &str) -> bool {
     attrs.iter().any(|a| a.name.text == name)
 }
 
-fn route_attr(attrs: &[AttributeNode]) -> Option<(String, String)> {
+fn route_kind(attrs: &[AttributeNode]) -> Option<RouteKind> {
+    if let Some(a) = attrs.iter().find(|a| a.name.text == "websocket") {
+        let path = a
+            .args
+            .first()
+            .and_then(|x| x.as_string())
+            .unwrap_or("/")
+            .to_string();
+        return Some(RouteKind::WebSocket { path });
+    }
     for name in ROUTE_ATTRS {
         if let Some(a) = attrs.iter().find(|a| a.name.text == *name) {
             let path = a
@@ -114,10 +218,35 @@ fn route_attr(attrs: &[AttributeNode]) -> Option<(String, String)> {
                 .and_then(|x| x.as_string())
                 .unwrap_or("/")
                 .to_string();
-            return Some((name.to_uppercase(), path));
+            return Some(RouteKind::Http {
+                method: name.to_uppercase(),
+                path,
+            });
         }
     }
     None
+}
+
+fn join_http_path(prefix: &str, path: &str) -> String {
+    let p = prefix.trim_end_matches('/');
+    let rest = if path.is_empty() {
+        "/"
+    } else if path.starts_with('/') {
+        path
+    } else {
+        return if p.is_empty() {
+            format!("/{path}")
+        } else {
+            format!("{p}/{path}")
+        };
+    };
+    if p.is_empty() {
+        rest.to_string()
+    } else if rest == "/" {
+        p.to_string()
+    } else {
+        format!("{p}{rest}")
+    }
 }
 
 fn attr_int(attrs: &[AttributeNode], name: &str) -> Option<i32> {
@@ -146,20 +275,105 @@ fn attr_string(attrs: &[AttributeNode], name: &str) -> Option<String> {
         }))
 }
 
-fn attr_enum_name(attrs: &[AttributeNode], name: &str) -> Option<String> {
-    let a = attrs.iter().find(|a| a.name.text == name)?;
-    let arg = a.args.first()?;
-    match arg {
-        dream_syntax::nodes::AttributeArg::Enum(parts) => {
-            Some(parts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join("."))
+fn attr_enum_names(attrs: &[AttributeNode], name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for a in attrs {
+        if a.name.text != name {
+            continue;
         }
-        _ => arg.as_string().map(|s| s.to_string()),
+        let Some(arg) = a.args.first() else {
+            continue;
+        };
+        match arg {
+            dream_syntax::nodes::AttributeArg::Enum(parts) => {
+                out.push(
+                    parts
+                        .iter()
+                        .map(|t| t.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
+            }
+            _ => {
+                if let Some(s) = arg.as_string() {
+                    out.push(s.to_string());
+                }
+            }
+        }
     }
+    out
+}
+
+fn is_middleware_shape(f: &FunctionNode<'_>) -> bool {
+    if !f.is_async {
+        return false;
+    }
+    let ret = f
+        .return_type
+        .as_ref()
+        .map(type_name)
+        .unwrap_or_else(|| "void".into());
+    if ret != "HttpOutgoing" {
+        return false;
+    }
+    if f.parameters.len() != 2 {
+        return false;
+    }
+    type_name(&f.parameters[0].type_) == "RequestContext"
+        && type_name(&f.parameters[1].type_) == "Next"
+}
+
+fn validate_uses(
+    uses: &[String],
+    route: &FunctionNode<'_>,
+    fns: &IndexMap<String, &FunctionNode<'_>>,
+    diagnostics: &mut DiagnosticBag,
+) -> bool {
+    let mut ok = true;
+    for name in uses {
+        let Some(target) = fns.get(name).copied() else {
+            report(
+                diagnostics,
+                route,
+                format!("@use({name}) does not resolve to a function"),
+            );
+            ok = false;
+            continue;
+        };
+        if !is_middleware_shape(target) {
+            report(
+                diagnostics,
+                route,
+                format!(
+                    "@use({name}) must be `async fun {name}(ctx: RequestContext, next: Next): HttpOutgoing`"
+                ),
+            );
+            ok = false;
+        }
+    }
+    ok
+}
+
+fn attr_enum_name(attrs: &[AttributeNode], name: &str) -> Option<String> {
+    attr_enum_names(attrs, name).into_iter().next()
 }
 
 fn report(diagnostics: &mut DiagnosticBag, f: &FunctionNode<'_>, msg: String) {
     diagnostics.file_path = f.file_path.as_ref().map(|p| p.to_string());
     diagnostics.report_error(msg, Some(f.name.position));
+}
+
+enum RouteKind {
+    Http { method: String, path: String },
+    WebSocket { path: String },
+}
+
+struct RouteCandidate<'a> {
+    f: &'a FunctionNode<'a>,
+    kind: RouteKind,
+    prefix: String,
+    class_uses: Vec<String>,
+    call: String,
 }
 
 struct Route {
@@ -169,6 +383,8 @@ struct Route {
     is_async: bool,
     ret: String,
     params: Vec<ParamPlan>,
+    uses: Vec<String>,
+    websocket: bool,
 }
 
 struct ParamPlan {
@@ -185,7 +401,10 @@ enum ParamKind {
     Header(String),
     Cookie(String),
     Body,
+    Form(String),
+    File(String),
     Dep(String),
+    ServerWs,
 }
 
 fn path_placeholders(path: &str) -> Vec<String> {
@@ -264,6 +483,9 @@ fn build_route(
     f: &FunctionNode<'_>,
     method: &str,
     path: &str,
+    call: &str,
+    uses: Vec<String>,
+    websocket: bool,
     fns: &IndexMap<String, &FunctionNode<'_>>,
     json_names: &HashSet<String>,
     acc: &ProgramAccumulator<'_>,
@@ -272,6 +494,8 @@ fn build_route(
     let placeholders = path_placeholders(path);
     let mut used_path: HashSet<String> = HashSet::new();
     let mut params = Vec::new();
+    let mut has_body = false;
+    let mut has_form = false;
     for p in &f.parameters {
         let ty = type_name(&p.type_);
         let name = p.name.text.clone();
@@ -279,6 +503,16 @@ fn build_route(
             ParamKind::Incoming
         } else if ty == "RequestContext" {
             ParamKind::Context
+        } else if ty == "ServerWebSocket" {
+            if !websocket {
+                report(
+                    diagnostics,
+                    f,
+                    "ServerWebSocket is only valid on `@websocket` routes".to_string(),
+                );
+                return None;
+            }
+            ParamKind::ServerWs
         } else if let Some(dep) = attr_enum_name(&p.attributes, "dep") {
             if !fns.contains_key(&dep) && dep != "BearerToken" && dep != "ApiKeyHeader" && dep != "BasicAuth"
             {
@@ -291,6 +525,14 @@ fn build_route(
             }
             ParamKind::Dep(dep)
         } else if has_attr(&p.attributes, "body") {
+            if has_form {
+                report(
+                    diagnostics,
+                    f,
+                    "@body cannot be combined with @form/@file".to_string(),
+                );
+                return None;
+            }
             let core = ty.strip_suffix("[]").unwrap_or(ty.as_str());
             if ty != "string" && ty != "byte[]" && ty != "JsonValue" && !json_names.contains(core) {
                 report(
@@ -300,7 +542,40 @@ fn build_route(
                 );
                 return None;
             }
+            has_body = true;
             ParamKind::Body
+        } else if has_attr(&p.attributes, "form") {
+            if has_body {
+                report(
+                    diagnostics,
+                    f,
+                    "@form cannot be combined with @body".to_string(),
+                );
+                return None;
+            }
+            has_form = true;
+            let field = attr_string(&p.attributes, "form").unwrap_or_else(|| name.clone());
+            ParamKind::Form(field)
+        } else if has_attr(&p.attributes, "file") {
+            if has_body {
+                report(
+                    diagnostics,
+                    f,
+                    "@file cannot be combined with @body".to_string(),
+                );
+                return None;
+            }
+            has_form = true;
+            if ty != "UploadedFile" && option_inner(&ty) != Some("UploadedFile") {
+                report(
+                    diagnostics,
+                    f,
+                    format!("@file parameter '{name}' must be UploadedFile"),
+                );
+                return None;
+            }
+            let field = attr_string(&p.attributes, "file").unwrap_or_else(|| name.clone());
+            ParamKind::File(field)
         } else if has_attr(&p.attributes, "query") {
             let q = attr_string(&p.attributes, "query").unwrap_or_else(|| name.clone());
             ParamKind::Query(q)
@@ -327,6 +602,17 @@ fn build_route(
         };
         params.push(ParamPlan { name, ty, kind });
     }
+    if websocket {
+        let has_ws = params.iter().any(|p| matches!(p.kind, ParamKind::ServerWs));
+        if !has_ws {
+            report(
+                diagnostics,
+                f,
+                "@websocket handler must take a ServerWebSocket parameter".to_string(),
+            );
+            return None;
+        }
+    }
     let mut dep_stack = Vec::new();
     for p in &params {
         if let ParamKind::Dep(dep) = &p.kind {
@@ -352,11 +638,10 @@ fn build_route(
             return None;
         }
     }
-    let _ = fns;
     Some(Route {
         method: method.to_string(),
         path: path.to_string(),
-        fn_name: f.name.text.clone(),
+        fn_name: call.to_string(),
         is_async: f.is_async,
         ret: f
             .return_type
@@ -364,6 +649,8 @@ fn build_route(
             .map(type_name)
             .unwrap_or_else(|| "void".into()),
         params,
+        uses,
+        websocket,
     })
 }
 
@@ -416,8 +703,9 @@ fn emit_extend(
     s.push_str(&json_string(&openapi_paths(routes, json_names, acc)));
     s.push_str(";\n    }\n\n");
     s.push_str(
-        "    public static async fun generated_dispatch(req: HttpIncoming): HttpOutgoing {\n",
+        "    public static async fun generated_dispatch(ctx: RequestContext): HttpOutgoing {\n",
     );
+    s.push_str("        let req = ctx.incoming;\n");
     s.push_str("        let method = req.method;\n");
     s.push_str("        let path = req.path;\n");
     for (i, r) in routes.iter().enumerate() {
@@ -466,9 +754,43 @@ fn emit_handler_body(
     json_names: &HashSet<String>,
     acc: &ProgramAccumulator<'_>,
 ) {
-    let ind = "            ";
+    let wrap = !r.uses.is_empty();
+    let ind = if wrap { "                " } else { "            " };
+    if wrap {
+        s.push_str("            let __leaf: fun(): Future<HttpOutgoing> = async () => {\n");
+    }
+    emit_extractors(s, r, i, json_names, acc, ind);
+    if wrap {
+        s.push_str("            };\n");
+        s.push_str("            let __uses = List<Middleware>();\n");
+        for u in &r.uses {
+            s.push_str(&format!("            __uses.push(Middleware({u}));\n"));
+        }
+        s.push_str(
+            "            return await WebApp.run_local_middleware(ctx, __uses, 0, __leaf);\n",
+        );
+    }
+}
+
+fn emit_extractors(
+    s: &mut String,
+    r: &Route,
+    i: usize,
+    json_names: &HashSet<String>,
+    acc: &ProgramAccumulator<'_>,
+    ind: &str,
+) {
     let mut args: Vec<String> = Vec::new();
     let mut dep_memo: HashSet<String> = HashSet::new();
+    let needs_multipart = r
+        .params
+        .iter()
+        .any(|p| matches!(p.kind, ParamKind::Form(_) | ParamKind::File(_)));
+    if needs_multipart {
+        s.push_str(&format!(
+            "{ind}if WebApp.host_parse_multipart(req.req_id) != 1 {{ return HttpOutgoing.from_status(HttpStatus(400, \"expected multipart/form-data\")); }}\n"
+        ));
+    }
     for p in &r.params {
         match &p.kind {
             ParamKind::Incoming => {
@@ -476,9 +798,21 @@ fn emit_handler_body(
                 args.push(p.name.clone());
             }
             ParamKind::Context => {
+                s.push_str(&format!("{ind}let {} = ctx;\n", p.name));
+                args.push(p.name.clone());
+            }
+            ParamKind::ServerWs => {
                 s.push_str(&format!(
-                    "{ind}let {} = RequestContext(req);\n",
+                    "{ind}let __ws_{} = ServerWebSocket.upgrade(req);\n",
                     p.name
+                ));
+                s.push_str(&format!(
+                    "{ind}if __ws_{}.is_none() {{ return HttpOutgoing.from_status(HttpStatus(400, \"websocket upgrade failed\")); }}\n",
+                    p.name
+                ));
+                s.push_str(&format!(
+                    "{ind}let {} = __ws_{}.unwrap();\n",
+                    p.name, p.name
                 ));
                 args.push(p.name.clone());
             }
@@ -575,6 +909,44 @@ fn emit_handler_body(
                 }
                 args.push(p.name.clone());
             }
+            ParamKind::Form(key) => {
+                s.push_str(&format!(
+                    "{ind}let __f_{} = WebApp.multipart_field(req.req_id, \"{key}\");\n",
+                    p.name
+                ));
+                if option_inner(&p.ty).is_some() {
+                    s.push_str(&format!("{ind}let {} = __f_{};\n", p.name, p.name));
+                } else {
+                    s.push_str(&format!(
+                        "{ind}if __f_{}.is_none() {{ return HttpOutgoing.from_status(HttpStatus(400,\"missing form {key}\")); }}\n",
+                        p.name
+                    ));
+                    s.push_str(&format!(
+                        "{ind}let {} = __f_{}.unwrap_or(string.empty);\n",
+                        p.name, p.name
+                    ));
+                }
+                args.push(p.name.clone());
+            }
+            ParamKind::File(key) => {
+                s.push_str(&format!(
+                    "{ind}let __file_{} = WebApp.multipart_file(req.req_id, \"{key}\");\n",
+                    p.name
+                ));
+                if option_inner(&p.ty).is_some() {
+                    s.push_str(&format!("{ind}let {} = __file_{};\n", p.name, p.name));
+                } else {
+                    s.push_str(&format!(
+                        "{ind}if __file_{}.is_none() {{ return HttpOutgoing.from_status(HttpStatus(400,\"missing file {key}\")); }}\n",
+                        p.name
+                    ));
+                    s.push_str(&format!(
+                        "{ind}let {} = __file_{}.unwrap();\n",
+                        p.name, p.name
+                    ));
+                }
+                args.push(p.name.clone());
+            }
             ParamKind::Dep(dep) => {
                 emit_dep_call(s, ind, &p.name, &p.ty, dep, acc, &mut dep_memo);
                 args.push(p.name.clone());
@@ -587,6 +959,11 @@ fn emit_handler_body(
     } else {
         format!("{}({call_args})", r.fn_name)
     };
+    if r.websocket {
+        s.push_str(&format!("{ind}{call};\n"));
+        s.push_str(&format!("{ind}return HttpOutgoing.already_sent();\n"));
+        return;
+    }
     emit_return(s, ind, &r.ret, &call, json_names);
 }
 
@@ -719,6 +1096,12 @@ fn emit_return(
         s.push_str(&format!("{ind}return HttpOutgoing.from_status({call});\n"));
         return;
     }
+    if ret == "EventStream" {
+        s.push_str(&format!("{ind}let __es = {call};\n"));
+        s.push_str(&format!("{ind}__es.end();\n"));
+        s.push_str(&format!("{ind}return HttpOutgoing.already_sent();\n"));
+        return;
+    }
     s.push_str(&format!("{ind}let __out = {call};\n"));
     if let Some((ok, err)) = result_parts(ret) {
         if err == "HttpStatus" {
@@ -729,6 +1112,18 @@ fn emit_return(
             emit_value_return(s, ind, ok, "__ok", json_names);
             return;
         }
+        if err == "string" {
+            s.push_str(&format!(
+                "{ind}if __out.is_err() {{ return HttpOutgoing.detail(__out.unwrap_err(), 500); }}\n"
+            ));
+        } else {
+            s.push_str(&format!(
+                "{ind}if __out.is_err() {{ return HttpOutgoing.detail(__out.unwrap_err().to_string(), 500); }}\n"
+            ));
+        }
+        s.push_str(&format!("{ind}let __ok = __out.unwrap();\n"));
+        emit_value_return(s, ind, ok, "__ok", json_names);
+        return;
     }
     emit_value_return(s, ind, ret, "__out", json_names);
 }
@@ -786,6 +1181,8 @@ fn openapi_paths(
             let mut first_p = true;
             params_json.push('[');
             let mut body: Option<String> = None;
+            let mut form_props = String::new();
+            let mut first_form = true;
             for p in &r.params {
                 match &p.kind {
                     ParamKind::Path(n) => {
@@ -824,6 +1221,22 @@ fn openapi_paths(
                     ParamKind::Body => {
                         body = Some(openapi_schema_str(&p.ty, json_names, acc));
                     }
+                    ParamKind::Form(n) => {
+                        if !first_form {
+                            form_props.push(',');
+                        }
+                        first_form = false;
+                        form_props.push_str(&json_raw_string(n));
+                        form_props.push_str(":{\"type\":\"string\"}");
+                    }
+                    ParamKind::File(n) => {
+                        if !first_form {
+                            form_props.push(',');
+                        }
+                        first_form = false;
+                        form_props.push_str(&json_raw_string(n));
+                        form_props.push_str(":{\"type\":\"string\",\"format\":\"binary\"}");
+                    }
                     _ => {}
                 }
             }
@@ -836,6 +1249,10 @@ fn openapi_paths(
                 s.push_str(",\"requestBody\":{\"required\":true,\"content\":{\"application/json\":{\"schema\":");
                 s.push_str(&schema);
                 s.push_str("}}}");
+            } else if !form_props.is_empty() {
+                s.push_str(",\"requestBody\":{\"required\":true,\"content\":{\"multipart/form-data\":{\"schema\":{\"type\":\"object\",\"properties\":{");
+                s.push_str(&form_props);
+                s.push_str("}}}}}");
             }
             s.push_str(",\"responses\":{\"200\":{\"description\":\"OK\"}}}");
         }

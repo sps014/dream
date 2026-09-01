@@ -7,6 +7,7 @@ public class HttpOutgoing {
     public body: string;
     public body_bytes: byte[];
     public use_bytes: bool;
+    public skip_send: bool;
 
     public constructor(status: int, body: string = "") {
         this.status = status;
@@ -14,6 +15,7 @@ public class HttpOutgoing {
         this.body = body;
         this.body_bytes = Buffer.alloc<byte>(0);
         this.use_bytes = false;
+        this.skip_send = false;
     }
 
     public fun set_header(name: string, value: string): HttpOutgoing {
@@ -36,6 +38,17 @@ public class HttpOutgoing {
     public static fun json_text(body: string, status: int = 200): HttpOutgoing {
         let res = HttpOutgoing(status, body);
         res.headers.set("Content-Type", "application/json; charset=utf-8");
+        return res;
+    }
+
+    // FastAPI-style `{"detail": "..."}` JSON error.
+    public static fun detail(message: string, status: int = 500): HttpOutgoing {
+        return HttpOutgoing.json_text("{\"detail\":" + WebApp.json_escape(message) + "}", status);
+    }
+
+    public static fun already_sent(): HttpOutgoing {
+        let res = HttpOutgoing(200, string.empty);
+        res.skip_send = true;
         return res;
     }
 

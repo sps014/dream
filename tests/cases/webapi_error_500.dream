@@ -1,0 +1,34 @@
+import system;
+import system.net;
+import system.webapi;
+
+@get("/boom")
+fun boom(): Result<string, string> {
+    return Result.Err("kaboom");
+}
+
+@get("/ok")
+fun ok(): string {
+    return "ok";
+}
+
+async fun main(): void {
+    WebApp.use(CORS(CorsOptions()));
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    let h = HttpHeaders();
+    h.set("Origin", "http://example.com");
+    switch (await client.get_with("/boom", h)) {
+        Ok(r) => {
+            System.println(r.status());
+            System.println(r.text());
+            System.println(r.header("access-control-allow-origin"));
+        },
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/ok")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

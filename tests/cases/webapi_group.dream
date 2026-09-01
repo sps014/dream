@@ -1,0 +1,25 @@
+import system;
+import system.net;
+import system.webapi;
+
+@http_group("/api")
+class Items {
+    @get("/items")
+    public static fun list(): string {
+        return "ok";
+    }
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    switch (await client.get("/api/items")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/openapi.json")) {
+        Ok(r) => System.println(r.text().contains("/api/items")),
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

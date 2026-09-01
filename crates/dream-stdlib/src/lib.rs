@@ -853,6 +853,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/webapi/http_incoming.dream"),
             ),
             (
+                "<std>/system/webapi/uploaded_file.dream",
+                include_str!("system/webapi/uploaded_file.dream"),
+            ),
+            (
                 "<std>/system/webapi/middleware.dream",
                 include_str!("system/webapi/middleware.dream"),
             ),
@@ -863,6 +867,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/webapi/web_app.dream",
                 include_str!("system/webapi/web_app.dream"),
+            ),
+            (
+                "<std>/system/webapi/event_stream.dream",
+                include_str!("system/webapi/event_stream.dream"),
+            ),
+            (
+                "<std>/system/webapi/server_ws.dream",
+                include_str!("system/webapi/server_ws.dream"),
             ),
             (
                 "<std>/system/webapi/auth.dream",

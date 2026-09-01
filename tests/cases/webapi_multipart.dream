@@ -1,0 +1,25 @@
+import system;
+import system.net;
+import system.webapi;
+
+@post("/upload")
+fun upload(@form title: string, @file file: UploadedFile): string {
+    return title + ":" + file.filename + ":" + file.bytes.length.to_string();
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    let form = MultipartForm();
+    form.add_field("title", "hi");
+    form.add_file("file", "a.txt", "text/plain", Encoding.utf8_encode("abc"));
+    switch (await client.post_multipart("/upload", form)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/openapi.json")) {
+        Ok(r) => System.println(r.text().contains("multipart/form-data")),
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

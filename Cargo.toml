@@ -48,6 +48,12 @@ hyper = { version = "1", optional = true, default-features = false, features = [
 hyper-util = { version = "0.1", optional = true, default-features = false, features = ["tokio", "server-auto", "http1"] }
 http-body-util = { version = "0.1", optional = true }
 bytes = { version = "1", optional = true }
+multer = { version = "3", optional = true }
+futures-util = { version = "0.3", optional = true }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "tls12", "ring"] }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["ring"] }
+rustls-pemfile = { version = "2", optional = true }
+tokio-tungstenite = { version = "0.24", optional = true, default-features = false }
 serde_json = { version = "1", optional = true }
 # Cross-platform raw-mode terminal input backing `System.readKey` (native C runtime / libdream).
 crossterm = { version = "0.28", optional = true }
@@ -101,7 +107,7 @@ default = ["native", "wasm-opt", "webview"]
 # `native` pulls in libdream (GPU/HTTP/console) used by the `dream` CLI to
 # execute compiled native C programs. It is excluded from the wasm32 analyzer
 # build, whose only need is the lexer/parser/analyzer front-end.
-native = ["reqwest", "tokio", "hyper", "hyper-util", "http-body-util", "bytes", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "gilrs", "image"]
+native = ["reqwest", "tokio", "hyper", "hyper-util", "http-body-util", "bytes", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "tokio-tungstenite", "multer", "futures-util", "rustls", "tokio-rustls", "rustls-pemfile", "wgpu", "pollster", "winit", "gilrs", "image"]
 # wry/WebKit. Default for published toolchains (macOS/Windows OS WebView; Linux WebKitGTK).
 webview = ["dep:wry"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
@@ -114,6 +120,7 @@ pretty_assertions = "1.4.1"
 rayon = "1"
 # Parses the emitted `.wat` text back into a module in wasm-opt / e2e assertions.
 wat = "1.252.0"
+rcgen = "0.13"
 
 [profile.dev]
 debug = "line-tables-only"

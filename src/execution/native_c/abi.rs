@@ -1039,11 +1039,33 @@ pub unsafe extern "C" fn wsConnect(url: usize, timeout_ms: i32) -> usize {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn wsConnectAsync(future: usize, url: usize, timeout_ms: i32) -> i32 {
+    let url = read_string(url);
+    std::thread::spawn(move || {
+        let out = crate::execution::host::net::ws_connect(&url, timeout_ms);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn wsSendText(handle: i32, text: usize) -> usize {
     alloc_bytes(&crate::execution::host::net::ws_send_text(
         handle,
         &read_string(text),
     ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wsSendTextAsync(future: usize, handle: i32, text: usize) -> i32 {
+    let text = read_string(text);
+    std::thread::spawn(move || {
+        let out = crate::execution::host::net::ws_send_text(handle, &text);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
 }
 
 #[no_mangle]
@@ -1055,8 +1077,29 @@ pub unsafe extern "C" fn wsSendBinary(handle: i32, data: usize) -> usize {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn wsSendBinaryAsync(future: usize, handle: i32, data: usize) -> i32 {
+    let data = read_bytes(data);
+    std::thread::spawn(move || {
+        let out = crate::execution::host::net::ws_send_binary(handle, &data);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn wsReceive(handle: i32) -> usize {
     alloc_bytes(&crate::execution::host::net::ws_receive(handle))
+}
+
+#[no_mangle]
+pub extern "C" fn wsReceiveAsync(future: usize, handle: i32) -> i32 {
+    std::thread::spawn(move || {
+        let out = crate::execution::host::net::ws_receive(handle);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
 }
 
 #[no_mangle]
@@ -1156,10 +1199,17 @@ pub extern "C" fn dateLocalZoneName() -> usize {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn httpServerListen(host: usize, port: i32) -> usize {
+pub unsafe extern "C" fn httpServerListen(
+    host: usize,
+    port: i32,
+    tls_cert: usize,
+    tls_key: usize,
+) -> usize {
     alloc_bytes(&crate::execution::host::http_server::listen(
         &read_string(host),
         port,
+        &read_string(tls_cert),
+        &read_string(tls_key),
     ))
 }
 
@@ -1198,6 +1248,102 @@ pub unsafe extern "C" fn httpServerRespond(
         &read_string(headers),
         read_bytes(body),
     )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerStartStream(req: i32, status: i32, headers: usize) -> i32 {
+    crate::execution::host::http_server::start_stream(req, status, &read_string(headers))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerWriteChunk(req: i32, data: usize) -> i32 {
+    crate::execution::host::http_server::write_chunk(req, read_bytes(data))
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerWriteChunkAsync(future: usize, req: i32, data: usize) -> i32 {
+    let bytes = unsafe { read_bytes(data) };
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http_server::write_chunk(req, bytes);
+        complete_foreign_future(future, out as usize);
+    });
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerEndStream(req: i32) -> i32 {
+    crate::execution::host::http_server::end_stream(req)
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerWsUpgrade(req: i32) -> i32 {
+    crate::execution::host::http_server::ws_upgrade(req)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerWsSend(handle: i32, kind: i32, data: usize) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::ws_send(
+        handle,
+        kind,
+        read_bytes(data),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerWsSendAsync(
+    future: usize,
+    handle: i32,
+    kind: i32,
+    data: usize,
+) -> i32 {
+    let bytes = read_bytes(data);
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http_server::ws_send(handle, kind, bytes);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerWsReceive(handle: i32) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::ws_receive(handle))
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerWsReceiveAsync(future: usize, handle: i32) -> i32 {
+    std::thread::spawn(move || {
+        let out = crate::execution::host::http_server::ws_receive(handle);
+        let payload = alloc_bytes(&out);
+        complete_foreign_future(future, payload);
+    });
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerWsClose(handle: i32, code: i32, reason: usize) -> i32 {
+    crate::execution::host::http_server::ws_close(handle, code, &read_string(reason))
+}
+
+#[no_mangle]
+pub extern "C" fn httpServerParseMultipart(req: i32) -> i32 {
+    crate::execution::host::http_server::parse_multipart(req)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerMultipartField(req: i32, name: usize) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::multipart_field(
+        req,
+        &read_string(name),
+    ))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn httpServerMultipartFile(req: i32, name: usize) -> usize {
+    alloc_bytes(&crate::execution::host::http_server::multipart_file(
+        req,
+        &read_string(name),
+    ))
 }
 
 #[no_mangle]

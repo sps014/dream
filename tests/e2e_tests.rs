@@ -79,10 +79,18 @@ const SMOKE_CASES: &[&str] = &[
     "webapi_duplicate_route",
     "webapi_missing_path_param",
     "webapi_dep_cycle",
+    "webapi_use_unknown",
     "webapi_basic",
     "webapi_mw_short",
     "webapi_docs_off",
     "webapi_cors",
+    "webapi_use_route",
+    "webapi_group",
+    "webapi_error_500",
+    "webapi_sse",
+    "webapi_ws",
+    "webapi_multipart",
+    "webapi_tls",
     "primary_constructor",
     "unit_variant_bare",
     "union_named_single_field",
@@ -131,6 +139,20 @@ fn spawn_tcp_echo() -> (u16, thread::JoinHandle<()>) {
         }
     });
     (port, handle)
+}
+
+fn write_e2e_tls_cert() -> (String, String) {
+    let dir = std::env::temp_dir().join(format!("dream_e2e_tls_{}", std::process::id()));
+    let _ = fs::create_dir_all(&dir);
+    let cert_path = dir.join("cert.pem");
+    let key_path = dir.join("key.pem");
+    let issued = rcgen::generate_simple_self_signed(["localhost".into()]).expect("rcgen");
+    fs::write(&cert_path, issued.cert.pem()).expect("write cert");
+    fs::write(&key_path, issued.key_pair.serialize_pem()).expect("write key");
+    (
+        cert_path.to_string_lossy().into_owned(),
+        key_path.to_string_lossy().into_owned(),
+    )
 }
 
 struct MockRequest {
@@ -282,10 +304,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
     };
     let timeout_secs = if stem == "http_get_local"
         || stem == "http_methods_local"
-        || stem == "webapi_basic"
-        || stem == "webapi_mw_short"
-        || stem == "webapi_docs_off"
-        || stem == "webapi_cors"
+        || stem.starts_with("webapi_")
     {
         20
     } else {
@@ -307,6 +326,15 @@ fn run_native_case(dream_file: &Path, release: bool) {
     }
     if let Some((port, _)) = http_mock.as_ref() {
         env.push(("DREAM_E2E_HTTP_PORT", port.to_string()));
+    }
+    let tls_paths = if stem == "webapi_tls" {
+        Some(write_e2e_tls_cert())
+    } else {
+        None
+    };
+    if let Some((cert, key)) = tls_paths.as_ref() {
+        env.push(("DREAM_E2E_TLS_CERT", cert.clone()));
+        env.push(("DREAM_E2E_TLS_KEY", key.clone()));
     }
     let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let run =
@@ -688,10 +716,18 @@ fn run_file_http_parity_e2e() {
             "webapi_duplicate_route",
             "webapi_missing_path_param",
             "webapi_dep_cycle",
+            "webapi_use_unknown",
             "webapi_basic",
             "webapi_mw_short",
             "webapi_docs_off",
             "webapi_cors",
+            "webapi_use_route",
+            "webapi_group",
+            "webapi_error_500",
+            "webapi_sse",
+            "webapi_ws",
+            "webapi_multipart",
+            "webapi_tls",
         ]),
     );
 }

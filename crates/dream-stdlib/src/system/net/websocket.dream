@@ -6,15 +6,19 @@ public class WebSocket {
     handle: int;
     is_closed: bool;
 
+    @async_host
     @runtime("wsConnect")
     static extern async fun ws_connect(url: string, timeout_ms: int): char[];
 
+    @async_host
     @runtime("wsSendText")
     static extern async fun ws_send_text(handle: int, text: string): char[];
 
+    @async_host
     @runtime("wsSendBinary")
     static extern async fun ws_send_binary(handle: int, data: byte[]): char[];
 
+    @async_host
     @runtime("wsReceive")
     static extern async fun ws_receive(handle: int): char[];
 

@@ -1,0 +1,33 @@
+import system;
+import system.net;
+import system.webapi;
+
+@websocket("/ws")
+async fun echo(ws: ServerWebSocket): void {
+    switch (await ws.receive()) {
+        Ok(WebSocketMessage.Text(t)) => {
+            let _ = await ws.send_text(t);
+        },
+        Ok(_) => { },
+        Err(_) => { }
+    }
+    ws.close();
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let url = "ws://127.0.0.1:" + port.to_string() + "/ws";
+    switch (await WebSocket.connect(url)) {
+        Ok(client) => {
+            let _ = await client.send_text("ping");
+            switch (await client.receive()) {
+                Ok(WebSocketMessage.Text(t)) => System.println(t),
+                Ok(_) => System.println("other"),
+                Err(e) => System.println(e.message()),
+            }
+            client.close();
+        },
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

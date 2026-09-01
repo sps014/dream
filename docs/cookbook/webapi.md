@@ -32,4 +32,4 @@ async fun main(): void {
 dream run sample/webapi/app.dream
 ```
 
-Open [http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs). Full reference: [system.webapi](../reference/stdlib/webapi.md).
+Open [http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs) or `/redoc`. Full reference: [system.webapi](../reference/stdlib/webapi.md).

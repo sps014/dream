@@ -1,0 +1,58 @@
+module system.webapi;
+
+// Server-sent events (`text/event-stream`). Returning this from a `@get` handler starts a
+// chunked response instead of a oneshot `httpServerRespond`.
+public class EventStream {
+    req_id: int;
+    started: bool;
+    ended: bool;
+
+    public constructor(req: HttpIncoming) {
+        this.req_id = req.req_id;
+        this.started = false;
+        this.ended = false;
+    }
+
+    public fun start(): void {
+        if this.started {
+            return;
+        }
+        this.started = true;
+        let headers = HttpHeaders();
+        headers.set("Content-Type", "text/event-stream");
+        headers.set("Cache-Control", "no-cache");
+        headers.set("Connection", "keep-alive");
+        let _ = WebApp.host_start_stream(this.req_id, 200, headers.to_wire());
+    }
+
+    public async fun send(event: string, data: string): void {
+        this.start();
+        let sb = StringBuilder();
+        if !event.is_empty() {
+            sb.append("event: ");
+            sb.append(event);
+            sb.append("\n");
+        }
+        sb.append("data: ");
+        sb.append(data);
+        sb.append("\n\n");
+        let bytes = Encoding.utf8_encode(sb.build());
+        if bytes.length > 65536 {
+            return;
+        }
+        let _ = await WebApp.host_write_chunk(this.req_id, bytes);
+    }
+
+    public async fun send_data(data: string): void {
+        await this.send("", data);
+    }
+
+    public fun end(): void {
+        if this.ended {
+            return;
+        }
+        this.ended = true;
+        this.start();
+        let _ = WebApp.host_end_stream(this.req_id);
+    }
+}

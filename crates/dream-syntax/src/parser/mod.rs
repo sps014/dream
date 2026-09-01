@@ -555,14 +555,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             if core == TokenKind::ClassToken
                 || core == TokenKind::StructToken
                 || (cur == TokenKind::AtToken
-                    && self.peek_token(1).kind == TokenKind::IdentifierToken
-                    && (matches!(
-                        self.peek_token(2).kind,
+                    && matches!(
+                        self.core_keyword_after_attrs(),
                         TokenKind::ClassToken | TokenKind::StructToken
-                    ) || matches!(
-                        self.peek_token(3).kind,
-                        TokenKind::ClassToken | TokenKind::StructToken
-                    )))
+                    ))
             {
                 match self.parse_struct_declaration() {
                     Ok(struct_decl) => structs.push(struct_decl),
@@ -570,9 +566,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
             } else if core == TokenKind::InterfaceToken
                 || (cur == TokenKind::AtToken
-                    && self.peek_token(1).kind == TokenKind::IdentifierToken
-                    && (self.peek_token(2).kind == TokenKind::InterfaceToken
-                        || self.peek_token(3).kind == TokenKind::InterfaceToken))
+                    && self.core_keyword_after_attrs() == TokenKind::InterfaceToken)
             {
                 match self.parse_interface_declaration() {
                     Ok(iface) => interfaces.push(iface),

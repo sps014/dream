@@ -3,7 +3,7 @@ module system.net;
 // Sequential reader over a `char[]` wire payload shared by the TCP/WebSocket host functions: a
 // tag line, then raw bytes for the remainder (mirrors `system.process`'s `ProcessWireReader`).
 // Each `char` element of the payload is one raw byte (0-255).
-internal class NetWireReader {
+public class NetWireReader {
     data: char[];
     pos: int;
 

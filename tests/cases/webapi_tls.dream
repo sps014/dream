@@ -1,0 +1,18 @@
+import system;
+import system.webapi;
+
+@get("/health")
+fun health(): string {
+    return "ok";
+}
+
+async fun main(): void {
+    let cert = System.env_or("DREAM_E2E_TLS_CERT", "");
+    let key = System.env_or("DREAM_E2E_TLS_KEY", "");
+    let opts = WebAppOptions();
+    opts.tls_cert_path = cert;
+    opts.tls_key_path = key;
+    let port = await WebApp.listen_with("127.0.0.1", 0, opts);
+    System.println(port > 0);
+    WebApp.shutdown();
+}

@@ -118,7 +118,7 @@ impl<'a> Analyzer<'a> {
         if self.function_table.get_function(&function_name).is_err()
             && !self.function_table.is_overloaded(&function_name)
             && !self.generic_functions.contains_key(&function_name)
-            && generic_args.as_ref().map_or(true, |g| g.is_empty())
+            && generic_args.as_ref().is_none_or(|g| g.is_empty())
         {
             if let Some(expected) = self.current_expected_type.clone() {
                 let enum_name = match &expected {

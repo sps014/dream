@@ -66,5 +66,9 @@ async fun main(): void {
         Ok(r) => System.println(r.status()),
         Err(e) => System.println(e.message()),
     }
+    switch (await client.get("/redoc")) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.message()),
+    }
     WebApp.shutdown();
 }

@@ -1,0 +1,26 @@
+import system;
+import system.net;
+import system.webapi;
+
+@get("/events")
+async fun events(req: HttpIncoming): EventStream {
+    let s = EventStream(req);
+    await s.send("tick", "{\"n\":1}");
+    await s.send("tick", "{\"n\":2}");
+    return s;
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    switch (await client.get("/events")) {
+        Ok(r) => {
+            let t = r.text();
+            System.println(t.contains("event: tick"));
+            System.println(t.contains("data: {\"n\":1}"));
+            System.println(t.contains("data: {\"n\":2}"));
+        },
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

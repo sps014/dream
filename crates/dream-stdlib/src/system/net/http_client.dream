@@ -99,12 +99,8 @@ public class HttpClient {
 
     fun merge_headers(call: HttpHeaders): string {
         let merged = HttpHeaders();
-        for (let pair in this.default_headers) {
-            merged.set(pair.key, pair.value);
-        }
-        for (let pair in call) {
-            merged.set(pair.key, pair.value);
-        }
+        merged.add_all(this.default_headers);
+        merged.add_all(call);
         switch (this.cookie_jar) {
             Some(jar) => {
                 let cookie = jar.to_header();

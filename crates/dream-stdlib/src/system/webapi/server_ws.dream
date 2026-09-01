@@ -1,0 +1,80 @@
+module system.webapi;
+
+// Server-side WebSocket after a successful `@websocket` handshake. Frame wire format matches
+// `system.net` `WebSocket` so `NetWireReader` can parse send/receive results.
+public class ServerWebSocket {
+    handle: int;
+    is_closed: bool;
+
+    public constructor(handle: int) {
+        this.handle = handle;
+        this.is_closed = false;
+    }
+
+    public static fun upgrade(req: HttpIncoming): Option<ServerWebSocket> {
+        let handle = WebApp.host_ws_upgrade(req.req_id);
+        if handle <= 0 {
+            let none: Option<ServerWebSocket> = Option.None;
+            return none;
+        }
+        return Option.Some(ServerWebSocket(handle));
+    }
+
+    public async fun send_text(text: string): Result<bool, NetError> {
+        if this.is_closed {
+            return Result.Err(NetError.closed("connection closed"));
+        }
+        let wire = await WebApp.host_ws_send(this.handle, 0, Encoding.utf8_encode(text));
+        return this.parse_send_result(wire);
+    }
+
+    public async fun send_binary(data: byte[]): Result<bool, NetError> {
+        if this.is_closed {
+            return Result.Err(NetError.closed("connection closed"));
+        }
+        let wire = await WebApp.host_ws_send(this.handle, 1, data);
+        return this.parse_send_result(wire);
+    }
+
+    fun parse_send_result(wire: char[]): Result<bool, NetError> {
+        let reader = NetWireReader(wire);
+        let ok = reader.read_line();
+        if ok == "1" {
+            return Result.Ok(true);
+        }
+        return Result.Err(NetError.io(reader.read_remaining_text()));
+    }
+
+    public async fun receive(): Result<WebSocketMessage, NetError> {
+        if this.is_closed {
+            return Result.Err(NetError.closed("connection closed"));
+        }
+        let wire = await WebApp.host_ws_receive(this.handle);
+        let reader = NetWireReader(wire);
+        let tag = reader.read_line();
+        if tag == "text" {
+            return Result.Ok(WebSocketMessage.Text(reader.read_remaining_text()));
+        }
+        if tag == "binary" {
+            return Result.Ok(WebSocketMessage.Binary(reader.read_remaining_bytes()));
+        }
+        if tag == "close" {
+            let code = int.parse(reader.read_line()).unwrap_or(1000);
+            let reason = reader.read_remaining_text();
+            this.is_closed = true;
+            return Result.Ok(WebSocketMessage.Close(code, reason));
+        }
+        return Result.Err(NetError.protocol(reader.read_remaining_text()));
+    }
+
+    public fun close(): void {
+        this.close_with(1000, "");
+    }
+
+    public fun close_with(code: int, reason: string): void {
+        if this.is_closed == false {
+            this.is_closed = true;
+            let _ = WebApp.host_ws_close(this.handle, code, reason);
+        }
+    }
+}

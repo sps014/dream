@@ -37,10 +37,20 @@ fn http_transport_error(msg: &str) -> Vec<u8> {
 
 fn http_error_message(err: &reqwest::Error) -> String {
     if err.is_timeout() {
-        "timeout".to_string()
-    } else {
-        err.to_string()
+        return "timeout".to_string();
     }
+    let mut s = err.to_string();
+    if let Some(url) = err.url() {
+        s.push_str(" url=");
+        s.push_str(url.as_str());
+    }
+    let mut src = std::error::Error::source(err);
+    while let Some(e) = src {
+        s.push_str(" | ");
+        s.push_str(&e.to_string());
+        src = e.source();
+    }
+    s
 }
 
 /// Runs `f` with an optional wall-clock budget. When `wall` is `None`, runs on the calling thread.
@@ -138,7 +148,12 @@ fn build_request(
         {
             for (name, value) in map.iter() {
                 if let Some(v) = value.as_str() {
-                    builder = builder.header(name.as_str(), v);
+                    if let (Ok(hn), Ok(hv)) = (
+                        reqwest::header::HeaderName::from_bytes(name.as_bytes()),
+                        reqwest::header::HeaderValue::from_str(v),
+                    ) {
+                        builder = builder.header(hn, hv);
+                    }
                 }
             }
         }

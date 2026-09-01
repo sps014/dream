@@ -109,6 +109,15 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         return headers;
     }
 
+    // Copies every pair from `other` (later names overwrite).
+    public fun add_all(other: HttpHeaders): void {
+        let i = 0;
+        while i < other.length {
+            this.set(other.key_at(i), other.value_at(i));
+            i = i + 1;
+        }
+    }
+
     internal fun key_at(i: int): string {
         return this.keys.get(i);
     }

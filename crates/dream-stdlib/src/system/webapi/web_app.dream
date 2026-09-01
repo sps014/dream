@@ -6,17 +6,26 @@ public class WebAppOptions {
     public version: string;
     public docs_url: string;
     public openapi_url: string;
+    public redoc_url: string;
+    public tls_cert_path: string;
+    public tls_key_path: string;
 
     public constructor(
         title: string = "Dream API",
         version: string = "0.1.0",
         docs_url: string = "/docs",
-        openapi_url: string = "/openapi.json"
+        openapi_url: string = "/openapi.json",
+        redoc_url: string = "/redoc",
+        tls_cert_path: string = "",
+        tls_key_path: string = ""
     ) {
         this.title = title;
         this.version = version;
         this.docs_url = docs_url;
         this.openapi_url = openapi_url;
+        this.redoc_url = redoc_url;
+        this.tls_cert_path = tls_cert_path;
+        this.tls_key_path = tls_key_path;
     }
 }
 
@@ -29,7 +38,7 @@ let webapi_tasks: List<object> = List<object>();
 public class WebApp {
     @native
     @runtime("httpServerListen")
-    static extern fun host_listen(host: string, port: int): char[];
+    static extern fun host_listen(host: string, port: int, tls_cert_path: string, tls_key_path: string): char[];
 
     @native
     @async_host
@@ -43,6 +52,49 @@ public class WebApp {
     @native
     @runtime("httpServerRespond")
     static extern fun host_respond(req: int, status: int, headers: string, body: byte[]): int;
+
+    @native
+    @runtime("httpServerStartStream")
+    internal static extern fun host_start_stream(req: int, status: int, headers: string): int;
+
+    @native
+    @async_host
+    @runtime("httpServerWriteChunk")
+    internal static extern async fun host_write_chunk(req: int, data: byte[]): int;
+
+    @native
+    @runtime("httpServerEndStream")
+    internal static extern fun host_end_stream(req: int): int;
+
+    @native
+    @runtime("httpServerWsUpgrade")
+    internal static extern fun host_ws_upgrade(req: int): int;
+
+    @native
+    @async_host
+    @runtime("httpServerWsSend")
+    internal static extern async fun host_ws_send(handle: int, kind: int, data: byte[]): char[];
+
+    @native
+    @async_host
+    @runtime("httpServerWsReceive")
+    internal static extern async fun host_ws_receive(handle: int): char[];
+
+    @native
+    @runtime("httpServerWsClose")
+    internal static extern fun host_ws_close(handle: int, code: int, reason: string): int;
+
+    @native
+    @runtime("httpServerParseMultipart")
+    internal static extern fun host_parse_multipart(req: int): int;
+
+    @native
+    @runtime("httpServerMultipartField")
+    internal static extern fun host_multipart_field(req: int, name: string): char[];
+
+    @native
+    @runtime("httpServerMultipartFile")
+    internal static extern fun host_multipart_file(req: int, name: string): char[];
 
     @native
     @runtime("httpServerShutdown")
@@ -132,6 +184,32 @@ public class WebApp {
         return none;
     }
 
+    internal static fun multipart_field(req_id: int, name: string): Option<string> {
+        let wire = WebApp.host_multipart_field(req_id, name);
+        if !WebApp.wire_starts(wire, "1") {
+            let none: Option<string> = Option.None;
+            return none;
+        }
+        let nl = WebApp.next_nl(wire, 0);
+        return Option.Some(WebApp.slice_wire(wire, nl + 1, wire.length - (nl + 1)));
+    }
+
+    internal static fun multipart_file(req_id: int, name: string): Option<UploadedFile> {
+        let wire = WebApp.host_multipart_file(req_id, name);
+        if !WebApp.wire_starts(wire, "1") {
+            let none: Option<UploadedFile> = Option.None;
+            return none;
+        }
+        let reader = NetWireReader(wire);
+        if reader.read_line() != "1" {
+            let none: Option<UploadedFile> = Option.None;
+            return none;
+        }
+        let filename = reader.read_line();
+        let ctype = reader.read_line();
+        return Option.Some(UploadedFile(filename, ctype, reader.read_remaining_bytes()));
+    }
+
     static fun split_path(path: string): List<string> {
         let out = List<string>();
         if path.is_empty() || path == "/" {
@@ -187,6 +265,14 @@ public class WebApp {
             + "</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>window.onload=function(){window.ui=SwaggerUIBundle({url:"
             + WebApp.json_escape(openapi_url)
             + ",dom_id:'#swagger-ui'});};</script></body></html>";
+    }
+
+    public static fun redoc_html(title: string, openapi_url: string): string {
+        return "<!DOCTYPE html><html><head><title>"
+            + title
+            + "</title></head><body><redoc spec-url="
+            + WebApp.json_escape(openapi_url)
+            + "></redoc><script src=\"https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js\"></script></body></html>";
     }
 
     // Host `char[]` wires store one raw byte per element (same as `NetWireReader`).
@@ -270,6 +356,9 @@ public class WebApp {
     }
 
     static fun send_outgoing(req_id: int, res: HttpOutgoing): void {
+        if res.skip_send {
+            return;
+        }
         if res.use_bytes {
             let _ = WebApp.host_respond(req_id, res.status, res.headers.to_wire(), res.body_bytes);
         } else {
@@ -287,7 +376,10 @@ public class WebApp {
             if !options.docs_url.is_empty() && req.method == "GET" && req.path == options.docs_url {
                 return HttpOutgoing.html(WebApp.swagger_html(options.title, options.openapi_url), 200);
             }
-            return await WebApp.generated_dispatch(req);
+            if !options.redoc_url.is_empty() && req.method == "GET" && req.path == options.redoc_url {
+                return HttpOutgoing.html(WebApp.redoc_html(options.title, options.openapi_url), 200);
+            }
+            return await WebApp.generated_dispatch(ctx);
         };
         let res = await WebApp.run_middleware(ctx, 0, leaf);
         WebApp.send_outgoing(req.req_id, res);
@@ -304,6 +396,22 @@ public class WebApp {
         let mw = webapi_middlewares.get(index);
         let next = Next(async () => {
             return await WebApp.run_middleware(ctx, index + 1, leaf);
+        });
+        return await mw.invoke(ctx, next);
+    }
+
+    public static async fun run_local_middleware(
+        ctx: RequestContext,
+        chain: List<Middleware>,
+        index: int,
+        leaf: fun(): Future<HttpOutgoing>
+    ): HttpOutgoing {
+        if index >= chain.length {
+            return await leaf();
+        }
+        let mw = chain.get(index);
+        let next = Next(async () => {
+            return await WebApp.run_local_middleware(ctx, chain, index + 1, leaf);
         });
         return await mw.invoke(ctx, next);
     }
@@ -338,7 +446,12 @@ public class WebApp {
     @native
     public static async fun listen_with(host: string, port: int, options: WebAppOptions): int {
         WebApp.generated_install_middleware();
-        let raw = WebApp.host_listen(host, port);
+        let cert = options.tls_cert_path;
+        let key = options.tls_key_path;
+        if cert.is_empty() != key.is_empty() {
+            return 0 - 1;
+        }
+        let raw = WebApp.host_listen(host, port, cert, key);
         let a = WebApp.next_nl(raw, 0);
         if WebApp.slice_wire(raw, 0, a) != "ok" {
             return 0 - 1;

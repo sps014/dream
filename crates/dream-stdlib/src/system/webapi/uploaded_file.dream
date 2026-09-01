@@ -1,0 +1,14 @@
+module system.webapi;
+
+// One `multipart/form-data` file part (`@file`).
+public class UploadedFile {
+    public filename: string;
+    public content_type: string;
+    public bytes: byte[];
+
+    public constructor(filename: string, content_type: string, bytes: byte[]) {
+        this.filename = filename;
+        this.content_type = content_type;
+        this.bytes = bytes;
+    }
+}

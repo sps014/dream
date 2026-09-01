@@ -18,18 +18,21 @@ fun health(): string {
     return "ok";
 }
 
-@get("/items/{id}")
-fun get_item(id: int): Item {
-    return Item(id, "demo");
-}
+@http_group("/api")
+class ItemsApi {
+    @get("/items/{id}")
+    public static fun get_item(id: int): Item {
+        return Item(id, "demo");
+    }
 
-@post("/items")
-fun create(@body item: Item): Item {
-    return item;
+    @post("/items")
+    public static fun create(@body item: Item): Item {
+        return item;
+    }
 }
 
 async fun main(): void {
     WebApp.use(CORS(CorsOptions()));
-    System.println("listening on :8080  (docs: http://127.0.0.1:8080/docs)");
+    System.println("listening on :8080  (docs: http://127.0.0.1:8080/docs  redoc: /redoc)");
     await WebApp.run("127.0.0.1", 8080);
 }

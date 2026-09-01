@@ -1,0 +1,41 @@
+import system;
+import system.net;
+import system.webapi;
+
+@use(require_auth)
+@get("/secret")
+fun secret(): string {
+    return "s";
+}
+
+@get("/open")
+fun open(): string {
+    return "o";
+}
+
+async fun require_auth(ctx: RequestContext, next: Next): HttpOutgoing {
+    if ctx.incoming.header("Authorization").is_none() {
+        return HttpOutgoing.from_status(HttpStatus.unauthorized());
+    }
+    return await next.call();
+}
+
+async fun main(): void {
+    let port = await WebApp.listen("127.0.0.1", 0);
+    let client = HttpClient("http://127.0.0.1:" + port.to_string());
+    switch (await client.get("/open")) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    switch (await client.get("/secret")) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.message()),
+    }
+    let h = HttpHeaders();
+    h.set("Authorization", "Bearer x");
+    switch (await client.get_with("/secret", h)) {
+        Ok(r) => System.println(r.text()),
+        Err(e) => System.println(e.message()),
+    }
+    WebApp.shutdown();
+}

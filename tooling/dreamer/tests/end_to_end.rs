@@ -362,12 +362,13 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     let tmp = tempfile::tempdir().unwrap();
     let lib_dir = tmp.path().join("libpack");
     commands::init::run(&lib_dir, Some("libpack".to_string()), None, true).unwrap();
-    assert!(commands::pack::run(&lib_dir, &[], None).is_err());
+    let pack_flags = dreamer::compile_flags::CompileFlags::for_pack(false, None, false).unwrap();
+    assert!(commands::pack::run(&lib_dir, &[], None, pack_flags.clone()).is_err());
 
     let bin_dir = tmp.path().join("binpack");
     commands::init::run(&bin_dir, Some("binpack".to_string()), None, false).unwrap();
     // Pack builds dream-runner via cargo; needs the Dream workspace (discovered from the dream bin).
-    if let Err(e) = commands::pack::run(&bin_dir, &[], None) {
+    if let Err(e) = commands::pack::run(&bin_dir, &[], None, pack_flags) {
         eprintln!("pack skipped/failed (may need DREAM_REPO / full workspace): {e:#}");
         return;
     }

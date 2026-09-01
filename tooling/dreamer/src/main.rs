@@ -38,7 +38,7 @@ impl OptFlags {
     version,
     about = "Package manager for the Dream language",
     after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install wasi-sdk",
-    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file executables from release wasm\n  dreamer toolchain install wasi-sdk    WebAssembly toolchain for `dreamer build --wasm`"
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file native executables (default --release / -O3)\n  dreamer toolchain install wasi-sdk    WebAssembly toolchain for `dreamer build --wasm`"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -140,8 +140,10 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
-    /// Build a native single-file executable embedding the project's release wasm.
+    /// Build a native single-file executable (default `--release` / cc `-O3`; `-O` overrides).
     Pack {
+        #[command(flatten)]
+        opt: OptFlags,
         /// Pack triple (`linux-x64`, `macos-arm64`, …) or `all`. Repeatable; default = host.
         #[arg(long = "target", value_name = "TRIPLE")]
         targets: Vec<String>,
@@ -265,7 +267,17 @@ fn main() -> ExitCode {
             token,
             package,
         } => commands::publish::run(&cwd, registry, token, package.as_deref()),
-        Cmd::Pack { targets, package } => commands::pack::run(&cwd, &targets, package.as_deref()),
+        Cmd::Pack {
+            opt,
+            targets,
+            package,
+        } => match CompileFlags::for_pack(opt.release, opt.optimize, opt.wasm) {
+            Ok(flags) => commands::pack::run(&cwd, &targets, package.as_deref(), flags),
+            Err(e) => {
+                print_error(e);
+                return ExitCode::FAILURE;
+            }
+        },
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree { package } => commands::tree::run(&cwd, package.as_deref()),
         Cmd::Toolchain { cmd } => match cmd {

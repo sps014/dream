@@ -1,5 +1,6 @@
-//! `dreamer pack`: release-compile a bin package and copy the native `.bin`.
+//! `dreamer pack`: compile a bin package and copy the native `.bin`.
 
+use crate::compile_flags::CompileFlags;
 use crate::manifest::PackageType;
 use crate::workspace::Workspace;
 use anyhow::{bail, Context, Result};
@@ -15,7 +16,12 @@ const PACK_TRIPLES: &[(&str, &str)] = &[
     ("windows-arm64", "aarch64-pc-windows-msvc"),
 ];
 
-pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> Result<()> {
+pub fn run(
+    start_dir: &Path,
+    target_args: &[String],
+    package: Option<&str>,
+    flags: CompileFlags,
+) -> Result<()> {
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     let pkg = workspace.manifest.package()?;
@@ -30,17 +36,14 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
     let triples = resolve_pack_targets(target_args)?;
     super::build::compile_entry(
         &workspace,
-        &crate::compile_flags::CompileFlags {
-            release: true,
-            ..crate::compile_flags::CompileFlags::default()
-        },
+        &flags,
         Some(crate::manifest::RunTarget::Native),
     )?;
 
-    let bin_path = artifact_native_bin(&workspace)?;
+    let bin_path = artifact_native_bin(&workspace, &flags)?;
     if !bin_path.is_file() {
         bail!(
-            "expected release native binary at {} after build",
+            "expected native binary at {} after build",
             bin_path.display()
         );
     }
@@ -77,7 +80,7 @@ pub fn run(start_dir: &Path, target_args: &[String], package: Option<&str>) -> R
     Ok(())
 }
 
-fn artifact_native_bin(workspace: &Workspace) -> Result<PathBuf> {
+fn artifact_native_bin(workspace: &Workspace, flags: &CompileFlags) -> Result<PathBuf> {
     let entry = workspace.compile_root_path()?;
     let stem = entry
         .file_stem()
@@ -86,7 +89,7 @@ fn artifact_native_bin(workspace: &Workspace) -> Result<PathBuf> {
     Ok(workspace
         .root
         .join("target")
-        .join("release")
+        .join(flags.native_artifact_subdir())
         .join(format!("{stem}.bin")))
 }
 

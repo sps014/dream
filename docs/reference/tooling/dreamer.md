@@ -212,7 +212,7 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer build [--release] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. |
 | `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--target <os>-<arch>\|all]… [-p <name>]` | Release-build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>\|all]… [-p <name>]` | Build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default is `--release` (cc `-O3`); `-O` / `--optimize` override like `dreamer run`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
@@ -229,7 +229,8 @@ Produces a single native executable per selected platform and writes it to
 folder is required next to the packed binary.
 
 ```bash
-dreamer pack                         # host → target/pack/<name>-<os>-<arch>
+dreamer pack                         # --release / -O3; host → target/pack/<name>-<os>-<arch>
+dreamer pack -O2                     # same `-O` / `--release` tokens as `dreamer run`
 dreamer pack --target linux-x64
 dreamer pack --target macos-arm64 --target windows-x64
 dreamer pack --target all            # linux/macos/windows × x64/arm64

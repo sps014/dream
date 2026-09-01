@@ -37,6 +37,24 @@ impl CompileFlags {
         })
     }
 
+    /// Native pack: default `--release` (cc `-O3`). Explicit `-O` / `--release` match `dreamer run`.
+    pub fn for_pack(release: bool, optimize: Option<String>, wasm: bool) -> Result<Self> {
+        if wasm {
+            bail!("pack produces a native executable; omit --wasm");
+        }
+        let release = release || optimize.is_none();
+        Self::from_cli(release, optimize, false)
+    }
+
+    /// `target/release` vs `target/debug`, matching `dream`'s native output layout.
+    pub fn native_artifact_subdir(&self) -> &'static str {
+        if self.release {
+            "release"
+        } else {
+            "debug"
+        }
+    }
+
     pub fn apply(&self, cmd: &mut Command) {
         if self.release {
             cmd.arg("--release");
@@ -88,5 +106,26 @@ mod tests {
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
         assert_eq!(args, ["-Os"]);
+    }
+
+    #[test]
+    fn pack_defaults_to_release() {
+        let flags = CompileFlags::for_pack(false, None, false).unwrap();
+        assert!(flags.release);
+        assert!(flags.optimize.is_none());
+        assert_eq!(flags.native_artifact_subdir(), "release");
+    }
+
+    #[test]
+    fn pack_optimize_without_release_is_debug_like_run() {
+        let flags = CompileFlags::for_pack(false, Some("2".into()), false).unwrap();
+        assert!(!flags.release);
+        assert_eq!(flags.optimize.as_deref(), Some("2"));
+        assert_eq!(flags.native_artifact_subdir(), "debug");
+    }
+
+    #[test]
+    fn pack_rejects_wasm() {
+        assert!(CompileFlags::for_pack(false, None, true).is_err());
     }
 }

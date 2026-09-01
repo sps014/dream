@@ -42,48 +42,66 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        // The declared payload field types of the named variant (templated for generic unions).
-        let field_types: Vec<Type> = if let Some(&template) = self.generic_unions.get(enum_name) {
-            match template
-                .variants
-                .iter()
-                .find(|v| v.name.text == variant.text)
-            {
-                Some(v) => v.fields.iter().map(|f| f.field_type.clone()).collect(),
-                None => {
-                    return Err(report(
-                        diagnostics,
-                        format!("Enum '{}' has no variant '{}'", enum_name, variant.text),
-                        Some(variant.position),
-                    ));
+        // Declared payload names + types (templated for generic unions). Names reorder
+        // `Variant(field: expr)` to positional order before the args are typed.
+        let (field_names, field_types): (Vec<String>, Vec<Type>) =
+            if let Some(&template) = self.generic_unions.get(enum_name) {
+                match template
+                    .variants
+                    .iter()
+                    .find(|v| v.name.text == variant.text)
+                {
+                    Some(v) => (
+                        v.fields.iter().map(|f| f.name.text.clone()).collect(),
+                        v.fields.iter().map(|f| f.field_type.clone()).collect(),
+                    ),
+                    None => {
+                        return Err(report(
+                            diagnostics,
+                            format!("Enum '{}' has no variant '{}'", enum_name, variant.text),
+                            Some(variant.position),
+                        ));
+                    }
                 }
-            }
-        } else {
-            let info = match self.union_table.get(enum_name) {
-                Some(info) => info,
-                None => {
-                    return Err(report(
-                        diagnostics,
-                        format!("Enum '{}' could not be resolved", enum_name),
-                        Some(variant.position),
-                    ));
+            } else {
+                let info = match self.union_table.get(enum_name) {
+                    Some(info) => info,
+                    None => {
+                        return Err(report(
+                            diagnostics,
+                            format!("Enum '{}' could not be resolved", enum_name),
+                            Some(variant.position),
+                        ));
+                    }
+                };
+                match info.variant(&variant.text) {
+                    Some(v) => (
+                        v.fields.iter().map(|f| f.name.clone()).collect(),
+                        v.fields.iter().map(|f| f.type_.clone()).collect(),
+                    ),
+                    None => {
+                        return Err(report(
+                            diagnostics,
+                            format!("Enum '{}' has no variant '{}'", enum_name, variant.text),
+                            Some(variant.position),
+                        ));
+                    }
                 }
             };
-            match info.variant(&variant.text) {
-                Some(v) => v.fields.iter().map(|f| f.type_.clone()).collect(),
-                None => {
-                    return Err(report(
-                        diagnostics,
-                        format!("Enum '{}' has no variant '{}'", enum_name, variant.text),
-                        Some(variant.position),
-                    ));
-                }
-            }
-        };
+
+        let defaults: Vec<Option<Type>> = field_names.iter().map(|_| None).collect();
+        let args = self.normalize_named_arguments(
+            &field_names,
+            &defaults,
+            args,
+            variant.position,
+            diagnostics,
+            false,
+        )?;
 
         let mut arg_types = Vec::new();
         let mut arg_hirs = Vec::new();
-        for arg in args {
+        for arg in &args {
             let t = self.analyze_expression(arg, parent_function, symbol_table, diagnostics)?;
             arg_hirs.push(self.hir_take());
             arg_types.push(t);

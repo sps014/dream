@@ -36,14 +36,16 @@ When **any** variant carries a payload `(...)`, the whole `enum` becomes a discr
 
 ```dream
 enum Shape {
-    Circle(float),
+    Circle(float),                   // positional payload
     Rect(width: float, height: float),
-    Empty,                       // a unit variant carries no data
+    Empty,                           // a unit variant carries no data
 }
 
 let s = Shape.Circle(2.0);
 let e = Shape.Empty;
 ```
+
+A one-field payload may be positional (`Circle(float)`) or named (`Full(value: int)`). Construction accepts either order that matches the declaration: positional `Full(7)` always works; `Full(value: 7)` works when the field is named.
 
 ### Pattern-matching switch
 

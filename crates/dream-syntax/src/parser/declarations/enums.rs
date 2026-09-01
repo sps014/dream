@@ -8,8 +8,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// - C-style integer enum: `enum Color { Red, Green = 5, Blue }`. Members without an explicit
     ///   value continue from the previous member's value (starting at 0).
     /// - Discriminated union: `enum Shape { Circle(float), Empty }`, optionally generic
-    ///   `enum Option<T> { Some(T), None }`. A variant carries a parenthesized payload of
-    ///   `name: Type` fields; the variant's `value` is its discriminant (sequential from 0).
+    ///   `enum Option<T> { Some(T), None }`. A variant payload is positional (`T`) and/or named
+    ///   (`name: Type`); the variant's `value` is its discriminant (sequential from 0).
     ///
     /// Methods may be declared in the body alongside variants (`public fun is_some(): bool { ... }`),
     /// using the same member classification as classes (look past `public`/`static`/`async` for `fun`).
@@ -115,15 +115,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                             f.name.text = format!("_{pos_i}");
                             pos_i += 1;
                         }
-                    }
-                    if fields.len() == 1 && !fields[0].name.text.starts_with('_') {
-                        self.diagnostics.report_error(
-                            format!(
-                                "single-field variant '{}' must be positional ('{}(T)'), not named",
-                                variant_name.text, variant_name.text
-                            ),
-                            Some(fields[0].name.position),
-                        );
                     }
                 }
 

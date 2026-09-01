@@ -77,6 +77,7 @@ const SMOKE_CASES: &[&str] = &[
     "hello_println",
     "primary_constructor",
     "unit_variant_bare",
+    "union_named_single_field",
     "class_indexer",
     "operator_overloading",
 ];

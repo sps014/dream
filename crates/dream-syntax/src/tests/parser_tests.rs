@@ -300,6 +300,17 @@ fn test_parse_enum_struct() {
 }
 
 #[test]
+fn test_parse_named_single_field_variant() {
+    let code = "enum Box { Full(value: int), Empty }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
+    let decl = &program.enums[0];
+    assert_eq!(decl.variants[0].fields.len(), 1);
+    assert_eq!(decl.variants[0].fields[0].name.text, "value");
+}
+
+#[test]
 fn test_parse_generic_constraints() {
     // `<T : Iface (+ Iface)*>` on a struct/class and a function records each bound as a
     // `GenericConstraint`; the parameter still appears in `generic_parameters`.

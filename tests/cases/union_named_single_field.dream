@@ -1,0 +1,40 @@
+import system;
+import system.json;
+
+@json
+enum Box {
+    Full(value: int),
+    Empty,
+}
+
+@json
+enum Pair {
+    Pos(int),
+    Named(x: int),
+}
+
+fun take_box(b: Box): int {
+    return switch (b) {
+        Full(v) => v,
+        Empty => 0,
+    };
+}
+
+fun take_pair(p: Pair): int {
+    return switch (p) {
+        Pos(n) => n,
+        Named(n) => n,
+    };
+}
+
+fun main(): void {
+    let a = Box.Full(7);
+    let b = Box.Full(value: 9);
+    System.println(take_box(a));
+    System.println(take_box(b));
+    System.println(Json.serialize(a));
+    System.println(take_pair(Pair.Pos(1)));
+    System.println(take_pair(Pair.Named(x: 2)));
+    System.println(Json.serialize(Pair.Pos(3)));
+    System.println(Json.serialize(Pair.Named(4)));
+}

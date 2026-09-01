@@ -1,0 +1,32 @@
+// Promise.start must retain until settle, then drop — fire-and-forget must not leak.
+import system;
+
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+async fun work(): void {
+    let t = Tracked(1);
+    await Time.sleep(0);
+}
+
+async fun kick(): void {
+    Promise.start(work());
+}
+
+async fun main(): void {
+    await Time.sleep(0);
+    let base = Debug.live_objects();
+    await kick();
+    await Time.sleep(10);
+    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+}

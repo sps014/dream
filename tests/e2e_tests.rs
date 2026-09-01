@@ -75,6 +75,7 @@ const SMOKE_CASES: &[&str] = &[
     "webworker_basic",
     "webworker_local_alloc",
     "webworker_spawn_no_leak",
+    "promise_start_no_leak",
     "hello_println",
     "webapi_duplicate_route",
     "webapi_missing_path_param",

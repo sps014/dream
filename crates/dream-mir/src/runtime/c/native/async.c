@@ -20,6 +20,8 @@ typedef struct Node {
 static _Thread_local Node *rq_head;
 static _Thread_local Node *rq_tail;
 static _Thread_local Node *timer_head;
+static _Thread_local dream_ptr poll_current;
+static _Thread_local int32_t poll_drop_start_retain;
 
 static int32_t *i32_at(dream_ptr p, int32_t off) {
     return (int32_t *)((char *)dream_p(p) + off);
@@ -36,6 +38,22 @@ static dream_ptr arr_get(dream_ptr arr, int32_t i) {
 void *dream_ft_get(int32_t i);
 static void combinator_progress(dream_ptr w, dream_ptr child);
 
+/* F_NEXT: 0 = lazy, 1 = started and the scheduler holds a retain, 2 = started retain dropped.
+ * The scheduler retain is what makes Promise.start(borrow) and last-use of an awaited child
+ * safe: the runqueue / timer / foreign tables store raw pointers. Drop is deferred while the
+ * future's own poll is on the stack so complete cannot free __self mid-function. */
+static void scheduler_drop_start_retain(dream_ptr f) {
+    if (!f || i32_at(f, F_NEXT)[0] != 1) {
+        return;
+    }
+    i32_at(f, F_NEXT)[0] = 2;
+    if (f == poll_current) {
+        poll_drop_start_retain = 1;
+        return;
+    }
+    dream_release(f);
+}
+
 /* Futures are lazy: constructing one does not run it. It runs when first awaited, started by a
  * combinator it was passed to, or explicitly scheduled via dream_start (Promise.start). The
  * F_NEXT word doubles as the started latch: without it, awaiting a future that is already
@@ -46,6 +64,7 @@ void dream_start(dream_ptr f) {
         return;
     }
     i32_at(f, F_NEXT)[0] = 1;
+    dream_retain(f);
     kind = i32_at(f, F_KIND)[0];
     if (kind == KIND_ALL || kind == KIND_ANY) {
         /* Combinators are passive (no poll fn); starting one starts its members. Members that
@@ -103,6 +122,7 @@ static void fq_push_locked(Node *n) {
 
 void dream_complete_foreign(dream_ptr f, dream_ptr res) {
     int32_t expected = 0;
+    int32_t had_waker = 0;
     Node *n = (Node *)calloc(1, sizeof(Node));
     if (!f) {
         free(n);
@@ -125,6 +145,7 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
         foreign_pending -= 1;
     }
     if (ptr_at(f, F_WAKER)[0]) {
+        had_waker = 1;
         n->f = f;
         fq_push_locked(n);
         pthread_cond_signal(&wake_cv);
@@ -132,6 +153,9 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
     }
     pthread_mutex_unlock(&wake_mu);
     free(n);
+    if (!had_waker) {
+        scheduler_drop_start_retain(f);
+    }
 }
 
 static void foreign_drain(void) {
@@ -154,18 +178,18 @@ static void foreign_drain(void) {
             free(n);
             {
                 dream_ptr w = ptr_at(f, F_WAKER)[0];
-                if (!w) {
-                    continue;
-                }
-                ptr_at(f, F_WAKER)[0] = 0;
-                {
-                    int32_t wk = i32_at(w, F_KIND)[0];
-                    if (wk == KIND_ALL || wk == KIND_ANY) {
-                        combinator_progress(w, f);
-                    } else {
-                        dream_enqueue(w);
+                if (w) {
+                    ptr_at(f, F_WAKER)[0] = 0;
+                    {
+                        int32_t wk = i32_at(w, F_KIND)[0];
+                        if (wk == KIND_ALL || wk == KIND_ANY) {
+                            combinator_progress(w, f);
+                        } else {
+                            dream_enqueue(w);
+                        }
                     }
                 }
+                scheduler_drop_start_retain(f);
             }
         }
     }
@@ -216,16 +240,16 @@ void dream_async_complete(dream_ptr f, dream_ptr res) {
     ptr_at(f, F_RESULT)[0] = res;
     i32_at(f, F_STATUS)[0] = 1;
     w = ptr_at(f, F_WAKER)[0];
-    if (!w) {
-        return;
+    if (w) {
+        ptr_at(f, F_WAKER)[0] = 0;
+        wk = i32_at(w, F_KIND)[0];
+        if (wk == KIND_ALL || wk == KIND_ANY) {
+            combinator_progress(w, f);
+        } else {
+            dream_enqueue(w);
+        }
     }
-    ptr_at(f, F_WAKER)[0] = 0;
-    wk = i32_at(w, F_KIND)[0];
-    if (wk == KIND_ALL || wk == KIND_ANY) {
-        combinator_progress(w, f);
-    } else {
-        dream_enqueue(w);
-    }
+    scheduler_drop_start_retain(f);
 }
 
 void dream_cancel(dream_ptr f) {
@@ -235,6 +259,7 @@ void dream_cancel(dream_ptr f) {
     }
     i32_at(f, F_STATUS)[0] = 2;
     ptr_at(f, F_WAKER)[0] = 0;
+    scheduler_drop_start_retain(f);
     for (link = &timer_head; *link; link = &(*link)->next) {
         if ((*link)->f == f) {
             Node *node = *link;
@@ -327,7 +352,14 @@ void dream_run_loop(void) {
             {
                 int32_t poll = i32_at(f, F_POLL)[0];
                 if (poll > 0) {
+                    poll_current = f;
+                    poll_drop_start_retain = 0;
                     ((int32_t (*)(dream_ptr))dream_ft_get(poll))(f);
+                    poll_current = 0;
+                    if (poll_drop_start_retain) {
+                        poll_drop_start_retain = 0;
+                        dream_release(f);
+                    }
                 }
             }
         }

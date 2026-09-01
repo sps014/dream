@@ -32,8 +32,6 @@ public class WebAppOptions {
 let webapi_middlewares: List<Middleware> = List<Middleware>();
 let webapi_server_handle: int = 0;
 let webapi_gen_mw_done: bool = false;
-// `Promise.start` does not retain; keep fire-and-forget tasks alive until process exit.
-let webapi_tasks: List<object> = List<object>();
 
 public class WebApp {
     @native
@@ -431,9 +429,7 @@ public class WebApp {
                 continue;
             }
             let req = parsed.unwrap();
-            let task: object = WebApp.handle_one(req, options);
-            webapi_tasks.push(task);
-            Promise.start(task);
+            Promise.start(WebApp.handle_one(req, options));
         }
     }
 
@@ -463,9 +459,7 @@ public class WebApp {
         let handle = int.parse(WebApp.slice_wire(raw, b0, b - b0)).unwrap_or(0);
         let bound = int.parse(WebApp.slice_wire(raw, c0, c - c0)).unwrap_or(0);
         webapi_server_handle = handle;
-        let serve_fut: object = WebApp.serve_loop(handle, options);
-        webapi_tasks.push(serve_fut);
-        Promise.start(serve_fut);
+        Promise.start(WebApp.serve_loop(handle, options));
         return bound;
     }
 

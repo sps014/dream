@@ -61,7 +61,7 @@ async fun main(): void {
 
 ### Fire-and-forget (`Promise.start`)
 
-`Promise.start(future)` schedules a future on the run loop without awaiting it:
+`Promise.start(future)` schedules a future on the run loop without awaiting it. The runtime retains that future until it settles, so you do not need to keep a local after `start`:
 
 ```dream
 let f = logLater();     // nothing runs yet

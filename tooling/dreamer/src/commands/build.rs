@@ -84,7 +84,7 @@ pub fn compile_entry(
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
     if !status.success() {
-        bail!("build failed (exit code {:?})", status.code());
+        bail!("build failed");
     }
 
     if want_web || want_node {

@@ -1,8 +1,10 @@
 use clap::{Args, Parser, Subcommand};
 use dreamer::commands;
 use dreamer::compile_flags::CompileFlags;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use yansi::Paint;
 
 /// Same `--release` / `-O` / `--wasm` tokens as `dream`.
 #[derive(Args, Clone, Debug, Default)]
@@ -173,12 +175,16 @@ enum ToolchainCmd {
     Uninstall { component: String },
 }
 
+fn print_error(msg: impl Display) {
+    eprintln!("{} {}", Paint::red("error:").bold(), Paint::new(msg).bold());
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let cwd = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            eprintln!("error: could not determine current directory: {}", e);
+            print_error(format!("could not determine current directory: {e}"));
             return ExitCode::FAILURE;
         }
     };
@@ -192,7 +198,7 @@ fn main() -> ExitCode {
         } => {
             let dest = dir.unwrap_or(cwd);
             if let Err(e) = std::fs::create_dir_all(&dest) {
-                eprintln!("error: could not create {}: {}", dest.display(), e);
+                print_error(format!("could not create {}: {e}", dest.display()));
                 return ExitCode::FAILURE;
             }
             commands::init::run(&dest, name, runtime, lib)
@@ -225,7 +231,7 @@ fn main() -> ExitCode {
         Cmd::Build { opt, package } => match opt.into_compile_flags() {
             Ok(flags) => commands::build::run_with(&cwd, flags, package.as_deref()),
             Err(e) => {
-                eprintln!("error: {e}");
+                print_error(e);
                 return ExitCode::FAILURE;
             }
         },
@@ -240,7 +246,7 @@ fn main() -> ExitCode {
                 commands::run::run_with(&cwd, target, flags, port, &args, package.as_deref())
             }
             Err(e) => {
-                eprintln!("error: {e}");
+                print_error(e);
                 return ExitCode::FAILURE;
             }
         },
@@ -251,7 +257,7 @@ fn main() -> ExitCode {
         } => match opt.into_compile_flags() {
             Ok(flags) => commands::test::run_with(&cwd, flags, filter, package.as_deref()),
             Err(e) => {
-                eprintln!("error: {e}");
+                print_error(e);
                 return ExitCode::FAILURE;
             }
         },
@@ -273,7 +279,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("error: {:#}", e);
+            print_error(format!("{e:#}"));
             ExitCode::FAILURE
         }
     }

@@ -6,6 +6,7 @@ pub mod fetch;
 pub mod git;
 pub mod lockfile;
 pub mod manifest;
+pub mod process_status;
 pub mod registry;
 pub mod resolver;
 pub mod serve;

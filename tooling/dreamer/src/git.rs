@@ -36,7 +36,11 @@ pub fn fetch_git_dependency(
         .status()
         .with_context(|| format!("running `git clone {}`", url))?;
     if !status.success() {
-        bail!("`git clone {}` failed (exit code {:?})", url, status.code());
+        bail!(
+            "`git clone {}` failed ({})",
+            url,
+            crate::process_status::describe(&status)
+        );
     }
 
     if let Some(r) = rev {

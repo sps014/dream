@@ -70,8 +70,8 @@ fn run_native(workspace: &Workspace, flags: &CompileFlags, extra_args: &[String]
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
     if !status.success() {
         bail!(
-            "program exited with a failure (exit code {:?})",
-            status.code()
+            "program exited with a failure ({})",
+            crate::process_status::describe(&status)
         );
     }
     Ok(())
@@ -91,7 +91,10 @@ fn run_node(workspace: &Workspace, flags: &CompileFlags, extra_args: &[String]) 
         .status()
         .map_err(|e| anyhow::anyhow!("running node: {}", e))?;
     if !status.success() {
-        bail!("node exited with a failure (exit code {:?})", status.code());
+        bail!(
+            "node exited with a failure ({})",
+            crate::process_status::describe(&status)
+        );
     }
     Ok(())
 }

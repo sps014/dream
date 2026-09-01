@@ -53,7 +53,10 @@ pub fn run_with(
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
     if !status.success() {
-        bail!("tests failed (exit code {:?})", status.code());
+        bail!(
+            "tests failed ({})",
+            crate::process_status::describe(&status)
+        );
     }
     Ok(())
 }

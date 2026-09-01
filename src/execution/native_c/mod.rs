@@ -165,7 +165,9 @@ fn libdream_dir() -> Option<PathBuf> {
     // not contain libdream. Prefer DREAM_HOME / the canonical binary dir.
     if let Ok(home) = std::env::var("DREAM_HOME") {
         if !home.is_empty() {
-            push_libdream_dir(&mut dirs, PathBuf::from(home));
+            let home = PathBuf::from(home);
+            push_libdream_dir(&mut dirs, home.clone());
+            push_libdream_dir(&mut dirs, home.join("bin"));
         }
     }
     if let Ok(bin) = std::env::var("DREAM_BIN") {
@@ -185,6 +187,11 @@ fn libdream_dir() -> Option<PathBuf> {
     }
     push_libdream_dir(&mut dirs, PathBuf::from("target/debug"));
     push_libdream_dir(&mut dirs, PathBuf::from("target/release"));
+    if let Ok(user) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+        if !user.is_empty() {
+            push_libdream_dir(&mut dirs, PathBuf::from(user).join(".dream").join("bin"));
+        }
+    }
     dirs.into_iter().find(|d| d.join(name).exists())
 }
 

@@ -137,6 +137,7 @@ More syntax: [Language tour](https://sps014.github.io/dream/learn/tour/).
 | Build and test the compiler | [Rust](https://rustup.rs/) (stable `rustc` + `cargo`) |
 | `dream run` / native-C e2e | `dreamer toolchain install cc` (Zig) or a clang-compatible `CC` on `PATH` |
 | wasm32 output (`dream --wasm`) | `dreamer toolchain install wasi-sdk` — [runtime README](crates/dream-mir/src/runtime/README.md). Not used by `cargo test` or Windows CI |
+| `system.webview` on Linux from source | `libwebkit2gtk-4.1-dev` (the installer already installs the runtime `.so`s) |
 | JS runtime bundle | Node.js (`node scripts/bundle-runtime.mjs`) |
 | Docs site | Python 3; `python3 -m venv .venv && .venv/bin/pip install -r docs/requirements-docs.txt` then `mkdocs build --strict` |
 

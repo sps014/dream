@@ -9,6 +9,10 @@ pub(crate) mod http;
 pub(crate) mod net;
 pub(crate) mod process_host;
 pub(crate) mod tz;
+#[cfg(feature = "webview")]
+pub(crate) mod webview;
+#[cfg(not(feature = "webview"))]
+#[path = "webview/unavailable.rs"]
 pub(crate) mod webview;
 
 pub use c_link::{

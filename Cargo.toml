@@ -75,6 +75,8 @@ wgpu = { version = "24", optional = true }
 pollster = { version = "0.4", optional = true }
 winit = { version = "0.30", optional = true }
 # Native `system.webview` host (`src/execution/host/webview/`) — embeds OS WebView in a winit window.
+# Optional only so `dream` can compile without WebKitGTK headers (`--no-default-features --features native`).
+# Published toolchains keep `webview` on; the installer installs WebKitGTK runtime libs on Linux.
 wry = { version = "0.53", optional = true }
 gilrs = { version = "0.11", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
@@ -90,11 +92,13 @@ flate2 = "1.1.9"
 brotli = "8.0.4"
 
 [features]
-default = ["native", "wasm-opt"]
+default = ["native", "wasm-opt", "webview"]
 # `native` pulls in libdream (GPU/HTTP/console) used by the `dream` CLI to
 # execute compiled native C programs. It is excluded from the wasm32 analyzer
 # build, whose only need is the lexer/parser/analyzer front-end.
-native = ["reqwest", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "wry", "gilrs", "image"]
+native = ["reqwest", "serde_json", "serde", "crossterm", "chrono", "chrono-tz", "iana-time-zone", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation", "aes-gcm", "tungstenite", "wgpu", "pollster", "winit", "gilrs", "image"]
+# wry/WebKit. Default for published toolchains (macOS/Windows OS WebView; Linux WebKitGTK).
+webview = ["dep:wry"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
 # since it's a build-time optimization concern rather than a runtime-execution one, but excluded
 # from the wasm32 analyzer build the same way.

@@ -1,14 +1,17 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Install Dream toolchain (dream, dreamer, dream-lsp) from GitHub Releases.
 #
 #   curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
+#
+# POSIX /bin/sh so Debian/Ubuntu `dash` (the default `sh`) works when piped.
 #
 # Env:
 #   DREAM_VERSION   optional tag without leading v (default: latest release)
 #   DREAM_HOME      install prefix (default: ~/.dream)
 #   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
+#   DREAM_SKIP_LIBS=1 skip auto-install of Linux WebKitGTK / GTK runtime libraries
 
-set -euo pipefail
+set -eu
 
 REPO="${DREAM_REPO:-sps014/dream}"
 PREFIX="${DREAM_HOME:-${HOME}/.dream}"
@@ -29,7 +32,8 @@ need tar
 need uname
 
 detect_target() {
-  local os arch
+  os=
+  arch=
   case "$(uname -s)" in
     Linux*) os=linux ;;
     Darwin*) os=macos ;;
@@ -51,9 +55,8 @@ detect_target() {
 }
 
 latest_tag() {
-  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
-    | head -n1
+  json="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")" || return 1
+  echo "$json" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1
 }
 
 TARGET="$(detect_target)"
@@ -133,11 +136,44 @@ else
   unzip -q "${WORK}/${ARCHIVE}" -d "${WORK}/out"
 fi
 
-# Archives contain binaries at top level or in a single directory.
-find "${WORK}/out" -type f \( -name 'dream' -o -name 'dream.exe' -o -name 'dreamer' -o -name 'dreamer.exe' -o -name 'dream-lsp' -o -name 'dream-lsp.exe' \) \
-  -exec cp -f {} "$BIN_DIR/" \;
+# Archives contain binaries + libdream at top level or in a single directory.
+copy_named() {
+  find "${WORK}/out" -type f \( \
+    -name 'dream' -o -name 'dream.exe' -o \
+    -name 'dreamer' -o -name 'dreamer.exe' -o \
+    -name 'dream-lsp' -o -name 'dream-lsp.exe' -o \
+    -name 'libdream.so' -o -name 'libdream.dylib' -o \
+    -name 'dream.dll' -o -name 'dream.dll.lib' -o -name 'dream.lib' -o \
+    -name 'libdream.dll.a' \
+  \) -exec cp -f {} "$BIN_DIR/" \;
+}
+
+copy_named
 
 chmod +x "${BIN_DIR}/dream" "${BIN_DIR}/dreamer" "${BIN_DIR}/dream-lsp" 2>/dev/null || true
+
+EXT=
+case "$TARGET" in
+  windows-*) EXT=.exe ;;
+esac
+
+if [ ! -f "${BIN_DIR}/dream${EXT}" ] || [ ! -f "${BIN_DIR}/dreamer${EXT}" ]; then
+  echo "error: archive did not contain dream/dreamer binaries" >&2
+  exit 1
+fi
+
+LIBDREAM_OK=0
+for lib in libdream.so libdream.dylib dream.dll; do
+  if [ -f "${BIN_DIR}/${lib}" ]; then
+    LIBDREAM_OK=1
+    break
+  fi
+done
+if [ "$LIBDREAM_OK" -eq 0 ]; then
+  echo "error: archive did not contain libdream (needed to link native programs)" >&2
+  echo "  expected libdream.so, libdream.dylib, or dream.dll next to the compiler" >&2
+  exit 1
+fi
 
 # Native-C runtime sources (packed next to the binaries in the release archive).
 RT_SRC="$(find "${WORK}/out" -type d -path '*/lib/runtime/c' 2>/dev/null | head -n1 || true)"
@@ -147,22 +183,16 @@ if [ -n "$RT_SRC" ] && [ -f "${RT_SRC}/native/include/dream_rt_native.h" ]; then
   cp -R "$RT_SRC" "${PREFIX}/lib/runtime/c"
 fi
 
-EXT=
-case "$TARGET" in
-  windows-*) EXT=.exe ;;
-esac
-
 env_compiler() {
-  local v="$1"
-  [ -n "$v" ] || return 1
-  if [ -f "$v" ]; then
+  _v="$1"
+  [ -n "$_v" ] || return 1
+  if [ -f "$_v" ]; then
     return 0
   fi
-  command -v "$v" >/dev/null 2>&1
+  command -v "$_v" >/dev/null 2>&1
 }
 
 has_toolchain_zig() {
-  local cand
   for cand in "${PREFIX}/toolchains"/zig-*/zig "${PREFIX}/toolchains"/zig-*/zig.exe; do
     if [ -f "$cand" ]; then
       return 0
@@ -180,6 +210,89 @@ has_cc() {
   command -v clang >/dev/null 2>&1 && return 0
   command -v zig >/dev/null 2>&1 && return 0
   return 1
+}
+
+LIBS_NOTE=
+bin_needs_shared_libs() {
+  _bin="$1"
+  [ -f "$_bin" ] || return 1
+  command -v ldd >/dev/null 2>&1 || return 1
+  ldd "$_bin" 2>/dev/null | grep -q 'not found'
+}
+
+linux_pkg_install() {
+  _pkgs="$1"
+  _sudo=
+  if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      _sudo=sudo
+    else
+      return 1
+    fi
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    # shellcheck disable=SC2086
+    ${_sudo} apt-get update -qq && ${_sudo} apt-get install -y -qq --no-install-recommends ${_pkgs}
+    return $?
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    ${_sudo} dnf install -y ${_pkgs}
+    return $?
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    ${_sudo} pacman -S --noconfirm --needed ${_pkgs}
+    return $?
+  fi
+  return 1
+}
+
+linux_runtime_packages() {
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "libwebkit2gtk-4.1-0 libgtk-3-0 libudev1"
+  elif command -v dnf >/dev/null 2>&1; then
+    echo "webkit2gtk4.1 gtk3 systemd-libs"
+  elif command -v pacman >/dev/null 2>&1; then
+    echo "webkit2gtk-4.1 gtk3"
+  else
+    echo ""
+  fi
+}
+
+ensure_linux_libs() {
+  case "$TARGET" in
+    linux-*) ;;
+    *) return 0 ;;
+  esac
+  if [ "${DREAM_SKIP_LIBS:-}" = "1" ]; then
+    LIBS_NOTE="Skipped Linux runtime libraries (DREAM_SKIP_LIBS=1)"
+    echo "${LIBS_NOTE}"
+    return 0
+  fi
+  if ! bin_needs_shared_libs "${BIN_DIR}/dream${EXT}" && ! bin_needs_shared_libs "${BIN_DIR}/libdream.so"; then
+    return 0
+  fi
+  _pkgs="$(linux_runtime_packages)"
+  if [ -z "$_pkgs" ]; then
+    LIBS_NOTE="warning: dream needs WebKitGTK (libwebkit2gtk-4.1) and GTK 3; install them with your package manager"
+    echo "${LIBS_NOTE}" >&2
+    return 0
+  fi
+  echo "Installing Linux runtime libraries for native run / system.webview: ${_pkgs}"
+  if linux_pkg_install "${_pkgs}"; then
+    if bin_needs_shared_libs "${BIN_DIR}/dream${EXT}" || bin_needs_shared_libs "${BIN_DIR}/libdream.so"; then
+      LIBS_NOTE="warning: shared libraries still missing after install; see ldd ${BIN_DIR}/dream"
+      echo "${LIBS_NOTE}" >&2
+      ldd "${BIN_DIR}/dream${EXT}" 2>/dev/null | grep 'not found' >&2 || true
+    else
+      LIBS_NOTE="Installed Linux runtime libraries (${_pkgs})"
+    fi
+  else
+    LIBS_NOTE="warning: could not install ${_pkgs}; install them so dream and system.webview can load"
+    echo "${LIBS_NOTE}" >&2
+  fi
 }
 
 CC_NOTE=
@@ -228,12 +341,12 @@ EOF
 
 MARKER="# Dream toolchain (install.sh)"
 add_rc_hook() {
-  local rc="$1"
+  rc="$1"
   [ -f "$rc" ] || touch "$rc"
   if grep -Fq "$MARKER" "$rc" 2>/dev/null; then
     return 0
   fi
-  printf '\n%s\nsource "%s/env.sh"\n' "$MARKER" "$PREFIX" >>"$rc"
+  printf '\n%s\n. "%s/env.sh"\n' "$MARKER" "$PREFIX" >>"$rc"
   echo "Added PATH hook to ${rc}"
 }
 
@@ -246,8 +359,6 @@ case "${SHELL:-}" in
     ;;
 esac
 
-# shellcheck disable=SC1090
-# Current shell:
 export DREAM_HOME="${BIN_DIR}"
 export DREAMER_HOME="${BIN_DIR}"
 export DREAM_BIN="${BIN_DIR}/dream${EXT}"
@@ -256,6 +367,7 @@ case ":${PATH}:" in
   *) export PATH="${BIN_DIR}:${PATH}" ;;
 esac
 
+ensure_linux_libs
 ensure_cc
 
 echo
@@ -263,11 +375,14 @@ echo "Installed:"
 echo "  ${BIN_DIR}/dream${EXT}"
 echo "  ${BIN_DIR}/dreamer${EXT}"
 echo "  ${BIN_DIR}/dream-lsp${EXT}"
+if [ -n "${LIBS_NOTE}" ]; then
+  echo "  ${LIBS_NOTE}"
+fi
 if [ -n "${CC_NOTE}" ]; then
   echo "  ${CC_NOTE}"
 fi
 echo
-echo "Open a new terminal (or: source ${PREFIX}/env.sh), then:"
+echo "Open a new terminal (or: . ${PREFIX}/env.sh), then:"
 echo "  dream --help"
 echo "  dreamer --help"
 echo "  dreamer init hello && cd hello && dreamer run"

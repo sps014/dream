@@ -13,7 +13,7 @@ public enum GpuInputEvent {
     // Pointer left the surface.
     PointerLeave(x: float, y: float, pointer_id: int),
     // Pointer capture cancelled by the host.
-    PointerCancel(int),
+    PointerCancel(id:int),
     // Mouse wheel / trackpad scroll deltas.
     Wheel(dx: float, dy: float, x: float, y: float),
     // `code` is physical; `key` is the typed glyph when available.

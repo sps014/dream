@@ -78,7 +78,13 @@ try {
     Expand-Archive -Path $ArchivePath -DestinationPath (Join-Path $Work "out") -Force
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
-        Where-Object { $_.Name -match '^(dream|dreamer|dream-lsp)(\.exe)?$' } |
+        Where-Object {
+            $_.Name -match '^(dream|dreamer|dream-lsp)(\.exe)?$' -or
+            $_.Name -in @(
+                'libdream.so', 'libdream.dylib', 'dream.dll',
+                'dream.dll.lib', 'dream.lib', 'libdream.dll.a'
+            )
+        } |
         ForEach-Object { Copy-Item $_.FullName -Destination $BinDir -Force }
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -Directory |
         Where-Object { $_.FullName -match '[\\/]lib[\\/]runtime[\\/]c$' } |
@@ -92,6 +98,19 @@ try {
         }
 
     $Ext = if ($Target -like "windows-*") { ".exe" } else { "" }
+    $dreamBin = Join-Path $BinDir "dream$Ext"
+    $dreamerBin = Join-Path $BinDir "dreamer$Ext"
+    if (-not (Test-Path -LiteralPath $dreamBin) -or -not (Test-Path -LiteralPath $dreamerBin)) {
+        throw "archive did not contain dream/dreamer binaries"
+    }
+    $libdream = @(
+        (Join-Path $BinDir "libdream.so"),
+        (Join-Path $BinDir "libdream.dylib"),
+        (Join-Path $BinDir "dream.dll")
+    ) | Where-Object { Test-Path -LiteralPath $_ }
+    if (-not $libdream) {
+        throw "archive did not contain libdream (needed to link native programs)"
+    }
     @"
 DREAM_HOME=$BinDir
 DREAMER_HOME=$BinDir

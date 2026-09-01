@@ -2,6 +2,8 @@
 
 **Import:** `import system.webview;` — **native only** (`dream run`). Browser and Node report unsupported.
 
+The public installer ships WebView on every OS. On Linux it installs WebKitGTK/GTK if those libraries are missing. A desktop display is required to open a window (`DISPLAY` / Wayland); headless Docker needs Xvfb or `-e DISPLAY`.
+
 Opens a desktop window (via wry) and talks to the page with typed JSON IPC. Do not mix with [`GpuSurface`](gpu.md) in the same process.
 
 ```dream

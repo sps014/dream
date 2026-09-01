@@ -217,6 +217,11 @@ ln -sfn "$_dream_bin" "${_dream_bin_dir}/dream${_dream_ext}"
 ln -sfn "$_dreamer_bin" "${_dream_bin_dir}/dreamer${_dream_ext}"
 ln -sfn "$_dream_lsp_bin" "${_dream_bin_dir}/dream-lsp${_dream_ext}"
 echo "Linked ${_dream_bin_dir}/{dream,dreamer,dream-lsp} -> ${_dream_home}/"
+for _dream_lib in libdream.so libdream.dylib dream.dll dream.dll.lib dream.lib libdream.dll.a; do
+  if [ -f "${_dream_home}/${_dream_lib}" ]; then
+    ln -sfn "${_dream_home}/${_dream_lib}" "${_dream_bin_dir}/${_dream_lib}"
+  fi
+done
 
 _dream_rt_src="${_dream_root}/crates/dream-mir/src/runtime/c"
 if [ -f "${_dream_rt_src}/native/include/dream_rt_native.h" ]; then

@@ -3,9 +3,53 @@ use crate::manifest::{
     MANIFEST_FILE_NAME,
 };
 use anyhow::{bail, Context, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/"];
+
+const HELLO_MAIN: &str = "import system;\n\nfun main() {\n    System.println(\"Hello, world!\");\n}\n";
+
+/// `dreamer init hello` creates `./hello`. `dreamer init` (no name) uses the current directory.
+/// `--dir` wins over the name-as-subdirectory rule.
+pub fn resolve_project_dir(cwd: &Path, name: Option<&str>, dir: Option<&Path>) -> PathBuf {
+    if let Some(d) = dir {
+        if d.is_absolute() {
+            d.to_path_buf()
+        } else {
+            cwd.join(d)
+        }
+    } else if let Some(n) = name {
+        cwd.join(n)
+    } else {
+        cwd.to_path_buf()
+    }
+}
+
+pub fn prepare_project_dir(cwd: &Path, name: Option<&str>, dir: Option<&Path>) -> Result<PathBuf> {
+    let dest = resolve_project_dir(cwd, name, dir);
+    let named_subdir = name.is_some() && dir.is_none() && dest != cwd;
+    if dest.exists() {
+        if dest.is_file() {
+            bail!("{} exists and is a file", dest.display());
+        }
+        if named_subdir {
+            let empty = dest
+                .read_dir()
+                .with_context(|| format!("reading {}", dest.display()))?
+                .next()
+                .is_none();
+            if !empty {
+                bail!(
+                    "{} already exists; `cd` into it and run `dreamer init`, or pass --dir",
+                    dest.display()
+                );
+            }
+        }
+    }
+    std::fs::create_dir_all(&dest)
+        .with_context(|| format!("could not create {}", dest.display()))?;
+    Ok(dest)
+}
 
 pub fn run(
     dir: &Path,
@@ -56,8 +100,7 @@ pub fn run(
                 import_segment(&name)
             )
         } else {
-            "import system;\n\nfun main() {\n    System.println(\"Hello from Dream!\");\n}\n"
-                .to_string()
+            HELLO_MAIN.to_string()
         };
         std::fs::write(&source_path, body)
             .with_context(|| format!("writing {}", source_path.display()))?;
@@ -184,4 +227,45 @@ fn write_index_html(dir: &Path) -> Result<()> {
     );
     std::fs::write(&path, html).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn named_init_creates_subdirectory() {
+        let cwd = Path::new("workspace");
+        assert_eq!(
+            resolve_project_dir(cwd, Some("hello"), None),
+            cwd.join("hello")
+        );
+        assert_eq!(resolve_project_dir(cwd, None, None), cwd);
+        assert_eq!(
+            resolve_project_dir(cwd, Some("hello"), Some(Path::new("other"))),
+            cwd.join("other")
+        );
+    }
+
+    #[test]
+    fn prepare_named_dir_then_init_writes_hello_world() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = prepare_project_dir(tmp.path(), Some("hello"), None).unwrap();
+        assert_eq!(dest, tmp.path().join("hello"));
+        run(&dest, Some("hello".into()), None, false).unwrap();
+        let main = fs::read_to_string(dest.join("src/main.dream")).unwrap();
+        assert!(main.contains("Hello, world!"));
+        assert!(dest.join("dream.toml").is_file());
+    }
+
+    #[test]
+    fn prepare_rejects_nonempty_named_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hello = tmp.path().join("hello");
+        fs::create_dir_all(&hello).unwrap();
+        fs::write(hello.join("stale.txt"), "nope").unwrap();
+        let err = prepare_project_dir(tmp.path(), Some("hello"), None).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
 }

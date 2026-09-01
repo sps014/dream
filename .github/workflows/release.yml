@@ -20,11 +20,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Debian 12 (glibc 2.36 + WebKitGTK 4.1) so Linux `dream` runs hello-world and
+          # `system.webview` on Debian 12 / Ubuntu 24.04+ without needing glibc 2.39.
           - os: ubuntu-latest
+            container: debian:bookworm
             target: linux-x64
             rust_target: ""
             archive: tar.gz
           - os: ubuntu-24.04-arm
+            container: debian:bookworm
             target: linux-arm64
             rust_target: ""
             archive: tar.gz
@@ -44,33 +48,32 @@ jobs:
             archive: zip
 
     runs-on: ${{ matrix.os }}
+    container: ${{ contains(matrix.target, 'linux') && 'debian:bookworm' || fromJSON('null') }}
     steps:
+      - name: Install Linux native build deps
+        if: runner.os == 'Linux'
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential pkg-config \
+            cmake ninja-build python3 clang libclang-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libgtk-3-dev libudev-dev
+
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_target }}
 
-      # `wry` / `system.webview` need WebKitGTK + GTK; `gilrs` needs libudev.
-      - name: Install Linux native build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libudev-dev \
-            pkg-config
-
       - name: Build release binaries
         shell: bash
         run: |
           set -euo pipefail
+          TARGET_FLAG=()
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --release -p dream -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
-          else
-            cargo build --release -p dream -p dreamer -p dream-lsp
+            TARGET_FLAG=(--target "${{ matrix.rust_target }}")
           fi
+          cargo build --release -p dream -p dreamer -p dream-lsp "${TARGET_FLAG[@]}"
 
       - name: Package archive
         shell: bash
@@ -92,6 +95,18 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
+          LIBDREAM_COPIED=0
+          for f in libdream.so libdream.dylib dream.dll dream.dll.lib dream.lib libdream.dll.a; do
+            if [[ -f "${BIN_DIR}/$f" ]]; then
+              cp "${BIN_DIR}/$f" "$STAGE/"
+              LIBDREAM_COPIED=1
+            fi
+          done
+          if [[ "$LIBDREAM_COPIED" -eq 0 ]]; then
+            echo "error: libdream shared library missing under ${BIN_DIR}" >&2
+            ls -la "${BIN_DIR}"
+            exit 1
+          fi
           mkdir -p "$STAGE/lib/runtime"
           cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
           mkdir -p dist

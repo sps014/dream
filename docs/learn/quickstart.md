@@ -24,7 +24,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh |
 irm https://sps014.github.io/dream/install.ps1 | iex
 ```
 
-That installs `dream` (compile and run), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`. If no C compiler (`cc` / `clang` / Zig) is already on the machine, the installer also runs `dreamer toolchain install cc` (pinned Zig). Set `DREAM_SKIP_CC=1` to skip that download.
+That installs `dream` (compile and run), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`. If no C compiler (`cc` / `clang` / Zig) is already on the machine, the installer also runs `dreamer toolchain install cc` (pinned Zig). Set `DREAM_SKIP_CC=1` to skip that download. On Linux it also installs WebKitGTK/GTK when `dream` cannot load (needed for `system.webview`); set `DREAM_SKIP_LIBS=1` to skip. Linux binaries need glibc 2.36+ (Debian 12, Ubuntu 24.04, Fedora 39, or newer).
 
 Open a **new terminal**, then check:
 

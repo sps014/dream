@@ -1,6 +1,6 @@
 # `system.webview` samples
 
-Native-only (`dream run`).
+Native-only (`dream run`). Works with the public installer on macOS, Windows, and Linux (the installer pulls WebKitGTK on Linux). Needs a graphical session; in Docker pass a display (`-e DISPLAY` or Xvfb).
 
 ```bash
 # from repo root

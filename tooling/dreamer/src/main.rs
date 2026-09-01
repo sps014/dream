@@ -47,11 +47,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Scaffold a new dream.toml + source stub in the current (or given) directory.
+    /// Scaffold a new dream.toml + source stub. A name creates that subdirectory (`dreamer init hello && cd hello`).
     Init {
-        /// Project name; defaults to the directory name.
+        /// Project name (also the new directory unless `--dir` is set). Defaults to the directory name.
         name: Option<String>,
-        /// Directory to create the project in (created if missing). Defaults to the current directory.
+        /// Directory to create the project in (created if missing). Defaults to `./<name>` or cwd.
         #[arg(long)]
         dir: Option<PathBuf>,
         /// Comma-separated hosts to declare in dream.toml and scaffold for (`native`, `web`, `node`).
@@ -195,14 +195,13 @@ fn main() -> ExitCode {
             dir,
             runtime,
             lib,
-        } => {
-            let dest = dir.unwrap_or(cwd);
-            if let Err(e) = std::fs::create_dir_all(&dest) {
-                print_error(format!("could not create {}: {e}", dest.display()));
+        } => match commands::init::prepare_project_dir(&cwd, name.as_deref(), dir.as_deref()) {
+            Ok(dest) => commands::init::run(&dest, name, runtime, lib),
+            Err(e) => {
+                print_error(format!("{e:#}"));
                 return ExitCode::FAILURE;
             }
-            commands::init::run(&dest, name, runtime, lib)
-        }
+        },
         Cmd::Add {
             name,
             version,

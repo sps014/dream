@@ -1002,6 +1002,30 @@ fn test_parse_struct_constructor_and_destructor() {
 }
 
 #[test]
+fn test_parse_primary_ctor_fields_default_public() {
+    use crate::nodes::Visibility;
+    let code = "class Point(x: int, y: int); struct Vec2(internal a: int, b: int);";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    let point = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Point")
+        .expect("Point");
+    assert_eq!(point.fields.len(), 2);
+    assert_eq!(point.fields[0].visibility, Visibility::Public);
+    assert_eq!(point.fields[1].visibility, Visibility::Public);
+    let vec2 = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Vec2")
+        .expect("Vec2");
+    assert_eq!(vec2.fields[0].visibility, Visibility::Internal);
+    assert_eq!(vec2.fields[1].visibility, Visibility::Public);
+}
+
+#[test]
 fn test_parse_struct_keyword_sets_is_value() {
     // The `struct` keyword parses through the same path as `class` but flags the declaration as a
     // value type (`is_value`); a `class` declaration leaves it `false`.

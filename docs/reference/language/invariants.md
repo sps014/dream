@@ -18,7 +18,7 @@ let int = 3;   // error: 'int' is a reserved word
 
 ## Constructors and destructors
 
-- Extra constructors in a type body are named `constructor`; the destructor is `del`. A primary constructor (`class Point(public x: int, public y: int);`) synthesizes fields and a matching `constructor`.
+- Extra constructors in a type body are named `constructor`; the destructor is `del`. A primary constructor (`class Point(x: int, y: int);`) synthesizes public fields and a matching `constructor`.
 - `del` may not be `public`/`internal`, and neither `constructor` nor `del` may declare a return type.
 - `del` takes no parameters.
 

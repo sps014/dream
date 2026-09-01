@@ -7,7 +7,7 @@ Classes and structs both group related data with fields, constructors, and metho
 A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](ownership.md) (sink parameters, last-use move):
 
 ```dream
-class Point(public x: int, public y: int);
+class Point(x: int, y: int);
 
 let p1 = Point(3, 4);
 let p2 = p1;    // shares the same object
@@ -17,7 +17,7 @@ println(p1.x);  // 10
 
 Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
 
-Header parameters become fields and a synthesized `constructor`. Extra overloads in the body are also named `constructor`. Call sites stay `Point(3, 4)`.
+Header parameters become **public** fields and a synthesized `constructor`. Write `internal` on a parameter to narrow it. Extra overloads in the body are also named `constructor`. Call sites stay `Point(3, 4)`.
 
 ### Overloaded constructors
 
@@ -54,7 +54,7 @@ let c = Point(5);     // (5, 5)
 A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy** (not a last-use [move](ownership.md)):
 
 ```dream
-struct Vec2(public x: int, public y: int);
+struct Vec2(x: int, y: int);
 
 let v1 = Vec2(3, 4);
 let v2 = v1;    // full copy

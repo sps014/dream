@@ -248,8 +248,12 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn parse_primary_ctor_field(
         &mut self,
     ) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
+        // Header params are the type's public surface (`class Point(x: int, y: int)`). Body
+        // fields stay private unless marked. `internal` (or an explicit `public`) still binds.
         let mut field_visibility = Visibility::Private;
-        self.try_consume_visibility(&mut field_visibility);
+        if !self.try_consume_visibility(&mut field_visibility) {
+            field_visibility = Visibility::Public;
+        }
         let field_name = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::ColonToken);
         let type_position = self.current_token().position;

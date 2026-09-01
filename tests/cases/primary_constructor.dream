@@ -1,9 +1,9 @@
 import system;
 
 // Primary constructor: header params become fields plus a synthesized constructor.
-class Point(public x: int, public y: int);
+class Point(x: int, y: int);
 
-struct Vec2(public x: int, public y: int);
+struct Vec2(x: int, y: int);
 
 fun main() {
     let p = Point(3, 4);

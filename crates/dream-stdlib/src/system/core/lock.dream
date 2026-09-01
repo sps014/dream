@@ -1,8 +1,7 @@
 module system.core;
 
 // Reentrant mutual-exclusion lock for `@shared` critical sections.
-@shared
-public class Lock {
+shared public class Lock {
     @intrinsic("shared_lock_acquire")
     static extern fun host_acquire(target: Lock): void;
 

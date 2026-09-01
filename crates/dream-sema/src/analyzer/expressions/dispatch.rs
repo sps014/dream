@@ -590,7 +590,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                     );
                 }
-                Ok(self.analyze_identifier(id, symbol_table, diagnostics)?)
+                Ok(self.analyze_identifier(id, parent_function, symbol_table, diagnostics)?)
             }
             ExpressionNode::FunctionCall(name, generic_args, params) => {
                 // `analyze_function_call` records the call's HIR itself (only for a resolvable,
@@ -819,7 +819,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
             || {
                 format!(
-                    "type '{}' has no indexer (define '@get_indexer public fun ...(index): T' to allow obj[index])",
+                    "type '{}' has no indexer (define 'fun this[index]: T' to allow obj[index])",
                     pretty_obj
                 )
             },
@@ -832,7 +832,7 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             diagnostics.report_error(
                 format!(
-                    "type '{}' has no indexer: its '@get_indexer' method must return a value",
+                    "type '{}' has no indexer: its get indexer must return a value",
                     self.ty_display(obj_type)
                 ),
                 array_expr.position(),

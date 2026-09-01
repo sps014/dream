@@ -7,23 +7,22 @@ Four short programs. Each comment (and the numbered notes) explains one idea. Ru
 A **variable** is a named box that holds a value. `let` can be changed later. `const` cannot.
 
 ```dream
-import system;                 // (1)
+import system;
 
-fun main() {                   // (2)
-    let name = "Ada";          // (3)
-    const n = 3;               // (4)
-    name = "Grace";            // (5)
-    System.println(name);      // (6)
+fun main() {                   // (1)
+    let name = "Ada";          // (2)
+    const n = 3;               // (3)
+    name = "Grace";            // (4)
+    System.println(name);      // (5)
     System.println(n);
 }
 ```
 
-1. Bring in console I/O (`System.println`).
-2. Every program starts in `main`.
-3. `let` — Dream infers `name` is a `string` from `"Ada"`.
-4. `const` — `n` is locked after this line.
-5. Reassign a `let` with `=`.
-6. Print a line to the terminal.
+1. Every program starts in `main`.
+2. `let` — Dream infers `name` is a `string` from `"Ada"`.
+3. `const` — `n` is locked after this line.
+4. Reassign a `let` with `=`.
+5. Print a line to the terminal (`System.println` after `import system;`).
 
 You can write the type yourself when you want: `let score: int = 10;`.
 
@@ -39,7 +38,7 @@ import system;
 fun main() {
     let score = 85;
 
-    if (score >= 90) {         // (1)
+    if score >= 90 {         // (1)
         System.println("A");
     } else if (score >= 70) {
         System.println("B");
@@ -48,7 +47,7 @@ fun main() {
     }
 
     let i = 0;
-    while (i < 3) {            // (2)
+    while i < 3 {            // (2)
         System.println(i);
         i = i + 1;             // (3)
     }

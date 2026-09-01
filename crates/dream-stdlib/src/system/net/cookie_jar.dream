@@ -16,7 +16,7 @@ public class CookieJar {
     // Stores or overwrites cookie `name`.
     public fun set(name: string, value: string): void {
         let existing = this.index.get(name);
-        if (existing.is_some()) {
+        if existing.is_some() {
             this.values.set(existing.unwrap_or(0), value);
         } else {
             this.index.set(name, this.names.length);
@@ -28,7 +28,7 @@ public class CookieJar {
     // Value for `name`, or `None` when absent.
     public fun get(name: string): Option<string> {
         let existing = this.index.get(name);
-        if (existing.is_some()) {
+        if existing.is_some() {
             return Option.Some(this.values.get(existing.unwrap_or(0)));
         }
         let none: Option<string> = Option.None;
@@ -37,7 +37,7 @@ public class CookieJar {
 
     public fun remove(name: string): bool {
         let existing = this.index.get(name);
-        if (existing.is_none()) {
+        if existing.is_none() {
             return false;
         }
         let i = existing.unwrap_or(0);
@@ -45,7 +45,7 @@ public class CookieJar {
         this.values.remove_at(i);
         this.index.remove(name);
         let j = i;
-        while (j < this.names.length) {
+        while j < this.names.length {
             this.index.set(this.names.get(j), j);
             j = j + 1;
         }
@@ -68,8 +68,8 @@ public class CookieJar {
     public fun to_header(): string {
         let sb = StringBuilder();
         let i = 0;
-        while (i < this.names.length) {
-            if (i > 0) {
+        while i < this.names.length {
+            if i > 0 {
                 sb.append("; ");
             }
             sb.append(this.names.get(i));
@@ -85,15 +85,15 @@ public class CookieJar {
         let head = res.head_text_for_cookies();
         let lines = head.split('\n');
         let i = 0;
-        while (i < lines.length) {
+        while i < lines.length {
             let line = lines[i];
             let lower = line.to_lower();
-            if (lower.starts_with("set-cookie:")) {
+            if lower.starts_with("set-cookie:") {
                 let rest = line.substring(11, line.length).trim();
                 let semi = rest.index_of(';').unwrap_or(rest.length);
                 let pair = rest.substring(0, semi);
                 let eq = pair.index_of('=').unwrap_or(0 - 1);
-                if (eq > 0) {
+                if eq > 0 {
                     let name = pair.substring(0, eq).trim();
                     let value = pair.substring(eq + 1, pair.length).trim();
                     this.set(name, value);

@@ -337,11 +337,11 @@ impl<'a> Analyzer<'a> {
         let is_protocol =
             name == dream_abi::intrinsics::TO_STRING || name == dream_abi::intrinsics::HASH_CODE;
 
-        let is_override = method.attributes.iter().any(|a| a.name.text == "override");
+        let is_override = method.is_override;
 
         if is_override && !is_protocol {
             diagnostics.report_error(
-                format!("'@override' can only be applied to object-protocol methods (to_string, hash_code), not '{}'", name),
+                format!("'override' can only be applied to object-protocol methods (to_string, hash_code), not '{}'", name),
                 Some(method.name.position),
             );
             return;
@@ -350,7 +350,7 @@ impl<'a> Analyzer<'a> {
         if is_protocol && !is_override {
             diagnostics.report_error(
                 format!(
-                    "method '{}' overrides an object-protocol method; mark it with '@override'",
+                    "method '{}' overrides an object-protocol method; mark it with 'override'",
                     name
                 ),
                 Some(method.name.position),

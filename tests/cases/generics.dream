@@ -1,6 +1,6 @@
 import system;
 fun Test<T>(data: T) {
-    if (data is int) {
+    if data is int {
         System.println(data);
     } else if (data is float) {
         System.println(data);

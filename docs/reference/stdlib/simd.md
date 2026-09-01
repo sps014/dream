@@ -17,11 +17,11 @@ fun add(a: float[], b: float[], c: float[]): void {
     let n = a.length;
     let lanes = Vector<float>.lane_count();
     let i = 0;
-    while (i + lanes <= n) {
+    while i + lanes <= n {
         (Vector<float>.load(a, i) + Vector<float>.load(b, i)).store(c, i);
         i = i + lanes;
     }
-    while (i < n) {
+    while i < n {
         c[i] = a[i] + b[i];
         i = i + 1;
     }

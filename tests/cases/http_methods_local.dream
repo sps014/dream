@@ -6,7 +6,7 @@ import system.encoding;
 
 async fun main(): void {
     let port = int.parse(System.env_or("DREAM_E2E_HTTP_PORT", "0")).unwrap_or(0);
-    if (port == 0) {
+    if port == 0 {
         System.println("no port");
         return;
     }

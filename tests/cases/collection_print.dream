@@ -11,9 +11,9 @@ fun main(): void {
     System.println(c[0][0]);
 
     let i = 0;
-    while (i < c.length) {
+    while i < c.length {
         let j = 0;
-        while (j < c[i].length) {
+        while j < c[i].length {
             System.println(c[i][j]);
             j = j + 1;
         }
@@ -25,10 +25,10 @@ fun main(): void {
 
     let grid = Array.alloc<int[]>(2);
     let r = 0;
-    while (r < 2) {
+    while r < 2 {
         grid[r] = Array.alloc<int>(3);
         let col = 0;
-        while (col < 3) {
+        while col < 3 {
             grid[r][col] = r * 10 + col;
             col = col + 1;
         }
@@ -36,9 +36,9 @@ fun main(): void {
     }
     System.println(grid);
     r = 0;
-    while (r < grid.length) {
+    while r < grid.length {
         let col = 0;
-        while (col < grid[r].length) {
+        while col < grid[r].length {
             System.println(grid[r][col]);
             col = col + 1;
         }

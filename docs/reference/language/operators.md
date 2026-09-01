@@ -160,9 +160,8 @@ Any expression can be used as a statement (`expr;`); the result is evaluated and
 ## Operator overloading
 
 A class or struct can give `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `<<`, `>>`, `==`, unary `-`, `!`,
-`~`, and both implicit and explicit casts their own meaning by tagging a method with
-`@operator("...")` or `@cast("implicit"|"explicit")`. This is the same `@name(args)` attribute
-syntax used elsewhere in Dream (`@override`, `@json`).
+`~`, and both implicit and explicit casts their own meaning with `fun operator +(...)` and
+`fun implicit(): T` / `fun explicit(): T`.
 
 ```dream
 class Vector2 {
@@ -174,25 +173,21 @@ class Vector2 {
         this.y = y;
     }
 
-    @operator("+")
-    fun add(other: Vector2): Vector2 {
+    fun operator +(other: Vector2): Vector2 {
         return Vector2(this.x + other.x, this.y + other.y);
     }
 
-    @operator("-")
-    fun sub(other: Vector2): Vector2 {
+    fun operator -(other: Vector2): Vector2 {
         return Vector2(this.x - other.x, this.y - other.y);
     }
 
     // A one-parameter method takes the binary `-`; a zero-parameter method (same symbol) takes
-    // unary `-`. Arity — not a separate attribute — tells them apart.
-    @operator("-")
-    fun negate(): Vector2 {
+    // unary `-`. Arity tells them apart.
+    fun operator -(): Vector2 {
         return Vector2(-this.x, -this.y);
     }
 
-    @operator("==")
-    fun equalsVec(other: Vector2): bool {
+    fun operator ==(other: Vector2): bool {
         return this.x == other.x && this.y == other.y;
     }
 }
@@ -200,10 +195,10 @@ class Vector2 {
 fun main(): void {
     let a = Vector2(1, 2);
     let b = Vector2(3, 4);
-    let c = a + b;        // Vector2(4, 6), dispatches to `add`
-    let d = -a;            // Vector2(-1, -2), dispatches to `negate`
-    let same = a == a;     // true, dispatches to `equalsVec`
-    let diff = a != b;     // true — `!=` reuses a registered `@operator("==")`, negated
+    let c = a + b;        // Vector2(4, 6)
+    let d = -a;            // Vector2(-1, -2)
+    let same = a == a;     // true
+    let diff = a != b;     // true — `!=` reuses `operator ==`, negated
 }
 ```
 
@@ -211,9 +206,8 @@ Rules:
 
 - A tagged method's own parameter list fixes the operator's arity: one parameter is a binary
   overload (the right-hand operand), zero parameters is a unary overload. `+`/`*`/`/`/`%`/the
-  bitwise operators/`==` are binary-only; `!`/`~` are unary-only; `-` may be either (as `sub`/`negate`
-  above).
-- `!=` has no operator of its own — a registered `@operator("==")` also powers it, negated.
+  bitwise operators/`==` are binary-only; `!`/`~` are unary-only; `-` may be either.
+- `!=` has no operator of its own — a registered `operator ==` also powers it, negated.
 - `<`, `<=`, `>`, `>=` are **not** tagged individually. Implement `Comparable<Self>` (see
   [Interfaces § Built-in `Equatable` and `Comparable`](interfaces.md#built-in-equatable-and-comparable))
   instead; all four ordering operators dispatch to its single `compare` method.
@@ -222,7 +216,7 @@ Rules:
 
 ### User-defined casts
 
-`@cast("implicit")`/`@cast("explicit")` on a no-parameter method defines a conversion from the
+`fun implicit(): T` / `fun explicit(): T` on a no-parameter method defines a conversion from the
 declaring type to the method's return type:
 
 ```dream
@@ -234,8 +228,7 @@ class Meters {
     }
 
     // Explicit only: `(float)meters`, never inferred.
-    @cast("explicit")
-    fun toFloat(): float {
+    fun explicit(): float {
         return this.value;
     }
 }
@@ -248,8 +241,7 @@ class Money {
     }
 
     // Implicit: assignable anywhere an `int` is expected, no cast syntax needed.
-    @cast("implicit")
-    fun toCents(): int {
+    fun implicit(): int {
         return this.cents;
     }
 }
@@ -263,7 +255,7 @@ fun main(): void {
 }
 ```
 
-An explicit `(T)expr` cast accepts either `@cast("implicit")` or `@cast("explicit")` — implicit
+An explicit `(T)expr` cast accepts either `implicit` or `explicit` — implicit
 conversions are always also spellable explicitly. Implicit conversions themselves are currently
 recognized at typed `let x: T = expr;` bindings; elsewhere, cast explicitly.
 

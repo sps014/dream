@@ -175,15 +175,12 @@ impl<'a> Analyzer<'a> {
         mangled_name: &str,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if let Some(attr) = method.attributes.iter().find(|a| a.name.text == "operator") {
-            let Some(symbol_text) = attr.args.first().and_then(|a| a.as_string()) else {
-                return;
-            };
+        if let Some(symbol_text) = method.operator_symbol.as_deref() {
             let arity = method.parameters.len();
             let Some(symbol) = OperatorSymbol::from_attr_str(symbol_text, arity) else {
                 diagnostics.report_error(
                     format!(
-                        "'@operator(\"{}\")' is not a recognized operator for a method with {} parameter(s)",
+                        "'operator {}' is not a recognized operator for a method with {} parameter(s)",
                         symbol_text, arity
                     ),
                     Some(method.name.position),
@@ -227,14 +224,11 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        if let Some(attr) = method.attributes.iter().find(|a| a.name.text == "cast") {
-            let Some(kind_text) = attr.args.first().and_then(|a| a.as_string()) else {
-                return;
-            };
+        if let Some(kind_text) = method.cast_kind.as_deref() {
             let Some(kind) = CastKind::from_attr_str(kind_text) else {
                 diagnostics.report_error(
                     format!(
-                        "'@cast(\"{}\")' must be \"implicit\" or \"explicit\"",
+                        "'{}' must be implicit or explicit",
                         kind_text
                     ),
                     Some(method.name.position),
@@ -244,7 +238,7 @@ impl<'a> Analyzer<'a> {
             if !method.parameters.is_empty() {
                 diagnostics.report_error(
                     format!(
-                        "'@cast' method '{}' must not declare parameters",
+                        "cast method '{}' must not declare parameters",
                         method.name.text
                     ),
                     Some(method.name.position),
@@ -254,7 +248,7 @@ impl<'a> Analyzer<'a> {
             let Some(target) = method.return_type.clone() else {
                 diagnostics.report_error(
                     format!(
-                        "'@cast' method '{}' must declare a return type (the cast's target type)",
+                        "cast method '{}' must declare a return type (the cast's target type)",
                         method.name.text
                     ),
                     Some(method.name.position),

@@ -4,7 +4,7 @@ import system.text;
 fun main(): void {
     let xs = List<int>();
     let i = 0;
-    while (i < 100) {
+    while i < 100 {
         xs.push(i * 2);
         i = i + 1;
     }
@@ -14,7 +14,7 @@ fun main(): void {
 
     let sum = 0;
     let j = 0;
-    while (j < xs.length) {
+    while j < xs.length {
         sum = sum + xs.get(j);
         j = j + 1;
     }
@@ -22,7 +22,7 @@ fun main(): void {
 
     let words = List<string>();
     let k = 0;
-    while (k < 20) {
+    while k < 20 {
         words.push("x");
         k = k + 1;
     }
@@ -36,7 +36,7 @@ fun main(): void {
 
     let squares = Map<int, int>();
     let n = 0;
-    while (n < 64) {
+    while n < 64 {
         squares.set(n, n * n);
         n = n + 1;
     }

@@ -23,7 +23,7 @@ public static class Json {
     // Pretty-prints `value` with newlines and `indent` spaces per nesting level (e.g. 2 or 4).
     // Pass 0 to fall back to compact output.
     public static fun stringify_pretty(borrow value: JsonValue, indent: int): string {
-        if (indent <= 0) {
+        if indent <= 0 {
             return Json.stringify(value);
         }
         let sb = StringBuilder();
@@ -33,12 +33,12 @@ public static class Json {
 
     // Parses `text` into a dynamic `JsonValue` tree (no intermediate byte[] copy).
     public static fun parse(borrow text: string): Result<JsonValue, ParseError> {
-        if (text.is_empty()) {
+        if text.is_empty() {
             return Result.Err(ParseError.invalid("empty JSON input"));
         }
         let parser = JsonParser(text, 0);
         let value = parser.parse_value();
-        if (parser.at_end() == false) {
+        if parser.at_end() == false {
             return Result.Err(ParseError.invalid("trailing characters after JSON value"));
         }
         return Result.Ok(value);
@@ -52,7 +52,7 @@ public static class Json {
     }
 
     public static fun write_bool(borrow sb: StringBuilder, b: bool): void {
-        if (b == true) {
+        if b == true {
             sb.append("true");
         } else {
             sb.append("false");
@@ -78,9 +78,9 @@ public static class Json {
         digits[2] = (value / 16) % 16;
         digits[3] = value % 16;
         let i = 0;
-        while (i < 4) {
+        while i < 4 {
             let nibble = digits[i];
-            if (nibble < 10) {
+            if nibble < 10 {
                 sb.append_char((char)(48 + nibble));
             } else {
                 sb.append_char((char)(87 + nibble));
@@ -95,30 +95,30 @@ public static class Json {
         sb.append_char('"');
         let n = s.length;
         let i = 0;
-        while (i < n) {
+        while i < n {
             let run_start = i;
             let scanning = true;
-            while (scanning == true) {
-                if (i >= n) {
+            while scanning == true {
+                if i >= n {
                     scanning = false;
                 } else {
                     let b = s.char_at(i).to_int();
                     // Escape `"`, `\`, and ASCII controls; pass through the rest.
-                    if ((b < 32) || (b == 34) || (b == 92)) {
+                    if (b < 32) || (b == 34) || (b == 92) {
                         scanning = false;
                     } else {
                         i = i + 1;
                     }
                 }
             }
-            if (i > run_start) {
+            if i > run_start {
                 sb.append_utf8_slice(s, run_start * 2, (i - run_start) * 2);
             }
-            if (i >= n) {
+            if i >= n {
                 break;
             }
             let b = s.char_at(i).to_int();
-            if (b == 34) {
+            if b == 34 {
                 sb.append_char('\\');
                 sb.append_char('"');
             } else if (b == 92) {
@@ -152,7 +152,7 @@ public static class Json {
     // default double formatting.
     static fun _json_number(n: double): string {
         let i = (int)n;
-        if ((double)i == n) {
+        if (double)i == n {
             return i.to_string();
         }
         return n.to_string();
@@ -161,32 +161,32 @@ public static class Json {
     // Recursively serializes a JsonValue into `sb` as compact JSON text.
     static fun _json_stringify_into(borrow sb: StringBuilder, borrow v: JsonValue): void {
         let k = v.kind;
-        if (k == 0) {
+        if k == 0 {
             sb.append("null");
             return;
         }
-        if (k == 1) {
-            if (v.bool_val == true) {
+        if k == 1 {
+            if v.bool_val == true {
                 sb.append("true");
             } else {
                 sb.append("false");
             }
             return;
         }
-        if (k == 2) {
+        if k == 2 {
             sb.append(Json._json_number(v.num_val));
             return;
         }
-        if (k == 3) {
+        if k == 3 {
             Json._json_escape_into(sb, v.str_val);
             return;
         }
-        if (k == 4) {
+        if k == 4 {
             sb.append_char('[');
             let i = 0;
             let n = v.length;
-            while (i < n) {
-                if (i > 0) {
+            while i < n {
+                if i > 0 {
                     sb.append_char(',');
                 }
                 Json._json_stringify_into(sb, v.at(i).unwrap_or(JsonValue.none()));
@@ -195,12 +195,12 @@ public static class Json {
             sb.append_char(']');
             return;
         }
-        if (k == 5) {
+        if k == 5 {
             sb.append_char('{');
             let i = 0;
             let n = v.length;
-            while (i < n) {
-                if (i > 0) {
+            while i < n {
+                if i > 0 {
                     sb.append_char(',');
                 }
                 let key = v.key_at(i).unwrap_or(string.empty);
@@ -218,7 +218,7 @@ public static class Json {
     // Appends `n` spaces to `sb`.
     static fun _json_spaces_into(borrow sb: StringBuilder, n: int): void {
         let i = 0;
-        while (i < n) {
+        while i < n {
             sb.append_char(' ');
             i = i + 1;
         }
@@ -227,16 +227,16 @@ public static class Json {
     // Recursively serializes a JsonValue with newlines and `indent` spaces of nesting per level.
     static fun _json_stringify_pretty_into(borrow sb: StringBuilder, borrow v: JsonValue, indent: int, depth: int): void {
         let k = v.kind;
-        if (k == 4) {
+        if k == 4 {
             let n = v.length;
-            if (n == 0) {
+            if n == 0 {
                 sb.append("[]");
                 return;
             }
             sb.append("[\n");
             let i = 0;
-            while (i < n) {
-                if (i > 0) {
+            while i < n {
+                if i > 0 {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));
@@ -248,16 +248,16 @@ public static class Json {
             sb.append_char(']');
             return;
         }
-        if (k == 5) {
+        if k == 5 {
             let n = v.length;
-            if (n == 0) {
+            if n == 0 {
                 sb.append("{}");
                 return;
             }
             sb.append("{\n");
             let i = 0;
-            while (i < n) {
-                if (i > 0) {
+            while i < n {
+                if i > 0 {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));

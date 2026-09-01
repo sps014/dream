@@ -1,0 +1,15 @@
+import system;
+
+fun take_opt(o: Option<int>): int {
+    return switch (o) {
+        Some(v) => v,
+        None => 0,
+    };
+}
+
+fun main() {
+    let a: Option<int> = None;
+    let b: Option<int> = Some(7);
+    System.println(take_opt(a));
+    System.println(take_opt(b));
+}

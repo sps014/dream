@@ -6,9 +6,9 @@ async fun main(): void {
     let tok = src.token();
     let w = WebWorker.spawn(() => {
         let n = 0;
-        while (!tok.is_cancelled()) {
+        while !tok.is_cancelled() {
             n = n + 1;
-            if (n > 1000000) {
+            if n > 1000000 {
                 break;
             }
         }

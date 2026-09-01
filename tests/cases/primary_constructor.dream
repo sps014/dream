@@ -1,0 +1,15 @@
+import system;
+
+// Primary constructor: header params become fields plus a synthesized constructor.
+class Point(public x: int, public y: int);
+
+struct Vec2(public x: int, public y: int);
+
+fun main() {
+    let p = Point(3, 4);
+    System.println(p.x);
+    System.println(p.y);
+    let v = Vec2(1, 2);
+    System.println(v.x);
+    System.println(v.y);
+}

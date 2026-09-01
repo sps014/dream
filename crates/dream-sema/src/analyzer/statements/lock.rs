@@ -26,7 +26,7 @@ impl<'a> Analyzer<'a> {
             if !self.type_ctx.interner.is_shared_type(tid) {
                 diagnostics.report_error(
                     format!(
-                        "'lock' target must be an '@shared class' instance, got '{}'",
+                        "'lock' target must be a 'shared class' instance, got '{}'",
                         self.ty_display(&target_type)
                     ),
                     target.position(),

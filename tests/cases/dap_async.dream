@@ -2,7 +2,7 @@ import system;
 fun compute(n: int): int {
     let total = 0;
     let i = 0;
-    while (i < n) {
+    while i < n {
         total = total + i;
         i = i + 1;
     }
@@ -12,7 +12,7 @@ fun compute(n: int): int {
 async fun main(): void {
     let base = 10;
     let sum = compute(base);
-    if (sum > 5) {
+    if sum > 5 {
         System.println(sum);
     }
 }

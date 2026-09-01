@@ -38,27 +38,33 @@ public ref struct Span<T> {
     }
 
     // The element at `index` (relative to this span, not the backing array). Traps if out of range.
-    @get_indexer
-    public fun get(index: int): T {
-        if ((index < 0) || (index >= this._length)) {
+    public fun this[index: int]: T {
+        if (index < 0) || (index >= this._length) {
             System.panic("Span index out of range");
         }
         return this.array[this.offset + index];
     }
 
+    public fun get(index: int): T {
+        return this[index];
+    }
+
     // Overwrites the element at `index` (relative to this span). Traps if out of range.
-    @set_indexer
-    public fun set(index: int, value: T): void {
-        if ((index < 0) || (index >= this._length)) {
+    public fun this[index: int] = value: T {
+        if (index < 0) || (index >= this._length) {
             System.panic("Span index out of range");
         }
         this.array[this.offset + index] = value;
     }
 
+    public fun set(index: int, value: T): void {
+        this[index] = value;
+    }
+
     // A sub-span covering `[start, start + count)` of this span's own range. Traps if the requested
     // range doesn't fit within this span.
     public fun slice(start: int, count: int): Span<T> {
-        if ((start < 0) || (count < 0) || (start + count > this._length)) {
+        if (start < 0) || (count < 0) || (start + count > this._length) {
             System.panic("Span slice out of range");
         }
         return Span<T>(this.array, this.offset + start, count);
@@ -69,19 +75,19 @@ public ref struct Span<T> {
     // unmanaged specialization below bulk-blits instead.
     // Same-array rightward shifts copy high-to-low so overlapping regions stay correct (memmove).
     public fun copy_from(src: Span<T>): void {
-        if (src._length > this._length) {
+        if src._length > this._length {
             System.panic("Span copy_from overflow");
         }
-        if ((this.array == src.array) && (this.offset > src.offset)) {
+        if (this.array == src.array) && (this.offset > src.offset) {
             let i = src._length;
-            while (i > 0) {
+            while i > 0 {
                 i = i - 1;
                 this.array[this.offset + i] = src.array[src.offset + i];
             }
             return;
         }
         let i = 0;
-        while (i < src._length) {
+        while i < src._length {
             this.array[this.offset + i] = src.array[src.offset + i];
             i = i + 1;
         }
@@ -89,7 +95,7 @@ public ref struct Span<T> {
 
     // Unmanaged fast path: one `memory.copy` of `src._length * sizeof(T)` bytes.
     public fun copy_from(src: Span<T>): void where T : unmanaged {
-        if (src._length > this._length) {
+        if src._length > this._length {
             System.panic("Span copy_from overflow");
         }
         Buffer.elems_copy<T>(this.array, this.offset, src.array, src.offset, src._length);
@@ -98,7 +104,7 @@ public ref struct Span<T> {
     // Fills every element of this span with `value`.
     public fun fill(value: T): void {
         let i = 0;
-        while (i < this._length) {
+        while i < this._length {
             this.array[this.offset + i] = value;
             i = i + 1;
         }
@@ -108,7 +114,7 @@ public ref struct Span<T> {
     public fun to_array(): T[] {
         let result = Buffer.alloc<T>(this._length);
         let i = 0;
-        while (i < this._length) {
+        while i < this._length {
             result[i] = this.array[this.offset + i];
             i = i + 1;
         }

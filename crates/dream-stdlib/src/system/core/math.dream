@@ -24,7 +24,7 @@ public static class Math {
 
     // Returns the square root of `x` or None.
     public static fun sqrt(x: double): Option<double> {
-        if (x < 0.0d) {
+        if x < 0.0d {
             return Option.None;
         }
         return Option.Some(Math.sqrt_host(x));
@@ -91,24 +91,24 @@ public static class Math {
     }
 
     public static fun min(a: double, b: double): double {
-        if (a < b) {
+        if a < b {
             return a;
         }
         return b;
     }
 
     public static fun max(a: double, b: double): double {
-        if (a > b) {
+        if a > b {
             return a;
         }
         return b;
     }
 
     public static fun clamp(x: double, lo: double, hi: double): double {
-        if (x < lo) {
+        if x < lo {
             return lo;
         }
-        if (x > hi) {
+        if x > hi {
             return hi;
         }
         return x;

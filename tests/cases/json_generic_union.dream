@@ -8,7 +8,7 @@ struct Point { public x: int; public y: int; public constructor(x: int, y: int) 
 
 @json
 enum Opt<T> {
-    Some(value: T),
+    Some(T),
     None,
 }
 

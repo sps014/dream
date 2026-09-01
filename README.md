@@ -62,14 +62,14 @@ import system;
 
 fun main() {
     let score = 85;
-    if (score >= 90) {              // conditions go in parentheses
+    if score >= 90 {              // conditions go in parentheses
         System.println("A");
     } else {
         System.println("B");
     }
 
     let i = 0;
-    while (i < 3) {                 // repeat while the condition is true
+    while i < 3 {                 // repeat while the condition is true
         System.println(i);
         i = i + 1;
     }

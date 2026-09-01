@@ -33,7 +33,7 @@ public class Regex {
         this.group_names = Buffer.alloc<string>(nc);
         this.group_name_numbers = Buffer.alloc<int>(nc);
         let i = 0;
-        while (i < nc) {
+        while i < nc {
             this.group_names[i] = regex_name_at(this.engine, i);
             this.group_name_numbers[i] = regex_name_number(this.engine, i);
             i = i + 1;
@@ -47,7 +47,7 @@ public class Regex {
 
     fun find_at(input: string, pos: int): Option<RegexMatch> {
         let g = regex_find(this.engine, input, pos);
-        if (g.length == 0) {
+        if g.length == 0 {
             return Option.None;
         }
         return Option.Some(RegexMatch(g, this.ngroup));
@@ -62,8 +62,8 @@ public class Regex {
         let sb = StringBuilder();
         let pos = 0;
         let going = true;
-        while (going) {
-            if (pos > n) {
+        while going {
+            if pos > n {
                 going = false;
             } else {
                 let m_opt = this.find_at(input, pos);
@@ -71,21 +71,21 @@ public class Regex {
                     Some(m) => {
                         let s = m.start();
                         let e = m.end();
-                        if (s > pos) {
+                        if s > pos {
                             sb.append_utf8_slice(input, pos * 2, (s - pos) * 2);
                         }
                         this.write_replacement(sb, replacement, input, m);
-                        if (e > s) {
+                        if e > s {
                             pos = e;
                         } else {
-                            if (s < n) {
+                            if s < n {
                                 sb.append_char(input.char_at(s));
                                 pos = s + 1;
                             } else {
                                 pos = n + 1;
                             }
                         }
-                        if (this.global == false) {
+                        if this.global == false {
                             going = false;
                         }
                     },
@@ -95,7 +95,7 @@ public class Regex {
                 }
             }
         }
-        if (pos < n) {
+        if pos < n {
             sb.append_utf8_slice(input, pos * 2, (n - pos) * 2);
         } else if (pos == n) {
             // keep tail empty
@@ -106,11 +106,11 @@ public class Regex {
     fun write_replacement(sb: StringBuilder, replacement: string, input: string, m: RegexMatch): void {
         let i = 0;
         let rn = replacement.length;
-        while (i < rn) {
+        while i < rn {
             let c = replacement.char_at(i);
-            if ((c == '$') && (i + 1 < rn)) {
+            if (c == '$') && (i + 1 < rn) {
                 let next = replacement.char_at(i + 1);
-                if (next == '$') {
+                if next == '$' {
                     sb.append_char('$');
                     i = i + 2;
                 } else if (next == '&') {
@@ -119,11 +119,11 @@ public class Regex {
                 } else if (next == '{') {
                     let j = i + 2;
                     let token = StringBuilder();
-                    while ((j < rn) && (replacement.char_at(j) != '}')) {
+                    while (j < rn) && (replacement.char_at(j) != '}') {
                         token.append_char(replacement.char_at(j));
                         j = j + 1;
                     }
-                    if (j < rn) {
+                    if j < rn {
                         j = j + 1;
                     }
                     sb.append(this.resolve_braced_token(token.build(), input, m));
@@ -145,27 +145,27 @@ public class Regex {
     }
 
     fun resolve_braced_token(token: string, input: string, m: RegexMatch): string {
-        if (token.length == 0) {
+        if token.length == 0 {
             return "";
         }
         let all_digits = true;
         let v = 0;
         let i = 0;
-        while (i < token.length) {
+        while i < token.length {
             let ch = token.char_at(i);
-            if (ch.is_digit() == false) {
+            if ch.is_digit() == false {
                 all_digits = false;
             } else {
                 v = v * 10 + (ch.to_int() - '0'.to_int());
             }
             i = i + 1;
         }
-        if (all_digits) {
+        if all_digits {
             return m.group_text(input, v);
         }
         i = 0;
-        while (i < this.group_names.length) {
-            if (this.group_names[i] == token) {
+        while i < this.group_names.length {
+            if this.group_names[i] == token {
                 return m.group_text(input, this.group_name_numbers[i]);
             }
             i = i + 1;
@@ -175,12 +175,12 @@ public class Regex {
 
     public fun match(input: string): string[] {
         let n = input.length;
-        if (this.global) {
+        if this.global {
             let scratch = List<string>(8);
             let pos = 0;
             let going = true;
-            while (going) {
-                if (pos > n) {
+            while going {
+                if pos > n {
                     going = false;
                 } else {
                     let m_opt = this.find_at(input, pos);
@@ -189,7 +189,7 @@ public class Regex {
                             scratch.push(m.group_text(input, 0));
                             let s = m.start();
                             let e = m.end();
-                            if (e > s) {
+                            if e > s {
                                 pos = e;
                             } else {
                                 pos = s + 1;
@@ -222,7 +222,7 @@ public class Regex {
         let full = m.group_text(input, 0);
         let groups = Buffer.alloc<string>(this.ngroup);
         let i = 0;
-        while (i < this.ngroup) {
+        while i < this.ngroup {
             groups[i] = m.group_text(input, i + 1);
             i = i + 1;
         }
@@ -233,7 +233,7 @@ public class Regex {
         let count = this.ngroup + 1;
         let arr = Buffer.alloc<string>(count);
         let i = 0;
-        while (i < count) {
+        while i < count {
             arr[i] = m.group_text(input, i);
             i = i + 1;
         }
@@ -243,7 +243,7 @@ public class Regex {
     fun to_array(list: List<string>): string[] {
         let arr = Buffer.alloc<string>(list.length);
         let i = 0;
-        while (i < list.length) {
+        while i < list.length {
             arr[i] = list.get(i);
             i = i + 1;
         }

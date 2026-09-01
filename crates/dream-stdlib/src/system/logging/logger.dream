@@ -17,7 +17,7 @@ public class Logger {
     // Returns the named logger, creating it on first use.
     public static fun get(name: string): Logger {
         let existing = loggers_map.get(name);
-        if (existing.is_some()) {
+        if existing.is_some() {
             return existing.unwrap_or(Logger(name));
         }
         let created = Logger(name);
@@ -36,12 +36,12 @@ public class Logger {
     }
 
     fun emit(level: LogLevel, msg: string): void {
-        if (level < this.level) {
+        if level < this.level {
             return;
         }
         let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);
         let i = 0;
-        while (i < this.handlers.length) {
+        while i < this.handlers.length {
             let h = this.handlers.get(i);
             h.emit(record);
             i = i + 1;

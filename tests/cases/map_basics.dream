@@ -27,7 +27,7 @@ fun main(): void {
 
     let counts = Map<int, int>();
     let i = 0;
-    while (i < 40) {
+    while i < 40 {
         counts.set(i, i * i);
         i = i + 1;
     }

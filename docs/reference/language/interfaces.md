@@ -128,7 +128,7 @@ Test what an interface value (or `object`) actually holds at runtime:
 
 ```dream
 let a: Animal = Cat();
-if (a is Cat) {
+if a is Cat {
     println("it's a cat");
 }
 ```
@@ -139,7 +139,7 @@ if (a is Cat) {
 
 ```dream
 let a: Animal = Cat();
-if (a is Cat cat) {
+if a is Cat cat {
     println(cat.speak());   // `cat` aliases the same object
 }
 ```
@@ -158,8 +158,8 @@ An `extend` block can carry an `implements` clause, making an **existing** type 
 ```dream
 extend int : Comparable<int> {
     public fun compare(other: int): int {
-        if (this < other) { return 0 - 1; }
-        if (this > other) { return 1; }
+        if this < other { return 0 - 1; }
+        if this > other { return 1; }
         return 0;
     }
 }

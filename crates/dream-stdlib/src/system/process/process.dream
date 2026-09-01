@@ -15,8 +15,8 @@ public static class Process {
     static fun join_args(args: string[]): string {
         let sb = StringBuilder();
         let i = 0;
-        while (i < args.length) {
-            if (i > 0) {
+        while i < args.length {
+            if i > 0 {
                 sb.append_char('\n');
             }
             sb.append(args[i]);
@@ -39,7 +39,7 @@ public static class Process {
         let raw = await Process.host_run(cmd, Process.join_args(args), cwd);
         let reader = ProcessWireReader(raw);
         let exit_code = int.parse(reader.read_line()).unwrap_or(0 - 2);
-        if (exit_code == (0 - 1)) {
+        if exit_code == (0 - 1) {
             let message = Encoding.utf8_decode(reader.read_remaining_bytes());
             return Result.Err(ProcessError.spawn_failed(message));
         }
@@ -63,7 +63,7 @@ public static class Process {
         let raw = await Process.host_spawn(cmd, Process.join_args(args), cwd);
         let reader = ProcessWireReader(raw);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
-        if (handle < 0) {
+        if handle < 0 {
             let message = Encoding.utf8_decode(reader.read_remaining_bytes());
             return Result.Err(ProcessError.spawn_failed(message));
         }
@@ -73,11 +73,11 @@ public static class Process {
     @native @node
     public static async fun run_checked(cmd: string, args: string[]): Result<ProcessOutput, ProcessError> {
         let ran = await Process.run(cmd, args);
-        if (ran.is_err()) {
+        if ran.is_err() {
             return Result.Err(ran.unwrap_err());
         }
         let out = ran.unwrap_or(ProcessOutput(0 - 1, string.empty, string.empty));
-        if (out.success()) {
+        if out.success() {
             return Result.Ok(out);
         }
         return Result.Err(ProcessError.failed("process exited with code " + out.exit_code.to_string()));
@@ -85,27 +85,27 @@ public static class Process {
 
     @native @node
     public static fun which(cmd: string): Option<string> {
-        if (cmd.is_empty()) {
+        if cmd.is_empty() {
             return Option.None;
         }
-        if (cmd.contains("/") || cmd.contains("\\")) {
-            if (File.exists(cmd) && (File.is_dir(cmd) == false)) {
+        if cmd.contains("/") || cmd.contains("\\") {
+            if File.exists(cmd) && (File.is_dir(cmd) == false) {
                 return Option.Some(cmd);
             }
             return Option.None;
         }
         let path_var = System.env("PATH").unwrap_or(string.empty);
         let sep = ':';
-        if (System.os_family() == OsFamily.Windows) {
+        if System.os_family() == OsFamily.Windows {
             sep = ';';
         }
         let dirs = path_var.split(sep);
         let i = 0;
-        while (i < dirs.length) {
+        while i < dirs.length {
             let dir = dirs[i];
-            if (dir.is_empty() == false) {
+            if dir.is_empty() == false {
                 let candidate = Path.join(dir, cmd);
-                if (File.exists(candidate) && (File.is_dir(candidate) == false)) {
+                if File.exists(candidate) && (File.is_dir(candidate) == false) {
                     return Option.Some(candidate);
                 }
             }

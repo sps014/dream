@@ -7,7 +7,7 @@ public class Random {
     // Creates a generator from `seed` (`0` is remapped to `1` so the state is never zero).
     public constructor(seed: uint) {
         let s = seed;
-        if (s == 0u) {
+        if s == 0u {
             s = 1u;
         }
         this.state = s;
@@ -25,7 +25,7 @@ public class Random {
 
     // Uniform integer in `[0, bound)` when `bound > 0`, otherwise `0`.
     public fun next_int(bound: int): int {
-        if (bound <= 0) {
+        if bound <= 0 {
             return 0;
         }
         return (int)(this.next_u32() % (uint)bound);
@@ -52,12 +52,12 @@ public class Random {
 
     public fun next_bytes(n: int): byte[] {
         let count = n;
-        if (count < 0) {
+        if count < 0 {
             count = 0;
         }
         let out = Buffer.alloc<byte>(count);
         let i = 0;
-        while (i < count) {
+        while i < count {
             out[i] = (byte)this.next_int(256);
             i = i + 1;
         }
@@ -65,7 +65,7 @@ public class Random {
     }
 
     public fun choice<T>(list: List<T>): Option<T> {
-        if (list.length == 0) {
+        if list.length == 0 {
             return Option.None;
         }
         return Option.Some(list.get(this.next_int(list.length)));
@@ -73,7 +73,7 @@ public class Random {
 
     public fun shuffle<T>(list: List<T>): void {
         let i = list.length - 1;
-        while (i > 0) {
+        while i > 0 {
             let j = this.next_int(i + 1);
             let a = list.get(i);
             let b = list.get(j);

@@ -18,7 +18,7 @@ class Tracked {
 fun main() {
     defer {
         let i = 0;
-        while (i < 300) {
+        while i < 300 {
             let x = Tracked(i);
             i = i + 1 + x.id * 0;
         }

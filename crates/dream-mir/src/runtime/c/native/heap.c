@@ -32,6 +32,11 @@ static int32_t total_allocations;
 static int32_t last_freed;
 static char *chunks[32];
 static int nchunks;
+/* Every mmap used as a heap (process bump, TLS bump, unique-region). `dream_publish`
+ * must not deref `char[]` payload words that happen to look like pointers. */
+static char *heap_maps[64];
+static size_t heap_map_lens[64];
+static int nheap_maps;
 static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
 int dream_rt_mt;
 
@@ -81,6 +86,40 @@ static int32_t class_bytes(int idx) {
         return 0;
     }
     return 1 << (idx + 4);
+}
+
+static void note_heap_map_locked(char *p, size_t n) {
+    if (p == NULL || n == 0) {
+        return;
+    }
+    if (nheap_maps < 64) {
+        heap_maps[nheap_maps] = p;
+        heap_map_lens[nheap_maps] = n;
+        nheap_maps += 1;
+    }
+}
+
+static void note_heap_map(char *p, size_t n) {
+    heap_lock();
+    note_heap_map_locked(p, n);
+    heap_unlock();
+}
+
+static int native_block_in_heap(char *block) {
+    int i;
+    int n;
+    heap_lock();
+    n = nheap_maps;
+    for (i = 0; i < n; i++) {
+        char *base = heap_maps[i];
+        size_t len = heap_map_lens[i];
+        if (block >= base && (size_t)(block - base) < len) {
+            heap_unlock();
+            return 1;
+        }
+    }
+    heap_unlock();
+    return 0;
 }
 
 static void *map_chunk(size_t n) {
@@ -183,6 +222,7 @@ static char *tls_bump(size_t n) {
         if (tls_arena == NULL) {
             abort();
         }
+        note_heap_map(tls_arena, map_len);
     }
     {
         char *p = tls_arena + tls_arena_off;
@@ -204,6 +244,7 @@ static char *bump(size_t n) {
         if (nchunks < 32) {
             chunks[nchunks++] = arena;
         }
+        note_heap_map_locked(arena, map_len);
     }
     {
         char *p = arena + arena_off;
@@ -220,6 +261,7 @@ static dream_ptr region_malloc(int32_t alloc_size, int32_t tag) {
         if (region_base == NULL) {
             abort();
         }
+        note_heap_map(region_base, REGION_CHUNK);
         region_len = REGION_CHUNK;
         region_off = 0;
     }
@@ -342,6 +384,9 @@ static int native_is_live_ptr(dream_ptr ptr) {
         return 0;
     }
     block = (char *)dream_p(ptr) - (int)NATIVE_HEAP_HEADER_SIZE;
+    if (!native_block_in_heap(block)) {
+        return 0;
+    }
     return ((uint32_t *)block)[1] == MAGIC_LIVE;
 }
 

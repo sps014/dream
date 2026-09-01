@@ -154,6 +154,13 @@ pub enum ReceiverMode {
     Unique,
 }
 
+/// Bracket indexer role for `fun this[...]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexerKind {
+    Get,
+    Set,
+}
+
 /// Represents a function declaration in the AST
 #[derive(Debug, Clone)]
 pub struct FunctionNode<'a> {
@@ -195,6 +202,14 @@ pub struct FunctionNode<'a> {
     /// Explicit `[borrow | unique] fun` qualifier on a method declaration. `None` = infer
     /// from the body; only valid on non-static methods with a `this` receiver.
     pub receiver_mode: Option<ReceiverMode>,
+    /// `override fun to_string` / `hash_code`.
+    pub is_override: bool,
+    /// `fun operator +(...)` — the surface spelling (`"+"`, `"=="`, …).
+    pub operator_symbol: Option<String>,
+    /// `fun implicit(): T` / `fun explicit(): T`.
+    pub cast_kind: Option<String>,
+    /// `fun this[i]: T` (get) or `fun this[i] = v` (set).
+    pub indexer_kind: Option<IndexerKind>,
 }
 
 impl<'a> FunctionNode<'a> {
@@ -225,6 +240,10 @@ impl<'a> FunctionNode<'a> {
             accessor: None,
             is_default_impl: false,
             receiver_mode: None,
+            is_override: false,
+            operator_symbol: None,
+            cast_kind: None,
+            indexer_kind: None,
         }
     }
 }

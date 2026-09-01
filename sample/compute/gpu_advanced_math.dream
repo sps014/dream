@@ -9,7 +9,7 @@ fun advanced_gpu_calc(
     n: int
 ): void {
     let i = global_id.x;
-    if (i < n) {
+    if i < n {
         let p1 = GpuVec2.of(data[i * 2], data[i * 2 + 1]);
         let p2 = GpuVec2.of(0.0, 0.0);
         let dist = GpuMath.distance(p1, p2);
@@ -38,7 +38,7 @@ fun advanced_gpu_calc(
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
@@ -55,7 +55,7 @@ async fun main(): void {
         2, 1, 1,
         Buffer.alloc<byte>(0)
     );
-    if (r.is_err()) {
+    if r.is_err() {
         System.println("dispatch failed");
         return;
     }

@@ -7,15 +7,7 @@ Classes and structs both group related data with fields, constructors, and metho
 A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](ownership.md) (sink parameters, last-use move):
 
 ```dream
-class Point {
-    x: int;
-    y: int;
-
-    public constructor(x: int, y: int) {
-        this.x = x;
-        this.y = y;
-    }
-}
+class Point(public x: int, public y: int);
 
 let p1 = Point(3, 4);
 let p2 = p1;    // shares the same object
@@ -24,6 +16,8 @@ println(p1.x);  // 10
 ```
 
 Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
+
+Header parameters become fields and a synthesized `constructor`. Extra overloads in the body are also named `constructor`. Call sites stay `Point(3, 4)`.
 
 ### Overloaded constructors
 
@@ -60,15 +54,7 @@ let c = Point(5);     // (5, 5)
 A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy** (not a last-use [move](ownership.md)):
 
 ```dream
-struct Vec2 {
-    public x: int;
-    public y: int;
-
-    public constructor(x: int, y: int) {
-        this.x = x;
-        this.y = y;
-    }
-}
+struct Vec2(public x: int, public y: int);
 
 let v1 = Vec2(3, 4);
 let v2 = v1;    // full copy
@@ -170,30 +156,25 @@ class App {
 ```
 
 A getter-only property is fine; a setter without a getter is allowed but unusual. These are
-distinct from bracket indexers (`@get_indexer` / `@set_indexer` methods) below.
+distinct from bracket indexers (`fun this[...]`) below.
+
 ### Indexers and enumerators
 
-Opt into `obj[i]` / `obj[i] = v` by tagging methods with `@get_indexer` / `@set_indexer` (method names are free — they need not be called `get`/`set`). Opt into `for (let x in obj)` by tagging a zero-arg factory with `@iterator` (returning an enumerator object) and tagging that enumerator's step method with `@next` (returning `Option<T>`):
+Opt into `obj[i]` / `obj[i] = v` with C#-style indexers. Opt into `for let x in obj` with methods named `iterator` (zero args, returning an enumerator object) and `next` (zero args, returning `Option<T>`):
 
 ```dream
 class Grid {
-    @get_indexer
-    public fun at(index: int): int { ... }
-
-    @set_indexer
-    public fun put(index: int, value: int): void { ... }
-
-    @iterator
-    public fun iter(): GridIter { ... }
+    public fun this[index: int]: int { ... }
+    public fun this[index: int] = value: int { ... }
+    public fun iterator(): GridIter { ... }
 }
 
 class GridIter {
-    @next
-    public fun advance(): Option<int> { ... }
+    public fun next(): Option<int> { ... }
 }
 ```
 
-A bare method named `get`/`set`/`iterator`/`next` without the attribute is an ordinary method and does **not** enable bracket / `for..in` sugar.
+A method named `get`/`set` is ordinary and does **not** enable bracket sugar. `iterator` / `next` are the enumerator protocol when they have the shapes above.
 
 ## Advanced: sealed types
 
@@ -229,18 +210,17 @@ A static class cannot have instance fields, instance methods, constructors, or a
 let u = Util();
 ```
 
-## Advanced: `@shared` classes
+## Advanced: `shared` classes
 
-Prefix a `class` with `@shared` to make it a **shared** reference type — Dream's analogue of Swift `Sendable` for classes. A `@shared` class pays two costs, and only when opted in:
+Prefix a `class` with `shared` to make it a **shared** reference type — Dream's analogue of Swift `Sendable` for classes. A `shared class` pays two costs, and only when opted in:
 
-- **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a `@shared` instance's refcount can be touched from more than one thread.
+- **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a shared instance's refcount can be touched from more than one thread.
 - **An extra header word** reserved for a reentrant lock, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking.
 
-A type is **`shared`** (and may be captured by a [`WebWorker`](webworkers.md) body, or stored in an `@shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or an `@shared class`. Constrain generics with `T : shared`.
+A type is **`shared`** (and may be captured by a [`WebWorker`](webworkers.md) body, or stored in a `shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or a `shared class`. Constrain generics with `T : shared`.
 
 ```dream
-@shared
-class Counter {
+shared class Counter {
     public value: int;
     public label: string;   // legal — string is shared
     public constructor() { this.value = 0; this.label = ""; }
@@ -253,13 +233,12 @@ class Counter {
 }
 ```
 
-**The closed-graph field rule:** every field of an `@shared class` must be either `shared`, or a **managed heap reference** — another ordinary class, an array (`int[]`, `Job[]`), `List<T>`, a union like `Option<Plain>` — whose whole reachable graph then joins this object's shared region. Such fields use the same `lock` discipline as every other field; there are no per-field access rules. What is rejected is anything that would smuggle an *untracked* reference in: a value struct embedding a non-shared class field, or a generic argument that could be one.
+**The closed-graph field rule:** every field of a `shared class` must be either `shared`, or a **managed heap reference** — another ordinary class, an array (`int[]`, `Job[]`), `List<T>`, a union like `Option<Plain>` — whose whole reachable graph then joins this object's shared region. Such fields use the same `lock` discipline as every other field; there are no per-field access rules. What is rejected is anything that would smuggle an *untracked* reference in: a value struct embedding a non-shared class field, or a generic argument that could be one.
 
 ```dream
 class Plain { public x: int; }
 
-@shared
-class Holder {
+shared class Holder {
     // legal: managed heap references — the graph below `h` is part of the shared object
     public p: Option<Plain>;
     public xs: int[];
@@ -271,14 +250,13 @@ struct Wrap {
     public p: Plain;   // value struct embedding a non-shared class
 }
 
-@shared
-class Bad {
+shared class Bad {
     // error: 'Wrap' is a value struct containing a non-shared reference
     public w: Wrap;
 }
 ```
 
-`@shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `@shared class` if it needs to be shared by pointer. `lock (x)` still requires an `@shared class` (a lock word), not every `shared` type.
+`shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `shared class` if it needs to be shared by pointer. `lock (x)` still requires a `shared class` (a lock word), not every `shared` type.
 
 ## Advanced: boxing a struct
 

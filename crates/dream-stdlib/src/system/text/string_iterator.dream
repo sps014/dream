@@ -11,15 +11,13 @@ public class StringIterator : Iterator<char> {
     }
 
     // So `for (let c in s.chars())` uses the enumerator protocol on the cursor itself.
-    @iterator
     public fun iterator(): StringIterator {
         return this;
     }
 
     // Yields the next UTF-16 code unit or None.
-    @next
     public fun next(): Option<char> {
-        if (this.idx >= this.text.length) {
+        if this.idx >= this.text.length {
             return Option.None;
         }
         let value = this.text.char_at(this.idx);

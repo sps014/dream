@@ -1,5 +1,5 @@
 import system;
-enum Shape { Circle(radius: float), Square, Triangle, Empty }
+enum Shape { Circle(float), Square, Triangle, Empty }
 
 fun grade(score: int): string {
     return switch (score) {

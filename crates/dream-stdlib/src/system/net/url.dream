@@ -34,7 +34,7 @@ public class Url {
 
     // Parses an absolute or scheme-relative URL; rejects empty input.
     public static fun parse(text: string): Result<Url, ParseError> {
-        if (text.is_empty()) {
+        if text.is_empty() {
             return Result.Err(ParseError.invalid("empty URL"));
         }
         let scheme = string.empty;
@@ -42,7 +42,7 @@ public class Url {
         let scheme_end = text.index_of(':');
         switch (scheme_end) {
             Some(idx) => {
-                if ((idx + 2 < text.length) && (text.char_at(idx + 1) == '/') && (text.char_at(idx + 2) == '/')) {
+                if (idx + 2 < text.length) && (text.char_at(idx + 1) == '/') && (text.char_at(idx + 2) == '/') {
                     scheme = text.substring(0, idx);
                     rest = text.substring(idx + 3, text.length);
                 }
@@ -97,17 +97,16 @@ public class Url {
             None => { },
         }
 
-        if (path.is_empty()) {
+        if path.is_empty() {
             path = "/";
         }
         return Result.Ok(Url(scheme, host, port, path, query, fragment));
     }
 
     // Reconstructs the URL string from components.
-    @override
-    public fun to_string(): string {
+    override public fun to_string(): string {
         let sb = StringBuilder();
-        if (this.scheme.is_empty() == false) {
+        if this.scheme.is_empty() == false {
             sb.append(this.scheme);
             sb.append("://");
             sb.append(this.host);
@@ -122,11 +121,11 @@ public class Url {
             None => { },
         }
         sb.append(this.path);
-        if (this.query.is_empty() == false) {
+        if this.query.is_empty() == false {
             sb.append_char('?');
             sb.append(this.query);
         }
-        if (this.fragment.is_empty() == false) {
+        if this.fragment.is_empty() == false {
             sb.append_char('#');
             sb.append(this.fragment);
         }
@@ -152,16 +151,16 @@ public class Url {
 
     public fun query_params(): Map<string, string> {
         let map = Map<string, string>();
-        if (this.query.is_empty()) {
+        if this.query.is_empty() {
             return map;
         }
         let pairs = this.query.split('&');
         let i = 0;
-        while (i < pairs.length) {
+        while i < pairs.length {
             let pair = pairs[i];
-            if (pair.is_empty() == false) {
+            if pair.is_empty() == false {
                 let parts = pair.split_once('=');
-                if (parts.length == 2) {
+                if parts.length == 2 {
                     map.set(parts[0], parts[1]);
                 } else {
                     map.set(pair, string.empty);
@@ -174,15 +173,15 @@ public class Url {
 
     // Resolves `relative` against this URL (absolute http(s) URLs replace entirely).
     public fun join(relative: string): Result<Url, ParseError> {
-        if (relative.starts_with("http://") || relative.starts_with("https://")) {
+        if relative.starts_with("http://") || relative.starts_with("https://") {
             return Url.parse(relative);
         }
-        if (relative.starts_with("/")) {
+        if relative.starts_with("/") {
             return Result.Ok(this.with_path(relative));
         }
         let base = this.path;
         let joined = base;
-        if ((base.ends_with("/") == false) && (base.is_empty() == false)) {
+        if (base.ends_with("/") == false) && (base.is_empty() == false) {
             joined = base + "/";
         }
         joined = joined + relative;

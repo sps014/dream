@@ -134,7 +134,7 @@ public class ComputePass {
     // Submits all recorded dispatches in one queue submit.
     public async fun submit(): Result<bool, GpuError> {
         let code = await Gpu.pass_submit(this._id);
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "ComputePass.submit failed"));
     }
 }

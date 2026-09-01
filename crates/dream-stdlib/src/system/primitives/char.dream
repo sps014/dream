@@ -6,10 +6,10 @@ module system.primitives;
 extend char : Comparable<char> {
     // Orders this character against `other` by code point, implementing `Comparable<char>`.
     public fun compare(other: char): int {
-        if (this < other) {
+        if this < other {
             return 0 - 1;
         }
-        if (this > other) {
+        if this > other {
             return 1;
         }
         return 0;
@@ -22,7 +22,7 @@ extend char : Comparable<char> {
 
     // True if this character is an ASCII letter ('a'-'z' or 'A'-'Z').
     public fun is_alpha(): bool {
-        if ((this >= 'a') && (this <= 'z')) {
+        if (this >= 'a') && (this <= 'z') {
             return true;
         }
         return (this >= 'A') && (this <= 'Z');
@@ -30,13 +30,13 @@ extend char : Comparable<char> {
 
     // True if this character is ASCII whitespace (space, tab, newline, or carriage return).
     public fun is_whitespace(): bool {
-        if (this == ' ') {
+        if this == ' ' {
             return true;
         }
-        if (this == '\t') {
+        if this == '\t' {
             return true;
         }
-        if (this == '\n') {
+        if this == '\n' {
             return true;
         }
         return this == '\r';
@@ -44,7 +44,7 @@ extend char : Comparable<char> {
 
     // The lowercase form of an ASCII uppercase letter; other characters are returned unchanged.
     public fun to_lower(): char {
-        if ((this >= 'A') && (this <= 'Z')) {
+        if (this >= 'A') && (this <= 'Z') {
             return (char)((int)this + 32);
         }
         return this;
@@ -52,7 +52,7 @@ extend char : Comparable<char> {
 
     // The uppercase form of an ASCII lowercase letter; other characters are returned unchanged.
     public fun to_upper(): char {
-        if ((this >= 'a') && (this <= 'z')) {
+        if (this >= 'a') && (this <= 'z') {
             return (char)((int)this - 32);
         }
         return this;
@@ -72,7 +72,7 @@ extend char : Comparable<char> {
 
     // Parses exactly one Unicode scalar from `text`.
     public static fun parse(borrow text: string): Result<char, ParseError> {
-        if (text.length != 1) {
+        if text.length != 1 {
             return Result.Err(ParseError.invalid("char.parse requires exactly one Unicode scalar"));
         }
         return Result.Ok(text.char_at(0));

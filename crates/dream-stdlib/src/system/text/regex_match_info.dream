@@ -21,10 +21,10 @@ public class RegexMatchInfo {
     // pattern or the group didn't participate in the match.
     public fun named(name: string): Option<string> {
         let i = 0;
-        while (i < this.names.length) {
-            if (this.names[i] == name) {
+        while i < this.names.length {
+            if this.names[i] == name {
                 let num = this.name_numbers[i];
-                if ((num >= 1) && (num <= this.groups.length)) {
+                if (num >= 1) && (num <= this.groups.length) {
                     return Option.Some(this.groups[num - 1]);
                 }
                 return Option.None;

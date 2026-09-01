@@ -8,7 +8,7 @@ async fun main(): void {
 
     System.println(await WebWorker.spawn(() => {
         let result = scale + offset;
-        if (result == 6) {
+        if result == 6 {
             return prefix + "ok";
         }
         return prefix + "bad";

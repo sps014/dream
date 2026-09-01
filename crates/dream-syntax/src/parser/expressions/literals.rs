@@ -227,6 +227,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             diagnostics: &mut *self.diagnostics,
             foreach_counter: 0,
             type_aliases: self.type_aliases.clone(),
+            in_condition: false,
         };
         let expr = sub.parse_expression(0)?;
         if sub.current_token().kind != EndOfFileToken {

@@ -13,7 +13,7 @@ public class SortedMap<K : Comparable<K>, V> {
     // Allocates an empty sorted map with an initial capacity (defaults to 8).
     public constructor(capacity: int = 8) {
         let c = capacity;
-        if (c < sequence_min_capacity()) {
+        if c < sequence_min_capacity() {
             c = sequence_min_capacity();
         }
         this.keys_arr = Buffer.alloc<K>(c);
@@ -36,9 +36,9 @@ public class SortedMap<K : Comparable<K>, V> {
     // Removes every entry, keeping capacity. Live slots are overwritten with a zero value so
     // reference keys/values release immediately.
     public fun clear(): void {
-        if (this.count > 0) {
+        if this.count > 0 {
             let i = 0;
-            while (i < this.count) {
+            while i < this.count {
                 this.keys_arr[i] = this.blank_k[0];
                 this.values_arr[i] = this.blank_v[0];
                 i = i + 1;
@@ -50,7 +50,7 @@ public class SortedMap<K : Comparable<K>, V> {
     fun grow(): void {
         let old_cap = this.keys_arr.length;
         let new_cap = old_cap * 2;
-        if (new_cap < sequence_min_capacity()) {
+        if new_cap < sequence_min_capacity() {
             new_cap = sequence_min_capacity();
         }
         this.keys_arr = Buffer.realloc<K>(this.keys_arr, new_cap);
@@ -63,13 +63,13 @@ public class SortedMap<K : Comparable<K>, V> {
     fun locate(borrow key: K): int {
         let lo = 0;
         let hi = this.count;
-        while (lo < hi) {
+        while lo < hi {
             let mid = lo + (hi - lo) / 2;
             let c = this.keys_arr[mid].compare(key);
-            if (c == 0) {
+            if c == 0 {
                 return mid;
             }
-            if (c < 0) {
+            if c < 0 {
                 lo = mid + 1;
             } else {
                 hi = mid;
@@ -79,18 +79,17 @@ public class SortedMap<K : Comparable<K>, V> {
     }
 
     // Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to shift.
-    @set_indexer
-    public fun set(key: K, value: V): void {
+    public fun this[key: K] = value: V {
         let idx = this.locate(key);
-        if (idx >= 0) {
+        if idx >= 0 {
             this.values_arr[idx] = value;
         } else {
             let insert_at = 0 - idx - 1;
-            if (this.count == this.keys_arr.length) {
+            if this.count == this.keys_arr.length {
                 this.grow();
             }
             let i = this.count;
-            while (i > insert_at) {
+            while i > insert_at {
                 this.keys_arr[i] = this.keys_arr[i - 1];
                 this.values_arr[i] = this.values_arr[i - 1];
                 i = i - 1;
@@ -101,10 +100,14 @@ public class SortedMap<K : Comparable<K>, V> {
         }
     }
 
+    public fun set(key: K, value: V): void {
+        this[key] = value;
+    }
+
     // Value for `key`, or `None` when the key is absent.
     public fun get(borrow key: K): Option<V> {
         let idx = this.locate(key);
-        if (idx >= 0) {
+        if idx >= 0 {
             return Option.Some(this.values_arr[idx]);
         }
         return Option.None;
@@ -112,10 +115,9 @@ public class SortedMap<K : Comparable<K>, V> {
 
     // Value for `key`. Panics when the key is absent — this is what `sm[k]` compiles to; use
     // `get(k)` for absence-tolerant reads.
-    @get_indexer
-    public fun at(borrow key: K): V {
+    public fun this[borrow key: K]: V {
         let idx = this.locate(key);
-        if (idx < 0) {
+        if idx < 0 {
             System.panic("SortedMap key not found");
         }
         return this.values_arr[idx];
@@ -129,11 +131,11 @@ public class SortedMap<K : Comparable<K>, V> {
     // Removes a key and returns true if it was present.
     public fun remove(borrow key: K): bool {
         let idx = this.locate(key);
-        if (idx < 0) {
+        if idx < 0 {
             return false;
         }
         let i = idx;
-        while (i < this.count - 1) {
+        while i < this.count - 1 {
             this.keys_arr[i] = this.keys_arr[i + 1];
             this.values_arr[i] = this.values_arr[i + 1];
             i = i + 1;
@@ -146,7 +148,7 @@ public class SortedMap<K : Comparable<K>, V> {
 
     // The smallest key, or `None` when empty.
     public fun first_key(): Option<K> {
-        if (this.count == 0) {
+        if this.count == 0 {
             return Option.None;
         }
         return Option.Some(this.keys_arr[0]);
@@ -154,7 +156,7 @@ public class SortedMap<K : Comparable<K>, V> {
 
     // The largest key, or `None` when empty.
     public fun last_key(): Option<K> {
-        if (this.count == 0) {
+        if this.count == 0 {
             return Option.None;
         }
         return Option.Some(this.keys_arr[this.count - 1]);
@@ -163,11 +165,11 @@ public class SortedMap<K : Comparable<K>, V> {
     // The smallest key `>= key`, or `None` if every key is smaller.
     public fun ceiling_key(borrow key: K): Option<K> {
         let idx = this.locate(key);
-        if (idx >= 0) {
+        if idx >= 0 {
             return Option.Some(this.keys_arr[idx]);
         }
         let insert_at = 0 - idx - 1;
-        if (insert_at >= this.count) {
+        if insert_at >= this.count {
             return Option.None;
         }
         return Option.Some(this.keys_arr[insert_at]);
@@ -176,11 +178,11 @@ public class SortedMap<K : Comparable<K>, V> {
     // The largest key `<= key`, or `None` if every key is larger.
     public fun floor_key(borrow key: K): Option<K> {
         let idx = this.locate(key);
-        if (idx >= 0) {
+        if idx >= 0 {
             return Option.Some(this.keys_arr[idx]);
         }
         let insert_at = 0 - idx - 1;
-        if (insert_at == 0) {
+        if insert_at == 0 {
             return Option.None;
         }
         return Option.Some(this.keys_arr[insert_at - 1]);
@@ -190,7 +192,7 @@ public class SortedMap<K : Comparable<K>, V> {
     public fun keys(): K[] {
         let result = Buffer.alloc<K>(this.count);
         let i = 0;
-        while (i < this.count) {
+        while i < this.count {
             result[i] = this.keys_arr[i];
             i = i + 1;
         }
@@ -201,7 +203,7 @@ public class SortedMap<K : Comparable<K>, V> {
     public fun values(): V[] {
         let result = Buffer.alloc<V>(this.count);
         let i = 0;
-        while (i < this.count) {
+        while i < this.count {
             result[i] = this.values_arr[i];
             i = i + 1;
         }
@@ -209,7 +211,6 @@ public class SortedMap<K : Comparable<K>, V> {
     }
 
     // Gets an iterator over entries in ascending key order.
-    @iterator
     public fun iterator(): SortedMapIterator<K, V> {
         return SortedMapIterator<K, V>(this);
     }

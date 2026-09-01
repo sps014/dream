@@ -1,1 +1,1 @@
-cannot capture 'wrap' of type 'Wrap' in a `WebWorker.spawn` body: 'Wrap' is not shared — mark the class '@shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)
+cannot capture 'wrap' of type 'Wrap' in a `WebWorker.spawn` body: 'Wrap' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)

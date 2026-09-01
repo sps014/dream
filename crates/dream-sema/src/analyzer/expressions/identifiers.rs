@@ -4,7 +4,7 @@ use super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::Type;
+use dream_syntax::nodes::{FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
@@ -14,6 +14,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn analyze_identifier(
         &mut self,
         id: &SyntaxToken,
+        parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
@@ -110,6 +111,22 @@ impl<'a> Analyzer<'a> {
                     }
                     self.hir_none();
                     return Ok(Type::GenericFunctionItem(id.text.clone()));
+                }
+                if let Some(expected) = self.current_expected_type.clone() {
+                    let enum_name = match &expected {
+                        Type::Struct(tok, _) => tok.text.clone(),
+                        other => other.get_type(),
+                    };
+                    if let Ok(Some(t)) = self.analyze_variant_construction(
+                        &enum_name,
+                        id,
+                        &[],
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    ) {
+                        return Ok(t);
+                    }
                 }
                 // Unresolved name: report and short-circuit. Statement-level callers recover
                 // (poisoning the binding with `Type::Unknown`) so sibling errors still surface.

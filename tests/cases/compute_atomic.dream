@@ -5,9 +5,9 @@ import system.gpu;
 @compute(64)
 fun hist(data: GpuBuffer<int>, bins: GpuBuffer<int>, n: int): void {
     let i = global_id.x;
-    if (i < n) {
+    if i < n {
         let v = data[i];
-        if (v >= 0 && v < bins.length) {
+        if v >= 0 && v < bins.length {
             let _ = Gpu.atomic_add(bins, v, 1);
         }
     }
@@ -15,7 +15,7 @@ fun hist(data: GpuBuffer<int>, bins: GpuBuffer<int>, n: int): void {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
@@ -31,7 +31,7 @@ async fun main(): void {
         1,
         Buffer.alloc<byte>(0)
     );
-    if (r.is_err()) {
+    if r.is_err() {
         System.println("dispatch failed");
         return;
     }

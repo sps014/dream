@@ -11,7 +11,7 @@ public static class Array {
     public static fun repeat<T>(len: int, value: T): T[] {
         let out = Buffer.alloc<T>(len);
         let i = 0;
-        while (i < len) {
+        while i < len {
             out[i] = value;
             i = i + 1;
         }
@@ -23,7 +23,7 @@ public static class Array {
     public static fun repeat_with<T>(len: int, fill: fun(): T): T[] {
         let out = Buffer.alloc<T>(len);
         let i = 0;
-        while (i < len) {
+        while i < len {
             out[i] = fill();
             i = i + 1;
         }
@@ -42,24 +42,22 @@ extend T[] : IndexedCollection<T> {
     }
 
     // Element at `index`. Panics if `index` is out of range.
-    @get_indexer
-    public fun get(index: int): T {
-        if (index < 0 || index >= this.length) {
+    public fun this[index: int]: T {
+        if index < 0 || index >= this.length {
             System.panic("array index out of range");
         }
         return this[index];
     }
 
     // Enumerator for treating an array as a `Collection`.
-    @iterator
     public fun iterator(): Iterator<T> {
         return ArrayIterator<T>(this);
     }
 
     public fun contains(borrow value: T): bool {
         let i = 0;
-        while (i < this.length) {
-            if (this[i] == value) {
+        while i < this.length {
+            if this[i] == value {
                 return true;
             }
             i = i + 1;
@@ -69,8 +67,8 @@ extend T[] : IndexedCollection<T> {
 
     public fun index_of(borrow value: T): Option<int> {
         let i = 0;
-        while (i < this.length) {
-            if (this[i] == value) {
+        while i < this.length {
+            if this[i] == value {
                 return Option.Some(i);
             }
             i = i + 1;
@@ -81,19 +79,19 @@ extend T[] : IndexedCollection<T> {
     public fun slice(start: int, end: int): T[] {
         let lo = start;
         let hi = end;
-        if (lo < 0) {
+        if lo < 0 {
             lo = 0;
         }
-        if (hi > this.length) {
+        if hi > this.length {
             hi = this.length;
         }
-        if (lo > hi) {
+        if lo > hi {
             lo = hi;
         }
         let n = hi - lo;
         let out = Buffer.alloc<T>(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             out[i] = this[lo + i];
             i = i + 1;
         }
@@ -103,7 +101,7 @@ extend T[] : IndexedCollection<T> {
     public fun reverse(): void {
         let lo = 0;
         let hi = this.length - 1;
-        while (lo < hi) {
+        while lo < hi {
             let a = this[lo];
             this[lo] = this[hi];
             this[hi] = a;
@@ -116,12 +114,12 @@ extend T[] : IndexedCollection<T> {
         let n = this.length + other.length;
         let out = Buffer.alloc<T>(n);
         let i = 0;
-        while (i < this.length) {
+        while i < this.length {
             out[i] = this[i];
             i = i + 1;
         }
         let j = 0;
-        while (j < other.length) {
+        while j < other.length {
             out[i] = other[j];
             i = i + 1;
             j = j + 1;

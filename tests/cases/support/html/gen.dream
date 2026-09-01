@@ -8,7 +8,7 @@ import parser;
 public fun html(ctx: GenContext): void {
     for (let block in ctx.syntax_blocks("html")) {
         let result = HtmlCompiler.compile(block.body, block.splices);
-        if (!result.ok) {
+        if !result.ok {
             ctx.error(block, result.error);
             return;
         }

@@ -5,21 +5,21 @@ fun reduce_sum(data: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     @workgroup(64) let tile: float;
     let lid = local_id.x;
     let gid = global_id.x;
-    if (gid < n) {
+    if gid < n {
         tile[lid] = data[gid];
     } else {
         tile[lid] = 0.0;
     }
     Gpu.workgroup_barrier();
     let stride = 32;
-    while (stride > 0) {
-        if (lid < stride) {
+    while stride > 0 {
+        if lid < stride {
             tile[lid] = tile[lid] + tile[lid + stride];
         }
         Gpu.workgroup_barrier();
         stride = stride / 2;
     }
-    if (lid == 0) {
+    if lid == 0 {
         out[workgroup_id.x] = tile[0];
     }
 }

@@ -48,7 +48,7 @@ fun main() {
 
     // Unsigned comparison.
     let big: uint = 3000000000u;
-    if (big > 1000000000u) {
+    if big > 1000000000u {
         System.println(1);
     } else {
         System.println(0);

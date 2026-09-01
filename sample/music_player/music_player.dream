@@ -63,7 +63,7 @@ fun el(id: string): js {
 // --- Helpers --------------------------------------------------------------------------------
 
 fun pad2(n: int): string {
-    if (n < 10) {
+    if n < 10 {
         return "0" + n.to_string();
     }
     return n.to_string();
@@ -85,12 +85,12 @@ fun render_playlist(): void {
     playlist_el.innerHTML = "";
 
     let i = 0;
-    while (i < tracks.length) {
+    while i < tracks.length {
         let track = tracks[i];
 
         let row = doc.createElement("li");
         row.className = i == current_index ? "track active" : "track";
-        if (track.unavailable) {
+        if track.unavailable {
             row.className = row.className + " unavailable";
         }
         row.setAttribute("data-index", i.to_string());
@@ -107,7 +107,7 @@ fun render_playlist(): void {
 
         title_row.appendChild(title_span);
 
-        if (track.is_ncs) {
+        if track.is_ncs {
             let badge = doc.createElement("span");
             badge.className = "ncs-badge";
             badge.textContent = "NCS";
@@ -163,7 +163,7 @@ fun update_play_button(): void {
 
 fun on_play_pause_click(ev: js): void {
     let audio = el("audio-player");
-    if (is_playing) {
+    if is_playing {
         audio.pause();
         is_playing = false;
     } else {
@@ -175,14 +175,14 @@ fun on_play_pause_click(ev: js): void {
 
 fun on_prev_click(ev: js): void {
     load_track(current_index - 1);
-    if (is_playing) {
+    if is_playing {
         el("audio-player").play();
     }
 }
 
 fun on_next_click(ev: js): void {
     load_track(current_index + 1);
-    if (is_playing) {
+    if is_playing {
         el("audio-player").play();
     }
 }
@@ -199,7 +199,7 @@ fun on_seek_input(ev: js): void {
     let percent: double = el("seek").value;
     let audio = el("audio-player");
     let duration: double = audio.duration;
-    if (duration > 0.0) {
+    if duration > 0.0 {
         audio.currentTime = (percent / 100.0) * duration;
     }
     update_seek_fill();
@@ -214,16 +214,16 @@ fun on_volume_input(ev: js): void {
 // `<audio>` fires `error` when a source 404s / 500s / aborts (archive.org rate-limits with
 // 500s). Mark the track dead, surface it in the UI, and move on to the next source.
 fun on_error(ev: js): void {
-    if (current_index >= 0 && current_index < tracks.length) {
+    if current_index >= 0 && current_index < tracks.length {
         let track = tracks[current_index];
-        if (!track.unavailable) {
+        if !track.unavailable {
             track.unavailable = true;
             load_failures = load_failures + 1;
         }
     }
     render_playlist();
 
-    if (load_failures >= tracks.length) {
+    if load_failures >= tracks.length {
         set_status("no playable sources — check your connection");
         is_playing = false;
         update_play_button();
@@ -231,7 +231,7 @@ fun on_error(ev: js): void {
     }
     set_status("source unavailable — skipping");
     load_track(current_index + 1);
-    if (is_playing) {
+    if is_playing {
         el("audio-player").play();
     }
 }
@@ -245,7 +245,7 @@ fun on_time_update(ev: js): void {
     let current: double = audio.currentTime;
     let duration: double = audio.duration;
 
-    if (duration > 0.0) {
+    if duration > 0.0 {
         el("seek").value = (current / duration) * 100.0;
     }
     update_seek_fill();

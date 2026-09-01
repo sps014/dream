@@ -25,8 +25,8 @@ ABI change than a self-contained follow-up. Heap-pointer strings stay the model:
 ## 2. Opt-in `@stack` class-instance stack allocation — **rejected**
 
 **What exists and stays:** `src/mir/passes/sroa.rs` silently promotes non-escaping,
-default-constructed class instances' fields to scalar locals. `@stack` on **discriminated
-unions** (checked inline contract) is shipped and unchanged — see [Enums & unions](../reference/language/enums-unions.md).
+default-constructed class instances' fields to scalar locals. `enum struct` on **discriminated
+unions** (checked inline contract) is the value-union spelling — see [Enums & unions](../reference/language/enums-unions.md).
 
 **Why rejected as a user-facing class feature:** a diagnosable "this `new` must not escape"
 guarantee needs expression-level syntax (attributes are declaration-only today) plus HIR-level

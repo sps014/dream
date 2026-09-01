@@ -42,12 +42,12 @@ public class HttpStreamResponse {
     // is host-determined and may be smaller than `max_bytes` even before EOF.
     public async fun read_chunk(max_bytes: int): Result<Option<byte[]>, HttpError> {
         let eof: Option<byte[]> = Option.None;
-        if (this.closed) {
+        if this.closed {
             return Result.Ok(eof);
         }
         switch (this.cancel_token) {
             Some(tok) => {
-                if (tok.is_cancelled()) {
+                if tok.is_cancelled() {
                     this.close();
                     return Result.Err(HttpError.transport("cancelled"));
                 }
@@ -57,10 +57,10 @@ public class HttpStreamResponse {
         let wire = await HttpStreamResponse.host_read_chunk(this.handle, max_bytes);
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
-        if (tag == "data") {
+        if tag == "data" {
             return Result.Ok(Option.Some(reader.read_remaining_bytes()));
         }
-        if (tag == "eof") {
+        if tag == "eof" {
             this.closed = true;
             return Result.Ok(eof);
         }
@@ -73,14 +73,14 @@ public class HttpStreamResponse {
         let sb = List<byte>();
         let going = true;
         let error: Option<HttpError> = Option.None;
-        while (going) {
+        while going {
             let chunk = await this.read_chunk(65536);
             switch (chunk) {
                 Ok(opt) => {
                     switch (opt) {
                         Some(bytes) => {
                             let i = 0;
-                            while (i < bytes.length) {
+                            while i < bytes.length {
                                 sb.push(bytes[i]);
                                 i = i + 1;
                             }
@@ -100,7 +100,7 @@ public class HttpStreamResponse {
         }
         let out = Buffer.alloc<byte>(sb.length);
         let i = 0;
-        while (i < sb.length) {
+        while i < sb.length {
             out[i] = sb.get(i);
             i = i + 1;
         }
@@ -110,7 +110,7 @@ public class HttpStreamResponse {
     // Closes the stream early (e.g. after reading only the headers, or on cancellation). Safe to
     // call more than once.
     public fun close(): void {
-        if (this.closed == false) {
+        if this.closed == false {
             this.closed = true;
             HttpStreamResponse.host_close_stream(this.handle);
         }

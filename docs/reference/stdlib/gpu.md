@@ -11,7 +11,7 @@ import system;
 import system.gpu;
 
 async fun main(): void {
-    if ((await Gpu.try_init()).is_err()) {
+    if (await Gpu.try_init()).is_err() {
         System.println("gpu unavailable");
         return;
     }

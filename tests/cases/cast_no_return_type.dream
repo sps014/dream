@@ -1,4 +1,4 @@
-// `@cast` requires a declared return type (the cast's target type).
+// `fun implicit` requires a declared return type (the cast's target type).
 import system;
 class Wrapper {
     public value: int;
@@ -7,8 +7,7 @@ class Wrapper {
         this.value = value;
     }
 
-    @cast("implicit")
-    fun unwrap() {
+        fun implicit() {
         this.value = this.value;
     }
 }

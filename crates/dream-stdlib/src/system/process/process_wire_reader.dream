@@ -16,7 +16,7 @@ public class ProcessWireReader {
         let result = string.alloc(len);
         let src = Span<char>(this.data, start, len);
         let i = 0;
-        while (i < len) {
+        while i < len {
             string.set(result, i, src.get(i));
             i = i + 1;
         }
@@ -28,7 +28,7 @@ public class ProcessWireReader {
         let n = this.data.length;
         let start = this.pos;
         let i = start;
-        while ((i < n) && (this.data[i] != '\n')) {
+        while (i < n) && (this.data[i] != '\n') {
             i = i + 1;
         }
         let line = this.slice_text(start, i - start);
@@ -41,16 +41,16 @@ public class ProcessWireReader {
         let n = this.data.length;
         let start = this.pos;
         let take = count;
-        if (start + take > n) {
+        if start + take > n {
             take = n - start;
         }
-        if (take < 0) {
+        if take < 0 {
             take = 0;
         }
         let out = Buffer.alloc<byte>(take);
         let src = Span<char>(this.data, start, take);
         let i = 0;
-        while (i < take) {
+        while i < take {
             out[i] = (byte)src.get(i);
             i = i + 1;
         }

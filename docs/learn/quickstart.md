@@ -59,9 +59,8 @@ fun main() {
 Hello, world!
 ```
 
-- `import system;` — load console helpers.
 - `fun main()` — the program starts here.
-- `System.println(...)` — print a line, then a newline.
+- `System.println(...)` — print a line, then a newline (`import system;`).
 
 Without a project folder you can still run a single file:
 

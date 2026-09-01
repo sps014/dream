@@ -25,7 +25,7 @@ fun mesh_fs(v: VsOut): GpuVec4 {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
@@ -35,7 +35,7 @@ async fun main(): void {
     let _samp = GpuSampler.create(GpuFilterMode.Linear, GpuAddressMode.Repeat, GpuFilterMode.Linear);
     let desc = GpuRenderPipelineDesc.mesh();
     let pipe = await GpuRenderPipeline.create_ex("mesh_vs", "mesh_fs", desc);
-    if (pipe.is_err()) {
+    if pipe.is_err() {
         System.println("pipeline create failed");
         return;
     }

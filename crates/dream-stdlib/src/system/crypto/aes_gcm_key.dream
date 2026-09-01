@@ -16,7 +16,7 @@ public class AesGcmKey {
 
     // Wraps exactly 32 raw key bytes, or an error when the length is wrong.
     public static fun from_bytes(bytes: byte[]): Result<AesGcmKey, CryptoError> {
-        if (bytes.length != 32) {
+        if bytes.length != 32 {
             return Result.Err(CryptoError.invalid_key("AES-256-GCM key must be 32 bytes, got " + bytes.length));
         }
         return Result.Ok(AesGcmKey(bytes));

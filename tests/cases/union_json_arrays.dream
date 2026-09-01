@@ -13,9 +13,9 @@ class Point {
 
 @json
 enum Tags {
-    Many(items: string[]),
-    Counts(nums: int[]),
-    Points(pts: Point[]),
+    Many(string[]),
+    Counts(int[]),
+    Points(Point[]),
     Empty,
 }
 

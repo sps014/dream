@@ -35,7 +35,7 @@ public static class AesGcm {
     // reused with the same key.
     @native @node
     public static fun encrypt(key: AesGcmKey, nonce: byte[], plaintext: byte[], aad: byte[]): Result<byte[], CryptoError> {
-        if (nonce.length != AesGcm.nonce_size()) {
+        if nonce.length != AesGcm.nonce_size() {
             return Result.Err(CryptoError.invalid_nonce("AES-GCM nonce must be " + AesGcm.nonce_size() + " bytes, got " + nonce.length));
         }
         return Result.Ok(AesGcm.encrypt_host(key.to_bytes(), nonce, plaintext, aad));
@@ -46,20 +46,20 @@ public static class AesGcm {
     // (tampered ciphertext, wrong key/nonce/aad, or truncated input).
     @native @node
     public static fun decrypt(key: AesGcmKey, nonce: byte[], ciphertext: byte[], aad: byte[]): Result<byte[], CryptoError> {
-        if (nonce.length != AesGcm.nonce_size()) {
+        if nonce.length != AesGcm.nonce_size() {
             return Result.Err(CryptoError.invalid_nonce("AES-GCM nonce must be " + AesGcm.nonce_size() + " bytes, got " + nonce.length));
         }
-        if (ciphertext.length < AesGcm.tag_size()) {
+        if ciphertext.length < AesGcm.tag_size() {
             return Result.Err(CryptoError.decrypt_failed("ciphertext shorter than the authentication tag"));
         }
         let tagged = AesGcm.decrypt_host(key.to_bytes(), nonce, ciphertext, aad);
-        if (tagged.is_empty() || (tagged[0] == (byte)0)) {
+        if tagged.is_empty() || (tagged[0] == (byte)0) {
             return Result.Err(CryptoError.decrypt_failed("authentication failed: wrong key/nonce/aad or tampered ciphertext"));
         }
         let n = tagged.length - 1;
         let plaintext = Buffer.alloc<byte>(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             plaintext[i] = tagged[i + 1];
             i = i + 1;
         }

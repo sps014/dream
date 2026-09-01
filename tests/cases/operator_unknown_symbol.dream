@@ -1,4 +1,4 @@
-// `@operator` requires a symbol recognized for the tagged method's arity — `&&` is not overloadable.
+// `fun operator` requires a symbol recognized for the method's arity — `&&` is not overloadable.
 import system;
 class Flag {
     public value: bool;
@@ -7,8 +7,7 @@ class Flag {
         this.value = value;
     }
 
-    @operator("&&")
-    fun and(other: Flag): Flag {
+        fun operator &&(other: Flag): Flag {
         return Flag(this.value && other.value);
     }
 }

@@ -16,7 +16,7 @@ class Tracked {
 }
 
 enum Box {
-    Full(item: Tracked),
+    Full(Tracked),
     Empty,
 }
 

@@ -13,9 +13,9 @@ class Point {
 
 @json
 enum Shape {
-    Circle(radius: int),
+    Circle(int),
     Rect(width: int, height: int),
-    Located(at: Point),
+    Located(Point),
     Empty,
 }
 

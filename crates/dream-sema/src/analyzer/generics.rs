@@ -315,7 +315,7 @@ impl<'a> Analyzer<'a> {
                         ),
                         dream_syntax::nodes::ConstraintKind::Shared => (
                             "shared",
-                            "it is not blittable, string, a struct of shared fields, or an '@shared class'",
+                            "it is not blittable, string, a struct of shared fields, or a 'shared class'",
                         ),
                         dream_syntax::nodes::ConstraintKind::Class => {
                             ("class", "it is not a reference type")

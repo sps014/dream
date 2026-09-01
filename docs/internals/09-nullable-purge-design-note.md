@@ -75,11 +75,11 @@ codegen path — no `TyKind::Nullable`-shaped bifurcation was reintroduced, beca
 on payload-type shape (`is_value_type`), not on `Option` being a special case.
 
 Any number of non-self-referential reference-typed fields is also permitted inline when the union
-is explicitly annotated `@stack` (see [Enums & unions](../reference/language/enums-unions.md)):
+is declared `enum struct` (see [Enums & unions](../reference/language/enums-unions.md)):
 this exists for payload shapes like a `Span<T>`/array-backed variant that need reference fields
 alongside value fields, without forcing a fully boxed union. `Option<T>` itself never needs this —
 `None` carries no payload and `Some(T)` carries exactly one value-typed field — so the ordinary
-(non-`@stack`) value-union rule already covers it.
+(non-`enum struct`) value-union rule already covers it.
 
 Net effect: `Option<StructType>` now costs the same as `StructType?` did before the purge — a
 null-checkable inline slot, zero heap allocation — closing the one deliberate regression this note

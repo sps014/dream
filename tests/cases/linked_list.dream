@@ -28,7 +28,7 @@ fun main(): void {
 
     let curr: Option<Node> = Option.Some(head);
     let done = false;
-    while (!done) {
+    while !done {
         switch (curr) {
             Some(n) => {
                 System.println(n.value);

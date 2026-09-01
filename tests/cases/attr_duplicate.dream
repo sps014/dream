@@ -3,14 +3,18 @@ import system;
 class Foo {
     x: int;
 
-    @override
-    @override
-    public fun to_string(): string {
-        return "foo";
+    @inline
+    @inline
+    public fun n(): int {
+        return this.x;
+    }
+
+    public constructor(x: int) {
+        this.x = x;
     }
 }
 
 fun main() {
     let f = Foo(1);
-    System.print(f);
+    System.println(f.n());
 }

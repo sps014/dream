@@ -9,21 +9,21 @@ struct Vec2 {
 
 @compute(64)
 fun double_float(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
-    if (global_id.x < n) {
+    if global_id.x < n {
         out[global_id.x] = a[global_id.x] * 2.0;
     }
 }
 
 @compute(64)
 fun double_int(@readonly a: GpuBuffer<int>, out: GpuBuffer<int>, n: int): void {
-    if (global_id.x < n) {
+    if global_id.x < n {
         out[global_id.x] = a[global_id.x] * 2;
     }
 }
 
 @compute(64)
 fun double_vec2(@readonly a: GpuBuffer<Vec2>, out: GpuBuffer<Vec2>, n: int): void {
-    if (global_id.x < n) {
+    if global_id.x < n {
         let v = a[global_id.x];
         let o = Vec2();
         o.x = v.x * 2.0;
@@ -41,7 +41,7 @@ fun make_vec2(x: float, y: float): Vec2 {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
@@ -50,7 +50,7 @@ async fun main(): void {
     let fa = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
     let fout = GpuBuffer<float>.alloc(4);
     let fr = await Compute.run_1d("double_float", [fa, fout], 4);
-    if (fr.is_err()) {
+    if fr.is_err() {
         System.println("float dispatch failed");
         return;
     }
@@ -72,7 +72,7 @@ async fun main(): void {
         1,
         Buffer.alloc<byte>(0)
     );
-    if (ir.is_err()) {
+    if ir.is_err() {
         System.println("int dispatch failed");
         return;
     }
@@ -98,7 +98,7 @@ async fun main(): void {
         1,
         Buffer.alloc<byte>(0)
     );
-    if (vr.is_err()) {
+    if vr.is_err() {
         System.println("vec2 dispatch failed");
         return;
     }

@@ -1,5 +1,5 @@
 //! Scalar replacement of aggregates. A struct allocated with the implicit zero-initializing default
-//! constructor (`New { ctor: None }`) — or a user constructor that has been lowered to the same
+//! constructor(`New { ctor: None }`) — or a user constructor that has been lowered to the same
 //! shape by [`ExpandSimpleCtors`] — that never escapes — used only as the base of `obj.field`
 //! loads and stores, never read whole, passed to a call, returned, stored elsewhere, or indexed —
 //! has each of its fields promoted to a plain local. The allocation then becomes dead (removed

@@ -1,15 +1,13 @@
-// `@stack` allows any number of non-self-referential reference-typed payload fields inline:
+// `enum struct` allows any number of non-self-referential reference-typed payload fields inline:
 // refs across different variants (Either) and multiple refs in one variant (Pair).
 
 import system;
-@stack
-enum Either {
-    Left(value: string),
-    Right(value: string),
+enum struct Either {
+    Left(string),
+    Right(string),
 }
 
-@stack
-enum Pair {
+enum struct Pair {
     Both(a: string, b: string),
 }
 

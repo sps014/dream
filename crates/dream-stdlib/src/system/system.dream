@@ -2,7 +2,7 @@ module system;
 
 // System utilities for console I/O, process control, and terminal colors.
 
-public static class System {
+extend System {
     // Prints a value to standard output.
     @intrinsic("print")
     static extern fun print<T>(borrow value: T): void;
@@ -52,12 +52,6 @@ public static class System {
     @runtime("processSetCwd")
     static extern fun host_set_cwd(borrow path: string): bool;
 
-    // Halts the program immediately with `message`, after printing it to standard output. Fatal
-    // and non-recoverable (there is no catch/recover) — the same halt point every automatic
-    // runtime check (bounds, division by zero, bad cast) already uses.
-    @intrinsic("dream_panic")
-    static extern fun panic(borrow message: string): void;
-
     // Reads a line of input from stdin.
     public static fun read_line(): string {
         return System.host_read_line();
@@ -92,13 +86,13 @@ public static class System {
     // The current host platform.
     public static fun platform(): Platform {
         let p = System.host_platform();
-        if (p == 0) {
+        if p == 0 {
             return Platform.Native;
         }
-        if (p == 1) {
+        if p == 1 {
             return Platform.Node;
         }
-        if (p == 2) {
+        if p == 2 {
             return Platform.Browser;
         }
         return Platform.Unknown;
@@ -107,10 +101,10 @@ public static class System {
     // The OS family on native hosts (Unknown elsewhere).
     public static fun os_family(): OsFamily {
         let f = System.host_os_family();
-        if (f == 0) {
+        if f == 0 {
             return OsFamily.Unix;
         }
-        if (f == 1) {
+        if f == 1 {
             return OsFamily.Windows;
         }
         return OsFamily.Unknown;
@@ -137,7 +131,7 @@ public static class System {
     // Process arguments (excluding the executable name when the host provides one separately).
     public static fun args(): string[] {
         let joined = System.host_args();
-        if (joined.is_empty()) {
+        if joined.is_empty() {
             return Buffer.alloc<string>(0);
         }
         return joined.split('\n');
@@ -146,7 +140,7 @@ public static class System {
     // Absolute path of the running executable when known.
     public static fun exe_path(): Option<string> {
         let path = System.host_exe_path();
-        if (path.is_empty()) {
+        if path.is_empty() {
             return Option.None;
         }
         return Option.Some(path);
@@ -155,10 +149,10 @@ public static class System {
     // Value of environment variable `name`, or `None` when unset.
     public static fun env(borrow name: string): Option<string> {
         let raw = System.host_env_get(name);
-        if (raw.is_empty()) {
+        if raw.is_empty() {
             return Option.None;
         }
-        if (raw.char_at(0) != '1') {
+        if raw.char_at(0) != '1' {
             return Option.None;
         }
         return Option.Some(raw.substring(1, raw.length));
@@ -171,7 +165,7 @@ public static class System {
 
     // Sets environment variable `name` to `value`.
     public static fun set_env(borrow name: string, borrow value: string): Result<bool, ArgError> {
-        if (name.is_empty()) {
+        if name.is_empty() {
             return Result.Err(ArgError.invalid("environment variable name must not be empty"));
         }
         System.host_env_set(name, value);
@@ -197,7 +191,7 @@ public static class System {
 
     // Unsets environment variable `name`.
     public static fun unset_env(borrow name: string): Result<bool, ArgError> {
-        if (name.is_empty()) {
+        if name.is_empty() {
             return Result.Err(ArgError.invalid("environment variable name must not be empty"));
         }
         System.host_env_unset(name);
@@ -207,7 +201,7 @@ public static class System {
     // Names of all environment variables (empty on hosts without an env block).
     public static fun env_keys(): string[] {
         let joined = System.host_env_keys();
-        if (joined.is_empty()) {
+        if joined.is_empty() {
             return Buffer.alloc<string>(0);
         }
         return joined.split('\n');
@@ -216,7 +210,7 @@ public static class System {
     // Process temp directory (`TMPDIR` / `GetTempPath` / `"/tmp"` in the browser).
     public static fun temp_dir(): string {
         let path = System.host_temp_dir();
-        if (path.is_empty()) {
+        if path.is_empty() {
             return "/tmp";
         }
         return path;
@@ -225,7 +219,7 @@ public static class System {
     // User home directory when the host provides one.
     public static fun home_dir(): Option<string> {
         let path = System.host_home_dir();
-        if (path.is_empty()) {
+        if path.is_empty() {
             return Option.None;
         }
         return Option.Some(path);
@@ -234,7 +228,7 @@ public static class System {
     // Current working directory.
     public static fun cwd(): Result<string, IoError> {
         let path = System.host_cwd();
-        if (path.is_empty()) {
+        if path.is_empty() {
             return Result.Err(IoError.other(".", "current working directory is unavailable"));
         }
         return Result.Ok(path);
@@ -242,7 +236,7 @@ public static class System {
 
     // Sets the current working directory.
     public static fun set_cwd(borrow path: string): Result<bool, IoError> {
-        if (System.host_set_cwd(path)) {
+        if System.host_set_cwd(path) {
             return Result.Ok(true);
         }
         return Result.Err(IoError.other(path, "failed to set current working directory: " + path));

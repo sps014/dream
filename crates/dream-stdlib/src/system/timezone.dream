@@ -35,7 +35,7 @@ public struct TimeZone {
     // The host's configured local timezone, or `utc()` if it can't be determined.
     public static fun local(): TimeZone {
         let name = TimeZone.host_local_zone_name();
-        if (name.is_empty()) {
+        if name.is_empty() {
             return TimeZone.utc();
         }
         return TimeZone(name);
@@ -45,7 +45,7 @@ public struct TimeZone {
     // timezone database doesn't recognize it.
     public static fun of(name: string): Result<TimeZone, ParseError> {
         let offset = TimeZone.host_zone_offset_minutes(name, 0L);
-        if (offset == TimeZone.unknown_offset()) {
+        if offset == TimeZone.unknown_offset() {
             return Result.Err(ParseError.invalid("unknown IANA time zone: " + name));
         }
         return Result.Ok(TimeZone(name));
@@ -55,7 +55,7 @@ public struct TimeZone {
     // that instant). Falls back to `0` if the zone is no longer recognized by the host.
     public fun offset_minutes_at(epoch_millis: long): int {
         let offset = TimeZone.host_zone_offset_minutes(this._name, epoch_millis);
-        if (offset == TimeZone.unknown_offset()) {
+        if offset == TimeZone.unknown_offset() {
             return 0;
         }
         return offset;

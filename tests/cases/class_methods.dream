@@ -19,7 +19,7 @@ class GenericBox<T> {
     public val: T;
 
     public fun print_val() {
-        if (this.val is int) {
+        if this.val is int {
             System.println(this.val);
         } else if (this.val is float) {
             System.println(this.val);

@@ -137,7 +137,7 @@ fun height_map_tracing(
     let tm: float = 0.0;
     let tx: float = 1000.0;
     let hx: float = sea_map(ox + dx * tx, oy + dy * tx, oz + dz * tx, sea_time);
-    if (hx > 0.0) {
+    if hx > 0.0 {
         return GpuVec3.of(ox + dx * tx, oy + dy * tx, oz + dz * tx);
     }
     let hm: float = sea_map(ox, oy, oz, sea_time);
@@ -147,14 +147,14 @@ fun height_map_tracing(
         let py: float = oy + dy * tmid;
         let pz: float = oz + dz * tmid;
         let hmid: float = sea_map(px, py, pz, sea_time);
-        if (hmid < 0.0) {
+        if hmid < 0.0 {
             tx = tmid;
             hx = hmid;
         } else {
             tm = tmid;
             hm = hmid;
         }
-        if (GpuMath.abs(hmid) < 0.001) {
+        if GpuMath.abs(hmid) < 0.001 {
             return GpuVec3.of(px, py, pz);
         }
     }
@@ -247,13 +247,13 @@ fun make_vert(x: float, y: float): Vertex {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("WebGPU unavailable — ocean needs Gpu.try_init");
         return;
     }
 
     let surface_r = GpuSurface.create("ocean", 1280, 720);
-    if (surface_r.is_err()) {
+    if surface_r.is_err() {
         System.println("GpuSurface.create failed");
         return;
     }
@@ -261,12 +261,12 @@ async fun main(): void {
 
     let w: int = surface.width();
     let h: int = surface.height();
-    if (w < 1) { w = 1280; }
-    if (h < 1) { h = 720; }
+    if w < 1 { w = 1280; }
+    if h < 1 { h = 720; }
 
     let desc = GpuRenderPipelineDesc.overlay();
     let pipe_r = await GpuRenderPipeline.create_ex("sea_vs", "sea_fs", desc);
-    if (pipe_r.is_err()) {
+    if pipe_r.is_err() {
         System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
@@ -282,11 +282,11 @@ async fun main(): void {
     let sky = GpuVec4.of(0.44, 0.77, 0.99, 1.0);
     let t0: long = Time.nano_time();
 
-    while (!surface.close_requested()) {
+    while !surface.close_requested() {
         w = surface.width();
         h = surface.height();
-        if (w < 1) { w = 1280; }
-        if (h < 1) { h = 720; }
+        if w < 1 { w = 1280; }
+        if h < 1 { h = 720; }
         let rw: float = (float)w;
         let rh: float = (float)h;
         let now: long = Time.nano_time();

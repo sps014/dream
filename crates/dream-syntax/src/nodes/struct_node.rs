@@ -60,6 +60,8 @@ pub struct StructDeclarationNode<'a> {
     pub is_sealed: bool,
     /// True when declared `static class`: a namespace of static members, not a value type.
     pub is_static: bool,
+    /// `shared class` — shareable across threads (atomic RC + lock word).
+    pub is_shared: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
@@ -87,6 +89,7 @@ impl<'a> StructDeclarationNode<'a> {
             is_ref_struct: false,
             is_sealed: false,
             is_static: false,
+            is_shared: false,
             file_path: None,
         }
     }

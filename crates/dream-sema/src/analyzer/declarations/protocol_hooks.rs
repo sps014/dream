@@ -21,20 +21,22 @@ pub enum ProtocolRole {
 }
 
 impl ProtocolRole {
-    fn from_attr_name(name: &str) -> Option<Self> {
-        match name {
-            "get_indexer" => Some(ProtocolRole::Get),
-            "set_indexer" => Some(ProtocolRole::Set),
-            "iterator" => Some(ProtocolRole::Iterator),
-            "next" => Some(ProtocolRole::Next),
-            _ => None,
+    fn from_method(method: &FunctionNode<'_>) -> Option<Self> {
+        match method.indexer_kind {
+            Some(dream_syntax::nodes::function::IndexerKind::Get) => Some(ProtocolRole::Get),
+            Some(dream_syntax::nodes::function::IndexerKind::Set) => Some(ProtocolRole::Set),
+            None => match method.name.text.as_str() {
+                "iterator" if method.parameters.is_empty() => Some(ProtocolRole::Iterator),
+                "next" if method.parameters.is_empty() => Some(ProtocolRole::Next),
+                _ => None,
+            },
         }
     }
 
-    fn attr_name(self) -> &'static str {
+    fn role_name(self) -> &'static str {
         match self {
-            ProtocolRole::Get => "get_indexer",
-            ProtocolRole::Set => "set_indexer",
+            ProtocolRole::Get => "get indexer",
+            ProtocolRole::Set => "set indexer",
             ProtocolRole::Iterator => "iterator",
             ProtocolRole::Next => "next",
         }
@@ -98,10 +100,7 @@ impl<'a> Analyzer<'a> {
         mangled_name: &str,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let role = method
-            .attributes
-            .iter()
-            .find_map(|a| ProtocolRole::from_attr_name(a.name.text.as_str()));
+        let role = ProtocolRole::from_method(method);
         let Some(role) = role else {
             return;
         };
@@ -109,8 +108,8 @@ impl<'a> Analyzer<'a> {
         if method.is_static {
             diagnostics.report_error(
                 format!(
-                    "'@{}' method '{}' must be a non-static instance method",
-                    role.attr_name(),
+                    "'{}' method '{}' must be a non-static instance method",
+                    role.role_name(),
                     method.name.text
                 ),
                 Some(method.name.position),
@@ -120,8 +119,8 @@ impl<'a> Analyzer<'a> {
         if method.is_async {
             diagnostics.report_error(
                 format!(
-                    "'@{}' method '{}' cannot be async",
-                    role.attr_name(),
+                    "'{}' method '{}' cannot be async",
+                    role.role_name(),
                     method.name.text
                 ),
                 Some(method.name.position),
@@ -131,8 +130,8 @@ impl<'a> Analyzer<'a> {
         if method.accessor.is_some() {
             diagnostics.report_error(
                 format!(
-                    "'@{}' cannot be applied to a property accessor",
-                    role.attr_name()
+                    "'{}' cannot be applied to a property accessor",
+                    role.role_name()
                 ),
                 Some(method.name.position),
             );
@@ -144,8 +143,8 @@ impl<'a> Analyzer<'a> {
         if arity != expected {
             diagnostics.report_error(
                 format!(
-                    "'@{}' method '{}' must take {} parameter(s), but takes {}",
-                    role.attr_name(),
+                    "'{}' method '{}' must take {} parameter(s), but takes {}",
+                    role.role_name(),
                     method.name.text,
                     expected,
                     arity
@@ -160,7 +159,7 @@ impl<'a> Analyzer<'a> {
                 if matches!(method.return_type, None | Some(Type::Void)) {
                     diagnostics.report_error(
                         format!(
-                            "'@get_indexer' method '{}' must return a non-void value",
+                            "get indexer '{}' must return a non-void value",
                             method.name.text
                         ),
                         Some(method.name.position),
@@ -177,7 +176,7 @@ impl<'a> Analyzer<'a> {
                 if !ok {
                     diagnostics.report_error(
                         format!(
-                            "'@iterator' method '{}' must return an enumerator object (class/struct)",
+                            "'iterator' method '{}' must return an enumerator object (class/struct)",
                             method.name.text
                         ),
                         Some(method.name.position),
@@ -196,7 +195,7 @@ impl<'a> Analyzer<'a> {
                 if !ok {
                     diagnostics.report_error(
                         format!(
-                            "'@next' method '{}' must return Option<T>",
+                            "'next' method '{}' must return Option<T>",
                             method.name.text
                         ),
                         Some(method.name.position),
@@ -216,7 +215,7 @@ impl<'a> Analyzer<'a> {
                 format!(
                     "'{}' already declares an '@{}' method",
                     self.ty_str_display(target_type_str),
-                    role.attr_name()
+                    role.role_name()
                 ),
                 Some(method.name.position),
             );

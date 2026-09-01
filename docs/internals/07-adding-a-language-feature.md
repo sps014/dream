@@ -63,7 +63,7 @@ You have a choice: add a dedicated `HStmt::Repeat`, or **desugar to an existing 
 
 ```
 let __i = 0;
-while (__i < n) { body; __i = __i + 1; }
+while __i < n { body; __i = __i + 1; }
 ```
 
 So the analyzer emits the existing `HStmt::While` (or `HStmt::For`) with a synthetic counter local instead of a new variant. Now MIR, passes, and the backend need **zero** changes — they already handle `While`. This is the single most important lesson here: **desugar in the front end whenever the meaning is expressible in existing IR.**

@@ -12,9 +12,8 @@ public class SortedMapIterator<K : Comparable<K>, V> : Iterator<KeyValuePair<K, 
     }
 
     // Returns the next key/value pair in ascending key order, or `None` if exhausted.
-    @next
     public fun next(): Option<KeyValuePair<K, V>> {
-        if (this.idx >= this.map.length) {
+        if this.idx >= this.map.length {
             return Option.None;
         }
         let i = this.idx;

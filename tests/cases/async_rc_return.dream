@@ -1,6 +1,6 @@
 // Regression: returning an owned ref local from async must not release-then-read it
 // (prior emit_poll_complete bulk-released user locals before packing F_RESULT).
-// `live_delta=1` is the still-held `run` Future handle inside `main`.
+// After await, the Future is released at resume (`live_delta=0`).
 
 import system;
 async fun greet(name: string): string {

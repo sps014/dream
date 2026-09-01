@@ -19,7 +19,7 @@ fun main(): void {
 
     xs.sort();
     let i = 0;
-    while (i < xs.length) {
+    while i < xs.length {
         System.print(xs.get(i));
         System.print(" ");
         i = i + 1;
@@ -38,7 +38,7 @@ fun main(): void {
     ws.push("banana");
     ws.sort();
     let j = 0;
-    while (j < ws.length) {
+    while j < ws.length {
         System.println(ws.get(j));
         j = j + 1;
     }

@@ -13,7 +13,7 @@ public enum GpuInputEvent {
     // Pointer left the surface.
     PointerLeave(x: float, y: float, pointer_id: int),
     // Pointer capture cancelled by the host.
-    PointerCancel(pointer_id: int),
+    PointerCancel(int),
     // Mouse wheel / trackpad scroll deltas.
     Wheel(dx: float, dy: float, x: float, y: float),
     // `code` is physical; `key` is the typed glyph when available.
@@ -21,11 +21,11 @@ public enum GpuInputEvent {
     // Key released (physical `code`).
     KeyUp(code: KeyCode, key: string),
     // Composed text input (IME / dead keys).
-    TextInput(text: string),
+    TextInput(string),
     // Surface client size changed (logical pixels).
     Resize(width: int, height: int),
     // Device pixel ratio / window scale factor changed.
-    ScaleFactor(scale: float),
+    ScaleFactor(float),
     // Surface gained keyboard focus.
     Focus,
     // Surface lost keyboard focus.
@@ -33,9 +33,9 @@ public enum GpuInputEvent {
     // User asked to close the window (native).
     Close,
     // Gamepad at slot `pad` connected.
-    GamepadConnected(pad: int),
+    GamepadConnected(int),
     // Gamepad at slot `pad` disconnected.
-    GamepadDisconnected(pad: int),
+    GamepadDisconnected(int),
     // Gamepad button pressed.
     GamepadButtonDown(pad: int, button: GamepadButton),
     // Gamepad button released.

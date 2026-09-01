@@ -12,9 +12,8 @@ public class QueueIterator<T> : Iterator<T> {
     }
 
     // Returns the next element, or `None` if exhausted.
-    @next
     public fun next(): Option<T> {
-        if (this.offset >= this.queue.length) {
+        if this.offset >= this.queue.length {
             return Option.None;
         }
         let value = this.queue.at_offset(this.offset);

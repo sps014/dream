@@ -28,7 +28,7 @@ fun main(): void {
     let s: Status = Status.Inactive;
     System.println(s);
 
-    if (c == Color.Green) {
+    if c == Color.Green {
         System.println(100);
     }
 

@@ -64,9 +64,8 @@ public struct Vector<T : unmanaged> {
     }
 
     // Lane-wise addition.
-    @operator("+")
     @inline
-    fun add(other: Vector<T>): Vector<T> {
+    fun operator +(other: Vector<T>): Vector<T> {
         return Vector<T>.bin_add(this, other);
     }
 
@@ -74,8 +73,7 @@ public struct Vector<T : unmanaged> {
     static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Lane-wise subtraction.
-    @operator("-")
-    fun sub(other: Vector<T>): Vector<T> {
+        fun operator -(other: Vector<T>): Vector<T> {
         return Vector<T>.bin_sub(this, other);
     }
 
@@ -83,8 +81,7 @@ public struct Vector<T : unmanaged> {
     static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Lane-wise multiplication.
-    @operator("*")
-    fun mul(other: Vector<T>): Vector<T> {
+        fun operator *(other: Vector<T>): Vector<T> {
         return Vector<T>.bin_mul(this, other);
     }
 

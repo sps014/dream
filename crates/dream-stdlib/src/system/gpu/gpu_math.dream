@@ -6,17 +6,17 @@ module system.gpu;
 public static class GpuMath {
     // Smaller of two floats (WGSL `min`).
     public static fun min(a: float, b: float): float {
-        if (a < b) { return a; }
+        if a < b { return a; }
         return b;
     }
     // Larger of two floats (WGSL `max`).
     public static fun max(a: float, b: float): float {
-        if (a > b) { return a; }
+        if a > b { return a; }
         return b;
     }
     // Absolute value (WGSL `abs`).
     public static fun abs(a: float): float {
-        if (a < 0.0) { return -a; }
+        if a < 0.0 { return -a; }
         return a;
     }
     // Clamps `x` into `[lo, hi]` (WGSL `clamp`).
@@ -42,7 +42,7 @@ public static class GpuMath {
     // Reciprocal square root; returns `0` when `sqrt(x)` is zero (WGSL `inverseSqrt`).
     public static fun inversesqrt(x: float): float {
         let s = GpuMath.sqrt(x);
-        if (s == 0.0) { return 0.0; }
+        if s == 0.0 { return 0.0; }
         return 1.0 / s;
     }
     // Sine in radians (WGSL `sin`).
@@ -76,13 +76,13 @@ public static class GpuMath {
     // Natural log (WGSL `log`). CPU body is a stub — use only inside shaders.
     public static fun log(x: float): float {
         // CPU stub — shaders map to WGSL `log`. Host Math has no ln.
-        if (x <= 0.0) { return 0.0; }
+        if x <= 0.0 { return 0.0; }
         return GpuMath.pow(x, 0.0) - 1.0; // 0 for positive x; shader path uses real log
     }
     // Sign of `x`: −1, 0, or 1 (WGSL `sign`).
     public static fun sign(x: float): float {
-        if (x > 0.0) { return 1.0; }
-        if (x < 0.0) { return -1.0; }
+        if x > 0.0 { return 1.0; }
+        if x < 0.0 { return -1.0; }
         return 0.0;
     }
     // Clamps `x` into `[0, 1]` (WGSL `saturate` / `clamp(x, 0, 1)`).
@@ -91,7 +91,7 @@ public static class GpuMath {
     }
     // Heaviside step: `0` if `x < edge`, else `1` (WGSL `step`).
     public static fun step(edge: float, x: float): float {
-        if (x < edge) { return 0.0; }
+        if x < edge { return 0.0; }
         return 1.0;
     }
     // Hermite smoothstep between `edge0` and `edge1` (WGSL `smoothstep`).
@@ -113,7 +113,7 @@ public static class GpuMath {
     // Overloaded for `GpuVec2` / `GpuVec4`.
     public static fun normalize(v: GpuVec3): GpuVec3 {
         let len = GpuMath.length(v);
-        if (len < 0.000001) { return GpuVec3.of(0.0, 1.0, 0.0); }
+        if len < 0.000001 { return GpuVec3.of(0.0, 1.0, 0.0); }
         return v / len;
     }
 
@@ -237,7 +237,7 @@ public static class GpuMath {
 
     // Flips the surface normal `n` to face the opposite direction of incident vector `i` if `dot(nref, i) >= 0` (WGSL `faceForward`).
     public static fun faceforward(n: GpuVec3, i: GpuVec3, nref: GpuVec3): GpuVec3 {
-        if (GpuMath.dot(nref, i) < 0.0) { return n; }
+        if GpuMath.dot(nref, i) < 0.0 { return n; }
         return -n;
     }
 
@@ -258,7 +258,7 @@ public static class GpuMath {
 
     // Truncates fractional digits toward zero (WGSL `trunc`).
     public static fun trunc(x: float): float {
-        if (x < 0.0) { return GpuMath.ceil(x); }
+        if x < 0.0 { return GpuMath.ceil(x); }
         return GpuMath.floor(x);
     }
 
@@ -293,7 +293,7 @@ public static class GpuMath {
     // WGSL has no `inverse` builtin; shaders lower this to adjugate / `determinant`.
     public static fun inverse(m: GpuMat2): GpuMat2 {
         let det = GpuMath.determinant(m);
-        if (det == 0.0) { return GpuMat2.identity(); }
+        if det == 0.0 { return GpuMat2.identity(); }
         let inv_det = 1.0 / det;
         return GpuMat2.of(
             GpuVec2.of(m.c1.y * inv_det, -m.c0.y * inv_det),

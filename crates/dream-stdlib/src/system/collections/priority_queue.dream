@@ -38,7 +38,7 @@ public class PriorityQueue<T> : Collection<T> {
     public fun clear(): void {
         let z = Buffer.alloc<T>(1);
         let i = 0;
-        while (i < this.count) {
+        while i < this.count {
             this.items[i] = z[0];
             i = i + 1;
         }
@@ -53,7 +53,7 @@ public class PriorityQueue<T> : Collection<T> {
     fun grow(): void {
         let old_cap = this.items.length;
         let new_cap = old_cap * 2;
-        if (new_cap < sequence_min_capacity()) {
+        if new_cap < sequence_min_capacity() {
             new_cap = sequence_min_capacity();
         }
         this.items = Buffer.realloc<T>(this.items, new_cap);
@@ -75,9 +75,9 @@ public class PriorityQueue<T> : Collection<T> {
     fun sift_up(idx: int): void {
         let i = idx;
         let done = false;
-        while ((i > 0) && (done == false)) {
+        while (i > 0) && (done == false) {
             let parent = (i - 1) / 2;
-            if (this.less(i, parent)) {
+            if this.less(i, parent) {
                 this.swap(i, parent);
                 i = parent;
             } else {
@@ -90,17 +90,17 @@ public class PriorityQueue<T> : Collection<T> {
     fun sift_down(idx: int): void {
         let i = idx;
         let done = false;
-        while (done == false) {
+        while done == false {
             let left = i * 2 + 1;
             let right = i * 2 + 2;
             let smallest = i;
-            if ((left < this.count) && this.less(left, smallest)) {
+            if (left < this.count) && this.less(left, smallest) {
                 smallest = left;
             }
-            if ((right < this.count) && this.less(right, smallest)) {
+            if (right < this.count) && this.less(right, smallest) {
                 smallest = right;
             }
-            if (smallest == i) {
+            if smallest == i {
                 done = true;
             } else {
                 this.swap(i, smallest);
@@ -111,7 +111,7 @@ public class PriorityQueue<T> : Collection<T> {
 
     // Inserts `value`, restoring the heap invariant. O(log n).
     public fun push(value: T): void {
-        if (this.count == this.items.length) {
+        if this.count == this.items.length {
             this.grow();
         }
         this.items[this.count] = value;
@@ -121,7 +121,7 @@ public class PriorityQueue<T> : Collection<T> {
 
     // Removes and returns the smallest element, or `None` when empty. O(log n).
     public fun pop(): Option<T> {
-        if (this.count == 0) {
+        if this.count == 0 {
             return Option.None;
         }
         let top = this.items[0];
@@ -130,7 +130,7 @@ public class PriorityQueue<T> : Collection<T> {
         // Zero the vacated tail slot: it still holds a reference to the moved element and must
         // not keep it retained past the next overwrite.
         this.items[this.count] = Buffer.alloc<T>(1)[0];
-        if (this.count > 0) {
+        if this.count > 0 {
             this.sift_down(0);
         }
         return Option.Some(top);
@@ -138,7 +138,7 @@ public class PriorityQueue<T> : Collection<T> {
 
     // Returns the smallest element without removing it, or `None` when empty. O(1).
     public fun peek(): Option<T> {
-        if (this.count == 0) {
+        if this.count == 0 {
             return Option.None;
         }
         return Option.Some(this.items[0]);
@@ -146,11 +146,10 @@ public class PriorityQueue<T> : Collection<T> {
 
     // Iterates elements in ascending order under the active comparator, over a snapshot taken
     // now, so later pushes/pops do not affect the cursor.
-    @iterator
     public fun iterator(): PriorityQueueIterator<T> {
         let sorted = List<T>(this.count);
         let i = 0;
-        while (i < this.count) {
+        while i < this.count {
             sorted.push(this.items[i]);
             i = i + 1;
         }

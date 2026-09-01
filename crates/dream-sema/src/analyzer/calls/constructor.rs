@@ -13,7 +13,7 @@ use std::rc::Rc;
 impl<'a> Analyzer<'a> {
     /// Type-checks a constructor call `Struct(args)`. When the struct defines a custom `constructor`
     /// the call is checked against `init`'s parameters; otherwise the class has an implicit zero-arg
-    /// default constructor (`Struct()`) that leaves every field at its zero value. A struct may
+    /// default constructor(`Struct()`) that leaves every field at its zero value. A struct may
     /// declare more than one `constructor` overload (registered like any other method via
     /// `add_overload`); the matching one is selected by argument count/types exactly like an
     /// overloaded free function or method call. Returns the selected constructor's *emitted*

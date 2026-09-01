@@ -46,7 +46,7 @@ fun deriv_fs(
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }

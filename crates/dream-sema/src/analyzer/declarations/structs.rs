@@ -44,11 +44,7 @@ impl<'a> Analyzer<'a> {
             if struct_decl.is_ref_struct {
                 self.type_ctx.interner.mark_ref_struct_def(def);
             }
-            if struct_decl
-                .attributes
-                .iter()
-                .any(|a| a.name.text == "shared")
-            {
+            if struct_decl.is_shared {
                 self.type_ctx.interner.mark_shared_def(def);
             }
             if struct_decl.generic_parameters.is_some() {
@@ -115,11 +111,7 @@ impl<'a> Analyzer<'a> {
             if struct_decl.generic_parameters.is_some() {
                 continue;
             }
-            if !struct_decl
-                .attributes
-                .iter()
-                .any(|a| a.name.text == "shared")
-            {
+            if !struct_decl.is_shared {
                 continue;
             }
             let owner_name = struct_decl.name.text.clone();
@@ -209,7 +201,7 @@ impl<'a> Analyzer<'a> {
         }
         diagnostics.report_error(
             format!(
-                "field '{}' of '@shared class {}' has type '{}', which is not shared: an '@shared class' may only hold blittable values, string, structs of shared fields, other '@shared' types, or managed heap types ('Option<T>', arrays, classes) accessed under 'lock'",
+                "field '{}' of 'shared class {}' has type '{}', which is not shared: a 'shared class' may only hold blittable values, string, structs of shared fields, other 'shared' types, or managed heap types ('Option<T>', arrays, classes) accessed under 'lock'",
                 field.name.text,
                 owner_name,
                 self.ty_display(&field.field_type)
@@ -508,6 +500,7 @@ impl<'a> Analyzer<'a> {
         );
         new_decl.is_value = template.is_value;
         new_decl.is_ref_struct = template.is_ref_struct;
+        new_decl.is_shared = template.is_shared;
         new_decl.file_path = template.file_path.clone();
 
         let new_decl_ref: &'a StructDeclarationNode<'a> = self.arena.alloc(new_decl);
@@ -519,11 +512,7 @@ impl<'a> Analyzer<'a> {
         // The closed-graph rule runs per monomorphization for generic `@shared class`es: whether a
         // field like `payload: T` is shared, transfer-only (`Option<T>`), or rejected is only
         // decidable once `T` is concrete.
-        if template
-            .attributes
-            .iter()
-            .any(|a| a.name.text == "shared")
-        {
+        if template.is_shared {
             let owner = mangled_name.clone();
             for field in &new_decl_ref.fields {
                 self.check_shared_field(&owner, field, diagnostics);

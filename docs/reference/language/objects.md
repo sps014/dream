@@ -19,7 +19,7 @@ Check the runtime type before casting:
 
 ```dream
 fun describe(o: object): void {
-    if (o is int) {
+    if o is int {
         print("int: ");
         println((int)o);
     } else if (o is string) {
@@ -39,7 +39,7 @@ On a non-`object` variable, `is` is resolved at compile time — a matching bran
 
 ```dream
 fun describe(o: object): void {
-    if (o is int n) {
+    if o is int n {
         println(n + 1);   // `n` is an int, unboxed from `o`
     } else if (o is string s) {
         println(s);       // `s` is a string

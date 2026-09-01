@@ -9,7 +9,7 @@ fun main(): void {
     // Non-zero scalar: value evaluated once, copied into every slot.
     let sevens = [7; 3];
     let i = 0;
-    while (i < sevens.length) {
+    while i < sevens.length {
         System.println(sevens[i]);
         i = i + 1;
     }

@@ -472,6 +472,10 @@ impl<'a> Analyzer<'a> {
             is_default_impl: false,
             // Synthesized closures/method-groups have no receiver contract.
             receiver_mode: None,
+            is_override: false,
+            operator_symbol: None,
+            cast_kind: None,
+            indexer_kind: None,
         };
         let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
 

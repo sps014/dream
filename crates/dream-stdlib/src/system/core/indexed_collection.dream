@@ -3,32 +3,35 @@ module system.core;
 // Ordered, indexable sequences (`List`). Extends `Collection` so implementers are usable
 // wherever a `Collection` is expected without re-listing `size` / `iterator`.
 public interface IndexedCollection<T> : Collection<T> {
-    @get_indexer
-    fun get(index: int): T;
+    fun this[index: int]: T;
+
+    public fun get(index: int): T {
+        return this[index];
+    }
 
     // Element at index 0, or `None` when empty.
     public fun first(): Option<T> {
-        if (this.length == 0) {
+        if this.length == 0 {
             return Option.None;
         }
-        return Option.Some(this.get(0));
+        return Option.Some(this[0]);
     }
 
     // Last element, or `None` when empty.
     public fun last(): Option<T> {
         let n = this.length;
-        if (n == 0) {
+        if n == 0 {
             return Option.None;
         }
-        return Option.Some(this.get(n - 1));
+        return Option.Some(this[n - 1]);
     }
 
     // Index of the first element matching `pred`, or `None`.
     public fun find_index_where(borrow pred: fun(T): bool): Option<int> {
         let i = 0;
         let n = this.length;
-        while (i < n) {
-            if (pred(this.get(i))) {
+        while i < n {
+            if pred(this[i]) {
                 return Option.Some(i);
             }
             i = i + 1;

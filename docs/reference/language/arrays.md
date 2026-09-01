@@ -32,7 +32,7 @@ Because arrays are references, a function sees the caller's buffer directly:
 ```dream
 fun fill_zeros(arr: int[]): void {
     let i = 0;
-    while (i < arr.length) {
+    while i < arr.length {
         arr[i] = 0;
         i = i + 1;
     }
@@ -90,7 +90,7 @@ There is no `new int[n]` / `int[5][10]` syntax — use `[value; len]` for a fill
 ```dream
 let grid = Array.alloc<int[]>(5);
 let r = 0;
-while (r < 5) {
+while r < 5 {
     grid[r] = Array.alloc<int>(10);
     r = r + 1;
 }

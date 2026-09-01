@@ -14,7 +14,7 @@ class Dog : Animal {
 // Exercises `is`-binding used inside a *later* conjunct of the same `&&` chain, both directly
 // (second conjunct) and past an intermediate plain-bool conjunct (third conjunct).
 fun describe(a: Animal, flag: bool): string {
-    if (a is Cat t && t.speak() >= 0 && flag) {
+    if a is Cat t && t.speak() >= 0 && flag {
         return "flagged cat";
     }
     return "other";

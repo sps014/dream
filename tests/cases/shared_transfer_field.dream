@@ -1,4 +1,4 @@
-// An `@shared class` may hold non-shared managed heap values (`Option<Job>`, arrays,
+// An `shared class` may hold non-shared managed heap values (`Option<Job>`, arrays,
 // classes). The object's whole reachable graph is treated as shared once inside, so all
 // fields are accessed under the same `lock` discipline — no per-field move rules.
 //
@@ -14,8 +14,7 @@ class Job {
     }
 }
 
-@shared
-class JobQueue {
+shared class JobQueue {
     public head: Option<Job>;
     public count: int;
 
@@ -41,7 +40,7 @@ async fun main(): void {
 
     let consumer = WebWorker.spawn(() => {
         lock (q) {
-            if (q.head.is_some()) {
+            if q.head.is_some() {
                 System.println(q.head.unwrap().name);
                 q.count = q.count - 1;
             } else {

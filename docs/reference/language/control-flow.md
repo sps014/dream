@@ -7,7 +7,7 @@ Control flow decides which code runs and how often. Dream has the usual `if`, lo
 Bodies may be a braced block or a single statement:
 
 ```dream
-if (score >= 90) {
+if score >= 90 {
     print("A\n");
 } else if (score >= 70) {
     print("B\n");
@@ -29,7 +29,7 @@ Runs the body while the condition holds:
 
 ```dream
 let i = 0;
-while (i < 10) {
+while i < 10 {
     println(i);
     i++;
 }
@@ -91,7 +91,7 @@ fun sum(xs: Collection<int>): int {
 
 ```dream
 for (let i = 0; i < 10; i = i + 1) {
-    if (i % 2 == 0) {
+    if i % 2 == 0 {
         continue;   // skip even numbers
     }
     println(i);
@@ -139,10 +139,10 @@ Give a loop a label so `break`/`continue` can target an outer loop from inside a
 ```dream
 outer: for (let i = 0; i < 3; i = i + 1) {
     for (let j = 0; j < 3; j = j + 1) {
-        if (j == 1) {
+        if j == 1 {
             continue outer;   // next iteration of the outer loop
         }
-        if (i == 2) {
+        if i == 2 {
             break outer;      // exit both loops
         }
         println(i * 10 + j);

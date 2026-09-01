@@ -365,7 +365,17 @@ fn union_variant_pieces(v: &dream_hir::UnionVariant) -> (String, Vec<String>, St
         .iter()
         .enumerate()
         .map(|(i, f)| {
-            if i == 0 {
+            let positional = f
+                .name
+                .strip_prefix('_')
+                .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()));
+            if positional {
+                if i == 0 {
+                    String::new()
+                } else {
+                    ", ".to_string()
+                }
+            } else if i == 0 {
                 format!("{}: ", f.name)
             } else {
                 format!(", {}: ", f.name)

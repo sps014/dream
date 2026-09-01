@@ -72,7 +72,7 @@ Sync functions are emitted as relooper-informed structured C — nested `while`/
 
 ```c
 L0:;
-  while (1) {
+  while 1 {
     /* … body … */
     goto L0;   /* back-edge to the loop header */
   }

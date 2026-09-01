@@ -113,7 +113,7 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 Do not implement these (decision record: `docs/internals/10-stack-alloc-and-mono-design-note.md`):
 
 - **Small-string SSO** — `string` stays a heap ARC `i32` pointer; no tagged inline representation.
-- **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`@stack` on unions is shipped and unrelated.)
+- **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`enum struct` is the value-union spelling; unrelated.)
 - **Size-class-keyed unmanaged monomorphization** — mono stays `(DefId, args)`; `unmanaged` stdlib code uses runtime `esize`, not a compiler size-class key.
 
 Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/internals/11-swift-like-arc-roadmap.md`.

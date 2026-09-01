@@ -15,16 +15,14 @@ extend string : Comparable<string>, Equatable<string> {
     }
 
     // Gets the character at the specified index.
-    @get_indexer
-    public fun get(index: int): char {
+    public fun this[index: int]: char {
         return this.char_at(index);
     }
 
     // Overwrites the character at the specified index (panics if out of range).
     // Named `set_at` (not `set`) so it does not collide with static `string.set`.
-    @set_indexer
     @inline
-    public fun set_at(index: int, value: char): void {
+    public fun this[index: int] = value: char {
         // Force the same bounds panic as `char_at` / `s[i]` before the low-level write
         // (which would otherwise append when `index == length`).
         this.char_at(index);
@@ -32,7 +30,6 @@ extend string : Comparable<string>, Equatable<string> {
     }
 
     // Gets an iterator for the string's characters.
-    @iterator
     public fun iterator(): StringIterator {
         return StringIterator(this);
     }
@@ -47,8 +44,8 @@ extend string : Comparable<string>, Equatable<string> {
         let n = this.byte_size();
         let bo = 0;
         let si = 0;
-        while (bo < n) {
-            if (string.utf8_decode_at(this, bo) == target) {
+        while bo < n {
+            if string.utf8_decode_at(this, bo) == target {
                 return Option.Some(si);
             }
             bo = bo + string.utf8_width_at(this, bo);
@@ -60,17 +57,17 @@ extend string : Comparable<string>, Equatable<string> {
     // The index of the first occurrence of substring `sub`, or `None`.
     public fun index_of(borrow sub: string): Option<int> {
         let needle = sub.byte_size();
-        if (needle == 0) {
+        if needle == 0 {
             return Option.Some(0);
         }
         let hay = this.byte_size();
-        if (needle > hay) {
+        if needle > hay {
             return Option.None;
         }
         let bo = 0;
         let si = 0;
-        while ((bo + needle) <= hay) {
-            if (this._bytes_eq(sub, bo, 0, needle) == true) {
+        while (bo + needle) <= hay {
+            if this._bytes_eq(sub, bo, 0, needle) == true {
                 return Option.Some(si);
             }
             bo = bo + string.utf8_width_at(this, bo);
@@ -87,7 +84,7 @@ extend string : Comparable<string>, Equatable<string> {
     // True if this string begins with `prefix`.
     public fun starts_with(borrow prefix: string): bool {
         let n = prefix.byte_size();
-        if (n > this.byte_size()) {
+        if n > this.byte_size() {
             return false;
         }
         return this._bytes_eq(prefix, 0, 0, n);
@@ -97,7 +94,7 @@ extend string : Comparable<string>, Equatable<string> {
     public fun ends_with(borrow suffix: string): bool {
         let n = suffix.byte_size();
         let hay = this.byte_size();
-        if (n > hay) {
+        if n > hay {
             return false;
         }
         return this._bytes_eq(suffix, hay - n, 0, n);
@@ -108,7 +105,7 @@ extend string : Comparable<string>, Equatable<string> {
         let n = this.length;
         let result = string.alloc(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             let c = this.char_at(i);
             string.set(result, i, c.to_lower());
             i = i + 1;
@@ -121,7 +118,7 @@ extend string : Comparable<string>, Equatable<string> {
         let n = this.length;
         let result = string.alloc(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             let c = this.char_at(i);
             string.set(result, i, c.to_upper());
             i = i + 1;
@@ -153,11 +150,11 @@ extend string : Comparable<string>, Equatable<string> {
     public fun trim(): string {
         let n = this.length;
         let start = 0;
-        while ((start < n) && (this._is_space_at(start) == true)) {
+        while (start < n) && (this._is_space_at(start) == true) {
             start = start + 1;
         }
         let end = n;
-        while ((end > start) && (this._is_space_at(end - 1) == true)) {
+        while (end > start) && (this._is_space_at(end - 1) == true) {
             end = end - 1;
         }
         return this.substring(start, end);
@@ -167,7 +164,7 @@ extend string : Comparable<string>, Equatable<string> {
     public fun trim_start(): string {
         let n = this.length;
         let start = 0;
-        while ((start < n) && (this._is_space_at(start) == true)) {
+        while (start < n) && (this._is_space_at(start) == true) {
             start = start + 1;
         }
         return this.substring(start, n);
@@ -177,7 +174,7 @@ extend string : Comparable<string>, Equatable<string> {
     public fun trim_end(): string {
         let n = this.length;
         let end = n;
-        while ((end > 0) && (this._is_space_at(end - 1) == true)) {
+        while (end > 0) && (this._is_space_at(end - 1) == true) {
             end = end - 1;
         }
         return this.substring(0, end);
@@ -190,16 +187,16 @@ extend string : Comparable<string>, Equatable<string> {
 
     // Left-pads this string with `pad` until `width` code units (no-op when `pad` is empty).
     public fun pad_start(width: int, pad: string): string {
-        if ((pad.is_empty()) || (this.length >= width)) {
+        if (pad.is_empty()) || (this.length >= width) {
             return this;
         }
         let sb = StringBuilder();
-        while (sb.length + this.length < width) {
+        while sb.length + this.length < width {
             sb.append(pad);
         }
         sb.append(this);
         let out = sb.build();
-        if (out.length > width) {
+        if out.length > width {
             return out.substring(out.length - width, out.length);
         }
         return out;
@@ -207,16 +204,16 @@ extend string : Comparable<string>, Equatable<string> {
 
     // Right-pads this string with `pad` until `width` code units (no-op when `pad` is empty).
     public fun pad_end(width: int, pad: string): string {
-        if ((pad.is_empty()) || (this.length >= width)) {
+        if (pad.is_empty()) || (this.length >= width) {
             return this;
         }
         let sb = StringBuilder();
         sb.append(this);
-        while (sb.length < width) {
+        while sb.length < width {
             sb.append(pad);
         }
         let out = sb.build();
-        if (out.length > width) {
+        if out.length > width {
             return out.substring(0, width);
         }
         return out;
@@ -225,8 +222,8 @@ extend string : Comparable<string>, Equatable<string> {
     // The index of the last occurrence of `target`, or `None`.
     public fun last_index_of(target: char): Option<int> {
         let i = this.length - 1;
-        while (i >= 0) {
-            if (this.char_at(i) == target) {
+        while i >= 0 {
+            if this.char_at(i) == target {
                 return Option.Some(i);
             }
             i = i - 1;
@@ -238,24 +235,24 @@ extend string : Comparable<string>, Equatable<string> {
     // Byte-compare scan like `index_of` — allocates nothing per candidate.
     public fun last_index_of(borrow sub: string): Option<int> {
         let needle = sub.byte_size();
-        if (needle == 0) {
+        if needle == 0 {
             return Option.Some(this.length);
         }
         let hay = this.byte_size();
-        if (needle > hay) {
+        if needle > hay {
             return Option.None;
         }
         let best_si = -1;
         let bo = 0;
         let si = 0;
-        while ((bo + needle) <= hay) {
-            if (this._bytes_eq(sub, bo, 0, needle) == true) {
+        while (bo + needle) <= hay {
+            if this._bytes_eq(sub, bo, 0, needle) == true {
                 best_si = si;
             }
             bo = bo + string.utf8_width_at(this, bo);
             si = si + 1;
         }
-        if (best_si < 0) {
+        if best_si < 0 {
             return Option.None;
         }
         return Option.Some(best_si);
@@ -264,7 +261,7 @@ extend string : Comparable<string>, Equatable<string> {
     // Replaces the first occurrence of `old` with `replacement`.
     public fun replace_first(borrow old: string, borrow replacement: string): string {
         let at = this.index_of(old);
-        if (at.is_none()) {
+        if at.is_none() {
             return this;
         }
         let i = at.unwrap_or(0);
@@ -275,7 +272,7 @@ extend string : Comparable<string>, Equatable<string> {
     // returns `[this]` (consistent with `split`), never an empty array.
     public fun split_once(sep: char): string[] {
         let at = this.index_of(sep);
-        if (at.is_none()) {
+        if at.is_none() {
             let whole = Buffer.alloc<string>(1);
             whole[0] = this;
             return whole;
@@ -288,13 +285,13 @@ extend string : Comparable<string>, Equatable<string> {
     }
 
     public fun split_once(borrow sep: string): string[] {
-        if (sep.is_empty()) {
+        if sep.is_empty() {
             let whole = Buffer.alloc<string>(1);
             whole[0] = this;
             return whole;
         }
         let at = this.index_of(sep);
-        if (at.is_none()) {
+        if at.is_none() {
             let whole = Buffer.alloc<string>(1);
             whole[0] = this;
             return whole;
@@ -308,7 +305,7 @@ extend string : Comparable<string>, Equatable<string> {
 
     // `Some` remainder when this starts with `prefix`.
     public fun strip_prefix(borrow prefix: string): Option<string> {
-        if (this.starts_with(prefix) == false) {
+        if this.starts_with(prefix) == false {
             return Option.None;
         }
         return Option.Some(this.substring(prefix.length, this.length));
@@ -316,7 +313,7 @@ extend string : Comparable<string>, Equatable<string> {
 
     // `Some` remainder when this ends with `suffix`.
     public fun strip_suffix(borrow suffix: string): Option<string> {
-        if (this.ends_with(suffix) == false) {
+        if this.ends_with(suffix) == false {
             return Option.None;
         }
         return Option.Some(this.substring(0, this.length - suffix.length));
@@ -326,18 +323,18 @@ extend string : Comparable<string>, Equatable<string> {
     public fun lines(): string[] {
         let parts = this.split('\n');
         let i = 0;
-        while (i < parts.length) {
+        while i < parts.length {
             let line = parts[i];
-            if (line.ends_with("\r")) {
+            if line.ends_with("\r") {
                 parts[i] = line.substring(0, line.length - 1);
             }
             i = i + 1;
         }
-        if ((parts.length > 0) && parts[parts.length - 1].is_empty() && this.ends_with("\n")) {
+        if (parts.length > 0) && parts[parts.length - 1].is_empty() && this.ends_with("\n") {
             let n = parts.length - 1;
             let out = Buffer.alloc<string>(n);
             i = 0;
-            while (i < n) {
+            while i < n {
                 out[i] = parts[i];
                 i = i + 1;
             }
@@ -348,17 +345,17 @@ extend string : Comparable<string>, Equatable<string> {
 
     // A new string repeated `times` times.
     public fun repeat(times: int): string {
-        if (times <= 0) {
+        if times <= 0 {
             return string.empty;
         }
         let n = this.byte_size();
-        if (n == 0) {
+        if n == 0 {
             return string.empty;
         }
         let total = n * times;
         let buf = Buffer.alloc<byte>(total);
         let i = 0;
-        while (i < times) {
+        while i < times {
             string.copy_utf8(buf, i * n, this, 0, n);
             i = i + 1;
         }
@@ -375,8 +372,8 @@ extend string : Comparable<string>, Equatable<string> {
         let n = this.byte_size();
         let parts = 1;
         let bo = 0;
-        while (bo < n) {
-            if (string.utf8_decode_at(this, bo) == sep) {
+        while bo < n {
+            if string.utf8_decode_at(this, bo) == sep {
                 parts = parts + 1;
             }
             bo = bo + string.utf8_width_at(this, bo);
@@ -386,9 +383,9 @@ extend string : Comparable<string>, Equatable<string> {
         let si = 0;
         let idx = 0;
         bo = 0;
-        while (bo < n) {
+        while bo < n {
             let w = string.utf8_width_at(this, bo);
-            if (string.utf8_decode_at(this, bo) == sep) {
+            if string.utf8_decode_at(this, bo) == sep {
                 result[idx] = this.substring(start_si, si);
                 idx = idx + 1;
                 start_si = si + 1;
@@ -403,7 +400,7 @@ extend string : Comparable<string>, Equatable<string> {
     // Splits this string on every occurrence of substring `sep`.
     public fun split(borrow sep: string): string[] {
         let needle = sep.byte_size();
-        if (needle == 0) {
+        if needle == 0 {
             let one = Buffer.alloc<string>(1);
             one[0] = this;
             return one;
@@ -411,8 +408,8 @@ extend string : Comparable<string>, Equatable<string> {
         let hay = this.byte_size();
         let parts = 1;
         let bo = 0;
-        while ((bo + needle) <= hay) {
-            if (this._bytes_eq(sep, bo, 0, needle) == true) {
+        while (bo + needle) <= hay {
+            if this._bytes_eq(sep, bo, 0, needle) == true {
                 parts = parts + 1;
                 bo = bo + needle;
             } else {
@@ -424,8 +421,8 @@ extend string : Comparable<string>, Equatable<string> {
         let si = 0;
         let idx = 0;
         bo = 0;
-        while ((bo + needle) <= hay) {
-            if (this._bytes_eq(sep, bo, 0, needle) == true) {
+        while (bo + needle) <= hay {
+            if this._bytes_eq(sep, bo, 0, needle) == true {
                 result[idx] = this.substring(start_si, si);
                 idx = idx + 1;
                 bo = bo + needle;
@@ -442,27 +439,27 @@ extend string : Comparable<string>, Equatable<string> {
 
     // Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
     public fun split(sep: char, limit: int): string[] {
-        if (limit < 1) {
+        if limit < 1 {
             return this.split(sep);
         }
-        if (limit == 1) {
+        if limit == 1 {
             let one = Buffer.alloc<string>(1);
             one[0] = this;
             return one;
         }
         let all = this.split(sep);
-        if (all.length <= limit) {
+        if all.length <= limit {
             return all;
         }
         let out = Buffer.alloc<string>(limit);
         let i = 0;
-        while (i < limit - 1) {
+        while i < limit - 1 {
             out[i] = all[i];
             i = i + 1;
         }
         let sb = StringBuilder();
-        while (i < all.length) {
-            if (sb.is_empty() == false) {
+        while i < all.length {
+            if sb.is_empty() == false {
                 sb.append_char(sep);
             }
             sb.append(all[i]);
@@ -474,27 +471,27 @@ extend string : Comparable<string>, Equatable<string> {
 
     // Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
     public fun split(borrow sep: string, limit: int): string[] {
-        if (limit < 1) {
+        if limit < 1 {
             return this.split(sep);
         }
-        if (limit == 1) {
+        if limit == 1 {
             let one = Buffer.alloc<string>(1);
             one[0] = this;
             return one;
         }
         let all = this.split(sep);
-        if (all.length <= limit) {
+        if all.length <= limit {
             return all;
         }
         let out = Buffer.alloc<string>(limit);
         let i = 0;
-        while (i < limit - 1) {
+        while i < limit - 1 {
             out[i] = all[i];
             i = i + 1;
         }
         let sb = StringBuilder();
-        while (i < all.length) {
-            if (sb.is_empty() == false) {
+        while i < all.length {
+            if sb.is_empty() == false {
                 sb.append(sep);
             }
             sb.append(all[i]);
@@ -507,14 +504,14 @@ extend string : Comparable<string>, Equatable<string> {
     // A new string with every occurrence of `old` replaced by `replacement`.
     public fun replace(borrow old: string, borrow replacement: string): string {
         let needle = old.byte_size();
-        if (needle == 0) {
+        if needle == 0 {
             return this;
         }
         let hay = this.byte_size();
         let sb = StringBuilder(this.length);
         let bo = 0;
-        while (bo < hay) {
-            if (((bo + needle) <= hay) && (this._bytes_eq(old, bo, 0, needle) == true)) {
+        while bo < hay {
+            if ((bo + needle) <= hay) && (this._bytes_eq(old, bo, 0, needle) == true) {
                 sb.append(replacement);
                 bo = bo + needle;
             } else {
@@ -532,8 +529,8 @@ extend string : Comparable<string>, Equatable<string> {
 
     fun _bytes_eq(borrow other: string, this_off: int, other_off: int, n: int): bool {
         let i = 0;
-        while (i < n) {
-            if (this.byte_at(this_off + i) != other.byte_at(other_off + i)) {
+        while i < n {
+            if this.byte_at(this_off + i) != other.byte_at(other_off + i) {
                 return false;
             }
             i = i + 1;
@@ -547,8 +544,8 @@ extend string[] {
     public fun join(sep: string): string {
         let sb = StringBuilder();
         let i = 0;
-        while (i < this.length) {
-            if (i > 0) {
+        while i < this.length {
+            if i > 0 {
                 sb.append(sep);
             }
             sb.append(this[i]);

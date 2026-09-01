@@ -3,10 +3,10 @@ import system;
 fun main(): void {
     let arena = ScratchArena<int>(256);
     let round = 0;
-    while (round < 3) {
+    while round < 3 {
         let a = arena.alloc(4);
         let i = 0;
-        while (i < a.length) {
+        while i < a.length {
             a[i] = round * 10 + i;
             i = i + 1;
         }

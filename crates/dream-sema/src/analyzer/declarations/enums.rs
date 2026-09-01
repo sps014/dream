@@ -87,12 +87,11 @@ impl<'a> Analyzer<'a> {
         // instantiate generic unions whose templates were collected in pass 1.
         for enum_decl in node.enums.iter() {
             if enum_decl.is_data_enum() && enum_decl.generic_parameters.is_none() {
-                let has_stack = enum_decl.attributes.iter().any(|a| a.name.text == "stack");
                 self.register_union(
                     &enum_decl.name.text,
                     &enum_decl.variants,
                     &GenericBindings::new(),
-                    has_stack,
+                    enum_decl.is_enum_struct,
                     diagnostics,
                 );
                 if !enum_decl.methods.is_empty() {
@@ -111,16 +110,15 @@ impl<'a> Analyzer<'a> {
     /// `union_name`. Each variant's payload starts after the discriminant word; payloads of
     /// different variants overlap, so the block is sized to the largest variant. `bindings`
     /// substitutes any generic parameters in field types (empty for non-generic unions).
-    /// `has_stack` is true when the union declaration carries `@stack`: a checked contract that
-    /// every monomorphized instance must qualify as inline/value (all-value payloads, or any
-    /// number of non-self-referential reference payloads — self-reference is rejected), rather
-    /// than just the usual best-effort automatic classification.
+    /// `is_enum_struct` is true for `enum struct`: a checked contract that every monomorphized
+    /// instance must qualify as inline/value (all-value payloads, or any number of
+    /// non-self-referential reference payloads — self-reference is rejected).
     pub(in crate::analyzer) fn register_union(
         &mut self,
         union_name: &str,
         variants: &[EnumVariantNode],
         bindings: &GenericBindings,
-        has_stack: bool,
+        is_enum_struct: bool,
         diagnostics: &mut DiagnosticBag,
     ) {
         let mut variant_infos = Vec::new();
@@ -206,17 +204,11 @@ impl<'a> Analyzer<'a> {
         // (monomorphized) instance, because `Option<int>` (value) and `Option<string>` (heap) share
         // one `DefId`. The inline layout is finalized later in `hir_build_layouts` (value-aware sizes).
         //
-        // `@stack` additionally allows any number of reference-typed payload fields to still go
-        // inline, each stored as a retained pointer exactly like a reference field embedded in a
-        // value `struct` already is (see `construct_value_union` in
-        // `mir::backend::wasm::emitter::value_struct`). Self-reference is still rejected: an inline recursive
-        // value union would have infinite size. This relaxation is opt-in only, gated behind
-        // `@stack`, rather than automatic: several existing constructs (e.g. a `weak parent:
-        // Option<Node>` field, see `docs/language/memory.md`) depend on `Option<T>` staying a heap
-        // reference whenever `T` is itself a reference type, so widening the automatic inference
-        // would silently change their runtime representation. `@stack` is an explicit, checked
-        // opt-in instead: it errors if the union is self-referential (rather than silently
-        // falling back to the heap), and its scope is limited to declarations that ask for it.
+        // `enum struct` additionally allows any number of reference-typed payload fields to still
+        // go inline, each stored as a retained pointer exactly like a reference field embedded in
+        // a value `struct`. Self-reference is still rejected: an inline recursive value union
+        // would have infinite size. Plain `enum` keeps automatic all-value / niche classification
+        // only; reference payloads stay a heap envelope unless the declaration is `enum struct`.
         let union_tid = self.type_ctx.lower_str(union_name);
         let mut ref_count = 0usize;
         let mut self_ref_field: Option<(String, String)> = None;
@@ -233,15 +225,15 @@ impl<'a> Analyzer<'a> {
         }
         let self_referential = self_ref_field.is_some();
         let all_value = ref_count == 0;
-        let stack_inlineable = has_stack && !self_referential;
+        let stack_inlineable = is_enum_struct && !self_referential;
         if all_value || stack_inlineable {
             self.type_ctx.interner.mark_value_union(union_tid);
-        } else if has_stack {
+        } else if is_enum_struct {
             let (field_name, field_type) =
                 self_ref_field.unwrap_or_else(|| ("<variant>".to_string(), union_name.to_string()));
             diagnostics.report_error(
                 format!(
-                    "'@stack' union '{}' cannot be stored inline: field '{}' has type '{}', which is a self-referential payload that would make this value type infinite-size",
+                    "'enum struct {}' cannot be stored inline: field '{}' has type '{}', which is a self-referential payload that would make this value type infinite-size",
                     union_name, field_name, field_type,
                 ),
                 None,
@@ -322,12 +314,11 @@ impl<'a> Analyzer<'a> {
         );
         self.reject_ref_struct_type_args(args, position, diagnostics);
         let bindings = generic_bindings(params, args);
-        let has_stack = template.attributes.iter().any(|a| a.name.text == "stack");
         self.register_union(
             &mangled,
             &template.variants,
             &bindings,
-            has_stack,
+            template.is_enum_struct,
             diagnostics,
         );
         // Methods declared on the generic enum template (e.g. `Option.is_some`) attach to each

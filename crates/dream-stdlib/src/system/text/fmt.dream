@@ -9,15 +9,15 @@ public static class Fmt {
         let sb = StringBuilder(pattern.length);
         let n = pattern.length;
         let i = 0;
-        while (i < n) {
+        while i < n {
             let c = pattern.char_at(i);
-            if (c == '{') {
-                if ((i + 1 < n) && (pattern.char_at(i + 1) == '{')) {
+            if c == '{' {
+                if (i + 1 < n) && (pattern.char_at(i + 1) == '{') {
                     sb.append_char('{');
                     i = i + 2;
                 } else {
                     let close = Fmt._find_close(pattern, i);
-                    if (close < 0) {
+                    if close < 0 {
                         sb.append_char('{');
                         i = i + 1;
                     } else {
@@ -27,7 +27,7 @@ public static class Fmt {
                     }
                 }
             } else if (c == '}') {
-                if ((i + 1 < n) && (pattern.char_at(i + 1) == '}')) {
+                if (i + 1 < n) && (pattern.char_at(i + 1) == '}') {
                     sb.append_char('}');
                     i = i + 2;
                 } else {
@@ -46,8 +46,8 @@ public static class Fmt {
     static fun _find_close(pattern: string, open: int): int {
         let n = pattern.length;
         let j = open + 1;
-        while (j < n) {
-            if (pattern.char_at(j) == '}') {
+        while j < n {
+            if pattern.char_at(j) == '}' {
                 return j;
             }
             j = j + 1;
@@ -60,17 +60,17 @@ public static class Fmt {
         let colon = inner.index_of(':');
         let index_text = inner;
         let spec = string.empty;
-        if (colon.is_some()) {
+        if colon.is_some() {
             let at = colon.unwrap_or(0);
             index_text = inner.substring(0, at);
             spec = inner.substring(at + 1, inner.length);
         }
         let parsed = int.parse(index_text);
-        if (parsed.is_err()) {
+        if parsed.is_err() {
             return "{" + inner + "}";
         }
         let idx = parsed.unwrap_or(0);
-        if ((idx < 0) || (idx >= args.length)) {
+        if (idx < 0) || (idx >= args.length) {
             return "{" + inner + "}";
         }
         return Fmt._render_value(args[idx], spec);
@@ -78,13 +78,13 @@ public static class Fmt {
 
     // Renders a single argument, honoring a `.N` fixed-decimal spec for float/double.
     static fun _render_value(value: object, spec: string): string {
-        if (spec.is_empty() == false) {
+        if spec.is_empty() == false {
             let digits = Fmt._parse_precision(spec);
-            if (digits >= 0) {
-                if (value is double d) {
+            if digits >= 0 {
+                if value is double d {
                     return Fmt._format_fixed(d, digits);
                 }
-                if (value is float f) {
+                if value is float f {
                     return Fmt._format_fixed((double)f, digits);
                 }
             }
@@ -94,7 +94,7 @@ public static class Fmt {
 
     // Parses a `.N` precision spec, returning `N`, or `-1` when `spec` doesn't match that shape.
     static fun _parse_precision(spec: string): int {
-        if (spec.is_empty() || (spec.char_at(0) != '.')) {
+        if spec.is_empty() || (spec.char_at(0) != '.') {
             return 0 - 1;
         }
         let digits_text = spec.substring(1, spec.length);
@@ -106,31 +106,31 @@ public static class Fmt {
     static fun _format_fixed(value: double, digits: int): string {
         let neg = value < 0.0d;
         let v = value;
-        if (neg) {
+        if neg {
             v = 0.0d - v;
         }
         let scale = 1.0d;
         let k = 0;
-        while (k < digits) {
+        while k < digits {
             scale = scale * 10.0d;
             k = k + 1;
         }
         let scaled = Math.round(v * scale);
         let whole = (int)(scaled / scale);
         let frac = (int)(scaled - (double)whole * scale);
-        if (frac < 0) {
+        if frac < 0 {
             frac = 0 - frac;
         }
         let sb = StringBuilder();
-        if (neg) {
+        if neg {
             sb.append_char('-');
         }
         sb.append("" + whole);
-        if (digits > 0) {
+        if digits > 0 {
             sb.append_char('.');
             let frac_text = "" + frac;
             let pad = digits - frac_text.length;
-            while (pad > 0) {
+            while pad > 0 {
                 sb.append_char('0');
                 pad = pad - 1;
             }

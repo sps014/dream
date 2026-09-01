@@ -18,7 +18,7 @@ public static class Assert {
     @native
     @node
     public static fun eq<T>(actual: T, expected: T): void {
-        if (actual == expected) {
+        if actual == expected {
             return;
         }
         Assert.fail("assert_eq failed: " + actual + " != " + expected);
@@ -28,7 +28,7 @@ public static class Assert {
     @native
     @node
     public static fun ne<T>(actual: T, expected: T): void {
-        if (actual != expected) {
+        if actual != expected {
             return;
         }
         Assert.fail("assert_ne failed: " + actual + " == " + expected);
@@ -38,7 +38,7 @@ public static class Assert {
     @native
     @node
     public static fun is_true(value: bool): void {
-        if (value == true) {
+        if value == true {
             return;
         }
         Assert.fail("assert_true failed");
@@ -48,7 +48,7 @@ public static class Assert {
     @native
     @node
     public static fun is_false(value: bool): void {
-        if (value == false) {
+        if value == false {
             return;
         }
         Assert.fail("assert_false failed");
@@ -59,10 +59,10 @@ public static class Assert {
     @node
     public static fun approx(actual: double, expected: double, epsilon: double): void {
         let diff = actual - expected;
-        if (diff < 0.0d) {
+        if diff < 0.0d {
             diff = 0.0d - diff;
         }
-        if (diff <= epsilon) {
+        if diff <= epsilon {
             return;
         }
         Assert.fail("assert_approx failed: " + actual + " !~ " + expected + " (epsilon " + epsilon + ")");
@@ -72,7 +72,7 @@ public static class Assert {
     @native
     @node
     public static fun eq_str(actual: string, expected: string): void {
-        if (actual == expected) {
+        if actual == expected {
             return;
         }
         Assert.fail("assert_eq_str failed: expected \"" + expected + "\" but got \"" + actual + "\"");

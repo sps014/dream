@@ -1,5 +1,5 @@
 fun f() {
-    while (true) {
+    while true {
         defer {
             break;
             continue;

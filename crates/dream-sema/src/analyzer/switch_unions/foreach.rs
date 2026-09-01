@@ -301,7 +301,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
             || {
                 format!(
-                    "for-each can only iterate over arrays or types with an '@iterator' method, got {}",
+                    "for-each can only iterate over arrays or types with an 'iterator' method, got {}",
                     pretty_iterable
                 )
             },
@@ -315,7 +315,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "type '{}' is not iterable: its '@iterator' method must return an enumerator object",
+                        "type '{}' is not iterable: its 'iterator' method must return an enumerator object",
                         self.ty_display(iterable_type)
                     ),
                     Some(element.position),
@@ -350,7 +350,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "for-each requires '@next' to return Option<T>, got {}",
+                        "for-each requires 'next' to return Option<T>, got {}",
                         self.ty_display(&next_ret)
                     ),
                     Some(element.position),
@@ -374,7 +374,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "for-each requires '@next' to return Option<T>, got {}",
+                        "for-each requires 'next' to return Option<T>, got {}",
                         self.ty_display(&next_ret)
                     ),
                     Some(element.position),

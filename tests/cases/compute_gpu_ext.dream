@@ -5,7 +5,7 @@ import system.gpu;
 @compute(64)
 fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < a.length && i < n) {
+    if i < a.length && i < n {
         out[i] = a[i] * 2.0;
     }
 }

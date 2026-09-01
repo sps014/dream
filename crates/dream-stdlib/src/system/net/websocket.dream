@@ -36,9 +36,9 @@ public class WebSocket {
         let wire = await WebSocket.ws_connect(url, timeout_ms);
         let reader = NetWireReader(wire);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
-        if (handle < 0) {
+        if handle < 0 {
             let message = reader.read_remaining_text();
-            if (handle == (0 - 2)) {
+            if handle == (0 - 2) {
                 return Result.Err(NetError.unsupported(message));
             }
             return Result.Err(NetError.connect_failed(message));
@@ -48,7 +48,7 @@ public class WebSocket {
 
     // Sends a text frame. `Ok(true)` on success.
     public async fun send_text(text: string): Result<bool, NetError> {
-        if (this.is_closed) {
+        if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
         let wire = await WebSocket.ws_send_text(this.handle, text);
@@ -57,7 +57,7 @@ public class WebSocket {
 
     // Sends a binary frame. `Ok(true)` on success.
     public async fun send_binary(data: byte[]): Result<bool, NetError> {
-        if (this.is_closed) {
+        if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
         let wire = await WebSocket.ws_send_binary(this.handle, data);
@@ -67,7 +67,7 @@ public class WebSocket {
     fun parse_send_result(wire: char[]): Result<bool, NetError> {
         let reader = NetWireReader(wire);
         let ok = reader.read_line();
-        if (ok == "1") {
+        if ok == "1" {
             return Result.Ok(true);
         }
         return Result.Err(NetError.io(reader.read_remaining_text()));
@@ -76,19 +76,19 @@ public class WebSocket {
     // Waits for the next message. Resolves `NetError` on transport failure; a peer-initiated
     // close arrives as `Ok(WebSocketMessage.Close(...))`, not an error.
     public async fun receive(): Result<WebSocketMessage, NetError> {
-        if (this.is_closed) {
+        if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
         let wire = await WebSocket.ws_receive(this.handle);
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
-        if (tag == "text") {
+        if tag == "text" {
             return Result.Ok(WebSocketMessage.Text(reader.read_remaining_text()));
         }
-        if (tag == "binary") {
+        if tag == "binary" {
             return Result.Ok(WebSocketMessage.Binary(reader.read_remaining_bytes()));
         }
-        if (tag == "close") {
+        if tag == "close" {
             let code = int.parse(reader.read_line()).unwrap_or(1000);
             let reason = reader.read_remaining_text();
             this.is_closed = true;
@@ -105,7 +105,7 @@ public class WebSocket {
 
     // Closes the connection with an explicit close code/reason.
     public fun close_with(code: int, reason: string): void {
-        if (this.is_closed == false) {
+        if this.is_closed == false {
             this.is_closed = true;
             WebSocket.ws_close(this.handle, code, reason);
         }

@@ -3,7 +3,7 @@
 
 import system;
 fun safe_div(a: int, b: int): Result<int, string> {
-    if (b == 0) {
+    if b == 0 {
         return Result.Err("divide by zero");
     }
     return Result.Ok(a / b);

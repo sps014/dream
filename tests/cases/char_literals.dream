@@ -19,7 +19,7 @@ fun main(): void {
     System.print(chars[1]);
     System.print('\n');
 
-    if (a < z) {
+    if a < z {
         System.print(1);
     }
     System.print('\n');

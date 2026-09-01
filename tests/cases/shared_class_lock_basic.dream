@@ -1,9 +1,8 @@
-// `@shared class` + `lock (obj) { ... }`: basic single-threaded sanity check (acquire, mutate,
+// `shared class` + `lock (obj) { ... }`: basic single-threaded sanity check (acquire, mutate,
 // release; reentrancy; and that `Lock`/`Semaphore` work as standalone primitives).
 
 import system;
-@shared
-class Counter {
+shared class Counter {
     public value: int;
 
     public constructor() {
@@ -25,7 +24,7 @@ class Counter {
 
 fun reentrant(counter: Counter, depth: int): void {
     lock (counter) {
-        if (depth > 0) {
+        if depth > 0 {
             reentrant(counter, depth - 1);
         } else {
             counter.value = counter.value + 100;

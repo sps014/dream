@@ -12,7 +12,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     public constructor(capacity: int = 8) {
         let c = hash_min_capacity();
-        while (c < capacity) {
+        while c < capacity {
             c = c * 2;
         }
         this.cap = c;
@@ -26,9 +26,9 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     fun bump_epoch(): void {
         let e = this.epoch + 1;
-        if (e <= 0) {
+        if e <= 0 {
             let i = 0;
-            while (i < this.cap) {
+            while i < this.cap {
                 this.slots[i].state = 0;
                 i = i + 1;
             }
@@ -54,20 +54,20 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let idx = key.hash_code() & (cap - 1);
         let result = -1;
         let done = false;
-        while (done == false) {
+        while done == false {
             let s = slots[idx].state;
-            if ((s != epoch) && (s != tomb)) {
+            if (s != epoch) && (s != tomb) {
                 done = true;
             } else {
-                if (s == epoch) {
-                    if (slots[idx].key == key) {
+                if s == epoch {
+                    if slots[idx].key == key {
                         result = idx;
                         done = true;
                     }
                 }
-                if (done == false) {
+                if done == false {
                     idx = idx + 1;
-                    if (idx == cap) {
+                    if idx == cap {
                         idx = 0;
                     }
                 }
@@ -84,31 +84,31 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let idx = key.hash_code() & (cap - 1);
         let first_tomb = -1;
         let done = false;
-        while (done == false) {
+        while done == false {
             let s = slots[idx].state;
-            if ((s != epoch) && (s != tomb)) {
+            if (s != epoch) && (s != tomb) {
                 let target = idx;
-                if (first_tomb >= 0) {
+                if first_tomb >= 0 {
                     target = first_tomb;
                 }
                 slots[target].key = key;
                 slots[target].value = value;
                 slots[target].state = epoch;
                 this.count = this.count + 1;
-                if (first_tomb < 0) {
+                if first_tomb < 0 {
                     this.used = this.used + 1;
                 }
                 done = true;
             } else {
-                if ((s == epoch) && (slots[idx].key == key)) {
+                if (s == epoch) && (slots[idx].key == key) {
                     slots[idx].value = value;
                     done = true;
                 } else {
-                    if ((s == tomb) && (first_tomb < 0)) {
+                    if (s == tomb) && (first_tomb < 0) {
                         first_tomb = idx;
                     }
                     idx = idx + 1;
-                    if (idx == cap) {
+                    if idx == cap {
                         idx = 0;
                     }
                 }
@@ -120,7 +120,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let old = this.slots;
         let old_cap = this.cap;
         let new_cap = old_cap * 2;
-        if (new_cap < hash_min_capacity()) {
+        if new_cap < hash_min_capacity() {
             new_cap = hash_min_capacity();
         }
         this.slots = Buffer.alloc<MapSlot<K, V>>(new_cap);
@@ -128,20 +128,23 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.count = 0;
         this.used = 0;
         let i = 0;
-        while (i < old_cap) {
-            if (old[i].state == this.epoch) {
+        while i < old_cap {
+            if old[i].state == this.epoch {
                 this.insert_no_grow(old[i].key, old[i].value);
             }
             i = i + 1;
         }
     }
 
-    @set_indexer
-    public fun set(key: K, value: V): void {
-        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
+    public fun this[key: K] = value: V {
+        if (this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num() {
             this.rehash();
         }
         this.insert_no_grow(key, value);
+    }
+
+    public fun set(key: K, value: V): void {
+        this[key] = value;
     }
 
     public fun contains(borrow key: K): bool {
@@ -150,11 +153,11 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     public fun set_all(borrow keys: K[], borrow values: V[]): void {
         let n = keys.length;
-        if (values.length < n) {
+        if values.length < n {
             n = values.length;
         }
         let i = 0;
-        while (i < n) {
+        while i < n {
             this.set(keys[i], values[i]);
             i = i + 1;
         }
@@ -170,7 +173,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     @inline
     public fun get(borrow key: K): Option<V> {
         let i = this.find(key);
-        if (i >= 0) {
+        if i >= 0 {
             return Option.Some(this.slots[i].value);
         }
         return Option.None;
@@ -178,10 +181,9 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     // Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use
     // `get(k)` for absence-tolerant reads.
-    @get_indexer
-    public fun at(borrow key: K): V {
+    public fun this[borrow key: K]: V {
         let i = this.find(key);
-        if (i < 0) {
+        if i < 0 {
             System.panic("Map key not found");
         }
         return this.slots[i].value;
@@ -190,7 +192,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     @inline
     public fun get_or(borrow key: K, fallback: V): V {
         let i = this.find(key);
-        if (i >= 0) {
+        if i >= 0 {
             return this.slots[i].value;
         }
         return fallback;
@@ -198,7 +200,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     public fun get_or_insert(key: K, borrow factory: fun(): V): V {
         let i = this.find(key);
-        if (i >= 0) {
+        if i >= 0 {
             return this.slots[i].value;
         }
         let value = factory();
@@ -215,8 +217,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     public fun entries(): List<KeyValuePair<K, V>> {
         let result = List<KeyValuePair<K, V>>(this.count);
         let i = 0;
-        while (i < this.cap) {
-            if (this.slots[i].state == this.epoch) {
+        while i < this.cap {
+            if this.slots[i].state == this.epoch {
                 result.push(KeyValuePair<K, V>(this.slots[i].key, this.slots[i].value));
             }
             i = i + 1;
@@ -226,7 +228,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
 
     public fun remove(borrow key: K): bool {
         let i = this.find(key);
-        if (i >= 0) {
+        if i >= 0 {
             this.slots[i].state = 0 - this.epoch;
             // Zero both halves of the tombstoned slot so managed keys release immediately,
             // not just on slot reuse.
@@ -250,8 +252,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let zk = this.empty_keys[0];
         let zv = this.defaults[0];
         let i = 0;
-        while (i < c) {
-            if (this.slots[i].state == e) {
+        while i < c {
+            if this.slots[i].state == e {
                 this.slots[i].key = zk;
                 this.slots[i].value = zv;
             }
@@ -273,8 +275,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let result = Buffer.alloc<K>(this.count);
         let i = 0;
         let j = 0;
-        while (i < this.cap) {
-            if (this.slots[i].state == this.epoch) {
+        while i < this.cap {
+            if this.slots[i].state == this.epoch {
                 result[j] = this.slots[i].key;
                 j = j + 1;
             }
@@ -287,8 +289,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let result = Buffer.alloc<V>(this.count);
         let i = 0;
         let j = 0;
-        while (i < this.cap) {
-            if (this.slots[i].state == this.epoch) {
+        while i < this.cap {
+            if this.slots[i].state == this.epoch {
                 result[j] = this.slots[i].value;
                 j = j + 1;
             }
@@ -297,7 +299,6 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
-    @iterator
     public fun iterator(): MapIterator<K, V> {
         return MapIterator<K, V>(this);
     }
@@ -314,14 +315,14 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.slots[i].value;
     }
 
-    @override public fun to_string(): string {
+    override public fun to_string(): string {
         let sb = StringBuilder();
         sb.append("{");
         let n = 0;
         let i = 0;
-        while (i < this.cap) {
-            if (this.slots[i].state == this.epoch) {
-                if (n > 0) {
+        while i < this.cap {
+            if this.slots[i].state == this.epoch {
+                if n > 0 {
                     sb.append(", ");
                 }
                 sb.append(this.slots[i].key.to_string());

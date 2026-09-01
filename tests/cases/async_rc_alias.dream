@@ -1,6 +1,6 @@
 // Regression: async bodies must retain on aliasing copies. Without poll RcInsertion,
 // `let b = a` shares one count and completion bulk-released both → double-free.
-// `live_delta=1` is the still-held `run` Future handle inside `main` (freed at main complete).
+// After await, the Future is released at resume (`live_delta=0`).
 
 import system;
 class Tracked {

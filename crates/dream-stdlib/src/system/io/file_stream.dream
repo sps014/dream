@@ -26,11 +26,11 @@ public class FileStream {
     // Reads everything remaining from the current position as text.
     public fun read_all(): string {
         let sz = File.size(this.handle.path);
-        if (sz.is_none()) {
+        if sz.is_none() {
             return string.empty;
         }
         let remaining = (int)sz.unwrap_or(0L) - this.pos;
-        if (remaining < 0) {
+        if remaining < 0 {
             remaining = 0;
         }
         return this.read(remaining);
@@ -41,7 +41,7 @@ public class FileStream {
         let none: Option<string> = Option.None;
         let line = this.handle.read_line().unwrap_or(none);
         let told = this.handle.tell();
-        if (told.is_ok()) {
+        if told.is_ok() {
             this.pos = (int)told.unwrap_or(0L);
         }
         return line;
@@ -49,7 +49,7 @@ public class FileStream {
 
     public fun write_text(text: string): Result<int, IoError> {
         let n = this.handle.write_text(text);
-        if (n.is_ok()) {
+        if n.is_ok() {
             this.pos = this.pos + n.unwrap_or(0);
         }
         return n;
@@ -58,7 +58,7 @@ public class FileStream {
     // True while the cursor has not reached the end of the file.
     public fun has_more(): bool {
         let sz = File.size(this.handle.path);
-        if (sz.is_none()) {
+        if sz.is_none() {
             return false;
         }
         return this.pos < (int)sz.unwrap_or(0L);
@@ -72,7 +72,7 @@ public class FileStream {
     // Total file size in bytes (`-1` when the path is missing).
     public get length(): int {
         let sz = File.size(this.handle.path);
-        if (sz.is_none()) {
+        if sz.is_none() {
             return (0 - 1);
         }
         return (int)sz.unwrap_or(0L);
@@ -88,7 +88,7 @@ public class FileStream {
     public fun seek_end(): void {
         this.handle.seek_end();
         let told = this.handle.tell();
-        if (told.is_ok()) {
+        if told.is_ok() {
             this.pos = (int)told.unwrap_or(0L);
         }
     }

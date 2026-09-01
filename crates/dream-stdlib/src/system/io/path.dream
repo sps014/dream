@@ -10,7 +10,7 @@ public static class Path {
         let have = Path._append_segment(sb, false, a);
         have = Path._append_segment(sb, have, b);
         let i = 0;
-        while (i < more.length) {
+        while i < more.length {
             have = Path._append_segment(sb, have, more[i]);
             i = i + 1;
         }
@@ -22,10 +22,10 @@ public static class Path {
     // terminated. Returns true when the builder now holds at least one segment and its last
     // character is not a separator (i.e. the next segment needs one).
     static fun _append_segment(sb: StringBuilder, have_live: bool, seg: string): bool {
-        if (seg.is_empty()) {
+        if seg.is_empty() {
             return have_live;
         }
-        if (have_live) {
+        if have_live {
             sb.append(Path.separator());
         }
         sb.append(seg);
@@ -34,19 +34,19 @@ public static class Path {
 
     // Joins every segment in `parts` left-to-right with the same rules as `join`.
     public static fun of(parts: string[]): string {
-        if (parts.length == 0) {
+        if parts.length == 0 {
             return string.empty;
         }
         let total = 0;
         let i = 0;
-        while (i < parts.length) {
+        while i < parts.length {
             total = total + parts[i].length + 1;
             i = i + 1;
         }
         let sb = StringBuilder(total);
         let have = false;
         i = 0;
-        while (i < parts.length) {
+        while i < parts.length {
             have = Path._append_segment(sb, have, parts[i]);
             i = i + 1;
         }
@@ -56,14 +56,14 @@ public static class Path {
     // Final path component after the last `/` or `\`, or `None` for a trailing separator.
     public static fun file_name(path: string): Option<string> {
         let n = path.length;
-        if (n == 0) {
+        if n == 0 {
             return Option.None;
         }
         let i = n - 1;
-        while (i >= 0) {
+        while i >= 0 {
             let c = path.char_at(i);
-            if ((c == '/') || (c == '\\')) {
-                if (i + 1 >= n) {
+            if (c == '/') || (c == '\\') {
+                if i + 1 >= n {
                     return Option.None;
                 }
                 return Option.Some(path.substring(i + 1, n));
@@ -78,9 +78,9 @@ public static class Path {
         let name = Path.file_name(path).unwrap_or(string.empty);
         let n = name.length;
         let i = n - 1;
-        while (i >= 0) {
-            if (name.char_at(i) == '.') {
-                if (i + 1 >= n) {
+        while i >= 0 {
+            if name.char_at(i) == '.' {
+                if i + 1 >= n {
                     return Option.None;
                 }
                 return Option.Some(name.substring(i + 1, n));
@@ -93,14 +93,14 @@ public static class Path {
     // Directory portion of `path`, or `None` when there is no separator.
     public static fun parent(path: string): Option<string> {
         let n = path.length;
-        if (n == 0) {
+        if n == 0 {
             return Option.None;
         }
         let i = n - 1;
-        while (i >= 0) {
+        while i >= 0 {
             let c = path.char_at(i);
-            if ((c == '/') || (c == '\\')) {
-                if (i == 0) {
+            if (c == '/') || (c == '\\') {
+                if i == 0 {
                     return Option.Some(path.substring(0, 1));
                 }
                 return Option.Some(path.substring(0, i));
@@ -112,14 +112,14 @@ public static class Path {
 
     // True for POSIX absolute paths (`/`…), Windows drive paths (`C:`…), or `\`-rooted paths.
     public static fun is_absolute(path: string): bool {
-        if (path.is_empty()) {
+        if path.is_empty() {
             return false;
         }
         let c = path.char_at(0);
-        if ((c == '/') || (c == '\\')) {
+        if (c == '/') || (c == '\\') {
             return true;
         }
-        if ((path.length >= 3) && (path.char_at(1) == ':')) {
+        if (path.length >= 3) && (path.char_at(1) == ':') {
             return true;
         }
         return false;
@@ -127,7 +127,7 @@ public static class Path {
 
     // Resolves `.` and `..` segments where possible. Does not consult the filesystem.
     public static fun normalize(path: string): string {
-        if (path.is_empty()) {
+        if path.is_empty() {
             return path;
         }
         let sep = Path.separator();
@@ -136,16 +136,16 @@ public static class Path {
         let start = 0;
         let i = 0;
         let n = path.length;
-        while (i <= n) {
-            if ((i == n) || (path.char_at(i) == '/') || (path.char_at(i) == '\\')) {
-                if (i > start) {
+        while i <= n {
+            if (i == n) || (path.char_at(i) == '/') || (path.char_at(i) == '\\') {
+                if i > start {
                     let part = path.substring(start, i);
-                    if (part == ".") {
+                    if part == "." {
                         // skip
                     } else if (part == "..") {
-                        if (parts.length > 0) {
+                        if parts.length > 0 {
                             let last = parts.get(parts.length - 1);
-                            if (last != "..") {
+                            if last != ".." {
                                 parts.pop();
                             } else {
                                 parts.push(part);
@@ -163,24 +163,24 @@ public static class Path {
         }
         let sb = StringBuilder();
         let j = 0;
-        while (j < parts.length) {
-            if (j > 0) {
+        while j < parts.length {
+            if j > 0 {
                 sb.append(sep);
             }
             sb.append(parts.get(j));
             j = j + 1;
         }
         let out = sb.build();
-        if (absolute) {
-            if (path.char_at(0) == '/') {
+        if absolute {
+            if path.char_at(0) == '/' {
                 return "/" + out;
             }
-            if (path.char_at(0) == '\\') {
+            if path.char_at(0) == '\\' {
                 return "\\" + out;
             }
         }
-        if (out.is_empty()) {
-            if (absolute) {
+        if out.is_empty() {
+            if absolute {
                 return sep;
             }
             return ".";
@@ -201,12 +201,12 @@ public static class Path {
     public static fun stem(path: string): string {
         let name = Path.file_name(path).unwrap_or(string.empty);
         let ext = Path.extension(path);
-        if (ext.is_none()) {
+        if ext.is_none() {
             return name;
         }
         let e = ext.unwrap_or(string.empty);
         let cut = name.length - e.length - 1;
-        if (cut < 0) {
+        if cut < 0 {
             return name;
         }
         return name.substring(0, cut);
@@ -215,7 +215,7 @@ public static class Path {
     // Replaces the last extension, or appends `ext` when the path has none. `ext` may include a leading `.`.
     public static fun with_extension(path: string, ext: string): string {
         let suffix = ext;
-        if ((ext.is_empty() == false) && (ext.char_at(0) != '.')) {
+        if (ext.is_empty() == false) && (ext.char_at(0) != '.') {
             suffix = "." + ext;
         }
         let parent = Path.parent(path);
@@ -243,7 +243,7 @@ public static class Path {
     // True when the last extension equals `ext` (with or without a leading `.`).
     public static fun has_extension(path: string, ext: string): bool {
         let want = ext;
-        if ((ext.is_empty() == false) && (ext.char_at(0) == '.')) {
+        if (ext.is_empty() == false) && (ext.char_at(0) == '.') {
             want = ext.substring(1, ext.length);
         }
         return switch (Path.extension(path)) {
@@ -258,9 +258,9 @@ public static class Path {
         let start = 0;
         let i = 0;
         let n = path.length;
-        while (i <= n) {
-            if ((i == n) || (path.char_at(i) == '/') || (path.char_at(i) == '\\')) {
-                if (i > start) {
+        while i <= n {
+            if (i == n) || (path.char_at(i) == '/') || (path.char_at(i) == '\\') {
+                if i > start {
                     parts.push(path.substring(start, i));
                 }
                 start = i + 1;
@@ -272,11 +272,11 @@ public static class Path {
 
     // Joins `path` onto the process cwd when it is relative, then `normalize`s. Does not consult `realpath`.
     public static fun absolute(path: string): string {
-        if (Path.is_absolute(path)) {
+        if Path.is_absolute(path) {
             return Path.normalize(path);
         }
         let cwd = Path.host_cwd();
-        if (cwd.is_empty()) {
+        if cwd.is_empty() {
             cwd = ".";
         }
         return Path.normalize(Path.join(cwd, path));
@@ -286,14 +286,14 @@ public static class Path {
     public static fun relative_to(path: string, base: string): Option<string> {
         let p = Path.normalize(path);
         let b = Path.normalize(base);
-        if (p == b) {
+        if p == b {
             return Option.Some(".");
         }
         let prefix = b;
-        if ((b.ends_with("/") == false) && (b.ends_with("\\") == false)) {
+        if (b.ends_with("/") == false) && (b.ends_with("\\") == false) {
             prefix = b + Path.separator();
         }
-        if (p.starts_with(prefix) == false) {
+        if p.starts_with(prefix) == false {
             return Option.None;
         }
         return Option.Some(p.substring(prefix.length, p.length));

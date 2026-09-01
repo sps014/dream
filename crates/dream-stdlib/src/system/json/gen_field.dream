@@ -75,7 +75,7 @@ public class GenField {
 
     // JSON object key: `@json_property` override, else the Dream field name.
     public fun json_key(): string {
-        if (this.property_name.length > 0) {
+        if this.property_name.length > 0 {
             return this.property_name;
         }
         return this.name;

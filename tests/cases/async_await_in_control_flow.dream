@@ -9,7 +9,7 @@ async fun ready(): bool { return true; }
 
 async fun in_branch(b: int): int {
     let acc = 0;
-    if (b == 2) { acc = acc + await g(3); }     // await inside a branch body
+    if b == 2 { acc = acc + await g(3); }     // await inside a branch body
     else { acc = acc + await g(7); }
     return acc;
 }
@@ -17,7 +17,7 @@ async fun in_branch(b: int): int {
 async fun in_loop(): int {
     let sum = 0;
     let i = 0;
-    while (i < 4) { sum = sum + await g(i); i = i + 1; }   // await every iteration
+    while i < 4 { sum = sum + await g(i); i = i + 1; }   // await every iteration
     return sum;                                            // 0+1+2+3 = 6
 }
 

@@ -12,14 +12,14 @@ class Node {
 }
 
 fun create_list(n: int): Option<Node> {
-    if (n <= 0 ) {
+    if n <= 0 {
         return Option.None;
     }
     let no_next: Option<Node> = Option.None;
     let head = Node(n, no_next);
     let curr = head;
     let i = n - 1;
-    while (i > 0 ) {
+    while i > 0 {
         let nxt = Node(i, no_next);
         curr.next = Option.Some(nxt);
         curr = nxt;

@@ -20,7 +20,7 @@ public class Stopwatch {
 
     // Starts or resumes measuring elapsed time.
     public fun start(): void {
-        if (!this._is_running) {
+        if !this._is_running {
             this._start_time = Time.nano_time();
             this._is_running = true;
         }
@@ -28,7 +28,7 @@ public class Stopwatch {
 
     // Stops measuring elapsed time.
     public fun stop(): void {
-        if (this._is_running) {
+        if this._is_running {
             let now = Time.nano_time();
             this._elapsed = this._elapsed + (now - this._start_time);
             this._is_running = false;
@@ -51,7 +51,7 @@ public class Stopwatch {
 
     // The total elapsed time measured by the current instance, in nanoseconds.
     public fun elapsed_nanos(): long {
-        if (this._is_running) {
+        if this._is_running {
             let now = Time.nano_time();
             return this._elapsed + (now - this._start_time);
         }

@@ -8,7 +8,7 @@ module system.core;
 // ```dream
 // let wb = Weak.make(engine);
 // engine.on_tick = () => {
-//     if (!wb.is_dead()) {
+//     if !wb.is_dead() {
 //         let e = wb.get();   // retained for immediate use
 //         e.tick();
 //     }

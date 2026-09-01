@@ -24,7 +24,7 @@ fun tri_vs(v: Vertex): VsOut {
 @fragment
 fun tri_fs(v: VsOut): GpuVec4 {
     // `front_facing` is injected for every @fragment entry.
-    if (!front_facing) {
+    if !front_facing {
         return GpuVec4.of(0.1, 0.1, 0.1, 1.0);
     }
     return v.color;
@@ -39,13 +39,13 @@ fun make_vert(x: float, y: float, r: float, g: float, b: float): Vertex {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("WebGPU unavailable");
         return;
     }
 
     let surface_r = GpuSurface.create("c", 800, 600);
-    if (surface_r.is_err()) {
+    if surface_r.is_err() {
         System.println("GpuSurface.create failed");
         return;
     }
@@ -54,7 +54,7 @@ async fun main(): void {
     // Explicit pipeline state (still triangle-list / no depth for this demo).
     let desc = GpuRenderPipelineDesc.defaults();
     let pipe_r = await GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc);
-    if (pipe_r.is_err()) {
+    if pipe_r.is_err() {
         System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
@@ -66,7 +66,7 @@ async fun main(): void {
         make_vert(0.0, 0.5, 0.2, 0.2, 1.0),
     ]);
 
-    while (!surface.close_requested()) {
+    while !surface.close_requested() {
         let _ = await GpuRenderPass.draw(surface, pipe, verts, 3);
         let _ = await surface.present();
         await Gpu.frame();

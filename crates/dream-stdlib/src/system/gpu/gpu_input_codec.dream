@@ -24,13 +24,13 @@ public static class GpuInputCodec {
     // Reads a length-prefixed UTF-8 string at byte `off`.
     public static fun read_string(buf: byte[], off: int): string {
         let n = GpuInputCodec.read_i32(buf, off);
-        if (n < 0) { n = 0; }
+        if n < 0 { n = 0; }
         let start = off + 4;
         let end = start + n;
-        if (end > buf.length) { end = buf.length; }
+        if end > buf.length { end = buf.length; }
         let slice = Buffer.alloc<byte>(end - start);
         let i = 0;
-        while (start + i < end) {
+        while start + i < end {
             slice[i] = buf[start + i];
             i = i + 1;
         }
@@ -40,14 +40,14 @@ public static class GpuInputCodec {
     // Byte length of a length-prefixed string starting at `off` (header + payload).
     public static fun string_byte_len(buf: byte[], off: int): int {
         let n = GpuInputCodec.read_i32(buf, off);
-        if (n < 0) { n = 0; }
+        if n < 0 { n = 0; }
         return 4 + n;
     }
 
     // Decodes a packed pointer latch blob into `GpuPointer`.
     public static fun decode_pointer(buf: byte[]): GpuPointer {
         let p = GpuPointer();
-        if (buf.length < 32) {
+        if buf.length < 32 {
             p.pointer_id = 0 - 1;
             return p;
         }
@@ -65,7 +65,7 @@ public static class GpuInputCodec {
     // Decodes a packed modifier latch blob into `GpuMods`.
     public static fun decode_mods(buf: byte[]): GpuMods {
         let m = GpuMods();
-        if (buf.length < 4) { return m; }
+        if buf.length < 4 { return m; }
         m.shift = ((int)buf[0] & 255) != 0;
         m.ctrl = ((int)buf[1] & 255) != 0;
         m.alt = ((int)buf[2] & 255) != 0;
@@ -75,18 +75,18 @@ public static class GpuInputCodec {
 
     // Decodes a packed event queue into `GpuInputEvent` values.
     public static fun decode_events(buf: byte[]): GpuInputEvent[] {
-        if (buf.length < 4) {
+        if buf.length < 4 {
             return Buffer.alloc<GpuInputEvent>(0);
         }
         let count = GpuInputCodec.read_i32(buf, 0);
-        if (count < 0) { count = 0; }
+        if count < 0 { count = 0; }
         let out = Buffer.alloc<GpuInputEvent>(count);
         let off = 4;
         let i = 0;
-        while (i < count && off < buf.length) {
+        while i < count && off < buf.length {
             let tag = (int)buf[off] & 255;
             off = off + 1;
-            if (tag == 0) {
+            if tag == 0 {
                 let x = GpuInputCodec.read_f32(buf, off); off = off + 4;
                 let y = GpuInputCodec.read_f32(buf, off); off = off + 4;
                 let button = GpuInputCodec.read_i32(buf, off); off = off + 4;
@@ -174,10 +174,10 @@ public static class GpuInputCodec {
             }
             i = i + 1;
         }
-        if (i == count) { return out; }
+        if i == count { return out; }
         let trimmed = Buffer.alloc<GpuInputEvent>(i);
         let j = 0;
-        while (j < i) {
+        while j < i {
             trimmed[j] = out[j];
             j = j + 1;
         }

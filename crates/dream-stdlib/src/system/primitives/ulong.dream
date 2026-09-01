@@ -4,10 +4,10 @@ module system.primitives;
 extend ulong : Comparable<ulong> {
     // Orders this value against `other`.
     public fun compare(other: ulong): int {
-        if (this < other) {
+        if this < other {
             return 0 - 1;
         }
-        if (this > other) {
+        if this > other {
             return 1;
         }
         return 0;
@@ -15,7 +15,7 @@ extend ulong : Comparable<ulong> {
 
     // The smaller of this and `other`.
     public fun min(other: ulong): ulong {
-        if (this < other) {
+        if this < other {
             return this;
         }
         return other;
@@ -23,7 +23,7 @@ extend ulong : Comparable<ulong> {
 
     // The larger of this and `other`.
     public fun max(other: ulong): ulong {
-        if (this > other) {
+        if this > other {
             return this;
         }
         return other;
@@ -31,10 +31,10 @@ extend ulong : Comparable<ulong> {
 
     // This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: ulong, hi: ulong): ulong {
-        if (this < lo) {
+        if this < lo {
             return lo;
         }
-        if (this > hi) {
+        if this > hi {
             return hi;
         }
         return this;
@@ -43,14 +43,14 @@ extend ulong : Comparable<ulong> {
     // Parses an unsigned decimal integer from `text`.
     public static fun parse(borrow text: string): Result<ulong, ParseError> {
         let n = text.length;
-        if (n == 0) {
+        if n == 0 {
             return Result.Err(ParseError.invalid("cannot parse ulong from empty string"));
         }
         let result = 0uL;
         let i = 0;
-        while (i < n) {
+        while i < n {
             let c = text.char_at(i);
-            if ((c < '0') || (c > '9')) {
+            if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse ulong: invalid digit"));
             }
             result = result * 10uL + (ulong)((int)c - 48);

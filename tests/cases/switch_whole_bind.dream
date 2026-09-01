@@ -3,7 +3,7 @@
 // another match). Previously this crashed codegen; now it lowers as the switch `default` with an
 // injected binding.
 import system;
-enum E { A(v: int), B(v: int) }
+enum E { A(int), B(int) }
 
 fun tag(e: E): int {
     return switch (e) {

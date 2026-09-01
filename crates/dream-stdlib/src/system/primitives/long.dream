@@ -4,10 +4,10 @@ module system.primitives;
 extend long : Comparable<long> {
     // Orders this value against `other`.
     public fun compare(other: long): int {
-        if (this < other) {
+        if this < other {
             return 0 - 1;
         }
-        if (this > other) {
+        if this > other {
             return 1;
         }
         return 0;
@@ -15,7 +15,7 @@ extend long : Comparable<long> {
 
     // Absolute value of this long.
     public fun abs(): long {
-        if (this < 0L) {
+        if this < 0L {
             return 0L - this;
         }
         return this;
@@ -23,7 +23,7 @@ extend long : Comparable<long> {
 
     // The smaller of this and `other`.
     public fun min(other: long): long {
-        if (this < other) {
+        if this < other {
             return this;
         }
         return other;
@@ -31,7 +31,7 @@ extend long : Comparable<long> {
 
     // The larger of this and `other`.
     public fun max(other: long): long {
-        if (this > other) {
+        if this > other {
             return this;
         }
         return other;
@@ -39,10 +39,10 @@ extend long : Comparable<long> {
 
     // This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: long, hi: long): long {
-        if (this < lo) {
+        if this < lo {
             return lo;
         }
-        if (this > hi) {
+        if this > hi {
             return hi;
         }
         return this;
@@ -50,10 +50,10 @@ extend long : Comparable<long> {
 
     // The sign of this value: -1, 0, or 1.
     public fun signum(): long {
-        if (this > 0L) {
+        if this > 0L {
             return 1L;
         }
-        if (this < 0L) {
+        if this < 0L {
             return 0L - 1L;
         }
         return 0L;
@@ -62,28 +62,28 @@ extend long : Comparable<long> {
     // Parses a decimal integer from `text`.
     public static fun parse(borrow text: string): Result<long, ParseError> {
         let n = text.length;
-        if (n == 0) {
+        if n == 0 {
             return Result.Err(ParseError.invalid("cannot parse long from empty string"));
         }
         let i = 0;
         let neg = false;
-        if (text.char_at(0) == '-') {
+        if text.char_at(0) == '-' {
             neg = true;
             i = 1;
         }
-        if (i >= n) {
+        if i >= n {
             return Result.Err(ParseError.invalid("cannot parse long: no digits"));
         }
         let result = 0L;
-        while (i < n) {
+        while i < n {
             let c = text.char_at(i);
-            if ((c < '0') || (c > '9')) {
+            if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse long: invalid digit"));
             }
             result = result * 10L + (long)((int)c - 48);
             i = i + 1;
         }
-        if (neg == true) {
+        if neg == true {
             return Result.Ok(0L - result);
         }
         return Result.Ok(result);

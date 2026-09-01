@@ -30,7 +30,7 @@ public static class Gpu {
     // Initializes the GPU device; returns `Err` with a host error code on failure.
     public static async fun try_init(): Result<bool, GpuError> {
         let code = await Gpu.try_init_host();
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "Gpu.try_init failed"));
     }
 

@@ -1,4 +1,4 @@
-{"type":"Some","value":{"x":3,"y":4}}
+{"type":"Some","_0":{"x":3,"y":4}}
 3
 4
 {"type":"None"}

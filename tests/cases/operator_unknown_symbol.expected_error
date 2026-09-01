@@ -1,1 +1,1 @@
-'@operator("&&")' is not a recognized operator for a method with 1 parameter(s)
+'operator &&' is not a recognized operator for a method with 1 parameter(s)

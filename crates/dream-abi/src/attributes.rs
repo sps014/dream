@@ -211,13 +211,6 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Excludes a field from JSON serialize/deserialize (used with `@json`).",
     },
     AttributeSpec {
-        name: "override",
-        targets: &[AttributeTarget::Method],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Marks an instance method as overriding an object-protocol hook (`to_string` / `hash_code`).",
-    },
-    AttributeSpec {
         name: "inline",
         targets: &[
             AttributeTarget::Function,
@@ -263,34 +256,6 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         args: ArgShape::None,
         repeatable: false,
         doc: "Allows a class to participate in a reference cycle (ARC will not free it automatically).",
-    },
-    AttributeSpec {
-        name: "operator",
-        targets: &[AttributeTarget::Method],
-        args: ArgShape::Args {
-            kinds: &[ArgKind::String],
-            min: 1,
-            max: 1,
-        },
-        repeatable: false,
-        // Not repeatable *on one method* (`@operator("+") @operator("-")` on the same method makes
-        // no sense — a method implements exactly one operator). A struct declaring many distinct
-        // `@operator`-tagged *methods* is fine: `validate_attributes` runs once per method, so this
-        // only rejects stacking the same attribute twice on a single declaration.
-        // `validate_and_register_operator` (`declarations::operator_overloads`) separately enforces
-        // that no two methods on the same type claim the same operator symbol/arity.
-        doc: "Overloads an operator for a type. The string is the operator symbol (e.g. `\"+\"`, `\"==\"`, `\"-\"`).",
-    },
-    AttributeSpec {
-        name: "cast",
-        targets: &[AttributeTarget::Method],
-        args: ArgShape::Args {
-            kinds: &[ArgKind::String],
-            min: 1,
-            max: 1,
-        },
-        repeatable: false,
-        doc: "Registers a conversion method as an implicit or explicit cast: `@cast(\"implicit\")` or `@cast(\"explicit\")`.",
     },
     AttributeSpec {
         name: "unsafe",
@@ -343,59 +308,6 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         args: ArgShape::None,
         repeatable: false,
         doc: "Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.",
-    },
-    AttributeSpec {
-        name: "shared",
-        // `class` only: a `struct` is a value type (copied on assignment, no heap allocation), so
-        // an embedded lock word would defeat the point (`Shared<T>` is the value-type equivalent —
-        // see `src/stdlib/system/core/lock.dream`). Rejecting `@shared struct` here means the rest of the
-        // compiler never needs to reason about a value-typed shared class.
-        targets: &[AttributeTarget::Struct],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Makes a class shareable across threads (`Shared<T>`-style lock word on the instance).",
-    },
-    AttributeSpec {
-        name: "stack",
-        // A checked contract, not a request: every monomorphized instance of a `@stack` union
-        // must qualify as a value union (all payloads value/primitive, or any number of
-        // non-self-referential reference-typed payloads) or registration reports an error. See
-        // `Analyzer::register_union` in `src/semantics/analyzer/declarations/enums.rs`.
-        targets: &[AttributeTarget::Union],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Requires a discriminated union to be a value (stack) union for every monomorphization.",
-    },
-    // Indexer / enumerator protocol hooks (mirrors `@operator`: the attribute marks the role;
-    // the method name is free). Shape/arity are checked in
-    // `declarations::protocol_hooks::validate_and_register_protocol_hook`.
-    AttributeSpec {
-        name: "get_indexer",
-        targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Marks a method as the get-indexer (`obj[i]`) protocol hook.",
-    },
-    AttributeSpec {
-        name: "set_indexer",
-        targets: &[AttributeTarget::Method],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Marks a method as the set-indexer (`obj[i] = v`) protocol hook.",
-    },
-    AttributeSpec {
-        name: "iterator",
-        targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Marks a method as the `for-each` iterator factory protocol hook.",
-    },
-    AttributeSpec {
-        name: "next",
-        targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Marks a method as the iterator `next` protocol hook.",
     },
     // Source-generator framework (`system.codegen` / `driver/generate`).
     AttributeSpec {
@@ -1372,7 +1284,7 @@ mod tests {
     fn duplicate_non_repeatable_attribute_is_reported() {
         let mut diagnostics = DiagnosticBag::new(None);
         validate_attributes(
-            &[attr("override", &[]), attr("override", &[])],
+            &[attr("inline", &[]), attr("inline", &[])],
             AttributeTarget::Method,
             &mut diagnostics,
         );

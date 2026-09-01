@@ -48,12 +48,12 @@ public class GpuError : Error {
     public static fun from_code(code: int, detail: string): GpuError {
         let last = GpuError.last_error_host();
         let msg = detail;
-        if (last.length > 0) {
+        if last.length > 0 {
             msg = detail + ": " + last;
         }
-        if (code == 1) { return GpuError.unavailable(msg); }
-        if (code == 2) { return GpuError.timeout(msg); }
-        if (code == 3) { return GpuError.validation(msg); }
+        if code == 1 { return GpuError.unavailable(msg); }
+        if code == 2 { return GpuError.timeout(msg); }
+        if code == 3 { return GpuError.validation(msg); }
         return GpuError.other(msg);
     }
 

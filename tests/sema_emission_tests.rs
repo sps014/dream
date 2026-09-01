@@ -170,7 +170,7 @@ fn test_hir_emission_coalesce() {
     // runs outside the stdlib prelude, so it declares a minimal stand-in `Option<T>` with the
     // `unwrap_or` method the desugar dispatches to.
     let code = "
-        enum Option<T> { Some(value: T), None }
+        enum Option<T> { Some(T), None }
         extend Option<T> {
             fun unwrap_or(fallback: T): T {
                 return switch (this) { Some(v) => v, None => fallback };
@@ -438,7 +438,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
 #[test]
 fn test_hir_emission_user_constructor() {
     // A struct with a user-defined `constructor(...){}`: `Point(1, 2)` allocates, zeroes, and calls the
-    // constructor (rather than initializing fields positionally); the constructor body is emitted too.
+    // constructor(rather than initializing fields positionally); the constructor body is emitted too.
     let code = "
         class Point {
             public x: int;
@@ -877,7 +877,7 @@ fn exec_print_union_variants() {
     // active variant. Data variants render `Variant(field: value, ...)`; unit variants render bare.
     let code = format!(
         "{SYSTEM_STUB}
-        enum Shape {{ Circle(radius: int), Rect(width: int, height: int), Empty }}
+        enum Shape {{ Circle(int), Rect(width: int, height: int), Empty }}
         fun main(): void {{
             System.println(Shape.Circle(5));
             System.println(Shape.Rect(2, 3));
@@ -886,7 +886,7 @@ fn exec_print_union_variants() {
     );
     assert_eq!(
         run_and_capture(&code, "main"),
-        "Circle(radius: 5)\nRect(width: 2, height: 3)\nEmpty\n"
+        "Circle(5)\nRect(width: 2, height: 3)\nEmpty\n"
     );
 }
 
@@ -1498,7 +1498,7 @@ fn test_hir_emission_union_construction() {
     // buffer whose first word is the variant discriminant (boxed into a tagged heap block only when
     // returned, unlike the WAT backend which kept it unboxed).
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun mk(): Shape { return Shape.Circle(2); }
         fun nil(): Shape { return Shape.Empty; }
     ";
@@ -1561,7 +1561,7 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
     // A statement-position pattern `switch` lowers to `HStmt::Switch`; a variant pattern binds its
     // payload to fresh locals that the arm body resolves.
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun describe(s: Shape): int {
             let r: int = 0;
             switch (s) {
@@ -1618,7 +1618,7 @@ fn test_hir_emission_len_builtin() {
 fn test_hir_emission_switch_expression() {
     // A value-position `switch` desugars to a result temp + `Switch`, read back as the switch value.
     let code = "
-        enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
+        enum Shape { Circle(int), Rect(width: int, height: int), Empty }
         fun area(s: Shape): int {
             return switch (s) {
                 Circle(r)  => r * r,

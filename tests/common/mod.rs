@@ -206,7 +206,7 @@ pub const SYSTEM_STUB: &str = "
 /// analyzer desugars dynamic operations into.
 pub const JS_STUB: &str = "
     enum Option<T> {
-        Some(value: T),
+        Some(T),
         None,
     }
     extend js {

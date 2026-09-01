@@ -259,7 +259,7 @@ fn switch_arm_completions_for_union() {
     let harness = TestHarness::new(
         r#"
 enum Shape {
-    Circle(radius: float),
+    Circle(float),
     Rect(width: float, height: float),
     Empty,
 }
@@ -427,7 +427,7 @@ fun f(): void {
 
 #[test]
 fn enum_member_payload_snippet() {
-    let snippet = dream_lsp::index::enum_member_snippet("Circle", "Shape.Circle(radius: float)");
+    let snippet = dream_lsp::index::enum_member_snippet("Circle", "Shape.Circle(float)");
     assert_eq!(snippet.as_deref(), Some("Circle(${1:radius})"));
 
     let unit = dream_lsp::index::enum_member_snippet("Red", "Color.Red = 0");
@@ -436,7 +436,7 @@ fn enum_member_payload_snippet() {
     let harness = TestHarness::new(
         r#"
 enum Shape {
-    Circle(radius: float),
+    Circle(float),
     Empty,
 }
 fun f(): void {
@@ -1083,7 +1083,7 @@ fn hover_on_union_variant_shows_signature_and_doc() {
     // Cursor on the `Rect` variant in a constructor call.
     let src = "
 enum Shape {
-    Circle(radius: int),
+    Circle(int),
     // A rectangle with width and height.
     Rect(width: int, height: int),
     Empty,
@@ -1118,7 +1118,7 @@ fun main(): void {
 fn hover_on_union_variant_in_switch_arm() {
     let src = "
 enum Shape {
-    Circle(radius: int),
+    Circle(int),
     Rect(width: int, height: int),
 }
 fun area(s: Shape): int {
@@ -1147,7 +1147,7 @@ fun area(s: Shape): int {
 fn hover_on_generic_enum_shows_type_parameters() {
     let src = "
 enum Opt<T> {
-    Some(value: T),
+    Some(T),
     None,
 }
 fun main(): void {
@@ -1171,7 +1171,7 @@ fun main(): void {
 fn definition_resolves_union_variant_constructor() {
     let src = "
 enum Shape {
-    Circle(radius: int),
+    Circle(int),
     Rect(width: int, height: int),
 }
 fun main(): void {

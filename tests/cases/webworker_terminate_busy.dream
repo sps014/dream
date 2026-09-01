@@ -3,7 +3,7 @@ import system;
 
 async fun main(): void {
     let f = WebWorker.spawn(() => {
-        while (true) {
+        while true {
         }
         return 0;
     });

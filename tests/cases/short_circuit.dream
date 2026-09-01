@@ -6,12 +6,12 @@ fun side(): bool {
 
 fun main(): void {
     let f: bool = false;
-    if (f && side()) {
+    if f && side() {
         System.println(1);
     }
 
     let t: bool = true;
-    if (t || side()) {
+    if t || side() {
         System.println(2);
     }
 

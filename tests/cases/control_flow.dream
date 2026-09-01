@@ -2,13 +2,13 @@ import system;
 fun main(): void {
     let x = 10;
     
-    if (x > 5 ) {
+    if x > 5 {
         System.println(1);
     } else {
         System.println(0);
     }
     
-    if (x < 5 ) {
+    if x < 5 {
         System.println(0);
     } else if (x == 10 ) {
         System.println(2);
@@ -17,13 +17,13 @@ fun main(): void {
     }
     
     let i = 0;
-    while (i < 3 ) {
+    while i < 3 {
         System.println(i);
         i = i + 1;
     }
     
     for (let j = 0; j < 3; j = j + 1 ) {
-        if (j == 1 ) {
+        if j == 1 {
             continue;
         }
         System.println(j);

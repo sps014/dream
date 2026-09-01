@@ -18,19 +18,19 @@ import system.gpu;
 @compute(64)
 fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < a.length && i < n) {
+    if i < a.length && i < n {
         out[i] = a[i] + b[i];
     }
 }
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) { return; }
+    if init.is_err() { return; }
     let a = GpuBuffer.from([1.0, 2.0, 3.0]);
     let b = GpuBuffer.from([10.0, 20.0, 30.0]);
     let out = GpuBuffer<float>.alloc(3);
     let r = await Compute.run_1d("add", [a, b, out], 3);
-    if (r.is_err()) { return; }
+    if r.is_err() { return; }
     let vals = await out.read();
     System.println((int)vals[0]); // 11 when a GPU adapter is available
 }
@@ -48,14 +48,14 @@ import system.gpu;
 @compute(64)
 fun saxpy(x: GpuBuffer<float>, y: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < n) {
+    if i < n {
         out[i] = 2.0 * x[i] + y[i];
     }
 }
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) { return; }
+    if init.is_err() { return; }
     let x = GpuBuffer.from([1.0, 2.0, 3.0, 4.0]);
     let y = GpuBuffer.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
@@ -139,7 +139,7 @@ fun advect(
 ): void {
     let x = global_id.x;
     let y = global_id.y;
-    if (x >= n || y >= n) { return; }
+    if x >= n || y >= n { return; }
     // … bilinear sample of src at (x - dt*vx, y - dt*vy) …
 }
 
@@ -182,7 +182,7 @@ Prefix a buffer (or texture) with **`@readonly`** for WGSL `var<storage, read>` 
 @compute(64)
 fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < n) { out[i] = a[i] * 2.0; }
+    if i < n { out[i] = a[i] * 2.0; }
 }
 ```
 

@@ -6,7 +6,7 @@ import system;
 fun sum(s: Span<int>): int {
     let total = 0;
     let i = 0;
-    while (i < s.length) {
+    while i < s.length {
         total = total + s.get(i);
         i = i + 1;
     }

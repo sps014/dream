@@ -1,5 +1,5 @@
 // Regression: reassigning a ref local inside async must release the previous value.
-// `live_delta=1` is the still-held `run` Future handle inside `main`.
+// After await, the Future is released at resume (`live_delta=0`).
 
 import system;
 class Tracked {

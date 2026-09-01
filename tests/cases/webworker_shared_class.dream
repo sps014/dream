@@ -1,6 +1,5 @@
 import system;
-@shared
-class Counter {
+shared class Counter {
     public value: int;
 
     public constructor() {

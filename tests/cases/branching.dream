@@ -3,9 +3,9 @@ fun main(): void {
     let x = 10;
     
     // Nested ifs and complex branching
-    if (x > 5 ) {
-        if (x < 15 ) {
-            if (x == 10 ) {
+    if x > 5 {
+        if x < 15 {
+            if x == 10 {
                 System.println(1);
             } else {
                 System.println(0);
@@ -18,7 +18,7 @@ fun main(): void {
     }
     
     // Else if chains
-    if (x < 5 ) {
+    if x < 5 {
         System.println(0);
     } else if (x == 10 ) {
         System.println(2);
@@ -30,8 +30,8 @@ fun main(): void {
     
     // While loop with break
     let i = 0;
-    while (i < 10 ) {
-        if (i == 3 ) {
+    while i < 10 {
+        if i == 3 {
             break;
         }
         System.println(i);
@@ -40,10 +40,10 @@ fun main(): void {
     
     // For loop with continue
     for (let j = 0; j < 5; j = j + 1 ) {
-        if (j == 1 ) {
+        if j == 1 {
             continue;
         }
-        if (j == 3 ) {
+        if j == 3 {
             continue;
         }
         System.println(j);

@@ -10,7 +10,7 @@ fun main(): void {
     pq.push(4);
     System.println(pq.length);
     System.println(pq.peek().unwrap_or(0 - 1));
-    while (pq.is_empty() == false) {
+    while pq.is_empty() == false {
         System.println(pq.pop().unwrap_or(0 - 1));
     }
     System.println(pq.pop().unwrap_or(0 - 1));

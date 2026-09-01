@@ -28,12 +28,12 @@ fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
 fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
     let line = "";
     let i = 0;
-    while (i < argc) {
-        if (i > 0) {
+    while i < argc {
+        if i > 0 {
             line = line + "|";
         }
         let p = Ffi.read_ptr(argv, i);
-        if (p == 0L) {
+        if p == 0L {
             line = line + "NULL";
         } else {
             line = line + Ffi.read_cstring(p);
@@ -56,7 +56,7 @@ class Database {
     public static fun open(path: string): Database {
         let handle: long = 0L;
         let rc = sqlite3_open(path, ref handle);
-        if (rc != 0) {
+        if rc != 0 {
             System.println("sqlite3_open('" + path + "') failed with rc=" + rc);
             return Database(0L, false);
         }
@@ -64,7 +64,7 @@ class Database {
     }
 
     public fun exec(sql: string): int {
-        if (this.is_open == false) {
+        if this.is_open == false {
             return -1;
         }
         let __errmsg: long = 0L;
@@ -73,7 +73,7 @@ class Database {
     }
 
     public fun query(sql: string): int {
-        if (this.is_open == false) {
+        if this.is_open == false {
             return -1;
         }
         let __errmsg: long = 0L;
@@ -81,7 +81,7 @@ class Database {
     }
 
     public fun close(): void {
-        if (this.is_open) {
+        if this.is_open {
             sqlite3_close(this.handle);
             this.is_open = false;
         }
@@ -93,7 +93,7 @@ fun main(): void {
     // `sample/sqlite/demo.db` only work when you launch from the Dream repo root.
     let path = "demo.db";
     let db = Database.open(path);
-    if (db.is_open == false) {
+    if db.is_open == false {
         System.println("aborting: could not open database");
         return;
     }

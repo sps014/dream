@@ -10,7 +10,7 @@ class Bucket {
 fun main(): void {
     let b = Bucket();
     let i = 0;
-    while (i < 64) {
+    while i < 64 {
         b.names.push("item" + i.to_string());
         i = i + 1;
     }

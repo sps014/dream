@@ -17,13 +17,13 @@ fun main() {
     System.print(b);
     System.print("\n");
 
-    if (o is int) { System.print("o is int\n"); }
-    if (s is string) { System.print("s is string\n"); }
-    if (o is string) { System.print("o is string\n"); } else { System.print("o not string\n"); }
+    if o is int { System.print("o is int\n"); }
+    if s is string { System.print("s is string\n"); }
+    if o is string { System.print("o is string\n"); } else { System.print("o not string\n"); }
 
     let a: object = "x";
     let c: object = a;
-    if (a == c) { System.print("same\n"); }
+    if a == c { System.print("same\n"); }
 
     System.print((7).hash_code());
     System.print("\n");

@@ -8,10 +8,10 @@ extend int : Comparable<int> {
     // Orders this value against `other`: negative when less, zero when equal, positive when greater.
     // Implementing `Comparable<int>` lets `List<int>.sort()` / `binary_search` work out of the box.
     public fun compare(other: int): int {
-        if (this < other) {
+        if this < other {
             return 0 - 1;
         }
-        if (this > other) {
+        if this > other {
             return 1;
         }
         return 0;
@@ -19,7 +19,7 @@ extend int : Comparable<int> {
 
     // Absolute value of this integer.
     public fun abs(): int {
-        if (this < 0) {
+        if this < 0 {
             return 0 - this;
         }
         return this;
@@ -27,7 +27,7 @@ extend int : Comparable<int> {
 
     // The smaller of this and `other`.
     public fun min(other: int): int {
-        if (this < other) {
+        if this < other {
             return this;
         }
         return other;
@@ -35,7 +35,7 @@ extend int : Comparable<int> {
 
     // The larger of this and `other`.
     public fun max(other: int): int {
-        if (this > other) {
+        if this > other {
             return this;
         }
         return other;
@@ -43,10 +43,10 @@ extend int : Comparable<int> {
 
     // This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: int, hi: int): int {
-        if (this < lo) {
+        if this < lo {
             return lo;
         }
-        if (this > hi) {
+        if this > hi {
             return hi;
         }
         return this;
@@ -56,7 +56,7 @@ extend int : Comparable<int> {
     public fun pow(exp: int): int {
         let result = 1;
         let i = 0;
-        while (i < exp) {
+        while i < exp {
             result = result * this;
             i = i + 1;
         }
@@ -65,10 +65,10 @@ extend int : Comparable<int> {
 
     // The sign of this value: -1, 0, or 1.
     public fun signum(): int {
-        if (this > 0) {
+        if this > 0 {
             return 1;
         }
-        if (this < 0) {
+        if this < 0 {
             return 0 - 1;
         }
         return 0;
@@ -77,28 +77,28 @@ extend int : Comparable<int> {
     // Parses a (possibly signed) decimal integer from `text`.
     public static fun parse(borrow text: string): Result<int, ParseError> {
         let n = text.length;
-        if (n == 0) {
+        if n == 0 {
             return Result.Err(ParseError.invalid("cannot parse int from empty string"));
         }
         let i = 0;
         let neg = false;
-        if (text.char_at(0) == '-') {
+        if text.char_at(0) == '-' {
             neg = true;
             i = 1;
         }
-        if (i >= n) {
+        if i >= n {
             return Result.Err(ParseError.invalid("cannot parse int: no digits"));
         }
         let result = 0;
-        while (i < n) {
+        while i < n {
             let c = text.char_at(i);
-            if ((c < '0') || (c > '9')) {
+            if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse int: invalid digit"));
             }
             result = result * 10 + ((int)c - 48);
             i = i + 1;
         }
-        if (neg == true) {
+        if neg == true {
             return Result.Ok(0 - result);
         }
         return Result.Ok(result);

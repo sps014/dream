@@ -30,12 +30,12 @@ fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
 fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
     let line = "";
     let i = 0;
-    while (i < argc) {
-        if (i > 0) {
+    while i < argc {
+        if i > 0 {
             line = line + "|";
         }
         let p = Ffi.read_ptr(argv, i);
-        if (p == 0L) {
+        if p == 0L {
             line = line + "NULL";
         } else {
             line = line + Ffi.read_cstring(p);
@@ -49,7 +49,7 @@ fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
 fun main(): void {
     let db: long = 0L;
     let rc = sqlite3_open(":memory:", ref db);
-    if (rc != 0) {
+    if rc != 0 {
         System.println("sqlite3_open failed: " + rc);
         return;
     }
@@ -58,7 +58,7 @@ fun main(): void {
     let __errmsg: long = 0L;
     let ddl = "CREATE TABLE t(x INT); INSERT INTO t VALUES (1), (2);";
     let ok = sqlite3_exec(db, ddl, ignore_row, 0L, ref __errmsg);
-    if (ok != 0) {
+    if ok != 0 {
         System.println("exec failed with rc=" + ok);
     } else {
         System.println("exec ok");

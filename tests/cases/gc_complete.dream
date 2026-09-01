@@ -59,7 +59,7 @@ fun struct_array() {
     let xs = [Node(1, no_next), Node(2, no_next), Node(3, no_next)];
     let total = 0;
     let i = 0;
-    while (i < 3) {
+    while i < 3 {
         total = total + xs[i].val;
         i = i + 1;
     }
@@ -78,7 +78,7 @@ fun nested_array() {
 fun string_builder() {
     let s = "";
     let i = 0;
-    while (i < 5) {
+    while i < 5 {
         s = s + "x" + i.to_string();
         i = i + 1;
     }
@@ -95,7 +95,7 @@ fun local_reassign() {
     let no_next: Option<Node> = Option.None;
     let n = Node(0, no_next);
     let i = 1;
-    while (i <= 4) {
+    while i <= 4 {
         n = Node(i, no_next);
         i = i + 1;
     }
@@ -115,7 +115,7 @@ fun pass_borrow(n: Node): int {
 
 fun branchy(flag: bool) {
     let no_next: Option<Node> = Option.None;
-    if (flag) {
+    if flag {
         let x = Node(1, no_next);
     } else {
         let y = Holder(Option.Some(Node(2, no_next)), "branch");
@@ -170,7 +170,7 @@ fun main() {
 
     // Warm up so the freelist/heap reach steady state, then capture the baseline.
     let w = 0;
-    while (w < 20) {
+    while w < 20 {
         stress();
         w = w + 1;
     }
@@ -179,7 +179,7 @@ fun main() {
     let base_free = Debug.free_list_head();
 
     let i = 0;
-    while (i < 100) {
+    while i < 100 {
         stress();
         i = i + 1;
     }

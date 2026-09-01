@@ -25,12 +25,12 @@ public class JsonParser {
 
     public fun skip_ws(): void {
         let going = true;
-        while (going == true) {
-            if (this.pos >= this.len()) {
+        while going == true {
+            if this.pos >= this.len() {
                 going = false;
             } else {
                 let c = this.b();
-                if ((c == 32) || (c == 10) || (c == 9) || (c == 13)) {
+                if (c == 32) || (c == 10) || (c == 9) || (c == 13) {
                     this.pos = this.pos + 1;
                 } else {
                     going = false;
@@ -50,13 +50,13 @@ public class JsonParser {
     }
 
     fun hex_nibble(c: int): int {
-        if ((c >= 48) && (c <= 57)) {
+        if (c >= 48) && (c <= 57) {
             return c - 48;
         }
-        if ((c >= 97) && (c <= 102)) {
+        if (c >= 97) && (c <= 102) {
             return c - 97 + 10;
         }
-        if ((c >= 65) && (c <= 70)) {
+        if (c >= 65) && (c <= 70) {
             return c - 65 + 10;
         }
         return 0 - 1;
@@ -65,12 +65,12 @@ public class JsonParser {
     fun read_hex4(): int {
         let cp = 0;
         let k = 0;
-        while (k < 4) {
-            if (this.pos >= this.len()) {
+        while k < 4 {
+            if this.pos >= this.len() {
                 return 0 - 1;
             }
             let h = this.hex_nibble(this.b());
-            if (h < 0) {
+            if h < 0 {
                 return 0 - 1;
             }
             cp = cp * 16 + h;
@@ -84,7 +84,7 @@ public class JsonParser {
     fun pow10(exp: int): double {
         let r = 1.0d;
         let i = 0;
-        while (i < exp) {
+        while i < exp {
             r = r * 10.0d;
             i = i + 1;
         }
@@ -95,22 +95,22 @@ public class JsonParser {
         this.pos = this.pos + 1; // opening quote
         let sb = StringBuilder();
         let going = true;
-        while (going == true) {
-            if (this.pos >= this.len()) {
+        while going == true {
+            if this.pos >= this.len() {
                 going = false;
             } else {
                 let c = this.b();
-                if (c == 34) {
+                if c == 34 {
                     this.pos = this.pos + 1;
                     going = false;
                 } else if (c == 92) {
                     this.pos = this.pos + 1;
-                    if (this.pos >= this.len()) {
+                    if this.pos >= this.len() {
                         going = false;
                     } else {
                         let e = this.b();
                         let cp = 0;
-                        if (e == 110) {
+                        if e == 110 {
                             cp = 10;
                             this.pos = this.pos + 1;
                         } else if (e == 116) {
@@ -137,14 +137,14 @@ public class JsonParser {
                         } else if (e == 117) {
                             this.pos = this.pos + 1;
                             cp = this.read_hex4();
-                            if (cp < 0) {
+                            if cp < 0 {
                                 cp = 65533;
                             } else if ((cp >= 55296) && (cp <= 56319)) {
-                                if (((this.pos + 5) < this.len()) && (this.b() == 92) && (this.b_at(this.pos + 1) == 117)) {
+                                if ((this.pos + 5) < this.len()) && (this.b() == 92) && (this.b_at(this.pos + 1) == 117) {
                                     let save = this.pos;
                                     this.pos = this.pos + 2;
                                     let lo = this.read_hex4();
-                                    if ((lo >= 56320) && (lo <= 57343)) {
+                                    if (lo >= 56320) && (lo <= 57343) {
                                         cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320);
                                     } else {
                                         this.pos = save;
@@ -161,12 +161,12 @@ public class JsonParser {
                     // Bulk-copy unescaped units until `"` or `\`.
                     let run_start = this.pos;
                     let scanning = true;
-                    while (scanning == true) {
-                        if (this.pos >= this.len()) {
+                    while scanning == true {
+                        if this.pos >= this.len() {
                             scanning = false;
                         } else {
                             let b = this.b();
-                            if ((b == 34) || (b == 92)) {
+                            if (b == 34) || (b == 92) {
                                 scanning = false;
                             } else {
                                 this.pos = this.pos + 1;
@@ -182,7 +182,7 @@ public class JsonParser {
 
     public fun parse_number(): JsonValue {
         let sign = 1.0d;
-        if ((this.pos < this.len()) && (this.b() == 45)) {
+        if (this.pos < this.len()) && (this.b() == 45) {
             sign = 0.0d - 1.0d;
             this.pos = this.pos + 1;
         } else if ((this.pos < this.len()) && (this.b() == 43)) {
@@ -190,9 +190,9 @@ public class JsonParser {
         }
 
         let value = 0.0d;
-        while (this.pos < this.len()) {
+        while this.pos < this.len() {
             let c = this.b();
-            if ((c >= 48) && (c <= 57)) {
+            if (c >= 48) && (c <= 57) {
                 value = value * 10.0d + (double)(c - 48);
                 this.pos = this.pos + 1;
             } else {
@@ -200,13 +200,13 @@ public class JsonParser {
             }
         }
 
-        if ((this.pos < this.len()) && (this.b() == 46)) {
+        if (this.pos < this.len()) && (this.b() == 46) {
             this.pos = this.pos + 1;
             let frac = 0.0d;
             let frac_digits = 0;
-            while (this.pos < this.len()) {
+            while this.pos < this.len() {
                 let c = this.b();
-                if ((c >= 48) && (c <= 57)) {
+                if (c >= 48) && (c <= 57) {
                     frac = frac * 10.0d + (double)(c - 48);
                     frac_digits = frac_digits + 1;
                     this.pos = this.pos + 1;
@@ -214,19 +214,19 @@ public class JsonParser {
                     break;
                 }
             }
-            if (frac_digits > 0) {
+            if frac_digits > 0 {
                 value = value + frac / this.pow10(frac_digits);
             }
         }
 
-        if (this.pos < this.len()) {
+        if this.pos < this.len() {
             let ec = this.b();
-            if ((ec == 101) || (ec == 69)) {
+            if (ec == 101) || (ec == 69) {
                 this.pos = this.pos + 1;
                 let esign = 1;
-                if (this.pos < this.len()) {
+                if this.pos < this.len() {
                     let s = this.b();
-                    if (s == 45) {
+                    if s == 45 {
                         esign = 0 - 1;
                         this.pos = this.pos + 1;
                     } else if (s == 43) {
@@ -234,16 +234,16 @@ public class JsonParser {
                     }
                 }
                 let exp = 0;
-                while (this.pos < this.len()) {
+                while this.pos < this.len() {
                     let c = this.b();
-                    if ((c >= 48) && (c <= 57)) {
+                    if (c >= 48) && (c <= 57) {
                         exp = exp * 10 + (c - 48);
                         this.pos = this.pos + 1;
                     } else {
                         break;
                     }
                 }
-                if (esign > 0) {
+                if esign > 0 {
                     value = value * this.pow10(exp);
                 } else {
                     value = value / this.pow10(exp);
@@ -258,21 +258,21 @@ public class JsonParser {
         let result = JsonValue.array();
         this.pos = this.pos + 1; // '['
         this.skip_ws();
-        if (this.pos < this.len()) {
-            if (this.b() == 93) {
+        if this.pos < this.len() {
+            if this.b() == 93 {
                 this.pos = this.pos + 1;
                 return result;
             }
         }
         let going = true;
-        while (going == true) {
+        while going == true {
             let element = this.parse_value();
             result.push(element);
             this.skip_ws();
-            if (this.pos >= this.len()) {
+            if this.pos >= this.len() {
                 going = false;
             } else {
-                if (this.b() == 44) {
+                if this.b() == 44 {
                     this.pos = this.pos + 1;
                 } else {
                     this.pos = this.pos + 1; // ']'
@@ -287,29 +287,29 @@ public class JsonParser {
         let result = JsonValue.dict();
         this.pos = this.pos + 1; // '{'
         this.skip_ws();
-        if (this.pos < this.len()) {
-            if (this.b() == 125) {
+        if this.pos < this.len() {
+            if this.b() == 125 {
                 this.pos = this.pos + 1;
                 return result;
             }
         }
         let going = true;
-        while (going == true) {
+        while going == true {
             this.skip_ws();
             let key = this.parse_string();
             this.skip_ws();
-            if (this.pos < this.len()) {
-                if (this.b() == 58) {
+            if this.pos < this.len() {
+                if this.b() == 58 {
                     this.pos = this.pos + 1;
                 }
             }
             let value = this.parse_value();
             result.set(key, value);
             this.skip_ws();
-            if (this.pos >= this.len()) {
+            if this.pos >= this.len() {
                 going = false;
             } else {
-                if (this.b() == 44) {
+                if this.b() == 44 {
                     this.pos = this.pos + 1;
                 } else {
                     this.pos = this.pos + 1; // '}'
@@ -322,26 +322,26 @@ public class JsonParser {
 
     public fun parse_value(): JsonValue {
         this.skip_ws();
-        if (this.pos >= this.len()) {
+        if this.pos >= this.len() {
             return JsonValue.none();
         }
         let c = this.b();
-        if (c == 123) {
+        if c == 123 {
             return this.parse_object();
         }
-        if (c == 91) {
+        if c == 91 {
             return this.parse_array();
         }
-        if (c == 34) {
+        if c == 34 {
             return JsonValue.from_string(this.parse_string());
         }
-        if (c == 116) {
+        if c == 116 {
             return this.keyword(4, JsonValue.boolean(true));
         }
-        if (c == 102) {
+        if c == 102 {
             return this.keyword(5, JsonValue.boolean(false));
         }
-        if (c == 110) {
+        if c == 110 {
             return this.keyword(4, JsonValue.none());
         }
         return this.parse_number();
@@ -349,7 +349,7 @@ public class JsonParser {
 
     public fun try_consume(code: int): bool {
         this.skip_ws();
-        if ((this.pos < this.len()) && (this.b() == code)) {
+        if (this.pos < this.len()) && (this.b() == code) {
             this.pos = this.pos + 1;
             return true;
         }
@@ -358,7 +358,7 @@ public class JsonParser {
 
     public fun try_null(): bool {
         this.skip_ws();
-        if ((this.pos < this.len()) && (this.b() == 110)) {
+        if (this.pos < this.len()) && (this.b() == 110) {
             this.pos = this.pos + 4;
             return true;
         }
@@ -367,19 +367,19 @@ public class JsonParser {
 
     public fun parse_bool(): bool {
         this.skip_ws();
-        if (this.pos >= this.len()) {
+        if this.pos >= this.len() {
             return false;
         }
         let c = this.b();
-        if (c == 116) {
+        if c == 116 {
             this.pos = this.pos + 4;
             return true;
         }
-        if (c == 102) {
+        if c == 102 {
             this.pos = this.pos + 5;
             return false;
         }
-        if (c == 110) {
+        if c == 110 {
             this.pos = this.pos + 4;
             return false;
         }
@@ -387,30 +387,30 @@ public class JsonParser {
     }
 
     fun consume_number_tail(): void {
-        if ((this.pos < this.len()) && (this.b() == 46)) {
+        if (this.pos < this.len()) && (this.b() == 46) {
             this.pos = this.pos + 1;
-            while (this.pos < this.len()) {
+            while this.pos < this.len() {
                 let c = this.b();
-                if ((c >= 48) && (c <= 57)) {
+                if (c >= 48) && (c <= 57) {
                     this.pos = this.pos + 1;
                 } else {
                     break;
                 }
             }
         }
-        if (this.pos < this.len()) {
+        if this.pos < this.len() {
             let ec = this.b();
-            if ((ec == 101) || (ec == 69)) {
+            if (ec == 101) || (ec == 69) {
                 this.pos = this.pos + 1;
-                if (this.pos < this.len()) {
+                if this.pos < this.len() {
                     let s = this.b();
-                    if ((s == 45) || (s == 43)) {
+                    if (s == 45) || (s == 43) {
                         this.pos = this.pos + 1;
                     }
                 }
-                while (this.pos < this.len()) {
+                while this.pos < this.len() {
                     let c = this.b();
-                    if ((c >= 48) && (c <= 57)) {
+                    if (c >= 48) && (c <= 57) {
                         this.pos = this.pos + 1;
                     } else {
                         break;
@@ -423,16 +423,16 @@ public class JsonParser {
     public fun parse_int(): int {
         this.skip_ws();
         let sign = 1;
-        if ((this.pos < this.len()) && (this.b() == 45)) {
+        if (this.pos < this.len()) && (this.b() == 45) {
             sign = 0 - 1;
             this.pos = this.pos + 1;
         } else if ((this.pos < this.len()) && (this.b() == 43)) {
             this.pos = this.pos + 1;
         }
         let value = 0;
-        while (this.pos < this.len()) {
+        while this.pos < this.len() {
             let c = this.b();
-            if ((c >= 48) && (c <= 57)) {
+            if (c >= 48) && (c <= 57) {
                 value = value * 10 + (c - 48);
                 this.pos = this.pos + 1;
             } else {
@@ -446,29 +446,29 @@ public class JsonParser {
     public fun parse_double(): double {
         this.skip_ws();
         let sign = 1.0d;
-        if ((this.pos < this.len()) && (this.b() == 45)) {
+        if (this.pos < this.len()) && (this.b() == 45) {
             sign = 0.0d - 1.0d;
             this.pos = this.pos + 1;
         } else if ((this.pos < this.len()) && (this.b() == 43)) {
             this.pos = this.pos + 1;
         }
         let value = 0.0d;
-        while (this.pos < this.len()) {
+        while this.pos < this.len() {
             let c = this.b();
-            if ((c >= 48) && (c <= 57)) {
+            if (c >= 48) && (c <= 57) {
                 value = value * 10.0d + (double)(c - 48);
                 this.pos = this.pos + 1;
             } else {
                 break;
             }
         }
-        if ((this.pos < this.len()) && (this.b() == 46)) {
+        if (this.pos < this.len()) && (this.b() == 46) {
             this.pos = this.pos + 1;
             let frac = 0.0d;
             let frac_digits = 0;
-            while (this.pos < this.len()) {
+            while this.pos < this.len() {
                 let c = this.b();
-                if ((c >= 48) && (c <= 57)) {
+                if (c >= 48) && (c <= 57) {
                     frac = frac * 10.0d + (double)(c - 48);
                     frac_digits = frac_digits + 1;
                     this.pos = this.pos + 1;
@@ -476,18 +476,18 @@ public class JsonParser {
                     break;
                 }
             }
-            if (frac_digits > 0) {
+            if frac_digits > 0 {
                 value = value + frac / this.pow10(frac_digits);
             }
         }
-        if (this.pos < this.len()) {
+        if this.pos < this.len() {
             let ec = this.b();
-            if ((ec == 101) || (ec == 69)) {
+            if (ec == 101) || (ec == 69) {
                 this.pos = this.pos + 1;
                 let esign = 1;
-                if (this.pos < this.len()) {
+                if this.pos < this.len() {
                     let s = this.b();
-                    if (s == 45) {
+                    if s == 45 {
                         esign = 0 - 1;
                         this.pos = this.pos + 1;
                     } else if (s == 43) {
@@ -495,16 +495,16 @@ public class JsonParser {
                     }
                 }
                 let exp = 0;
-                while (this.pos < this.len()) {
+                while this.pos < this.len() {
                     let c = this.b();
-                    if ((c >= 48) && (c <= 57)) {
+                    if (c >= 48) && (c <= 57) {
                         exp = exp * 10 + (c - 48);
                         this.pos = this.pos + 1;
                     } else {
                         break;
                     }
                 }
-                if (esign > 0) {
+                if esign > 0 {
                     value = value * this.pow10(exp);
                 } else {
                     value = value / this.pow10(exp);
@@ -518,36 +518,36 @@ public class JsonParser {
     public fun match_key(borrow key: string): bool {
         this.skip_ws();
         let saved = this.pos;
-        if ((this.pos >= this.len()) || (this.b() != 34)) {
+        if (this.pos >= this.len()) || (this.b() != 34) {
             return false;
         }
         this.pos = this.pos + 1;
         let i = 0;
         let kn = key.length;
-        while (i < kn) {
-            if (this.pos >= this.len()) {
+        while i < kn {
+            if this.pos >= this.len() {
                 this.pos = saved;
                 return false;
             }
             let c = this.b();
-            if (c == 92) {
+            if c == 92 {
                 this.pos = saved;
                 return false;
             }
-            if (c != key.char_at(i).to_int()) {
+            if c != key.char_at(i).to_int() {
                 this.pos = saved;
                 return false;
             }
             this.pos = this.pos + 1;
             i = i + 1;
         }
-        if ((this.pos >= this.len()) || (this.b() != 34)) {
+        if (this.pos >= this.len()) || (this.b() != 34) {
             this.pos = saved;
             return false;
         }
         this.pos = this.pos + 1;
         this.skip_ws();
-        if ((this.pos < this.len()) && (this.b() == 58)) {
+        if (this.pos < this.len()) && (this.b() == 58) {
             this.pos = this.pos + 1;
             return true;
         }
@@ -557,21 +557,21 @@ public class JsonParser {
 
     public fun skip_value(): void {
         this.skip_ws();
-        if (this.pos >= this.len()) {
+        if this.pos >= this.len() {
             return;
         }
         let c = this.b();
-        if (c == 123) {
+        if c == 123 {
             this.pos = this.pos + 1;
             this.skip_ws();
-            if ((this.pos < this.len()) && (this.b() == 125)) {
+            if (this.pos < this.len()) && (this.b() == 125) {
                 this.pos = this.pos + 1;
                 return;
             }
             let going = true;
-            while (going) {
+            while going {
                 this.skip_ws();
-                if (this.pos >= this.len()) {
+                if this.pos >= this.len() {
                     going = false;
                 } else if (this.b() == 125) {
                     this.pos = this.pos + 1;
@@ -579,29 +579,29 @@ public class JsonParser {
                 } else {
                     this.parse_string();
                     this.skip_ws();
-                    if ((this.pos < this.len()) && (this.b() == 58)) {
+                    if (this.pos < this.len()) && (this.b() == 58) {
                         this.pos = this.pos + 1;
                     }
                     this.skip_value();
                     this.skip_ws();
-                    if ((this.pos < this.len()) && (this.b() == 44)) {
+                    if (this.pos < this.len()) && (this.b() == 44) {
                         this.pos = this.pos + 1;
                     }
                 }
             }
             return;
         }
-        if (c == 91) {
+        if c == 91 {
             this.pos = this.pos + 1;
             this.skip_ws();
-            if ((this.pos < this.len()) && (this.b() == 93)) {
+            if (this.pos < this.len()) && (this.b() == 93) {
                 this.pos = this.pos + 1;
                 return;
             }
             let going = true;
-            while (going) {
+            while going {
                 this.skip_ws();
-                if (this.pos >= this.len()) {
+                if this.pos >= this.len() {
                     going = false;
                 } else if (this.b() == 93) {
                     this.pos = this.pos + 1;
@@ -609,26 +609,26 @@ public class JsonParser {
                 } else {
                     this.skip_value();
                     this.skip_ws();
-                    if ((this.pos < this.len()) && (this.b() == 44)) {
+                    if (this.pos < this.len()) && (this.b() == 44) {
                         this.pos = this.pos + 1;
                     }
                 }
             }
             return;
         }
-        if (c == 34) {
+        if c == 34 {
             this.parse_string();
             return;
         }
-        if (c == 116) {
+        if c == 116 {
             this.pos = this.pos + 4;
             return;
         }
-        if (c == 102) {
+        if c == 102 {
             this.pos = this.pos + 5;
             return;
         }
-        if (c == 110) {
+        if c == 110 {
             this.pos = this.pos + 4;
             return;
         }

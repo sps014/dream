@@ -21,7 +21,7 @@ fun main(): void {
 
     let base = Debug.live_objects();
     let i = 0;
-    while (i < 50) {
+    while i < 50 {
         once(i);
         i = i + 1;
     }

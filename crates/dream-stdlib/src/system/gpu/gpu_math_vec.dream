@@ -240,13 +240,13 @@ extend GpuMath {
     // Unit `GpuVec2`; near-zero input yields `(1, 0)` on CPU (WGSL `normalize`).
     public static fun normalize(v: GpuVec2): GpuVec2 {
         let len = GpuMath.length(v);
-        if (len < 0.000001) { return GpuVec2.of(1.0, 0.0); }
+        if len < 0.000001 { return GpuVec2.of(1.0, 0.0); }
         return v / len;
     }
     // Unit `GpuVec4`; near-zero input yields `(0, 0, 0, 1)` on CPU (WGSL `normalize`).
     public static fun normalize(v: GpuVec4): GpuVec4 {
         let len = GpuMath.length(v);
-        if (len < 0.000001) { return GpuVec4.of(0.0, 0.0, 0.0, 1.0); }
+        if len < 0.000001 { return GpuVec4.of(0.0, 0.0, 0.0, 1.0); }
         return v / len;
     }
 

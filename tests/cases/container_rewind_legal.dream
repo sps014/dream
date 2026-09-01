@@ -12,7 +12,7 @@ class Cache {
         this.count = 0;
     }
     public fun add(v: string): void {
-        if (this.count >= this.entries.length) { return; }
+        if this.count >= this.entries.length { return; }
         this.entries[this.count] = v;
         this.count = this.count + 1;
     }

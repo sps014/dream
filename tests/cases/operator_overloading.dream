@@ -1,4 +1,4 @@
-// Exercises `@operator`/`@cast`-driven overloading: binary/unary arithmetic, user `==`/`!=`,
+// Exercises operator/cast overloading: binary/unary arithmetic, user `==`/`!=`,
 // `Comparable`-backed ordering, and explicit/implicit user-defined casts.
 
 import system;
@@ -11,29 +11,24 @@ class Vector2 {
         this.y = y;
     }
 
-    @operator("+")
-    fun add(other: Vector2): Vector2 {
+        fun operator +(other: Vector2): Vector2 {
         return Vector2(this.x + other.x, this.y + other.y);
     }
 
-    @operator("-")
-    fun sub(other: Vector2): Vector2 {
+        fun operator -(other: Vector2): Vector2 {
         return Vector2(this.x - other.x, this.y - other.y);
     }
 
     // Same symbol as `sub` above; zero parameters selects the unary form instead.
-    @operator("-")
-    fun negate(): Vector2 {
+        fun operator -(): Vector2 {
         return Vector2(-this.x, -this.y);
     }
 
-    @operator("==")
-    fun equalsVec(other: Vector2): bool {
+        fun operator ==(other: Vector2): bool {
         return this.x == other.x && this.y == other.y;
     }
 
-    @cast("explicit")
-    fun toDisplay(): string {
+        fun explicit(): string {
         return "(" + this.x + ", " + this.y + ")";
     }
 }
@@ -49,8 +44,7 @@ class Money : Comparable<Money> {
         return this.cents - other.cents;
     }
 
-    @cast("implicit")
-    fun toCents(): int {
+        fun implicit(): int {
         return this.cents;
     }
 }

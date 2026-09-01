@@ -116,7 +116,7 @@ public class WebView {
     @native
     public static fun create(title: string, width: int, height: int): Result<WebView, WebViewError> {
         let id = WebView.host_create(title, width, height);
-        if (id < 0) {
+        if id < 0 {
             return Result.Err(WebViewError.unavailable("WebView.create failed"));
         }
         return Result.Ok(WebView(id));
@@ -125,7 +125,7 @@ public class WebView {
     @native
     public fun load_url(url: string): Result<bool, WebViewError> {
         let code = WebView.host_load_url(this.id, url);
-        if (code != 0) {
+        if code != 0 {
             return Result.Err(WebViewError.failed("load_url failed"));
         }
         return Result.Ok(true);
@@ -134,7 +134,7 @@ public class WebView {
     @native
     public fun load_html(html: string): Result<bool, WebViewError> {
         let code = WebView.host_load_html(this.id, html);
-        if (code != 0) {
+        if code != 0 {
             return Result.Err(WebViewError.failed("load_html failed"));
         }
         return Result.Ok(true);
@@ -143,7 +143,7 @@ public class WebView {
     @native
     public fun load_file(path: string): Result<bool, WebViewError> {
         let code = WebView.host_load_file(this.id, path);
-        if (code != 0) {
+        if code != 0 {
             return Result.Err(WebViewError.failed("load_file failed"));
         }
         return Result.Ok(true);
@@ -152,14 +152,14 @@ public class WebView {
     fun upsert_on(channel: string, fire: fun(string): void): void {
         let found = 0 - 1;
         let i = 0;
-        while (i < this._on.length) {
+        while i < this._on.length {
             let entry = this._on.get(i);
-            if (entry.channel == channel) {
+            if entry.channel == channel {
                 found = i;
             }
             i = i + 1;
         }
-        if (found >= 0) {
+        if found >= 0 {
             this._on.set(found, WebViewOnEntry(channel, fire));
         } else {
             this._on.push(WebViewOnEntry(channel, fire));
@@ -169,14 +169,14 @@ public class WebView {
     fun upsert_serve(channel: string, fire: fun(string): string): void {
         let found = 0 - 1;
         let i = 0;
-        while (i < this._serve.length) {
+        while i < this._serve.length {
             let entry = this._serve.get(i);
-            if (entry.channel == channel) {
+            if entry.channel == channel {
                 found = i;
             }
             i = i + 1;
         }
-        if (found >= 0) {
+        if found >= 0 {
             this._serve.set(found, WebViewServeEntry(channel, fire));
         } else {
             this._serve.push(WebViewServeEntry(channel, fire));
@@ -186,14 +186,14 @@ public class WebView {
     fun upsert_on_bytes(channel: string, fire: fun(byte[]): void): void {
         let found = 0 - 1;
         let i = 0;
-        while (i < this._on_bytes.length) {
+        while i < this._on_bytes.length {
             let entry = this._on_bytes.get(i);
-            if (entry.channel == channel) {
+            if entry.channel == channel {
                 found = i;
             }
             i = i + 1;
         }
-        if (found >= 0) {
+        if found >= 0 {
             this._on_bytes.set(found, WebViewOnBytesEntry(channel, fire));
         } else {
             this._on_bytes.push(WebViewOnBytesEntry(channel, fire));
@@ -203,14 +203,14 @@ public class WebView {
     fun upsert_serve_bytes(channel: string, fire: fun(byte[]): byte[]): void {
         let found = 0 - 1;
         let i = 0;
-        while (i < this._serve_bytes.length) {
+        while i < this._serve_bytes.length {
             let entry = this._serve_bytes.get(i);
-            if (entry.channel == channel) {
+            if entry.channel == channel {
                 found = i;
             }
             i = i + 1;
         }
-        if (found >= 0) {
+        if found >= 0 {
             this._serve_bytes.set(found, WebViewServeBytesEntry(channel, fire));
         } else {
             this._serve_bytes.push(WebViewServeBytesEntry(channel, fire));
@@ -274,23 +274,23 @@ public class WebView {
     @native
     public fun on_raw<T : unmanaged>(channel: string, handler: fun(T[]): void): void {
         this.upsert_on_bytes(channel, (body: byte[]) => {
-            if (body.length == 0) {
+            if body.length == 0 {
                 handler(Buffer.alloc<T>(0));
                 return;
             }
             let scratch = Buffer.alloc<T>(1);
             let stride = Bytes.of(scratch[0]).length;
-            if (stride <= 0) {
+            if stride <= 0 {
                 handler(Buffer.alloc<T>(0));
                 return;
             }
             let count = body.length / stride;
             let out = Buffer.alloc<T>(count);
             let i = 0;
-            while (i < count) {
+            while i < count {
                 let slice = Buffer.alloc<byte>(stride);
                 let j = 0;
-                while (j < stride) {
+                while j < stride {
                     slice[j] = body[i * stride + j];
                     j = j + 1;
                 }
@@ -308,17 +308,17 @@ public class WebView {
     ): void {
         this.upsert_serve_bytes(channel, (body: byte[]) => {
             let input = Buffer.alloc<TIn>(0);
-            if (body.length > 0) {
+            if body.length > 0 {
                 let scratch = Buffer.alloc<TIn>(1);
                 let stride = Bytes.of(scratch[0]).length;
-                if (stride > 0) {
+                if stride > 0 {
                     let count = body.length / stride;
                     input = Buffer.alloc<TIn>(count);
                     let i = 0;
-                    while (i < count) {
+                    while i < count {
                         let slice = Buffer.alloc<byte>(stride);
                         let j = 0;
-                        while (j < stride) {
+                        while j < stride {
                             slice[j] = body[i * stride + j];
                             j = j + 1;
                         }
@@ -328,16 +328,16 @@ public class WebView {
                 }
             }
             let values = handler(input);
-            if (values.length == 0) {
+            if values.length == 0 {
                 return Buffer.alloc<byte>(0);
             }
             let stride_out = Bytes.of(values[0]).length;
             let out = Buffer.alloc<byte>(values.length * stride_out);
             let i = 0;
-            while (i < values.length) {
+            while i < values.length {
                 let eb = Bytes.of(values[i]);
                 let j = 0;
-                while (j < stride_out) {
+                while j < stride_out {
                     out[i * stride_out + j] = eb[j];
                     j = j + 1;
                 }
@@ -354,17 +354,17 @@ public class WebView {
 
     @native
     public static fun emit_raw_on<T : unmanaged>(id: int, channel: string, values: T[]): void {
-        if (values.length == 0) {
+        if values.length == 0 {
             WebView.emit_bytes_on(id, channel, Buffer.alloc<byte>(0));
             return;
         }
         let stride = Bytes.of(values[0]).length;
         let out = Buffer.alloc<byte>(values.length * stride);
         let i = 0;
-        while (i < values.length) {
+        while i < values.length {
             let eb = Bytes.of(values[i]);
             let j = 0;
-            while (j < stride) {
+            while j < stride {
                 out[i * stride + j] = eb[j];
                 j = j + 1;
             }
@@ -376,12 +376,12 @@ public class WebView {
     @native
     public async fun run(): void {
         // `host_tick` pumps AppKit (~16ms) and returns `closed\\n` + IPC poll payload.
-        while (true) {
+        while true {
             let raw = WebView.host_tick(this.id);
             let reader = WebViewWireReader(raw);
             let closed = int.parse(reader.read_line()).unwrap_or(1);
             this.dispatch_from(reader);
-            if (closed != 0) {
+            if closed != 0 {
                 return;
             }
             await Time.delay(0);
@@ -404,7 +404,7 @@ public class WebView {
         let reader = WebViewWireReader(raw);
         let code = int.parse(reader.read_line()).unwrap_or(1);
         let payload = Encoding.utf8_decode(reader.read_remaining_bytes());
-        if (code != 0) {
+        if code != 0 {
             return Result.Err(WebViewError.failed(payload));
         }
         return Result.Ok(payload);
@@ -436,18 +436,18 @@ public class WebView {
         let count = int.parse(reader.read_line()).unwrap_or(0);
         let i = 0;
         let prefix = "__dream_webview_parse__:";
-        while (i < count) {
+        while i < count {
             let kind = int.parse(reader.read_line()).unwrap_or(0);
             let reply_id = int.parse(reader.read_line()).unwrap_or(0);
             let channel = reader.read_line();
             let body_len = int.parse(reader.read_line()).unwrap_or(0);
             let body_bytes = reader.read_bytes(body_len);
-            if (kind == 0) {
+            if kind == 0 {
                 let body = Encoding.utf8_decode(body_bytes);
                 let hi = 0;
-                while (hi < this._on.length) {
+                while hi < this._on.length {
                     let entry = this._on.get(hi);
-                    if (entry.channel == channel) {
+                    if entry.channel == channel {
                         WebView.run_on(entry.fire, body);
                         hi = this._on.length;
                     } else {
@@ -455,15 +455,15 @@ public class WebView {
                     }
                 }
             }
-            if (kind == 1) {
+            if kind == 1 {
                 let body = Encoding.utf8_decode(body_bytes);
                 let found = false;
                 let hi = 0;
-                while (hi < this._serve.length) {
+                while hi < this._serve.length {
                     let entry = this._serve.get(hi);
-                    if (entry.channel == channel) {
+                    if entry.channel == channel {
                         let out = WebView.run_serve(entry.fire, body);
-                        if (out.starts_with(prefix)) {
+                        if out.starts_with(prefix) {
                             let msg = out.substring(prefix.length, out.length);
                             WebView.host_reply_err(this.id, reply_id, msg);
                         } else {
@@ -475,15 +475,15 @@ public class WebView {
                         hi = hi + 1;
                     }
                 }
-                if (found == false) {
+                if found == false {
                     WebView.host_reply_err(this.id, reply_id, "no handler for channel: " + channel);
                 }
             }
-            if (kind == 2) {
+            if kind == 2 {
                 let hi = 0;
-                while (hi < this._on_bytes.length) {
+                while hi < this._on_bytes.length {
                     let entry = this._on_bytes.get(hi);
-                    if (entry.channel == channel) {
+                    if entry.channel == channel {
                         WebView.run_on_bytes(entry.fire, body_bytes);
                         hi = this._on_bytes.length;
                     } else {
@@ -491,12 +491,12 @@ public class WebView {
                     }
                 }
             }
-            if (kind == 3) {
+            if kind == 3 {
                 let found = false;
                 let hi = 0;
-                while (hi < this._serve_bytes.length) {
+                while hi < this._serve_bytes.length {
                     let entry = this._serve_bytes.get(hi);
-                    if (entry.channel == channel) {
+                    if entry.channel == channel {
                         let out = WebView.run_serve_bytes(entry.fire, body_bytes);
                         WebView.host_reply_bytes(this.id, reply_id, out);
                         found = true;
@@ -505,7 +505,7 @@ public class WebView {
                         hi = hi + 1;
                     }
                 }
-                if (found == false) {
+                if found == false {
                     WebView.host_reply_err(this.id, reply_id, "no handler for channel: " + channel);
                 }
             }

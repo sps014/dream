@@ -93,6 +93,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             visibility,
             is_static,
             is_extern: _,
+            is_override: _,
         } = self.parse_function_modifiers();
 
         // Optional receiver-mode qualifier (`[borrow | unique] fun/get/set ...`) — same shape as
@@ -153,9 +154,50 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         self.match_token(TokenKind::FunToken);
-        let function_name = self.match_token(TokenKind::IdentifierToken);
-        let (generic_parameters, generic_constraints) = self.take_generic_params();
-        let params = self.parse_formal_parameters()?;
+        let mut indexer_kind = None;
+        let function_name;
+        let params;
+        let generic_parameters;
+        let generic_constraints;
+        if self.current_token().kind == TokenKind::IdentifierToken
+            && self.current_token().text == "this"
+            && self.peek_token(1).kind == TokenKind::OpenBracketToken
+        {
+            let this_tok = self.match_token(TokenKind::IdentifierToken);
+            self.match_token(TokenKind::OpenBracketToken);
+            let mut ps = self.parse_delimited_list(TokenKind::CloseBracketToken, |p| {
+                p.parse_simple_named_parameter()
+            })?;
+            if self.current_token().kind == TokenKind::EqualToken {
+                self.match_token(TokenKind::EqualToken);
+                let value_name = self.match_token(TokenKind::IdentifierToken);
+                self.match_token(TokenKind::ColonToken);
+                let value_ty = self.parse_type()?;
+                ps.push(crate::nodes::function::ParameterNode::new(
+                    value_name, value_ty,
+                ));
+                indexer_kind = Some(crate::nodes::function::IndexerKind::Set);
+            } else {
+                indexer_kind = Some(crate::nodes::function::IndexerKind::Get);
+            }
+            function_name = crate::token::syntax_token::SyntaxToken::new(
+                TokenKind::IdentifierToken,
+                this_tok.position,
+                match indexer_kind {
+                    Some(crate::nodes::function::IndexerKind::Set) => "__set_indexer".to_string(),
+                    _ => "__get_indexer".to_string(),
+                },
+            );
+            params = ps;
+            generic_parameters = None;
+            generic_constraints = Vec::new();
+        } else {
+            function_name = self.match_token(TokenKind::IdentifierToken);
+            let (gp, gc) = self.take_generic_params();
+            generic_parameters = gp;
+            generic_constraints = gc;
+            params = self.parse_formal_parameters()?;
+        }
         let mut return_type: Option<Type> = None;
         if self.current_token().kind == TokenKind::ColonToken {
             self.match_token(TokenKind::ColonToken);
@@ -186,6 +228,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.is_default_impl = is_default;
         node.generic_constraints = generic_constraints;
         node.receiver_mode = receiver_mode;
+        node.indexer_kind = indexer_kind;
         Ok(node)
     }
 

@@ -11,7 +11,7 @@ public class IntStack {
         this.count = 0;
     }
     public fun push(v: int): void {
-        if (this.count == this.items.length) { return; }
+        if this.count == this.items.length { return; }
         this.items[this.count] = v;
         this.count = this.count + 1;
     }

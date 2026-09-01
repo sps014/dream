@@ -11,6 +11,7 @@ pub(crate) struct FunctionModifiers {
     pub(crate) visibility: Visibility,
     pub(crate) is_static: bool,
     pub(crate) is_extern: bool,
+    pub(crate) is_override: bool,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
@@ -19,51 +20,36 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// exactly the modifier tokens, leaving the cursor on the `fun`/constructor/`del` token.
     pub(crate) fn parse_function_modifiers(&mut self) -> FunctionModifiers {
         let mut m = FunctionModifiers::default();
-
-        // `async` may appear before or after `public`/`internal` (e.g. `async fun`, `public async
-        // fun`, `async public fun`). Calling such a function eagerly starts a task and yields
-        // `Future<T>`.
-        if self.current_token().kind == TokenKind::AsyncToken {
-            self.match_token(TokenKind::AsyncToken);
-            m.is_async = true;
-        }
-
-        self.try_consume_visibility(&mut m.visibility);
-
-        if self.current_token().kind == TokenKind::AsyncToken {
-            self.match_token(TokenKind::AsyncToken);
-            m.is_async = true;
-        }
-
-        // `static fun ...`: a method with no implicit `this`, called as `Type.method(...)`.
-        if self.current_token().kind == TokenKind::StaticToken {
-            self.match_token(TokenKind::StaticToken);
-            m.is_static = true;
-        }
-
-        if self.current_token().kind == TokenKind::ExternToken {
-            self.match_token(TokenKind::ExternToken);
-            m.is_extern = true;
-            if m.visibility.is_public() {
-                self.diagnostics.report_error(
-                    "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
-                    Some(self.current_token().position),
-                );
+        loop {
+            if self.try_consume_visibility(&mut m.visibility) {
+                continue;
+            }
+            match self.current_token().kind {
+                TokenKind::AsyncToken => {
+                    self.match_token(TokenKind::AsyncToken);
+                    m.is_async = true;
+                }
+                TokenKind::OverrideToken => {
+                    self.match_token(TokenKind::OverrideToken);
+                    m.is_override = true;
+                }
+                TokenKind::StaticToken => {
+                    self.match_token(TokenKind::StaticToken);
+                    m.is_static = true;
+                }
+                TokenKind::ExternToken => {
+                    self.match_token(TokenKind::ExternToken);
+                    m.is_extern = true;
+                    if m.visibility.is_public() {
+                        self.diagnostics.report_error(
+                            "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
+                            Some(self.current_token().position),
+                        );
+                    }
+                }
+                _ => break,
             }
         }
-
-        // allow `static` again in case order was reversed
-        if self.current_token().kind == TokenKind::StaticToken {
-            self.match_token(TokenKind::StaticToken);
-            m.is_static = true;
-        }
-
-        // `static async fun ...`: allow `async` to follow `static` as well as precede it.
-        if self.current_token().kind == TokenKind::AsyncToken {
-            self.match_token(TokenKind::AsyncToken);
-            m.is_async = true;
-        }
-
         m
     }
 
@@ -87,6 +73,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             visibility,
             is_static,
             is_extern,
+            is_override,
         } = self.parse_function_modifiers();
 
         // Optional receiver-mode qualifier immediately before `fun` (`[borrow | unique] fun ...`):
@@ -147,9 +134,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 visibility
             };
-            return Ok(FunctionNode::new(
+            let mut node = FunctionNode::new(
                 attributes, ctor_name, None, None, params, block, ctor_vis,
-            ));
+            );
+            node.is_override = is_override;
+            return Ok(node);
         }
 
         // TypeScript-style property accessor: `get name(): T { ... }` / `set name(value: T) { ... }`.
@@ -186,17 +175,77 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_static = is_static;
             node.is_async = is_async;
             node.accessor = Some(accessor_kind);
+            node.is_override = is_override;
             return Ok(node);
         }
 
         //eat the fun keyword
         self.match_token(TokenKind::FunToken);
-        let mut function_name = self.match_member_name();
-        Self::splice_leading_trivia(&mut function_name, first_trivia);
 
-        let (generic_parameters, generic_constraints) = self.take_generic_params();
+        let mut operator_symbol: Option<String> = None;
+        let mut indexer_kind: Option<crate::nodes::function::IndexerKind> = None;
+        let mut function_name;
+        let mut params;
+        let mut generic_parameters = None;
+        let mut generic_constraints = Vec::new();
+        if self.current_token().kind == TokenKind::OperatorToken {
+            self.match_token(TokenKind::OperatorToken);
+            let op = self.current_token();
+            operator_symbol = Some(op.text.clone());
+            let op_pos = op.position;
+            self.next_token();
+            params = self.parse_formal_parameters()?;
+            function_name = crate::token::syntax_token::SyntaxToken::new(
+                TokenKind::IdentifierToken,
+                op_pos,
+                operator_method_ident(operator_symbol.as_deref().unwrap_or(""), params.len()),
+            );
+            Self::splice_leading_trivia(&mut function_name, first_trivia);
+        } else if self.current_token().kind == TokenKind::IdentifierToken
+            && self.current_token().text == "this"
+            && self.peek_token(1).kind == TokenKind::OpenBracketToken
+        {
+            let this_tok = self.match_token(TokenKind::IdentifierToken);
+            self.match_token(TokenKind::OpenBracketToken);
+            params = self.parse_delimited_list(TokenKind::CloseBracketToken, |p| {
+                p.parse_simple_named_parameter()
+            })?;
+            if self.current_token().kind == TokenKind::EqualToken {
+                self.match_token(TokenKind::EqualToken);
+                let value_name = self.match_token(TokenKind::IdentifierToken);
+                self.match_token(TokenKind::ColonToken);
+                let value_ty = self.parse_type()?;
+                params.push(ParameterNode::new(value_name, value_ty));
+                indexer_kind = Some(crate::nodes::function::IndexerKind::Set);
+            } else {
+                indexer_kind = Some(crate::nodes::function::IndexerKind::Get);
+            }
+            function_name = crate::token::syntax_token::SyntaxToken::new(
+                TokenKind::IdentifierToken,
+                this_tok.position,
+                match indexer_kind {
+                    Some(crate::nodes::function::IndexerKind::Set) => "__set_indexer".to_string(),
+                    _ => "__get_indexer".to_string(),
+                },
+            );
+            Self::splice_leading_trivia(&mut function_name, first_trivia);
+        } else {
+            function_name = self.match_member_name();
+            Self::splice_leading_trivia(&mut function_name, first_trivia);
+            let (gp, gc) = self.take_generic_params();
+            generic_parameters = gp;
+            generic_constraints = gc;
+            params = self.parse_formal_parameters()?;
+        }
 
-        let params = self.parse_formal_parameters()?;
+        let mut cast_kind = None;
+        if operator_symbol.is_none() && indexer_kind.is_none() {
+            match function_name.text.as_str() {
+                "implicit" | "explicit" => cast_kind = Some(function_name.text.clone()),
+                _ => {}
+            }
+        }
+
         let mut return_type: Option<Type> = None;
         if self.current_token().kind == TokenKind::ColonToken {
             //eat the colon
@@ -236,6 +285,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.generic_constraints = generic_constraints;
             node.where_constraints = where_constraints;
             node.receiver_mode = receiver_mode;
+            node.is_override = is_override;
+            node.operator_symbol = operator_symbol;
+            node.cast_kind = cast_kind;
+            node.indexer_kind = indexer_kind;
             return Ok(node);
         }
 
@@ -254,6 +307,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.generic_constraints = generic_constraints;
         node.where_constraints = where_constraints;
         node.receiver_mode = receiver_mode;
+        node.is_override = is_override;
+        node.operator_symbol = operator_symbol;
+        node.cast_kind = cast_kind;
+        node.indexer_kind = indexer_kind;
         Ok(node)
     }
 
@@ -416,5 +473,60 @@ impl<'a, 'b> Parser<'a, 'b> {
         //eat the close parenthesis
         self.match_token(TokenKind::CloseParenthesisToken);
         Ok(params)
+    }
+
+    pub(crate) fn parse_simple_named_parameter(&mut self) -> Result<ParameterNode, Error> {
+        let is_ref = self.current_token().kind == TokenKind::RefToken;
+        if is_ref {
+            self.match_token(TokenKind::RefToken);
+        }
+        let is_borrow = if !is_ref && self.current_token().kind == TokenKind::BorrowToken {
+            self.match_token(TokenKind::BorrowToken);
+            true
+        } else {
+            false
+        };
+        let param = self.match_token(TokenKind::IdentifierToken);
+        self.match_token(TokenKind::ColonToken);
+        let param_type = self.parse_type()?;
+        if is_ref {
+            Ok(ParameterNode::by_ref(param, param_type))
+        } else if is_borrow {
+            Ok(ParameterNode::borrow(param, param_type))
+        } else {
+            Ok(ParameterNode::new(param, param_type))
+        }
+    }
+}
+
+/// C-safe method name for `fun operator +` / `fun operator -()` so backend symbols stay valid
+/// identifiers (`Vector2_op_add`, not `Vector2_operator+`).
+fn operator_method_ident(symbol: &str, arity: usize) -> String {
+    match (symbol, arity) {
+        ("+", 1) => "op_add".to_string(),
+        ("-", 1) => "op_sub".to_string(),
+        ("-", 0) => "op_neg".to_string(),
+        ("*", 1) => "op_mul".to_string(),
+        ("/", 1) => "op_div".to_string(),
+        ("%", 1) => "op_mod".to_string(),
+        ("&", 1) => "op_bitand".to_string(),
+        ("|", 1) => "op_bitor".to_string(),
+        ("^", 1) => "op_bitxor".to_string(),
+        ("<<", 1) => "op_shl".to_string(),
+        (">>", 1) => "op_shr".to_string(),
+        ("==", 1) => "op_eq".to_string(),
+        ("!", 0) => "op_not".to_string(),
+        ("~", 0) => "op_bitnot".to_string(),
+        _ => {
+            let mut s = String::from("op_");
+            for c in symbol.chars() {
+                if c.is_ascii_alphanumeric() {
+                    s.push(c);
+                } else {
+                    s.push('_');
+                }
+            }
+            s
+        }
     }
 }

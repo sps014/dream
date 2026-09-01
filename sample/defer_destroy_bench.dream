@@ -53,7 +53,7 @@ fun retire_widget(t: Widget): void {
 fun build_tree(n: int, id0: int): Widget {
     let root = Widget(id0, n);
     let i = 0;
-    while (i < n) {
+    while i < n {
         root.children.push(Widget(id0 + 1 + i, 0));
         i = i + 1;
     }
@@ -64,7 +64,7 @@ fun paint(borrow n: Widget): int {
     let acc = n.id + n.w + n.h;
     let i = 0;
     let len = n.children.length;
-    while (i < len) {
+    while i < len {
         acc = acc + paint(n.children[i]);
         i = i + 1;
     }
@@ -75,7 +75,7 @@ fun paint_particles(borrow slots: List<Particle>): int {
     let acc = 0;
     let i = 0;
     let len = slots.length;
-    while (i < len) {
+    while i < len {
         let p = slots[i];
         acc = acc + p.id + p.x + p.y;
         i = i + 1;
@@ -183,7 +183,7 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
     let max_hitch_cpu = 0L;
     let max_rss = 0L;
     let f = 0;
-    while (f < frames) {
+    while f < frames {
         let id0 = 2 + f * (nodes + 1);
 
         let sw = Stopwatch();
@@ -199,7 +199,7 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
         g_del = 0;
         let cpu0 = System.cpu_time_nanos();
         sw.restart();
-        if (use_defer) {
+        if use_defer {
             defer(0) {
                 retire_widget(prev);
             }
@@ -214,7 +214,7 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
         g_del = 0;
         let drain_ns = 0L;
         let drain_cpu = 0L;
-        if (use_defer) {
+        if use_defer {
             cpu0 = System.cpu_time_nanos();
             sw.restart();
             defer(budget) {}
@@ -226,23 +226,23 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
 
         let hitch_ns = drain_ns;
         let hitch_cpu = drain_cpu;
-        if (use_defer == false) {
+        if use_defer == false {
             hitch_ns = retire_ns;
             hitch_cpu = retire_cpu;
         }
         let rss = System.memory_bytes();
         let present = build_ns + paint_ns;
         present_sum = present_sum + present;
-        if (present > max_present) {
+        if present > max_present {
             max_present = present;
         }
-        if (hitch_ns > max_hitch) {
+        if hitch_ns > max_hitch {
             max_hitch = hitch_ns;
         }
-        if (hitch_cpu > max_hitch_cpu) {
+        if hitch_cpu > max_hitch_cpu {
             max_hitch_cpu = hitch_cpu;
         }
-        if (rss > max_rss) {
+        if rss > max_rss {
             max_rss = rss;
         }
         line(mode, f, build_ns, retire_ns, paint_ns, drain_ns, present, hitch_ns, hitch_cpu, rss, del_retire, del_drain);
@@ -256,7 +256,7 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
 fun fill_particles(n: int, id0: int): List<Particle> {
     let slots = List<Particle>.with_capacity(n);
     let i = 0;
-    while (i < n) {
+    while i < n {
         slots.push(Particle(id0 + i));
         i = i + 1;
     }
@@ -265,7 +265,7 @@ fun fill_particles(n: int, id0: int): List<Particle> {
 
 fun rewrite_particles(borrow slots: List<Particle>, n: int, id0: int): void {
     let i = 0;
-    while (i < n) {
+    while i < n {
         slots.set(i, Particle(id0 + i));
         i = i + 1;
     }
@@ -293,13 +293,13 @@ fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bo
     let max_hitch_cpu = 0L;
     let max_rss = 0L;
     let f = 0;
-    while (f < frames) {
+    while f < frames {
         let id0 = (1 + f) * n;
 
         g_del = 0;
         let cpu0 = System.cpu_time_nanos();
         let sw = Stopwatch();
-        if (use_defer) {
+        if use_defer {
             defer(0) {
                 rewrite_particles(slots, n, id0);
             }
@@ -319,7 +319,7 @@ fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bo
         g_del = 0;
         let drain_ns = 0L;
         let drain_cpu = 0L;
-        if (use_defer) {
+        if use_defer {
             cpu0 = System.cpu_time_nanos();
             sw.restart();
             defer(budget) {}
@@ -331,23 +331,23 @@ fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bo
 
         let hitch_ns = drain_ns;
         let hitch_cpu = drain_cpu;
-        if (use_defer == false) {
+        if use_defer == false {
             hitch_ns = retire_ns;
             hitch_cpu = retire_cpu;
         }
         let rss = System.memory_bytes();
         let present = retire_ns + paint_ns;
         present_sum = present_sum + present;
-        if (present > max_present) {
+        if present > max_present {
             max_present = present;
         }
-        if (hitch_ns > max_hitch) {
+        if hitch_ns > max_hitch {
             max_hitch = hitch_ns;
         }
-        if (hitch_cpu > max_hitch_cpu) {
+        if hitch_cpu > max_hitch_cpu {
             max_hitch_cpu = hitch_cpu;
         }
-        if (rss > max_rss) {
+        if rss > max_rss {
             max_rss = rss;
         }
         line(mode, f, 0L, retire_ns, paint_ns, drain_ns, present, hitch_ns, hitch_cpu, rss, del_retire, del_drain);

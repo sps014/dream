@@ -11,7 +11,7 @@ fun greet(name: string): string {
 
 fun work(input: string): string {
     let i = 0;
-    while (i < 5000000) {
+    while i < 5000000 {
         i = i + 1;
     }
     return input.to_upper();

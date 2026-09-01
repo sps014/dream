@@ -73,7 +73,7 @@ pub struct ModuleDeclNode {
 
 /// A single variant of an `enum`. A variant with no `fields` is either a plain C-style member
 /// (`Red`, `Green = 5`) or a unit variant of a discriminated union (`None`, `Empty`). A variant
-/// with one or more `fields` carries a typed payload (`Circle(radius: float)`), which turns the
+/// with one or more `fields` carries a typed payload (`Circle(float)`), which turns the
 /// whole enum into a heap-backed discriminated union.
 #[derive(Debug, Clone)]
 pub struct EnumVariantNode {
@@ -85,10 +85,12 @@ pub struct EnumVariantNode {
     pub value: i32,
 }
 
-/// Represents an enum declaration. Two flavours share this node:
+/// Represents an enum declaration. Three flavours share this node:
 /// - C-style integer enums: `enum Color { Red, Green = 5, Blue }` (all variants payload-less).
-/// - Discriminated unions (Rust-style): `enum Shape { Circle(radius: float), Empty }` and
-///   generic `enum Option<T> { Some(value: T), None }` (at least one variant carries a payload).
+/// - Heap discriminated unions: `enum Shape { Circle(float), Empty }` and
+///   generic `enum Option<T> { Some(T), None }` (at least one variant carries a payload).
+/// - Value discriminated unions: `enum struct Outcome { ... }` — inline, copied; error if a
+///   payload is self-referential.
 #[derive(Debug, Clone)]
 pub struct EnumDeclarationNode<'a> {
     /// Leading attributes (`@json`, ...). Carried so derives like `@json` can target unions.
@@ -103,6 +105,8 @@ pub struct EnumDeclarationNode<'a> {
     pub methods: Vec<crate::nodes::function::FunctionNode<'a>>,
     /// True when declared `sealed`: no `extend` block may target this enum (enforced in analysis).
     pub is_sealed: bool,
+    /// `enum struct` — value (inline) discriminated union.
+    pub is_enum_struct: bool,
     /// Accessibility of the enum (`public`/`internal`/private, the default).
     pub visibility: Visibility,
     /// Source file this declaration came from; set during multi-file merge so semantic
@@ -126,6 +130,7 @@ impl<'a> EnumDeclarationNode<'a> {
             variants,
             methods: Vec::new(),
             is_sealed: false,
+            is_enum_struct: false,
             visibility: Visibility::Private,
             file_path: None,
         }

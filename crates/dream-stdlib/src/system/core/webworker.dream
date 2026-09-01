@@ -6,7 +6,7 @@ module system.core;
 // or Web Worker (browser/Node). There is no spawn message and no `join()`: `spawn` is `async`
 // and *is* the wait. Overlap work by saving the Future and awaiting later.
 //
-// Captures must be `shared` (blittable, `string`, a struct of those, or `@shared class`).
+// Captures must be `shared` (blittable, `string`, a struct of those, or `shared class`).
 // Ordinary classes / arrays / `List` are a compile error.
 //
 //   async fun main(): void {

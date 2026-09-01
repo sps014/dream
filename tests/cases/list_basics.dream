@@ -20,7 +20,7 @@ fun main(): void {
     System.print("\n");
 
     let i = 0;
-    while (i < 50) {
+    while i < 50 {
         xs.push(i);
         i = i + 1;
     }

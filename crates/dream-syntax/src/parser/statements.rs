@@ -492,24 +492,25 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::SemicolonToken);
         Ok(StatementNode::Return(expression))
     }
-    /// Parses an if-else statement, including else-if chains
+
+    /// Expression in `if`/`while`/`for-in` heads: `{` starts the body, not a syntax block or set.
+    pub(super) fn parse_condition_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        self.in_condition = true;
+        let expr = self.parse_expression(0);
+        self.in_condition = false;
+        expr
+    }
+
     pub(super) fn parse_if_else(&mut self) -> Result<StatementNode<'a>, Error> {
-        //eat the if keyword
         self.match_token(TokenKind::IfToken);
-        self.match_token(TokenKind::OpenParenthesisToken);
-        let condition = self.parse_expression(0)?;
-        self.match_token(TokenKind::CloseParenthesisToken);
+        let condition = self.parse_condition_expression()?;
         let then_branch = self.parse_block_or_statement()?;
         let mut else_ifs = vec![];
         while self.current_token().kind == TokenKind::ElseToken {
-            //eat the else keyword
             self.match_token(TokenKind::ElseToken);
             if self.current_token().kind == TokenKind::IfToken {
-                //eat the if keyword
                 self.match_token(TokenKind::IfToken);
-                self.match_token(TokenKind::OpenParenthesisToken);
-                let condition = self.parse_expression(0)?;
-                self.match_token(TokenKind::CloseParenthesisToken);
+                let condition = self.parse_condition_expression()?;
                 let then_branch = self.parse_block_or_statement()?;
                 else_ifs.push((condition, then_branch));
             } else {
@@ -534,9 +535,12 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses a for loop statement
     pub(super) fn parse_for(&mut self) -> Result<StatementNode<'a>, Error> {
         self.match_token(TokenKind::ForToken);
-        self.match_token(TokenKind::OpenParenthesisToken);
+        let paren = self.current_token().kind == TokenKind::OpenParenthesisToken;
+        if paren {
+            self.match_token(TokenKind::OpenParenthesisToken);
+        }
 
-        // For-each form: `for (let <var> in <iterable>) { ... }`.
+        // For-each form: `for let <var> in <iterable> { ... }` (parens optional).
         if self.current_token().kind == TokenKind::LetToken
             && self.peek_token(1).kind == TokenKind::IdentifierToken
             && self.peek_token(2).kind == TokenKind::InToken
@@ -544,8 +548,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::LetToken);
             let element = self.match_token(TokenKind::IdentifierToken);
             self.match_token(TokenKind::InToken);
-            let iterable = self.parse_expression(0)?;
-            self.match_token(TokenKind::CloseParenthesisToken);
+            let iterable = self.parse_condition_expression()?;
+            if paren {
+                self.match_token(TokenKind::CloseParenthesisToken);
+            }
             let body = self.parse_block_or_statement()?;
 
             let n = self.foreach_counter;
@@ -579,7 +585,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             let stmt = self.parse_for_increment()?;
             increment = Some(self.arena.alloc(stmt));
         }
-        self.match_token(TokenKind::CloseParenthesisToken);
+        if paren {
+            self.match_token(TokenKind::CloseParenthesisToken);
+        }
 
         let body = self.parse_block_or_statement()?;
         Ok(StatementNode::For(init, condition, increment, body))
@@ -589,9 +597,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(super) fn parse_while(&mut self) -> Result<StatementNode<'a>, Error> {
         //eat the while keyword
         self.match_token(TokenKind::WhileToken);
-        self.match_token(TokenKind::OpenParenthesisToken);
-        let condition = self.parse_expression(0)?;
-        self.match_token(TokenKind::CloseParenthesisToken);
+        let condition = self.parse_condition_expression()?;
         let body = self.parse_block_or_statement()?;
         Ok(StatementNode::While(condition, body))
     }
@@ -625,9 +631,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::DoToken);
         let body = self.parse_block()?;
         self.match_token(TokenKind::WhileToken);
-        self.match_token(TokenKind::OpenParenthesisToken);
         let condition = self.parse_expression(0)?;
-        self.match_token(TokenKind::CloseParenthesisToken);
         self.match_token(TokenKind::SemicolonToken);
         Ok(StatementNode::DoWhile(body, condition))
     }

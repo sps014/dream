@@ -7,7 +7,7 @@ fun heavy(input: string): string {
     let seed = input.length;
     let acc = 0;
     let i = 0;
-    while (i < 60000000) {
+    while i < 60000000 {
         acc = acc + ((i + seed) % 9);
         i = i + 1;
     }
@@ -23,7 +23,7 @@ async fun main(): void {
 
     let seq_start = Time.nano_time();
     let i = 0;
-    while (i < tasks) {
+    while i < tasks {
         let r = heavy("seq");
         i = i + 1;
     }
@@ -33,12 +33,12 @@ async fun main(): void {
     let par_start = Time.nano_time();
     let workers = Buffer.alloc<Future<string>>(tasks);
     let s = 0;
-    while (s < tasks) {
+    while s < tasks {
         workers[s] = WebWorker.spawn(() => heavy("par"));
         s = s + 1;
     }
     let c = 0;
-    while (c < tasks) {
+    while c < tasks {
         let r = await workers[c];
         c = c + 1;
     }
@@ -48,7 +48,7 @@ async fun main(): void {
     System.println("tasks:       " + tasks.to_string());
     System.println("sequential:  " + seq_ms.to_string() + " ms");
     System.println("parallel:    " + par_ms.to_string() + " ms");
-    if (par_ms > 0) {
+    if par_ms > 0 {
         System.println("speedup:     " + (seq_ms / par_ms).to_string() + "x");
     }
 }

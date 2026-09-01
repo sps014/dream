@@ -33,8 +33,8 @@ let x = await e;                // bind the result
 let y = await f() + 1;          // in an operand
 process(await a(), await b());  // several awaits in call arguments
 
-if (retry) { data = await fetch(url); }         // in a branch
-while (i < n) { sum += await g(i); i += 1; }    // suspends each iteration
+if retry { data = await fetch(url); }         // in a branch
+while i < n { sum += await g(i); i += 1; }    // suspends each iteration
 let y = cond ? await a() : await b();           // in a ternary arm
 let z = flag && await ready();                  // right side of && / || / ??
 ```

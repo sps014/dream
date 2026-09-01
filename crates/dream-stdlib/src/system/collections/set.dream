@@ -12,7 +12,7 @@ public class Set<T> : Collection<T> {
     // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
     public constructor(capacity: int = 8) {
         let c = hash_min_capacity();
-        while (c < capacity) {
+        while c < capacity {
             c = c * 2;
         }
         this.cap = c;
@@ -25,7 +25,7 @@ public class Set<T> : Collection<T> {
 
     fun bump_epoch(): void {
         let e = this.epoch + 1;
-        if (e <= 0) {
+        if e <= 0 {
             Buffer.elems_fill<int>(this.states, 0, this.cap);
             e = hash_epoch_initial();
         }
@@ -58,20 +58,20 @@ public class Set<T> : Collection<T> {
         let idx = value.hash_code() & (cap - 1);
         let result = -1;
         let done = false;
-        while (done == false) {
+        while done == false {
             let s = states[idx];
-            if ((s != epoch) && (s != tomb)) {
+            if (s != epoch) && (s != tomb) {
                 done = true;
             } else {
-                if (s == epoch) {
-                    if (keys[idx] == value) {
+                if s == epoch {
+                    if keys[idx] == value {
                         result = idx;
                         done = true;
                     }
                 }
-                if (done == false) {
+                if done == false {
                     idx = idx + 1;
-                    if (idx == cap) {
+                    if idx == cap {
                         idx = 0;
                     }
                 }
@@ -92,34 +92,34 @@ public class Set<T> : Collection<T> {
         let first_tomb = -1;
         let added = false;
         let done = false;
-        while (done == false) {
+        while done == false {
             let s = states[idx];
-            if ((s != epoch) && (s != tomb)) {
+            if (s != epoch) && (s != tomb) {
                 let target = idx;
-                if (first_tomb >= 0) {
+                if first_tomb >= 0 {
                     target = first_tomb;
                 }
                 keys[target] = value;
                 states[target] = epoch;
                 this.count = this.count + 1;
-                if (first_tomb < 0) {
+                if first_tomb < 0 {
                     this.used = this.used + 1;
                 }
                 added = true;
                 done = true;
             } else {
-                if (s == epoch) {
-                    if (keys[idx] == value) {
+                if s == epoch {
+                    if keys[idx] == value {
                         done = true;
                     }
                 } else {
-                    if ((s == tomb) && (first_tomb < 0)) {
+                    if (s == tomb) && (first_tomb < 0) {
                         first_tomb = idx;
                     }
                 }
-                if (done == false) {
+                if done == false {
                     idx = idx + 1;
-                    if (idx == cap) {
+                    if idx == cap {
                         idx = 0;
                     }
                 }
@@ -134,7 +134,7 @@ public class Set<T> : Collection<T> {
         let old_states = this.states;
         let old_cap = this.cap;
         let new_cap = old_cap * 2;
-        if (new_cap < hash_min_capacity()) {
+        if new_cap < hash_min_capacity() {
             new_cap = hash_min_capacity();
         }
         this.keys = Buffer.alloc<T>(new_cap);
@@ -143,8 +143,8 @@ public class Set<T> : Collection<T> {
         this.count = 0;
         this.used = 0;
         let i = 0;
-        while (i < old_cap) {
-            if (old_states[i] == this.epoch) {
+        while i < old_cap {
+            if old_states[i] == this.epoch {
                 this.insert_no_grow(old_keys[i]);
             }
             i = i + 1;
@@ -153,7 +153,7 @@ public class Set<T> : Collection<T> {
 
     // Inserts a value into the set. Returns true if it was newly added, false if already present.
     public fun add(value: T): bool {
-        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
+        if (this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num() {
             this.rehash();
         }
         return this.insert_no_grow(value);
@@ -169,7 +169,7 @@ public class Set<T> : Collection<T> {
     // with N elements costs one call, not N.
     public fun add_all(borrow items: T[]): void {
         let i = 0;
-        while (i < items.length) {
+        while i < items.length {
             this.add(items[i]);
             i = i + 1;
         }
@@ -186,7 +186,7 @@ public class Set<T> : Collection<T> {
     // Removes a value and returns true if it was removed.
     public fun remove(borrow value: T): bool {
         let i = this.find(value);
-        if (i >= 0) {
+        if i >= 0 {
             this.states[i] = 0 - this.epoch;
             this.count = this.count - 1;
             return true;
@@ -206,8 +206,8 @@ public class Set<T> : Collection<T> {
         let e = this.epoch;
         let z = Buffer.alloc<T>(1);
         let i = 0;
-        while (i < c) {
-            if (this.states[i] == e) {
+        while i < c {
+            if this.states[i] == e {
                 this.keys[i] = z[0];
             }
             i = i + 1;
@@ -228,8 +228,8 @@ public class Set<T> : Collection<T> {
         let result = Buffer.alloc<T>(this.count);
         let i = 0;
         let j = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
                 result[j] = this.keys[i];
                 j = j + 1;
             }
@@ -242,8 +242,8 @@ public class Set<T> : Collection<T> {
     public fun union(borrow other: Set<T>): Set<T> {
         let result = Set<T>(this.count + other.length);
         let i = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
                 result.add(this.keys[i]);
             }
             i = i + 1;
@@ -258,9 +258,9 @@ public class Set<T> : Collection<T> {
     public fun intersection(borrow other: Set<T>): Set<T> {
         let result = Set<T>();
         let i = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                if (other.contains(this.keys[i])) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
+                if other.contains(this.keys[i]) {
                     result.add(this.keys[i]);
                 }
             }
@@ -273,9 +273,9 @@ public class Set<T> : Collection<T> {
     public fun difference(borrow other: Set<T>): Set<T> {
         let result = Set<T>();
         let i = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                if (other.contains(this.keys[i]) == false) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
+                if other.contains(this.keys[i]) == false {
                     result.add(this.keys[i]);
                 }
             }
@@ -287,9 +287,9 @@ public class Set<T> : Collection<T> {
     // True when every element of this set is in `other`.
     public fun is_subset(borrow other: Set<T>): bool {
         let i = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                if (other.contains(this.keys[i]) == false) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
+                if other.contains(this.keys[i]) == false {
                     return false;
                 }
             }
@@ -301,9 +301,9 @@ public class Set<T> : Collection<T> {
     // True when the sets share no elements.
     public fun is_disjoint(borrow other: Set<T>): bool {
         let i = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                if (other.contains(this.keys[i])) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
+                if other.contains(this.keys[i]) {
                     return false;
                 }
             }
@@ -313,7 +313,6 @@ public class Set<T> : Collection<T> {
     }
 
     // Gets an iterator for the set.
-    @iterator
     public fun iterator(): SetIterator<T> {
         return SetIterator<T>(this);
     }
@@ -327,14 +326,14 @@ public class Set<T> : Collection<T> {
         return this.keys[i];
     }
 
-    @override public fun to_string(): string {
+    override public fun to_string(): string {
         let sb = StringBuilder();
         sb.append("{");
         let n = 0;
         let i = 0;
-        while (i < this.cap) {
-            if (this.states[i] == this.epoch) {
-                if (n > 0) {
+        while i < this.cap {
+            if this.states[i] == this.epoch {
+                if n > 0 {
                     sb.append(", ");
                 }
                 sb.append(this.keys[i].to_string());

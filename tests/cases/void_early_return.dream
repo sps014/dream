@@ -3,7 +3,7 @@
 
 import system;
 fun log_positive(n: int): void {
-    if (n < 0) {
+    if n < 0 {
         return;
     }
     System.println(n);

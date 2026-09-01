@@ -18,36 +18,31 @@ let int = 3;   // error: 'int' is a reserved word
 
 ## Constructors and destructors
 
-- The constructor is named `constructor`; the destructor is `del`.
-- Neither may be `public`, and neither may declare a return type.
+- Extra constructors in a type body are named `constructor`; the destructor is `del`. A primary constructor (`class Point(public x: int, public y: int);`) synthesizes fields and a matching `constructor`.
+- `del` may not be `public`/`internal`, and neither `constructor` nor `del` may declare a return type.
 - `del` takes no parameters.
 
-Their calling convention is fixed, so their shape is fixed.
+Their calling convention is fixed, so their shape is fixed. Call sites are `Type(...)`.
 
 ## The object protocol
 
-- `@override` applies only to the protocol methods `to_string` and `hash_code`. It must be `public`, take no parameters, and use the fixed return type.
-- Any method that overrides a protocol method must be marked `@override`.
+- `override` applies only to the protocol methods `to_string` and `hash_code`. It must be `public`, take no parameters, and use the fixed return type.
+- Any method that overrides a protocol method must be marked `override`.
 
 ## Operator overloading
 
-- `@operator("...")` only applies to a method; the tagged method's own parameter count (0 or 1)
+- `fun operator +(...)` only applies to a method; the method's own parameter count (0 or 1)
   fixes whether it overloads the unary or binary form of that symbol.
-- `@cast("implicit"|"explicit")` only applies to a no-parameter method; its return type is the
+- `fun implicit(): T` / `fun explicit(): T` only apply to a no-parameter method; its return type is the
   cast's target type.
-- A type may declare at most one `@operator` overload per (symbol, arity) and at most one `@cast`
+- A type may declare at most one operator overload per (symbol, arity) and at most one cast
   per target type. See [Operators § Operator overloading](operators.md#operator-overloading).
 
 ## Indexers and enumerators
 
-- `@get_indexer` / `@set_indexer` / `@iterator` / `@next` mark protocol roles; method names are free (same model as
-  `@operator`). See [Classes & Structs § Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
-- `@get_indexer`: instance method, one parameter, non-void return, non-async — enables `obj[i]`.
-- `@set_indexer`: instance method, two parameters, non-async — enables `obj[i] = v`.
-- `@iterator`: instance method, zero parameters, returns a class/struct — enables `for..in`.
-- `@next`: instance method, zero parameters, returns `Option<T>` — enumerator step.
-- A type may declare at most one method per role. Bare `get`/`set`/`iterator`/`next` without the
-  attribute are ordinary methods.
+- `fun this[i: int]: T` / `fun this[i: int] = v: T` enable `obj[i]` and `obj[i] = v`.
+- Methods named `iterator` (zero parameters, returns a class/struct) and `next` (zero parameters, returns `Option<T>`) enable `for..in`.
+- A type may declare at most one method per role. A method named `get`/`set` without `fun this[...]` is ordinary.
 
 ## Linkage modifiers are exclusive
 

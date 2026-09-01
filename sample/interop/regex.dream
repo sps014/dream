@@ -9,7 +9,7 @@ import system.text;
 fun main(): void {
     let digits = Regex("\\d+", RegexFlags.Global);
 
-    if (digits.test("abc123")) {
+    if digits.test("abc123") {
         System.println("has digits");
     }
 

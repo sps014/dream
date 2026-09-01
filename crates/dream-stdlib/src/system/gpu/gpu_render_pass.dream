@@ -6,7 +6,7 @@ public class GpuRenderPass {
     @web @native
     public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
         let code = await Gpu.render_blit(surface.id, source.id);
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "blit failed"));
     }
 
@@ -84,7 +84,7 @@ public class GpuRenderPass {
             depth_id,
             load
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw failed"));
     }
 
@@ -168,7 +168,7 @@ public class GpuRenderPass {
             depth_id,
             load
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw_indexed failed"));
     }
 
@@ -204,7 +204,7 @@ public class GpuRenderPass {
             depth_id,
             load
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "draw_to failed"));
     }
 }

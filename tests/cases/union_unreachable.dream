@@ -2,7 +2,7 @@
 
 import system;
 enum Light {
-    Red(brightness: int),
+    Red(int),
     Green,
     Blue,
 }

@@ -10,9 +10,8 @@ public class HttpHeadersIterator : Iterator<KeyValuePair<string, string>> {
         this.idx = 0;
     }
 
-    @next
     public fun next(): Option<KeyValuePair<string, string>> {
-        if (this.idx >= this.headers.length) {
+        if this.idx >= this.headers.length {
             return Option.None;
         }
         let i = this.idx;

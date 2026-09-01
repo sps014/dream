@@ -4,7 +4,7 @@ import system.collections;
 fun main(): void {
     let xs = List<int>();
     let round = 0;
-    while (round < 3) {
+    while round < 3 {
         xs.push(round);
         xs.push(round + 10);
         System.println(xs.length);

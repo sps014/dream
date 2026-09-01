@@ -14,7 +14,7 @@ public class ScratchArena<T : unmanaged> {
     // Allocates a zeroed slab of `capacity` elements (at least one).
     public constructor(capacity: int) {
         let n = capacity;
-        if (n < 1) {
+        if n < 1 {
             n = 1;
         }
         this.items = Buffer.alloc<T>(n);
@@ -44,10 +44,10 @@ public class ScratchArena<T : unmanaged> {
     // Bump-allocates `n` elements and returns the start index into the slab (no `Span`, no extra RC).
     @inline
     public fun bump(n: int): int {
-        if (n < 0) {
+        if n < 0 {
             System.panic("ScratchArena.bump: negative count");
         }
-        if (this.used + n > this.items.length) {
+        if this.used + n > this.items.length {
             System.panic("ScratchArena overflow");
         }
         let start = this.used;

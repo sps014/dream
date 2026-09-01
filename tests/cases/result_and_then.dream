@@ -1,11 +1,11 @@
 import system;
 fun parse_even(s: string): Result<int, ParseError> {
     let parsed = int.parse(s);
-    if (parsed.is_err()) {
+    if parsed.is_err() {
         return Result.Err(ParseError.invalid("parse"));
     }
     let n = parsed.unwrap_or(0);
-    if ((n % 2) != 0) {
+    if (n % 2) != 0 {
         return Result.Err(ParseError.invalid("odd"));
     }
     return Result.Ok(n);

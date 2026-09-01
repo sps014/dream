@@ -6,7 +6,7 @@ import system;
 async fun g(n: int): int { return n; }
 
 async fun pick(early: bool): int {
-    if (early) { return 99; }          // explicit return in a branch before the await
+    if early { return 99; }          // explicit return in a branch before the await
     let y = await g(5);
     return y + 1;
 }
@@ -14,9 +14,9 @@ async fun pick(early: bool): int {
 async fun run(): int {
     let sum = 0;
     let i = 0;
-    while (i < 4) { sum = sum + i; i = i + 1; }   // loop before the await
+    while i < 4 { sum = sum + i; i = i + 1; }   // loop before the await
     let a = await g(1);
-    if (a == 1) { a = a + 10; }                   // branch between two awaits
+    if a == 1 { a = a + 10; }                   // branch between two awaits
     let b = await g(2);
     return sum + a + b;
 }

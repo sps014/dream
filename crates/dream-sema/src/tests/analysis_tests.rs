@@ -175,7 +175,7 @@ fn test_c_style_enum_shift_still_rejected() {
 #[test]
 fn test_discriminated_union_bitwise_or_rejected() {
     let code = "
-        enum Shape { Circle(r: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun main(): void { let x = Shape.Empty | Shape.Empty; }
     ";
     let diagnostics = analyze_code(code);
@@ -375,7 +375,7 @@ fn test_unknown_call_result_does_not_cascade() {
 #[test]
 fn test_analyze_union_switch_ok() {
     let code = "
-        enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
+        enum Shape { Circle(int), Rect(width: int, height: int), Empty }
         fun area(s: Shape): int {
             return switch (s) {
                 Circle(r)  => r * r,
@@ -392,7 +392,7 @@ fn test_analyze_union_switch_ok() {
 #[test]
 fn test_statement_switch_returns_on_all_arms() {
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun area(s: Shape): int {
             switch (s) {
                 Circle(r) => { return r * r; },
@@ -408,7 +408,7 @@ fn test_statement_switch_returns_on_all_arms() {
 #[test]
 fn test_statement_switch_missing_arm_return() {
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun area(s: Shape): int {
             switch (s) {
                 Circle(r) => { return r * r; },
@@ -428,7 +428,7 @@ fn test_statement_switch_missing_arm_return() {
 #[test]
 fn test_analyze_union_switch_non_exhaustive() {
     let code = "
-        enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
+        enum Shape { Circle(int), Rect(width: int, height: int), Empty }
         fun area(s: Shape): int {
             return switch (s) {
                 Circle(r)  => r * r,
@@ -497,7 +497,7 @@ fn test_analyze_or_pattern_ok() {
 #[test]
 fn test_analyze_or_pattern_exhaustiveness_across_unit_variants() {
     let code = "
-        enum Shape { Circle(radius: int), Square, Triangle, Empty }
+        enum Shape { Circle(int), Square, Triangle, Empty }
         fun has_straight_edges(s: Shape): bool {
             return switch (s) {
                 Square | Triangle => true,
@@ -518,7 +518,7 @@ fn test_analyze_or_pattern_exhaustiveness_across_unit_variants() {
 #[test]
 fn test_analyze_or_pattern_rejects_binding_alternative() {
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun f(s: Shape): int {
             return switch (s) {
                 Circle(r) | Empty => r,
@@ -537,7 +537,7 @@ fn test_analyze_or_pattern_rejects_binding_alternative() {
 #[test]
 fn test_analyze_union_variant_arity_mismatch() {
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun main(): void { let s: Shape = Shape.Circle(1, 2); }
     ";
     let diagnostics = analyze_code(code);
@@ -551,7 +551,7 @@ fn test_analyze_union_variant_arity_mismatch() {
 #[test]
 fn test_analyze_generic_union_inference() {
     let code = "
-        enum Option<T> { Some(value: T), None }
+        enum Option<T> { Some(T), None }
         fun main(): void {
             let o = Option.Some(42);
             let n: Option<int> = Option.None;
@@ -564,7 +564,7 @@ fn test_analyze_generic_union_inference() {
 #[test]
 fn test_analyze_switch_expression_arm_type_mismatch() {
     let code = "
-        enum Shape { Circle(radius: int), Empty }
+        enum Shape { Circle(int), Empty }
         fun f(s: Shape): int {
             return switch (s) {
                 Circle(r) => r,
@@ -582,7 +582,7 @@ fn test_analyze_switch_expression_arm_type_mismatch() {
 #[test]
 fn test_try_propagation_result_ok() {
     let code = "
-        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        enum Result<T, E> { Ok(T), Err(E) }
         fun half(n: int): Result<int, string> {
             if (n % 2 != 0) { return Result.Err(\"odd\"); }
             return Result.Ok(n / 2);
@@ -599,7 +599,7 @@ fn test_try_propagation_result_ok() {
 #[test]
 fn test_try_propagation_option_ok() {
     let code = "
-        enum Option<T> { Some(value: T), None }
+        enum Option<T> { Some(T), None }
         fun first(n: int): Option<int> {
             if (n < 0) { return Option.None; }
             return Option.Some(n);
@@ -616,7 +616,7 @@ fn test_try_propagation_option_ok() {
 #[test]
 fn test_try_propagation_requires_result_or_option_operand() {
     let code = "
-        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        enum Result<T, E> { Ok(T), Err(E) }
         fun f(): Result<int, string> {
             let n = 5;
             let x = n?;
@@ -635,7 +635,7 @@ fn test_try_propagation_requires_matching_return_type() {
     // `?` on a `Result<..>` inside a function that doesn't itself return a `Result<..>` (here
     // `void`) has nowhere to propagate the `Err` to.
     let code = "
-        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        enum Result<T, E> { Ok(T), Err(E) }
         fun half(n: int): Result<int, string> {
             if (n % 2 != 0) { return Result.Err(\"odd\"); }
             return Result.Ok(n / 2);
@@ -655,7 +655,7 @@ fn test_try_propagation_requires_matching_return_type() {
 fn test_try_propagation_rejects_mismatched_error_type() {
     // The enclosing function's `Result<_, E>` error type must match the operand's exactly.
     let code = "
-        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        enum Result<T, E> { Ok(T), Err(E) }
         fun half(n: int): Result<int, string> {
             if (n % 2 != 0) { return Result.Err(\"odd\"); }
             return Result.Ok(n / 2);
@@ -672,8 +672,8 @@ fn test_try_propagation_rejects_mismatched_error_type() {
 #[test]
 fn test_try_propagation_rejects_option_result_mismatch() {
     let code = "
-        enum Option<T> { Some(value: T), None }
-        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        enum Option<T> { Some(T), None }
+        enum Result<T, E> { Ok(T), Err(E) }
         fun first(n: int): Option<int> {
             if (n < 0) { return Option.None; }
             return Option.Some(n);
@@ -691,37 +691,12 @@ fn test_try_propagation_rejects_option_result_mismatch() {
 
 #[test]
 fn test_class_indexer_get_set_ok() {
-    // A class with `@get_indexer`/`@set_indexer` methods is indexable (method names are free; `get`/`set` still fine).
     let code = "
         class Cell {
             v: int;
             public constructor() { this.v = 0; }
-            @get_indexer
-            public fun get(index: int): int { return this.v + index; }
-            @set_indexer
-            public fun set(index: int, value: int): void { this.v = value; }
-        }
-        fun main(): void {
-            let c = Cell();
-            c[1] = 5;
-            let x: int = c[2];
-        }
-    ";
-    let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), false);
-}
-
-#[test]
-fn test_class_indexer_arbitrary_names_ok() {
-    // Protocol role comes from the attribute; method names need not be `get`/`set`.
-    let code = "
-        class Cell {
-            v: int;
-            public constructor() { this.v = 0; }
-            @get_indexer
-            public fun at(index: int): int { return this.v + index; }
-            @set_indexer
-            public fun put(index: int, value: int): void { this.v = value; }
+            public fun this[index: int]: int { return this.v + index; }
+            public fun this[index: int] = value: int { this.v = value; }
         }
         fun main(): void {
             let c = Cell();
@@ -762,8 +737,7 @@ fn test_class_indexer_void_get_attr_rejected() {
         class Box {
             v: int;
             public constructor() { this.v = 0; }
-            @get_indexer
-            public fun get(index: int): void { }
+            public fun this[index: int]: void { }
         }
         fun main(): void { }
     ";
@@ -800,8 +774,7 @@ fn test_class_indexer_static_get_attr_rejected() {
         class Box {
             v: int;
             public constructor() { this.v = 0; }
-            @get_indexer
-            public static fun get(index: int): int { return index; }
+            public static fun this[index: int]: int { return index; }
         }
         fun main(): void { }
     ";
@@ -820,8 +793,7 @@ fn test_class_indexer_async_get_attr_rejected() {
         class Box {
             v: int;
             public constructor() { this.v = 0; }
-            @get_indexer
-            public async fun get(index: int): int { return index; }
+            public async fun this[index: int]: int { return index; }
         }
         fun main(): void { }
     ";
@@ -928,12 +900,11 @@ fn test_class_foreach_with_option_enumerator_ok() {
     // The full enumerator protocol: `@iterator` returns an object whose `@next(): Option<T>`
     // yields elements. `break`/`continue` are valid in the body.
     let code = "
-        enum Option<T> { Some(value: T), None }
+        enum Option<T> { Some(T), None }
         class RangeIter {
             cur: int;
             end: int;
             public constructor(s: int, e: int) { this.cur = s; this.end = e; }
-            @next
             public fun next(): Option<int> {
                 if (this.cur >= this.end) { return Option.None; }
                 let v = this.cur;
@@ -945,7 +916,6 @@ fn test_class_foreach_with_option_enumerator_ok() {
             start: int;
             end: int;
             public constructor(s: int, e: int) { this.start = s; this.end = e; }
-            @iterator
             public fun iterator(): RangeIter { return RangeIter(this.start, this.end); }
         }
         fun main(): void {
@@ -968,12 +938,10 @@ fn test_class_foreach_next_not_option_errors() {
         class NumIter {
             n: int;
             public constructor() { this.n = 0; }
-            @next
             public fun next(): int { return 0; }
         }
         class Nums {
             public constructor() { }
-            @iterator
             public fun iterator(): NumIter { return NumIter(); }
         }
         fun main(): void {
@@ -1005,7 +973,7 @@ fn test_class_foreach_missing_iterator_errors() {
     assert!(diagnostics
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("@iterator")));
+        .any(|d| d.message.contains("iterator")));
 }
 
 #[test]
@@ -1568,7 +1536,7 @@ fn test_class_self_reference_allowed_with_allow_cycle() {
 
 #[test]
 fn test_option_wrapped_self_reference_is_a_cycle_error() {
-    let code = "enum Option<T> { Some(value: T), None }
+    let code = "enum Option<T> { Some(T), None }
         class Node { public next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
@@ -1630,7 +1598,7 @@ fn test_set_field_self_reference_is_a_cycle_error() {
 
 #[test]
 fn test_option_list_field_self_reference_is_a_cycle_error() {
-    let code = "enum Option<T> { Some(value: T), None }
+    let code = "enum Option<T> { Some(T), None }
         class List<T> {}
         class Node { public children: Option<List<Node>>; }";
     let diagnostics = analyze_code(code);
@@ -1675,7 +1643,7 @@ fn test_mutual_cycle_allow_cycle_on_both_suppresses() {
 
 #[test]
 fn test_weak_field_breaks_self_cycle() {
-    let code = "enum Option<T> { Some(value: T), None }
+    let code = "enum Option<T> { Some(T), None }
         class Node { weak next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
@@ -1701,7 +1669,7 @@ fn test_weak_field_requires_option_type() {
 
 #[test]
 fn test_unowned_field_requires_class_type() {
-    let code = "enum Option<T> { Some(value: T), None }
+    let code = "enum Option<T> { Some(T), None }
         class Node { unowned next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
@@ -1713,7 +1681,7 @@ fn test_unowned_field_requires_class_type() {
 
 #[test]
 fn test_field_cannot_be_both_weak_and_unowned() {
-    let code = "enum Option<T> { Some(value: T), None }
+    let code = "enum Option<T> { Some(T), None }
         class Node { weak unowned next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
@@ -1952,8 +1920,7 @@ fn test_infer_generic_class_static_unused_class_param_still_errors() {
 fn test_shared_kind_constraint() {
     let code = "
         fun send<T : shared>(v: T): T { return v; }
-        @shared
-        class Box {
+        shared class Box {
             public n: int;
             public constructor(n: int) { this.n = n; }
         }
@@ -1999,8 +1966,7 @@ fn test_shared_kind_rejects_plain_class() {
 #[test]
 fn test_shared_class_string_field_ok() {
     let code = "
-        @shared
-        class Named {
+        shared class Named {
             public label: string;
             public constructor(label: string) { this.label = label; }
         }

@@ -40,12 +40,12 @@ public class CodeBuilder {
     }
 
     static fun _spaces(n: int): string {
-        if (n <= 0) {
+        if n <= 0 {
             return string.empty;
         }
         let s = string.empty;
         let i = 0;
-        while (i < n) {
+        while i < n {
             s = s + " ";
             i = i + 1;
         }
@@ -53,11 +53,11 @@ public class CodeBuilder {
     }
 
     fun write_indent(): void {
-        if (!this.indent_pending) {
+        if !this.indent_pending {
             return;
         }
         let i = 0;
-        while (i < this.indent_level) {
+        while i < this.indent_level {
             this.buf.append(this.indent_unit);
             i = i + 1;
         }
@@ -71,7 +71,7 @@ public class CodeBuilder {
 
     // Decreases the indent depth by one unit (no-op at zero).
     public fun dedent(): void {
-        if (this.indent_level > 0) {
+        if this.indent_level > 0 {
             this.indent_level = this.indent_level - 1;
         }
     }
@@ -90,8 +90,7 @@ public class CodeBuilder {
     }
 
     // Returns the accumulated source text.
-    @override
-    public fun to_string(): string {
+    override public fun to_string(): string {
         return this.buf.to_string();
     }
 }

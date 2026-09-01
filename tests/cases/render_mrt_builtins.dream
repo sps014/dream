@@ -31,7 +31,7 @@ fun vs(v: Vertex): VsOut {
 fun fs(v: VsOut): FsOut {
     let o = FsOut();
     let face: float = 0.0;
-    if (front_facing) {
+    if front_facing {
         face = 1.0;
     } else {
         face = 0.5;
@@ -51,7 +51,7 @@ fun use_math(m: GpuMat4, v: GpuVec4): GpuVec4 {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }

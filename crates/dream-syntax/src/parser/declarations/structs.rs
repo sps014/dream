@@ -17,6 +17,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut visibility = Visibility::Private;
         let mut is_sealed = false;
         let mut is_static = false;
+        let mut is_shared = false;
         loop {
             if self.try_consume_visibility(&mut visibility) {
                 continue;
@@ -29,6 +30,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::StaticToken => {
                     self.match_token(TokenKind::StaticToken);
                     is_static = true;
+                }
+                TokenKind::SharedToken => {
+                    self.match_token(TokenKind::SharedToken);
+                    is_shared = true;
                 }
                 _ => break,
             }
@@ -68,6 +73,15 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let (generic_parameters, generic_constraints) = self.take_generic_params();
 
+        let mut primary_fields = Vec::new();
+        let had_primary = self.current_token().kind == TokenKind::OpenParenthesisToken;
+        if had_primary {
+            self.match_token(TokenKind::OpenParenthesisToken);
+            primary_fields = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
+                p.parse_primary_ctor_field()
+            })?;
+        }
+
         // Optional `: Iface1, Container<int>, ...` implements clause. Each entry is a (possibly
         // generic) interface type the class declares it satisfies; the class must provide a matching
         // method for every interface method (validated during semantic analysis).
@@ -86,10 +100,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
 
+        let mut fields = primary_fields.clone();
+        let mut methods = Vec::new();
+        if self.current_token().kind == TokenKind::SemicolonToken {
+            self.match_token(TokenKind::SemicolonToken);
+        } else {
         self.match_token(TokenKind::CurlyOpenBracketToken);
 
-        let mut fields = Vec::new();
-        let mut methods = Vec::new();
         while self.current_token().kind != TokenKind::CurlyCloseBracketToken
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
@@ -108,6 +125,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     | TokenKind::AsyncToken
                     // Receiver-mode qualifiers (`[borrow | unique] fun ...`) also precede the
                     // member's core token.
+                    | TokenKind::OverrideToken
                     | TokenKind::BorrowToken
                     | TokenKind::UniqueToken
             ) {
@@ -193,6 +211,20 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         self.match_token(TokenKind::CurlyCloseBracketToken);
+        }
+
+        if had_primary {
+            methods.insert(
+                0,
+                self.synthesize_primary_init(&primary_fields, &struct_name),
+            );
+        }
+        if is_shared && is_value {
+            self.diagnostics.report_error(
+                "'shared' cannot modify a struct; use 'shared class'".to_string(),
+                Some(struct_name.position),
+            );
+        }
         let mut decl = crate::nodes::struct_node::StructDeclarationNode::new(
             attributes,
             struct_name,
@@ -208,7 +240,81 @@ impl<'a, 'b> Parser<'a, 'b> {
         // are still allowed (see analyzer `register_extensions`).
         decl.is_sealed = is_sealed || is_static;
         decl.is_static = is_static;
+        decl.is_shared = is_shared;
         decl.generic_constraints = generic_constraints;
         Ok(decl)
+    }
+
+    fn parse_primary_ctor_field(
+        &mut self,
+    ) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
+        let mut field_visibility = Visibility::Private;
+        self.try_consume_visibility(&mut field_visibility);
+        let field_name = self.match_token(TokenKind::IdentifierToken);
+        self.match_token(TokenKind::ColonToken);
+        let type_position = self.current_token().position;
+        let parsed_type = self.parse_type()?;
+        let field_type_token = crate::token::syntax_token::SyntaxToken::new(
+            TokenKind::IdentifierToken,
+            type_position,
+            parsed_type.get_type(),
+        );
+        Ok(crate::nodes::struct_node::StructFieldNode {
+            attributes: Vec::new(),
+            name: field_name,
+            visibility: field_visibility,
+            is_weak: false,
+            is_unowned: false,
+            type_token: field_type_token,
+            field_type: parsed_type,
+        })
+    }
+
+    fn synthesize_primary_init(
+        &mut self,
+        fields: &[crate::nodes::struct_node::StructFieldNode],
+        struct_name: &crate::token::syntax_token::SyntaxToken,
+    ) -> crate::nodes::function::FunctionNode<'a> {
+        use crate::nodes::expression::ExpressionNode;
+        use crate::nodes::function::{FunctionNode, ParameterNode};
+        use crate::nodes::statement::StatementNode;
+        use crate::nodes::types::CONSTRUCTOR_NAME;
+
+        let params: Vec<ParameterNode> = fields
+            .iter()
+            .map(|f| ParameterNode::new(f.name.clone(), f.field_type.clone()))
+            .collect();
+        let this_tok = crate::token::syntax_token::SyntaxToken::new(
+            TokenKind::IdentifierToken,
+            struct_name.position.clone(),
+            "this".to_string(),
+        );
+        let mut stmts = Vec::new();
+        for f in fields {
+            let this_expr = self
+                .arena
+                .alloc(ExpressionNode::Identifier(this_tok.clone()));
+            let value = ExpressionNode::Identifier(f.name.clone());
+            stmts.push(StatementNode::MemberAssignment(
+                this_expr,
+                f.name.clone(),
+                value,
+            ));
+        }
+        let body = self.arena.alloc_slice_clone(&stmts);
+        let name = crate::token::syntax_token::SyntaxToken::new(
+            TokenKind::IdentifierToken,
+            struct_name.position.clone(),
+            CONSTRUCTOR_NAME.to_string(),
+        );
+        FunctionNode::new(
+            Vec::new(),
+            name,
+            None,
+            None,
+            params,
+            body,
+            Visibility::Public,
+        )
     }
 }

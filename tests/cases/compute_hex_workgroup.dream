@@ -5,14 +5,14 @@ import system.gpu;
 fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
     let scale = 0b1;
-    if (i < a.length && i < n) {
+    if i < a.length && i < n {
         out[i] = a[i] + b[i] + (float)scale - 1.0;
     }
 }
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
@@ -20,7 +20,7 @@ async fun main(): void {
     let b = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
     let r = await Compute.run_1d("add", [a, b, out], 4);
-    if (r.is_err()) {
+    if r.is_err() {
         System.println("dispatch failed");
         return;
     }

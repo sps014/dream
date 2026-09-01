@@ -272,7 +272,7 @@ impl SemanticModel {
             } else {
                 TypeKind::Class
             };
-            let is_shared = s.attributes.iter().any(|a| a.name.text == "shared");
+            let is_shared = s.is_shared;
             let mut fields = Vec::new();
             for f in &s.fields {
                 fields.push(Symbol {
@@ -299,7 +299,7 @@ impl SemanticModel {
             let mut constructors = Vec::new();
             for m in &s.methods {
                 let sym = method_symbol(m, &s.name.text, is_shared);
-                if m.name.text == "constructor" {
+                if m.name.text == dream_syntax::nodes::types::CONSTRUCTOR_NAME {
                     constructors.push(sym);
                 } else {
                     methods.push(sym);
@@ -491,7 +491,7 @@ fn method_symbol(m: &FunctionNode<'_>, declaring: &str, is_shared: bool) -> Symb
     let is_unsafe = m.attributes.iter().any(|a| a.name.text == "unsafe");
     Symbol {
         name: m.name.text.clone(),
-        kind: if m.name.text == "constructor" {
+        kind: if m.name.text == dream_syntax::nodes::types::CONSTRUCTOR_NAME {
             SymbolKind::Constructor
         } else {
             SymbolKind::Method

@@ -4,7 +4,7 @@ module system.primitives;
 extend bool {
     // 1 for true, 0 for false.
     public fun to_int(): int {
-        if (this == true) {
+        if this == true {
             return 1;
         }
         return 0;
@@ -12,10 +12,10 @@ extend bool {
 
     // Parses `true` or `false` (case-sensitive, matching language literals).
     public static fun parse(borrow text: string): Result<bool, ParseError> {
-        if (text == "true") {
+        if text == "true" {
             return Result.Ok(true);
         }
-        if (text == "false") {
+        if text == "false" {
             return Result.Ok(false);
         }
         return Result.Err(ParseError.invalid("cannot parse bool: expected true or false"));

@@ -6,19 +6,19 @@ fun main(): void {
     let b = Buffer.alloc<float>(n);
     let c = Buffer.alloc<float>(n);
     let i = 0;
-    while (i < n) {
+    while i < n {
         a[i] = (float)i;
         b[i] = (float)1;
         i = i + 1;
     }
     i = 0;
-    while (i < n) {
+    while i < n {
         c[i] = a[i] + b[i];
         i = i + 1;
     }
     let s = 0;
     i = 0;
-    while (i < n) {
+    while i < n {
         s = s + (int)c[i];
         i = i + 1;
     }
@@ -28,19 +28,19 @@ fun main(): void {
     let bi = Buffer.alloc<int>(n);
     let ci = Buffer.alloc<int>(n);
     i = 0;
-    while (i < n) {
+    while i < n {
         ai[i] = i;
         bi[i] = 2;
         i = i + 1;
     }
     i = 0;
-    while (i < n) {
+    while i < n {
         ci[i] = ai[i] + bi[i];
         i = i + 1;
     }
     s = 0;
     i = 0;
-    while (i < n) {
+    while i < n {
         s = s + ci[i];
         i = i + 1;
     }

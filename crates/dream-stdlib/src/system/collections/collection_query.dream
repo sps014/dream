@@ -17,7 +17,7 @@ extend Collection<T> {
     public fun filter(borrow pred: fun(T): bool): List<T> {
         let result = List<T>();
         for (let x in this) {
-            if (pred(x)) {
+            if pred(x) {
                 result.push(x);
             }
         }
@@ -56,7 +56,7 @@ extend Collection<T> {
         let seen = Set<T>();
         let result = List<T>();
         for (let x in this) {
-            if (!seen.contains(x)) {
+            if !seen.contains(x) {
                 seen.add(x);
                 result.push(x);
             }
@@ -81,7 +81,7 @@ extend Collection<T> {
         let result = List<T>();
         let i = 0;
         for (let x in this) {
-            if (i >= n) {
+            if i >= n {
                 break;
             }
             result.push(x);
@@ -95,7 +95,7 @@ extend Collection<T> {
         let result = List<T>();
         let i = 0;
         for (let x in this) {
-            if (i >= n) {
+            if i >= n {
                 result.push(x);
             }
             i = i + 1;
@@ -124,14 +124,14 @@ extend Collection<T> {
         let seen = false;
         let best = Buffer.alloc<T>(1)[0];
         for (let x in this) {
-            if (seen == false) {
+            if seen == false {
                 best = x;
                 seen = true;
             } else if (x.compare(best) < 0) {
                 best = x;
             }
         }
-        if (seen == false) {
+        if seen == false {
             return Option.None;
         }
         return Option.Some(best);
@@ -142,14 +142,14 @@ extend Collection<T> {
         let seen = false;
         let best = Buffer.alloc<T>(1)[0];
         for (let x in this) {
-            if (seen == false) {
+            if seen == false {
                 best = x;
                 seen = true;
             } else if (x.compare(best) > 0) {
                 best = x;
             }
         }
-        if (seen == false) {
+        if seen == false {
             return Option.None;
         }
         return Option.Some(best);

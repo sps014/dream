@@ -559,7 +559,7 @@ impl<'a> Analyzer<'a> {
                 return Err(report(
                     diagnostics,
                     format!(
-                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class '@shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)",
+                        "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)",
                         bad,
                         pretty,
                         who,
@@ -596,6 +596,10 @@ impl<'a> Analyzer<'a> {
             is_default_impl: false,
             // Synthesized closures/method-groups have no receiver contract.
             receiver_mode: None,
+            is_override: false,
+            operator_symbol: None,
+            cast_kind: None,
+            indexer_kind: None,
         };
         let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
 

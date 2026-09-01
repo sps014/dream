@@ -30,7 +30,7 @@ public class GenTypeInfo {
 
     public fun has_attribute(attr: string): bool {
         for (let a in this.attributes) {
-            if (a == attr) {
+            if a == attr {
                 return true;
             }
         }
@@ -86,7 +86,7 @@ public class GenContext {
     // Loads a `GenContext` from the JSON snapshot file the compiler wrote. The path is
     // passed to the generator harness as its first program argument.
     public static async fun from_snapshot(path: string): Result<GenContext, string> {
-        if (path.is_empty()) {
+        if path.is_empty() {
             return Result.Err("snapshot path is empty");
         }
         let text_res = await File.read(path);
@@ -98,7 +98,7 @@ public class GenContext {
                         let arr = root.get("blocks").unwrap_or(JsonValue.array());
                         let blocks = List<GenSyntaxBlock>();
                         let i = 0;
-                        while (i < arr.length) {
+                        while i < arr.length {
                             let b = arr.at(i).unwrap_or(JsonValue.none());
                             let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
                             let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
@@ -106,7 +106,7 @@ public class GenContext {
                             let splices_json = b.get("splices").unwrap_or(JsonValue.array());
                             let splices = List<string>();
                             let j = 0;
-                            while (j < splices_json.length) {
+                            while j < splices_json.length {
                                 let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
                                 splices.push(s);
                                 j = j + 1;
@@ -117,13 +117,13 @@ public class GenContext {
                         let types_arr = root.get("types").unwrap_or(JsonValue.array());
                         let types = List<GenTypeInfo>();
                         let ti = 0;
-                        while (ti < types_arr.length) {
+                        while ti < types_arr.length {
                             let t = types_arr.at(ti).unwrap_or(JsonValue.none());
                             let tname = t.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
                             let attrs_json = t.get("attributes").unwrap_or(JsonValue.array());
                             let attributes = List<string>();
                             let ai = 0;
-                            while (ai < attrs_json.length) {
+                            while ai < attrs_json.length {
                                 let a = attrs_json.at(ai).unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
                                 attributes.push(a);
                                 ai = ai + 1;
@@ -131,7 +131,7 @@ public class GenContext {
                             let fields_json = t.get("fields").unwrap_or(JsonValue.array());
                             let fields = List<GenFieldInfo>();
                             let fi = 0;
-                            while (fi < fields_json.length) {
+                            while fi < fields_json.length {
                                 let f = fields_json.at(fi).unwrap_or(JsonValue.none());
                                 let fname = f.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
                                 let ftype = f.get("type_name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
@@ -158,7 +158,7 @@ public class GenContext {
     public fun syntax_blocks(name: string): List<GenSyntaxBlock> {
         let out = List<GenSyntaxBlock>();
         for (let b in this.blocks) {
-            if (b.name == name) {
+            if b.name == name {
                 out.push(b);
             }
         }
@@ -174,7 +174,7 @@ public class GenContext {
     public fun types_with(attr: string): List<GenTypeInfo> {
         let out = List<GenTypeInfo>();
         for (let t in this.types) {
-            if (t.has_attribute(attr)) {
+            if t.has_attribute(attr) {
                 out.push(t);
             }
         }
@@ -202,7 +202,7 @@ public class GenContext {
     // Only the first reported error is kept, mirroring the harness `ERR` protocol's one-message
     // contract.
     public fun error(block: GenSyntaxBlock, message: string): void {
-        if (this.has_error == false) {
+        if this.has_error == false {
             this.has_error = true;
             this.error_line = block.id.to_string() + "\t" + message;
         }
@@ -210,7 +210,7 @@ public class GenContext {
 
     // Queues a generate-time diagnostic with no associated call site.
     public fun error_general(message: string): void {
-        if (this.has_error == false) {
+        if this.has_error == false {
             this.has_error = true;
             this.error_line = message;
         }
@@ -218,7 +218,7 @@ public class GenContext {
 
     // Flushes accumulated replace/error/emit calls to stdout using the `GenHost` protocol.
     public fun finish(): void {
-        if (this.has_error) {
+        if this.has_error {
             System.println(GenHost.err_marker());
             System.println(this.error_line);
             return;
@@ -228,14 +228,14 @@ public class GenContext {
             System.println(line);
         }
         let ei = 0;
-        while (ei < this.extend_types.length) {
+        while ei < this.extend_types.length {
             System.println(GenHost.emit_extend_marker());
             System.println(this.extend_types.get(ei));
             System.println(escape_gen_payload(this.extend_bodies.get(ei)));
             ei = ei + 1;
         }
         let fi = 0;
-        while (fi < this.file_paths.length) {
+        while fi < this.file_paths.length {
             System.println(GenHost.emit_file_marker());
             System.println(this.file_paths.get(fi));
             System.println(escape_gen_payload(this.file_sources.get(fi)));

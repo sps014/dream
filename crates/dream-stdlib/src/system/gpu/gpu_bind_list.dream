@@ -23,13 +23,13 @@ public class GpuBindList {
     }
 
     fun grow_int(arr: int[], need: int): int[] {
-        if (need <= arr.length) { return arr; }
+        if need <= arr.length { return arr; }
         let n = arr.length;
-        if (n < 1) { n = 1; }
-        while (n < need) { n = n * 2; }
+        if n < 1 { n = 1; }
+        while n < need { n = n * 2; }
         let out = Buffer.alloc<int>(n);
         let i = 0;
-        while (i < arr.length) {
+        while i < arr.length {
             out[i] = arr[i];
             i = i + 1;
         }
@@ -64,7 +64,7 @@ public class GpuBindList {
     public fun buffer_ids(): int[] {
         let out = Buffer.alloc<int>(this._bc);
         let i = 0;
-        while (i < this._bc) {
+        while i < this._bc {
             out[i] = this._buffers[i];
             i = i + 1;
         }
@@ -75,7 +75,7 @@ public class GpuBindList {
     public fun texture_ids(): int[] {
         let out = Buffer.alloc<int>(this._tc);
         let i = 0;
-        while (i < this._tc) {
+        while i < this._tc {
             out[i] = this._textures[i];
             i = i + 1;
         }
@@ -86,7 +86,7 @@ public class GpuBindList {
     public fun sampler_ids(): int[] {
         let out = Buffer.alloc<int>(this._sc);
         let i = 0;
-        while (i < this._sc) {
+        while i < this._sc {
             out[i] = this._samplers[i];
             i = i + 1;
         }

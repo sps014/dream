@@ -11,7 +11,7 @@ async fun main(): void {
     await File.append(path, "rocks\n");
 
     // Metadata (synchronous predicates). `size` is an `Option<int>` (`None` if absent).
-    if (File.exists(path)) {
+    if File.exists(path) {
         System.print("size = ");
         System.println(File.size(path).unwrap_or(0 - 1));
     }

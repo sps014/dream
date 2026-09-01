@@ -14,7 +14,7 @@ public class StringBuilder {
     // Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
     public constructor(capacity: int = 16) {
         let c = capacity;
-        if (c < sequence_min_capacity()) {
+        if c < sequence_min_capacity() {
             c = sequence_min_capacity();
         }
         this.bytes = Buffer.alloc<byte>(c + 4);
@@ -37,7 +37,7 @@ public class StringBuilder {
     @inline
     fun grow(min_capacity: int): void {
         let new_cap = this.cap * 2;
-        if (new_cap < min_capacity) {
+        if new_cap < min_capacity {
             new_cap = min_capacity;
         }
         this.bytes = Buffer.realloc<byte>(this.bytes, new_cap);
@@ -47,7 +47,7 @@ public class StringBuilder {
     @inline
     fun ensure(extra: int): void {
         let need = this.count + extra + 4;
-        if (need > this.cap) {
+        if need > this.cap {
             this.grow(need);
         }
     }
@@ -62,10 +62,10 @@ public class StringBuilder {
     // Appends a Unicode scalar as one or two UTF-16 units.
     public fun append_char(c: char): void {
         let cp = c.to_int();
-        if ((cp < 0) || (cp > 1114111)) {
+        if (cp < 0) || (cp > 1114111) {
             cp = 65533;
         }
-        if (cp < 65536) {
+        if cp < 65536 {
             this.write_unit(cp);
             return;
         }
@@ -91,7 +91,7 @@ public class StringBuilder {
 
     // Appends `byte_len` payload bytes starting at byte index `start` of `text`.
     public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void {
-        if (byte_len <= 0) {
+        if byte_len <= 0 {
             return;
         }
         this.ensure(byte_len);
@@ -106,7 +106,7 @@ public class StringBuilder {
 
     // Appends `"true"` or `"false"` without allocating an intermediate string.
     public fun append_bool(v: bool): void {
-        if (v) {
+        if v {
             this.append("true");
         } else {
             this.append("false");
@@ -139,14 +139,14 @@ public class StringBuilder {
     // second `byte[]` (that doubled the finish memcpy).
     public fun build(): string {
         let n = this.count;
-        if (n <= 0) {
+        if n <= 0 {
             return string.empty;
         }
         // `scalars < 0` tells the runtime to derive the unit count from `len`.
         return string.from_builder(this.bytes, n, -1);
     }
 
-    @override public fun to_string(): string {
+    override public fun to_string(): string {
         return this.build();
     }
 }

@@ -149,7 +149,7 @@ fun interesct(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: f
         let py: float = roy + t * rdy;
         let pz: float = roz + t * rdz;
         let h: float = py - terrain_n(px, pz, 6);
-        if (GpuMath.abs(h) < 0.002 * t || t > tmax) {
+        if GpuMath.abs(h) < 0.002 * t || t > tmax {
             break;
         }
         t = t + 0.4 * h;
@@ -168,7 +168,7 @@ fun soft_shadow(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz:
         let h: float = py - terrain_n(px, pz, 3);
         res = GpuMath.min(res, 16.0 * h / t);
         t = t + GpuMath.max(h, 0.12);
-        if (res < 0.001 || py > 220.0 || t > 140.0) {
+        if res < 0.001 || py > 220.0 || t > 140.0 {
             break;
         }
     }
@@ -206,10 +206,10 @@ fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: floa
     let tmin: float = 0.5;
     let tmax: float = 2000.0;
     let maxh: float = 300.0;
-    if (GpuMath.abs(rdy) > 0.00001) {
+    if GpuMath.abs(rdy) > 0.00001 {
         let tp: float = (maxh - roy) / rdy;
-        if (tp > 0.0) {
-            if (roy > maxh) {
+        if tp > 0.0 {
+            if roy > maxh {
                 tmin = GpuMath.max(tmin, tp);
             } else {
                 tmax = GpuMath.min(tmax, tp);
@@ -221,14 +221,14 @@ fun render(rox: float, roy: float, roz: float, rdx: float, rdy: float, rdz: floa
     let t: float = interesct(rox, roy, roz, rdx, rdy, rdz, tmin, tmax);
     let col = GpuVec3.of(0.0, 0.0, 0.0);
 
-    if (t > tmax) {
+    if t > tmax {
         let sky0 = GpuVec3.of(0.3 - rdy * rdy * 0.5, 0.5 - rdy * rdy * 0.5, 0.85 - rdy * rdy * 0.5);
         let hz: float = GpuMath.pow(1.0 - GpuMath.max(rdy, 0.0), 4.0);
         col = GpuMath.mix(sky0, GpuVec3.of(0.7, 0.75, 0.85) * 0.85, hz);
         col = col + GpuVec3.of(1.0, 0.7, 0.4) * (0.25 * GpuMath.pow(sundot, 5.0));
         col = col + GpuVec3.of(1.0, 0.8, 0.6) * (0.25 * GpuMath.pow(sundot, 64.0));
         col = col + GpuVec3.of(1.0, 0.8, 0.6) * (0.2 * GpuMath.pow(sundot, 512.0));
-        if (rdy > 0.05) {
+        if rdy > 0.05 {
             let scx: float = rox + rdx * (1000.0 - roy) / rdy;
             let scz: float = roz + rdz * (1000.0 - roy) / rdy;
             let cl: float = 0.5 * GpuMath.smoothstep(0.5, 0.8, fbm(0.0005 * scx, 0.0005 * scz));
@@ -348,13 +348,13 @@ fun make_vert(x: float, y: float): Vertex {
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("WebGPU unavailable — elevated needs Gpu.try_init");
         return;
     }
 
     let surface_r = GpuSurface.create("elevated", 1280, 720);
-    if (surface_r.is_err()) {
+    if surface_r.is_err() {
         System.println("GpuSurface.create failed");
         return;
     }
@@ -362,12 +362,12 @@ async fun main(): void {
 
     let w: int = surface.width();
     let h: int = surface.height();
-    if (w < 1) { w = 1280; }
-    if (h < 1) { h = 720; }
+    if w < 1 { w = 1280; }
+    if h < 1 { h = 720; }
 
     let desc = GpuRenderPipelineDesc.defaults();
     let pipe_r = await GpuRenderPipeline.create_ex("elev_vs", "elev_fs", desc);
-    if (pipe_r.is_err()) {
+    if pipe_r.is_err() {
         System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
@@ -382,7 +382,7 @@ async fun main(): void {
     let sky = GpuVec4.of(0.3, 0.5, 0.85, 1.0);
     let t0: long = Time.nano_time();
 
-    while (!surface.close_requested()) {
+    while !surface.close_requested() {
         for (let ev in surface.poll_events()) {
             switch (ev) {
                 _ => {},
@@ -390,8 +390,8 @@ async fun main(): void {
         }
         w = surface.width();
         h = surface.height();
-        if (w < 1) { w = 1280; }
-        if (h < 1) { h = 720; }
+        if w < 1 { w = 1280; }
+        if h < 1 { h = 720; }
         let rw: float = (float)w;
         let rh: float = (float)h;
         let now: long = Time.nano_time();

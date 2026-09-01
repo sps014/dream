@@ -4,7 +4,7 @@
 
 import system;
 fun half(n: int): Result<int, string> {
-    if (n % 2 != 0) {
+    if n % 2 != 0 {
         return Result.Err("odd");
     }
     return Result.Ok(n / 2);
@@ -19,7 +19,7 @@ fun quarter(n: int): Result<int, string> {
 
 fun first_positive(xs: int[]): Option<int> {
     for (let x in xs) {
-        if (x > 0) {
+        if x > 0 {
             return Option.Some(x);
         }
     }

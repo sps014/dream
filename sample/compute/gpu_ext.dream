@@ -7,7 +7,7 @@ import system.gpu;
 @compute(64)
 fun double_it(@readonly src: GpuBuffer<float>, dst: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < n) {
+    if i < n {
         dst[i] = src[i] * 2.0;
     }
 }
@@ -15,14 +15,14 @@ fun double_it(@readonly src: GpuBuffer<float>, dst: GpuBuffer<float>, n: int): v
 @compute(64)
 fun add_one(buf: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < n) {
+    if i < n {
         buf[i] = buf[i] + 1.0;
     }
 }
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
@@ -36,7 +36,7 @@ async fun main(): void {
     pass.dispatch("double_it", [src, dst], 4, 1, 1);
     pass.dispatch("add_one", [dst], 4, 1, 1);
     let sub = await pass.submit();
-    if (sub.is_err()) {
+    if sub.is_err() {
         System.println("submit failed");
         return;
     }

@@ -2,7 +2,7 @@ module system.core;
 
 // `Option<T>` - a value that is either present (`Some`) or absent (`None`).
 public enum Option<T> {
-    Some(value: T),
+    Some(T),
     None,
 
     // True when this is `Some`.
@@ -31,7 +31,7 @@ public enum Option<T> {
 
     // The contained value, or panics if `None`.
     public fun unwrap(): T {
-        if (this.is_none()) {
+        if this.is_none() {
             System.panic("unwrap() called on Option.None");
         }
         return this.unwrap_or(Buffer.alloc<T>(1)[0]);
@@ -39,7 +39,7 @@ public enum Option<T> {
 
     // The contained value, or panics with `msg` if `None`.
     public fun expect(borrow msg: string): T {
-        if (this.is_none()) {
+        if this.is_none() {
             System.panic(msg);
         }
         return this.unwrap_or(Buffer.alloc<T>(1)[0]);
@@ -55,11 +55,11 @@ public enum Option<T> {
 
     // `Some` when the value is present and `pred` is true, otherwise `None`.
     public fun filter(borrow pred: fun(T): bool): Option<T> {
-        if (this.is_none()) {
+        if this.is_none() {
             return Option.None;
         }
         let v = this.unwrap_or(Buffer.alloc<T>(1)[0]);
-        if (pred(v)) {
+        if pred(v) {
             return Option.Some(v);
         }
         return Option.None;

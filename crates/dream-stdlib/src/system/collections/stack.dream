@@ -26,7 +26,7 @@ public class Stack<T> : Collection<T> {
 
     // Returns the top element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
-        if (this.items.length == 0) {
+        if this.items.length == 0 {
             return Option.None;
         }
         return Option.Some(this.items.get(this.items.length - 1));
@@ -38,7 +38,6 @@ public class Stack<T> : Collection<T> {
     }
 
     // Iterates elements from bottom to top.
-    @iterator
     public fun iterator(): ListIterator<T> {
         return this.items.iterator();
     }

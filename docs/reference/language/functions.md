@@ -29,8 +29,8 @@ Use `return`. The compiler checks that every path returns when the return type i
 
 ```dream
 fun clamp(value: int, lo: int, hi: int): int {
-    if (value < lo) { return lo; }
-    if (value > hi) { return hi; }
+    if value < lo { return lo; }
+    if value > hi { return hi; }
     return value;
 }
 ```
@@ -39,7 +39,7 @@ In a `void` function a bare `return;` exits early:
 
 ```dream
 fun log_positive(n: int): void {
-    if (n < 0) { return; }
+    if n < 0 { return; }
     println(n);
 }
 ```
@@ -48,7 +48,7 @@ Functions can call themselves — recursion works as expected:
 
 ```dream
 fun fib(n: int): int {
-    if (n <= 1) { return n; }
+    if n <= 1 { return n; }
     return fib(n - 1) + fib(n - 2);
 }
 ```
@@ -60,7 +60,7 @@ A parameter can supply a default with `= <literal>`; callers may then omit it:
 ```dream
 fun greet(name: string, times: int = 1): void {
     let i = 0;
-    while (i < times) {
+    while i < times {
         println("hi " + name);
         i = i + 1;
     }

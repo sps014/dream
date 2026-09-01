@@ -53,7 +53,7 @@ pub(super) fn analyze_code_with_crate_type(
 /// not depend on the full prelude being merged by the unit-test harness.
 pub(super) const JS_STUB: &str = "
     enum Option<T> {
-        Some(value: T),
+        Some(T),
         None,
     }
     extend js {

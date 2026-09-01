@@ -35,7 +35,7 @@ public class ChildProcess {
         let out = Buffer.alloc<byte>(n);
         let src = Span<char>(data, start, n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             out[i] = (byte)src.get(i);
             i = i + 1;
         }
@@ -45,10 +45,10 @@ public class ChildProcess {
     @native @node
     async fun read_line(stream: int): Option<string> {
         let raw = await ChildProcess.host_read_stream_line(this._handle, stream);
-        if (raw.length == 0) {
+        if raw.length == 0 {
             return Option.None;
         }
-        if (raw[0] == '0') {
+        if raw[0] == '0' {
             return Option.None;
         }
         return Option.Some(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 1)));
@@ -122,25 +122,25 @@ public class ChildProcess {
     async fun read_stream_all(stream: int): byte[] {
         let acc = Buffer.alloc<byte>(0);
         let n = 0;
-        while (true) {
+        while true {
             let raw = await ChildProcess.host_read_stream(this._handle, stream, 65536);
             let chunk = ChildProcess.slice_to_bytes(raw, 0);
-            if (chunk.length == 0) {
+            if chunk.length == 0 {
                 break;
             }
             let need = n + chunk.length;
-            if (need > acc.length) {
+            if need > acc.length {
                 let cap = acc.length;
-                if (cap < 1) {
+                if cap < 1 {
                     cap = chunk.length;
                 }
-                while (cap < need) {
+                while cap < need {
                     cap = cap * 2;
                 }
                 acc = Buffer.realloc<byte>(acc, cap);
             }
             let i = 0;
-            while (i < chunk.length) {
+            while i < chunk.length {
                 acc[n] = chunk[i];
                 n = n + 1;
                 i = i + 1;
@@ -148,7 +148,7 @@ public class ChildProcess {
         }
         let out = Buffer.alloc<byte>(n);
         let j = 0;
-        while (j < n) {
+        while j < n {
             out[j] = acc[j];
             j = j + 1;
         }

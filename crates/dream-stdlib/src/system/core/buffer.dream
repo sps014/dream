@@ -52,7 +52,7 @@ public static class Buffer {
         let z = Buffer.alloc<T>(1);
         let i = 0;
         let n = arr.length;
-        while (i < n) {
+        while i < n {
             arr[i] = z[0];
             i = i + 1;
         }
@@ -61,15 +61,15 @@ public static class Buffer {
     // Like `clear`, but releases only slots `[n, arr.length)` — the tail dropped by a shrink to
     // `n`. Slots below `n` are left untouched.
     public static fun truncate<T>(borrow arr: T[], n: int): void {
-        if (n < 0) {
+        if n < 0 {
             n = 0;
         }
-        if (n >= arr.length) {
+        if n >= arr.length {
             return;
         }
         let z = Buffer.alloc<T>(1);
         let i = n;
-        while (i < arr.length) {
+        while i < arr.length {
             arr[i] = z[0];
             i = i + 1;
         }

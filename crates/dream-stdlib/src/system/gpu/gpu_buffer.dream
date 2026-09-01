@@ -75,8 +75,8 @@ public struct GpuBuffer<T : unmanaged> {
 
     // Partial CPU→GPU write starting at element `offset`.
     public fun write_at(offset: int, data: T[]): void {
-        if (offset < 0 || data.length < 0) { return; }
-        if (offset + data.length > this._length) {
+        if offset < 0 || data.length < 0 { return; }
+        if offset + data.length > this._length {
             System.println("GpuBuffer.write_at: out of bounds");
             return;
         }
@@ -101,7 +101,7 @@ public struct GpuBuffer<T : unmanaged> {
 
     // Reads `count` elements starting at element `offset`.
     public async fun read_at(offset: int, count: int): T[] {
-        if (offset < 0 || count < 0 || offset + count > this._length) {
+        if offset < 0 || count < 0 || offset + count > this._length {
             return Buffer.alloc<T>(0);
         }
         let bytes = await Gpu.buffer_read_bytes_at(
@@ -114,13 +114,13 @@ public struct GpuBuffer<T : unmanaged> {
 
     // GPU-side copy of `count` elements into `dst` (no CPU round-trip).
     public fun copy_to(dst: GpuBuffer<T>, src_offset: int, dst_offset: int, count: int): void {
-        if (count <= 0) { return; }
-        if (src_offset < 0 || dst_offset < 0) { return; }
-        if (src_offset + count > this._length || dst_offset + count > dst._length) {
+        if count <= 0 { return; }
+        if src_offset < 0 || dst_offset < 0 { return; }
+        if src_offset + count > this._length || dst_offset + count > dst._length {
             System.println("GpuBuffer.copy_to: out of bounds");
             return;
         }
-        if (this._stride != dst._stride) {
+        if this._stride != dst._stride {
             System.println("GpuBuffer.copy_to: stride mismatch");
             return;
         }

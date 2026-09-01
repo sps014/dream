@@ -39,7 +39,7 @@ public class MultipartForm {
         let boundary = "dreamform" + this.field_names.length.to_string() + "x" + this.file_names.length.to_string();
         let total = 0;
         let i = 0;
-        while (i < this.field_names.length) {
+        while i < this.field_names.length {
             let name = this.field_names.get(i);
             let value = this.field_values.get(i);
             total = total + MultipartForm._str_bytes("--" + boundary + "\r\n");
@@ -51,7 +51,7 @@ public class MultipartForm {
             i = i + 1;
         }
         i = 0;
-        while (i < this.file_names.length) {
+        while i < this.file_names.length {
             let name = this.file_names.get(i);
             let filename = this.file_filenames.get(i);
             let ctype = this.file_types.get(i);
@@ -70,7 +70,7 @@ public class MultipartForm {
         let body_buf = Buffer.alloc<byte>(total);
         let offset = 0;
         i = 0;
-        while (i < this.field_names.length) {
+        while i < this.field_names.length {
             let name = this.field_names.get(i);
             let value = this.field_values.get(i);
             offset = MultipartForm._write_str(body_buf, offset, "--" + boundary + "\r\n");
@@ -84,7 +84,7 @@ public class MultipartForm {
             i = i + 1;
         }
         i = 0;
-        while (i < this.file_names.length) {
+        while i < this.file_names.length {
             let name = this.file_names.get(i);
             let filename = this.file_filenames.get(i);
             let ctype = this.file_types.get(i);
@@ -118,7 +118,7 @@ public class MultipartForm {
     static fun _write_bytes(dst: byte[], offset: int, extra: byte[]): int {
         let src = Span<byte>.of(extra);
         let i = 0;
-        while (i < src.length) {
+        while i < src.length {
             dst[offset + i] = src.get(i);
             i = i + 1;
         }

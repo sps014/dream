@@ -562,7 +562,7 @@ pub(crate) fn is_ident_byte(b: u8) -> bool {
 }
 
 /// Snippet insert text for a payload enum variant. `detail` looks like
-/// `Shape.Circle(radius: float)` or `Result.Ok(T)`; unit variants (`Color.Red = 0`) return `None`.
+/// `Shape.Circle(float)` or `Result.Ok(T)`; unit variants (`Color.Red = 0`) return `None`.
 pub fn enum_member_snippet(name: &str, detail: &str) -> Option<String> {
     let open = detail.find('(')?;
     let close = detail.rfind(')')?;

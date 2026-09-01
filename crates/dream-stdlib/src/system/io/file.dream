@@ -65,7 +65,7 @@ public static class File {
 
     // Reads the whole file at `path` as UTF-8 text.
     public static async fun read(borrow path: string): Result<string, IoError> {
-        if (File.exists(path) == false) {
+        if File.exists(path) == false {
             return Result.Err(IoError.not_found(path));
         }
         return Result.Ok(File.file_read(path));
@@ -74,7 +74,7 @@ public static class File {
     // Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
     public static async fun write(borrow path: string, borrow content: string): Result<long, IoError> {
         let n = File.file_write(path, content);
-        if (n < 0L) {
+        if n < 0L {
             return Result.Err(IoError.other(path, "failed to write file: " + path));
         }
         return Result.Ok(n);
@@ -83,7 +83,7 @@ public static class File {
     // Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
     public static async fun append(borrow path: string, borrow content: string): Result<long, IoError> {
         let n = File.file_append(path, content);
-        if (n < 0L) {
+        if n < 0L {
             return Result.Err(IoError.other(path, "failed to append to file: " + path));
         }
         return Result.Ok(n);
@@ -91,7 +91,7 @@ public static class File {
 
     // Reads the whole file at `path` as raw bytes.
     public static async fun read_bytes(borrow path: string): Result<byte[], IoError> {
-        if (File.exists(path) == false) {
+        if File.exists(path) == false {
             return Result.Err(IoError.not_found(path));
         }
         return Result.Ok(File.file_read_bytes(path));
@@ -100,7 +100,7 @@ public static class File {
     // Writes raw bytes to `path`, replacing any existing contents.
     public static async fun write_bytes(borrow path: string, borrow data: byte[]): Result<long, IoError> {
         let n = File.file_write_bytes(path, data);
-        if (n < 0L) {
+        if n < 0L {
             return Result.Err(IoError.other(path, "failed to write file: " + path));
         }
         return Result.Ok(n);
@@ -108,8 +108,8 @@ public static class File {
 
     // Deletes `path`; resolves `Ok(true)` on success.
     public static async fun delete(borrow path: string): Result<bool, IoError> {
-        if (File.file_delete(path) == false) {
-            if (File.exists(path) == false) {
+        if File.file_delete(path) == false {
+            if File.exists(path) == false {
                 return Result.Err(IoError.not_found(path));
             }
             return Result.Err(IoError.other(path, "failed to delete: " + path));
@@ -119,13 +119,13 @@ public static class File {
 
     // Copies a file from `from` to `to`, overwriting `to` when it already exists.
     public static async fun copy(borrow from: string, borrow to: string): Result<bool, IoError> {
-        if (File.exists(from) == false) {
+        if File.exists(from) == false {
             return Result.Err(IoError.not_found(from));
         }
-        if (File.is_dir(from)) {
+        if File.is_dir(from) {
             return Result.Err(IoError.other(from, "cannot copy a directory: " + from));
         }
-        if (File.file_copy(from, to) == false) {
+        if File.file_copy(from, to) == false {
             return Result.Err(IoError.other(to, "failed to copy to: " + to));
         }
         return Result.Ok(true);
@@ -133,10 +133,10 @@ public static class File {
 
     // Renames or moves `from` to `to` (same-volume when the OS requires it).
     public static async fun rename(borrow from: string, borrow to: string): Result<bool, IoError> {
-        if (File.exists(from) == false) {
+        if File.exists(from) == false {
             return Result.Err(IoError.not_found(from));
         }
-        if (File.file_rename(from, to) == false) {
+        if File.file_rename(from, to) == false {
             return Result.Err(IoError.other(to, "failed to rename to: " + to));
         }
         return Result.Ok(true);
@@ -144,13 +144,13 @@ public static class File {
 
     // Removes an empty directory at `path`.
     public static async fun remove_dir(borrow path: string): Result<bool, IoError> {
-        if (File.exists(path) == false) {
+        if File.exists(path) == false {
             return Result.Err(IoError.not_found(path));
         }
-        if (File.is_dir(path) == false) {
+        if File.is_dir(path) == false {
             return Result.Err(IoError.other(path, "not a directory: " + path));
         }
-        if (File.dir_remove(path) == false) {
+        if File.dir_remove(path) == false {
             return Result.Err(IoError.other(path, "failed to remove directory: " + path));
         }
         return Result.Ok(true);
@@ -158,10 +158,10 @@ public static class File {
 
     // Recursively deletes `path` (file or directory tree).
     public static async fun remove_dir_all(borrow path: string): Result<bool, IoError> {
-        if (File.exists(path) == false) {
+        if File.exists(path) == false {
             return Result.Err(IoError.not_found(path));
         }
-        if (File.dir_remove_all(path) == false) {
+        if File.dir_remove_all(path) == false {
             return Result.Err(IoError.other(path, "failed to remove: " + path));
         }
         return Result.Ok(true);
@@ -169,8 +169,8 @@ public static class File {
 
     // Creates a single directory at `path`; resolves `Ok(true)` on success.
     public static async fun create_dir(borrow path: string): Result<bool, IoError> {
-        if (File.dir_create(path) == false) {
-            if (File.exists(path)) {
+        if File.dir_create(path) == false {
+            if File.exists(path) {
                 return Result.Err(IoError.exists(path));
             }
             return Result.Err(IoError.other(path, "failed to create directory: " + path));
@@ -180,7 +180,7 @@ public static class File {
 
     // Creates `path` and any missing parents; resolves `Ok(true)` on success.
     public static async fun create_dir_all(borrow path: string): Result<bool, IoError> {
-        if (File.dir_create_all(path) == false) {
+        if File.dir_create_all(path) == false {
             return Result.Err(IoError.other(path, "failed to create directories: " + path));
         }
         return Result.Ok(true);
@@ -189,11 +189,11 @@ public static class File {
     // Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a
     // directory (an existing empty directory yields `Ok([])`).
     public static async fun list(borrow path: string): Result<string[], IoError> {
-        if (File.is_dir(path) == false) {
+        if File.is_dir(path) == false {
             return Result.Err(IoError.not_found(path));
         }
         let joined = File.dir_list(path);
-        if (joined.is_empty()) {
+        if joined.is_empty() {
             return Result.Ok(Buffer.alloc<string>(0));
         }
         return Result.Ok(joined.split('\n'));
@@ -202,13 +202,13 @@ public static class File {
     // Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
     public static async fun list_paths(borrow path: string): Result<string[], IoError> {
         let got = await File.list(path);
-        if (got.is_err()) {
+        if got.is_err() {
             return got;
         }
         let names = got.unwrap_or(Buffer.alloc<string>(0));
         let out = Buffer.alloc<string>(names.length);
         let i = 0;
-        while (i < names.length) {
+        while i < names.length {
             out[i] = Path.join(path, names[i]);
             i = i + 1;
         }
@@ -218,19 +218,19 @@ public static class File {
     // Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.
     public static async fun read_lines(borrow path: string): Result<string[], IoError> {
         let got = await File.read(path);
-        if (got.is_err()) {
+        if got.is_err() {
             return Result.Err(got.unwrap_err());
         }
         let text = got.unwrap_or(string.empty);
-        if (text.is_empty()) {
+        if text.is_empty() {
             return Result.Ok(Buffer.alloc<string>(0));
         }
         let parts = text.split('\n');
-        if ((parts.length > 0) && parts[parts.length - 1].is_empty() && text.ends_with("\n")) {
+        if (parts.length > 0) && parts[parts.length - 1].is_empty() && text.ends_with("\n") {
             let n = parts.length - 1;
             let out = Buffer.alloc<string>(n);
             let i = 0;
-            while (i < n) {
+            while i < n {
                 out[i] = parts[i];
                 i = i + 1;
             }
@@ -243,7 +243,7 @@ public static class File {
     public static async fun write_lines(borrow path: string, borrow lines: string[]): Result<long, IoError> {
         let sb = StringBuilder();
         let i = 0;
-        while (i < lines.length) {
+        while i < lines.length {
             sb.append(lines[i]);
             sb.append_char('\n');
             i = i + 1;
@@ -258,7 +258,7 @@ public static class File {
     // Size of `path` in bytes, or `None` if it does not exist.
     public static fun size(borrow path: string): Option<long> {
         let s = File.file_size(path);
-        if (s < 0L) {
+        if s < 0L {
             return Option.None;
         }
         return Option.Some(s);
@@ -278,11 +278,11 @@ public static class File {
     // One `stat` of `path`. Follows symlinks. Missing paths are `Err`.
     public static fun stat(borrow path: string): Result<FileStats, IoError> {
         let wire = File.file_stat(path);
-        if (wire.is_empty()) {
+        if wire.is_empty() {
             return Result.Err(IoError.not_found(path));
         }
         let parts = wire.split('\n');
-        if (parts.length < 6) {
+        if parts.length < 6 {
             return Result.Err(IoError.other(path, "invalid stat payload for: " + path));
         }
         let size = long.parse(parts[0]).unwrap_or(0L);

@@ -76,7 +76,7 @@ Save the Futures before the first `await` so they compute concurrently:
 ```dream
 fun work(input: string): string {
     let i = 0;
-    while (i < 5000000) { i = i + 1; }
+    while i < 5000000 { i = i + 1; }
     return input.to_upper();
 }
 
@@ -173,7 +173,7 @@ Two layers (same split as C# / asyncio):
 let src = CancellationSource();
 let tok = src.token();
 let w = WebWorker.spawn(() => {
-    while (!tok.is_cancelled()) { /* work */ }
+    while !tok.is_cancelled() { /* work */ }
     return 0;
 });
 src.cancel();

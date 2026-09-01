@@ -60,7 +60,7 @@ Constrain a type parameter to one or more interfaces with `T : Iface`. Inside th
 
 ```dream
 fun max_of<T : Comparable<T>>(a: T, b: T): T {
-    if (a.compare(b) > 0) { return a; }   // compare available because T : Comparable<T>
+    if a.compare(b) > 0 { return a; }   // compare available because T : Comparable<T>
     return b;
 }
 ```
@@ -122,7 +122,7 @@ Use `is` to branch on the concrete type. The compiler eliminates the dead branch
 
 ```dream
 fun describe<T>(v: T): void {
-    if (v is int) {
+    if v is int {
         print("it's an int: ");
         println(v);
     } else if (v is string) {

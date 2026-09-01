@@ -43,9 +43,9 @@ public class TcpClient {
         let wire = await TcpClient.tcp_connect(host, port, timeout_ms);
         let reader = NetWireReader(wire);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
-        if (handle < 0) {
+        if handle < 0 {
             let message = reader.read_remaining_text();
-            if (handle == (0 - 2)) {
+            if handle == (0 - 2) {
                 return Result.Err(NetError.unsupported(message));
             }
             return Result.Err(NetError.connect_failed(message));
@@ -56,7 +56,7 @@ public class TcpClient {
     // Sends raw bytes; resolves with the number of bytes written.
     @native @node
     public async fun send(data: byte[]): Result<int, NetError> {
-        if (this.is_closed) {
+        if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
         let wire = await TcpClient.tcp_send(this.handle, data);
@@ -66,7 +66,7 @@ public class TcpClient {
     // Sends `text` encoded as UTF-8; resolves with the number of bytes written.
     @native @node
     public async fun send_text(text: string): Result<int, NetError> {
-        if (this.is_closed) {
+        if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
         let wire = await TcpClient.tcp_send_text(this.handle, text);
@@ -76,7 +76,7 @@ public class TcpClient {
     fun parse_int_result(wire: char[]): Result<int, NetError> {
         let reader = NetWireReader(wire);
         let n = int.parse(reader.read_line()).unwrap_or(0 - 1);
-        if (n < 0) {
+        if n < 0 {
             return Result.Err(NetError.io(reader.read_remaining_text()));
         }
         return Result.Ok(n);
@@ -86,16 +86,16 @@ public class TcpClient {
     // error — check `data.length == 0` to detect end-of-stream.
     @native @node
     public async fun receive(max_bytes: int): Result<byte[], NetError> {
-        if (this.is_closed) {
+        if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
         let wire = await TcpClient.tcp_receive(this.handle, max_bytes);
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
-        if (tag == "data") {
+        if tag == "data" {
             return Result.Ok(reader.read_remaining_bytes());
         }
-        if (tag == "eof") {
+        if tag == "eof" {
             return Result.Ok(Buffer.alloc<byte>(0));
         }
         return Result.Err(NetError.io(reader.read_remaining_text()));
@@ -104,7 +104,7 @@ public class TcpClient {
     // Closes the connection. Safe to call more than once.
     @native @node
     public fun close(): void {
-        if (this.is_closed == false) {
+        if this.is_closed == false {
             this.is_closed = true;
             TcpClient.tcp_close(this.handle);
         }

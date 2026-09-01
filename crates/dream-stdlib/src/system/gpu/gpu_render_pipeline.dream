@@ -18,11 +18,11 @@ public class GpuRenderPipeline {
         desc: GpuRenderPipelineDesc
     ): Result<GpuRenderPipeline, GpuError> {
         let depth_en = 0;
-        if (desc.depth_enabled) { depth_en = 1; }
+        if desc.depth_enabled { depth_en = 1; }
         let depth_wr = 0;
-        if (desc.depth_write) { depth_wr = 1; }
+        if desc.depth_write { depth_wr = 1; }
         let blend_en = 0;
-        if (desc.blend_enabled) { blend_en = 1; }
+        if desc.blend_enabled { blend_en = 1; }
         let id = await Gpu.render_pipeline_create_ex(
             vertex,
             fragment,
@@ -35,7 +35,7 @@ public class GpuRenderPipeline {
             blend_en,
             desc.sample_count
         );
-        if (id < 0) {
+        if id < 0 {
             return Result.Err(GpuError.from_code(-id, "GpuRenderPipeline.create failed"));
         }
         let p = GpuRenderPipeline();

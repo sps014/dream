@@ -1,15 +1,12 @@
-// `@stack` on a discriminated union is a *checked contract*: registration errors out unless the
-// union qualifies as a value union (every payload value/primitive, or any number of
-// non-self-referential reference-typed payloads). When every payload is already value/primitive,
-// `@stack` has no representational effect (the union was already going to be inline) — its value
-// is catching a future regression (e.g. someone adding a self-referential field) at the
-// declaration site instead of silently forcing the union onto the heap. With a reference payload
-// (as below), `@stack` is what opts the union into the inline representation.
+// `enum struct` is a checked contract: registration errors out unless the union qualifies as a
+// value union (every payload value/primitive, or any number of non-self-referential
+// reference-typed payloads). When every payload is already value/primitive, `enum struct` has no
+// representational effect beyond the contract. With a reference payload (as below), `enum struct`
+// is what opts the union into the inline representation.
 
 import system;
-@stack
-enum Outcome {
-    Success(code: int),
+enum struct Outcome {
+    Success(int),
     Failure(code: int, reason: string),
 }
 

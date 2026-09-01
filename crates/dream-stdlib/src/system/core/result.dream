@@ -2,8 +2,8 @@ module system.core;
 
 // `Result<T, E>` - the outcome of an operation that may fail.
 public enum Result<T, E> {
-    Ok(value: T),
-    Err(error: E),
+    Ok(T),
+    Err(E),
 
     // True when this is `Ok`.
     public fun is_ok(): bool {
@@ -32,7 +32,7 @@ public enum Result<T, E> {
 
     // The success value, or panics if `Err`.
     public fun unwrap(): T {
-        if (this.is_err()) {
+        if this.is_err() {
             System.panic("unwrap() called on Result.Err");
         }
         return this.unwrap_or(Buffer.alloc<T>(1)[0]);
@@ -40,7 +40,7 @@ public enum Result<T, E> {
 
     // The success value, or panics with `msg` if `Err`.
     public fun expect(borrow msg: string): T {
-        if (this.is_err()) {
+        if this.is_err() {
             System.panic(msg);
         }
         return this.unwrap_or(Buffer.alloc<T>(1)[0]);
@@ -56,7 +56,7 @@ public enum Result<T, E> {
 
     // The error value, or panics if `Ok`.
     public fun unwrap_err(): E {
-        if (this.is_ok()) {
+        if this.is_ok() {
             System.panic("unwrap_err() called on Result.Ok");
         }
         return switch (this) {

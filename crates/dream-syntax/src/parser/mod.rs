@@ -27,6 +27,9 @@ pub struct Parser<'a, 'b> {
     /// Declared type aliases (`type Foo = Bar;`). Resolved (erased) at parse time so the rest of
     /// the compiler never sees the alias name.
     type_aliases: HashMap<String, Type>,
+    /// When true, `{` after an identifier is the statement block of `if`/`while`/`for`, not a
+    /// syntax-block or set/map literal.
+    in_condition: bool,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
@@ -40,6 +43,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             diagnostics,
             foreach_counter: 0,
             type_aliases: HashMap::new(),
+            in_condition: false,
         }
     }
     //returns the new eof token
@@ -287,8 +291,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 kinds.push(crate::nodes::ConstraintKind::Unmanaged);
                 true
             }
-            TokenKind::IdentifierToken if self.current_token().text == "shared" => {
-                self.match_token(TokenKind::IdentifierToken);
+            TokenKind::SharedToken => {
+                self.match_token(TokenKind::SharedToken);
                 kinds.push(crate::nodes::ConstraintKind::Shared);
                 true
             }
@@ -448,6 +452,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::StaticToken
                 | TokenKind::AsyncToken
                 | TokenKind::SealedToken
+                | TokenKind::SharedToken
+                | TokenKind::OverrideToken
                 // `ref` only appears at declaration position as the `ref struct` modifier.
                 | TokenKind::RefToken => i += 1,
                 other => return other,
@@ -467,6 +473,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::StaticToken
                 | TokenKind::AsyncToken
                 | TokenKind::SealedToken
+                | TokenKind::SharedToken
+                | TokenKind::OverrideToken
                 | TokenKind::RefToken => i += 1,
                 TokenKind::AtToken => {
                     i += 1; // `@`
@@ -636,6 +644,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::ClassToken
                     | TokenKind::StructToken
                     | TokenKind::SealedToken
+                    | TokenKind::SharedToken
+                    | TokenKind::OverrideToken
                     | TokenKind::InterfaceToken
                     | TokenKind::EnumToken
                     | TokenKind::ExtendToken

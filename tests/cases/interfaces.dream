@@ -33,16 +33,16 @@ fun main(): void {
 
     let a: Animal = (Animal)c;
     // `is`-with-binding on a reference/interface value: `cc` aliases the same object as `Cat`.
-    if (a is Cat cc) {
+    if a is Cat cc {
         System.println(cc.speak());
     }
-    if (a is Dog dd) {
+    if a is Dog dd {
         System.println("unexpected");
     }
 
     // `is`-with-binding on a boxed primitive: `n` unboxes the object to `int`.
     let o: object = 42;
-    if (o is int n) {
+    if o is int n {
         System.println(n + 1);
     }
 }

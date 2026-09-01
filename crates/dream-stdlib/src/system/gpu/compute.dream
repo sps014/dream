@@ -55,7 +55,7 @@ public static class Compute {
             sz,
             uniforms
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
     }
 
@@ -101,7 +101,7 @@ public static class Compute {
             sz,
             uniforms
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
     }
 
@@ -123,7 +123,7 @@ public static class Compute {
             args.id,
             0
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "indirect dispatch failed: " + kernel));
     }
 
@@ -141,7 +141,7 @@ public static class Compute {
             args.id,
             0
         );
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "indirect dispatch failed: " + kernel));
     }
 
@@ -158,7 +158,7 @@ public static class Compute {
             ids[i] = buffers[i].id;
         }
         let code = await Gpu.dispatch_shader(shader.id, ids, wx, wy, wz);
-        if (code == 0) { return Result.Ok(true); }
+        if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "shader dispatch failed"));
     }
 }

@@ -118,7 +118,7 @@ impl<'a> Analyzer<'a> {
             _ => {
                 diagnostics.report_error(
                     format!(
-                        "for-each can only iterate over arrays, Collection/Iterator interfaces, or types with an '@iterator' method, got {}",
+                        "for-each can only iterate over arrays, Collection/Iterator interfaces, or types with an 'iterator' method, got {}",
                         self.ty_display(&iterable_type)
                     ),
                     iterable.position(),

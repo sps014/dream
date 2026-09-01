@@ -2,8 +2,7 @@
 // all coroutines share one thread, so a suspend point under a lock would silently break mutual
 // exclusion between tasks.
 import system;
-@shared
-class Cell {
+shared class Cell {
     public v: int;
     public constructor() { this.v = 0; }
 }

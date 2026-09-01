@@ -118,7 +118,7 @@ public class JsonValue {
 
     // Returns the value as a bool when this is a JSON boolean.
     public fun as_bool(): Option<bool> {
-        if (this.kind != 1) {
+        if this.kind != 1 {
             return Option.None;
         }
         return Option.Some(this.bool_val);
@@ -126,7 +126,7 @@ public class JsonValue {
 
     // Returns the value as a double when this is a JSON number.
     public fun as_double(): Option<double> {
-        if (this.kind != 2) {
+        if this.kind != 2 {
             return Option.None;
         }
         return Option.Some(this.num_val);
@@ -134,7 +134,7 @@ public class JsonValue {
 
     // Returns the value as an integer when this is a JSON number.
     public fun as_int(): Option<int> {
-        if (this.kind != 2) {
+        if this.kind != 2 {
             return Option.None;
         }
         return Option.Some((int)this.num_val);
@@ -142,21 +142,21 @@ public class JsonValue {
 
     // Returns the value as a string when this is a JSON string.
     public fun as_string(): Option<string> {
-        if (this.kind != 3) {
+        if this.kind != 3 {
             return Option.None;
         }
         return Option.Some(this.str_val);
     }
 
     public fun as_array(): Option<List<JsonValue>> {
-        if (this.kind != 4) {
+        if this.kind != 4 {
             return Option.None;
         }
         return this.items;
     }
 
     public fun as_map(): Option<Map<string, JsonValue>> {
-        if (this.kind != 5) {
+        if this.kind != 5 {
             return Option.None;
         }
         return this.obj_map;
@@ -168,21 +168,21 @@ public class JsonValue {
 
     public fun remove(borrow key: string): bool {
         let mopt = this.obj_map;
-        if (mopt.is_none()) {
+        if mopt.is_none() {
             return false;
         }
         let m = mopt.unwrap_or(Map<string, JsonValue>());
-        if (m.contains(key) == false) {
+        if m.contains(key) == false {
             return false;
         }
         m.remove(key);
         let keys_opt = this.obj_keys;
         let vals_opt = this.obj_vals;
-        if (keys_opt.is_some() && vals_opt.is_some()) {
+        if keys_opt.is_some() && vals_opt.is_some() {
             let keys = keys_opt.unwrap_or(List<string>());
             let vals = vals_opt.unwrap_or(List<JsonValue>());
             let idx = keys.index_of(key);
-            if (idx.is_some()) {
+            if idx.is_some() {
                 let i = idx.unwrap_or(0);
                 keys.remove_at(i);
                 vals.remove_at(i);
@@ -200,34 +200,36 @@ public class JsonValue {
     }
 
     // The value for `key`, or `None` when this is not an object or the key is absent.
-    @get_indexer
-    public fun get(borrow key: string): Option<JsonValue> {
+    public fun this[borrow key: string]: Option<JsonValue> {
         return switch (this.obj_map) {
             Some(m) => m.get(key),
             None => Option.None,
         };
     }
 
+    public fun get(borrow key: string): Option<JsonValue> {
+        return this[key];
+    }
+
     // The value for `key`. Panics when this is not an object or the key is absent — use
     // `get(key)` for absence-tolerant reads.
     public fun at(borrow key: string): JsonValue {
         let at = this.get(key);
-        if (at.is_none()) {
+        if at.is_none() {
             System.panic("JsonValue key not found: " + key);
         }
         return at.unwrap_or(JsonValue.none());
     }
 
     // Sets the value for `key` (objects only).
-    @set_indexer
-    public fun set(key: string, value: JsonValue): void {
+    public fun this[key: string] = value: JsonValue {
         switch (this.obj_map) {
             Some(m) => {
                 switch (this.obj_keys) {
                     Some(keys) => {
                         switch (this.obj_vals) {
                             Some(vals) => {
-                                if (m.contains(key) == false) {
+                                if m.contains(key) == false {
                                     keys.push(key);
                                     vals.push(value);
                                 } else {
@@ -250,11 +252,15 @@ public class JsonValue {
         }
     }
 
+    public fun set(key: string, value: JsonValue): void {
+        this[key] = value;
+    }
+
     // The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
         switch (this.obj_keys) {
             Some(keys) => {
-                if (index < 0 || index >= keys.length) {
+                if index < 0 || index >= keys.length {
                     return Option.None;
                 }
                 return Option.Some(keys.get(index));
@@ -269,7 +275,7 @@ public class JsonValue {
     public fun value_at(index: int): Option<JsonValue> {
         switch (this.obj_vals) {
             Some(vals) => {
-                if (index < 0 || index >= vals.length) {
+                if index < 0 || index >= vals.length {
                     return Option.None;
                 }
                 return Option.Some(vals.get(index));
@@ -289,7 +295,7 @@ public class JsonValue {
     public fun at(index: int): Option<JsonValue> {
         switch (this.items) {
             Some(items) => {
-                if (index < 0 || index >= items.length) {
+                if index < 0 || index >= items.length {
                     return Option.None;
                 }
                 return Option.Some(items.get(index));
@@ -312,7 +318,7 @@ public class JsonValue {
 
     // Element count for arrays/objects (0 for scalars).
     public get length(): int {
-        if (this.kind == 5) {
+        if this.kind == 5 {
             return switch (this.obj_keys) {
                 Some(keys) => keys.length,
                 None => 0,

@@ -1,8 +1,7 @@
-// `@shared class` may hold a `string` field (shared / Sendable analogue).
+// `shared class` may hold a `string` field (shared / Sendable analogue).
 import system;
 
-@shared
-class Named {
+shared class Named {
     public label: string;
     public constructor(label: string) {
         this.label = label;

@@ -25,7 +25,7 @@ fun rd_step(
 ): void {
     let x = global_id.x;
     let y = global_id.y;
-    if (x >= n || y >= n) { return; }
+    if x >= n || y >= n { return; }
     let i = y * n + x;
     let xm = (x + n - 1) % n;
     let xp = (x + 1) % n;
@@ -44,10 +44,10 @@ fun rd_step(
     let uvv = u * v * v;
     let u2 = u + du * lap_u - uvv + feed * (1.0 - u);
     let v2 = v + dv * lap_v + uvv - (feed + kill) * v;
-    if (u2 < 0.0) { u2 = 0.0; }
-    if (u2 > 1.0) { u2 = 1.0; }
-    if (v2 < 0.0) { v2 = 0.0; }
-    if (v2 > 1.0) { v2 = 1.0; }
+    if u2 < 0.0 { u2 = 0.0; }
+    if u2 > 1.0 { u2 = 1.0; }
+    if v2 < 0.0 { v2 = 0.0; }
+    if v2 > 1.0 { v2 = 1.0; }
     u_out[i] = u2;
     v_out[i] = v2;
 }
@@ -61,7 +61,7 @@ fun rd_paint(
 ): void {
     let x = global_id.x;
     let y = global_id.y;
-    if (x >= n || y >= n) { return; }
+    if x >= n || y >= n { return; }
     let i = y * n + x;
     let xm = (x + n - 1) % n;
     let xp = (x + 1) % n;
@@ -74,11 +74,11 @@ fun rd_paint(
     let gx = v_buf[y * n + xp] - v_buf[y * n + xm];
     let gy = v_buf[yp * n + x] - v_buf[ym * n + x];
     let grad = GpuMath.sqrt(gx * gx + gy * gy);
-    if (grad > 1.0) { grad = 1.0; }
+    if grad > 1.0 { grad = 1.0; }
 
     let t = vv * 1.15;
-    if (t < 0.0) { t = 0.0; }
-    if (t > 1.0) { t = 1.0; }
+    if t < 0.0 { t = 0.0; }
+    if t > 1.0 { t = 1.0; }
     // Ease midtones so thin filaments pop.
     t = t * t * (3.0 - 2.0 * t);
 
@@ -86,7 +86,7 @@ fun rd_paint(
     let r: float = 0.0;
     let g: float = 0.0;
     let b: float = 0.0;
-    if (t < 0.15) {
+    if t < 0.15 {
         let w = t / 0.15;
         r = 0.01 + w * 0.02;
         g = 0.02 + w * 0.08;
@@ -121,30 +121,30 @@ fun rd_paint(
     r = r + grad * 0.55;
     g = g + grad * 0.35;
     b = b + grad * 0.15;
-    if (r < 0.0) { r = 0.0; }
-    if (g < 0.0) { g = 0.0; }
-    if (b < 0.0) { b = 0.0; }
-    if (r > 1.0) { r = 1.0; }
-    if (g > 1.0) { g = 1.0; }
-    if (b > 1.0) { b = 1.0; }
+    if r < 0.0 { r = 0.0; }
+    if g < 0.0 { g = 0.0; }
+    if b < 0.0 { b = 0.0; }
+    if r > 1.0 { r = 1.0; }
+    if g > 1.0 { g = 1.0; }
+    if b > 1.0 { b = 1.0; }
     Gpu.texture_store(tex, x, y, r, g, b, 1.0);
 }
 
 fun soft_disk(u: float[], v: float[], n: int, cx: int, cy: int, rad: int, v0: float): void {
     let r2 = rad * rad;
     for (let y = cy - rad; y <= cy + rad; y = y + 1) {
-        if (y < 0 || y >= n) { continue; }
+        if y < 0 || y >= n { continue; }
         for (let x = cx - rad; x <= cx + rad; x = x + 1) {
-            if (x < 0 || x >= n) { continue; }
+            if x < 0 || x >= n { continue; }
             let dx = x - cx;
             let dy = y - cy;
             let d2 = dx * dx + dy * dy;
-            if (d2 <= r2) {
+            if d2 <= r2 {
                 let w: float = 1.0 - (float)d2 / (float)r2;
                 w = w * w;
                 let i = y * n + x;
                 let nv = v[i] + v0 * w;
-                if (nv > 1.0) { nv = 1.0; }
+                if nv > 1.0 { nv = 1.0; }
                 v[i] = nv;
                 u[i] = 1.0 - 0.55 * nv;
             }
@@ -174,7 +174,7 @@ fun seed_field(u: float[], v: float[], n: int): void {
             let dx = x - cx;
             let dy = y - cy;
             let d2 = dx * dx + dy * dy;
-            if (d2 >= r_in * r_in && d2 <= r_out * r_out) {
+            if d2 >= r_in * r_in && d2 <= r_out * r_out {
                 let i = y * n + x;
                 v[i] = 0.45;
                 u[i] = 0.50;
@@ -196,7 +196,7 @@ async fun run_browser(n: int): void {
     let tex = GpuTexture.rgba8(n, n);
 
     let surface_r = GpuSurface.create("life", n, n);
-    if (surface_r.is_err()) {
+    if surface_r.is_err() {
         System.println("GpuSurface.create failed");
         return;
     }
@@ -208,25 +208,25 @@ async fun run_browser(n: int): void {
     let steps_per_frame = 14;
 
     System.println("reaction-diffusion gpu — Gray-Scott");
-    while (!surface.close_requested()) {
+    while !surface.close_requested() {
         for (let ev in surface.poll_events()) {
             switch (ev) {
                 KeyDown(code, _key, _repeat) => {
-                    if (code == KeyCode.Escape) {
+                    if code == KeyCode.Escape {
                         return;
                     }
                 },
                 _ => {},
             }
         }
-        if (surface.key_down(KeyCode.Escape)) {
+        if surface.key_down(KeyCode.Escape) {
             return;
         }
 
         let pass = ComputePass.begin();
         let s = 0;
-        while (s < steps_per_frame) {
-            if ((s % 2) == 0) {
+        while s < steps_per_frame {
+            if (s % 2) == 0 {
                 pass.dispatch_uniforms("rd_step", [u, v, u2, v2], n, n, 1, step_u);
             } else {
                 pass.dispatch_uniforms("rd_step", [u2, v2, u, v], n, n, 1, step_u);
@@ -236,22 +236,22 @@ async fun run_browser(n: int): void {
         let paint = GpuBindList.begin().buffer(u).buffer(v).texture(tex);
         pass.dispatch_bind("rd_paint", paint, n, n, 1, empty_u);
         let sub = await pass.submit();
-        if (sub.is_err()) {
+        if sub.is_err() {
             System.println("ComputePass.submit failed");
             return;
         }
 
         let bl = await GpuRenderPass.blit(surface, tex);
-        if (bl.is_err()) { return; }
+        if bl.is_err() { return; }
         let pr = await surface.present();
-        if (pr.is_err()) { return; }
+        if pr.is_err() { return; }
         await Gpu.frame();
     }
 }
 
 async fun main(): void {
     let init = await Gpu.try_init();
-    if (init.is_err()) {
+    if init.is_err() {
         System.println("WebGPU unavailable — open life.html in a browser");
         return;
     }

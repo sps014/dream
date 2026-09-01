@@ -2,8 +2,8 @@
 // `Wrap(A(n))` + `Wrap(B)` together cover the `Wrap` variant (all of `Inner`), and `Bare` covers
 // the rest of `Outer`. Coverage is computed recursively across arms in `check_exhaustiveness`.
 import system;
-enum Inner { A(v: int), B }
-enum Outer { Wrap(inner: Inner), Bare }
+enum Inner { A(int), B }
+enum Outer { Wrap(Inner), Bare }
 
 fun describe(o: Outer): int {
     return switch (o) {

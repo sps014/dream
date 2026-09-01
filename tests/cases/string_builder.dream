@@ -1,5 +1,5 @@
 // `StringBuilder`: incremental append, `append_char`/`append_line`, `clear`, `build`, growth past
-// the initial capacity, and the `@override to_string()` that makes `print`/`+`/interpolation use
+// the initial capacity, and the `override to_string()` that makes `print`/`+`/interpolation use
 // it automatically.
 
 import system;
@@ -27,7 +27,7 @@ fun main(): void {
     // Force multiple growths past a small initial capacity.
     let sb2 = StringBuilder(2);
     let i = 0;
-    while (i < 50) {
+    while i < 50 {
         sb2.append_char('x');
         i = i + 1;
     }

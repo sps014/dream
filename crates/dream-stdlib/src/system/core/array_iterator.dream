@@ -13,9 +13,8 @@ public class ArrayIterator<T> : Iterator<T> {
     }
 
     // Returns the next element, or `None` if exhausted.
-    @next
     public fun next(): Option<T> {
-        if (this.idx >= this.items.length) {
+        if this.idx >= this.items.length {
             return Option.None;
         }
         let value = this.items[this.idx];

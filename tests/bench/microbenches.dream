@@ -31,7 +31,7 @@ class BenchSink {
 let bench_sink = BenchSink();
 
 fun report(name: string, nanos: long, iters: int): void {
-    if (measuring == false) {
+    if measuring == false {
         return;
     }
     let per = nanos / (long)iters;
@@ -63,7 +63,7 @@ fun bench_arc_locals(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let a = "n" + i.to_string();
         let b = a;
         let c = b;
@@ -79,7 +79,7 @@ fun bench_string_concat(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let s = "hello" + i.to_string() + "world";
         acc = acc + s.byte_size();
         i = i + 1;
@@ -103,8 +103,8 @@ fun bench_string_eq(iters: int): void {
     let sw = Stopwatch();
     let hits = 0;
     let i = 0;
-    while (i < iters) {
-        if (base == variants[i & 3]) {
+    while i < iters {
+        if base == variants[i & 3] {
             hits = hits + 1;
         } else {
             hits = hits - 1;
@@ -124,10 +124,10 @@ fun bench_char_scan(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let n = s.length;
         let bo = 0;
-        while (bo < n) {
+        while bo < n {
             let c = s.char_at(bo);
             acc = acc + (int)c;
             bo = bo + 1;
@@ -147,10 +147,10 @@ fun bench_byte_scan(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let n = s.byte_size();
         let j = 0;
-        while (j < n) {
+        while j < n {
             acc = acc + (int)s.byte_at(j);
             j = j + 1;
         }
@@ -167,7 +167,7 @@ fun bench_substring(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let sub = s.substring(5, 40);
         acc = acc + sub.byte_size();
         i = i + 1;
@@ -181,7 +181,7 @@ fun bench_list_push(iters: int): void {
     let sw = Stopwatch();
     let list = List<int>(iters);
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         list.push(i);
         i = i + 1;
     }
@@ -193,15 +193,15 @@ fun bench_list_push(iters: int): void {
 fun bench_list_insert_mid(iters: int): void {
     let n = 256;
     let rounds = iters / n;
-    if (rounds < 1) {
+    if rounds < 1 {
         rounds = 1;
     }
     let sw = Stopwatch();
     let r = 0;
-    while (r < rounds) {
+    while r < rounds {
         let list = List<int>(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             list.insert(list.length / 2, i);
             i = i + 1;
         }
@@ -215,13 +215,13 @@ fun bench_map_get_set(iters: int): void {
     let map = Map<int, int>(iters);
     let sw = Stopwatch();
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         map.set(i, i * 3);
         i = i + 1;
     }
     let acc = 0;
     i = 0;
-    while (i < iters) {
+    while i < iters {
         acc = acc + map.get_or(i, 0);
         i = i + 1;
     }
@@ -234,14 +234,14 @@ fun bench_map_clear_reuse(iters: int): void {
     let map = Map<int, int>(1024);
     let rounds = 64;
     let per = iters / rounds;
-    if (per < 1) {
+    if per < 1 {
         per = 1;
     }
     let sw = Stopwatch();
     let r = 0;
-    while (r < rounds) {
+    while r < rounds {
         let i = 0;
-        while (i < per) {
+        while i < per {
             map.set(i, i);
             i = i + 1;
         }
@@ -257,7 +257,7 @@ fun bench_alloc_churn(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let buf = Buffer.alloc<int>(64);
         buf[0] = i;
         acc = acc + buf[0];
@@ -272,14 +272,14 @@ fun bench_list_clear_reuse(iters: int): void {
     let buf = List<int>(64);
     let rounds = 64;
     let per = iters / rounds;
-    if (per < 1) {
+    if per < 1 {
         per = 1;
     }
     let sw = Stopwatch();
     let r = 0;
-    while (r < rounds) {
+    while r < rounds {
         let i = 0;
-        while (i < per) {
+        while i < per {
             buf.push(i);
             i = i + 1;
         }
@@ -297,7 +297,7 @@ fun bench_scratch_arena(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let start = arena.bump(32);
         arena.set_at(start, i);
         acc = acc + arena.at(start);
@@ -316,11 +316,11 @@ fun bench_regex_find(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let m = re.match(hay);
 
         let j = 0;
-        while (j < m.length) {
+        while j < m.length {
             acc = acc + m[j].byte_size();
             j = j + 1;
         }
@@ -370,7 +370,7 @@ fun bench_json_serialize(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let text = Json.serialize(u);
         acc = acc + text.byte_size();
         i = i + 1;
@@ -386,7 +386,7 @@ fun bench_json_deserialize(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let back = Json.deserialize<BenchUser>(text).unwrap_or(fallback);
         acc = acc + back.age + back.scores[2];
         i = i + 1;
@@ -399,7 +399,7 @@ fun bench_json_deserialize(iters: int): void {
 fun checksum_floats(borrow a: float[]): int {
     let acc = 0;
     let i = 0;
-    while (i < a.length) {
+    while i < a.length {
         acc = acc + (int)a[i];
         i = i + 1;
     }
@@ -409,7 +409,7 @@ fun checksum_floats(borrow a: float[]): int {
 fun checksum_ints(borrow a: int[]): int {
     let acc = 0;
     let i = 0;
-    while (i < a.length) {
+    while i < a.length {
         acc = acc + a[i];
         i = i + 1;
     }
@@ -425,7 +425,7 @@ fun bench_arr_add(iters: int): void {
     let bi = Buffer.alloc<int>(n);
     let ci = Buffer.alloc<int>(n);
     let k = 0;
-    while (k < n) {
+    while k < n {
         a[k] = (float)k;
         b[k] = (float)(k + 1);
         ai[k] = k;
@@ -434,14 +434,14 @@ fun bench_arr_add(iters: int): void {
     }
     let sw = Stopwatch();
     let r = 0;
-    while (r < iters) {
+    while r < iters {
         let i = 0;
-        while (i < n) {
+        while i < n {
             c[i] = a[i] + b[i];
             i = i + 1;
         }
         let j = 0;
-        while (j < n) {
+        while j < n {
             ci[j] = ai[j] + bi[j];
             j = j + 1;
         }
@@ -458,7 +458,7 @@ fun bench_vec_add(iters: int): void {
     let b = Buffer.alloc<float>(n);
     let c = Buffer.alloc<float>(n);
     let k = 0;
-    while (k < n) {
+    while k < n {
         a[k] = (float)k;
         b[k] = (float)(k + 1);
         k = k + 1;
@@ -466,15 +466,15 @@ fun bench_vec_add(iters: int): void {
     let lanes = Vector<float>.lane_count();
     let sw = Stopwatch();
     let r = 0;
-    while (r < iters) {
+    while r < iters {
         let i = 0;
-        while (i + lanes <= n) {
+        while i + lanes <= n {
             let va = Vector<float>.load(a, i);
             let vb = Vector<float>.load(b, i);
             (va + vb).store(c, i);
             i = i + lanes;
         }
-        while (i < n) {
+        while i < n {
             c[i] = a[i] + b[i];
             i = i + 1;
         }
@@ -490,7 +490,7 @@ fun bench_string_builder(iters: int): void {
     let sw = Stopwatch();
     let sb = StringBuilder(iters * chunk.byte_size());
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         sb.append(chunk);
         i = i + 1;
     }
@@ -538,12 +538,12 @@ fun bench_nbody(iters: int): void {
     let dt = 0.01d;
     let sw = Stopwatch();
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let a = 0;
-        while (a < n) {
+        while a < n {
             let bi = bodies[a];
             let b = a + 1;
-            while (b < n) {
+            while b < n {
                 let bj = bodies[b];
                 let dx = bj.x - bi.x;
                 let dy = bj.y - bi.y;
@@ -562,7 +562,7 @@ fun bench_nbody(iters: int): void {
             a = a + 1;
         }
         let k = 0;
-        while (k < n) {
+        while k < n {
             let bk = bodies[k];
             bk.x = bk.x + bk.vx * dt;
             bk.y = bk.y + bk.vy * dt;
@@ -583,22 +583,22 @@ fun bench_mandelbrot(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let row = 0;
-        while (row < 48) {
+        while row < 48 {
             let ci = (double)row / 24.0d - 1.0d;
             let col = 0;
-            while (col < 64) {
+            while col < 64 {
                 let cr = ((double)col + jitter) / 32.0d - 1.5d;
                 let zr = 0.0d;
                 let zi = 0.0d;
                 let k = 0;
                 let escaped = false;
-                while (k < 30 && escaped == false) {
+                while k < 30 && escaped == false {
                     let zr2 = zr * zr - zi * zi + cr;
                     zi = 2.0d * zr * zi + ci;
                     zr = zr2;
-                    if (zr * zr + zi * zi > 4.0d) {
+                    if zr * zr + zi * zi > 4.0d {
                         escaped = true;
                     }
                     k = k + 1;
@@ -624,7 +624,7 @@ fun bench_matmul(iters: int): void {
     let b = Buffer.alloc<double>(n * n);
     let c = Buffer.alloc<double>(n * n);
     let t = 0;
-    while (t < n * n) {
+    while t < n * n {
         a[t] = (double)(t % 13);
         b[t] = (double)((t * 7) % 11);
         c[t] = 0.0d;
@@ -632,14 +632,14 @@ fun bench_matmul(iters: int): void {
     }
     let sw = Stopwatch();
     let r = 0;
-    while (r < iters) {
+    while r < iters {
         let i = 0;
-        while (i < n) {
+        while i < n {
             let k = 0;
-            while (k < n) {
+            while k < n {
                 let aik = a[i * n + k];
                 let j = 0;
-                while (j < n) {
+                while j < n {
                     c[i * n + j] = c[i * n + j] + aik * b[k * n + j];
                     j = j + 1;
                 }
@@ -655,20 +655,20 @@ fun bench_matmul(iters: int): void {
 }
 
 fun qsort_range(a: int[], lo: int, hi: int): void {
-    if (lo >= hi) {
+    if lo >= hi {
         return;
     }
     let p = a[(lo + hi) / 2];
     let i = lo;
     let j = hi;
-    while (i <= j) {
-        while (a[i] < p) {
+    while i <= j {
+        while a[i] < p {
             i = i + 1;
         }
-        while (a[j] > p) {
+        while a[j] > p {
             j = j - 1;
         }
-        if (i <= j) {
+        if i <= j {
             let t = a[i];
             a[i] = a[j];
             a[j] = t;
@@ -687,9 +687,9 @@ fun bench_quicksort(iters: int): void {
     let seed = 123456789;
     let sw = Stopwatch();
     let r = 0;
-    while (r < iters) {
+    while r < iters {
         let t = 0;
-        while (t < n) {
+        while t < n {
             seed = seed * 1103515245 + 12345;
             a[t] = (seed >> 16) & 1023;
             t = t + 1;
@@ -709,17 +709,17 @@ fun bench_sieve(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let r = 0;
-    while (r < iters) {
+    while r < iters {
         let t: int = 0;
-        while (t < n) {
+        while t < n {
             flags[t] = 1;
             t = t + 1;
         }
         let i: int = 2;
-        while (i * i < n) {
-            if (flags[i] == 1) {
+        while i * i < n {
+            if flags[i] == 1 {
                 let m: int = i * i;
-                while (m < n) {
+                while m < n {
                     flags[m] = 0;
                     m = m + i;
                 }
@@ -727,7 +727,7 @@ fun bench_sieve(iters: int): void {
             i = i + 1;
         }
         let p: int = 2;
-        while (p < n) {
+        while p < n {
             acc = acc + (int)flags[p];
             p = p + 1;
         }
@@ -743,7 +743,7 @@ fun bench_sieve(iters: int): void {
 // =====================================================================
 
 fun fib(n: int): int {
-    if (n < 2) {
+    if n < 2 {
         return n;
     }
     return fib(n - 1) + fib(n - 2);
@@ -754,7 +754,7 @@ fun bench_fib_rec(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         // Arg varies with i so LICM cannot hoist the pure call out of the loop.
         acc = acc + fib(20 + (i & 1));
         i = i + 1;
@@ -768,7 +768,7 @@ fun bench_fib_rec(iters: int): void {
 // (~1ns/op), so timing it measures the optimizer, not the language. Kept as a one-shot
 // TCO/stack-safety sentinel — without tail calls 5M frames would blow the native stack.
 fun tco_sum(n: int, acc: int): int {
-    if (n == 0) {
+    if n == 0 {
         return acc;
     }
     return tco_sum(n - 1, acc + n);
@@ -804,7 +804,7 @@ fun bench_iface_dispatch(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         acc = acc + a.apply(i) + b.apply(i) + c.apply(i);
         i = i + 1;
     }
@@ -830,7 +830,7 @@ class TreeNode {
 
 fun make_tree(depth: int): Option<TreeNode> {
     let none: Option<TreeNode> = Option.None;
-    if (depth <= 0) {
+    if depth <= 0 {
         return none;
     }
     return Option.Some(TreeNode(make_tree(depth - 1), make_tree(depth - 1)));
@@ -841,7 +841,7 @@ fun bench_binary_trees(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         switch (make_tree(12)) {
             Some(root) => { acc = acc + 1; }
             None       => { acc = acc - 1; }
@@ -867,7 +867,7 @@ class LinkNode {
 fun make_chain(n: int): Option<LinkNode> {
     let head: Option<LinkNode> = Option.None;
     let i = 0;
-    while (i < n) {
+    while i < n {
         head = Option.Some(LinkNode(i, head));
         i = i + 1;
     }
@@ -880,10 +880,10 @@ fun bench_linked_walk(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let curr = head;
         let done = false;
-        while (done == false) {
+        while done == false {
             switch (curr) {
                 Some(node) => {
                     acc = acc + node.value;
@@ -911,9 +911,9 @@ fun bench_wordcount(iters: int): void {
     let count = words.length;
     let sw = Stopwatch();
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let k = 0;
-        while (k < count) {
+        while k < count {
             map.set(words[k], map.get_or(words[k], 0) + 1);
             k = k + 1;
         }
@@ -932,10 +932,10 @@ fun bench_parse_ints(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         let v = bias;
         let j = 0;
-        while (j < n) {
+        while j < n {
             v = v * 10 + ((int)src.char_at(j) - 48);
             j = j + 1;
         }
@@ -955,7 +955,7 @@ fun bench_sum_options(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
-    while (i < iters) {
+    while i < iters {
         switch (some) {
             Some(v) => { acc = acc + v; }
             None    => { acc = acc - 1; }

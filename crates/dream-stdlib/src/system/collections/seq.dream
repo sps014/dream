@@ -74,9 +74,9 @@ public class Seq<T> {
 
     // Appends every element surviving this stage (and everything below it) into `out`.
     fun drain(out: List<T>): void {
-        if (this.parent.is_none()) {
+        if this.parent.is_none() {
             let i = this.start;
-            while (i < this.end) {
+            while i < this.end {
                 out.push(this.items.get(i));
                 i = i + 1;
             }
@@ -87,40 +87,40 @@ public class Seq<T> {
             Some(p) => p.drain(upstream),
             None => {},
         }
-        if (this.has_pred) {
+        if this.has_pred {
             let keep = this.pred;
             let i = 0;
-            while (i < upstream.length) {
+            while i < upstream.length {
                 let v = upstream.get(i);
-                if (keep(v)) {
+                if keep(v) {
                     out.push(v);
                 }
                 i = i + 1;
             }
             return;
         }
-        if (this.is_take) {
+        if this.is_take {
             let n = this.take_n;
-            if (n > upstream.length) {
+            if n > upstream.length {
                 n = upstream.length;
             }
             let i = 0;
-            while (i < n) {
+            while i < n {
                 out.push(upstream.get(i));
                 i = i + 1;
             }
             return;
         }
-        if (this.is_skip) {
+        if this.is_skip {
             let n = this.skip_n;
-            if (n < 0) {
+            if n < 0 {
                 n = 0;
             }
-            if (n > upstream.length) {
+            if n > upstream.length {
                 n = upstream.length;
             }
             let i = n;
-            while (i < upstream.length) {
+            while i < upstream.length {
                 out.push(upstream.get(i));
                 i = i + 1;
             }
@@ -161,7 +161,7 @@ public class Seq<T> {
         let src = this.to_list();
         let result = List<U>();
         let i = 0;
-        while (i < src.length) {
+        while i < src.length {
             result.push(f(src.get(i)));
             i = i + 1;
         }

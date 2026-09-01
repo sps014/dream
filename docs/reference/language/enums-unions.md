@@ -36,7 +36,7 @@ When **any** variant carries a payload `(...)`, the whole `enum` becomes a discr
 
 ```dream
 enum Shape {
-    Circle(radius: float),
+    Circle(float),
     Rect(width: float, height: float),
     Empty,                       // a unit variant carries no data
 }
@@ -135,8 +135,8 @@ Both compose with exhaustiveness checking the same way a single pattern does —
 Unions may be generic; the concrete type is inferred from constructor arguments, or supplied by annotation. Add methods with an `extend` block:
 
 ```dream
-enum Option<T> { Some(value: T), None }
-enum Result<T, E> { Ok(value: T), Err(error: E) }
+enum Option<T> { Some(T), None }
+enum Result<T, E> { Ok(T), Err(E) }
 
 let o  = Option.Some(42);         // inferred Option<int>
 let n: Option<int> = Option.None; // annotation needed for the unit variant
@@ -146,29 +146,28 @@ let n: Option<int> = Option.None; // annotation needed for the unit variant
 
 Unions are heap-allocated and reference-counted by default. But if **every** variant's payload is a value type or primitive (`int`, `bool`, `float`, a value `struct`, ...), the union automatically becomes a **stack (value) union**: stored inline, copied by value, with zero heap allocation. This is decided per concrete instantiation, so `Option<int>` is a value union while `Option<string>` stays a heap union, even though they share one generic declaration.
 
-#### `@stack`: a checked contract, plus a reference-payload relaxation
+#### `enum struct`: a value union, plus a reference-payload relaxation
 
-`@stack` on a union declaration turns "should be a value union" from a best-effort inference into a checked contract: the compiler reports an error if the union doesn't qualify, instead of silently falling back to the heap. This catches a regression (e.g. someone later adds a self-referential payload) at the declaration site rather than as a silent performance cliff.
+`enum struct` is the value-type counterpart of a heap `enum`, the same split as `class` vs `struct`. It is a checked contract: the compiler reports an error if the union doesn't qualify as inline, instead of silently falling back to the heap. This catches a regression (e.g. someone later adds a self-referential payload) at the declaration site rather than as a silent performance cliff.
 
-`@stack` also unlocks a relaxation the automatic inference doesn't apply on its own: a union may still go inline with **any number** of reference-typed payload fields (a `string`, a `class`, an array, ...) across its variants — each is stored inline as a retained pointer, exactly like a reference field embedded in a value `struct` already is. A union that refers to itself still cannot be stored inline (an inline recursive value type would have infinite size); `@stack` reports an error naming the offending field:
+`enum struct` also unlocks a relaxation the automatic inference doesn't apply on its own: a union may still go inline with **any number** of reference-typed payload fields (a `string`, a `class`, an array, ...) across its variants — each is stored inline as a retained pointer, exactly like a reference field embedded in a value `struct` already is. A union that refers to itself still cannot be stored inline (an inline recursive value type would have infinite size); `enum struct` reports an error naming the offending field:
 
 ```dream
-@stack
-enum Outcome {
+enum struct Outcome {
     Success(code: int),
-    Failure(code: int, reason: string), // reference fields are fine under @stack
+    Failure(code: int, reason: string), // reference fields are fine
 }
 
-@stack
-enum Either {
-    Left(value: string),
-    Right(value: string), // multiple reference fields across variants: also fine
+enum struct Either {
+    Left(string),
+    Right(string), // multiple reference fields across variants: also fine
 }
 ```
 
-This relaxation is opt-in via `@stack` rather than automatic, because a union with several
+This form is opt-in rather than automatic, because a union with several
 reference payloads across variants has no single niche to exploit. Unions with *exactly one*
-reference payload (see the next section) are handled automatically instead.
+reference payload (see the next section) are handled automatically instead. `enum struct` on a
+C-style (payload-less) enum is an error — use `enum`.
 
 #### Niche unions: `Option<Class>` is the pointer itself
 
@@ -190,7 +189,7 @@ Mark a union `@json` to derive `to_json` / `from_json`. Each value serializes to
 
 ```dream
 @json
-enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
+enum Shape { Circle(int), Rect(width: int, height: int), Empty }
 
 let text = Json.serialize(Shape.Circle(7));   // {"type":"Circle","radius":7}
 ```

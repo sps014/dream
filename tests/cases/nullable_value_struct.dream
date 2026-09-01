@@ -10,7 +10,7 @@ struct Point {
 }
 
 fun show(p: Option<Point>): void {
-    if (p.is_none()) {
+    if p.is_none() {
         System.println("none");
     } else {
         System.println("some");

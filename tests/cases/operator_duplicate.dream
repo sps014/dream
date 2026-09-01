@@ -7,13 +7,11 @@ class Vector2 {
         this.x = x;
     }
 
-    @operator("+")
-    fun add(other: Vector2): Vector2 {
+        fun operator +(other: Vector2): Vector2 {
         return Vector2(this.x + other.x);
     }
 
-    @operator("+")
-    fun plus(other: Vector2): Vector2 {
+        fun operator +(other: Vector2): Vector2 {
         return Vector2(this.x + other.x);
     }
 }

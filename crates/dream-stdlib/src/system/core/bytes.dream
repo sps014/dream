@@ -24,7 +24,7 @@ public static class Bytes {
         let n = bytes.length;
         let s = string.alloc(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             string.set(s, i, (char)bytes[i]);
             i = i + 1;
         }
@@ -36,7 +36,7 @@ public static class Bytes {
         let n = s.length;
         let out = Buffer.alloc<byte>(n);
         let i = 0;
-        while (i < n) {
+        while i < n {
             out[i] = (byte)s.char_at(i).to_int();
             i = i + 1;
         }

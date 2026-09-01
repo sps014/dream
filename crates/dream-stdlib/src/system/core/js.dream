@@ -206,7 +206,7 @@ extend js {
     @node @web
     static async fun await_promise(borrow target: js): Option<js> {
         let v = await js.await_raw(target);
-        if (v.is_null()) {
+        if v.is_null() {
             return Option.None;
         }
         return Option.Some(v);

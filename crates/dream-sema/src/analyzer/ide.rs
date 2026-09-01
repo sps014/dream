@@ -162,7 +162,7 @@ pub enum MemberKind {
 pub struct MemberInfo {
     pub kind: MemberKind,
     pub name: String,
-    /// Rendered detail (`count: int`, `push(value: T): int`, `Some(value: T)`).
+    /// Rendered detail (`count: int`, `push(value: T): int`, `Some(T)`).
     pub detail: String,
     pub is_static: bool,
 }

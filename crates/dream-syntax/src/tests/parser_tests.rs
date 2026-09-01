@@ -265,7 +265,7 @@ fn test_parse_enum_declaration() {
 
 #[test]
 fn test_parse_data_enum_with_generics() {
-    let code = "enum Option<T> { Some(value: T), None }";
+    let code = "enum Option<T> { Some(T), None }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
@@ -282,9 +282,22 @@ fn test_parse_data_enum_with_generics() {
     assert_eq!(decl.variants.len(), 2);
     assert_eq!(decl.variants[0].name.text, "Some");
     assert_eq!(decl.variants[0].fields.len(), 1);
-    assert_eq!(decl.variants[0].fields[0].name.text, "value");
+    assert_eq!(decl.variants[0].fields[0].name.text, "_0");
     assert_eq!(decl.variants[1].name.text, "None");
     assert_eq!(decl.variants[1].fields.len(), 0);
+}
+
+#[test]
+fn test_parse_enum_struct() {
+    let code = "enum struct Outcome { Success(int), Failure(code: int, reason: string) }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
+    let decl = &program.enums[0];
+    assert!(decl.is_enum_struct);
+    assert!(decl.is_data_enum());
+    assert_eq!(decl.variants[0].fields[0].name.text, "_0");
+    assert_eq!(decl.variants[1].fields.len(), 2);
 }
 
 #[test]
@@ -554,6 +567,10 @@ fn test_parse_try_propagation_before_comparison_in_condition() {
     let func = &program.functions[0];
     let StatementNode::IfElse(cond, _, _, _) = &func.body[0] else {
         panic!("expected an if statement");
+    };
+    let cond = match cond {
+        ExpressionNode::Parenthesized(_, inner) => inner,
+        other => other,
     };
     let ExpressionNode::Binary(left, _, _) = cond else {
         panic!("expected a comparison condition");
@@ -1392,6 +1409,10 @@ fn test_parse_is_with_binding() {
     let func = &program.functions[0];
     // The `if` condition should be an `is` expression carrying a binding token.
     if let StatementNode::IfElse(cond, _, _, _) = &func.body[0] {
+        let cond = match cond {
+            ExpressionNode::Parenthesized(_, inner) => inner,
+            other => other,
+        };
         if let ExpressionNode::IsExpression(_, ty, binding) = cond {
             assert!(matches!(ty, Type::Integer(_)));
             assert_eq!(binding.as_ref().map(|t| t.text.as_str()), Some("a"));
@@ -1412,6 +1433,10 @@ fn test_parse_is_without_binding_still_works() {
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
     if let StatementNode::IfElse(cond, _, _, _) = &func.body[0] {
+        let cond = match cond {
+            ExpressionNode::Parenthesized(_, inner) => inner,
+            other => other,
+        };
         if let ExpressionNode::IsExpression(_, _, binding) = cond {
             assert!(binding.is_none());
         } else {

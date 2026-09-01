@@ -36,10 +36,10 @@ class CounterState {
 async fun main() {
     let state = CounterState();
     let ui = "ui/index.html";
-    if (File.exists(ui) == false) {
+    if File.exists(ui) == false {
         ui = "sample/webview/ui/index.html";
     }
-    if (File.exists(ui) == false) {
+    if File.exists(ui) == false {
         System.println("ui/index.html not found (run from repo root or sample/webview)");
         return;
     }

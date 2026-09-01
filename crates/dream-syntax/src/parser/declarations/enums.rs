@@ -7,8 +7,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses an enum declaration. Two forms share this parser:
     /// - C-style integer enum: `enum Color { Red, Green = 5, Blue }`. Members without an explicit
     ///   value continue from the previous member's value (starting at 0).
-    /// - Discriminated union: `enum Shape { Circle(radius: float), Empty }`, optionally generic
-    ///   `enum Option<T> { Some(value: T), None }`. A variant carries a parenthesized payload of
+    /// - Discriminated union: `enum Shape { Circle(float), Empty }`, optionally generic
+    ///   `enum Option<T> { Some(T), None }`. A variant carries a parenthesized payload of
     ///   `name: Type` fields; the variant's `value` is its discriminant (sequential from 0).
     ///
     /// Methods may be declared in the body alongside variants (`public fun is_some(): bool { ... }`),
@@ -47,6 +47,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         self.match_token(TokenKind::EnumToken);
+        let is_enum_struct = self.current_token().kind == TokenKind::StructToken;
+        if is_enum_struct {
+            self.match_token(TokenKind::StructToken);
+        }
         let mut name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut name, doc_trivia);
 
@@ -105,6 +109,22 @@ impl<'a, 'b> Parser<'a, 'b> {
                     fields = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
                         p.parse_variant_field()
                     })?;
+                    let mut pos_i = 0usize;
+                    for f in &mut fields {
+                        if f.name.text == "_" {
+                            f.name.text = format!("_{pos_i}");
+                            pos_i += 1;
+                        }
+                    }
+                    if fields.len() == 1 && !fields[0].name.text.starts_with('_') {
+                        self.diagnostics.report_error(
+                            format!(
+                                "single-field variant '{}' must be positional ('{}(T)'), not named",
+                                variant_name.text, variant_name.text
+                            ),
+                            Some(fields[0].name.position),
+                        );
+                    }
                 }
 
                 // C-style explicit value (`Green = 5`); only meaningful for payload-less variants.
@@ -135,21 +155,46 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
         self.match_token(TokenKind::CurlyCloseBracketToken);
+        let name_pos = name.position;
+        let name_text = name.text.clone();
         let mut decl =
             crate::nodes::EnumDeclarationNode::new(attributes, name, generic_parameters, variants);
         decl.generic_constraints = generic_constraints;
         decl.methods = methods;
         decl.is_sealed = is_sealed;
+        decl.is_enum_struct = is_enum_struct;
         decl.visibility = visibility;
+        if is_enum_struct && !decl.is_data_enum() {
+            self.diagnostics.report_error(
+                format!(
+                    "'enum struct {}' must have at least one variant payload; use 'enum' for a C-style integer enum",
+                    name_text
+                ),
+                Some(name_pos),
+            );
+        }
         Ok(decl)
     }
 
-    /// Parses a single discriminated-union variant payload field: `name: Type`.
+    /// Parses a single discriminated-union variant payload field: `name: Type` or a positional
+    /// `Type` (named `_0`, `_1`, … by the caller via empty name + later fill). Positional fields
+    /// are a type with no preceding `name:`.
     pub(crate) fn parse_variant_field(
         &mut self,
     ) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
-        let field_name = self.match_token(TokenKind::IdentifierToken);
-        self.match_token(TokenKind::ColonToken);
+        let positional = !(self.current_token().kind == TokenKind::IdentifierToken
+            && self.peek_token(1).kind == TokenKind::ColonToken);
+        let field_name = if positional {
+            crate::token::syntax_token::SyntaxToken::new(
+                TokenKind::IdentifierToken,
+                self.current_token().position,
+                "_".to_string(),
+            )
+        } else {
+            let n = self.match_token(TokenKind::IdentifierToken);
+            self.match_token(TokenKind::ColonToken);
+            n
+        };
         let type_position = self.current_token().position;
         let parsed_type = self.parse_type()?;
         let field_type_token = crate::token::syntax_token::SyntaxToken::new(

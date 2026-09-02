@@ -88,7 +88,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     }
 
     // Rebuilds headers from the host bridge JSON object string.
-    public static fun from_wire(text: string): HttpHeaders {
+    public static fun from_wire(borrow text: string): HttpHeaders {
         let headers = HttpHeaders();
         if text.is_empty() {
             return headers;
@@ -110,7 +110,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     }
 
     // Copies every pair from `other` (later names overwrite).
-    public fun add_all(other: HttpHeaders): void {
+    public fun add_all(borrow other: HttpHeaders): void {
         let i = 0;
         while i < other.length {
             this.set(other.key_at(i), other.value_at(i));

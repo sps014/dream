@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 
 const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/"];
 
-const HELLO_MAIN: &str = "import system;\n\nfun main() {\n    System.println(\"Hello, world!\");\n}\n";
+const HELLO_MAIN: &str =
+    "import system;\n\nfun main() {\n    System.println(\"Hello, world!\");\n}\n";
 
 /// `dreamer init hello` creates `./hello`. `dreamer init` (no name) uses the current directory.
 /// `--dir` wins over the name-as-subdirectory rule.

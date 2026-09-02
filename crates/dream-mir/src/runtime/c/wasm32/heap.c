@@ -702,6 +702,9 @@ void dream_free(dream_ptr ptr) {
      * set. Weak slots pointing at this object are reset first so `del`-time observers see
      * the cleared state (mirrors native/heap.c). */
     dream_str_fini(ptr);
+    if (dream_object_tag(ptr) == TAG_FUTURE) {
+        dream_future_fini(ptr);
+    }
     dream_recycle(ptr);
 }
 

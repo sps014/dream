@@ -32,7 +32,9 @@ impl<'a> Emitter<'a> {
                 default,
             } => self.switch(value, targets, *default),
             Terminator::Return(None) => {
-                self.value_teardown(None);
+                if !self.f.is_async {
+                    self.value_teardown(None);
+                }
                 if self.f.is_async || !matches!(self.cx.interner.kind(self.f.ret), TyKind::Void) {
                     self.b.ret(Some(Expr::i(0)));
                 } else {
@@ -48,7 +50,9 @@ impl<'a> Emitter<'a> {
                     }
                     _ => None,
                 };
-                self.value_teardown(skip);
+                if !self.f.is_async {
+                    self.value_teardown(skip);
+                }
                 if !self.f.is_async && self.cx.interner.is_value_type(self.f.ret) {
                     let size = super::types::elem_size(self.cx, self.f.ret);
                     let tag = self.cx.type_tag(self.f.ret, dream_types::DefId(0));
@@ -79,7 +83,9 @@ impl<'a> Emitter<'a> {
             }
             Terminator::Unreachable => self.b.call("abort", vec![]),
             Terminator::TailCall { callee, args } => {
-                self.value_teardown(None);
+                if !self.f.is_async {
+                    self.value_teardown(None);
+                }
                 let call = self.call_expr(callee, args);
                 if matches!(self.cx.interner.kind(self.f.ret), TyKind::Void) {
                     self.b.expr_stmt(call);
@@ -89,11 +95,21 @@ impl<'a> Emitter<'a> {
                 }
             }
             Terminator::AsyncComplete(None) => {
+                self.value_teardown(None);
                 self.b
                     .call("dream_async_complete", vec![Expr::id("__self"), Expr::i(0)]);
                 self.b.ret(Some(Expr::i(0)));
             }
             Terminator::AsyncComplete(Some(o)) => {
+                let skip = match o {
+                    Operand::Copy(Place::Local(l))
+                        if self.cx.interner.is_value_type(self.f.local_ty(*l)) =>
+                    {
+                        Some(*l)
+                    }
+                    _ => None,
+                };
+                self.value_teardown(skip);
                 let result = self.operand(o);
                 let wide = self.cx.target.abi().future.wide as i64;
                 match self.cx.interner.kind(self.f.ret) {
@@ -208,15 +224,6 @@ impl<'a> Emitter<'a> {
     }
 
     fn value_teardown(&mut self, skip: Option<Local>) {
-        if self.f.is_async
-            || self
-                .f
-                .blocks
-                .iter()
-                .any(|b| matches!(b.terminator, Terminator::Await { .. }))
-        {
-            return;
-        }
         let dropped: Vec<bool> = {
             let mut d = vec![false; self.f.locals.len()];
             for stmt in self.f.blocks.iter().flat_map(|block| &block.stmts) {

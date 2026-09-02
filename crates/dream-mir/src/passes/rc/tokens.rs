@@ -79,6 +79,8 @@ pub(crate) struct TokenAnalysis {
     pub unique_out: Vec<Vec<bool>>,
     /// Unique token on this block, Shared on a successor that still holds it: Retain before the join.
     pub share_at_end: Vec<BTreeSet<u32>>,
+    /// Await dest written at the top of this resume block.
+    pub await_resume_dest: Vec<Option<u32>>,
     pub has_await: bool,
 }
 
@@ -90,11 +92,11 @@ struct TokenFlow<'a> {
     assign_move: &'a HashSet<(usize, usize)>,
     sink_move: &'a HashSet<(usize, usize, u32)>,
     die_after: &'a HashSet<(usize, usize, u32)>,
-    has_await: bool,
     live_out: &'a [HashSet<u32>],
     preds: &'a [Vec<crate::BlockId>],
     entry: usize,
     loop_headers: &'a HashSet<usize>,
+    await_resume_dest: &'a [Option<u32>],
 }
 
 impl TokenAnalysis {
@@ -157,36 +159,32 @@ impl TokenAnalysis {
         transferred.extend(sink_move.iter().copied());
 
         let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
-        if !has_await {
-            for (bi, block) in func.blocks.iter().enumerate() {
-                for (si, stmt) in block.stmts.iter().enumerate() {
-                    for local in 0..nloc as u32 {
-                        if !is_owned(local) || take_params.contains(&local) {
+        for (bi, block) in func.blocks.iter().enumerate() {
+            for (si, stmt) in block.stmts.iter().enumerate() {
+                for local in 0..nloc as u32 {
+                    if !is_owned(local) || take_params.contains(&local) {
+                        continue;
+                    }
+                    if !is_early_destroy_ty(func, interner, local) {
+                        continue;
+                    }
+                    if transferred.contains(&(bi, si, local)) || rc_op_on_local(stmt, local) {
+                        continue;
+                    }
+                    let used = stmt_reads_local(stmt, local);
+                    let defined_dead = assigns_local(stmt, local)
+                        && !live_after_stmt(func, &live_out, bi, si, local);
+                    if !used && !defined_dead {
+                        continue;
+                    }
+                    if used && live_after_stmt(func, &live_out, bi, si, local) {
+                        continue;
+                    }
+                    if defined_dead || (used && !live_after_stmt(func, &live_out, bi, si, local)) {
+                        if !allows_early_destroy(stmt) {
                             continue;
                         }
-                        if !is_early_destroy_ty(func, interner, local) {
-                            continue;
-                        }
-                        if transferred.contains(&(bi, si, local)) || rc_op_on_local(stmt, local) {
-                            continue;
-                        }
-                        let used = stmt_reads_local(stmt, local);
-                        let defined_dead = assigns_local(stmt, local)
-                            && !live_after_stmt(func, &live_out, bi, si, local);
-                        if !used && !defined_dead {
-                            continue;
-                        }
-                        if used && live_after_stmt(func, &live_out, bi, si, local) {
-                            continue;
-                        }
-                        if defined_dead
-                            || (used && !live_after_stmt(func, &live_out, bi, si, local))
-                        {
-                            if !allows_early_destroy(stmt) {
-                                continue;
-                            }
-                            die_after.insert((bi, source_line_end(block, si), local));
-                        }
+                        die_after.insert((bi, source_line_end(block, si), local));
                     }
                 }
             }
@@ -198,6 +196,17 @@ impl TokenAnalysis {
             .iter()
             .map(|lp| lp.header.0 as usize)
             .collect();
+        let mut await_resume_dest = vec![None; n];
+        for block in &func.blocks {
+            if let Terminator::Await {
+                dest: Some(d),
+                resume,
+                ..
+            } = &block.terminator
+            {
+                await_resume_dest[resume.0 as usize] = Some(d.0);
+            }
+        }
         let mut token_in = vec![vec![false; nloc]; n];
         let mut token_out: Vec<Vec<Option<bool>>> = vec![vec![None; nloc]; n];
         let mut unique_in = vec![vec![false; nloc]; n];
@@ -211,11 +220,11 @@ impl TokenAnalysis {
             assign_move: &assign_move,
             sink_move: &sink_move,
             die_after: &die_after,
-            has_await,
             live_out: &live_out,
             preds: &preds,
             entry,
             loop_headers: &loop_headers,
+            await_resume_dest: &await_resume_dest,
         };
         let mut start_release = vec![BTreeSet::new(); n];
         let mut end_release = vec![BTreeSet::new(); n];
@@ -271,6 +280,12 @@ impl TokenAnalysis {
         for bi in 0..n {
             for succ in func.blocks[bi].terminator.successors() {
                 let s = succ.0 as usize;
+                // A loop header is Shared because the back-edge meets the entry edge.
+                // That is one token going around, not a second owner — Retain here leaks
+                // (StringBuilder across stringify loops, take params in add_all / serve_loop).
+                if loop_headers.contains(&s) {
+                    continue;
+                }
                 for local in 0..nloc {
                     if token_out[bi][local]
                         && unique_out[bi][local]
@@ -297,6 +312,7 @@ impl TokenAnalysis {
             unique_in,
             unique_out,
             share_at_end,
+            await_resume_dest,
             has_await,
         }
     }
@@ -417,26 +433,30 @@ fn transfer_block(
     let block = &flow.func.blocks[bi];
     let live_in = live_in_of(flow.func, flow.live_out, bi);
     let mut start = BTreeSet::new();
-    if !flow.has_await {
-        for (local, slot) in tokens.iter_mut().enumerate() {
-            let local = local as u32;
-            if !*slot || flow.take_params.contains(&local) || !(flow.is_owned)(local) {
-                continue;
-            }
-            if is_hidden_borrow_ty(flow.func, flow.interner, local) {
-                continue;
-            }
-            if live_in.contains(&local) || flow.live_out[bi].contains(&local) {
-                continue;
-            }
-            // Only the split edge of a mixed join. A single-pred successor (switch arm) is not a
-            // join: releasing here drops a weak-store referent before the arm reads it.
-            if !pred_tokens_unbalanced(flow, token_out, bi, local) {
-                continue;
-            }
-            start.insert(local);
-            *slot = false;
-            unique[local as usize] = false;
+    for (local, slot) in tokens.iter_mut().enumerate() {
+        let local = local as u32;
+        if !*slot || flow.take_params.contains(&local) || !(flow.is_owned)(local) {
+            continue;
+        }
+        if is_hidden_borrow_ty(flow.func, flow.interner, local) {
+            continue;
+        }
+        if live_in.contains(&local) || flow.live_out[bi].contains(&local) {
+            continue;
+        }
+        // Only the split edge of a mixed join. A single-pred successor (switch arm) is not a
+        // join: releasing here drops a weak-store referent before the arm reads it.
+        if !pred_tokens_unbalanced(flow, token_out, bi, local) {
+            continue;
+        }
+        start.insert(local);
+        *slot = false;
+        unique[local as usize] = false;
+    }
+    if let Some(d) = flow.await_resume_dest[bi] {
+        if (flow.is_owned)(d) {
+            tokens[d as usize] = true;
+            unique[d as usize] = true;
         }
     }
     for (si, stmt) in block.stmts.iter().enumerate() {
@@ -480,29 +500,40 @@ fn transfer_block(
         }
     }
 
+    let await_clobber: Option<u32> = match &block.terminator {
+        Terminator::Await {
+            future: Operand::Copy(Place::Local(f)),
+            dest: Some(d),
+            ..
+        } if d != f => Some(d.0),
+        _ => None,
+    };
+
     let mut end = BTreeSet::new();
-    if !flow.has_await {
-        for (local, slot) in tokens.iter_mut().enumerate() {
-            let local = local as u32;
-            if !*slot || flow.take_params.contains(&local) || !(flow.is_owned)(local) {
-                continue;
-            }
-            if is_hidden_borrow_ty(flow.func, flow.interner, local) {
-                continue;
-            }
-            if flow.live_out[bi].contains(&local) {
-                continue;
-            }
-            if terminator_reads_local(&block.terminator, local) {
-                continue;
-            }
-            if reads_local_in_block(block, local) {
-                continue;
-            }
-            end.insert(local);
-            *slot = false;
-            unique[local as usize] = false;
+    for (local, slot) in tokens.iter_mut().enumerate() {
+        let local = local as u32;
+        let clobber = await_clobber == Some(local);
+        if !*slot || !(flow.is_owned)(local) {
+            continue;
         }
+        if flow.take_params.contains(&local) && !clobber {
+            continue;
+        }
+        if is_hidden_borrow_ty(flow.func, flow.interner, local) && !clobber {
+            continue;
+        }
+        if flow.live_out[bi].contains(&local) && !clobber {
+            continue;
+        }
+        if !clobber && terminator_reads_local(&block.terminator, local) {
+            continue;
+        }
+        if !clobber && reads_local_in_block(block, local) {
+            continue;
+        }
+        end.insert(local);
+        *slot = false;
+        unique[local as usize] = false;
     }
     (tokens, unique, start, end)
 }

@@ -192,8 +192,7 @@ fn stub_extend() -> String {
 }
 
 fn is_std_file(path: Option<&str>) -> bool {
-    path.map(|p| p.starts_with("<std>/"))
-        .unwrap_or(true)
+    path.map(|p| p.starts_with("<std>/")).unwrap_or(true)
 }
 
 fn has_attr(attrs: &[AttributeNode], name: &str) -> bool {
@@ -266,13 +265,21 @@ fn attr_string(attrs: &[AttributeNode], name: &str) -> Option<String> {
         .find(|a| a.name.text == name)?
         .args
         .first()
-        .and_then(|a| a.as_string().map(|s| s.to_string()).or_else(|| {
-            if let dream_syntax::nodes::AttributeArg::Enum(parts) = a {
-                Some(parts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join("."))
-            } else {
-                None
-            }
-        }))
+        .and_then(|a| {
+            a.as_string().map(|s| s.to_string()).or_else(|| {
+                if let dream_syntax::nodes::AttributeArg::Enum(parts) = a {
+                    Some(
+                        parts
+                            .iter()
+                            .map(|t| t.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join("."),
+                    )
+                } else {
+                    None
+                }
+            })
+        })
 }
 
 fn attr_enum_names(attrs: &[AttributeNode], name: &str) -> Vec<String> {
@@ -514,7 +521,10 @@ fn build_route(
             }
             ParamKind::ServerWs
         } else if let Some(dep) = attr_enum_name(&p.attributes, "dep") {
-            if !fns.contains_key(&dep) && dep != "BearerToken" && dep != "ApiKeyHeader" && dep != "BasicAuth"
+            if !fns.contains_key(&dep)
+                && dep != "BearerToken"
+                && dep != "ApiKeyHeader"
+                && dep != "BasicAuth"
             {
                 report(
                     diagnostics,
@@ -617,18 +627,16 @@ fn build_route(
     for p in &params {
         if let ParamKind::Dep(dep) = &p.kind {
             if dep_has_cycle(dep, fns, acc, &mut dep_stack) {
-                report(
-                    diagnostics,
-                    f,
-                    format!("@dep({dep}) forms a cycle"),
-                );
+                report(diagnostics, f, format!("@dep({dep}) forms a cycle"));
                 return None;
             }
         }
     }
     for ph in &placeholders {
         if !used_path.contains(ph)
-            && !params.iter().any(|p| matches!(&p.kind, ParamKind::Path(n) if n == ph))
+            && !params
+                .iter()
+                .any(|p| matches!(&p.kind, ParamKind::Path(n) if n == ph))
         {
             report(
                 diagnostics,
@@ -664,9 +672,10 @@ fn dep_has_cycle(
         return true;
     }
     stack.push(name.to_string());
-    let node = fns.get(name).copied().or_else(|| {
-        acc.all_functions.iter().find(|f| f.name.text == name)
-    });
+    let node = fns
+        .get(name)
+        .copied()
+        .or_else(|| acc.all_functions.iter().find(|f| f.name.text == name));
     if let Some(f) = node {
         for p in &f.parameters {
             if let Some(nested) = attr_enum_name(&p.attributes, "dep") {
@@ -693,9 +702,7 @@ fn emit_extend(
     s.push_str("            return;\n");
     s.push_str("        }\n");
     for (_, name) in middleware {
-        s.push_str(&format!(
-            "        WebApp.use(Middleware({name}));\n"
-        ));
+        s.push_str(&format!("        WebApp.use(Middleware({name}));\n"));
     }
     s.push_str("    }\n\n");
     s.push_str("    public static fun generated_openapi_paths(): string {\n");
@@ -717,9 +724,7 @@ fn emit_extend(
             "        if method == \"{}\" && __m{i}.is_some() {{\n",
             r.method
         ));
-        s.push_str(&format!(
-            "            let __params{i} = __m{i}.unwrap();\n"
-        ));
+        s.push_str(&format!("            let __params{i} = __m{i}.unwrap();\n"));
         emit_handler_body(&mut s, r, i, json_names, acc);
         s.push_str("        }\n");
     }
@@ -755,7 +760,11 @@ fn emit_handler_body(
     acc: &ProgramAccumulator<'_>,
 ) {
     let wrap = !r.uses.is_empty();
-    let ind = if wrap { "                " } else { "            " };
+    let ind = if wrap {
+        "                "
+    } else {
+        "            "
+    };
     if wrap {
         s.push_str("            let __leaf: fun(): Future<HttpOutgoing> = async () => {\n");
     }
@@ -885,14 +894,14 @@ fn emit_extractors(
                 args.push(p.name.clone());
             }
             ParamKind::Body => {
-                s.push_str(&format!("{ind}let __body_{} = req.read_body_text();\n", p.name));
+                s.push_str(&format!(
+                    "{ind}let __body_{} = req.read_body_text();\n",
+                    p.name
+                ));
                 if p.ty == "string" {
                     s.push_str(&format!("{ind}let {} = __body_{};\n", p.name, p.name));
                 } else if p.ty == "byte[]" {
-                    s.push_str(&format!(
-                        "{ind}let {} = req.read_body_bytes();\n",
-                        p.name
-                    ));
+                    s.push_str(&format!("{ind}let {} = req.read_body_bytes();\n", p.name));
                 } else {
                     s.push_str(&format!(
                         "{ind}let __bj_{} = Json.deserialize<{}>(__body_{});\n",
@@ -1019,12 +1028,16 @@ fn emit_dep_call(
                     s.push_str(&format!(
                         "{ind}if {tmp}_o.is_none() {{ return HttpOutgoing.from_status(HttpStatus.unauthorized()); }}\n"
                     ));
-                    s.push_str(&format!("{ind}let {tmp} = {tmp}_o.unwrap_or(string.empty);\n"));
+                    s.push_str(&format!(
+                        "{ind}let {tmp} = {tmp}_o.unwrap_or(string.empty);\n"
+                    ));
                 }
                 dep_args.push(tmp);
             } else if has_attr(&p.attributes, "query") {
                 let q = attr_string(&p.attributes, "query").unwrap_or_else(|| p.name.text.clone());
-                s.push_str(&format!("{ind}let {tmp} = req.query_param(\"{q}\").unwrap_or(string.empty);\n"));
+                s.push_str(&format!(
+                    "{ind}let {tmp} = req.query_param(\"{q}\").unwrap_or(string.empty);\n"
+                ));
                 dep_args.push(tmp);
             } else if pty == "HttpIncoming" {
                 dep_args.push("req".into());
@@ -1076,13 +1089,7 @@ fn emit_dep_call(
     s.push_str(&format!("{ind}let {bind} = {slot};\n"));
 }
 
-fn emit_return(
-    s: &mut String,
-    ind: &str,
-    ret: &str,
-    call: &str,
-    json_names: &HashSet<String>,
-) {
+fn emit_return(s: &mut String, ind: &str, ret: &str, call: &str, json_names: &HashSet<String>) {
     if ret == "HttpOutgoing" {
         s.push_str(&format!("{ind}return {call};\n"));
         return;
@@ -1192,7 +1199,8 @@ fn openapi_paths(
                         first_p = false;
                         params_json.push_str("{\"name\":");
                         params_json.push_str(&json_raw_string(n));
-                        params_json.push_str(",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":");
+                        params_json
+                            .push_str(",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":");
                         params_json.push_str(&json_raw_string(openapi_scalar(&p.ty)));
                         params_json.push_str("}}");
                     }

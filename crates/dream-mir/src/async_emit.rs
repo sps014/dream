@@ -9,6 +9,8 @@
 //! With `pack` enabled, locals whose lifetimes never overlap (per MIR liveness) share one slot:
 //! the frame is canonical storage across suspends — scalars are re-read at poll entry and value
 //! locals alias it by pointer — so disjoint live ranges can safely reuse the same bytes.
+//! Only primitive scalars are packed: RC / value locals remain owned until `AsyncComplete`,
+//! which is longer than use-liveness, so sharing those slots would clobber a live ref.
 
 use super::MirFunction;
 use dream_types::{TyKind, TypeId, TypeInterner};

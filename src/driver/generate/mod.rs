@@ -4,13 +4,13 @@
 mod context;
 mod context_gen;
 mod json_gen;
-mod webapi_gen;
 mod manifest;
 mod registration;
 mod rewrite;
 mod semantic;
 mod syntax;
 mod syntax_gen;
+mod webapi_gen;
 
 pub use context::GeneratorContext;
 pub use manifest::{default_compile_entry, find_project_root, find_project_root_from};

@@ -136,6 +136,12 @@ impl RcInsertion {
                 }
                 changed = true;
             }
+            if let Some(d) = analysis.await_resume_dest.get(bi).copied().flatten() {
+                if (d as usize) < tokens.len() && is_owned(d) {
+                    tokens[d as usize] = true;
+                    unique[d as usize] = true;
+                }
+            }
             for (si, stmt) in block.stmts.drain(..).enumerate() {
                 let ref_dest = match &stmt {
                     Statement::Assign(Place::Local(dest), rvalue) if is_owned(dest.0) => Some((
@@ -352,6 +358,13 @@ impl RcInsertion {
                 }
             }
             for &local in &analysis.share_at_end[bi] {
+                // Take params already own +1. A loop-header "become shared" Retain
+                // plus a later unique/ordinary destroy of an alias, then `x = null`,
+                // leaks that +1 (HttpHeaders.add_all, WebApp.serve_loop options).
+                if take_flags.get(local as usize) == Some(&true) {
+                    unique[local as usize] = false;
+                    continue;
+                }
                 if dest_holds_token(&tokens, local) {
                     out.push(Statement::Retain(Operand::Copy(Place::Local(Local(local)))));
                     unique[local as usize] = false;
@@ -367,7 +380,21 @@ impl RcInsertion {
                         local,
                         unique.get(local as usize).copied().unwrap_or(false),
                     );
-                    out.extend(release_and_null(local, u));
+                    // Do not null an Await dest: resume is a C-only store, so `x = null`
+                    // here lets SCCP prove `x` is null in the resume block.
+                    let clobber_await_dest = matches!(
+                        &block.terminator,
+                        Terminator::Await {
+                            future: Operand::Copy(Place::Local(f)),
+                            dest: Some(d),
+                            ..
+                        } if *d != *f && d.0 == local
+                    );
+                    if clobber_await_dest {
+                        out.push(release_one(local, u));
+                    } else {
+                        out.extend(release_and_null(local, u));
+                    }
                     tokens[local as usize] = false;
                     unique[local as usize] = false;
                     changed = true;
@@ -380,9 +407,8 @@ impl RcInsertion {
 
         insert_value_struct_moves(func, interner, &mut changed);
 
-        if !analysis.has_await {
-            insert_early_value_drops(func, interner, &mut changed);
-        }
+        // Skip last-use drops in Await blocks: a host may still hold nested pointers until resume.
+        insert_early_value_drops(func, interner, &mut changed, analysis.has_await);
         // Last-use of an awaited handle: resume copies the result, then this drop frees the
         // future. Token flow also drops the handle at Await so AsyncComplete does not double-free.
         insert_await_resume_releases(func, interner, &mut changed);
@@ -391,12 +417,13 @@ impl RcInsertion {
         let ret_is_ref = interner.is_rc_tracked(func.ret);
         let mut spills: Vec<LocalDecl> = Vec::new();
         let next_local = func.locals.len() as u32;
-        for (bi, block) in func.blocks.iter_mut().enumerate() {
-            let ret = match &block.terminator {
+        for bi in 0..func.blocks.len() {
+            let ret = match &func.blocks[bi].terminator {
                 Terminator::Return(v) | Terminator::AsyncComplete(v) => v.clone(),
                 _ => continue,
             };
-            let is_async_complete = matches!(block.terminator, Terminator::AsyncComplete(_));
+            let is_async_complete =
+                matches!(func.blocks[bi].terminator, Terminator::AsyncComplete(_));
             let (skip, spill_from): (Option<u32>, Option<Operand>) = match &ret {
                 Some(Operand::Copy(Place::Local(l))) if is_owned(l.0) => (Some(l.0), None),
                 Some(op) if ret_is_ref => (None, Some(op.clone())),
@@ -412,14 +439,14 @@ impl RcInsertion {
                     is_cursor: false,
                     manual_drop: false,
                 });
-                block
+                func.blocks[bi]
                     .stmts
                     .push(Statement::Assign(Place::Local(temp), Rvalue::Use(op)));
-                block
+                func.blocks[bi]
                     .stmts
                     .push(Statement::Retain(Operand::Copy(Place::Local(temp))));
                 let spilled = Some(Operand::Copy(Place::Local(temp)));
-                block.terminator = if is_async_complete {
+                func.blocks[bi].terminator = if is_async_complete {
                     Terminator::AsyncComplete(spilled)
                 } else {
                     Terminator::Return(spilled)
@@ -429,18 +456,39 @@ impl RcInsertion {
             } else {
                 skip
             };
-            if let Some(tok) = analysis.token_out.get(bi) {
-                let uniq = analysis.unique_out.get(bi);
-                for (i, owned) in tok.iter().enumerate() {
-                    if !*owned || Some(i as u32) == skip {
-                        continue;
-                    }
-                    let u = uniq.and_then(|row| row.get(i).copied()).unwrap_or(false)
-                        && take_flags.get(i).copied() != Some(true)
-                        && can_unique_destroy(interner, func.locals[i].ty);
-                    block.stmts.push(release_one(i as u32, u));
-                    changed = true;
+            if is_async_complete {
+                insert_complete_value_drops(func, interner, bi, skip, &mut changed);
+            }
+            // Hidden-borrow types skip `end_release`, so leftovers still have a token here.
+            // Classes already dropped on the arms; sweeping every RC local would double-free
+            // at joins (`unbalanced_if_releases_on_kept_arm`).
+            let tokens = analysis.token_out.get(bi);
+            let uniq = analysis.unique_out.get(bi);
+            let nloc = func.locals.len().min(tokens.map(|t| t.len()).unwrap_or(0));
+            for i in 0..nloc {
+                let local = i as u32;
+                if Some(local) == skip || !is_owned_local(func, interner, local) {
+                    continue;
                 }
+                if !tokens.and_then(|row| row.get(i).copied()).unwrap_or(false) {
+                    continue;
+                }
+                // Retain after a string/const load must not suppress the exit drop.
+                if func.blocks[bi].stmts.iter().any(|s| {
+                    matches!(
+                        s,
+                        Statement::Release(Operand::Copy(Place::Local(l)))
+                            | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                            if l.0 == local
+                    )
+                }) {
+                    continue;
+                }
+                let u = uniq.and_then(|row| row.get(i).copied()).unwrap_or(false)
+                    && take_flags.get(i).copied() != Some(true)
+                    && can_unique_destroy(interner, func.locals[i].ty);
+                func.blocks[bi].stmts.extend(release_and_null(local, u));
+                changed = true;
             }
         }
         func.locals.extend(spills);
@@ -743,7 +791,42 @@ fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize
 
 /// Early `ValueDrop` after the last use of an owning value local. Whole-value copy-out (`dest = src`)
 /// keeps copy semantics (frame teardown still drops `src`); last *read* drops immediately.
-fn insert_early_value_drops(func: &mut MirFunction, interner: &TypeInterner, changed: &mut bool) {
+fn insert_complete_value_drops(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    bi: usize,
+    skip: Option<u32>,
+    changed: &mut bool,
+) {
+    let n = func.locals.len();
+    for i in 0..n {
+        if skip == Some(i as u32) || !is_owning_value_local(func, interner, i) {
+            continue;
+        }
+        let already = func.blocks[bi]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::ValueDrop(l) if l.0 == i as u32));
+        if already {
+            continue;
+        }
+        func.locals[i].manual_drop = true;
+        func.blocks[bi]
+            .stmts
+            .push(Statement::ValueDrop(Local(i as u32)));
+        *changed = true;
+    }
+}
+
+/// Early `ValueDrop` after the last use of an owning value local. Whole-value copy-out (`dest = src`)
+/// keeps copy semantics (frame teardown still drops `src`); last *read* drops immediately.
+/// `skip_await_blocks` holds nested refs until resume/`AsyncComplete` (host may stash pointers).
+fn insert_early_value_drops(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    changed: &mut bool,
+    skip_await_blocks: bool,
+) {
     let live_out = liveness::live_out(func);
     let owning: Vec<u32> = (0..func.locals.len())
         .filter(|&i| is_owning_value_local(func, interner, i))
@@ -754,6 +837,9 @@ fn insert_early_value_drops(func: &mut MirFunction, interner: &TypeInterner, cha
     }
     let mut drop_at: Vec<(usize, usize, u32)> = Vec::new();
     for (bi, block) in func.blocks.iter().enumerate() {
+        if skip_await_blocks && matches!(block.terminator, Terminator::Await { .. }) {
+            continue;
+        }
         for (si, stmt) in block.stmts.iter().enumerate() {
             for &local in &owning {
                 if matches!(
@@ -1129,6 +1215,109 @@ mod tests {
     }
 
     #[test]
+    fn take_param_loop_header_does_not_share_retain() {
+        let mut ctx = TypeCtx::new();
+        let (_, ty) = class_ty(&mut ctx);
+        let peek = ctx.register(DefKind::Function, "peek", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let p = b.new_take_param(ty, Some("p".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: peek,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(p))],
+        });
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let retains = func
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
+        assert_eq!(
+            retains, 0,
+            "loop-header share Retain of a take param leaks +1: {:?}",
+            func.blocks
+        );
+        let (_, releases) = count_rc(&func);
+        assert_eq!(releases, 1, "take param still drops at return");
+    }
+
+    #[test]
+    fn loop_carried_local_does_not_share_retain_on_entry() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let peek = ctx.register(DefKind::Function, "peek", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: peek,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(x))],
+        });
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let retains = func
+            .blocks
+            .iter()
+            .flat_map(|bb| &bb.stmts)
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
+        assert_eq!(
+            retains, 0,
+            "back-edge is not a second owner: {:?}",
+            func.blocks
+        );
+    }
+
+    #[test]
     fn loop_live_local_does_not_move_into_sink() {
         let mut ctx = TypeCtx::new();
         let (def, ty) = class_ty(&mut ctx);
@@ -1289,6 +1478,163 @@ mod tests {
             !mid,
             "string must not be released between hidden-borrow call and later work: {:?}",
             stmts
+        );
+    }
+
+    #[test]
+    fn async_class_released_before_await() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        b.set_async(true);
+        let x = b.new_local(ty, Some("x".into()));
+        let fut = b.new_local(ty, Some("fut".into()));
+        let resume = b.new_block();
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Local(fut),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Await {
+            future: Operand::Copy(Place::Local(fut)),
+            dest: None,
+            resume,
+        });
+        b.switch_to(resume);
+        b.terminate(Terminator::AsyncComplete(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let released_x = func.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == x
+            )
+        });
+        assert!(
+            released_x,
+            "class last-used before await must Release in the Await block: {:?}",
+            func.blocks[0].stmts
+        );
+    }
+
+    #[test]
+    fn async_complete_releases_sequential_hidden_borrow_locals() {
+        let i = dream_types::TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        b.set_async(true);
+        let s1 = b.new_local(i.string(), Some("s1".into()));
+        let s2 = b.new_local(i.string(), Some("s2".into()));
+        b.assign(
+            Place::Local(s1),
+            Rvalue::Use(Operand::Const(Const::Str("a".into()))),
+        );
+        b.assign(
+            Place::Local(s2),
+            Rvalue::Use(Operand::Const(Const::Str("b".into()))),
+        );
+        b.terminate(Terminator::AsyncComplete(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &i);
+        let complete = func
+            .blocks
+            .iter()
+            .find(|bl| matches!(bl.terminator, Terminator::AsyncComplete(_)));
+        let stmts = &complete.expect("AsyncComplete").stmts;
+        let rel_s1 = stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == s1
+            )
+        });
+        let rel_s2 = stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == s2
+            )
+        });
+        assert!(
+            rel_s1 && rel_s2,
+            "both string locals must Release at AsyncComplete: {:?}",
+            stmts
+        );
+    }
+
+    #[test]
+    fn async_await_rebind_releases_previous_dest() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        b.set_async(true);
+        let s = b.new_local(ctx.interner.string(), Some("s".into()));
+        let f1 = b.new_local(ty, Some("f1".into()));
+        let f2 = b.new_local(ty, Some("f2".into()));
+        let r1 = b.new_block();
+        let r2 = b.new_block();
+        b.assign(
+            Place::Local(f1),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Local(f2),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Await {
+            future: Operand::Copy(Place::Local(f1)),
+            dest: Some(s),
+            resume: r1,
+        });
+        b.switch_to(r1);
+        b.terminate(Terminator::Await {
+            future: Operand::Copy(Place::Local(f2)),
+            dest: Some(s),
+            resume: r2,
+        });
+        b.switch_to(r2);
+        b.terminate(Terminator::AsyncComplete(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let r1_stmts = &func.blocks[r1.0 as usize].stmts;
+        let released_s = r1_stmts.iter().any(|st| {
+            matches!(
+                st,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == s
+            )
+        });
+        assert!(
+            released_s,
+            "re-await into the same dest must Release the previous value: {:?}",
+            r1_stmts
         );
     }
 

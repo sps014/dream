@@ -1040,6 +1040,8 @@ dream_ptr dream_all(dream_ptr arr, int32_t esize);
 dream_ptr dream_any(dream_ptr arr);
 dream_ptr delayMs(int32_t ms);
 void *dream_ft_get(int32_t i);
+void *dream_fd_get(int32_t i);
+void dream_future_fini(dream_ptr f);
 int32_t utf8_width_at(dream_ptr s, int32_t i);
 int32_t utf8_decode_at(dream_ptr s, int32_t i);
 int32_t dream_lock_try_acquire(dream_ptr lock_addr);
@@ -1074,6 +1076,9 @@ int32_t debug_get_total_allocations(void);
 int32_t debug_get_ref_count(dream_ptr ptr);
 int32_t debug_get_heap_ptr(void);
 int32_t debug_get_free_list_head(void);
+/* Generated per module; weak default in heap.c. */
+const char *dream_tag_name(int32_t tag);
+void debug_dump_live(void);
 
 void string_copy_utf8(dream_ptr dst, int32_t dst_off, dream_ptr src, int32_t src_off, int32_t count);
 void array_store16(dream_ptr arr, int32_t off, int32_t u);

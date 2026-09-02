@@ -48,6 +48,7 @@ pub fn emit_c_module_for(
         m.push(item);
     }
     emit_string_table(&mut m, &cx);
+    emit_tag_names(&mut m, &cx);
     emit_globals(&mut m, &cx);
     let async_n = mir.polls.len();
     let import_async_n = mir
@@ -72,8 +73,8 @@ pub fn emit_c_module_for(
             let poll_idx = mir.functions.len() + 1 + user_async_i;
             let pre_lowered_poll = &mir.polls[user_async_i];
             user_async_i += 1;
-            let (stub, poll) = build_async_pair(&cx, f, pre_lowered_poll, poll_idx as i32);
-            vec![stub, poll]
+            let (stub, poll, drop) = build_async_pair(&cx, f, pre_lowered_poll, poll_idx as i32);
+            vec![stub, poll, drop]
         } else {
             vec![build_sync(&cx, f)]
         };
@@ -114,6 +115,16 @@ pub fn emit_c_module_for(
                 export: None,
             });
         }
+        if let Some(drop) = funcs.get(2) {
+            m.push(Item::Proto {
+                static_: drop.static_,
+                ret: drop.ret.clone(),
+                name: drop.name.clone(),
+                params: drop.params.clone(),
+                import: None,
+                export: None,
+            });
+        }
     }
     emit_release_helpers(&mut m, &cx);
     let reach = super::reach::compute(&cx);
@@ -142,6 +153,21 @@ pub fn emit_c_module_for(
         Expr::i(0),
     ))));
     m.push_func(ft_get);
+    let mut fd_get = FuncBuilder::new(CTy::VoidPtr, "dream_fd_get");
+    fd_get.param(CTy::I32, "i");
+    fd_get.stmt(Stmt::Return(Some(Expr::ternary(
+        Expr::and(
+            Expr::bin(crate::BinOp::Gt, Expr::id("i"), Expr::i(0)),
+            Expr::lt(
+                Expr::id("i"),
+                Expr::i((mir.functions.len() + 1 + async_n + import_async_n) as i64),
+            ),
+        ),
+        Expr::index(Expr::id("dream_fd"), Expr::id("i")),
+        Expr::i(0),
+    ))));
+    m.push_func(fd_get);
+    emit_drop_globals(&mut m, &cx);
     emit_iface_init(&mut m, &cx);
     emit_runtime_init(&mut m, &cx);
     emit_worker_invoke(&mut m, &cx);
@@ -187,6 +213,9 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
         // Wasm32 returns the Future to the JS host (`Instance.run`). Native owns it.
         entry.call("dream_release", vec![Expr::id("__mf")]);
     }
+    if !cx.target.is_wasm32() {
+        entry.call("dream_drop_globals", vec![]);
+    }
     if cx.target.is_wasm32() && main.is_async {
         entry.ret(Some(Expr::cast(CTy::I32, Expr::id("__mf"))));
     } else {
@@ -210,15 +239,18 @@ fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, asyn
     // Heap-counter leak report. Debug builds always print it so `dream run` / `-g` show
     // retention; release builds opt in via DREAM_DEBUG_LEAKS=1. Counters themselves always
     // update so `Debug.live_objects()` is valid in `--release` goldens.
-    let leak_report = Stmt::call(
-        "fprintf",
-        vec![
-            Expr::id("stderr"),
-            Expr::cstr("[dream] leak check: live=%d total_allocations=%d\n"),
-            Expr::call("debug_get_live_objects", vec![]),
-            Expr::call("debug_get_total_allocations", vec![]),
-        ],
-    );
+    let leak_report = Stmt::block(vec![
+        Stmt::call(
+            "fprintf",
+            vec![
+                Expr::id("stderr"),
+                Expr::cstr("[dream] leak check: live=%d total_allocations=%d\n"),
+                Expr::call("debug_get_live_objects", vec![]),
+                Expr::call("debug_get_total_allocations", vec![]),
+            ],
+        ),
+        Stmt::call("debug_dump_live", vec![]),
+    ]);
     if cx.leak_checks {
         main_fn.stmt(leak_report);
     } else {
@@ -326,6 +358,68 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             )),
         });
     }
+}
+
+fn emit_tag_names(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    if cx.target.is_wasm32() {
+        return;
+    }
+    let mut pairs: Vec<(i32, String)> = cx
+        .tags
+        .iter()
+        .map(|(ty, tag)| {
+            let name = cx
+                .mir
+                .layouts
+                .structs
+                .get(ty)
+                .map(|l| l.name.as_str())
+                .or_else(|| cx.mir.layouts.unions.get(ty).map(|l| l.name.as_str()))
+                .unwrap_or("object");
+            (*tag, name.to_string())
+        })
+        .collect();
+    pairs.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    let mut b = FuncBuilder::new(CTy::Ident("const char *".into()), "dream_tag_name");
+    b.param(CTy::I32, "tag");
+    let kind = b.temp(
+        CTy::I32,
+        Some(Expr::bin(
+            crate::BinOp::BitAnd,
+            Expr::id("tag"),
+            Expr::id("TAG_VALUE_MASK"),
+        )),
+    );
+    let mut arms = vec![
+        super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Ident("TAG_FUTURE")],
+            body: vec![Stmt::Return(Some(Expr::cstr("future")))],
+        },
+        super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Int(0)],
+            body: vec![Stmt::Return(Some(Expr::cstr("untagged")))],
+        },
+        super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Ident("TAG_STRING")],
+            body: vec![Stmt::Return(Some(Expr::cstr("string")))],
+        },
+        super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Ident("TAG_ARRAY")],
+            body: vec![Stmt::Return(Some(Expr::cstr("array")))],
+        },
+    ];
+    for (tag, name) in pairs {
+        arms.push(super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Int(tag as i64)],
+            body: vec![Stmt::Return(Some(Expr::cstr(name)))],
+        });
+    }
+    arms.push(super::ast::SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Return(Some(Expr::cstr("object")))],
+    });
+    b.stmt(Stmt::Switch { expr: kind, arms });
+    m.push_func(b);
 }
 
 fn emit_globals(m: &mut ModuleBuilder, cx: &Cx<'_>) {
@@ -732,6 +826,18 @@ fn emit_ftable_decl(m: &mut ModuleBuilder, cx: &Cx<'_>, async_n: usize) {
         name: "dream_ft".into(),
         init: None,
     });
+    m.push(Item::Global {
+        thread_local: false,
+        align: None,
+        static_: true,
+        const_: false,
+        ty: CTy::Array {
+            elem: Box::new(CTy::VoidPtr),
+            len: n,
+        },
+        name: "dream_fd".into(),
+        init: None,
+    });
 }
 
 fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _ft_extra: usize) {
@@ -755,6 +861,10 @@ fn emit_ftable_def(m: &mut ModuleBuilder, cx: &Cx<'_>, _ft_extra: usize) {
         b.assign(
             Expr::index(Expr::id("dream_ft"), Expr::i(i as i64)),
             Expr::cast(CTy::VoidPtr, Expr::id(poll_name(f))),
+        );
+        b.assign(
+            Expr::index(Expr::id("dream_fd"), Expr::i(i as i64)),
+            Expr::cast(CTy::VoidPtr, Expr::id(drop_name(f))),
         );
         async_i += 1;
     }
@@ -828,6 +938,10 @@ fn emit_runtime_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
 
 fn poll_name(f: &MirFunction) -> String {
     format!("poll_{}", c_ident(&func_symbol(f)))
+}
+
+fn drop_name(f: &MirFunction) -> String {
+    format!("drop_{}", c_ident(&func_symbol(f)))
 }
 
 fn proto_parts(cx: &Cx<'_>, f: &MirFunction) -> (CTy, String, Vec<Param>, Option<&'static str>) {
@@ -975,13 +1089,16 @@ fn build_async_pair(
     stub: &MirFunction,
     pre_lowered_poll: &MirFunction,
     poll_idx: i32,
-) -> (FuncBuilder, FuncBuilder) {
+) -> (FuncBuilder, FuncBuilder, FuncBuilder) {
     if stub.hir_fn.is_none() {
         let mut poll = FuncBuilder::new(CTy::I32, poll_name(stub));
         poll.param(CTy::Ptr, "__self");
         poll.static_ = true;
         poll.ret(Some(Expr::i(0)));
-        return (build_sync(cx, stub), poll);
+        let mut drop = FuncBuilder::new(CTy::Void, drop_name(stub));
+        drop.param(CTy::Ptr, "__self");
+        drop.static_ = true;
+        return (build_sync(cx, stub), poll, drop);
     }
     let body = pre_lowered_poll;
     let fut = cx.target.abi().future;
@@ -993,10 +1110,13 @@ fn build_async_pair(
             let sz = super::types::native_scalar_size(cx, ty).0.max(8);
             (sz, cx.interner.is_value_type(ty))
         },
-        // Packing shares slots between locals with disjoint lifetimes; disabled
-        // under debug info where the frame view expects one field per local.
+        // Pack only primitive scalars. RC and value locals stay in the frame until
+        // `AsyncComplete`; packing them on use-liveness overwrites a still-owned
+        // pointer/envelope without a Release/ValueDrop.
         if !cx.debug_syms {
-            Some(Box::new(|_ty| true))
+            Some(Box::new(|ty| {
+                !cx.interner.is_rc_tracked(ty) && !cx.interner.is_value_type(ty)
+            }))
         } else {
             None
         },
@@ -1202,15 +1322,23 @@ fn build_async_pair(
             }
         }
         for s in &block.stmts {
-            if let Statement::Assign(crate::Place::Local(l), _) = s {
-                let i = l.0 as usize;
-                let decl = &body.locals[i];
-                if !matches!(cx.interner.kind(decl.ty), TyKind::Void)
-                    && !cx.interner.is_value_type(decl.ty)
-                    && !dirty.contains(&l.0)
-                {
-                    dirty.push(l.0);
+            let spill_local = match s {
+                Statement::Assign(crate::Place::Local(l), _) => Some(l.0),
+                Statement::Release(crate::Operand::Copy(crate::Place::Local(l)))
+                | Statement::ReleaseUnique(crate::Operand::Copy(crate::Place::Local(l))) => {
+                    Some(l.0)
                 }
+                _ => None,
+            };
+            let Some(id) = spill_local else {
+                continue;
+            };
+            let decl = &body.locals[id as usize];
+            if !matches!(cx.interner.kind(decl.ty), TyKind::Void)
+                && !cx.interner.is_value_type(decl.ty)
+                && !dirty.contains(&id)
+            {
+                dirty.push(id);
             }
         }
         for i in dirty {
@@ -1226,7 +1354,102 @@ fn build_async_pair(
         }
     }
     poll.ret(Some(Expr::i(0)));
-    (stub_fn, poll)
+    let drop = build_future_drop(cx, stub, body, &offs);
+    (stub_fn, poll, drop)
+}
+
+fn drop_slot_rank(cx: &Cx<'_>, ty: dream_types::TypeId) -> u8 {
+    match cx.interner.kind(ty) {
+        TyKind::Func(_, _) => 0,
+        _ if cx.interner.is_value_type(ty) => 2,
+        _ if cx.interner.is_rc_tracked(ty) => 1,
+        _ => 3,
+    }
+}
+
+fn build_future_drop(
+    cx: &Cx<'_>,
+    stub: &MirFunction,
+    body: &MirFunction,
+    offs: &[i32],
+) -> FuncBuilder {
+    let mut d = FuncBuilder::new(CTy::Void, drop_name(stub));
+    d.static_ = true;
+    d.param(CTy::Ptr, "__self");
+    let result_slot = Expr::ptr_add(
+        Expr::id("__self"),
+        Expr::i(cx.target.abi().future.result as i64),
+    );
+    d.stmt(Stmt::decl(
+        CTy::Ptr,
+        "__res",
+        Some(Expr::load(CTy::Ptr, result_slot)),
+    ));
+    let mut idxs: Vec<usize> = (0..body.locals.len())
+        .filter(|&i| {
+            let d = &body.locals[i];
+            if !cx.interner.is_rc_tracked(d.ty) && !cx.interner.is_value_type(d.ty) {
+                return false;
+            }
+            if d.is_cursor {
+                return false;
+            }
+            let is_param = body.params.iter().any(|p| p.0 == i as u32);
+            !is_param || d.is_take
+        })
+        .collect();
+    idxs.sort_by_key(|&i| drop_slot_rank(cx, body.locals[i].ty));
+    for i in idxs {
+        let ty = body.locals[i].ty;
+        let slot = Expr::ptr_add(Expr::id("__self"), Expr::i(offs[i] as i64));
+        if cx.interner.is_value_type(ty) {
+            continue;
+        }
+        if !cx.interner.is_rc_tracked(ty) {
+            continue;
+        }
+        let loaded = Expr::load(local_c_ty(cx, ty), slot.clone());
+        let rel = crate::backend::c::release::release_sym(cx, ty);
+        let sn = format!("s{i}");
+        d.stmt(Stmt::block(vec![
+            Stmt::decl(CTy::Ptr, sn.clone(), Some(loaded)),
+            Stmt::if_(
+                Expr::and(
+                    Expr::id(sn.clone()),
+                    Expr::ne(Expr::id(sn.clone()), Expr::id("__res")),
+                ),
+                Stmt::block(vec![
+                    Stmt::call(rel, vec![Expr::id(sn)]),
+                    Stmt::store(local_c_ty(cx, ty), slot, Expr::i(0)),
+                ]),
+            ),
+        ]));
+    }
+    d
+}
+
+fn emit_drop_globals(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let mut b = FuncBuilder::new(CTy::Void, "dream_drop_globals");
+    b.static_ = true;
+    for g in &cx.mir.globals {
+        if g.id.0 == 0 {
+            continue;
+        }
+        let name = format!("g{}", g.id.0);
+        if cx.interner.is_value_type(g.ty) {
+            for s in super::statements::value_ref_stmts(cx, g.ty, Expr::id(&name), false) {
+                b.stmt(s);
+            }
+            continue;
+        }
+        if !cx.interner.is_rc_tracked(g.ty) {
+            continue;
+        }
+        let rel = crate::backend::c::release::release_sym(cx, g.ty);
+        b.call(rel, vec![Expr::id(&name)]);
+        b.assign(Expr::id(name), Expr::i(0));
+    }
+    m.push_func(b);
 }
 
 fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {

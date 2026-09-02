@@ -21,8 +21,7 @@ impl<'a> Emitter<'a> {
                 if matches!(*op, crate::BinOp::Eq | crate::BinOp::Ne)
                     && matches!(self.operand_kind(a), Some(TyKind::Prim(PrimTy::String)))
                 {
-                    let eq =
-                        Expr::call("dream_string_eq", vec![self.operand(a), self.operand(b)]);
+                    let eq = Expr::call("dream_string_eq", vec![self.operand(a), self.operand(b)]);
                     return if *op == crate::BinOp::Eq {
                         eq
                     } else {

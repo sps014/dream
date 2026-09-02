@@ -36,6 +36,27 @@ static dream_ptr arr_get(dream_ptr arr, int32_t i) {
 }
 
 void *dream_ft_get(int32_t i);
+
+__attribute__((weak)) void *dream_fd_get(int32_t i) {
+    (void)i;
+    return 0;
+}
+
+void dream_future_fini(dream_ptr f) {
+    int32_t poll;
+    void (*drop)(dream_ptr);
+    if (!f) {
+        return;
+    }
+    poll = i32_at(f, F_POLL)[0];
+    if (poll <= 0) {
+        return;
+    }
+    drop = (void (*)(dream_ptr))dream_fd_get(poll);
+    if (drop) {
+        drop(f);
+    }
+}
 static void combinator_progress(dream_ptr w, dream_ptr child);
 
 /* F_NEXT: 0 = lazy, 1 = started and the scheduler holds a retain, 2 = started retain dropped.
@@ -200,7 +221,8 @@ static void foreign_drain(void) {
 __attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
 #endif
 dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind) {
-    dream_ptr p = dream_malloc_shared(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, 0);
+    dream_ptr p = dream_malloc_shared(
+        size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, TAG_FUTURE);
     memset(dream_p(p), 0, (size_t)(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size));
     i32_at(p, F_POLL)[0] = poll;
     i32_at(p, F_KIND)[0] = kind;

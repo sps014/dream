@@ -34,11 +34,7 @@ pub fn run(
     }
 
     let triples = resolve_pack_targets(target_args)?;
-    super::build::compile_entry(
-        &workspace,
-        &flags,
-        Some(crate::manifest::RunTarget::Native),
-    )?;
+    super::build::compile_entry(&workspace, &flags, Some(crate::manifest::RunTarget::Native))?;
 
     let bin_path = artifact_native_bin(&workspace, &flags)?;
     if !bin_path.is_file() {

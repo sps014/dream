@@ -36,7 +36,7 @@ let webapi_gen_mw_done: bool = false;
 public class WebApp {
     @native
     @runtime("httpServerListen")
-    static extern fun host_listen(host: string, port: int, tls_cert_path: string, tls_key_path: string): char[];
+    static extern fun host_listen(borrow host: string, port: int, borrow tls_cert_path: string, borrow tls_key_path: string): char[];
 
     @native
     @async_host
@@ -49,7 +49,7 @@ public class WebApp {
 
     @native
     @runtime("httpServerRespond")
-    static extern fun host_respond(req: int, status: int, headers: string, body: byte[]): int;
+    static extern fun host_respond(req: int, status: int, borrow headers: string, borrow body: byte[]): int;
 
     @native
     @runtime("httpServerStartStream")
@@ -274,7 +274,7 @@ public class WebApp {
     }
 
     // Host `char[]` wires store one raw byte per element (same as `NetWireReader`).
-    static fun slice_wire(data: char[], start: int, len: int): string {
+    static fun slice_wire(borrow data: char[], start: int, len: int): string {
         let off = start;
         if off < 0 {
             off = 0;
@@ -298,7 +298,7 @@ public class WebApp {
         return result;
     }
 
-    static fun wire_starts(data: char[], prefix: string): bool {
+    static fun wire_starts(borrow data: char[], borrow prefix: string): bool {
         let n = prefix.length;
         if data.length < n {
             return false;
@@ -306,7 +306,7 @@ public class WebApp {
         return WebApp.slice_wire(data, 0, n) == prefix;
     }
 
-    static fun next_nl(data: char[], start: int): int {
+    static fun next_nl(borrow data: char[], start: int): int {
         let i = start;
         let n = data.length;
         while i < n {
@@ -318,7 +318,7 @@ public class WebApp {
         return n;
     }
 
-    static fun parse_incoming(wire: char[]): Option<HttpIncoming> {
+    static fun parse_incoming(borrow wire: char[]): Option<HttpIncoming> {
         if WebApp.wire_starts(wire, "shutdown") || WebApp.wire_starts(wire, "err") {
             let none: Option<HttpIncoming> = Option.None;
             return none;

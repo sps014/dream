@@ -165,8 +165,12 @@ fn header_from_json(headers_json: &str, name: &str) -> Option<String> {
     None
 }
 
-fn apply_headers(mut builder: hyper::http::response::Builder, headers_json: &str) -> hyper::http::response::Builder {
-    if let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(headers_json)
+fn apply_headers(
+    mut builder: hyper::http::response::Builder,
+    headers_json: &str,
+) -> hyper::http::response::Builder {
+    if let Ok(serde_json::Value::Object(map)) =
+        serde_json::from_str::<serde_json::Value>(headers_json)
     {
         for (k, v) in map {
             if let Some(s) = v.as_str() {
@@ -197,10 +201,7 @@ fn encode_shutdown() -> Vec<u8> {
     b"shutdown\n".to_vec()
 }
 
-fn load_tls(
-    cert_path: &str,
-    key_path: &str,
-) -> Result<tokio_rustls::TlsAcceptor, String> {
+fn load_tls(cert_path: &str, key_path: &str) -> Result<tokio_rustls::TlsAcceptor, String> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let certs = {
         let file = std::fs::File::open(cert_path).map_err(|e| e.to_string())?;
@@ -347,7 +348,11 @@ where
         .serve_connection(io, svc)
         .with_upgrades()
         .await;
-    let handles = ws_joins.lock().expect("ws joins").drain(..).collect::<Vec<_>>();
+    let handles = ws_joins
+        .lock()
+        .expect("ws joins")
+        .drain(..)
+        .collect::<Vec<_>>();
     for h in handles {
         let _ = h.await;
     }
@@ -416,7 +421,11 @@ async fn serve_one(
             let builder = apply_headers(Response::builder().status(status), &headers);
             Ok(builder.body(box_full(Bytes::from(body))).expect("response"))
         }
-        Ok(ReplyMsg::Stream { status, headers, rx }) => {
+        Ok(ReplyMsg::Stream {
+            status,
+            headers,
+            rx,
+        }) => {
             let builder = apply_headers(Response::builder().status(status), &headers);
             let body = ChunkBody { rx }.map_err(|e| match e {}).boxed_unsync();
             Ok(builder.body(body).expect("response"))
@@ -504,11 +513,7 @@ pub(crate) fn accept(server: i32) -> Vec<u8> {
         multipart: None,
     };
     let wire = encode_accept_ok(id, &live);
-    tables()
-        .requests
-        .lock()
-        .expect("requests")
-        .insert(id, live);
+    tables().requests.lock().expect("requests").insert(id, live);
     wire
 }
 
@@ -734,8 +739,7 @@ pub(crate) fn ws_receive(handle: i32) -> Vec<u8> {
     if tx.send(WsCmd::Recv(rtx)).is_err() {
         return b"error\nclosed".to_vec();
     }
-    rrx.recv()
-        .unwrap_or_else(|_| b"error\nclosed".to_vec())
+    rrx.recv().unwrap_or_else(|_| b"error\nclosed".to_vec())
 }
 
 pub(crate) fn ws_close(handle: i32, code: i32, reason: &str) -> i32 {
@@ -891,58 +895,58 @@ async fn run_ws_loop(
     mut ws: WebSocketStream<TokioIo<hyper::upgrade::Upgraded>>,
     mut cmd_rx: tokio::sync::mpsc::UnboundedReceiver<WsCmd>,
 ) {
-        while let Some(cmd) = cmd_rx.recv().await {
-            match cmd {
-                WsCmd::Send(msg, reply) => {
-                    let out = match ws.send(msg).await {
-                        Ok(()) => b"1\n".to_vec(),
-                        Err(e) => format!("0\n{e}").into_bytes(),
-                    };
-                    let _ = reply.send(out);
-                }
-                WsCmd::Recv(reply) => loop {
-                    match ws.next().await {
-                        Some(Ok(Message::Text(s))) => {
-                            let _ = reply.send(wire_ws_text("text", &s));
-                            break;
-                        }
-                        Some(Ok(Message::Binary(b))) => {
-                            let mut out = b"binary\n".to_vec();
-                            out.extend_from_slice(&b);
-                            let _ = reply.send(out);
-                            break;
-                        }
-                        Some(Ok(Message::Close(frame))) => {
-                            let (code, reason) = match frame {
-                                Some(f) => (u16::from(f.code) as i32, f.reason.into_owned()),
-                                None => (1000, String::new()),
-                            };
-                            let _ = reply.send(wire_ws_text("close", &format!("{code}\n{reason}")));
-                            break;
-                        }
-                        Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {
-                            continue;
-                        }
-                        Some(Err(e)) => {
-                            let _ = reply.send(format!("error\n{e}").into_bytes());
-                            break;
-                        }
-                        None => {
-                            let _ = reply.send(wire_ws_text("close", "1000\n"));
-                            break;
-                        }
+    while let Some(cmd) = cmd_rx.recv().await {
+        match cmd {
+            WsCmd::Send(msg, reply) => {
+                let out = match ws.send(msg).await {
+                    Ok(()) => b"1\n".to_vec(),
+                    Err(e) => format!("0\n{e}").into_bytes(),
+                };
+                let _ = reply.send(out);
+            }
+            WsCmd::Recv(reply) => loop {
+                match ws.next().await {
+                    Some(Ok(Message::Text(s))) => {
+                        let _ = reply.send(wire_ws_text("text", &s));
+                        break;
                     }
-                },
-                WsCmd::Close(code, reason) => {
-                    let frame = tungstenite::protocol::CloseFrame {
-                        code: tungstenite::protocol::frame::coding::CloseCode::from(code as u16),
-                        reason: reason.into(),
-                    };
-                    let _ = ws.close(Some(frame)).await;
-                    break;
+                    Some(Ok(Message::Binary(b))) => {
+                        let mut out = b"binary\n".to_vec();
+                        out.extend_from_slice(&b);
+                        let _ = reply.send(out);
+                        break;
+                    }
+                    Some(Ok(Message::Close(frame))) => {
+                        let (code, reason) = match frame {
+                            Some(f) => (u16::from(f.code) as i32, f.reason.into_owned()),
+                            None => (1000, String::new()),
+                        };
+                        let _ = reply.send(wire_ws_text("close", &format!("{code}\n{reason}")));
+                        break;
+                    }
+                    Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {
+                        continue;
+                    }
+                    Some(Err(e)) => {
+                        let _ = reply.send(format!("error\n{e}").into_bytes());
+                        break;
+                    }
+                    None => {
+                        let _ = reply.send(wire_ws_text("close", "1000\n"));
+                        break;
+                    }
                 }
+            },
+            WsCmd::Close(code, reason) => {
+                let frame = tungstenite::protocol::CloseFrame {
+                    code: tungstenite::protocol::frame::coding::CloseCode::from(code as u16),
+                    reason: reason.into(),
+                };
+                let _ = ws.close(Some(frame)).await;
+                break;
             }
         }
+    }
 }
 
 #[cfg(test)]
@@ -1036,7 +1040,9 @@ mod tests {
         let handle: i32 = lines.next().unwrap().parse().unwrap();
         let port: u16 = lines.next().unwrap().parse().unwrap();
         let url = format!("ws://127.0.0.1:{port}/ws");
-        let worker = std::thread::spawn(move || tungstenite::connect(url.as_str()).map_err(|e| e.to_string()));
+        let worker = std::thread::spawn(move || {
+            tungstenite::connect(url.as_str()).map_err(|e| e.to_string())
+        });
         let acc = super::accept(handle);
         let a = String::from_utf8_lossy(&acc);
         assert!(a.starts_with("ok\n"), "accept: {}", a);

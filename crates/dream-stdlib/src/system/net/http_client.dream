@@ -15,17 +15,17 @@ public class HttpClient {
     // completes the future there, so awaiting it no longer stalls the whole run loop.
     @async_host
     @runtime("httpRequest")
-    static extern async fun http_request(url: string, method: string, headers: string, body: string, timeout_ms: int, http_version: int): char[];
+    static extern async fun http_request(borrow url: string, borrow method: string, borrow headers: string, borrow body: string, timeout_ms: int, http_version: int): char[];
 
     @async_host
     @runtime("httpRequestBytes")
-    static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int, http_version: int): char[];
+    static extern async fun http_request_bytes(borrow url: string, borrow method: string, borrow headers: string, borrow body: byte[], timeout_ms: int, http_version: int): char[];
 
     @runtime("httpRequestStream")
-    static extern async fun http_request_stream(url: string, method: string, headers: string, body: string, timeout_ms: int, http_version: int): char[];
+    static extern async fun http_request_stream(borrow url: string, borrow method: string, borrow headers: string, borrow body: string, timeout_ms: int, http_version: int): char[];
 
     @runtime("httpRequestStreamBytes")
-    static extern async fun http_request_stream_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int, http_version: int): char[];
+    static extern async fun http_request_stream_bytes(borrow url: string, borrow method: string, borrow headers: string, borrow body: byte[], timeout_ms: int, http_version: int): char[];
 
     // Creates an HTTP client. `base_url` defaults to empty so absolute URLs work with `HttpClient()`.
     public constructor(base_url: string = "") {
@@ -97,7 +97,7 @@ public class HttpClient {
         return this.base_url + path;
     }
 
-    fun merge_headers(call: HttpHeaders): string {
+    fun merge_headers(borrow call: HttpHeaders): string {
         let merged = HttpHeaders();
         merged.add_all(this.default_headers);
         merged.add_all(call);

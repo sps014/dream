@@ -292,6 +292,16 @@ impl TokenAnalysis {
                         && token_in[s][local]
                         && !unique_in[s][local]
                     {
+                        // Phi dest: this arm *assigned* `local` (e.g. `unwrap_or` `None => fallback`).
+                        // The other arm's Shared is a different value, not a second owner of this
+                        // object. Retain would leak the moved fallback (`Option.unwrap_or`).
+                        if func.blocks[bi]
+                            .stmts
+                            .iter()
+                            .any(|stmt| assigns_local(stmt, local as u32))
+                        {
+                            continue;
+                        }
                         share_at_end[bi].insert(local as u32);
                     }
                 }

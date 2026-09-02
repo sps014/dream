@@ -960,6 +960,8 @@ fn cached_harness_c() -> Result<String, String> {
         include_str!("../../../crates/dream-stdlib/src/system/json/json.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/json_parser.dream"),
         include_str!("../../../crates/dream-mir/src/passes/rc/insertion.rs"),
+        include_str!("../../../crates/dream-mir/src/passes/rc/repair.rs"),
+        include_str!("../../../crates/dream-mir/src/passes/sroa.rs"),
         include_str!("../../../crates/dream-mir/src/passes/rc/uniqueness.rs"),
         include_str!("../../../crates/dream-mir/src/passes/rc/tokens.rs"),
         include_str!("../../../crates/dream-mir/src/backend/c/rvalue.rs"),

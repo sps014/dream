@@ -40,9 +40,10 @@ impl MirPass for Sroa {
 }
 
 /// Rewrites `o = New { ctor: Some(C), args }` into `o = New { ctor: None }` plus direct field
-/// stores when `C` is a straight-line initializer that only writes non-ref fields of `this` from
-/// parameters/constants. Enables silent SROA on short-lived `Acc(n)`-style instances without
-/// `@stack` class syntax.
+/// stores when `C` is a straight-line initializer that only writes non-ref fields or `string`
+/// fields of `this` from parameters/constants. Runs **before** [`super::RcInsertion`] so string
+/// field stores get call-site retain/move (take-ctors like `JsonParser`). Class / option / array
+/// fields stay on the ctor `New` so RC still sees a single sink.
 pub struct ExpandSimpleCtors;
 
 impl ModulePass for ExpandSimpleCtors {
@@ -80,6 +81,10 @@ enum CtorInit {
     Const(Const),
 }
 
+fn expandable_field_ty(interner: &TypeInterner, ty: TypeId) -> bool {
+    !interner.is_reference(ty) || ty == interner.string()
+}
+
 fn analyze_simple_ctor(
     ctor: &MirFunction,
     interner: &TypeInterner,
@@ -108,7 +113,7 @@ fn analyze_simple_ctor(
                     return None; // not a straight initializer
                 }
                 let ty = rvalue_store_ty(ctor, interner, rv);
-                if interner.is_reference(ty) {
+                if !expandable_field_ty(interner, ty) {
                     return None;
                 }
                 let init = match rv {
@@ -126,8 +131,8 @@ fn analyze_simple_ctor(
                 inits.push((*field, init));
             }
             Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => {
-                // RC on ctor params/this is inserted before this pass; ignore RC of non-this, but
-                // any mention of `this` besides field stores disqualifies.
+                // RC bookkeeping is ignored; this pass runs before insertion, but leftover RC
+                // from a previous pipeline must not look like ctor logic.
                 if stmt_mentions(stmt, this) {
                     // Retain/Release(this) alone is fine — object still exists after expansion.
                     if !matches!(
@@ -745,5 +750,80 @@ mod tests {
             .flat_map(|bb| &bb.stmts)
             .any(|s| matches!(s, Statement::Assign(_, Rvalue::New { .. })));
         assert!(!has_new, "allocation should be gone after SROA");
+    }
+
+    #[test]
+    fn expands_string_field_ctor() {
+        let mut i = TypeInterner::new();
+        let str_ty = i.string();
+        let ctor_def = DefId(1);
+        let class_def = DefId(2);
+        let class_ty = i.struct_ty(class_def, vec![]);
+
+        let mut ctor_b = FunctionBuilder::new("P.constructor", i.void());
+        ctor_b.set_def(ctor_def, vec![]);
+        let this = ctor_b.new_param(class_ty, Some("this".into()));
+        let text = ctor_b.new_take_param(str_ty, Some("text".into()));
+        ctor_b.assign(
+            Place::Field {
+                base: this,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Copy(Place::Local(text))),
+        );
+        ctor_b.terminate(Terminator::Return(None));
+        let ctor = ctor_b.finish();
+
+        let mut caller_b = FunctionBuilder::new("parse", i.void());
+        let p = caller_b.new_local(class_ty, Some("p".into()));
+        let s = caller_b.new_param(str_ty, Some("text".into()));
+        caller_b.assign(
+            Place::Local(p),
+            Rvalue::New {
+                def: class_def,
+                ty: class_ty,
+                ctor: Some(ctor_def),
+                args: vec![Operand::Copy(Place::Local(s))],
+            },
+        );
+        caller_b.terminate(Terminator::Return(None));
+        let caller = caller_b.finish();
+        let src = s;
+
+        let mut mir = Mir {
+            functions: vec![ctor, caller],
+            ..Mir::default()
+        };
+        assert!(
+            ExpandSimpleCtors.run(&mut mir, &i),
+            "string-field ctor New should expand: {:?}",
+            mir.functions[1].blocks[0].stmts
+        );
+        let stmts = &mir.functions[1].blocks[0].stmts;
+        assert!(
+            stmts.iter().any(|st| matches!(
+                st,
+                Statement::Assign(_, Rvalue::New { ctor: None, .. })
+            )),
+            "default New: {:?}",
+            stmts
+        );
+        assert!(
+            stmts.iter().any(|st| matches!(
+                st,
+                Statement::Assign(Place::Field { field: 0, .. }, Rvalue::Use(Operand::Copy(Place::Local(l))))
+                    if *l == src
+            )),
+            "field store of ctor arg: {:?}",
+            stmts
+        );
+        assert!(
+            !stmts.iter().any(|s| matches!(
+                s,
+                Statement::Assign(_, Rvalue::New { ctor: Some(_), .. })
+            )),
+            "ctor New must be gone: {:?}",
+            stmts
+        );
     }
 }

@@ -145,7 +145,7 @@ public class JsonValue {
         if this.kind != 3 {
             return Option.None;
         }
-        return Option.Some(this.str_val);
+        return Option.Some(string.clone(this.str_val));
     }
 
     public fun as_array(): Option<List<JsonValue>> {

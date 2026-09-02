@@ -102,6 +102,44 @@ fn diamond_unique_vs_shared_retains_on_unique_arm() {
 }
 
 #[test]
+fn phi_assign_unique_vs_shared_does_not_retain_moved_dest() {
+    let mut ctx = TypeCtx::new();
+    let (def, ty) = class_ty(&mut ctx);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let x = b.new_local(ty, Some("x".into()));
+    let d = b.new_local(ty, Some("d".into()));
+    let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+    let then_blk = b.new_block();
+    let else_blk = b.new_block();
+    let join = b.new_block();
+    b.assign(Place::Local(x), new_obj(def, ty));
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(c)),
+        then_blk,
+        else_blk,
+    });
+    b.switch_to(then_blk);
+    b.assign(Place::Local(d), new_obj(def, ty));
+    b.terminate(Terminator::Goto(join));
+    b.switch_to(else_blk);
+    b.assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(x))));
+    b.terminate(Terminator::Goto(join));
+    b.switch_to(join);
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(d)))));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    let then_retain_d = func.blocks[then_blk.0 as usize]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == d));
+    assert!(
+        !then_retain_d,
+        "unique phi assign must not share-Retain dest: {:?}",
+        func.blocks
+    );
+}
+
+#[test]
 fn loop_copy_inside_body_is_shared() {
     let mut ctx = TypeCtx::new();
     let (def, ty) = class_ty(&mut ctx);
@@ -198,17 +236,19 @@ fn take_param_field_store_then_use_does_not_null() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    let null_p = func.blocks[0].stmts.iter().any(|s| {
-        matches!(
-            s,
-            Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
-                if *l == p
-        )
-    });
+    let stmts = &func.blocks[0].stmts;
+    let store = stmts
+        .iter()
+        .position(|s| matches!(s, Statement::Assign(Place::Field { base, .. }, _) if *base == obj))
+        .expect("field store");
     assert!(
-        !null_p,
+        !matches!(
+            stmts.get(store + 1),
+            Some(Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null))))
+                if *l == p
+        ),
         "still-live take after field store is not a move: {:?}",
-        func.blocks[0].stmts
+        stmts
     );
 }
 

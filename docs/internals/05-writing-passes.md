@@ -34,13 +34,15 @@ Two rules make the system work:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> rc[RcInsertion\nmodule-wide] --> inline[Inliner\nto fixpoint + prune] --> perfn[per-function\nPassManager]
+    prune1[prune_module] --> expand[ExpandSimpleCtors] --> rc[RcInsertion\nmodule-wide] --> inline[Inliner\nto fixpoint + prune] --> repair[RcLastUseRepair] --> perfn[per-function\nPassManager]
 ```
 
 - `prune_module` tree-shakes unreachable functions.
-- `RcInsertion` runs **before** inlining. Dream has deterministic, reference-counted destruction, so a local reference's lifetime must end where its owning function returns. Inserting RC first bakes each callee's scope-exit `Release`s into its body, so inlining copies them to the return site and object lifetimes are preserved exactly. (A `debug_assert!` guards against a future reorder that would hoist the inliner above RC insertion.)
+- `ExpandSimpleCtors` runs **before** `RcInsertion` so field stores (including strings) get retain/move at the call site. Expanding after RC left `New` args as fake sinks and UAFed take-ctors like `JsonParser`.
+- `RcInsertion` runs **before** inlining. Callee scope-exit `Release`s stay on the original bodies (and keep inliner size budgets honest). Inserting after inlining on a fused `generated_dispatch` is too expensive.
 - `Inliner` runs to a fixpoint interleaved with pruning: each round may expose more inlining and more dead callees.
-- The per-function `PassManager` then cleans up the merged bodies.
+- `RcLastUseRepair` walks fused CFGs once: last-use `a[i] = s` / field stores become moves so inlined `split` temps do not leak.
+- The per-function `PassManager` then cleans up the merged bodies (`RcElision` only — never a second `RcInsertion`).
 
 Debug-info builds call `optimize_module_opts(.., inline = false)`: RC insertion and pruning still run (they are correctness-relevant), but inlining is off so each user function keeps its own body and call frame for the debugger.
 

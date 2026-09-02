@@ -5,12 +5,14 @@
 //! are bound to the argument operands, and every callee `Return` becomes a jump to a continuation
 //! block (assigning the returned value into the call's destination first).
 //!
-//! Inlining runs as a [`ModulePass`] *after* module-wide `RcInsertion` (see `optimize_module_opts`):
-//! each callee already carries its scope-exit `Release`s, so splicing copies those lifetimes to the
-//! inlined continuation. Value-struct teardown is emitter-side for standalone functions; the inliner
-//! inserts [`Statement::ValueDrop`] at each remapped return→continuation edge so owning value locals
-//! still die at the call site (not the caller's frame exit). Call-result dests are forced Owning
-//! (`__vret`) so the return `Assign` deep-copies rather than Borrow-rebinding a synthetic temp.
+//! Inlining runs as a [`ModulePass`] *after* module-wide [`crate::passes::rc::RcInsertion`]
+//! (see `optimize_module_opts`): each callee already carries its scope-exit `Release`s. A follow-up
+//! [`crate::passes::rc::RcLastUseRepair`] turns inlined last-use copies and container stores into
+//! moves so spliced `return x` / `a[i] = s` do not leak. Value-struct teardown is emitter-side for
+//! standalone functions; the inliner inserts [`Statement::ValueDrop`] at each remapped
+//! return→continuation edge so owning value locals still die at the call site (not the caller's
+//! frame exit). Call-result dests are forced Owning (`__vret`) so the return `Assign` deep-copies
+//! rather than Borrow-rebinding a synthetic temp.
 
 use super::ModulePass;
 use crate::{
@@ -329,7 +331,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     }
     let f = &mut mir.functions[fi];
     // Zero-initialize the callee's non-parameter *reference* locals. In a standalone function these
-    // start null (a fresh WASM frame); the callee's reference-counting relies on that — its
+    // start null (a fresh C frame); the callee's reference-counting relies on that — its
     // release-before-overwrite and scope-exit `Release`s assume a null baseline. Inlined into the
     // caller's frame the locals persist across executions (e.g. loop iterations), so without this
     // reset a scope-exit release on a not-yet-assigned path would free a stale pointer left by a
@@ -851,6 +853,99 @@ mod tests {
         assert_eq!(
             retains, 0,
             "inlined transparent peek should let elision drop retain of x"
+        );
+    }
+
+    /// `return s` inlined as `x = s` must be a last-use move after fused RC, not a second alias.
+    #[test]
+    fn optimize_module_rc_after_inline_moves_returned_string() {
+        let mut ctx = TypeCtx::new();
+        let str_ty = ctx.interner.string();
+        let void = ctx.interner.void();
+        let make_def = ctx.register(DefKind::Function, "make", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+        let main_def = ctx.register(DefKind::Function, "main", vec![]);
+
+        let make = {
+            let mut b = FunctionBuilder::new("make", str_ty);
+            b.set_def(make_def, vec![]);
+            let s = b.new_local(str_ty, Some("s".into()));
+            b.assign(
+                Place::Local(s),
+                Rvalue::Use(Operand::Const(Const::Str("hi".into()))),
+            );
+            b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
+            b.finish()
+        };
+        let caller = {
+            let mut b = FunctionBuilder::new("caller", void);
+            b.set_def(caller_def, vec![]);
+            let x = b.new_local(str_ty, Some("x".into()));
+            b.assign(
+                Place::Local(x),
+                Rvalue::Call {
+                    callee: crate::Callee {
+                        def: make_def,
+                        args: vec![],
+                        ret: str_ty,
+                        take_params: vec![],
+                    },
+                    args: vec![],
+                },
+            );
+            b.push(Statement::Print {
+                arg: Operand::Copy(Place::Local(x)),
+                ty: str_ty,
+                newline: true,
+            });
+            b.terminate(Terminator::Return(None));
+            b.finish()
+        };
+        let main = {
+            let mut b = FunctionBuilder::new(crate::abi::ENTRY_FN, void);
+            b.set_def(main_def, vec![]);
+            b.push(Statement::Call {
+                callee: crate::Callee {
+                    def: caller_def,
+                    args: vec![],
+                    ret: void,
+                    take_params: vec![],
+                },
+                args: vec![],
+            });
+            b.terminate(Terminator::Return(None));
+            b.finish()
+        };
+
+        let mut mir = crate::Mir {
+            functions: vec![make, caller, main],
+            ..Default::default()
+        };
+        crate::passes::optimize_module(&mut mir, &ctx.interner);
+        let caller = mir
+            .functions
+            .iter()
+            .find(|f| f.name == "caller")
+            .expect("caller survives prune");
+        let has_make_call = caller.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
+            matches!(
+                s,
+                Statement::Assign(_, Rvalue::Call { callee, .. }) if callee.def == make_def
+            )
+        });
+        assert!(!has_make_call, "make should be inlined");
+        let string_teardown = caller.blocks.iter().flat_map(|b| &b.stmts).any(|st| {
+            matches!(
+                st,
+                Statement::Release(Operand::Copy(Place::Local(_)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(_)))
+                    | Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null)))
+            )
+        });
+        assert!(
+            string_teardown,
+            "fused body still tears down RC locals: {:?}",
+            caller.blocks.iter().map(|b| &b.stmts).collect::<Vec<_>>()
         );
     }
 }

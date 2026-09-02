@@ -303,10 +303,8 @@ impl Compiler {
             let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
             let interner = analyzer.interner();
             let mut mir = dream_mir::lower::lower_program(&hir, interner);
-            // Whole-module optimization: tree-shaking + reference-counting insertion + function
-            // inlining (see `mir::passes::optimize_module`). RC is inserted there, before inlining,
-            // so callee destruction stays deterministic; the per-function pipeline below only cleans
-            // up the merged bodies.
+            // Whole-module optimization: simple-ctor expand, RC insertion, inlining, last-use RC
+            // repair on fused bodies (see `mir::passes::optimize_module`). Per-function only elides pairs.
             // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
             // user variables and per-function call frames survive for the debugger; release builds
             // use the full optimizing pipeline.

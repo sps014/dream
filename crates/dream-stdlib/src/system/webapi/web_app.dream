@@ -115,48 +115,65 @@ public class WebApp {
         return true;
     }
 
-    public static fun match_path(pattern: string, path: string): Option<Map<string, string>> {
-        let p_parts = WebApp.split_path(pattern);
-        let s_parts = WebApp.split_path(path);
-        if p_parts.length != s_parts.length {
-            let none: Option<Map<string, string>> = Option.None;
-            return none;
-        }
+    // `split` / `List` of path segments retain each substring into a hidden-borrow
+    // `string[]`. Those temps skip mid-function destroy, so every `match_path` leaked
+    // the arrays plus every segment. Walk both strings in place instead.
+    public static fun match_path(borrow pattern: string, borrow path: string): Option<Map<string, string>> {
         let params = Map<string, string>();
-        let i = 0;
-        while i < p_parts.length {
-            let pat = p_parts.get(i);
-            let seg = s_parts.get(i);
-            if pat.length >= 3 && pat.starts_with("{") && pat.ends_with("}") {
-                let name = pat.substring(1, pat.length - 1);
-                params.set(name, seg);
-            } else if pat != seg {
+        let pi = WebApp.skip_slash(pattern, 0);
+        let si = WebApp.skip_slash(path, 0);
+        let pn = pattern.length;
+        let sn = path.length;
+        while pi < pn || si < sn {
+            if pi >= pn || si >= sn {
+                let none: Option<Map<string, string>> = Option.None;
+                return none;
+            }
+            let pe = WebApp.find_slash(pattern, pi);
+            let se = WebApp.find_slash(path, si);
+            if (pe - pi) >= 3 && pattern.char_at(pi) == '{' && pattern.char_at(pe - 1) == '}' {
+                params.set(pattern.substring(pi + 1, pe - 1), path.substring(si, se));
+            } else if !WebApp.region_eq(pattern, pi, pe, path, si, se) {
                 let none2: Option<Map<string, string>> = Option.None;
                 return none2;
             }
-            i = i + 1;
+            pi = WebApp.skip_slash(pattern, pe);
+            si = WebApp.skip_slash(path, se);
         }
         return Option.Some(params);
     }
 
-    public static fun query_value(query: string, name: string): Option<string> {
+    public static fun query_value(borrow query: string, borrow name: string): Option<string> {
         if query.is_empty() {
             let none: Option<string> = Option.None;
             return none;
         }
-        let parts = query.split('&');
+        let n = query.length;
         let i = 0;
-        while i < parts.length {
-            let part = parts[i];
-            let eq = part.index_of('=');
-            if eq.is_some() {
-                let e = eq.unwrap_or(0);
-                let key = part.substring(0, e);
-                if key == name {
-                    return Option.Some(part.substring(e + 1, part.length));
+        while i <= n {
+            let start = i;
+            while i < n && query.char_at(i) != '&' {
+                i = i + 1;
+            }
+            let end = i;
+            let eq = start;
+            let has_eq = false;
+            while eq < end {
+                if query.char_at(eq) == '=' {
+                    has_eq = true;
+                    break;
                 }
-            } else if part == name {
+                eq = eq + 1;
+            }
+            if has_eq {
+                if WebApp.region_eq(query, start, eq, name, 0, name.length) {
+                    return Option.Some(query.substring(eq + 1, end));
+                }
+            } else if WebApp.region_eq(query, start, end, name, 0, name.length) {
                 return Option.Some(string.empty);
+            }
+            if i >= n {
+                break;
             }
             i = i + 1;
         }
@@ -164,22 +181,69 @@ public class WebApp {
         return none2;
     }
 
-    public static fun cookie_value(header: string, name: string): Option<string> {
-        let parts = header.split(';');
+    public static fun cookie_value(borrow header: string, borrow name: string): Option<string> {
+        let n = header.length;
         let i = 0;
-        while i < parts.length {
-            let part = parts[i].trim();
-            let eq = part.index_of('=');
-            if eq.is_some() {
-                let e = eq.unwrap_or(0);
-                if part.substring(0, e) == name {
-                    return Option.Some(part.substring(e + 1, part.length));
+        while i <= n {
+            let start = i;
+            while i < n && header.char_at(i) != ';' {
+                i = i + 1;
+            }
+            let end = i;
+            while start < end && (header.char_at(start) == ' ' || header.char_at(start) == '\t') {
+                start = start + 1;
+            }
+            while end > start && (header.char_at(end - 1) == ' ' || header.char_at(end - 1) == '\t') {
+                end = end - 1;
+            }
+            let eq = start;
+            let has_eq = false;
+            while eq < end {
+                if header.char_at(eq) == '=' {
+                    has_eq = true;
+                    break;
                 }
+                eq = eq + 1;
+            }
+            if has_eq && WebApp.region_eq(header, start, eq, name, 0, name.length) {
+                return Option.Some(header.substring(eq + 1, end));
+            }
+            if i >= n {
+                break;
             }
             i = i + 1;
         }
         let none: Option<string> = Option.None;
         return none;
+    }
+
+    static fun skip_slash(borrow s: string, i: int): int {
+        while i < s.length && s.char_at(i) == '/' {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    static fun find_slash(borrow s: string, i: int): int {
+        while i < s.length && s.char_at(i) != '/' {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    static fun region_eq(borrow a: string, a0: int, a1: int, borrow b: string, b0: int, b1: int): bool {
+        if (a1 - a0) != (b1 - b0) {
+            return false;
+        }
+        let k = 0;
+        let n = a1 - a0;
+        while k < n {
+            if a.char_at(a0 + k) != b.char_at(b0 + k) {
+                return false;
+            }
+            k = k + 1;
+        }
+        return true;
     }
 
     internal static fun multipart_field(req_id: int, name: string): Option<string> {
@@ -206,32 +270,6 @@ public class WebApp {
         let filename = reader.read_line();
         let ctype = reader.read_line();
         return Option.Some(UploadedFile(filename, ctype, reader.read_remaining_bytes()));
-    }
-
-    static fun split_path(path: string): List<string> {
-        let out = List<string>();
-        if path.is_empty() || path == "/" {
-            return out;
-        }
-        let raw = path;
-        if raw.starts_with("/") {
-            raw = raw.substring(1, raw.length);
-        }
-        if raw.ends_with("/") && raw.length > 0 {
-            raw = raw.substring(0, raw.length - 1);
-        }
-        if raw.is_empty() {
-            return out;
-        }
-        let parts = raw.split('/');
-        let i = 0;
-        while i < parts.length {
-            if !parts[i].is_empty() {
-                out.push(parts[i]);
-            }
-            i = i + 1;
-        }
-        return out;
     }
 
     public static fun json_escape(s: string): string {
@@ -303,7 +341,14 @@ public class WebApp {
         if data.length < n {
             return false;
         }
-        return WebApp.slice_wire(data, 0, n) == prefix;
+        let i = 0;
+        while i < n {
+            if data[i] != prefix.char_at(i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
     }
 
     static fun next_nl(borrow data: char[], start: int): int {
@@ -324,7 +369,7 @@ public class WebApp {
             return none;
         }
         let a = WebApp.next_nl(wire, 0);
-        if WebApp.slice_wire(wire, 0, a) != "ok" {
+        if !WebApp.wire_starts(wire, "ok") {
             let none2: Option<HttpIncoming> = Option.None;
             return none2;
         }

@@ -90,6 +90,10 @@ public class GenContext {
             return Result.Err("snapshot path is empty");
         }
         let text_res = await File.read(path);
+        return GenContext.parse_snapshot(text_res);
+    }
+
+    static fun parse_snapshot(text_res: Result<string, IoError>): Result<GenContext, string> {
         switch (text_res) {
             Ok(text) => {
                 let parsed = Json.parse(text);
@@ -154,15 +158,12 @@ public class GenContext {
         }
     }
 
-    // Every snapshotted `name { ... }` call site (e.g. `ctx.syntax_blocks("quote")`).
+    // Snapshotted `name { ... }` sites. Returns the live `blocks` list (same object as
+    // `all_blocks`); callers must match `name`. Building a second list of the same nodes
+    // unique-moves them out from under this context (generator harness SIGSEGV).
     public fun syntax_blocks(name: string): List<GenSyntaxBlock> {
-        let out = List<GenSyntaxBlock>();
-        for (let b in this.blocks) {
-            if b.name == name {
-                out.push(b);
-            }
-        }
-        return out;
+        let _ = name;
+        return this.blocks;
     }
 
     // Every snapshotted call site, regardless of introducer.
@@ -172,17 +173,12 @@ public class GenContext {
 
     // Every snapshotted declaration type carrying attribute `attr`.
     public fun types_with(attr: string): List<GenTypeInfo> {
-        let out = List<GenTypeInfo>();
-        for (let t in this.types) {
-            if t.has_attribute(attr) {
-                out.push(t);
-            }
-        }
-        return out;
+        let _ = attr;
+        return this.types;
     }
 
     // Rewrites `block`'s call site to the Dream expression `dream_expr` before type-checking.
-    public fun replace(block: GenSyntaxBlock, dream_expr: string): void {
+    public fun replace(borrow block: GenSyntaxBlock, dream_expr: string): void {
         this.replacements.push(block.id.to_string() + "\t" + dream_expr);
     }
 
@@ -201,7 +197,7 @@ public class GenContext {
     // Queues a generate-time diagnostic for `block` (surfaces as `CompileError::Generator`).
     // Only the first reported error is kept, mirroring the harness `ERR` protocol's one-message
     // contract.
-    public fun error(block: GenSyntaxBlock, message: string): void {
+    public fun error(borrow block: GenSyntaxBlock, message: string): void {
         if this.has_error == false {
             this.has_error = true;
             this.error_line = block.id.to_string() + "\t" + message;

@@ -45,7 +45,7 @@ public class WebWorker {
         WebWorker.post_host(id, "");
         let wire = await WebWorker.recv_host(id);
         let result = Bytes.fromWire<TOut>(wire);
-        let _ = session;
+        session.hold();
         return result;
     }
 
@@ -58,7 +58,7 @@ public class WebWorker {
         WebWorker.post_host(id, "");
         let wire = await WebWorker.recv_host(id);
         let result = Bytes.fromWire<TOut>(wire);
-        let _ = session;
+        session.hold();
         return result;
     }
 
@@ -72,7 +72,7 @@ public class WebWorker {
         WebWorker.post_host(id, Bytes.toWire<T>(input));
         let wire = await WebWorker.recv_host(id);
         let result = Bytes.fromWire<TOut>(wire);
-        let _ = session;
+        session.hold();
         return result;
     }
 
@@ -88,7 +88,7 @@ public class WebWorker {
         WebWorker.post_host(id, Bytes.toWire<T>(input));
         let wire = await WebWorker.recv_host(id);
         let result = Bytes.fromWire<TOut>(wire);
-        let _ = session;
+        session.hold();
         return result;
     }
 
@@ -137,5 +137,10 @@ class WorkerSession {
 
     del() {
         WebWorker.terminate_host(this.id);
+    }
+
+    // After `await recv`: last-use `del` (terminate) must not run in the pre-await poll block.
+    public fun hold() {
+        this.id = this.id;
     }
 }

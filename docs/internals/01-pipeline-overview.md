@@ -17,7 +17,7 @@ flowchart TD
 
     info --> hir["HIR emission\nlower AST+SemanticInfo → typed HIR"]
     hir --> mir["mir::lower\nHIR → CFG MIR"]
-    mir --> rc["RcInsertion pass\n(make ownership explicit)"]
+    mir --> rc["ExpandSimpleCtors then RcInsertion\n(make ownership explicit)"]
     rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
     opt --> emit["backend::c\nMIR → C99 (relooper-informed)"]
 
@@ -75,7 +75,7 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `RcInsertion` makes ownership explicit (module-wide, before inlining); `optimize_module` inlines and prunes, then the per-function `PassManager` runs the optimization pipeline to a fixpoint. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors` then `RcInsertion` make ownership explicit (module-wide, before inlining); `optimize_module` inlines, then `RcLastUseRepair` fixes last-use moves on fused bodies; the per-function `PassManager` runs to a fixpoint. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
 ### 7. Backend — `crates/dream-mir/src/relooper.rs` + `crates/dream-mir/src/backend/c/`
 

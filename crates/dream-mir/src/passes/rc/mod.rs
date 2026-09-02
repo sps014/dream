@@ -10,6 +10,7 @@ mod elision;
 mod hop;
 mod insertion;
 pub(crate) mod liveness;
+mod repair;
 mod tokens;
 mod uniqueness;
 
@@ -21,6 +22,7 @@ mod unique_tests;
 pub use elision::RcElision;
 pub use hop::HopElision;
 pub use insertion::RcInsertion;
+pub use repair::RcLastUseRepair;
 pub(crate) use liveness::stmt_reads_local;
 pub(crate) use uniqueness::container_move_locals;
 

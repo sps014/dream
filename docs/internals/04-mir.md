@@ -118,10 +118,11 @@ flowchart LR
     A["x = New{..}\nRetain(x)\n... use x ...\nRelease(x)"] -->|RcElision sees adjacent pair| B["x = New{..}\n... use x ..."]
 ```
 
-- `RcInsertion` runs once, module-wide, *before* inlining and the per-function pipeline. It assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies.
+- `ExpandSimpleCtors` then `RcInsertion` run module-wide *before* inlining. Insertion assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies.
+- After inlining, `RcLastUseRepair` turns last-use container stores on the fused CFG into moves (null the source; drop a `Retain` that only existed to share into a now-dead store). Re-running full insertion on inlined `generated_dispatch` is too expensive.
 - `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Nim-hard ARC](./11-swift-like-arc-roadmap.md)).
 
-See [05-writing-passes.md](./05-writing-passes.md) for the details, including why RC must be inserted before inlining.
+See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
 
 ## Building MIR by hand — `src/mir/build.rs`
 

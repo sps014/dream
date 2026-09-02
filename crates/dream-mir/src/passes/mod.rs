@@ -38,7 +38,7 @@ pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
 pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
-pub use rc::{HopElision, RcElision, RcInsertion};
+pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa};
@@ -204,8 +204,10 @@ impl Default for PassManager {
 /// call's destination via a plain copy, which is balanced because the callee already skipped
 /// releasing the returned value.
 ///
-/// After inlining, [`crate::driver`] runs the per-function [`PassManager`] (copy/const prop, folding,
-/// algebraic, GVN, CFG simplification, DCE, and RC elision) to clean up the merged bodies.
+/// [`ExpandSimpleCtors`] runs *before* [`RcInsertion`] so `o.field = arg` is what RC sees, not a
+/// `New` whose args are all treated as sinks. After inlining, [`RcLastUseRepair`] fixes last-use
+/// index stores of hidden-borrow values on the fused CFG (inlined `split` temps). Then
+/// [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     optimize_module_opts(mir, interner, true)
 }
@@ -217,6 +219,8 @@ pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
 pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool) {
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
+    let _ = ExpandSimpleCtors.run(mir, interner);
+    crate::prune_module(mir, interner);
     let layouts = mir.layouts.clone();
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         RcInsertion::run_with_layouts(f, interner, &layouts);
@@ -227,7 +231,9 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     let _rc_inserted = true;
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
     if !inline {
-        let _ = ExpandSimpleCtors.run(mir, interner);
+        for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
+            RcLastUseRepair.run(f, interner);
+        }
         let _ = UniqueRegion.run(mir, interner);
         return;
     }
@@ -243,9 +249,9 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
         }
         let _ = Devirt.run(mir, interner);
     }
-    // After inlining, lower simple user-ctors to `New { ctor: None }` + field stores so per-function
-    // SROA can promote non-escaping Acc(n)-style instances.
-    let _ = ExpandSimpleCtors.run(mir, interner);
+    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
+        RcLastUseRepair.run(f, interner);
+    }
     let _ = UniqueRegion.run(mir, interner);
 }
 

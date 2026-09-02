@@ -6,7 +6,7 @@ public class JsonParser {
     text: string;
     pos: int;
 
-    public constructor(borrow text: string, pos: int) {
+    public constructor(text: string, pos: int) {
         this.text = text;
         this.pos = pos;
     }

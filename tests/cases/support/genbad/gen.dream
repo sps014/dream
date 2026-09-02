@@ -4,10 +4,12 @@ import system.codegen;
 
 @generator
 @syntax_block("html")
-public fun broken(ctx: GenContext): void {
-    for (let block in ctx.syntax_blocks("html")) {
-        // Emits syntactically invalid Dream so the replacement re-parse fails and the
-        // diagnostic must map back to the user's `html {}` block.
+public fun broken(borrow ctx: GenContext): void {
+    let blocks = ctx.syntax_blocks("html");
+    let i = 0;
+    while i < blocks.length {
+        let block = blocks[i];
         ctx.replace(block, "(1 + 2).missing()");
+        i = i + 1;
     }
 }

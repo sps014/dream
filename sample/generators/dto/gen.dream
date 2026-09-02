@@ -7,14 +7,20 @@ public fun dto(): void {
 }
 
 @generator
-public fun dto_derive(ctx: GenContext): void {
-    for (let t in ctx.types_with("dto")) {
-        let b = CodeBuilder();
-        b.line("public fun describe(): string {");
-        b.indent();
-        b.line("return \"dto\";");
-        b.dedent();
-        b.line("}");
-        ctx.emit_extend(t.name, b.to_string());
+public fun dto_derive(borrow ctx: GenContext): void {
+    let types = ctx.types_with("dto");
+    let i = 0;
+    while i < types.length {
+        let t = types[i];
+        if t.has_attribute("dto") {
+            let b = CodeBuilder();
+            b.line("public fun describe(): string {");
+            b.indent();
+            b.line("return \"dto\";");
+            b.dedent();
+            b.line("}");
+            ctx.emit_extend(t.name, b.to_string());
+        }
+        i = i + 1;
     }
 }

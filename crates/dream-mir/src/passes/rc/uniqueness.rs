@@ -229,12 +229,16 @@ pub(crate) fn can_container_move(interner: &TypeInterner, ty: TypeId) -> bool {
 }
 
 /// True when a typed unique-destroy (skip RC RMW) is allowed. `js`, `@shared`, and strings stay on
-/// ordinary release (`js` is a host handle; shared needs atomics; strings have slice RC).
+/// ordinary release (`js` is a host handle; shared needs atomics; strings have slice RC). Arrays
+/// stay ordinary too: unique-destroy of a `this.items` snapshot frees the buffer still stored in
+/// the `List` (`push` / generator `syntax_blocks`).
 pub(crate) fn can_unique_destroy(interner: &TypeInterner, ty: TypeId) -> bool {
     can_container_move(interner, ty)
         && !matches!(
             interner.kind(ty),
-            TyKind::Prim(dream_types::PrimTy::String) | TyKind::Func(_, _)
+            TyKind::Prim(dream_types::PrimTy::String)
+                | TyKind::Func(_, _)
+                | TyKind::Array(_)
         )
 }
 

@@ -3,19 +3,21 @@
 use super::is_borrowed_copy;
 use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
 use super::tokens::{
-    apply_stmt_tokens, assigns_local, dest_holds_token, is_owned_local, move_source,
-    needs_rebind_temp, rc_op_on_local, release_and_null, sink_call_args, source_line_end,
-    take_arg_effects, TokenAnalysis,
+    apply_stmt_tokens, assigns_local, dest_holds_token, is_hidden_borrow_ty, is_owned_local,
+    move_source, needs_rebind_temp, rc_op_on_local, release_and_null, sink_call_args,
+    source_line_end, take_arg_effects, take_owned_arg_locals, TokenAnalysis,
 };
 use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
+    container_store_src,
 };
+use crate::passes::cfg;
 use crate::passes::MirPass;
 use crate::{
     Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::TypeInterner;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct RcInsertion;
 
@@ -72,6 +74,13 @@ impl RcInsertion {
         let mut realloc_readers: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
         let mut slot_readers: HashMap<SlotId, Vec<u32>> = HashMap::new();
         let live_out_rc = liveness::live_out(func);
+        let hidden_borrow: Vec<bool> = (0..func.locals.len() as u32)
+            .map(|l| is_hidden_borrow_ty(func, interner, l))
+            .collect();
+        let in_loop: HashSet<usize> = cfg::natural_loops(func)
+            .iter()
+            .flat_map(|lp| lp.body.iter().map(|b| b.0 as usize))
+            .collect();
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
                 // Collect locals defined by a direct container read, keyed by source slot. A
@@ -152,10 +161,18 @@ impl RcInsertion {
                     )),
                     _ => None,
                 };
-                let had_dest = ref_dest
+                let dest_had_token = ref_dest
                     .as_ref()
                     .map(|(d, _, _, _)| dest_holds_token(&tokens, d.0))
                     .unwrap_or(false);
+                // Loop-header token join treats the entry pred as empty, so a loop-carried
+                // hidden-borrow local can overwrite a still-resident pointer with `had_dest`
+                // false. Drop the previous value whenever this block is in a natural loop.
+                let drop_previous = dest_had_token
+                    || ref_dest.as_ref().is_some_and(|(d, _, _, _)| {
+                        hidden_borrow.get(d.0 as usize).copied().unwrap_or(false)
+                            && in_loop.contains(&bi)
+                    });
                 let had_unique = ref_dest
                     .as_ref()
                     .map(|(d, _, _, _)| {
@@ -210,7 +227,7 @@ impl RcInsertion {
                     });
 
                 match ref_dest {
-                    Some((dest, retain, true, _)) if had_dest => {
+                    Some((dest, retain, true, _)) if drop_previous => {
                         let tmp = Local(temp_base + extra_locals.len() as u32);
                         extra_locals.push(LocalDecl {
                             ty: local_types[dest.0 as usize],
@@ -230,7 +247,13 @@ impl RcInsertion {
                         out.push(Statement::Assign(Place::Local(tmp), rvalue));
                         out.push(release_one(
                             dest.0,
-                            unique_destroy(interner, &local_types, &take_flags, dest.0, had_unique),
+                            unique_destroy(
+                                interner,
+                                &local_types,
+                                &take_flags,
+                                dest.0,
+                                dest_had_token && had_unique,
+                            ),
                         ));
                         out.push(Statement::Assign(
                             Place::Local(dest),
@@ -279,7 +302,7 @@ impl RcInsertion {
                         changed = true;
                     }
                     Some((dest, retain, false, move_from)) => {
-                        if had_dest {
+                        if drop_previous {
                             out.push(release_one(
                                 dest.0,
                                 unique_destroy(
@@ -287,7 +310,7 @@ impl RcInsertion {
                                     &local_types,
                                     &take_flags,
                                     dest.0,
-                                    had_unique,
+                                    dest_had_token && had_unique,
                                 ),
                             ));
                         }
@@ -463,7 +486,7 @@ impl RcInsertion {
             // Classes already dropped on the arms; sweeping every RC local would double-free
             // at joins (`unbalanced_if_releases_on_kept_arm`).
             let tokens = analysis.token_out.get(bi);
-            let uniq = analysis.unique_out.get(bi);
+            let _unique_out = analysis.unique_out.get(bi);
             let nloc = func.locals.len().min(tokens.map(|t| t.len()).unwrap_or(0));
             for i in 0..nloc {
                 let local = i as u32;
@@ -473,21 +496,32 @@ impl RcInsertion {
                 if !tokens.and_then(|row| row.get(i).copied()).unwrap_or(false) {
                     continue;
                 }
-                // Retain after a string/const load must not suppress the exit drop.
-                if func.blocks[bi].stmts.iter().any(|s| {
-                    matches!(
-                        s,
-                        Statement::Release(Operand::Copy(Place::Local(l)))
-                            | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
-                            if l.0 == local
-                    )
-                }) {
+                // Loop-carried liveness keeps a token on `name`/`body` after they were stored into
+                // a `GenSyntaxBlock`. Leftover last-ref then frees the field (`quote` harness).
+                if local_sunk_into_container(func, local) {
                     continue;
                 }
-                let u = uniq.and_then(|row| row.get(i).copied()).unwrap_or(false)
-                    && take_flags.get(i).copied() != Some(true)
-                    && can_unique_destroy(interner, func.locals[i].ty);
-                func.blocks[bi].stmts.extend(release_and_null(local, u));
+                // A Retain in this block is a second owner (Result.Ok payload, alias copy).
+                // Unique destroy would `free` under that copy (`GenContext.from_snapshot`).
+                let retained = func.blocks[bi].stmts.iter().any(|s| {
+                    matches!(
+                        s,
+                        Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == local
+                    )
+                });
+                let u = !retained
+                    && unique_destroy(
+                        interner,
+                        &local_types,
+                        &take_flags,
+                        local,
+                        _unique_out
+                            .and_then(|row| row.get(i).copied())
+                            .unwrap_or(false),
+                    );
+                func.blocks[bi]
+                    .stmts
+                    .extend(release_and_null(local, u));
                 changed = true;
             }
         }
@@ -504,6 +538,23 @@ impl MirPass for RcInsertion {
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
         self.run_inner(func, interner, &dream_hir::LayoutTable::default())
     }
+}
+
+fn local_sunk_into_container(func: &MirFunction, local: u32) -> bool {
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if container_store_src(stmt) == Some(local) {
+                return true;
+            }
+            if take_owned_arg_locals(stmt, &|l| l == local)
+                .iter()
+                .any(|&l| l == local)
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Intra-procedural Unique is not object uniqueness: a take param may be a copy the caller
@@ -1384,6 +1435,66 @@ mod tests {
     }
 
     #[test]
+    fn loop_rebind_string_releases_previous() {
+        let mut ctx = TypeCtx::new();
+        let make = ctx.register(DefKind::Function, "make", vec![]);
+        let take = ctx.register(DefKind::Function, "take", vec![]);
+        let str_ty = ctx.interner.string();
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(str_ty, Some("x".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Const(Const::Str("seed".into()))),
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(x),
+            Rvalue::Call {
+                callee: Callee {
+                    def: make,
+                    args: vec![],
+                    ret: str_ty,
+                    take_params: vec![],
+                },
+                args: vec![],
+            },
+        );
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(x))],
+        });
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let body_rel = func.blocks[body.0 as usize].stmts.iter().any(
+            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x),
+        );
+        assert!(
+            body_rel,
+            "overwrite of loop-carried string must drop the previous value: {:?}",
+            func.blocks[body.0 as usize].stmts
+        );
+    }
+
+    #[test]
     fn rebind_evaluates_rhs_before_release() {
         let mut ctx = TypeCtx::new();
         let (def, ty) = class_ty(&mut ctx);
@@ -1579,6 +1690,68 @@ mod tests {
     }
 
     #[test]
+    fn rebind_after_union_move_releases_dest_at_return() {
+        // `a = None; a = b; b = None` — Release of the old `a` must not suppress the exit
+        // drop of the value moved into `a`.
+        let mut ctx = TypeCtx::new();
+        let udef = ctx.register(DefKind::Union, "Opt", vec![]);
+        let uty = ctx.interner.union_ty(udef, vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let a = b.new_local(uty, Some("a".into()));
+        let bb = b.new_local(uty, Some("b".into()));
+        b.assign(
+            Place::Local(a),
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        b.assign(
+            Place::Local(bb),
+            Rvalue::UnionNew {
+                def: udef,
+                ty: uty,
+                variant: 0,
+                args: vec![],
+            },
+        );
+        b.assign(Place::Local(a), Rvalue::Use(Operand::Copy(Place::Local(bb))));
+        b.assign(
+            Place::Local(bb),
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let rel_a = func.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == a
+            )
+        });
+        let last_rel_a = func.blocks[0].stmts.iter().rposition(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == a
+            )
+        });
+        let move_a = func.blocks[0].stmts.iter().rposition(|s| {
+            matches!(
+                s,
+                Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(src))))
+                    if *d == a && *src == bb
+            )
+        });
+        assert!(rel_a, "dest must be released: {:?}", func.blocks[0].stmts);
+        assert!(
+            last_rel_a.unwrap() > move_a.unwrap(),
+            "exit drop of a must follow a = b: {:?}",
+            func.blocks[0].stmts
+        );
+    }
+
+    #[test]
     fn async_await_rebind_releases_previous_dest() {
         let mut ctx = TypeCtx::new();
         let (def, ty) = class_ty(&mut ctx);
@@ -1724,6 +1897,126 @@ mod tests {
             null_x,
             "source nulled after container move: {:?}",
             func.blocks[0].stmts
+        );
+    }
+
+    #[test]
+    fn last_use_string_index_store_nulls_without_retain() {
+        let mut ctx = TypeCtx::new();
+        let str_ty = ctx.interner.string();
+        let arr_ty = ctx.interner.array(str_ty);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let arr = b.new_local(arr_ty, Some("arr".into()));
+        let s = b.new_local(str_ty, Some("s".into()));
+        b.assign(
+            Place::Local(arr),
+            Rvalue::ArrayNew {
+                elem_ty: str_ty,
+                len: Operand::Const(Const::Int(1)),
+            },
+        );
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(Const::Str("x".into()))),
+        );
+        b.assign(
+            Place::index(arr, Operand::Const(Const::Int(0))),
+            Rvalue::Use(Operand::Copy(Place::Local(s))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let null_s = func.blocks[0].stmts.iter().any(|st| {
+            matches!(
+                st,
+                Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
+                    if *l == s
+            )
+        });
+        assert!(
+            null_s,
+            "source nulled after string[] store: {:?}",
+            func.blocks[0].stmts
+        );
+        let store_at = func.blocks[0]
+            .stmts
+            .iter()
+            .position(|st| matches!(st, Statement::Assign(Place::Index { .. }, _)))
+            .expect("index store");
+        let retain_after_store = func.blocks[0].stmts[store_at + 1..].iter().any(|st| {
+            matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == s)
+        });
+        assert!(
+            !retain_after_store,
+            "move into string[] must not Retain after the store: {:?}",
+            func.blocks[0].stmts
+        );
+    }
+
+    #[test]
+    fn loop_string_index_store_is_per_iter_move() {
+        let mut ctx = TypeCtx::new();
+        let str_ty = ctx.interner.string();
+        let arr_ty = ctx.interner.array(str_ty);
+        let make = ctx.register(DefKind::Function, "make", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let arr = b.new_local(arr_ty, Some("arr".into()));
+        let s = b.new_local(str_ty, Some("s".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.assign(
+            Place::Local(arr),
+            Rvalue::ArrayNew {
+                elem_ty: str_ty,
+                len: Operand::Const(Const::Int(1)),
+            },
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(s),
+            Rvalue::Call {
+                callee: Callee {
+                    def: make,
+                    args: vec![],
+                    ret: str_ty,
+                    take_params: vec![],
+                },
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::index(arr, Operand::Const(Const::Int(0))),
+            Rvalue::Use(Operand::Copy(Place::Local(s))),
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let body_stmts = &func.blocks[body.0 as usize].stmts;
+        let null_s = body_stmts.iter().any(|st| {
+            matches!(
+                st,
+                Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
+                    if *l == s
+            )
+        });
+        let retain_s = body_stmts
+            .iter()
+            .any(|st| matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == s));
+        assert!(
+            null_s && !retain_s,
+            "loop-local string stored into array must move each iter: {:?}",
+            body_stmts
         );
     }
 

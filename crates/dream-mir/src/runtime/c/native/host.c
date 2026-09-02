@@ -14,12 +14,12 @@
 #endif
 
 #ifdef _WIN32
+#include <windows.h>
 #include <conio.h>
 #include <direct.h>
 #include <io.h>
 #include <psapi.h>
 #include <sys/stat.h>
-#include <windows.h>
 #else
 #include <dirent.h>
 #include <sys/resource.h>

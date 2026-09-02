@@ -7,14 +7,22 @@
 #
 # Env:
 #   DREAM_VERSION   optional tag without leading v (default: latest release)
-#   DREAM_HOME      install prefix (default: ~/.dream)
+#   DREAM_HOME      install prefix (default: ~/.dream). Re-runs replace bin/, lib/,
+#                   and leftover files; toolchains/ (Zig) is kept.
 #   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
 #   DREAM_SKIP_LIBS=1 skip auto-install of Linux WebKitGTK / GTK runtime libraries
 
 set -eu
 
 REPO="${DREAM_REPO:-sps014/dream}"
+# env.sh exports DREAM_HOME as ~/.dream/bin; treat that as the bin dir, not the prefix.
 PREFIX="${DREAM_HOME:-${HOME}/.dream}"
+case "$PREFIX" in
+  */) PREFIX="${PREFIX%/}" ;;
+esac
+if [ "$(basename "$PREFIX")" = "bin" ]; then
+  PREFIX="$(dirname "$PREFIX")"
+fi
 BIN_DIR="${PREFIX}/bin"
 TMPDIR="${TMPDIR:-/tmp}"
 WORK="$(mktemp -d "${TMPDIR%/}/dream-install.XXXXXX")"
@@ -128,13 +136,37 @@ if curl -fsSL "$SUM_URL" -o "${WORK}/SHA256SUMS" 2>/dev/null; then
   fi
 fi
 
-mkdir -p "${WORK}/out" "$BIN_DIR"
+mkdir -p "${WORK}/out"
 if [ "$EXTRACT" = tar ]; then
   tar -xzf "${WORK}/${ARCHIVE}" -C "${WORK}/out"
 else
   need unzip
   unzip -q "${WORK}/${ARCHIVE}" -d "${WORK}/out"
 fi
+
+# Drop the previous compiler/runtime payload so leftover binaries and headers
+# cannot mix with this version. Keep `toolchains/` (Zig / wasi-sdk).
+replace_previous_install() {
+  [ -d "$PREFIX" ] || return 0
+  echo "Removing previous Dream install under ${PREFIX} (keeping toolchains/)"
+  for entry in "$PREFIX"/*; do
+    [ -e "$entry" ] || continue
+    name="${entry##*/}"
+    case "$name" in
+      toolchains|toolchains.env) continue ;;
+    esac
+    rm -rf "$entry"
+  done
+}
+
+_extracted_dream="$(find "${WORK}/out" -type f \( -name dream -o -name 'dream.exe' \) | head -n1 || true)"
+if [ -z "$_extracted_dream" ]; then
+  echo "error: archive did not contain a dream binary" >&2
+  exit 1
+fi
+
+replace_previous_install
+mkdir -p "$BIN_DIR"
 
 # Archives contain binaries + libdream at top level or in a single directory.
 copy_named() {

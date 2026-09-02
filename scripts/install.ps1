@@ -4,12 +4,18 @@
 #
 # Env:
 #   $env:DREAM_VERSION  optional tag without leading v (default: latest)
-#   $env:DREAM_HOME     install prefix (default: $HOME\.dream)
+#   $env:DREAM_HOME     install prefix (default: $HOME\.dream). Re-runs replace
+#                       bin/, lib/, and leftover files; toolchains/ (Zig) is kept.
 #   $env:DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
 
 $ErrorActionPreference = "Stop"
 $Repo = if ($env:DREAM_REPO) { $env:DREAM_REPO } else { "sps014/dream" }
+# env.sh / toolchain.env export DREAM_HOME as ~/.dream/bin; treat that as the bin dir.
 $Prefix = if ($env:DREAM_HOME) { $env:DREAM_HOME } else { Join-Path $HOME ".dream" }
+$Prefix = $Prefix.TrimEnd('\', '/')
+if ([IO.Path]::GetFileName($Prefix) -eq "bin") {
+    $Prefix = Split-Path $Prefix -Parent
+}
 $BinDir = Join-Path $Prefix "bin"
 
 function Get-Target {
@@ -76,6 +82,19 @@ try {
     }
 
     Expand-Archive -Path $ArchivePath -DestinationPath (Join-Path $Work "out") -Force
+    $extractedDream = Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
+        Where-Object { $_.Name -eq "dream" -or $_.Name -eq "dream.exe" } |
+        Select-Object -First 1
+    if (-not $extractedDream) {
+        throw "archive did not contain a dream binary"
+    }
+    if (Test-Path -LiteralPath $Prefix) {
+        Write-Host "Removing previous Dream install under $Prefix (keeping toolchains/)"
+        Get-ChildItem -LiteralPath $Prefix -Force | ForEach-Object {
+            if ($_.Name -in @("toolchains", "toolchains.env")) { return }
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force
+        }
+    }
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
         Where-Object {

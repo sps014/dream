@@ -235,7 +235,7 @@ async fun main(): void {
         System.println("GpuSurface.create failed");
         return;
     }
-    let surface = surface_r.unwrap_or(GpuSurface());
+    let surface = surface_r.unwrap();
     let tex = GpuTexture.rgba8(n, n);
 
     let dens = GpuBuffer<float>.alloc(cells);
@@ -263,7 +263,7 @@ async fun main(): void {
     let dens_decay_u = Uniforms.pack_f32([0.996]);
     let vel_decay_u = Uniforms.pack_f32([0.995]);
 
-    while !surface.close_requested() {
+    while !surface.close_requested {
         // One event-loop pump per frame (poll_events); then read latches.
         for (let ev in surface.poll_events()) {
             switch (ev) {
@@ -275,14 +275,14 @@ async fun main(): void {
                 _ => {},
             }
         }
-        if surface.key_down(KeyCode.Escape) || surface.close_requested() {
+        if surface.key_down(KeyCode.Escape) || surface.close_requested {
             return;
         }
 
         let ptr = surface.pointer();
         // Pointer is in surface client pixels; map onto the simulation grid.
-        let sw = surface.width();
-        let sh = surface.height();
+        let sw = surface.width;
+        let sh = surface.height;
         if sw < 1 { sw = n; }
         if sh < 1 { sh = n; }
         let mx = (int)(ptr.x * (float)n / (float)sw);

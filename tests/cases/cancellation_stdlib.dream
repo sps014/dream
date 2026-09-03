@@ -6,7 +6,7 @@ import system.webapi;
 async fun main(): void {
     let src = CancellationSource();
     src.cancel();
-    let tok = src.token();
+    let tok = src.token;
     let opt = Option.Some(tok);
 
     switch (await File.read("missing.txt", opt)) {
@@ -15,13 +15,13 @@ async fun main(): void {
     }
 
     switch (await HttpClient().get("http://127.0.0.1:1/", opt)) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.code()),
     }
 
     let client = HttpClient().with_cancellation(tok);
     switch (await client.get("http://127.0.0.1:1/")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.code()),
     }
 

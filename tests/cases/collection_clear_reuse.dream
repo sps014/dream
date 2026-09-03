@@ -11,7 +11,7 @@ fun main(): void {
         System.println(xs.get(0));
         xs.clear();
         System.println(xs.length);
-        System.println(xs.capacity());
+        System.println(xs.capacity);
         round = round + 1;
     }
 

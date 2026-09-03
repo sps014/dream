@@ -1,0 +1,12 @@
+// Internal stdlib types and host constructors are not part of the public API.
+import system;
+import system.process;
+import system.collections;
+import system.gpu;
+
+fun main(): void {
+    let _r = ProcessWireReader(Buffer.alloc<char>(0));
+    let _m = MapSlot<int, int>(0, 0, 0);
+    let _c = GpuInputCodec.read_i32(Buffer.alloc<byte>(4), 0);
+    let _s = Stdout();
+}

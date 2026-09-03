@@ -3,11 +3,11 @@ module system.process;
 // Sequential reader over a `char[]` wire payload shared by the process host functions: a decimal
 // header line, then raw bytes for the remainder. Each `char` element of the payload is one raw
 // byte (0-255), the same byte-exact construction `HttpResponse.slice_text`/`bytes` use.
-public class ProcessWireReader {
+internal class ProcessWireReader {
     data: char[];
     pos: int;
 
-    public constructor(data: char[]) {
+    internal constructor(data: char[]) {
         this.data = data;
         this.pos = 0;
     }

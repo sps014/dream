@@ -22,7 +22,7 @@ fun make_tree(depth: int): Option<TreeNode> {
 }
 
 fun main() {
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     let i = 0;
     while i < 4 {
         switch (make_tree(3)) {
@@ -31,6 +31,6 @@ fun main() {
         }
         i = i + 1;
     }
-    let delta = Debug.live_objects() - base;
+    let delta = Debug.live_objects - base;
     System.println("live_delta=" + delta.to_string());
 }

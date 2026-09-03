@@ -21,25 +21,18 @@ async fun main(): void {
     System.print(text.unwrap_or(""));
 
     // Buffered, seekable streaming. `open` returns a `Result<FileStream, IoError>`.
-    let stream_result = File.open(path);
-    let stream = switch (stream_result) {
-        Ok(s) => s,
-        Err(e) => FileStream(FileHandle(0, "")),
-    };
+    let stream = File.open(path).unwrap();
     System.print("first 5: ");
     System.println(stream.read(5));     // "Dream"
     System.print("at pos: ");
-    System.println(stream.position());  // 5
+    System.println(stream.position);  // 5
     stream.seek(0);
     System.print("rest: ");
     System.println(stream.read_all());  // "Dream\nrocks\n"
     stream.close();
 
     // Raw byte round-trip: read 5 bytes, write them to a second file.
-    let head = switch (File.open(path)) {
-        Ok(s) => s,
-        Err(e) => FileStream(FileHandle(0, "")),
-    };
+    let head = File.open(path).unwrap();
     let bytes = head.read_bytes(5);     // ['D','r','e','a','m']
     await File.write_bytes("scratch_head.bin", bytes);
     let echoed = await File.read("scratch_head.bin");

@@ -7,7 +7,7 @@ async fun main(): void {
     switch (await http.get("https://example.com")) {
         Ok(res) => {
             System.println("status:");
-            System.println(res.status());
+            System.println(res.status);
             System.println("len:");
             System.println(res.bytes().length);
             System.println("has-html:");

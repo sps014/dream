@@ -5,11 +5,15 @@ module system.io;
 // await-style call sites. `close` is sync-only.
 public class FileHandle {
     _id: int;
-    public path: string;
+    _path: string;
 
-    public constructor(id: int, path: string) {
+    internal constructor(id: int, path: string) {
         this._id = id;
-        this.path = path;
+        this._path = path;
+    }
+
+    public get path(): string {
+        return this._path;
     }
 
     @runtime("fileOpen")

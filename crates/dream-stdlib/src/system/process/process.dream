@@ -79,7 +79,7 @@ public static class Process {
             return Result.Err(ran.unwrap_err());
         }
         let out = ran.unwrap_or(ProcessOutput(0 - 1, string.empty, string.empty));
-        if out.success() {
+        if out.success {
             return Result.Ok(out);
         }
         return Result.Err(ProcessError.failed("process exited with code " + out.exit_code.to_string()));
@@ -98,7 +98,7 @@ public static class Process {
         }
         let path_var = System.env("PATH").unwrap_or(string.empty);
         let sep = ':';
-        if System.os_family() == OsFamily.Windows {
+        if System.os_family == OsFamily.Windows {
             sep = ';';
         }
         let dirs = path_var.split(sep);

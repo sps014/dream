@@ -3,10 +3,10 @@ import system;
 
 async fun main(): void {
     let src = CancellationSource();
-    let tok = src.token();
+    let tok = src.token;
     let w = WebWorker.spawn(() => {
         let n = 0;
-        while !tok.is_cancelled() {
+        while !tok.is_cancelled {
             n = n + 1;
             if n > 1000000 {
                 break;
@@ -16,5 +16,5 @@ async fun main(): void {
     });
     src.cancel();
     let n = await w;
-    System.println(n > 0 || tok.is_cancelled());
+    System.println(n > 0 || tok.is_cancelled);
 }

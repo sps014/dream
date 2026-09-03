@@ -1,0 +1,7 @@
+// System.stdout / System.stderr stream getters.
+import system;
+
+fun main(): void {
+    System.stdout.write_line("hello-out");
+    System.stderr.write_text("");
+}

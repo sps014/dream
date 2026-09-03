@@ -10,14 +10,14 @@ fun churn(): void {
     buf[1] = "beta";
     buf[2] = "gamma";
     Buffer.truncate(buf, 2);
-    let before = Debug.live_objects();
+    let before = Debug.live_objects;
     Buffer.clear(buf);
     System.println("cleared");
 }
 
 fun main(): void {
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     churn();
-    let delta = Debug.live_objects() - base;
+    let delta = Debug.live_objects - base;
     System.println(delta.to_string());
 }

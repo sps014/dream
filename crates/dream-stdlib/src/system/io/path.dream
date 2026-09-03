@@ -26,7 +26,7 @@ public static class Path {
             return have_live;
         }
         if have_live {
-            sb.append(Path.separator());
+            sb.append(Path.separator);
         }
         sb.append(seg);
         return (seg.ends_with("/") == false) && (seg.ends_with("\\") == false);
@@ -130,7 +130,7 @@ public static class Path {
         if path.is_empty() {
             return path;
         }
-        let sep = Path.separator();
+        let sep = Path.separator;
         let absolute = Path.is_absolute(path);
         let parts = List<string>();
         let start = 0;
@@ -190,7 +190,7 @@ public static class Path {
 
     // Host path separator. Always `/` in the WASM stdlib surface (native hosts accept `/`
     // even on Windows); use `OsFamily` at call sites when Windows-style paths are required.
-    public static fun separator(): string {
+    public static get separator(): string {
         return "/";
     }
 
@@ -291,7 +291,7 @@ public static class Path {
         }
         let prefix = b;
         if (b.ends_with("/") == false) && (b.ends_with("\\") == false) {
-            prefix = b + Path.separator();
+            prefix = b + Path.separator;
         }
         if p.starts_with(prefix) == false {
             return Option.None;

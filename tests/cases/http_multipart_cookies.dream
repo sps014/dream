@@ -32,7 +32,7 @@ fun main(): void {
         chars[i] = wire.char_at(i);
         i = i + 1;
     }
-    let res = HttpResponse(chars);
+    let res = HttpResponse.from_wire(chars);
     jar.store_from_response(res);
     System.println(jar.get("token").unwrap_or(""));
     System.println(jar.get("other").unwrap_or(""));

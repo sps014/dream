@@ -71,7 +71,7 @@ fun bench_arc_locals(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("arc_locals", sw.elapsed_nanos(), iters);
+    report("arc_locals", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -85,7 +85,7 @@ fun bench_string_concat(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("string_concat", sw.elapsed_nanos(), iters);
+    report("string_concat", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -113,7 +113,7 @@ fun bench_string_eq(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("string_eq", sw.elapsed_nanos(), iters);
+    report("string_eq", sw.elapsed_nanos, iters);
     sink_int(hits);
 }
 
@@ -136,7 +136,7 @@ fun bench_char_scan(iters: int): void {
         bench_sink.add(acc);
     }
     sw.stop();
-    report("char_scan", sw.elapsed_nanos(), iters);
+    report("char_scan", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -158,7 +158,7 @@ fun bench_byte_scan(iters: int): void {
         bench_sink.add(acc);
     }
     sw.stop();
-    report("byte_scan", sw.elapsed_nanos(), iters);
+    report("byte_scan", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -173,7 +173,7 @@ fun bench_substring(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("substring", sw.elapsed_nanos(), iters);
+    report("substring", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -186,7 +186,7 @@ fun bench_list_push(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("list_push", sw.elapsed_nanos(), iters);
+    report("list_push", sw.elapsed_nanos, iters);
     sink_int(list.length);
 }
 
@@ -208,7 +208,7 @@ fun bench_list_insert_mid(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("list_insert_mid", sw.elapsed_nanos(), rounds * n);
+    report("list_insert_mid", sw.elapsed_nanos, rounds * n);
 }
 
 fun bench_map_get_set(iters: int): void {
@@ -226,7 +226,7 @@ fun bench_map_get_set(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("map_get_set", sw.elapsed_nanos(), iters);
+    report("map_get_set", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -249,8 +249,8 @@ fun bench_map_clear_reuse(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("map_clear_reuse", sw.elapsed_nanos(), rounds * per);
-    sink_int(map.capacity());
+    report("map_clear_reuse", sw.elapsed_nanos, rounds * per);
+    sink_int(map.capacity);
 }
 
 fun bench_alloc_churn(iters: int): void {
@@ -264,7 +264,7 @@ fun bench_alloc_churn(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("alloc_churn", sw.elapsed_nanos(), iters);
+    report("alloc_churn", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -287,8 +287,8 @@ fun bench_list_clear_reuse(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("list_clear_reuse", sw.elapsed_nanos(), rounds * per);
-    sink_int(buf.capacity());
+    report("list_clear_reuse", sw.elapsed_nanos, rounds * per);
+    sink_int(buf.capacity);
 }
 
 // Index bump (no Span) — avoids retain/release on the backing array each iteration.
@@ -305,7 +305,7 @@ fun bench_scratch_arena(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("scratch_arena", sw.elapsed_nanos(), iters);
+    report("scratch_arena", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 // Pike-VM find-all — pattern is intentionally NOT bare `\d+` (that hits a digit-run
@@ -327,7 +327,7 @@ fun bench_regex_find(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("regex_find", sw.elapsed_nanos(), iters);
+    report("regex_find", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -376,7 +376,7 @@ fun bench_json_serialize(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("json_serialize", sw.elapsed_nanos(), iters);
+    report("json_serialize", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -392,7 +392,7 @@ fun bench_json_deserialize(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("json_deserialize", sw.elapsed_nanos(), iters);
+    report("json_deserialize", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -448,7 +448,7 @@ fun bench_arr_add(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("arr_add", sw.elapsed_nanos(), iters);
+    report("arr_add", sw.elapsed_nanos, iters);
     sink_int(checksum_floats(c) + checksum_ints(ci));
 }
 
@@ -481,7 +481,7 @@ fun bench_vec_add(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("vec_add", sw.elapsed_nanos(), iters);
+    report("vec_add", sw.elapsed_nanos, iters);
     sink_int(checksum_floats(c));
 }
 
@@ -496,7 +496,7 @@ fun bench_string_builder(iters: int): void {
     }
     let built = sb.build();
     sw.stop();
-    report("string_builder", sw.elapsed_nanos(), iters);
+    report("string_builder", sw.elapsed_nanos, iters);
     sink_string(built);
 }
 
@@ -572,7 +572,7 @@ fun bench_nbody(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("nbody", sw.elapsed_nanos(), iters);
+    report("nbody", sw.elapsed_nanos, iters);
     sink_int((int)(bodies[0].x * 1000.0d));
 }
 
@@ -611,7 +611,7 @@ fun bench_mandelbrot(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("mandelbrot", sw.elapsed_nanos(), iters);
+    report("mandelbrot", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -650,7 +650,7 @@ fun bench_matmul(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("matmul_64", sw.elapsed_nanos(), iters);
+    report("matmul_64", sw.elapsed_nanos, iters);
     sink_int((int)c[0]);
 }
 
@@ -698,7 +698,7 @@ fun bench_quicksort(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("quicksort", sw.elapsed_nanos(), iters);
+    report("quicksort", sw.elapsed_nanos, iters);
     sink_int(a[0]);
 }
 
@@ -734,7 +734,7 @@ fun bench_sieve(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("sieve", sw.elapsed_nanos(), iters);
+    report("sieve", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -760,7 +760,7 @@ fun bench_fib_rec(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("fib_rec", sw.elapsed_nanos(), iters);
+    report("fib_rec", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -809,7 +809,7 @@ fun bench_iface_dispatch(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("iface_dispatch", sw.elapsed_nanos(), iters);
+    report("iface_dispatch", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -849,7 +849,7 @@ fun bench_binary_trees(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("binary_trees", sw.elapsed_nanos(), iters);
+    report("binary_trees", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -895,7 +895,7 @@ fun bench_linked_walk(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("linked_walk", sw.elapsed_nanos(), iters);
+    report("linked_walk", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -920,7 +920,7 @@ fun bench_wordcount(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("wordcount", sw.elapsed_nanos(), iters * count);
+    report("wordcount", sw.elapsed_nanos, iters * count);
     sink_int(map.get_or("the", 0));
 }
 
@@ -943,7 +943,7 @@ fun bench_parse_ints(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("parse_ints", sw.elapsed_nanos(), iters);
+    report("parse_ints", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -967,7 +967,7 @@ fun bench_sum_options(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("sum_options", sw.elapsed_nanos(), iters);
+    report("sum_options", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 

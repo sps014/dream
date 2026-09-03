@@ -171,9 +171,9 @@ Two layers (same split as C# / asyncio):
 
 ```dream
 let src = CancellationSource();
-let tok = src.token();
+let tok = src.token;
 let w = WebWorker.spawn(() => {
-    while !tok.is_cancelled() { /* work */ }
+    while !tok.is_cancelled { /* work */ }
     return 0;
 });
 src.cancel();

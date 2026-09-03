@@ -200,7 +200,7 @@ async fun run_browser(n: int): void {
         System.println("GpuSurface.create failed");
         return;
     }
-    let surface = surface_r.unwrap_or(GpuSurface());
+    let surface = surface_r.unwrap();
 
     // Fingerprint / coral Gray–Scott (Du, Dv, feed, kill).
     let step_u = Uniforms.pack_f32([0.21, 0.105, 0.026, 0.051]);
@@ -208,7 +208,7 @@ async fun run_browser(n: int): void {
     let steps_per_frame = 14;
 
     System.println("reaction-diffusion gpu — Gray-Scott");
-    while !surface.close_requested() {
+    while !surface.close_requested {
         for (let ev in surface.poll_events()) {
             switch (ev) {
                 KeyDown(code, _key, _repeat) => {

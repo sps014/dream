@@ -7,7 +7,7 @@ async fun main(): void {
     let api = HttpClient("https://jsonplaceholder.typicode.com");
     switch (await api.get("/posts/1")) {
         Ok(r) => {
-            System.println(r.status());
+            System.println(r.status);
             switch (r.json()) {
                 Ok(v) => {
                     System.println(v.get("userId").unwrap_or(JsonValue.none()).as_int().unwrap_or(0));

@@ -174,11 +174,11 @@ Debug builds (including `-g`) always print heap counters at exit:
 [dream] leak check: live=0 total_allocations=6
 ```
 
-Use `Debug.live_objects()` deltas to assert balance in tests:
+Use `Debug.live_objects` deltas to assert balance in tests:
 ```dream
-let before = Debug.live_objects();
+let before = Debug.live_objects;
 churn();
-let after = Debug.live_objects();
+let after = Debug.live_objects;
 System.println((after - before).to_string());   // expect "0"
 ```
 

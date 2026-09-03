@@ -12,7 +12,7 @@ shared public class CancellationSource {
     }
 
     // True after `cancel` has been called.
-    public fun is_cancelled(): bool {
+    public get is_cancelled(): bool {
         let cancelled = false;
         lock (this) {
             cancelled = this._cancelled;
@@ -28,7 +28,7 @@ shared public class CancellationSource {
     }
 
     // Returns a token that observes this source's cancelled state.
-    public fun token(): CancellationToken {
+    public get token(): CancellationToken {
         return CancellationToken(this);
     }
 }

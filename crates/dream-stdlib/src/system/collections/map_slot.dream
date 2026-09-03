@@ -2,12 +2,12 @@ module system.collections;
 
 // One open-addressing slot: key, value, and occupancy stamp in the same record so a probe
 // touches one cache line instead of three parallel arrays.
-public struct MapSlot<K, V> {
-    public key: K;
-    public value: V;
-    public state: int;
+internal struct MapSlot<K, V> {
+    internal key: K;
+    internal value: V;
+    internal state: int;
 
-    public constructor(key: K, value: V, state: int) {
+    internal constructor(key: K, value: V, state: int) {
         this.key = key;
         this.value = value;
         this.state = state;

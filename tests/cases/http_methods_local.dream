@@ -104,7 +104,7 @@ async fun main(): void {
     }
 
     switch (await c.head("/hello")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
 

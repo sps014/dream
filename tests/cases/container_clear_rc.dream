@@ -32,10 +32,10 @@ fun churn_list(): void {
 }
 
 fun main(): void {
-    let before = Debug.live_objects();
+    let before = Debug.live_objects;
     churn_queue();
     churn_priority_queue();
     churn_list();
-    let after = Debug.live_objects();
+    let after = Debug.live_objects;
     System.println(after - before);
 }

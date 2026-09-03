@@ -97,7 +97,7 @@ fun main(): void {
         System.println("aborting: could not open database");
         return;
     }
-    System.println("opened " + path + " (cwd=" + System.cwd().unwrap_or("?") + ")");
+    System.println("opened " + path + " (cwd=" + System.cwd.unwrap_or("?") + ")");
 
     let rc = db.exec("DROP TABLE IF EXISTS items;");
     System.println("DROP rc=" + rc);

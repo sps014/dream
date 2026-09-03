@@ -15,7 +15,7 @@ async fun main(): void {
     h.set("Origin", "http://example.com");
     switch (await client.get_with("/health", h)) {
         Ok(r) => {
-            System.println(r.status());
+            System.println(r.status);
             System.println(r.header("access-control-allow-origin"));
             System.println(r.text());
         },
@@ -27,7 +27,7 @@ async fun main(): void {
     pre.set("Access-Control-Request-Headers", "content-type");
     switch (await client.request("OPTIONS", "/health", "", pre)) {
         Ok(r) => {
-            System.println(r.status());
+            System.println(r.status);
             System.println(r.header("access-control-allow-origin"));
             System.println(r.header("access-control-allow-methods").contains("POST"));
             System.println(r.header("access-control-allow-headers").contains("content-type"));

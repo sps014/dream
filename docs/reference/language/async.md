@@ -93,7 +93,7 @@ Bootstrap types `CancellationSource` / `CancellationToken` / `CancelledError` su
 
 ```dream
 let src = CancellationSource();
-let tok = src.token();
+let tok = src.token;
 src.cancel();
 System.println(tok.check().is_err()); // true → ECANCELLED
 ```

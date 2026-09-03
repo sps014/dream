@@ -5,13 +5,17 @@ public class HttpResponse {
     data: char[];
     boundary: int;
     scanned: bool;
-    headers: HttpHeaders;
+    _headers: HttpHeaders;
 
-    public constructor(data: char[]) {
+    internal constructor(data: char[]) {
         this.data = data;
         this.boundary = 0 - 1;
         this.scanned = false;
-        this.headers = HttpHeaders();
+        this._headers = HttpHeaders();
+    }
+
+    public static fun from_wire(data: char[]): HttpResponse {
+        return HttpResponse(data);
     }
 
     fun scan(): void {
@@ -79,7 +83,7 @@ public class HttpResponse {
                 while (ve > vs) && this._is_http_space(this.data[ve - 1]) {
                     ve = ve - 1;
                 }
-                this.headers.set(this.slice_text(ks, ke), this.slice_text(vs, ve));
+                this._headers.set(this.slice_text(ks, ke), this.slice_text(vs, ve));
             }
             i = line_end + 1;
         }
@@ -110,7 +114,7 @@ public class HttpResponse {
     }
 
     // The HTTP status code.
-    public fun status(): int {
+    public get status(): int {
         let n = this.data.length;
         let i = 0;
         let value = 0;
@@ -128,20 +132,20 @@ public class HttpResponse {
     }
 
     // True for a 2xx status.
-    public fun ok(): bool {
-        let s = this.status();
+    public get ok(): bool {
+        let s = this.status;
         return (s >= 200) && (s < 300);
     }
 
     // The value of response header `name`.
     public fun header(name: string): string {
         this.scan();
-        return this.headers.get(name).unwrap_or(string.empty);
+        return this._headers.get(name).unwrap_or(string.empty);
     }
 
-    public fun headers(): HttpHeaders {
+    public get headers(): HttpHeaders {
         this.scan();
-        return this.headers;
+        return this._headers;
     }
 
     // The response body as UTF-8 text.

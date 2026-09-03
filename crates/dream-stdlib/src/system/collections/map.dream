@@ -42,7 +42,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     @inline
-    public fun capacity(): int {
+    public get capacity(): int {
         return this.cap;
     }
 

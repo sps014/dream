@@ -1,7 +1,7 @@
 import system;
 
 fun main(): void {
-    System.println(System.platform() == Platform.Native || System.platform() == Platform.Node || System.platform() == Platform.Browser);
-    System.println(System.cpu_time_nanos() >= 0L);
-    System.println(System.memory_bytes() > 0L);
+    System.println(System.platform == Platform.Native || System.platform == Platform.Node || System.platform == Platform.Browser);
+    System.println(System.cpu_time_nanos >= 0L);
+    System.println(System.memory_bytes > 0L);
 }

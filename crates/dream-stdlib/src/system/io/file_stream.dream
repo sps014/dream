@@ -65,8 +65,12 @@ public class FileStream {
     }
 
     // Current cursor offset (bytes from the start).
-    public fun position(): int {
+    public get position(): int {
         return this.pos;
+    }
+
+    public set position(offset: int) {
+        this.seek(offset);
     }
 
     // Total file size in bytes (`-1` when the path is missing).
@@ -93,7 +97,7 @@ public class FileStream {
         }
     }
 
-    // Current cursor as a `long` (same as `position()`, for `FileHandle.tell` parity).
+    // Current cursor as a `long` (same as `position`, for `FileHandle.tell` parity).
     public fun tell(): long {
         return (long)this.pos;
     }

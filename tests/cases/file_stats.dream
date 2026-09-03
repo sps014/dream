@@ -13,7 +13,7 @@ async fun main(): void {
 
     switch (File.stat(root + "/a.txt")) {
         Ok(st) => {
-            System.println(st.is_file());
+            System.println(st.is_file);
             System.println(st.size == 2L);
             System.println(st.mtime_millis > 0L);
         },
@@ -21,7 +21,7 @@ async fun main(): void {
     }
 
     switch (File.stat(root)) {
-        Ok(st) => System.println(st.is_dir()),
+        Ok(st) => System.println(st.is_dir),
         Err(e) => System.println(e.message()),
     }
 

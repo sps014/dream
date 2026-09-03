@@ -4,14 +4,14 @@ module system.io;
 // `mode` is Unix `st_mode` (0 on Windows and in the browser memfs). `kind` is 0 file, 1 directory,
 // 2 symlink, 3 other. `File.stat` follows symlinks, so `kind == 2` is uncommon.
 public class FileStats {
-    public size: long;
-    public mtime_millis: long;
-    public ctime_millis: long;
-    public atime_millis: long;
-    public mode: int;
-    public kind: int;
+    _size: long;
+    _mtime_millis: long;
+    _ctime_millis: long;
+    _atime_millis: long;
+    _mode: int;
+    _kind: int;
 
-    public constructor(
+    internal constructor(
         size: long,
         mtime_millis: long,
         ctime_millis: long,
@@ -19,26 +19,47 @@ public class FileStats {
         mode: int,
         kind: int
     ) {
-        this.size = size;
-        this.mtime_millis = mtime_millis;
-        this.ctime_millis = ctime_millis;
-        this.atime_millis = atime_millis;
-        this.mode = mode;
-        this.kind = kind;
+        this._size = size;
+        this._mtime_millis = mtime_millis;
+        this._ctime_millis = ctime_millis;
+        this._atime_millis = atime_millis;
+        this._mode = mode;
+        this._kind = kind;
     }
 
-    // True when `kind` is a regular file.
-    public fun is_file(): bool {
-        return this.kind == 0;
+    public get size(): long {
+        return this._size;
     }
 
-    // True when `kind` is a directory.
-    public fun is_dir(): bool {
-        return this.kind == 1;
+    public get mtime_millis(): long {
+        return this._mtime_millis;
     }
 
-    // True when `kind` is a symlink (not used when `File.stat` follows links).
-    public fun is_symlink(): bool {
-        return this.kind == 2;
+    public get ctime_millis(): long {
+        return this._ctime_millis;
+    }
+
+    public get atime_millis(): long {
+        return this._atime_millis;
+    }
+
+    public get mode(): int {
+        return this._mode;
+    }
+
+    public get kind(): int {
+        return this._kind;
+    }
+
+    public get is_file(): bool {
+        return this._kind == 0;
+    }
+
+    public get is_dir(): bool {
+        return this._kind == 1;
+    }
+
+    public get is_symlink(): bool {
+        return this._kind == 2;
     }
 }

@@ -103,7 +103,7 @@ construction** — no lint, no annotation, any number of buffers or counters:
   reclaim eagerly, not for safety.
 
 Leak checking: debug `dream run` (including `-g`) always prints heap counters at exit;
-`--release` opt-in is `DREAM_DEBUG_LEAKS=1`. `Debug.live_objects()` deltas assert balance in goldens
+`--release` opt-in is `DREAM_DEBUG_LEAKS=1`. `Debug.live_objects` deltas assert balance in goldens
 (`tests/cases/container_clear_rc.dream`). Note counters include interned strings and boxed print
 values, so measure into locals *before* printing.
 

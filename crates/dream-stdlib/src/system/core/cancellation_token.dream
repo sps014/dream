@@ -6,25 +6,25 @@ module system.core;
 shared public class CancellationToken {
     _source: CancellationSource;
 
-    public constructor(source: CancellationSource) {
+    internal constructor(source: CancellationSource) {
         this._source = source;
     }
 
     // True when the owning source has been cancelled.
-    public fun is_cancelled(): bool {
-        return this._source.is_cancelled();
+    public get is_cancelled(): bool {
+        return this._source.is_cancelled;
     }
 
     // Panics with `CancelledError` when already cancelled.
     public fun throw_if_cancelled(): void {
-        if this.is_cancelled() {
+        if this.is_cancelled {
             System.panic(CancelledError.cancelled().message());
         }
     }
 
     // `Ok(true)` when still running; `Err(CancelledError)` when cancelled.
     public fun check(): Result<bool, CancelledError> {
-        if this.is_cancelled() {
+        if this.is_cancelled {
             return Result.Err(CancelledError.cancelled());
         }
         return Result.Ok(true);
@@ -33,7 +33,7 @@ shared public class CancellationToken {
     // True when `token` is `Some` and already cancelled.
     public static fun is_cancelled_opt(token: Option<CancellationToken>): bool {
         return switch (token) {
-            Some(t) => t.is_cancelled(),
+            Some(t) => t.is_cancelled,
             None => false,
         };
     }

@@ -20,7 +20,7 @@ async fun main(): void {
     h.set("Origin", "http://example.com");
     switch (await client.get_with("/boom", h)) {
         Ok(r) => {
-            System.println(r.status());
+            System.println(r.status);
             System.println(r.text());
             System.println(r.header("access-control-allow-origin"));
         },

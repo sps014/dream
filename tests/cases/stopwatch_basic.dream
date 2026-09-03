@@ -10,23 +10,23 @@ async fun main() {
     sw.stop();
     System.println(sw.is_running);
     
-    let e1 = sw.elapsed_nanos();
-    let e2 = sw.elapsed_ms();
+    let e1 = sw.elapsed_nanos;
+    let e2 = sw.elapsed_ms;
     
     // Since it's stopped, these should be stable across multiple reads
-    let e3 = sw.elapsed_nanos();
+    let e3 = sw.elapsed_nanos;
     System.println(e1 == e3);
     
     sw.reset();
     System.println(sw.is_running);
-    System.println(sw.elapsed_nanos());
-    System.println(sw.elapsed_ms());
+    System.println(sw.elapsed_nanos);
+    System.println(sw.elapsed_ms);
     
     sw.restart();
     System.println(sw.is_running);
     
     sw.stop();
-    System.println(sw.elapsed_nanos() >= 0L); // Should be >= 0
+    System.println(sw.elapsed_nanos >= 0L); // Should be >= 0
     
     // Counted empty loops are DCE'd by optimizing backends; sleep is observable work.
     sw.reset();
@@ -34,13 +34,13 @@ async fun main() {
     await Time.sleep(1);
     sw.stop();
     
-    let acc1 = sw.elapsed_nanos();
+    let acc1 = sw.elapsed_nanos;
     System.println(acc1 > 0L);
     
     sw.start();
     await Time.sleep(1);
     sw.stop();
     
-    let acc2 = sw.elapsed_nanos();
+    let acc2 = sw.elapsed_nanos;
     System.println(acc2 > acc1);
 }

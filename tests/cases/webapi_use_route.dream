@@ -28,7 +28,7 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     switch (await client.get("/secret")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     let h = HttpHeaders();

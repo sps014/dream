@@ -16,7 +16,7 @@ async fun main(): void {
     let port = await WebApp.listen("127.0.0.1", 0);
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
     switch (await client.get("/secret")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();

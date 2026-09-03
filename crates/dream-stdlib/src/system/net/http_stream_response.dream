@@ -16,7 +16,7 @@ public class HttpStreamResponse {
     @runtime("httpCloseStream")
     static extern fun host_close_stream(handle: int): bool;
 
-    public constructor(head: HttpResponse, handle: int, cancel_token: Option<CancellationToken>) {
+    internal constructor(head: HttpResponse, handle: int, cancel_token: Option<CancellationToken>) {
         this.head = head;
         this.handle = handle;
         this.cancel_token = cancel_token;
@@ -24,18 +24,21 @@ public class HttpStreamResponse {
     }
 
     // The HTTP status code.
-    public fun status(): int {
-        return this.head.status();
+    public get status(): int {
+        return this.head.status;
     }
 
-    // True for a 2xx status.
-    public fun ok(): bool {
-        return this.head.ok();
+    public get ok(): bool {
+        return this.head.ok;
     }
 
     // The value of response header `name`.
     public fun header(name: string): string {
         return this.head.header(name);
+    }
+
+    public get headers(): HttpHeaders {
+        return this.head.headers;
     }
 
     // Reads up to `max_bytes` of the body. `Ok(None)` marks end-of-stream; the actual chunk size

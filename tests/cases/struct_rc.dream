@@ -1,6 +1,6 @@
 // A value `struct` that embeds a reference field must keep reference counting balanced: copying the
 // struct retains the embedded reference, and dropping a value struct at scope exit (or on overwrite)
-// releases it. The `Debug.live_objects()` delta proves nothing leaks, and the destructor prints show
+// releases it. The `Debug.live_objects` delta proves nothing leaks, and the destructor prints show
 // the embedded `Tracked` is freed exactly once.
 
 import system;
@@ -44,7 +44,7 @@ fun run() {
 }
 
 fun main() {
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     run();
-    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

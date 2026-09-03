@@ -11,7 +11,7 @@ fun classify(o: Option<int>): int {
 }
 
 fun main(): void {
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
 
     let some: Option<int> = Option.Some(42);
     let none: Option<int> = Option.None;
@@ -28,7 +28,7 @@ fun main(): void {
     System.println(classify(copy));        // 42
 
     // A value union allocates nothing on the heap.
-    System.println("int_delta=" + (Debug.live_objects() - base).to_string());
+    System.println("int_delta=" + (Debug.live_objects - base).to_string());
 
     // `Option<string>` carries a reference payload, so it stays a heap union.
     let s: Option<string> = Option.Some("hi");

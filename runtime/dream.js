@@ -4188,6 +4188,10 @@ function makeConsoleProcessHost() {
   return {
     consoleReadLine: () => consoleReadLineSync(),
     consoleReadKey: () => consoleReadKeySync(),
+    consoleWriteStderr: (text) => {
+      if (isNode && process.stderr) process.stderr.write(String(text));
+      else console.error(text);
+    },
     consoleExit: (code) => {
       if (isNode) process.exit(code);
       throw new Error(`System.exit(${code}): no process to exit in the browser`);

@@ -14,7 +14,7 @@ fun main(): void {
     System.println(b_dt.to_utc().to_iso8601());
 
     let c = DateTime.parse("2026-07-02T10:35:00.1234567Z");
-    System.println(c.unwrap_or(DateTime.from_epoch_millis(0L)).millisecond());
+    System.println(c.unwrap_or(DateTime.from_epoch_millis(0L)).millisecond);
 
     let d = DateTime.parse("not-a-date");
     System.println(d.is_err());

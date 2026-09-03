@@ -9,11 +9,11 @@ fun work(): int {
 async fun main(): void {
     let _ = await WebWorker.spawn(() => work());
     let _ = await WebWorker.spawn(() => work());
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     let i = 0;
     while i < 20 {
         let _ = await WebWorker.spawn(() => work());
         i = i + 1;
     }
-    System.println((Debug.live_objects() - base).to_string());
+    System.println((Debug.live_objects - base).to_string());
 }

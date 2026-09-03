@@ -25,21 +25,22 @@ fun main() {
 | `System.read_int()` / `read_double()` / `read_bool()` | parse a line → `Result` |
 | `System.exit(code)` | stop the process |
 | `System.panic(message)` | print and halt — see [Panics](../language/panics.md) |
+| `System.stdin` / `stdout` / `stderr` | standard streams (`read_line` / `write_line`) |
 
 ## Platform and env
 
 | Call | What it does |
 | --- | --- |
-| `System.platform()` / `System.os_family()` | which host you are on |
-| `System.is_browser()` | running in a page? |
-| `System.args()` | command-line arguments |
-| `System.exe_path()` | path of this executable, if any |
+| `System.platform` / `System.os_family` | which host you are on |
+| `System.is_browser` | running in a page? |
+| `System.args` | command-line arguments |
+| `System.exe_path` | path of this executable, if any |
 | `System.env(name)` / `env_or(name, fallback)` / `has_env` / `env_keys` | environment variables |
 | `System.set_env(name, value)` / `unset_env(name)` | set or clear an env var |
-| `System.cwd()` / `set_cwd(path)` | working directory |
-| `System.temp_dir()` / `home_dir()` | temp and home paths |
-| `System.cpu_time_nanos()` | process user+system CPU time since start |
-| `System.memory_bytes()` | OS resident memory (RSS / working set); `0` if unknown |
+| `System.cwd` / `set_cwd(path)` | working directory |
+| `System.temp_dir` / `home_dir` | temp and home paths |
+| `System.cpu_time_nanos` | process user+system CPU time since start |
+| `System.memory_bytes` | OS resident memory (RSS / working set); `0` if unknown |
 
 ## Math (no import)
 

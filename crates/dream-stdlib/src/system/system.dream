@@ -84,7 +84,7 @@ extend System {
     }
 
     // The current host platform.
-    public static fun platform(): Platform {
+    public static get platform(): Platform {
         let p = System.host_platform();
         if p == 0 {
             return Platform.Native;
@@ -99,7 +99,7 @@ extend System {
     }
 
     // The OS family on native hosts (Unknown elsewhere).
-    public static fun os_family(): OsFamily {
+    public static get os_family(): OsFamily {
         let f = System.host_os_family();
         if f == 0 {
             return OsFamily.Unix;
@@ -110,26 +110,23 @@ extend System {
         return OsFamily.Unknown;
     }
 
-    // User+system CPU time of this process since it started, in nanoseconds. `0` if the host
-    // cannot measure it (some browser pages).
-    public static fun cpu_time_nanos(): long {
+    // User+system CPU time of this process since it started, in nanoseconds (`0` if unknown).
+    public static get cpu_time_nanos(): long {
         return System.host_cpu_time_nanos();
     }
 
-    // Resident memory of this process in bytes (RSS / working set / physical footprint). `0` if
-    // unknown. This is OS memory, not `Debug.live_objects()` (Dream heap blocks; zero under
-    // `--release`).
-    public static fun memory_bytes(): long {
+    // Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.
+    public static get memory_bytes(): long {
         return System.host_memory_bytes();
     }
 
     // True when running under a browser JS host.
-    public static fun is_browser(): bool {
-        return System.platform() == Platform.Browser;
+    public static get is_browser(): bool {
+        return System.platform == Platform.Browser;
     }
 
     // Process arguments (excluding the executable name when the host provides one separately).
-    public static fun args(): string[] {
+    public static get args(): string[] {
         let joined = System.host_args();
         if joined.is_empty() {
             return Buffer.alloc<string>(0);
@@ -138,7 +135,7 @@ extend System {
     }
 
     // Absolute path of the running executable when known.
-    public static fun exe_path(): Option<string> {
+    public static get exe_path(): Option<string> {
         let path = System.host_exe_path();
         if path.is_empty() {
             return Option.None;
@@ -199,7 +196,7 @@ extend System {
     }
 
     // Names of all environment variables (empty on hosts without an env block).
-    public static fun env_keys(): string[] {
+    public static get env_keys(): string[] {
         let joined = System.host_env_keys();
         if joined.is_empty() {
             return Buffer.alloc<string>(0);
@@ -208,7 +205,7 @@ extend System {
     }
 
     // Process temp directory (`TMPDIR` / `GetTempPath` / `"/tmp"` in the browser).
-    public static fun temp_dir(): string {
+    public static get temp_dir(): string {
         let path = System.host_temp_dir();
         if path.is_empty() {
             return "/tmp";
@@ -217,7 +214,7 @@ extend System {
     }
 
     // User home directory when the host provides one.
-    public static fun home_dir(): Option<string> {
+    public static get home_dir(): Option<string> {
         let path = System.host_home_dir();
         if path.is_empty() {
             return Option.None;
@@ -226,7 +223,7 @@ extend System {
     }
 
     // Current working directory.
-    public static fun cwd(): Result<string, IoError> {
+    public static get cwd(): Result<string, IoError> {
         let path = System.host_cwd();
         if path.is_empty() {
             return Result.Err(IoError.other(".", "current working directory is unavailable"));

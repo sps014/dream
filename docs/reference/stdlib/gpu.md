@@ -22,9 +22,9 @@ async fun main(): void {
 
 | Call | Meaning |
 | --- | --- |
-| `Gpu.is_available()` | adapter present? |
+| `Gpu.is_available` | adapter present? |
 | `await Gpu.try_init()` | request device (call once) |
-| `Gpu.ready()` | init succeeded |
+| `Gpu.ready` | init succeeded |
 | `await Gpu.frame()` | wait a display frame |
 | `await Gpu.timestamp()` | GPU timestamp |
 

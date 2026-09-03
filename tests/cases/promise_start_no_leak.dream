@@ -25,8 +25,8 @@ async fun kick(): void {
 
 async fun main(): void {
     await Time.sleep(0);
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     await kick();
     await Time.sleep(10);
-    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

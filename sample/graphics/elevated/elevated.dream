@@ -358,10 +358,10 @@ async fun main(): void {
         System.println("GpuSurface.create failed");
         return;
     }
-    let surface = surface_r.unwrap_or(GpuSurface());
+    let surface = surface_r.unwrap();
 
-    let w: int = surface.width();
-    let h: int = surface.height();
+    let w: int = surface.width;
+    let h: int = surface.height;
     if w < 1 { w = 1280; }
     if h < 1 { h = 720; }
 
@@ -371,7 +371,7 @@ async fun main(): void {
         System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
-    let pipe = pipe_r.unwrap_or(GpuRenderPipeline());
+    let pipe = pipe_r.unwrap();
 
     let verts = GpuBuffer<Vertex>.vertex_from([
         make_vert(-1.0, -1.0),
@@ -382,14 +382,14 @@ async fun main(): void {
     let sky = GpuVec4.of(0.3, 0.5, 0.85, 1.0);
     let t0: long = Time.nano_time();
 
-    while !surface.close_requested() {
+    while !surface.close_requested {
         for (let ev in surface.poll_events()) {
             switch (ev) {
                 _ => {},
             }
         }
-        w = surface.width();
-        h = surface.height();
+        w = surface.width;
+        h = surface.height;
         if w < 1 { w = 1280; }
         if h < 1 { h = 720; }
         let rw: float = (float)w;

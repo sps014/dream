@@ -4,7 +4,7 @@ module system.encoding;
 // Dream strings are UTF-16 in memory; `utf8_encode` transcodes to UTF-8 bytes.
 
 // Maps 0–15 to a lowercase hex digit character.
-public fun hex_digit(v: int): char {
+fun hex_digit(v: int): char {
     if v < 10 {
         return (char)(48 + v);
     }
@@ -12,7 +12,7 @@ public fun hex_digit(v: int): char {
 }
 
 // Parses a hex digit; returns `-1` when `c` is not hex.
-public fun hex_value(c: char): int {
+fun hex_value(c: char): int {
     if (c >= '0') && (c <= '9') {
         return (int)c - 48;
     }
@@ -26,7 +26,7 @@ public fun hex_value(c: char): int {
 }
 
 // Maps a Base64 alphabet character to 0–63, or `-1` when invalid.
-public fun b64_value(c: char): int {
+fun b64_value(c: char): int {
     if (c >= 'A') && (c <= 'Z') {
         return (int)c - 65;
     }

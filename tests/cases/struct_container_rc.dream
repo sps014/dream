@@ -62,9 +62,9 @@ fun in_union() {
 }
 
 fun main() {
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     in_class();
     in_array();
     in_union();
-    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

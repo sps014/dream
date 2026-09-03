@@ -22,13 +22,13 @@ public class ScratchArena<T : unmanaged> {
     }
 
     // Number of elements still available before the next `reset`.
-    public fun remaining(): int {
+    public get remaining(): int {
         return this.items.length - this.used;
     }
 
     // Total element capacity of the slab.
     @inline
-    public fun capacity(): int {
+    public get capacity(): int {
         return this.items.length;
     }
 

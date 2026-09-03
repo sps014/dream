@@ -21,7 +21,7 @@ async fun main(): void {
     // Richer GET response: status + JSON body + a header.
     switch (await api.get("/user")) {
         Ok(res) => {
-            System.println(res.status());
+            System.println(res.status);
             System.println(res.header("content-type"));
             switch (res.json()) {
                 Ok(data) => System.println(data.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
@@ -34,7 +34,7 @@ async fun main(): void {
     // POST a JSON body (any verb is available: get/post/put/patch/delete/head, or `request`).
     switch (await api.post("/user", "{\"name\":\"Grace\"}")) {
         Ok(created) => {
-            System.println(created.status());
+            System.println(created.status);
             System.println(created.text());
         },
         Err(e) => System.println(e.message()),
@@ -44,7 +44,7 @@ async fun main(): void {
     switch (await api.get("/blob")) {
         Ok(bin) => {
             switch (await api.post_bytes("/upload", bin.bytes())) {
-                Ok(echoed) => System.println(echoed.status()),
+                Ok(echoed) => System.println(echoed.status),
                 Err(e) => System.println(e.message()),
             }
         },

@@ -43,7 +43,7 @@ public class List<T> : IndexedCollection<T> {
 
     // Current capacity of the backing buffer.
     @inline
-    public fun capacity(): int {
+    public get capacity(): int {
         return this.items.length;
     }
 

@@ -1,0 +1,4 @@
+Class 'ProcessWireReader' is not 'public'
+Class 'MapSlot' is not 'public'
+Type 'GpuInputCodec' is not 'public'
+constructor of 'Stdout' is not accessible here

@@ -2,18 +2,29 @@ module system.process;
 
 // The captured result of `Process.run`: exit code plus fully buffered stdout/stderr text.
 public class ProcessOutput {
-    public exit_code: int;
-    public stdout: string;
-    public stderr: string;
+    _exit_code: int;
+    _stdout: string;
+    _stderr: string;
 
-    public constructor(exit_code: int, stdout: string, stderr: string) {
-        this.exit_code = exit_code;
-        this.stdout = stdout;
-        this.stderr = stderr;
+    internal constructor(exit_code: int, stdout: string, stderr: string) {
+        this._exit_code = exit_code;
+        this._stdout = stdout;
+        this._stderr = stderr;
     }
 
-    // True when the process exited with code `0`.
-    public fun success(): bool {
-        return this.exit_code == 0;
+    public get exit_code(): int {
+        return this._exit_code;
+    }
+
+    public get stdout(): string {
+        return this._stdout;
+    }
+
+    public get stderr(): string {
+        return this._stderr;
+    }
+
+    public get success(): bool {
+        return this._exit_code == 0;
     }
 }

@@ -2,8 +2,13 @@ module system.gpu;
 
 // Canvas / native-window swapchain + polled input (web and native).
 public class GpuSurface {
-    // Host surface / window handle id.
-    public id: int;
+    _id: int;
+
+    internal constructor() {}
+
+    public get id(): int {
+        return this._id;
+    }
 
     // Creates a surface bound to the DOM canvas with id `canvas_id` (browser),
     // or a native window titled `canvas_id` under `dream run` (default 800×600).
@@ -20,7 +25,7 @@ public class GpuSurface {
             return Result.Err(GpuError.unavailable("GpuSurface.from_canvas failed"));
         }
         let s = GpuSurface();
-        s.id = sid;
+        s._id = sid;
         return Result.Ok(s);
     }
 
@@ -39,13 +44,13 @@ public class GpuSurface {
     // Drawable width in pixels (`canvas.width` on web; create/configure size on native —
     // not Retina physical, so fragment cost matches the browser).
     @web @native
-    public fun width(): int {
+    public get width(): int {
         return Gpu.surface_width(this.id);
     }
 
     // Drawable height in pixels.
     @web @native
-    public fun height(): int {
+    public get height(): int {
         return Gpu.surface_height(this.id);
     }
 
@@ -102,13 +107,13 @@ public class GpuSurface {
 
     // True when the surface/window has keyboard focus.
     @web @native
-    public fun focused(): bool {
+    public get focused(): bool {
         return Gpu.surface_focused(this.id);
     }
 
     // Sticky latch set on window close (native) or sample Escape handling.
     @web @native
-    public fun close_requested(): bool {
+    public get close_requested(): bool {
         return Gpu.surface_close_requested(this.id);
     }
 
@@ -122,6 +127,6 @@ public class GpuSurface {
     @web @native
     public fun destroy(): void {
         Gpu.surface_destroy(this.id);
-        this.id = -1;
+        this._id = -1;
     }
 }

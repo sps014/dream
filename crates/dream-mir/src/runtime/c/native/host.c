@@ -870,6 +870,15 @@ int32_t consoleReadKey(void) {
 #endif
 }
 
+void consoleWriteStderr(dream_ptr text) {
+    char *s = dream_str_utf8(text);
+    if (s) {
+        fputs(s, stderr);
+        fflush(stderr);
+        free(s);
+    }
+}
+
 dream_ptr processEnvGet(dream_ptr name) {
     char *key = dream_str_utf8(name);
     const char *value;

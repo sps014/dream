@@ -19,12 +19,12 @@ fun main(): void {
     warm(0);
     warm = make_adder(0);
 
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     let i = 0;
     while i < 50 {
         once(i);
         i = i + 1;
     }
-    let delta = Debug.live_objects() - base;
+    let delta = Debug.live_objects - base;
     System.println("live_delta=" + delta.to_string());
 }

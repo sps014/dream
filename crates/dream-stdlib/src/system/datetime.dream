@@ -83,7 +83,7 @@ public struct DateTime : Equatable<DateTime> {
         return DateTime(millis, 0);
     }
 
-    public fun epoch_seconds(): long {
+    public get epoch_seconds(): long {
         return this._epoch_millis / 1000L;
     }
 
@@ -144,17 +144,17 @@ public struct DateTime : Equatable<DateTime> {
     }
 
     // The year.
-    public fun year(): int {
+    public get year(): int {
         return this.decompose().year;
     }
 
     // The month.
-    public fun month(): int {
+    public get month(): int {
         return this.decompose().month;
     }
 
     // The day.
-    public fun day(): int {
+    public get day(): int {
         return this.decompose().day;
     }
 
@@ -164,32 +164,32 @@ public struct DateTime : Equatable<DateTime> {
     }
 
     // The hour.
-    public fun hour(): int {
+    public get hour(): int {
         return (int) (this._millis_of_day() / 3600000L);
     }
 
     // The minute.
-    public fun minute(): int {
+    public get minute(): int {
         return (int) ((this._millis_of_day() / 60000L) % 60L);
     }
 
     // The second.
-    public fun second(): int {
+    public get second(): int {
         return (int) ((this._millis_of_day() / 1000L) % 60L);
     }
 
     // The millisecond.
-    public fun millisecond(): int {
+    public get millisecond(): int {
         return (int) (this._millis_of_day() % 1000L);
     }
 
     // The day of the week (0 = Sunday).
-    public fun day_of_week(): int {
+    public get day_of_week(): int {
         return (int) DateTime._floor_mod((long) this._local_days() + 4L, 7L);
     }
 
     // The day of the year (1-based).
-    public fun day_of_year(): int {
+    public get day_of_year(): int {
         let ymd = DateTime._civil_from_days(this._local_days());
         let jan1 = DateTime._days_from_civil(ymd.year, 1, 1);
         return this._local_days() - jan1 + 1;
@@ -268,13 +268,13 @@ public struct DateTime : Equatable<DateTime> {
         sb.append_char('-');
         sb.append(DateTime._pad(ymd.day, 2));
         sb.append_char('T');
-        sb.append(DateTime._pad(this.hour(), 2));
+        sb.append(DateTime._pad(this.hour, 2));
         sb.append_char(':');
-        sb.append(DateTime._pad(this.minute(), 2));
+        sb.append(DateTime._pad(this.minute, 2));
         sb.append_char(':');
-        sb.append(DateTime._pad(this.second(), 2));
+        sb.append(DateTime._pad(this.second, 2));
         sb.append_char('.');
-        sb.append(DateTime._pad(this.millisecond(), 3));
+        sb.append(DateTime._pad(this.millisecond, 3));
         if this._offset_minutes == 0 {
             sb.append_char('Z');
         } else {
@@ -293,11 +293,11 @@ public struct DateTime : Equatable<DateTime> {
         sb.append_char('-');
         sb.append(DateTime._pad(ymd.day, 2));
         sb.append_char(' ');
-        sb.append(DateTime._pad(this.hour(), 2));
+        sb.append(DateTime._pad(this.hour, 2));
         sb.append_char(':');
-        sb.append(DateTime._pad(this.minute(), 2));
+        sb.append(DateTime._pad(this.minute, 2));
         sb.append_char(':');
-        sb.append(DateTime._pad(this.second(), 2));
+        sb.append(DateTime._pad(this.second, 2));
         if this._offset_minutes == 0 {
             sb.append(" UTC");
         } else {

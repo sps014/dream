@@ -18,25 +18,25 @@ public struct TimeZone {
 
     _name: string;
 
-    public constructor(name: string) {
+    internal constructor(name: string) {
         this._name = name;
     }
 
     // The IANA zone identifier (e.g. `"America/New_York"`).
-    public fun name(): string {
+    public get name(): string {
         return this._name;
     }
 
     // The UTC zone (offset `0` at every instant).
-    public static fun utc(): TimeZone {
+    public static get utc(): TimeZone {
         return TimeZone("UTC");
     }
 
-    // The host's configured local timezone, or `utc()` if it can't be determined.
-    public static fun local(): TimeZone {
+    // The host's configured local timezone, or `utc` if it can't be determined.
+    public static get local(): TimeZone {
         let name = TimeZone.host_local_zone_name();
         if name.is_empty() {
-            return TimeZone.utc();
+            return TimeZone.utc;
         }
         return TimeZone(name);
     }

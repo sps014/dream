@@ -1,0 +1,70 @@
+module system;
+
+// Standard input. Obtain via `System.stdin`.
+public class Stdin {
+    constructor() {}
+
+    internal static fun instance(): Stdin {
+        return Stdin();
+    }
+
+    public fun read_line(): string {
+        return System.read_line();
+    }
+
+    public fun read_key(): char {
+        return System.read_key();
+    }
+}
+
+// Standard output. Obtain via `System.stdout`.
+public class Stdout {
+    constructor() {}
+
+    internal static fun instance(): Stdout {
+        return Stdout();
+    }
+
+    public fun write_text(borrow text: string): void {
+        System.print(text);
+    }
+
+    public fun write_line(borrow text: string): void {
+        System.println(text);
+    }
+}
+
+// Standard error. Obtain via `System.stderr`.
+public class Stderr {
+    @runtime("consoleWriteStderr")
+    static extern fun host_write(borrow text: string): void;
+
+    constructor() {}
+
+    internal static fun instance(): Stderr {
+        return Stderr();
+    }
+
+    public fun write_text(borrow text: string): void {
+        Stderr.host_write(text);
+    }
+
+    public fun write_line(borrow text: string): void {
+        Stderr.host_write(text);
+        Stderr.host_write("\n");
+    }
+}
+
+extend System {
+    public static get stdin(): Stdin {
+        return Stdin.instance();
+    }
+
+    public static get stdout(): Stdout {
+        return Stdout.instance();
+    }
+
+    public static get stderr(): Stderr {
+        return Stderr.instance();
+    }
+}

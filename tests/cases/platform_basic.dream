@@ -1,9 +1,9 @@
 import system;
 fun main(): void {
-    let p = System.platform();
+    let p = System.platform;
     System.println(p == Platform.Native);
-    System.println(System.is_browser());
-    switch (System.cwd()) {
+    System.println(System.is_browser);
+    switch (System.cwd) {
         Ok(cwd) => System.println(cwd.is_empty() == false),
         Err(e) => System.println(e.message()),
     }

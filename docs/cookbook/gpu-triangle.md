@@ -59,7 +59,7 @@ async fun main(): void {
         make_vert(0.0, 0.5, 0.2, 0.2, 1.0),
     ]);
 
-    while !surface.close_requested() {
+    while !surface.close_requested {
         let _ = await GpuRenderPass.draw(surface, pipe, verts, 3);
         let _ = await surface.present();
         await Gpu.frame();

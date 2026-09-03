@@ -77,7 +77,7 @@ fun do_enum_allocations() {
 }
 
 fun main() {
-    // Warm up once, then capture the live-object baseline. `Debug.live_objects()` is the count of
+    // Warm up once, then capture the live-object baseline. `Debug.live_objects` is the count of
     // heap blocks currently handed out (incremented by `$malloc`, decremented by `$free`), so it is
     // the true leak detector: it is insensitive to which freed block sits at the freelist head
     // (deep recursive frees of mixed-size union nodes reorder the freelist without leaking). If
@@ -85,7 +85,7 @@ fun main() {
     // more rounds equals the baseline; a single leaked node makes it grow.
     do_allocations();
     do_enum_allocations();
-    let baseline = Debug.live_objects();
+    let baseline = Debug.live_objects;
 
     let i = 0;
     while i < 100 {
@@ -94,7 +94,7 @@ fun main() {
         i = i + 1;
     }
 
-    let final_live = Debug.live_objects();
+    let final_live = Debug.live_objects;
     if baseline == final_live {
         System.print("Memory perfectly reclaimed!");
     } else {

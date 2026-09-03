@@ -725,6 +725,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/system.dream"),
             ),
             (
+                "<std>/system/stdio.dream",
+                include_str!("system/stdio.dream"),
+            ),
+            (
                 "<std>/system/random.dream",
                 include_str!("system/random.dream"),
             ),

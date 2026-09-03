@@ -13,7 +13,7 @@ public class MapIterator<K, V> : Iterator<KeyValuePair<K, V>> {
 
     // Returns the next key/value pair, or `None` if exhausted.
     public fun next(): Option<KeyValuePair<K, V>> {
-        while this.idx < this.map.capacity() {
+        while this.idx < this.map.capacity {
             let i = this.idx;
             this.idx = this.idx + 1;
             if this.map.slot_occupied(i) {

@@ -6,7 +6,7 @@ public class ServerWebSocket {
     handle: int;
     is_closed: bool;
 
-    public constructor(handle: int) {
+    internal constructor(handle: int) {
         this.handle = handle;
         this.is_closed = false;
     }

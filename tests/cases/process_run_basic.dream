@@ -4,7 +4,7 @@ async fun main(): void {
     let ok = await Process.run("echo", ["hello", "world"]);
     switch (ok) {
         Ok(out) => {
-            System.println(out.success());
+            System.println(out.success);
             System.println(out.stdout.trim());
         },
         Err(e) => System.println("unexpected error: " + e.message()),

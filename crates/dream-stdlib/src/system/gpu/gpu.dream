@@ -18,12 +18,12 @@ public static class Gpu {
     static extern async fun timestamp_host(): long;
 
     // True when a WebGPU/native GPU backend is present.
-    public static fun is_available(): bool {
+    public static get is_available(): bool {
         return Gpu.is_available_host();
     }
 
     // True after a successful `try_init`.
-    public static fun ready(): bool {
+    public static get ready(): bool {
         return Gpu.ready_host();
     }
 

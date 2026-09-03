@@ -397,7 +397,7 @@ public class WebView {
     }
 
     @native
-    public fun close_requested(): bool {
+    public get close_requested(): bool {
         return WebView.host_close_requested(this.id);
     }
 

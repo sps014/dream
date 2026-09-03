@@ -174,9 +174,9 @@ fun main() {
         stress();
         w = w + 1;
     }
-    let base_live = Debug.live_objects();
-    let base_heap = Debug.heap_ptr();
-    let base_free = Debug.free_list_head();
+    let base_live = Debug.live_objects;
+    let base_heap = Debug.heap_ptr;
+    let base_free = Debug.free_list_head;
 
     let i = 0;
     while i < 100 {
@@ -184,9 +184,9 @@ fun main() {
         i = i + 1;
     }
 
-    let end_live = Debug.live_objects();
-    let end_heap = Debug.heap_ptr();
-    let end_free = Debug.free_list_head();
+    let end_live = Debug.live_objects;
+    let end_heap = Debug.heap_ptr;
+    let end_free = Debug.free_list_head;
 
     System.println("live_delta=" + (end_live - base_live).to_string());
     System.println("heap_grew=" + (end_heap - base_heap > 0).to_string());

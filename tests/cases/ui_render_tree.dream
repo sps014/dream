@@ -25,11 +25,11 @@ fun attach(borrow p: Node, c: Node) {
 }
 
 fun main() {
-    let base = Debug.live_objects();
+    let base = Debug.live_objects;
     let root = Node(1);
     let child = Node(2);
     attach(root, child);
     System.println("built");
     System.println("later");
-    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

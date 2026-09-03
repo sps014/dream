@@ -257,10 +257,10 @@ async fun main(): void {
         System.println("GpuSurface.create failed");
         return;
     }
-    let surface = surface_r.unwrap_or(GpuSurface());
+    let surface = surface_r.unwrap();
 
-    let w: int = surface.width();
-    let h: int = surface.height();
+    let w: int = surface.width;
+    let h: int = surface.height;
     if w < 1 { w = 1280; }
     if h < 1 { h = 720; }
 
@@ -270,7 +270,7 @@ async fun main(): void {
         System.println("GpuRenderPipeline.create_ex failed");
         return;
     }
-    let pipe = pipe_r.unwrap_or(GpuRenderPipeline());
+    let pipe = pipe_r.unwrap();
 
     // Fullscreen triangle covers clip space.
     let verts = GpuBuffer<Vertex>.vertex_from([
@@ -282,9 +282,9 @@ async fun main(): void {
     let sky = GpuVec4.of(0.44, 0.77, 0.99, 1.0);
     let t0: long = Time.nano_time();
 
-    while !surface.close_requested() {
-        w = surface.width();
-        h = surface.height();
+    while !surface.close_requested {
+        w = surface.width;
+        h = surface.height;
         if w < 1 { w = 1280; }
         if h < 1 { h = 720; }
         let rw: float = (float)w;

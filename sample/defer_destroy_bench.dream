@@ -189,15 +189,15 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
         let sw = Stopwatch();
         let next = build_tree(nodes, id0);
         sw.stop();
-        let build_ns = sw.elapsed_nanos();
+        let build_ns = sw.elapsed_nanos;
 
         sw.restart();
         g_sink = g_sink + (long)paint(next);
         sw.stop();
-        let paint_ns = sw.elapsed_nanos();
+        let paint_ns = sw.elapsed_nanos;
 
         g_del = 0;
-        let cpu0 = System.cpu_time_nanos();
+        let cpu0 = System.cpu_time_nanos;
         sw.restart();
         if use_defer {
             defer(0) {
@@ -207,20 +207,20 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
             retire_widget(prev);
         }
         sw.stop();
-        let retire_ns = sw.elapsed_nanos();
-        let retire_cpu = System.cpu_time_nanos() - cpu0;
+        let retire_ns = sw.elapsed_nanos;
+        let retire_cpu = System.cpu_time_nanos - cpu0;
         let del_retire = g_del;
 
         g_del = 0;
         let drain_ns = 0L;
         let drain_cpu = 0L;
         if use_defer {
-            cpu0 = System.cpu_time_nanos();
+            cpu0 = System.cpu_time_nanos;
             sw.restart();
             defer(budget) {}
             sw.stop();
-            drain_ns = sw.elapsed_nanos();
-            drain_cpu = System.cpu_time_nanos() - cpu0;
+            drain_ns = sw.elapsed_nanos;
+            drain_cpu = System.cpu_time_nanos - cpu0;
         }
         let del_drain = g_del;
 
@@ -230,7 +230,7 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
             hitch_ns = retire_ns;
             hitch_cpu = retire_cpu;
         }
-        let rss = System.memory_bytes();
+        let rss = System.memory_bytes;
         let present = build_ns + paint_ns;
         present_sum = present_sum + present;
         if present > max_present {
@@ -297,7 +297,7 @@ fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bo
         let id0 = (1 + f) * n;
 
         g_del = 0;
-        let cpu0 = System.cpu_time_nanos();
+        let cpu0 = System.cpu_time_nanos;
         let sw = Stopwatch();
         if use_defer {
             defer(0) {
@@ -307,25 +307,25 @@ fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bo
             rewrite_particles(slots, n, id0);
         }
         sw.stop();
-        let retire_ns = sw.elapsed_nanos();
-        let retire_cpu = System.cpu_time_nanos() - cpu0;
+        let retire_ns = sw.elapsed_nanos;
+        let retire_cpu = System.cpu_time_nanos - cpu0;
         let del_retire = g_del;
 
         sw.restart();
         g_sink = g_sink + (long)paint_particles(slots);
         sw.stop();
-        let paint_ns = sw.elapsed_nanos();
+        let paint_ns = sw.elapsed_nanos;
 
         g_del = 0;
         let drain_ns = 0L;
         let drain_cpu = 0L;
         if use_defer {
-            cpu0 = System.cpu_time_nanos();
+            cpu0 = System.cpu_time_nanos;
             sw.restart();
             defer(budget) {}
             sw.stop();
-            drain_ns = sw.elapsed_nanos();
-            drain_cpu = System.cpu_time_nanos() - cpu0;
+            drain_ns = sw.elapsed_nanos;
+            drain_cpu = System.cpu_time_nanos - cpu0;
         }
         let del_drain = g_del;
 
@@ -335,7 +335,7 @@ fun run_particles(mode: string, frames: int, n: int, budget: uint, use_defer: bo
             hitch_ns = retire_ns;
             hitch_cpu = retire_cpu;
         }
-        let rss = System.memory_bytes();
+        let rss = System.memory_bytes;
         let present = retire_ns + paint_ns;
         present_sum = present_sum + present;
         if present > max_present {

@@ -115,7 +115,7 @@ public class HttpClient {
 
     fun wrap_stream(raw: char[], token: Option<CancellationToken>): Result<HttpStreamResponse, HttpError> {
         let head = HttpResponse(raw);
-        if head.status() == 0 {
+        if head.status == 0 {
             return Result.Err(HttpError.transport(head.text()));
         }
         switch (this.cookie_jar) {
@@ -142,7 +142,7 @@ public class HttpClient {
 
     fun wrap(raw: char[]): Result<HttpResponse, HttpError> {
         let res = HttpResponse(raw);
-        if res.status() == 0 {
+        if res.status == 0 {
             return Result.Err(HttpError.transport(res.text()));
         }
         switch (this.cookie_jar) {

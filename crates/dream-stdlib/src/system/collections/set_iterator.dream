@@ -13,7 +13,7 @@ public class SetIterator<T> : Iterator<T> {
 
     // Returns the next element, or `None` if exhausted.
     public fun next(): Option<T> {
-        while this.index < this.set.capacity() {
+        while this.index < this.set.capacity {
             let i = this.index;
             this.index = this.index + 1;
             if this.set.slot_occupied(i) {

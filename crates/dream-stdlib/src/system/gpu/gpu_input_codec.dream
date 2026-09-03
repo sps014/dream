@@ -1,7 +1,7 @@
 module system.gpu;
 
 // Decode packed host input bytes (see native `gpu/input.rs` / JS `gpu.js`).
-public static class GpuInputCodec {
+internal static class GpuInputCodec {
     // Reads a little-endian i32 at byte `off`.
     public static fun read_i32(buf: byte[], off: int): int {
         let b0 = (int)buf[off] & 255;

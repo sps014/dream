@@ -6,15 +6,15 @@ import system.text;
 fun main(): void {
     let dt = DateTime.of(2026, 7, 2, 10, 35, 0, 250);
     System.println(dt.to_iso8601());
-    System.println(dt.year());
-    System.println(dt.month());
-    System.println(dt.day());
-    System.println(dt.hour());
-    System.println(dt.minute());
-    System.println(dt.second());
-    System.println(dt.millisecond());
-    System.println(dt.day_of_week());
-    System.println(dt.day_of_year());
+    System.println(dt.year);
+    System.println(dt.month);
+    System.println(dt.day);
+    System.println(dt.hour);
+    System.println(dt.minute);
+    System.println(dt.second);
+    System.println(dt.millisecond);
+    System.println(dt.day_of_week);
+    System.println(dt.day_of_year);
 
     let later = dt.add_days(30);
     System.println(later.to_iso8601());
@@ -41,5 +41,5 @@ fun main(): void {
     // Dates before the epoch exercise the floor-division paths.
     let before_epoch = DateTime.of(1969, 12, 31, 23, 59, 59, 500);
     System.println(before_epoch.to_iso8601());
-    System.println(before_epoch.day_of_week());
+    System.println(before_epoch.day_of_week);
 }

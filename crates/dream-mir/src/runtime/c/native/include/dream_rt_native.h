@@ -1145,6 +1145,7 @@ dream_ptr processTempDir(void);
 dream_ptr processHomeDir(void);
 dream_ptr consoleReadLine(void);
 int32_t consoleReadKey(void);
+void consoleWriteStderr(dream_ptr text);
 
 void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
                      void (*complete_foreign)(dream_ptr, dream_ptr));

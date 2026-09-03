@@ -39,6 +39,6 @@ fun main(): void {
     let d = Duration.from_seconds(2L);
     System.println(d.as_millis());
     let dt = DateTime.from_epoch_millis(0L);
-    System.println(dt.epoch_seconds());
-    System.println(System.has_env("PATH") || System.temp_dir().is_empty() == false);
+    System.println(dt.epoch_seconds);
+    System.println(System.has_env("PATH") || System.temp_dir.is_empty() == false);
 }

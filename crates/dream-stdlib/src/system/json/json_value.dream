@@ -7,19 +7,19 @@ module system.json;
 // objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
 @allow_cycle
 public class JsonValue {
-    public kind: int;
-    public bool_val: bool;
-    public num_val: double;
-    public str_val: string;
-    public items: Option<List<JsonValue>>;
+    internal kind: int;
+    internal bool_val: bool;
+    internal num_val: double;
+    internal str_val: string;
+    internal items: Option<List<JsonValue>>;
     // Insertion-ordered keys for objects (stringify order).
-    public obj_keys: Option<List<string>>;
+    internal obj_keys: Option<List<string>>;
     // Values parallel to `obj_keys` (avoids map re-hash during stringify).
     obj_vals: Option<List<JsonValue>>;
     // O(1) object field lookup.
     obj_map: Option<Map<string, JsonValue>>;
 
-    public constructor(
+    internal constructor(
         kind: int,
         bool_val: bool,
         num_val: double,

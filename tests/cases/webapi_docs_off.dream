@@ -12,11 +12,11 @@ async fun main(): void {
     let port = await WebApp.listen_with("127.0.0.1", 0, opts);
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
     switch (await client.get("/docs")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     switch (await client.get("/openapi.json")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();

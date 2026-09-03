@@ -283,7 +283,7 @@ public static class File {
     // True when `path` exists and is a regular file.
     public static fun is_file(borrow path: string): bool {
         return switch (File.stat(path)) {
-            Ok(st) => st.is_file(),
+            Ok(st) => st.is_file,
             Err(e) => false,
         };
     }

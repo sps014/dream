@@ -4,7 +4,7 @@ module system.process;
 public class ChildProcess {
     _handle: int;
 
-    public constructor(handle: int) {
+    internal constructor(handle: int) {
         this._handle = handle;
     }
 

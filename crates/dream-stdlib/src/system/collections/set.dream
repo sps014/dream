@@ -38,7 +38,7 @@ public class Set<T> : Collection<T> {
     }
 
     // Current capacity of the backing buffer.
-    public fun capacity(): int {
+    public get capacity(): int {
         return this.cap;
     }
 

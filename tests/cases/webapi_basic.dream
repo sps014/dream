@@ -63,11 +63,11 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     switch (await client.get("/docs")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     switch (await client.get("/redoc")) {
-        Ok(r) => System.println(r.status()),
+        Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();

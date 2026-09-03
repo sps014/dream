@@ -9,7 +9,7 @@ import system.net;
 async fun main(): void {
     let api = HttpClient("https://api.example.com");
     switch (await api.get("/health")) {
-        Ok(res) => System.println(res.status()),
+        Ok(res) => System.println(res.status),
         Err(e) => System.println(e.message()),
     }
 }

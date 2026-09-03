@@ -1,8 +1,14 @@
 {
   "name": "dream-lang",
-  "version": "0.1.6",
+  "version": "0.0.7",
   "description": "Dream language support for VS Code",
   "publisher": "dream-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sps014/dream.git",
+    "directory": "tooling/vscode"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },

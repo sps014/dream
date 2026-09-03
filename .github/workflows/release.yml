@@ -133,8 +133,37 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
 
+  vscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build and package VS Code extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          cd tooling/vscode
+          npm ci
+          npm run compile
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            npx @vscode/vsce package "$VERSION" --no-git-tag-version
+          else
+            npx @vscode/vsce package --no-git-tag-version
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: tooling/vscode/*.vsix
+
   publish:
-    needs: build
+    needs: [build, vscode]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -148,7 +177,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release/ \;
           cd release
           sha256sum * > SHA256SUMS
           ls -la

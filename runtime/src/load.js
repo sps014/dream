@@ -274,16 +274,18 @@ export async function load(source, options = {}) {
         };
   }
 
+  let workerStack = 0;
   const wasmInstance = await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
     if (stackGate || options.memory) {
-      attachGuestStack(inst);
+      workerStack = attachGuestStack(inst);
     } else if (typeof inst.exports.__runtime_init === "function") {
       inst.exports.__runtime_init();
     }
     return inst;
   });
   instance = new DreamInstance(wasmInstance);
+  instance.workerStack = workerStack;
   return instance;
 }
 
@@ -327,7 +329,7 @@ function attachGuestStack(wasmInstance) {
     if (typeof wasmInstance.exports.__runtime_init === "function") {
       wasmInstance.exports.__runtime_init();
     }
-    return;
+    return 0;
   }
   if (typeof wasmInstance.exports.__runtime_init === "function") {
     wasmInstance.exports.__runtime_init();
@@ -341,6 +343,7 @@ function attachGuestStack(wasmInstance) {
   if (tls) {
     tls.value = ptr;
   }
+  return ptr;
 }
 
 /**

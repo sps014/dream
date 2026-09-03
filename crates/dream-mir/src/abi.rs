@@ -377,7 +377,7 @@ pub const EXPORT_RUNTIME_INIT: &str = "__runtime_init";
 /// worker driver (`execution/host/worker.rs`) calls this with a body funcref index and a message
 /// string pointer; it performs one `call_indirect` on the `fun(string): string` body — driving an
 /// async body's constructor to completion in place if the call_indirect result turns out to be an
-/// untagged `Future` frame rather than the real value (see `src/mir/emit/module.rs`) — and returns
+/// `TAG_FUTURE` frame rather than the real value (see `src/mir/emit/module.rs`) — and returns
 /// the reply string pointer. Kept a fixed export so a freshly instantiated worker instance of the
 /// same module can be driven entirely from the host. Sound only because every native host `async`
 /// op resolves synchronously before returning to WASM; the browser worker driver (`runtime/dream.js`)
@@ -390,6 +390,11 @@ pub const EXPORT_WORKER_INVOKE: &str = "__dream_worker_invoke";
 /// is a still-pending `Future` and await it asynchronously (a real `extern async` host call there
 /// settles later via a Promise callback, never synchronously within the `call_indirect`).
 pub const EXPORT_WORKER_INVOKE_RAW: &str = "__dream_worker_invoke_raw";
+
+/// Wasm32 export of `dream_drop_globals`. Native runs that from `dream_guest_entry`; wasm32
+/// returns to JS first (async `main` still holds a Future), so `DreamInstance.run` calls this
+/// after the Future settles.
+pub const EXPORT_DROP_GLOBALS: &str = "__dream_drop_globals";
 
 /// C-backend wasm32 export mapping a `dream_ft[]` dispatch index to the function-pointer value.
 /// Clang assigns `__indirect_function_table` slots independently of `dream_ft[]` order, but on

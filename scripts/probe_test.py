@@ -43,6 +43,8 @@ _NODE_SKIP_PREFIXES = (
     # wgpu hosts: no WebGPU under Node.
     "render_",
     "compute_",
+    # `WebApp.listen` is native-only; wasm32 compile may still succeed then abort in Node.
+    "webapi_",
 )
 _NODE_SKIP_STEMS = {
     "console_read_line",
@@ -255,11 +257,9 @@ def one_node(f: Path):
     runner = dest_dir / f"{stem}_run.mjs"
     runner.write_text(
         f"""import {{ run }} from {js_url};
-const chunks = [];
 const timer = setTimeout(() => {{ console.error('probe --node timeout'); process.exit(2); }}, 25000);
-await run({wasm_url}, {{ stdout: (s) => chunks.push(s) }});
+await run({wasm_url}, {{ stdout: (s) => process.stdout.write(s) }});
 clearTimeout(timer);
-process.stdout.write(chunks.join(""));
 """
     )
     code, out, err_txt = run_group(["node", str(runner)], 35)

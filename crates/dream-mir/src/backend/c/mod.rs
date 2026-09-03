@@ -878,6 +878,14 @@ mod tests {
             "{}",
             c
         );
+        assert!(
+            c.contains(&format!(
+                "export_name(\"{}\")",
+                crate::abi::EXPORT_DROP_GLOBALS
+            )),
+            "{}",
+            c
+        );
         assert!(!c.contains("_Thread_local"), "{}", c);
     }
 }

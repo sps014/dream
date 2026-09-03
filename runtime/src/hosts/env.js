@@ -1,3 +1,5 @@
+import { getNodeFs } from "../platform.js";
+
 /** Default `env` builtins every Dream module imports (mirrors the WASM guest ABI). */
 
 /** Native host parity: `%.6f` with trailing zeros (and dot) trimmed. */
@@ -16,8 +18,25 @@ function formatDouble(v) {
   return String(Number(v.toPrecision(16)));
 }
 
+function nodeStdoutWrite(s) {
+  const fs = getNodeFs();
+  const fd =
+    typeof process !== "undefined" && process.stdout && typeof process.stdout.fd === "number"
+      ? process.stdout.fd
+      : 1;
+  if (fs && typeof fs.writeSync === "function") {
+    fs.writeSync(fd, s);
+    return;
+  }
+  if (typeof process !== "undefined" && process.stdout) {
+    process.stdout.write(s);
+    return;
+  }
+  console.log(s);
+}
+
 function defaultEnv(getInstance, options) {
-  const writeOut = options.stdout || ((s) => (typeof process !== "undefined" ? process.stdout.write(s) : console.log(s)));
+  const writeOut = options.stdout || nodeStdoutWrite;
   const writeLine = options.stdout
     ? (s) => options.stdout(s + "\n")
     : (s) => console.log(s);

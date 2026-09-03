@@ -17,6 +17,7 @@ export class DreamInstance {
     // captureless table indices, so index identity == function identity: returning the *same* JS
     // callable for the same funcref lets `addEventListener`/`removeEventListener` pair correctly.
     this._callbackWrappers = new Map();
+    this.workerStack = 0;
   }
 
   /**
@@ -336,29 +337,48 @@ export class DreamInstance {
     return this.__awaitWorkerResult(r);
   }
 
+  /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
+  __valueTag(ptr) {
+    return this.i32(ptr - 8) & 0x3fffffff;
+  }
+
+  __isFutureFrame(ptr) {
+    return !!ptr && this.__valueTag(ptr) === TAGS.FUTURE;
+  }
+
+  __guestFree(ptr) {
+    if (!ptr || typeof this.exports.free !== "function") return;
+    this.exports.free(ptr);
+  }
+
   /**
-   * Interprets a `__dream_worker_invoke_raw` return value, mirroring the tag check the *native*
-   * `__dream_worker_invoke` trampoline does synchronously in WASM (`src/mir/emit/module.rs`): every
-   * heap allocation carries a tag except a `Future` frame (`dream_new_future` mallocs with tag `0`,
-   * a value no real Dream type uses), so an untagged, non-null `r` means the body was an `async
-   * fun` and `r` is its still-running task, not the reply yet.
+   * Interprets a `__dream_worker_invoke_raw` return value: a `TAG_FUTURE` frame means the body was
+   * `async fun` and `r` is still running. A string (or other tagged heap value) is the reply.
    *
    * Unlike native (where every host `async` op resolves synchronously before `call_indirect`
    * returns, so one `__dream_run_loop` pass always finishes the task), a real `extern async` host
    * call here only settles later via a Promise `.then()` callback (see `wrapAsyncImport`), which
    * itself re-pumps `__dream_run_loop`. So instead of draining once, poll the future's `F_STATUS`
-   * slot on the microtask queue until some pump marks it done, then unwrap `F_RESULT`.
+   * slot until some pump marks it done, then unwrap `F_RESULT`.
    */
   __awaitWorkerResult(r) {
     const F_RESULT = 8;
     if (!r) return Promise.resolve("");
-    const tag = this.i32(r - 8) & 0x3fffffff; // TAG_VALUE_MASK; Future frames are tag 0
-    if (tag !== 0) return Promise.resolve(this.readString(r));
-    return this.__awaitFuture(r).then(() => this.readString(this.i32(r + F_RESULT)));
+    if (!this.__isFutureFrame(r)) {
+      const text = this.readString(r);
+      this.__guestFree(r);
+      return Promise.resolve(text);
+    }
+    return this.__awaitFuture(r).then(() => {
+      const out = this.i32(r + F_RESULT);
+      const text = this.readString(out);
+      this.__guestFree(r);
+      return text;
+    });
   }
 
   /**
-   * Waits until a tag-0 Future frame is settled. `wrapAsyncImport` re-pumps `__dream_run_loop`
+   * Waits until a `TAG_FUTURE` frame is settled. `wrapAsyncImport` re-pumps `__dream_run_loop`
    * when the host Promise completes; this only observes `F_STATUS`.
    */
   __awaitFuture(r) {
@@ -379,15 +399,34 @@ export class DreamInstance {
     });
   }
 
+  /** Process-exit global `del` / RC drop. Native does this in `dream_guest_entry`; wasm32 does not. */
+  __dropGlobals() {
+    const drop = this.exports.__dream_drop_globals;
+    if (typeof drop === "function") drop();
+  }
+
   /** Calls the exported `main`, if present. Async `main` returns a Future pointer. */
   run() {
     if (typeof this.exports.main !== "function") {
       throw new Error("module has no exported `main`");
     }
     const r = this.exports.main();
-    if (!r) return Promise.resolve();
-    const tag = this.i32(r - 8) & 0x3fffffff;
-    if (tag !== 0) return Promise.resolve(r);
-    return this.__awaitFuture(r);
+    const after = () => {
+      if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
+        this.exports.free(r);
+      }
+      this.__dropGlobals();
+    };
+    if (!r) {
+      after();
+      return Promise.resolve();
+    }
+    if (!this.__isFutureFrame(r)) {
+      after();
+      return Promise.resolve(r);
+    }
+    return this.__awaitFuture(r).then(() => {
+      after();
+    });
   }
 }

@@ -515,15 +515,15 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
         }),
     ));
     if cx.target.is_wasm32() {
-        // Worker bodies cross the string wire, so a tag-0 return can only be a lazy Future frame;
-        // launch it so the JS-side F_STATUS polling observes progress. Native returns can be
-        // untagged scalars, so the native path starts futures in `dream_worker_invoke` instead,
+        // Worker bodies cross the string wire. A `TAG_FUTURE` return is a lazy frame; launch it
+        // so JS `F_STATUS` polling observes progress. (Futures used to be tag 0.) Native
+        // scalars can also be untagged, so that path starts futures in `dream_worker_invoke`
         // where the async fn indices are known exactly.
         raw.stmt(Stmt::if_(
             Expr::bin(
                 crate::BinOp::Eq,
                 Expr::call("dream_object_tag", vec![Expr::id("__r")]),
-                Expr::i(0),
+                Expr::id("TAG_FUTURE"),
             ),
             Stmt::call("dream_start", vec![Expr::id("__r")]),
         ));
@@ -1430,7 +1430,11 @@ fn build_future_drop(
 
 fn emit_drop_globals(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let mut b = FuncBuilder::new(CTy::Void, "dream_drop_globals");
-    b.static_ = true;
+    if cx.target.is_wasm32() {
+        b.export = Some(crate::abi::EXPORT_DROP_GLOBALS.to_string());
+    } else {
+        b.static_ = true;
+    }
     for g in &cx.mir.globals {
         if g.id.0 == 0 {
             continue;

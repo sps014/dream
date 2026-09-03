@@ -69,7 +69,7 @@ parentPort.on('message', (m) => {
   chain = chain.then(async () => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
-      parentPort.postMessage({ t: 'ready' });
+      parentPort.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply) });
@@ -89,7 +89,7 @@ self.onmessage = (e) => {
   chain = chain.then(async () => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
-      self.postMessage({ t: 'ready' });
+      self.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply) });
@@ -126,6 +126,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       worker.on("message", (m) => {
         if (m.t === "ready") {
           state.ready = true;
+          state.stack = Number(m.stack ?? 0);
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
@@ -139,6 +140,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         const m = e.data;
         if (m.t === "ready") {
           state.ready = true;
+          state.stack = Number(m.stack ?? 0);
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
@@ -175,6 +177,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       ready: false,
       queued: [],
       blobUrl: null,
+      stack: 0,
     };
 
     const finishSpawn = (worker) => {
@@ -196,9 +199,6 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         const worker = new NodeWorker(workerBootSource(import.meta.url, { node: true }), {
           eval: true,
         });
-        // Allow the Node process to exit once Dream's async main has settled even if a worker
-        // handle is still referenced briefly during teardown.
-        if (typeof worker.unref === "function") worker.unref();
         finishSpawn(worker);
       };
       if (NodeWorkerCtor) {
@@ -265,6 +265,11 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         }
       } catch (_) {
         /* already gone */
+      }
+      const stack = s.stack;
+      if (stack && typeof getInstance === "function") {
+        const free = getInstance().exports && getInstance().exports.free;
+        if (typeof free === "function") free(stack);
       }
       if (s.blobUrl) {
         try {

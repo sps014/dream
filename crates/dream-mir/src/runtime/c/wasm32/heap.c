@@ -318,11 +318,17 @@ static void priv_class_push(int32_t idx, int32_t block) {
     dream_priv_fl_set(idx, block);
 }
 
-static dream_ptr finish_block(int32_t block, int32_t tag) {
+static dream_ptr finish_block_ex(int32_t block, int32_t tag, int32_t account) {
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
     i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
-    account_alloc();
+    if (account) {
+        account_alloc();
+    }
     return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+}
+
+static dream_ptr finish_block(int32_t block, int32_t tag) {
+    return finish_block_ex(block, tag, 1);
 }
 
 static void priv_refill(int32_t need) {
@@ -333,7 +339,7 @@ static void priv_refill(int32_t need) {
     dream_priv_cap_set(n);
 }
 
-static dream_ptr malloc_private(int32_t size, int32_t tag) {
+static dream_ptr malloc_private_ex(int32_t size, int32_t tag, int32_t account) {
     int32_t total;
     int32_t idx;
     int32_t block;
@@ -348,7 +354,7 @@ static dream_ptr malloc_private(int32_t size, int32_t tag) {
         if (block) {
             next = blk_next(block);
             dream_priv_fl_set(idx, next);
-            return finish_block(block, tag);
+            return finish_block_ex(block, tag, account);
         }
     }
     off = dream_priv_off_get();
@@ -361,7 +367,11 @@ static dream_ptr malloc_private(int32_t size, int32_t tag) {
     block = slab + off;
     dream_priv_off_set(off + total);
     i32_put(block, total);
-    return finish_block(block, tag);
+    return finish_block_ex(block, tag, account);
+}
+
+static dream_ptr malloc_private(int32_t size, int32_t tag) {
+    return malloc_private_ex(size, tag, 1);
 }
 
 static int32_t *region_mark_off(void) {
@@ -404,7 +414,9 @@ void dream_region_enter(void) {
         abort();
     }
     if (dream_region_marks_get() == 0) {
-        dream_region_marks_set((int32_t)malloc_private(REGION_MAX_DEPTH * 8, 0));
+        /* Native uses static mark arrays. Counting this private block as live would leave
+         * `live_objects` +1 after the region unwinds (the marks outlive the slab). */
+        dream_region_marks_set((int32_t)malloc_private_ex(REGION_MAX_DEPTH * 8, 0, 0));
     }
     if (depth == 0) {
         dream_region_slab_set((int32_t)malloc_private(REGION_PAYLOAD, 0));

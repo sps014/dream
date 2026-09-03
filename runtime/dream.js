@@ -25,6 +25,8 @@ const TAGS = {
   ULONG: 10,
   BYTE: 11,
   STRUCT_BASE: 12,
+  // `dream_new_future` — distinct from 0 (untagged C/weak). Mask TAG_SHARED before compare.
+  FUTURE: 256,
 };
 
 const HEAP_HEADER_SIZE = 12;
@@ -91,6 +93,7 @@ class DreamInstance {
     // captureless table indices, so index identity == function identity: returning the *same* JS
     // callable for the same funcref lets `addEventListener`/`removeEventListener` pair correctly.
     this._callbackWrappers = new Map();
+    this.workerStack = 0;
   }
 
   /**
@@ -410,29 +413,48 @@ class DreamInstance {
     return this.__awaitWorkerResult(r);
   }
 
+  /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
+  __valueTag(ptr) {
+    return this.i32(ptr - 8) & 0x3fffffff;
+  }
+
+  __isFutureFrame(ptr) {
+    return !!ptr && this.__valueTag(ptr) === TAGS.FUTURE;
+  }
+
+  __guestFree(ptr) {
+    if (!ptr || typeof this.exports.free !== "function") return;
+    this.exports.free(ptr);
+  }
+
   /**
-   * Interprets a `__dream_worker_invoke_raw` return value, mirroring the tag check the *native*
-   * `__dream_worker_invoke` trampoline does synchronously in WASM (`src/mir/emit/module.rs`): every
-   * heap allocation carries a tag except a `Future` frame (`dream_new_future` mallocs with tag `0`,
-   * a value no real Dream type uses), so an untagged, non-null `r` means the body was an `async
-   * fun` and `r` is its still-running task, not the reply yet.
+   * Interprets a `__dream_worker_invoke_raw` return value: a `TAG_FUTURE` frame means the body was
+   * `async fun` and `r` is still running. A string (or other tagged heap value) is the reply.
    *
    * Unlike native (where every host `async` op resolves synchronously before `call_indirect`
    * returns, so one `__dream_run_loop` pass always finishes the task), a real `extern async` host
    * call here only settles later via a Promise `.then()` callback (see `wrapAsyncImport`), which
    * itself re-pumps `__dream_run_loop`. So instead of draining once, poll the future's `F_STATUS`
-   * slot on the microtask queue until some pump marks it done, then unwrap `F_RESULT`.
+   * slot until some pump marks it done, then unwrap `F_RESULT`.
    */
   __awaitWorkerResult(r) {
     const F_RESULT = 8;
     if (!r) return Promise.resolve("");
-    const tag = this.i32(r - 8) & 0x3fffffff; // TAG_VALUE_MASK; Future frames are tag 0
-    if (tag !== 0) return Promise.resolve(this.readString(r));
-    return this.__awaitFuture(r).then(() => this.readString(this.i32(r + F_RESULT)));
+    if (!this.__isFutureFrame(r)) {
+      const text = this.readString(r);
+      this.__guestFree(r);
+      return Promise.resolve(text);
+    }
+    return this.__awaitFuture(r).then(() => {
+      const out = this.i32(r + F_RESULT);
+      const text = this.readString(out);
+      this.__guestFree(r);
+      return text;
+    });
   }
 
   /**
-   * Waits until a tag-0 Future frame is settled. `wrapAsyncImport` re-pumps `__dream_run_loop`
+   * Waits until a `TAG_FUTURE` frame is settled. `wrapAsyncImport` re-pumps `__dream_run_loop`
    * when the host Promise completes; this only observes `F_STATUS`.
    */
   __awaitFuture(r) {
@@ -453,16 +475,35 @@ class DreamInstance {
     });
   }
 
+  /** Process-exit global `del` / RC drop. Native does this in `dream_guest_entry`; wasm32 does not. */
+  __dropGlobals() {
+    const drop = this.exports.__dream_drop_globals;
+    if (typeof drop === "function") drop();
+  }
+
   /** Calls the exported `main`, if present. Async `main` returns a Future pointer. */
   run() {
     if (typeof this.exports.main !== "function") {
       throw new Error("module has no exported `main`");
     }
     const r = this.exports.main();
-    if (!r) return Promise.resolve();
-    const tag = this.i32(r - 8) & 0x3fffffff;
-    if (tag !== 0) return Promise.resolve(r);
-    return this.__awaitFuture(r);
+    const after = () => {
+      if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
+        this.exports.free(r);
+      }
+      this.__dropGlobals();
+    };
+    if (!r) {
+      after();
+      return Promise.resolve();
+    }
+    if (!this.__isFutureFrame(r)) {
+      after();
+      return Promise.resolve(r);
+    }
+    return this.__awaitFuture(r).then(() => {
+      after();
+    });
   }
 }
 
@@ -762,8 +803,25 @@ function formatDouble(v) {
   return String(Number(v.toPrecision(16)));
 }
 
+function nodeStdoutWrite(s) {
+  const fs = getNodeFs();
+  const fd =
+    typeof process !== "undefined" && process.stdout && typeof process.stdout.fd === "number"
+      ? process.stdout.fd
+      : 1;
+  if (fs && typeof fs.writeSync === "function") {
+    fs.writeSync(fd, s);
+    return;
+  }
+  if (typeof process !== "undefined" && process.stdout) {
+    process.stdout.write(s);
+    return;
+  }
+  console.log(s);
+}
+
 function defaultEnv(getInstance, options) {
-  const writeOut = options.stdout || ((s) => (typeof process !== "undefined" ? process.stdout.write(s) : console.log(s)));
+  const writeOut = options.stdout || nodeStdoutWrite;
   const writeLine = options.stdout
     ? (s) => options.stdout(s + "\n")
     : (s) => console.log(s);
@@ -4729,7 +4787,7 @@ parentPort.on('message', (m) => {
   chain = chain.then(async () => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
-      parentPort.postMessage({ t: 'ready' });
+      parentPort.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply) });
@@ -4749,7 +4807,7 @@ self.onmessage = (e) => {
   chain = chain.then(async () => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
-      self.postMessage({ t: 'ready' });
+      self.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply) });
@@ -4786,6 +4844,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       worker.on("message", (m) => {
         if (m.t === "ready") {
           state.ready = true;
+          state.stack = Number(m.stack ?? 0);
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
@@ -4799,6 +4858,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         const m = e.data;
         if (m.t === "ready") {
           state.ready = true;
+          state.stack = Number(m.stack ?? 0);
           for (const q of state.queued) state.worker.postMessage(q);
           state.queued = [];
         } else if (m.t === "reply") {
@@ -4835,6 +4895,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       ready: false,
       queued: [],
       blobUrl: null,
+      stack: 0,
     };
 
     const finishSpawn = (worker) => {
@@ -4856,9 +4917,6 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         const worker = new NodeWorker(workerBootSource(import.meta.url, { node: true }), {
           eval: true,
         });
-        // Allow the Node process to exit once Dream's async main has settled even if a worker
-        // handle is still referenced briefly during teardown.
-        if (typeof worker.unref === "function") worker.unref();
         finishSpawn(worker);
       };
       if (NodeWorkerCtor) {
@@ -4925,6 +4983,11 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         }
       } catch (_) {
         /* already gone */
+      }
+      const stack = s.stack;
+      if (stack && typeof getInstance === "function") {
+        const free = getInstance().exports && getInstance().exports.free;
+        if (typeof free === "function") free(stack);
       }
       if (s.blobUrl) {
         try {
@@ -5199,16 +5262,18 @@ async function load(source, options = {}) {
         };
   }
 
+  let workerStack = 0;
   const wasmInstance = await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
     if (stackGate || options.memory) {
-      attachGuestStack(inst);
+      workerStack = attachGuestStack(inst);
     } else if (typeof inst.exports.__runtime_init === "function") {
       inst.exports.__runtime_init();
     }
     return inst;
   });
   instance = new DreamInstance(wasmInstance);
+  instance.workerStack = workerStack;
   return instance;
 }
 
@@ -5252,7 +5317,7 @@ function attachGuestStack(wasmInstance) {
     if (typeof wasmInstance.exports.__runtime_init === "function") {
       wasmInstance.exports.__runtime_init();
     }
-    return;
+    return 0;
   }
   if (typeof wasmInstance.exports.__runtime_init === "function") {
     wasmInstance.exports.__runtime_init();
@@ -5266,6 +5331,7 @@ function attachGuestStack(wasmInstance) {
   if (tls) {
     tls.value = ptr;
   }
+  return ptr;
 }
 
 /**

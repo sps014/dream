@@ -13,6 +13,8 @@ export const TAGS = {
   ULONG: 10,
   BYTE: 11,
   STRUCT_BASE: 12,
+  // `dream_new_future` — distinct from 0 (untagged C/weak). Mask TAG_SHARED before compare.
+  FUTURE: 256,
 };
 
 export const HEAP_HEADER_SIZE = 12;

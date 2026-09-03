@@ -124,7 +124,8 @@ pub(crate) fn native_run_env_pairs(c_path: &str) -> Vec<(String, String)> {
         };
         let mut paths = dir.display().to_string();
         if let Ok(prev) = std::env::var(key) {
-            paths = format!("{paths}:{prev}");
+            let sep = if cfg!(target_os = "windows") { ';' } else { ':' };
+            paths = format!("{paths}{sep}{prev}");
         }
         out.push((key.to_string(), paths));
     }

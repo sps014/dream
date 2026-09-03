@@ -905,7 +905,11 @@ void processEnvSet(dream_ptr name, dream_ptr value) {
     char *key = dream_str_utf8(name);
     char *text = dream_str_utf8(value);
     if (key && text) {
+#ifdef _WIN32
+        _putenv_s(key, text);
+#else
         setenv(key, text, 1);
+#endif
     }
     free(key);
     free(text);

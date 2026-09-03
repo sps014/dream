@@ -4,7 +4,7 @@ import system.codegen;
 
 @generator
 @syntax_block("html")
-public fun broken(borrow ctx: GenContext): void {
+public fun broken(ctx: GenContext): void {
     let blocks = ctx.syntax_blocks("html");
     let i = 0;
     while i < blocks.length {

@@ -6,7 +6,7 @@ import system.codegen;
 // this body directly (it takes a single `GenContext`), so no sibling `harness.dream` is needed.
 @generator
 @syntax_block("quote")
-public fun quote(borrow ctx: GenContext): void {
+public fun quote(ctx: GenContext): void {
     let blocks = ctx.syntax_blocks("quote");
     let i = 0;
     while i < blocks.length {

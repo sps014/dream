@@ -5,11 +5,11 @@ use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
 use super::tokens::{
     apply_stmt_tokens, assigns_local, dest_holds_token, is_hidden_borrow_ty, is_owned_local,
     move_source, needs_rebind_temp, rc_op_on_local, release_and_null, sink_call_args,
-    source_line_end, take_arg_effects, take_owned_arg_locals, TokenAnalysis,
+    source_line_end, take_arg_effects, TokenAnalysis,
 };
 use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
-    container_store_src,
+    container_store_src, field_store_is_non_strong,
 };
 use crate::passes::cfg;
 use crate::passes::MirPass;
@@ -496,9 +496,10 @@ impl RcInsertion {
                 if !tokens.and_then(|row| row.get(i).copied()).unwrap_or(false) {
                     continue;
                 }
-                // Loop-carried liveness keeps a token on `name`/`body` after they were stored into
-                // a `GenSyntaxBlock`. Leftover last-ref then frees the field (`quote` harness).
-                if local_sunk_into_container(func, local) {
+                // Loop-carried liveness can keep a token on a local after a *strong* field/index
+                // store (`GenSyntaxBlock.body`). Skipping leftover then is correct. `unowned` /
+                // `weak` stores do not take the token — leftover must still run (`unowned_field_runtime`).
+                if local_sunk_into_container(func, layouts, local) {
                     continue;
                 }
                 // A Retain in this block is a second owner (Result.Ok payload, alias copy).
@@ -540,15 +541,15 @@ impl MirPass for RcInsertion {
     }
 }
 
-fn local_sunk_into_container(func: &MirFunction, local: u32) -> bool {
+fn local_sunk_into_container(
+    func: &MirFunction,
+    layouts: &dream_hir::LayoutTable,
+    local: u32,
+) -> bool {
     for block in &func.blocks {
         for stmt in &block.stmts {
-            if container_store_src(stmt) == Some(local) {
-                return true;
-            }
-            if take_owned_arg_locals(stmt, &|l| l == local)
-                .iter()
-                .any(|&l| l == local)
+            if container_store_src(stmt) == Some(local)
+                && !field_store_is_non_strong(func, layouts, stmt)
             {
                 return true;
             }

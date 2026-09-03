@@ -102,8 +102,10 @@ fn run_context_body(
         )));
     };
 
+    // Copy into `arg` so a sink `ctx: GenContext` last-use-moves that local, not `gen_ctx`.
+    // `finish()` must still own the snapshot after the generator returns (`borrow` or take).
     let harness_source = format!(
-        "import system;\nimport system.io;\nimport system.collections;\nimport system.json;\nimport system.codegen;\nimport {stem};\n\nasync fun main(): void {{\n    let args = System.args();\n    if (args.length < 1) {{\n        System.println(GenHost.err_marker());\n        System.println(\"missing snapshot path argument\");\n        return;\n    }}\n    let ctx_res = await GenContext.from_snapshot(args[0]);\n    switch (ctx_res) {{\n        Ok(gen_ctx) => {{\n            {func}(gen_ctx);\n            gen_ctx.finish();\n        }}\n        Err(e) => {{\n            System.println(GenHost.err_marker());\n            System.println(e);\n        }}\n    }}\n}}\n",
+        "import system;\nimport system.io;\nimport system.collections;\nimport system.json;\nimport system.codegen;\nimport {stem};\n\nasync fun main(): void {{\n    let args = System.args();\n    if (args.length < 1) {{\n        System.println(GenHost.err_marker());\n        System.println(\"missing snapshot path argument\");\n        return;\n    }}\n    let ctx_res = await GenContext.from_snapshot(args[0]);\n    switch (ctx_res) {{\n        Ok(gen_ctx) => {{\n            let arg = gen_ctx;\n            {func}(arg);\n            gen_ctx.finish();\n        }}\n        Err(e) => {{\n            System.println(GenHost.err_marker());\n            System.println(e);\n        }}\n    }}\n}}\n",
         stem = stem,
         func = gen.name,
     );

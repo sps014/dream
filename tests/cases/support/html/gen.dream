@@ -5,7 +5,7 @@ import parser;
 
 @generator
 @syntax_block("html")
-public fun html(borrow ctx: GenContext): void {
+public fun html(ctx: GenContext): void {
     let blocks = ctx.syntax_blocks("html");
     let i = 0;
     while i < blocks.length {

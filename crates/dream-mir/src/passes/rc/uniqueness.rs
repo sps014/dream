@@ -85,7 +85,11 @@ pub(crate) fn container_store_src(stmt: &Statement) -> Option<u32> {
     }
 }
 
-fn field_store_is_non_strong(func: &MirFunction, layouts: &LayoutTable, stmt: &Statement) -> bool {
+pub(crate) fn field_store_is_non_strong(
+    func: &MirFunction,
+    layouts: &LayoutTable,
+    stmt: &Statement,
+) -> bool {
     let Statement::Assign(Place::Field { base, field }, _) = stmt else {
         return false;
     };

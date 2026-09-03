@@ -7,7 +7,7 @@ public fun dto(): void {
 }
 
 @generator
-public fun dto_derive(borrow ctx: GenContext): void {
+public fun dto_derive(ctx: GenContext): void {
     let types = ctx.types_with("dto");
     let i = 0;
     while i < types.length {

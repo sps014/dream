@@ -198,6 +198,25 @@ fn libdream_dir() -> Option<PathBuf> {
 
 const DEBUG_CC_FLAGS: &[&str] = &["-g", "-O0", "-fno-omit-frame-pointer"];
 
+/// Zig 0.16 `windows-gnu` LTO pulls `zigc.lib` without MinGW CRT math/wchar
+/// symbols (`frexpf`, `wmemchr`, …). Keep `-O3`; drop LTO on that host only.
+fn host_cc_opt_flags(opt: OptLevel, debug: bool) -> Vec<&'static str> {
+    let flags: &[&str] = if debug {
+        DEBUG_CC_FLAGS
+    } else {
+        opt.cc_flags()
+    };
+    if cfg!(target_os = "windows") {
+        flags
+            .iter()
+            .copied()
+            .filter(|f| *f != "-flto" && *f != "-fno-semantic-interposition")
+            .collect()
+    } else {
+        flags.to_vec()
+    }
+}
+
 fn runtime_archive(
     opt: OptLevel,
     need: dream_mir::runtime::RuntimeNeed,
@@ -242,11 +261,7 @@ fn runtime_archive(
         return Ok(archive);
     }
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
-    if debug {
-        cflags.extend(DEBUG_CC_FLAGS);
-    } else {
-        cflags.extend(opt.cc_flags());
-    }
+    cflags.extend(host_cc_opt_flags(opt, debug));
     let toolchain = cc::resolve_cc()?;
     let mut objs = Vec::new();
     for (i, u) in units.iter().enumerate() {
@@ -312,14 +327,10 @@ pub fn compile_native_c(
         "-Wno-unused-parameter",
     ];
     let include = format!("-I{}", native_runtime_include_dir().display());
-    let opt_flags: &[&str] = if debug {
-        DEBUG_CC_FLAGS
-    } else {
-        opt.cc_flags()
-    };
+    let opt_flags = host_cc_opt_flags(opt, debug);
 
     let mut ccmd = toolchain.cc_command();
-    ccmd.args(opt_flags);
+    ccmd.args(&opt_flags);
     ccmd.args(warn);
     ccmd.arg(&include);
     if crate::driver::ui::color_enabled() {
@@ -330,7 +341,7 @@ pub fn compile_native_c(
     crate::driver::c_wasm32::run_captured(&mut ccmd, &format!("cc -c ({})", c_path.display()))?;
 
     let mut lcmd = toolchain.cc_command();
-    lcmd.args(opt_flags);
+    lcmd.args(&opt_flags);
     lcmd.args(warn);
     lcmd.arg(&obj);
     lcmd.arg(&rt);
@@ -372,4 +383,20 @@ fn native_bin_fresh(bin: &Path, c_path: &Path, rt: &Path) -> bool {
         return false;
     };
     mtime(c_path).is_some_and(|t| t <= bin_t) && mtime(rt).is_some_and(|t| t <= bin_t)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_release_drops_lto() {
+        let flags = host_cc_opt_flags(OptLevel::O3, false);
+        assert!(flags.contains(&"-O3"));
+        if cfg!(target_os = "windows") {
+            assert!(!flags.iter().any(|f| *f == "-flto"));
+        } else {
+            assert!(flags.contains(&"-flto"));
+        }
+    }
 }

@@ -77,6 +77,7 @@ impl OptLevel {
             Self::O2 => &["-O2"],
             // Hidden visibility + no semantic interposition let clang bind intra-module calls
             // directly (no PLT indirection) — the emitted module is self-contained by design.
+            // Native Windows skips `-flto` (Zig 0.16 windows-gnu LTO / zigc.lib CRT holes).
             Self::O3 | Self::O4 => &[
                 "-O3",
                 "-flto",

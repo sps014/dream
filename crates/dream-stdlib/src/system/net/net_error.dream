@@ -45,4 +45,9 @@ public class NetError : Error {
     public static fun unsupported(message: string): NetError {
         return NetError("EUNSUPPORTED", message);
     }
+
+    // Cooperative cancellation (`CancellationToken`).
+    public static fun cancelled(): NetError {
+        return NetError("ECANCELLED", "operation cancelled");
+    }
 }

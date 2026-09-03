@@ -29,4 +29,28 @@ shared public class CancellationToken {
         }
         return Result.Ok(true);
     }
+
+    // True when `token` is `Some` and already cancelled.
+    public static fun is_cancelled_opt(token: Option<CancellationToken>): bool {
+        return switch (token) {
+            Some(t) => t.is_cancelled(),
+            None => false,
+        };
+    }
+
+    // Panics when `token` is `Some` and already cancelled.
+    public static fun throw_if_opt(token: Option<CancellationToken>): void {
+        switch (token) {
+            Some(t) => { t.throw_if_cancelled(); },
+            None => { },
+        }
+    }
+
+    // `Err(err)` when `token` is cancelled; otherwise `Ok(true)`.
+    public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E> {
+        if CancellationToken.is_cancelled_opt(token) {
+            return Result.Err(err);
+        }
+        return Result.Ok(true);
+    }
 }

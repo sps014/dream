@@ -43,6 +43,11 @@ public class GpuError : Error {
         return GpuError("EIO", message);
     }
 
+    // Cooperative cancellation (`CancellationToken`).
+    public static fun cancelled(): GpuError {
+        return GpuError("ECANCELLED", "operation cancelled");
+    }
+
     // Maps a numeric host status code to a typed `GpuError`. When the host recorded a detail string
     // (pipeline compile failure, missing bind, wgpu validation, …), it is appended after `detail`.
     public static fun from_code(code: int, detail: string): GpuError {

@@ -39,4 +39,9 @@ public class ProcessError : Error {
     public static fun failed(message: string): ProcessError {
         return ProcessError("EEXIT", message);
     }
+
+    // Cooperative cancellation (`CancellationToken`).
+    public static fun cancelled(): ProcessError {
+        return ProcessError("ECANCELLED", "operation cancelled");
+    }
 }

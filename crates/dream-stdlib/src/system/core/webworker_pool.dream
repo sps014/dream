@@ -14,17 +14,20 @@ public class WebWorkerPool {
     }
 
     // Run `body` on the next pool member. Capture rules match `WebWorker.spawn`.
-    public async fun dispatch<TOut : shared>(body: fun(): TOut): TOut {
+    public async fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut {
+        CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
         let id = this.ids[this.next];
         this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker.funcidx(wrapped);
         let env = WebWorker.env(wrapped);
         let wire = await WebWorkerPool.dispatch_host(id, funcidx, env, "");
+        CancellationToken.throw_if_opt(token);
         return Bytes.fromWire<TOut>(wire);
     }
 
-    public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>): TOut {
+    public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut {
+        CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
             return Bytes.toWire<TOut>(await body());
         };
@@ -33,6 +36,7 @@ public class WebWorkerPool {
         let funcidx = WebWorker.funcidx_async(wrapped);
         let env = WebWorker.env_async(wrapped);
         let wire = await WebWorkerPool.dispatch_host(id, funcidx, env, "");
+        CancellationToken.throw_if_opt(token);
         return Bytes.fromWire<TOut>(wire);
     }
 

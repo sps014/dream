@@ -43,4 +43,9 @@ public class IoError : Error {
     public static fun exists(path: string): IoError {
         return IoError(path, "EEXIST", "already exists: " + path);
     }
+
+    // Cooperative cancellation (`CancellationToken`).
+    public static fun cancelled(): IoError {
+        return IoError("", "ECANCELLED", "operation cancelled");
+    }
 }

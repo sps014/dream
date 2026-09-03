@@ -51,7 +51,8 @@ public class GpuSurface {
 
     // Presents the current backbuffer to the canvas / native window.
     @web @native
-    public async fun present(): Result<bool, GpuError> {
+    public async fun present(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.surface_present(this.id);
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "surface present failed"));

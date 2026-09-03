@@ -4,10 +4,12 @@ module system.webapi;
 public class RequestContext {
     public incoming: HttpIncoming;
     public state: Map<string, string>;
+    public cancellation_token: Option<CancellationToken>;
 
     public constructor(incoming: HttpIncoming) {
         this.incoming = incoming;
         this.state = Map<string, string>();
+        this.cancellation_token = Option.None;
     }
 
     public fun set(key: string, value: string): void {

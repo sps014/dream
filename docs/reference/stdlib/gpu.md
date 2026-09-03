@@ -28,7 +28,7 @@ async fun main(): void {
 | `await Gpu.frame()` | wait a display frame |
 | `await Gpu.timestamp()` | GPU timestamp |
 
-`GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter.
+`GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter. Async GPU methods take an optional last `token`; cancelled `Result` calls return `GpuError` `ECANCELLED`.
 
 ## Buffers
 

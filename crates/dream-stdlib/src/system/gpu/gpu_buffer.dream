@@ -94,13 +94,15 @@ public struct GpuBuffer<T : unmanaged> {
     }
 
     // Reads the entire buffer back to a CPU array.
-    public async fun read(): T[] {
+    public async fun read(token: Option<CancellationToken> = Option.None): T[] {
+        CancellationToken.throw_if_opt(token);
         let bytes = await Gpu.buffer_read_bytes(this._id, this._length * this._stride);
         return GpuBuffer<T>.decode(bytes, this._length, this._stride);
     }
 
     // Reads `count` elements starting at element `offset`.
-    public async fun read_at(offset: int, count: int): T[] {
+    public async fun read_at(offset: int, count: int, token: Option<CancellationToken> = Option.None): T[] {
+        CancellationToken.throw_if_opt(token);
         if offset < 0 || count < 0 || offset + count > this._length {
             return Buffer.alloc<T>(0);
         }

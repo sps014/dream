@@ -6,9 +6,10 @@ public static class Compute {
     public static async fun run_1d(
         kernel: string,
         buffers: GpuBuffer<float>[],
-        n: int
+        n: int,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0));
+        return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0), token);
     }
 
     // Dispatches `kernel` over a 2D grid of size `w`×`h` (float storage buffers only).
@@ -16,9 +17,10 @@ public static class Compute {
         kernel: string,
         buffers: GpuBuffer<float>[],
         w: int,
-        h: int
+        h: int,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, w, h, 1, Buffer.alloc<byte>(0));
+        return await Compute.run_3d(kernel, buffers, w, h, 1, Buffer.alloc<byte>(0), token);
     }
 
     // Like `run_2d`, with a little-endian uniform blob.
@@ -27,9 +29,10 @@ public static class Compute {
         buffers: GpuBuffer<float>[],
         w: int,
         h: int,
-        uniforms: byte[]
+        uniforms: byte[],
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms);
+        return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms, token);
     }
 
     // Dispatches `kernel` over a 3D grid with optional uniforms (float storage buffers only).
@@ -39,8 +42,10 @@ public static class Compute {
         sx: int,
         sy: int,
         sz: int,
-        uniforms: byte[]
+        uniforms: byte[],
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let ids = Buffer.alloc<int>(buffers.length);
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
@@ -66,7 +71,8 @@ public static class Compute {
         sx: int,
         sy: int,
         sz: int,
-        uniforms: byte[]
+        uniforms: byte[],
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         return await Compute.run_resources(
             kernel,
@@ -76,7 +82,8 @@ public static class Compute {
             sx,
             sy,
             sz,
-            uniforms
+            uniforms,
+            token
         );
     }
 
@@ -89,8 +96,10 @@ public static class Compute {
         sx: int,
         sy: int,
         sz: int,
-        uniforms: byte[]
+        uniforms: byte[],
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.dispatch(
             kernel,
             buffer_ids,
@@ -109,8 +118,10 @@ public static class Compute {
     public static async fun dispatch_indirect(
         kernel: string,
         buffers: GpuBuffer<float>[],
-        args: GpuBuffer<int>
+        args: GpuBuffer<int>,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let ids = Buffer.alloc<int>(buffers.length);
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
@@ -131,8 +142,10 @@ public static class Compute {
     public static async fun dispatch_indirect_bind(
         kernel: string,
         resources: GpuBindList,
-        args: GpuBuffer<int>
+        args: GpuBuffer<int>,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.dispatch_indirect(
             kernel,
             resources.buffer_ids(),
@@ -151,8 +164,10 @@ public static class Compute {
         buffers: GpuBuffer<float>[],
         wx: int,
         wy: int,
-        wz: int
+        wz: int,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let ids = Buffer.alloc<int>(buffers.length);
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;

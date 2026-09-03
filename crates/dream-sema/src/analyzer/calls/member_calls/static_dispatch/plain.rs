@@ -202,19 +202,37 @@ impl<'a> Analyzer<'a> {
         }
 
         let expected_params = store_sig.parameters.clone();
-        if expected_params.len() != arg_types.len() {
-            diagnostics.report_error(
+        let total = expected_params.len();
+        let required = Self::required_arg_count(&store_sig.defaults, total);
+        let given = arg_types.len();
+        if given < required || given > total {
+            let message = if required == total {
                 format!(
                     "static method {} expects {} parameters, got {}",
-                    base,
-                    expected_params.len(),
-                    arg_types.len()
-                ),
-                Some(method.position),
-            );
+                    base, total, given
+                )
+            } else {
+                format!(
+                    "static method {} expects between {} and {} parameters, got {}",
+                    base, required, total, given
+                )
+            };
+            diagnostics.report_error(message, Some(method.position));
             self.hir_none();
             return Ok(Type::Unknown);
         }
+
+        let ctx_parent = parent_function;
+        let ctx_symbols = symbol_table;
+        self.substitute_default_args(
+            (&store_sig.defaults, &store_sig.parameter_types),
+            &mut arg_types,
+            &mut arg_hirs,
+            ctx_parent,
+            ctx_symbols,
+            diagnostics,
+        )?;
+
         for (i, given_type) in arg_types.iter().enumerate() {
             let expected = &expected_params[i];
             if expected == "object" || is_unknown_type_name(given_type) {

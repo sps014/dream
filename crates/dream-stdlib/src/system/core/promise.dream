@@ -2,17 +2,32 @@ module system.core;
 
 // Promise utilities for async tasks.
 public static class Promise {
-    // Waits for all promises in the array to resolve.
     @intrinsic("promise_all")
-    static extern async fun all<T>(borrow promises: T[]): T[];
-    
-    // Waits for any promise in the array to resolve.
+    static extern async fun all_host<T>(borrow promises: T[]): T[];
+
     @intrinsic("promise_any")
-    static extern async fun any<T>(borrow promises: T[]): T;
-    
-    // Returns the first promise to resolve or reject.
+    static extern async fun any_host<T>(borrow promises: T[]): T;
+
     @intrinsic("promise_race")
-    static extern async fun race<T>(borrow promises: T[]): T;
+    static extern async fun race_host<T>(borrow promises: T[]): T;
+
+    // Waits for all promises in the array to resolve.
+    public static async fun all<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T[] {
+        CancellationToken.throw_if_opt(token);
+        return await Promise.all_host(promises);
+    }
+
+    // Waits for any promise in the array to resolve.
+    public static async fun any<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T {
+        CancellationToken.throw_if_opt(token);
+        return await Promise.any_host(promises);
+    }
+
+    // Returns the first promise to resolve or reject.
+    public static async fun race<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T {
+        CancellationToken.throw_if_opt(token);
+        return await Promise.race_host(promises);
+    }
 
     // Cancels a future (marks it cancelled and unlinks pending timers). Best-effort for
     // in-flight native host HTTP; cooperative `CancellationToken` is preferred for app logic.
@@ -22,8 +37,7 @@ public static class Promise {
 
     // Explicitly launches a lazy future without awaiting it (fire-and-forget). Futures only run
     // when awaited, passed to `all`/`any`/`race`, or started here; a never-started future never
-    // executes. The scheduler retains the future until it settles, so the caller need not keep a
-    // local. Takes the future as `object` (futures are heap refs) like `cancel`.
+    // executes. Takes the future as `object` (futures are heap refs) like `cancel`.
     @intrinsic("dream_start")
     static extern fun start(borrow future: object): void;
 }

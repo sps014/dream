@@ -4,7 +4,8 @@ module system.gpu;
 public class GpuRenderPass {
     // Blits `source` onto `surface` (fullscreen textured triangle).
     @web @native
-    public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
+    public static async fun blit(surface: GpuSurface, source: GpuTexture, token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.render_blit(surface.id, source.id);
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "blit failed"));
@@ -16,7 +17,8 @@ public class GpuRenderPass {
         surface: GpuSurface,
         pipeline: GpuRenderPipeline,
         vertices: GpuBuffer<T>,
-        vertex_count: int
+        vertex_count: int,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         return await GpuRenderPass.draw_ex(
             surface,
@@ -24,7 +26,8 @@ public class GpuRenderPass {
             vertices,
             vertex_count,
             Buffer.alloc<byte>(0),
-            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+            token
         );
     }
 
@@ -36,7 +39,8 @@ public class GpuRenderPass {
         vertices: GpuBuffer<T>,
         vertex_count: int,
         uniforms: byte[],
-        clear: GpuVec4
+        clear: GpuVec4,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_depth: Option<GpuTexture> = Option.None;
         return await GpuRenderPass.draw_instanced(
@@ -48,7 +52,8 @@ public class GpuRenderPass {
             uniforms,
             clear,
             no_depth,
-            GpuLoadOp.Clear
+            GpuLoadOp.Clear,
+            token
         );
     }
 
@@ -63,8 +68,10 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4,
         depth: Option<GpuTexture>,
-        load_op: GpuLoadOp
+        load_op: GpuLoadOp,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let depth_id = switch (depth) {
             Some(t) => t.id,
             None => -1,
@@ -95,7 +102,8 @@ public class GpuRenderPass {
         pipeline: GpuRenderPipeline,
         vertices: GpuBuffer<T>,
         indices: GpuBuffer<int>,
-        index_count: int
+        index_count: int,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         return await GpuRenderPass.draw_indexed_ex(
             surface,
@@ -104,7 +112,8 @@ public class GpuRenderPass {
             indices,
             index_count,
             Buffer.alloc<byte>(0),
-            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+            token
         );
     }
 
@@ -117,7 +126,8 @@ public class GpuRenderPass {
         indices: GpuBuffer<int>,
         index_count: int,
         uniforms: byte[],
-        clear: GpuVec4
+        clear: GpuVec4,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_depth: Option<GpuTexture> = Option.None;
         return await GpuRenderPass.draw_indexed_instanced(
@@ -130,7 +140,8 @@ public class GpuRenderPass {
             uniforms,
             clear,
             no_depth,
-            GpuLoadOp.Clear
+            GpuLoadOp.Clear,
+            token
         );
     }
 
@@ -146,8 +157,10 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4,
         depth: Option<GpuTexture>,
-        load_op: GpuLoadOp
+        load_op: GpuLoadOp,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let depth_id = switch (depth) {
             Some(t) => t.id,
             None => -1,
@@ -183,8 +196,10 @@ public class GpuRenderPass {
         instance_count: int,
         uniforms: byte[],
         clear: GpuVec4,
-        load_op: GpuLoadOp
+        load_op: GpuLoadOp,
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let depth_id = switch (depth) {
             Some(t) => t.id,
             None => -1,

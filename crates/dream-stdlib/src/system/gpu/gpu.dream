@@ -28,19 +28,22 @@ public static class Gpu {
     }
 
     // Initializes the GPU device; returns `Err` with a host error code on failure.
-    public static async fun try_init(): Result<bool, GpuError> {
+    public static async fun try_init(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.try_init_host();
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "Gpu.try_init failed"));
     }
 
     // Yields until the next presentation/frame tick.
-    public static async fun frame(): void {
+    public static async fun frame(token: Option<CancellationToken> = Option.None): void {
+        CancellationToken.throw_if_opt(token);
         await Gpu.frame_host();
     }
 
     // High-resolution GPU timestamp in nanoseconds (host-defined epoch).
-    public static async fun timestamp(): long {
+    public static async fun timestamp(token: Option<CancellationToken> = Option.None): long {
+        CancellationToken.throw_if_opt(token);
         return await Gpu.timestamp_host();
     }
 

@@ -36,4 +36,4 @@ Named zones for “what time is it in Tokyo” independent of the machine’s lo
 
 ## `Time` / `Stopwatch`
 
-`await Time.sleep(ms)` / `delay(ms)` (async). `Time.nano_time()` for a monotonic clock. `Stopwatch` records elapsed time. Also listed under [Built-ins](builtins.md).
+`await Time.sleep(ms)` / `delay(ms)` (async, optional last `CancellationToken`). `Time.nano_time()` for a monotonic clock. `Stopwatch` records elapsed time. Also listed under [Built-ins](builtins.md).

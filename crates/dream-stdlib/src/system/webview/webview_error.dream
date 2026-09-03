@@ -33,4 +33,9 @@ public class WebViewError : Error {
     public static fun parse(message: string): WebViewError {
         return WebViewError("EPARSE", message);
     }
+
+    // Cooperative cancellation (`CancellationToken`).
+    public static fun cancelled(): WebViewError {
+        return WebViewError("ECANCELLED", "operation cancelled");
+    }
 }

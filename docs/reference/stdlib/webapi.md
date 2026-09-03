@@ -19,7 +19,7 @@ async fun main(): void {
 }
 ```
 
-`WebApp.listen` binds (port `0` is ephemeral) and starts the accept loop in the background, returning the bound port. `WebApp.run` is listen + wait until `shutdown`. OpenAPI (`/openapi.json`), Swagger UI (`/docs`), and ReDoc (`/redoc`) are on by default; set `docs_url` / `openapi_url` / `redoc_url` to `""` on `WebAppOptions` to disable.
+`WebApp.listen` binds (port `0` is ephemeral) and starts the accept loop in the background, returning the bound port. `WebApp.run` is listen + wait until `shutdown`. Pass `token: Some(tok)` to `listen` / `run` / `wait` to shut the listener down when the token is cancelled (`RequestContext.cancellation_token` exposes the same token to handlers). OpenAPI (`/openapi.json`), Swagger UI (`/docs`), and ReDoc (`/redoc`) are on by default; set `docs_url` / `openapi_url` / `redoc_url` to `""` on `WebAppOptions` to disable.
 
 Optional in-process TLS: set both `tls_cert_path` and `tls_key_path` on `WebAppOptions` (PEM files read by the host). Leave them empty to stay on cleartext HTTP, or terminate TLS at a proxy.
 
@@ -61,8 +61,8 @@ Stdlib auth helpers: `BearerToken`, `ApiKeyHeader`, `BasicAuth` — pass them to
 
 ## Streaming and WebSocket
 
-Return `EventStream` from a `@get` handler and `await stream.send(event, data)` for SSE (`text/event-stream`).
+Return `EventStream` from a `@get` handler and `await stream.send(event, data)` for SSE (`text/event-stream`). A cancelled token (argument or the server token) makes `send` return without writing.
 
-`@websocket("/ws") async fun echo(ws: ServerWebSocket): void` upgrades after middleware (CORS/auth can still reject the handshake). Frame types are `system.net` `WebSocketMessage`; the client is `WebSocket.connect("ws://...")`.
+`@websocket("/ws") async fun echo(ws: ServerWebSocket): void` upgrades after middleware (CORS/auth can still reject the handshake). Frame types are `system.net` `WebSocketMessage`; the client is `WebSocket.connect("ws://...")`. `send_text` / `send_binary` / `receive` take an optional token and return `NetError.cancelled()` when it has fired.
 
 Pair with [JSON](json.md) and the [HTTP client](http.md). Sample: `sample/webapi/app.dream`.

@@ -464,6 +464,10 @@ impl<'a> Analyzer<'a> {
         if !expected_is_take.is_empty() {
             expected_is_take.remove(0);
         }
+        let mut expected_param_tys = store_sig.parameter_types.clone();
+        if !expected_param_tys.is_empty() {
+            expected_param_tys.remove(0);
+        }
         self.validate_ref_arguments(
             &format!("method '{}'", method.text),
             &expected_is_ref,
@@ -494,7 +498,7 @@ impl<'a> Analyzer<'a> {
 
         // Fill omitted trailing arguments with their default values before type-checking/emit.
         self.substitute_default_args(
-            &expected_defaults,
+            (&expected_defaults, &expected_param_tys),
             &mut arg_types,
             &mut arg_hirs,
             ctx.parent_function,
@@ -655,6 +659,10 @@ impl<'a> Analyzer<'a> {
         if !expected_is_ref.is_empty() {
             expected_is_ref.remove(0);
         }
+        let mut expected_param_tys = store_sig.parameter_types.clone();
+        if !expected_param_tys.is_empty() {
+            expected_param_tys.remove(0);
+        }
 
         self.pack_variadic_analyzed_args(
             &store_sig,
@@ -693,7 +701,7 @@ impl<'a> Analyzer<'a> {
         }
 
         self.substitute_default_args(
-            &expected_defaults,
+            (&expected_defaults, &expected_param_tys),
             &mut arg_types,
             &mut arg_hirs,
             ctx.parent_function,

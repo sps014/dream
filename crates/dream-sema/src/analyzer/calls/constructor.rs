@@ -124,13 +124,18 @@ impl<'a> Analyzer<'a> {
         // arity/type re-check below (its own error was already reported).
         let overload_resolution_failed =
             resolved_ctor.is_none() && self.function_table.is_overloaded(&init_name);
-        let (expected, expected_defaults): (Vec<String>, Vec<Option<Type>>) = match &resolved_ctor {
+        let (expected, expected_defaults, expected_param_tys): (
+            Vec<String>,
+            Vec<Option<Type>>,
+            Vec<Type>,
+        ) = match &resolved_ctor {
             // `constructor` is registered as a method, so parameter 0 is the implicit `this`.
             Some(sig) => (
                 sig.parameters.iter().skip(1).cloned().collect(),
                 sig.defaults.iter().skip(1).cloned().collect(),
+                sig.parameter_types.iter().skip(1).cloned().collect(),
             ),
-            None => (Vec::new(), Vec::new()),
+            None => (Vec::new(), Vec::new(), Vec::new()),
         };
 
         if !overload_resolution_failed {
@@ -154,7 +159,7 @@ impl<'a> Analyzer<'a> {
                 // Fill omitted trailing arguments with their defaults (extends both the type list and
                 // the emitted argument HIR so the generated `New` receives the complete argument set).
                 self.substitute_default_args(
-                    &expected_defaults,
+                    (&expected_defaults, &expected_param_tys),
                     params_types,
                     arg_hirs,
                     parent_function,

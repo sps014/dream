@@ -43,7 +43,8 @@ public class ChildProcess {
     }
 
     @native @node
-    async fun read_line(stream: int): Option<string> {
+    async fun read_line(stream: int, token: Option<CancellationToken> = Option.None): Option<string> {
+        CancellationToken.throw_if_opt(token);
         let raw = await ChildProcess.host_read_stream_line(this._handle, stream);
         if raw.length == 0 {
             return Option.None;
@@ -69,44 +70,47 @@ public class ChildProcess {
     // Reads up to `max_bytes` currently buffered from stdout, blocking until at least one byte
     // has arrived or the stream has reached end-of-file (in which case the result is empty).
     @native @node
-    public async fun read_stdout(max_bytes: int): byte[] {
+    public async fun read_stdout(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[] {
+        CancellationToken.throw_if_opt(token);
         let raw = await ChildProcess.host_read_stream(this._handle, 0, max_bytes);
         return ChildProcess.slice_to_bytes(raw, 0);
     }
 
     @native @node
-    public async fun read_stdout_all(): byte[] {
-        return await this.read_stream_all(0);
+    public async fun read_stdout_all(token: Option<CancellationToken> = Option.None): byte[] {
+        return await this.read_stream_all(0, token);
     }
 
     // Reads one line from stdout (without the trailing newline), or `None` at end-of-file.
     @native @node
-    public async fun read_stdout_line(): Option<string> {
-        return await this.read_line(0);
+    public async fun read_stdout_line(token: Option<CancellationToken> = Option.None): Option<string> {
+        return await this.read_line(0, token);
     }
 
     // Reads up to `max_bytes` currently buffered from stderr.
     @native @node
-    public async fun read_stderr(max_bytes: int): byte[] {
+    public async fun read_stderr(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[] {
+        CancellationToken.throw_if_opt(token);
         let raw = await ChildProcess.host_read_stream(this._handle, 1, max_bytes);
         return ChildProcess.slice_to_bytes(raw, 0);
     }
 
     @native @node
-    public async fun read_stderr_all(): byte[] {
-        return await this.read_stream_all(1);
+    public async fun read_stderr_all(token: Option<CancellationToken> = Option.None): byte[] {
+        return await this.read_stream_all(1, token);
     }
 
     // Reads one line from stderr (without the trailing newline), or `None` at end-of-file.
     @native @node
-    public async fun read_stderr_line(): Option<string> {
-        return await this.read_line(1);
+    public async fun read_stderr_line(token: Option<CancellationToken> = Option.None): Option<string> {
+        return await this.read_line(1, token);
     }
 
     // Waits for the process to exit, returning its exit code (or a negative sentinel: `-1` if it
     // could not be waited on, `-2` if it was terminated by a signal with no exit code).
     @native @node
-    public async fun wait(): int {
+    public async fun wait(token: Option<CancellationToken> = Option.None): int {
+        CancellationToken.throw_if_opt(token);
         let raw = await ChildProcess.host_wait(this._handle);
         return int.parse(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 0))).unwrap_or(0 - 1);
     }
@@ -119,10 +123,11 @@ public class ChildProcess {
     }
 
     @native @node
-    async fun read_stream_all(stream: int): byte[] {
+    async fun read_stream_all(stream: int, token: Option<CancellationToken> = Option.None): byte[] {
         let acc = Buffer.alloc<byte>(0);
         let n = 0;
         while true {
+            CancellationToken.throw_if_opt(token);
             let raw = await ChildProcess.host_read_stream(this._handle, stream, 65536);
             let chunk = ChildProcess.slice_to_bytes(raw, 0);
             if chunk.length == 0 {

@@ -1,0 +1,30 @@
+import system;
+import system.io;
+import system.net;
+import system.webapi;
+
+async fun main(): void {
+    let src = CancellationSource();
+    src.cancel();
+    let tok = src.token();
+    let opt = Option.Some(tok);
+
+    switch (await File.read("missing.txt", opt)) {
+        Ok(t) => System.println(t),
+        Err(e) => System.println(e.code()),
+    }
+
+    switch (await HttpClient().get("http://127.0.0.1:1/", opt)) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.code()),
+    }
+
+    let client = HttpClient().with_cancellation(tok);
+    switch (await client.get("http://127.0.0.1:1/")) {
+        Ok(r) => System.println(r.status()),
+        Err(e) => System.println(e.code()),
+    }
+
+    let port = await WebApp.listen("127.0.0.1", 0, opt);
+    System.println(port);
+}

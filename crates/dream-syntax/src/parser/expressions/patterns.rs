@@ -182,11 +182,24 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    /// Parses a literal used as a pattern (`0`, `-5`, `3.14`, `"s"`, `'c'`, `true`). Also
-    /// reused to parse constant-literal default parameter values.
+    /// Parses a literal used as a pattern (`0`, `-5`, `3.14`, `"s"`, `'c'`, `true`, `Option.None`).
+    /// Also reused to parse constant default parameter values.
     pub(crate) fn parse_literal_pattern(&mut self) -> Result<Type, Error> {
         let cur = self.current_token();
         match cur.kind {
+            TokenKind::IdentifierToken => {
+                let first = self.match_token(TokenKind::IdentifierToken);
+                if self.current_token().kind != TokenKind::DotToken {
+                    self.diagnostics.report_error(
+                        format!("Expected a pattern but found {}", first.kind.friendly_name()),
+                        Some(first.position),
+                    );
+                    return Ok(Type::Unknown);
+                }
+                self.match_token(TokenKind::DotToken);
+                let second = self.match_token(TokenKind::IdentifierToken);
+                Ok(Type::Struct(first, Some(vec![Type::Struct(second, None)])))
+            }
             TokenKind::BooleanToken => Ok(Type::Boolean(self.match_token(TokenKind::BooleanToken))),
             TokenKind::StringToken => Ok(Type::String(self.match_token(TokenKind::StringToken))),
             TokenKind::CharToken => {

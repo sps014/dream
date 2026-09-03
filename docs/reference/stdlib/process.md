@@ -29,4 +29,4 @@ async fun main(): void {
 
 `ChildProcess`: `write_stdin` / `write_stdin_text`, `read_stdout` / `read_stderr` (bytes, a line, or `*_all`), `wait()`, `kill()`.
 
-Failures are `ProcessError` (`message()` / `code()`).
+Failures are `ProcessError` (`message()` / `code()`, including `ECANCELLED` when a `token` argument is already cancelled). Async methods take an optional last `CancellationToken`.

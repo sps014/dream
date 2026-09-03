@@ -113,7 +113,7 @@ public class HttpClient {
         return merged.to_wire();
     }
 
-    fun wrap_stream(raw: char[]): Result<HttpStreamResponse, HttpError> {
+    fun wrap_stream(raw: char[], token: Option<CancellationToken>): Result<HttpStreamResponse, HttpError> {
         let head = HttpResponse(raw);
         if head.status() == 0 {
             return Result.Err(HttpError.transport(head.text()));
@@ -126,7 +126,18 @@ public class HttpClient {
         if handle < 0 {
             return Result.Err(HttpError.transport("invalid stream handle"));
         }
-        return Result.Ok(HttpStreamResponse(head, handle, this.cancel_token));
+        return Result.Ok(HttpStreamResponse(head, handle, token));
+    }
+
+    fun effective_token(call: Option<CancellationToken>): Option<CancellationToken> {
+        if call.is_some() {
+            return call;
+        }
+        return this.cancel_token;
+    }
+
+    fun check_cancel(call: Option<CancellationToken>): Result<bool, HttpError> {
+        return CancellationToken.rejected(this.effective_token(call), HttpError.cancelled());
     }
 
     fun wrap(raw: char[]): Result<HttpResponse, HttpError> {
@@ -142,30 +153,23 @@ public class HttpClient {
     }
 
     // Performs a request with a text body.
-    public async fun request(method: string, path: string, body: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        switch (this.cancel_token) {
-            Some(tok) => {
-                if tok.is_cancelled() {
-                    return Result.Err(HttpError.transport("cancelled"));
-                }
-            },
-            None => { },
-        }
+    public async fun request(method: string, path: string, body: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        this.check_cancel(token)?;
         let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
         return this.wrap(raw);
     }
 
     // Performs a GET request.
-    public async fun get(path: string): Result<HttpResponse, HttpError> {
-        return await this.request("GET", path, "", HttpHeaders());
+    public async fun get(path: string, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("GET", path, "", HttpHeaders(), token);
     }
 
-    public async fun get_with(path: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        return await this.request("GET", path, "", headers);
+    public async fun get_with(path: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("GET", path, "", headers, token);
     }
 
-    public async fun get_json(path: string): Result<JsonValue, HttpError> {
-        let res = await this.get(path);
+    public async fun get_json(path: string, token: Option<CancellationToken> = Option.None): Result<JsonValue, HttpError> {
+        let res = await this.get(path, token);
         if res.is_err() {
             return Result.Err(res.unwrap_err());
         }
@@ -176,10 +180,10 @@ public class HttpClient {
         return Result.Ok(body.unwrap_or(JsonValue.none()));
     }
 
-    public async fun post_json(path: string, body: JsonValue): Result<HttpResponse, HttpError> {
+    public async fun post_json(path: string, body: JsonValue, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/json");
-        return await this.request("POST", path, Json.stringify(body), headers);
+        return await this.request("POST", path, Json.stringify(body), headers, token);
     }
 
     // Encodes a `Map` as an `application/x-www-form-urlencoded` body
@@ -200,143 +204,124 @@ public class HttpClient {
     }
 
     // POSTs `form` percent-encoded with `Content-Type: application/x-www-form-urlencoded`.
-    public async fun post_form(path: string, form: Map<string, string>): Result<HttpResponse, HttpError> {
+    public async fun post_form(path: string, form: Map<string, string>, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/x-www-form-urlencoded");
-        return await this.request("POST", path, this.encode_form(form), headers);
+        return await this.request("POST", path, this.encode_form(form), headers, token);
     }
 
     // Performs a POST request.
-    public async fun post(path: string, body: string): Result<HttpResponse, HttpError> {
-        return await this.request("POST", path, body, HttpHeaders());
+    public async fun post(path: string, body: string, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("POST", path, body, HttpHeaders(), token);
     }
 
-    public async fun post_with(path: string, body: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        return await this.request("POST", path, body, headers);
+    public async fun post_with(path: string, body: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("POST", path, body, headers, token);
     }
 
     // Performs a PUT request.
-    public async fun put(path: string, body: string): Result<HttpResponse, HttpError> {
-        return await this.request("PUT", path, body, HttpHeaders());
+    public async fun put(path: string, body: string, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("PUT", path, body, HttpHeaders(), token);
     }
 
-    public async fun put_with(path: string, body: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        return await this.request("PUT", path, body, headers);
+    public async fun put_with(path: string, body: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("PUT", path, body, headers, token);
     }
 
     // PUTs a JSON body with `Content-Type: application/json`.
-    public async fun put_json(path: string, body: JsonValue): Result<HttpResponse, HttpError> {
+    public async fun put_json(path: string, body: JsonValue, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/json");
-        return await this.request("PUT", path, Json.stringify(body), headers);
+        return await this.request("PUT", path, Json.stringify(body), headers, token);
     }
 
     // Performs a PATCH request.
-    public async fun patch(path: string, body: string): Result<HttpResponse, HttpError> {
-        return await this.request("PATCH", path, body, HttpHeaders());
+    public async fun patch(path: string, body: string, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("PATCH", path, body, HttpHeaders(), token);
     }
 
-    public async fun patch_with(path: string, body: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        return await this.request("PATCH", path, body, headers);
+    public async fun patch_with(path: string, body: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("PATCH", path, body, headers, token);
     }
 
     // PATCHes with a JSON body and `Content-Type: application/json`.
-    public async fun patch_json(path: string, body: JsonValue): Result<HttpResponse, HttpError> {
+    public async fun patch_json(path: string, body: JsonValue, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/json");
-        return await this.request("PATCH", path, Json.stringify(body), headers);
+        return await this.request("PATCH", path, Json.stringify(body), headers, token);
     }
 
     // Performs a DELETE request.
-    public async fun delete(path: string): Result<HttpResponse, HttpError> {
-        return await this.request("DELETE", path, "", HttpHeaders());
+    public async fun delete(path: string, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("DELETE", path, "", HttpHeaders(), token);
     }
 
-    public async fun delete_with(path: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        return await this.request("DELETE", path, "", headers);
+    public async fun delete_with(path: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("DELETE", path, "", headers, token);
     }
 
     // Performs a HEAD request.
-    public async fun head(path: string): Result<HttpResponse, HttpError> {
-        return await this.request("HEAD", path, "", HttpHeaders());
+    public async fun head(path: string, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request("HEAD", path, "", HttpHeaders(), token);
     }
 
     // Performs a request with a text body, streaming the response instead of buffering it.
-    public async fun request_stream(method: string, path: string, body: string, headers: HttpHeaders): Result<HttpStreamResponse, HttpError> {
-        switch (this.cancel_token) {
-            Some(tok) => {
-                if tok.is_cancelled() {
-                    return Result.Err(HttpError.transport("cancelled"));
-                }
-            },
-            None => { },
-        }
+    public async fun request_stream(method: string, path: string, body: string, headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpStreamResponse, HttpError> {
+        this.check_cancel(token)?;
+        let tok = this.effective_token(token);
         let raw = await HttpClient.http_request_stream(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
-        return this.wrap_stream(raw);
+        return this.wrap_stream(raw, tok);
     }
 
     // Performs a GET request, streaming the response instead of buffering it.
-    public async fun get_stream(path: string): Result<HttpStreamResponse, HttpError> {
-        return await this.request_stream("GET", path, "", HttpHeaders());
+    public async fun get_stream(path: string, token: Option<CancellationToken> = Option.None): Result<HttpStreamResponse, HttpError> {
+        return await this.request_stream("GET", path, "", HttpHeaders(), token);
     }
 
     // Performs a request with a binary body, streaming the response instead of buffering it.
-    public async fun request_stream_bytes(method: string, path: string, body: byte[], headers: HttpHeaders): Result<HttpStreamResponse, HttpError> {
-        switch (this.cancel_token) {
-            Some(tok) => {
-                if tok.is_cancelled() {
-                    return Result.Err(HttpError.transport("cancelled"));
-                }
-            },
-            None => { },
-        }
+    public async fun request_stream_bytes(method: string, path: string, body: byte[], headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpStreamResponse, HttpError> {
+        this.check_cancel(token)?;
+        let tok = this.effective_token(token);
         let raw = await HttpClient.http_request_stream_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
-        return this.wrap_stream(raw);
+        return this.wrap_stream(raw, tok);
     }
 
     // Performs a GET request and resolves with its body as text.
-    public async fun text(path: string): Result<string, HttpError> {
-        return switch (await this.get(path)) {
+    public async fun text(path: string, token: Option<CancellationToken> = Option.None): Result<string, HttpError> {
+        return switch (await this.get(path, token)) {
             Ok(res) => Result.Ok(res.text()),
             Err(e) => Result.Err(e),
         };
     }
 
     // Performs a GET request and resolves with its body as bytes.
-    public async fun get_bytes(path: string): Result<byte[], HttpError> {
-        return switch (await this.get(path)) {
+    public async fun get_bytes(path: string, token: Option<CancellationToken> = Option.None): Result<byte[], HttpError> {
+        return switch (await this.get(path, token)) {
             Ok(res) => Result.Ok(res.bytes()),
             Err(e) => Result.Err(e),
         };
     }
 
     // Performs a request with a binary body.
-    public async fun request_bytes(method: string, path: string, body: byte[], headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        switch (this.cancel_token) {
-            Some(tok) => {
-                if tok.is_cancelled() {
-                    return Result.Err(HttpError.transport("cancelled"));
-                }
-            },
-            None => { },
-        }
+    public async fun request_bytes(method: string, path: string, body: byte[], headers: HttpHeaders, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        this.check_cancel(token)?;
         let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms, this.http_version);
         return this.wrap(raw);
     }
 
     // Performs a POST request with a binary body.
-    public async fun post_bytes(path: string, body: byte[]): Result<HttpResponse, HttpError> {
-        return await this.request_bytes("POST", path, body, HttpHeaders());
+    public async fun post_bytes(path: string, body: byte[], token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request_bytes("POST", path, body, HttpHeaders(), token);
     }
 
     // Performs a PUT request with a binary body.
-    public async fun put_bytes(path: string, body: byte[]): Result<HttpResponse, HttpError> {
-        return await this.request_bytes("PUT", path, body, HttpHeaders());
+    public async fun put_bytes(path: string, body: byte[], token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        return await this.request_bytes("PUT", path, body, HttpHeaders(), token);
     }
 
     // POSTs a multipart form via `request_bytes`.
-    public async fun post_multipart(path: string, form: MultipartForm): Result<HttpResponse, HttpError> {
+    public async fun post_multipart(path: string, form: MultipartForm, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let built = form.build();
-        return await this.request_bytes("POST", path, built.body, built.headers);
+        return await this.request_bytes("POST", path, built.body, built.headers, token);
     }
 }

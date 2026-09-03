@@ -67,7 +67,11 @@ pub(super) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
             ty,
         ),
         TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
-            (c_ident(&format!("release_array_t{}", e.0)), *e)
+            // Array glue is never in `canon_maps` (those keys are struct/union ids). Looking
+            // up the element id would steal a redirected *element* `release_Foo` and drop the
+            // array header as if it were a `Foo` — SIGSEGV when two classes share a layout
+            // (e.g. `Job` and `CancelledError`) and `Option.unwrap` temps a `T[]`.
+            return Some(format!("{}_into", c_ident(&format!("release_array_t{}", e.0))));
         }
         _ => return None,
     };
@@ -101,8 +105,7 @@ pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
             cx.canon_maps().release.get(&ty).cloned().unwrap_or(raw)
         }
         TyKind::Array(e) if interner.is_reference(*e) || interner.is_value_type(*e) => {
-            let raw = c_ident(&format!("release_array_t{}", e.0));
-            cx.canon_maps().release.get(e).cloned().unwrap_or(raw)
+            c_ident(&format!("release_array_t{}", e.0))
         }
         TyKind::Func(..) => "dream_release_funcbox".into(),
         TyKind::Prim(dream_types::PrimTy::String) if mir.uses_defer => "release_string".into(),
@@ -136,8 +139,7 @@ pub(super) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
             cx.canon_maps().destroy.get(&ty).cloned().unwrap_or(raw)
         }
         TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
-            let raw = c_ident(&format!("destroy_array_t{}", e.0));
-            cx.canon_maps().destroy.get(e).cloned().unwrap_or(raw)
+            c_ident(&format!("destroy_array_t{}", e.0))
         }
         TyKind::Object | TyKind::Interface(..) => c_ident("destroy_object"),
         _ => "dream_destroy".into(),
@@ -146,9 +148,10 @@ pub(super) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
 
 /// Symbol canonicalization for ARC glue: types whose `release_*` (resp.
 /// `destroy_*`) bodies would be byte-identical share one emitted function —
-/// fieldless structs, arrays of plain references, and so on. Maps contain only
-/// *redirects*: entries whose target differs from the type's own raw symbol,
-/// keyed by struct/union id resp. array element id.
+/// fieldless structs and same-shape classes. Maps contain only *redirects*:
+/// entries whose target differs from the type's own raw symbol, keyed by
+/// struct/union id. Array helpers are never redirected through this map (an
+/// element TypeId may already be a struct redirect).
 pub(super) struct CanonMaps {
     pub release: std::collections::HashMap<TypeId, String>,
     pub destroy: std::collections::HashMap<TypeId, String>,
@@ -360,9 +363,6 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     let canon = cx.canon_maps();
     let rel_redirect = |ty: &TypeId| canon.release.contains_key(ty);
     for elem in &array_elems {
-        if rel_redirect(elem) {
-            continue;
-        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("release_array_t{}", elem.0)),
@@ -406,9 +406,6 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     }
     let des_redirect = |ty: &TypeId| canon.destroy.contains_key(ty);
     for elem in &array_elems {
-        if des_redirect(elem) {
-            continue;
-        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("destroy_array_t{}", elem.0)),
@@ -443,9 +440,6 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     }
     let array_elems_copy = array_elems.clone();
     for elem in array_elems {
-        if rel_redirect(&elem) {
-            continue;
-        }
         let es = elem_size(cx, elem);
         // Tail (`_into`) assumes the caller already ran the null-check + rc decrement
         // (Statement::Release inlines both so the not-last case is call-free).
@@ -716,9 +710,6 @@ fn emit_destroy_helpers(
         name: "p".into(),
     }];
     for elem in array_elems {
-        if des_redirect(elem) {
-            continue;
-        }
         m.static_proto(
             CTy::Void,
             c_ident(&format!("destroy_array_t{}", elem.0)),
@@ -747,9 +738,6 @@ fn emit_destroy_helpers(
     }
     m.static_proto(CTy::Void, c_ident("destroy_object"), p.clone());
     for elem in array_elems {
-        if des_redirect(elem) {
-            continue;
-        }
         let name = c_ident(&format!("destroy_array_t{}", elem.0));
         let es = elem_size(cx, *elem);
         let mut b = FuncBuilder::new(CTy::Void, name.clone());

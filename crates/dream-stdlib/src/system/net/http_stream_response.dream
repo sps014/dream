@@ -40,19 +40,18 @@ public class HttpStreamResponse {
 
     // Reads up to `max_bytes` of the body. `Ok(None)` marks end-of-stream; the actual chunk size
     // is host-determined and may be smaller than `max_bytes` even before EOF.
-    public async fun read_chunk(max_bytes: int): Result<Option<byte[]>, HttpError> {
+    public async fun read_chunk(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<Option<byte[]>, HttpError> {
         let eof: Option<byte[]> = Option.None;
         if this.closed {
             return Result.Ok(eof);
         }
-        switch (this.cancel_token) {
-            Some(tok) => {
-                if tok.is_cancelled() {
-                    this.close();
-                    return Result.Err(HttpError.transport("cancelled"));
-                }
-            },
-            None => { },
+        let tok = token;
+        if tok.is_none() {
+            tok = this.cancel_token;
+        }
+        if CancellationToken.is_cancelled_opt(tok) {
+            this.close();
+            return Result.Err(HttpError.cancelled());
         }
         let wire = await HttpStreamResponse.host_read_chunk(this.handle, max_bytes);
         let reader = NetWireReader(wire);
@@ -69,12 +68,12 @@ public class HttpStreamResponse {
     }
 
     // Reads and concatenates every remaining chunk into one `byte[]`.
-    public async fun read_all(): Result<byte[], HttpError> {
+    public async fun read_all(token: Option<CancellationToken> = Option.None): Result<byte[], HttpError> {
         let sb = List<byte>();
         let going = true;
         let error: Option<HttpError> = Option.None;
         while going {
-            let chunk = await this.read_chunk(65536);
+            let chunk = await this.read_chunk(65536, token);
             switch (chunk) {
                 Ok(opt) => {
                     switch (opt) {

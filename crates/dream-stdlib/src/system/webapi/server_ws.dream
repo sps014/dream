@@ -20,7 +20,8 @@ public class ServerWebSocket {
         return Option.Some(ServerWebSocket(handle));
     }
 
-    public async fun send_text(text: string): Result<bool, NetError> {
+    public async fun send_text(text: string, token: Option<CancellationToken> = Option.None): Result<bool, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
@@ -28,7 +29,8 @@ public class ServerWebSocket {
         return this.parse_send_result(wire);
     }
 
-    public async fun send_binary(data: byte[]): Result<bool, NetError> {
+    public async fun send_binary(data: byte[], token: Option<CancellationToken> = Option.None): Result<bool, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
@@ -45,7 +47,8 @@ public class ServerWebSocket {
         return Result.Err(NetError.io(reader.read_remaining_text()));
     }
 
-    public async fun receive(): Result<WebSocketMessage, NetError> {
+    public async fun receive(token: Option<CancellationToken> = Option.None): Result<WebSocketMessage, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }

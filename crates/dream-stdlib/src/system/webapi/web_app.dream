@@ -32,6 +32,7 @@ public class WebAppOptions {
 let webapi_middlewares: List<Middleware> = List<Middleware>();
 let webapi_server_handle: int = 0;
 let webapi_gen_mw_done: bool = false;
+let webapi_cancel_token: Option<CancellationToken> = Option.None;
 
 public class WebApp {
     @native
@@ -411,7 +412,11 @@ public class WebApp {
 
     @native
     static async fun handle_one(req: HttpIncoming, options: WebAppOptions): void {
+        if CancellationToken.is_cancelled_opt(webapi_cancel_token) {
+            return;
+        }
         let ctx = RequestContext(req);
+        ctx.cancellation_token = webapi_cancel_token;
         let leaf: fun(): Future<HttpOutgoing> = async () => {
             if !options.openapi_url.is_empty() && req.method == "GET" && req.path == options.openapi_url {
                 return HttpOutgoing.json_text(WebApp.openapi_document(options), 200);
@@ -462,6 +467,10 @@ public class WebApp {
     @native
     static async fun serve_loop(server: int, options: WebAppOptions): void {
         while true {
+            if CancellationToken.is_cancelled_opt(webapi_cancel_token) {
+                WebApp.shutdown();
+                return;
+            }
             let wire = await WebApp.host_accept(server);
             if WebApp.wire_starts(wire, "shutdown") {
                 return;
@@ -480,12 +489,30 @@ public class WebApp {
 
     // Bind, start the accept loop in the background, return the bound port (`0` picks ephemeral).
     @native
-    public static async fun listen(host: string, port: int): int {
-        return await WebApp.listen_with(host, port, WebAppOptions());
+    static async fun watch_cancel(): void {
+        while true {
+            if CancellationToken.is_cancelled_opt(webapi_cancel_token) {
+                WebApp.shutdown();
+                return;
+            }
+            await Time.sleep(16);
+        }
+    }
+
+    internal static fun stored_cancel_token(): Option<CancellationToken> {
+        return webapi_cancel_token;
+    }
+
+    public static async fun listen(host: string, port: int, token: Option<CancellationToken> = Option.None): int {
+        return await WebApp.listen_with(host, port, WebAppOptions(), token);
     }
 
     @native
-    public static async fun listen_with(host: string, port: int, options: WebAppOptions): int {
+    public static async fun listen_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): int {
+        if CancellationToken.is_cancelled_opt(token) {
+            return 0 - 1;
+        }
+        webapi_cancel_token = token;
         WebApp.generated_install_middleware();
         let cert = options.tls_cert_path;
         let key = options.tls_key_path;
@@ -505,19 +532,22 @@ public class WebApp {
         let bound = int.parse(WebApp.slice_wire(raw, c0, c - c0)).unwrap_or(0);
         webapi_server_handle = handle;
         Promise.start(WebApp.serve_loop(handle, options));
+        if token.is_some() {
+            Promise.start(WebApp.watch_cancel());
+        }
         return bound;
     }
 
     @native
-    public static async fun run(host: string, port: int): void {
-        let _ = await WebApp.listen(host, port);
-        await WebApp.wait();
+    public static async fun run(host: string, port: int, token: Option<CancellationToken> = Option.None): void {
+        let _ = await WebApp.listen(host, port, token);
+        await WebApp.wait(token);
     }
 
     @native
-    public static async fun run_with(host: string, port: int, options: WebAppOptions): void {
-        let _ = await WebApp.listen_with(host, port, options);
-        await WebApp.wait();
+    public static async fun run_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): void {
+        let _ = await WebApp.listen_with(host, port, options, token);
+        await WebApp.wait(token);
     }
 
     @native
@@ -528,7 +558,15 @@ public class WebApp {
     }
 
     @native
-    public static async fun wait(): void {
+    public static async fun wait(token: Option<CancellationToken> = Option.None): void {
+        if token.is_some() {
+            webapi_cancel_token = token;
+            if CancellationToken.is_cancelled_opt(token) {
+                WebApp.shutdown();
+            } else {
+                Promise.start(WebApp.watch_cancel());
+            }
+        }
         if webapi_server_handle != 0 {
             let _ = await WebApp.host_wait(webapi_server_handle);
         }

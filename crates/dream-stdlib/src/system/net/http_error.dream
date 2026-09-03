@@ -33,4 +33,9 @@ public class HttpError : Error {
     public static fun status(status: int, message: string): HttpError {
         return HttpError(status, "HTTP_" + status.to_string(), message);
     }
+
+    // Cooperative cancellation (`CancellationToken`).
+    public static fun cancelled(): HttpError {
+        return HttpError(0, "ECANCELLED", "operation cancelled");
+    }
 }

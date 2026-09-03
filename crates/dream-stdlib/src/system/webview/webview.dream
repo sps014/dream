@@ -374,9 +374,12 @@ public class WebView {
     }
 
     @native
-    public async fun run(): void {
-        // `host_tick` pumps AppKit (~16ms) and returns `closed\\n` + IPC poll payload.
+    public async fun run(token: Option<CancellationToken> = Option.None): void {
+        CancellationToken.throw_if_opt(token);
         while true {
+            if CancellationToken.is_cancelled_opt(token) {
+                return;
+            }
             let raw = WebView.host_tick(this.id);
             let reader = WebViewWireReader(raw);
             let closed = int.parse(reader.read_line()).unwrap_or(1);
@@ -399,7 +402,8 @@ public class WebView {
     }
 
     @native
-    public async fun eval(js: string): Result<string, WebViewError> {
+    public async fun eval(js: string, token: Option<CancellationToken> = Option.None): Result<string, WebViewError> {
+        CancellationToken.rejected(token, WebViewError.cancelled())?;
         let raw = await WebView.host_eval(this.id, js);
         let reader = WebViewWireReader(raw);
         let code = int.parse(reader.read_line()).unwrap_or(1);

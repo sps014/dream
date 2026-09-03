@@ -38,18 +38,21 @@ public class WebWorker {
     @runtime("workerTerminate")
     static extern fun terminate_host(id: int): void;
 
-    public static async fun spawn<TOut : shared>(body: fun(): TOut): TOut {
+    public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut {
+        CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
         let id = WebWorker.spawn_host(WebWorker.funcidx(wrapped), WebWorker.env(wrapped));
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, "");
         let wire = await WebWorker.recv_host(id);
+        CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
         return result;
     }
 
-    public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>): TOut {
+    public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut {
+        CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
             return Bytes.toWire<TOut>(await body());
         };
@@ -57,6 +60,7 @@ public class WebWorker {
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, "");
         let wire = await WebWorker.recv_host(id);
+        CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
         return result;
@@ -64,13 +68,16 @@ public class WebWorker {
 
     static async fun spawn_mapped<T : shared, TOut : shared>(
         input: T,
-        body: fun(T): TOut
+        body: fun(T): TOut,
+        token: Option<CancellationToken> = Option.None
     ): TOut {
+        CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)));
         let id = WebWorker.spawn_host(WebWorker.funcidx(wrapped), WebWorker.env(wrapped));
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, Bytes.toWire<T>(input));
         let wire = await WebWorker.recv_host(id);
+        CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
         return result;
@@ -78,8 +85,10 @@ public class WebWorker {
 
     static async fun spawn_mapped_async<T : shared, TOut : shared>(
         input: T,
-        body: fun(T): Future<TOut>
+        body: fun(T): Future<TOut>,
+        token: Option<CancellationToken> = Option.None
     ): TOut {
+        CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (raw: string) => {
             return Bytes.toWire<TOut>(await body(Bytes.fromWire<T>(raw)));
         };
@@ -87,32 +96,37 @@ public class WebWorker {
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, Bytes.toWire<T>(input));
         let wire = await WebWorker.recv_host(id);
+        CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
         return result;
     }
 
-    public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut): TOut[] {
+    public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut, token: Option<CancellationToken> = Option.None): TOut[] {
+        CancellationToken.throw_if_opt(token);
         let n = items.length;
         let futures = Buffer.alloc<Future<TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
-            futures[i] = WebWorker.spawn_mapped(items[i], body);
+            futures[i] = WebWorker.spawn_mapped(items[i], body, token);
         }
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
+            CancellationToken.throw_if_opt(token);
             results[i] = await futures[i];
         }
         return results;
     }
 
-    public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>): TOut[] {
+    public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut[] {
+        CancellationToken.throw_if_opt(token);
         let n = items.length;
         let futures = Buffer.alloc<Future<TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
-            futures[i] = WebWorker.spawn_mapped_async(items[i], body);
+            futures[i] = WebWorker.spawn_mapped_async(items[i], body, token);
         }
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
+            CancellationToken.throw_if_opt(token);
             results[i] = await futures[i];
         }
         return results;

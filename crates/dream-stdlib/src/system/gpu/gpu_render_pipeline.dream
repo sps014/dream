@@ -7,16 +7,18 @@ public class GpuRenderPipeline {
 
     // Compiles and caches a render pipeline for the named Dream shaders.
     // Available on web and native (`dream run` / wgpu); string-literal pairing is checked at compile time.
-    public static async fun create(vertex: string, fragment: string): Result<GpuRenderPipeline, GpuError> {
-        return await GpuRenderPipeline.create_ex(vertex, fragment, GpuRenderPipelineDesc.defaults());
+    public static async fun create(vertex: string, fragment: string, token: Option<CancellationToken> = Option.None): Result<GpuRenderPipeline, GpuError> {
+        return await GpuRenderPipeline.create_ex(vertex, fragment, GpuRenderPipelineDesc.defaults(), token);
     }
 
     // Like `create`, with fixed-function state (topology, cull, depth, blend, MSAA).
     public static async fun create_ex(
         vertex: string,
         fragment: string,
-        desc: GpuRenderPipelineDesc
+        desc: GpuRenderPipelineDesc,
+        token: Option<CancellationToken> = Option.None
     ): Result<GpuRenderPipeline, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let depth_en = 0;
         if desc.depth_enabled { depth_en = 1; }
         let depth_wr = 0;

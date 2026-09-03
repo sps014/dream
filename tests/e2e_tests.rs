@@ -92,6 +92,8 @@ const SMOKE_CASES: &[&str] = &[
     "webapi_ws",
     "webapi_multipart",
     "webapi_tls",
+    "cancellation_basic",
+    "cancellation_stdlib",
     "primary_constructor",
     "unit_variant_bare",
     "union_named_single_field",

@@ -907,7 +907,7 @@ impl<'a> Analyzer<'a> {
         }
 
         self.substitute_default_args(
-            &store_sig.defaults,
+            (&store_sig.defaults, &store_sig.parameter_types),
             &mut params_types,
             &mut arg_hirs,
             ctx.parent_function,

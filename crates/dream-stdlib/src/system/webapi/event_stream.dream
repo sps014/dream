@@ -25,7 +25,14 @@ public class EventStream {
         let _ = WebApp.host_start_stream(this.req_id, 200, headers.to_wire());
     }
 
-    public async fun send(event: string, data: string): void {
+    public async fun send(event: string, data: string, token: Option<CancellationToken> = Option.None): void {
+        let tok = token;
+        if tok.is_none() {
+            tok = WebApp.stored_cancel_token();
+        }
+        if CancellationToken.is_cancelled_opt(tok) {
+            return;
+        }
         this.start();
         let sb = StringBuilder();
         if !event.is_empty() {
@@ -43,8 +50,8 @@ public class EventStream {
         let _ = await WebApp.host_write_chunk(this.req_id, bytes);
     }
 
-    public async fun send_data(data: string): void {
-        await this.send("", data);
+    public async fun send_data(data: string, token: Option<CancellationToken> = Option.None): void {
+        await this.send("", data, token);
     }
 
     public fun end(): void {

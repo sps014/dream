@@ -313,9 +313,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(node)
     }
 
-    /// Parses formal parameters for a function declaration. A parameter may carry a constant-literal
-    /// default value (`name: type = <literal>`); once one parameter has a default, every parameter
-    /// after it must also have one (defaults must be trailing).
+    /// Parses formal parameters for a function declaration. A parameter may carry a constant
+    /// default (`name: type = <literal>` or `= Option.None`); once one parameter has a default,
+    /// every parameter after it must also have one (defaults must be trailing).
     pub(crate) fn parse_formal_parameters(&mut self) -> Result<Vec<ParameterNode>, Error> {
         let mut params = vec![];
         //eat the open parenthesis
@@ -422,8 +422,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     };
                     params.push(node.with_attributes(attributes));
                 } else {
-                    // Optional default value: `= <literal>`. Restricted to constant literals so no
-                    // evaluation is needed at the call site.
+                    // Optional default: `= <literal>` or a unit enum/union construction (`Option.None`).
                     let default = if self.current_token().kind == TokenKind::EqualToken {
                         self.match_token(TokenKind::EqualToken);
                         seen_default = true;

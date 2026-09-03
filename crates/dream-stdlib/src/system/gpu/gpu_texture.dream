@@ -52,7 +52,8 @@ public class GpuTexture {
     }
 
     // Uploads a full-texture RGBA8 pixel buffer.
-    public async fun write_rgba(pixels: byte[]): Result<bool, GpuError> {
+    public async fun write_rgba(pixels: byte[], token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.texture_write_rgba(this.id, pixels, 0, 0, this.width, this.height);
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "texture write failed"));
@@ -64,15 +65,18 @@ public class GpuTexture {
         y: int,
         w: int,
         h: int,
-        pixels: byte[]
+        pixels: byte[],
+        token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
         let code = await Gpu.texture_write_rgba(this.id, pixels, x, y, w, h);
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "texture write_at failed"));
     }
 
     // Downloads the full texture as RGBA8 bytes.
-    public async fun read_rgba(): byte[] {
+    public async fun read_rgba(token: Option<CancellationToken> = Option.None): byte[] {
+        CancellationToken.throw_if_opt(token);
         return await Gpu.texture_read_rgba(this.id);
     }
 

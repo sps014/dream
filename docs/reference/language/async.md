@@ -85,7 +85,7 @@ Static methods on the built-in `Promise` class, over `Future<T>[]`:
 let first = await Promise.any([work(10), work(20)]);
 ```
 
-`Time.sleep(ms: int): Future<void>` is an awaitable timer backed by the runtime's timer queue (a virtual clock natively, `setTimeout` in the browser). It composes with the combinators like any other future.
+`Time.sleep(ms: int, token: Option<CancellationToken> = None): Future<void>` is an awaitable timer backed by the runtime's timer queue (a virtual clock natively, `setTimeout` in the browser). With a token, sleep is sliced so cancellation is observed without changing the host timer ABI. It composes with the combinators like any other future.
 
 ## Cancellation
 
@@ -98,7 +98,7 @@ src.cancel();
 System.println(tok.check().is_err()); // true → ECANCELLED
 ```
 
-`Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Cancelling a not-yet-started future means it never runs. Prefer tokens for app-level checks; native in-flight HTTP cancel remains best-effort (`HttpClient.with_cancellation` + `with_timeout`).
+Public stdlib async APIs take a trailing `token: Option<CancellationToken> = None` (omitted at existing call sites). `Result` methods return `Err` with machine code `ECANCELLED`; `void` / non-`Result` APIs panic via `throw_if_cancelled`. `Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Cancelling a not-yet-started future means it never runs. Native in-flight host I/O remains best-effort (`HttpClient.with_cancellation` still sets a client-wide default used when the per-call token is omitted).
 
 ### Native deferred hosts (`@async_host`)
 

@@ -204,8 +204,10 @@ extend js {
     // natively while still forcing the caller to handle failure:
     //   let r = await js.global.fetch("/api");   // r: Option<js>
     @node @web
-    static async fun await_promise(borrow target: js): Option<js> {
+    static async fun await_promise(borrow target: js, token: Option<CancellationToken> = Option.None): Option<js> {
+        CancellationToken.throw_if_opt(token);
         let v = await js.await_raw(target);
+        CancellationToken.throw_if_opt(token);
         if v.is_null() {
             return Option.None;
         }

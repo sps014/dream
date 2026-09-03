@@ -56,7 +56,8 @@ public class FileHandle {
     }
 
     // Async wrapper around `open`.
-    public static async fun open_async(path: string, mode: string): Result<FileHandle, IoError> {
+    public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError> {
+        CancellationToken.rejected(token, IoError.cancelled())?;
         return FileHandle.open(path, mode);
     }
 
@@ -66,7 +67,8 @@ public class FileHandle {
     }
 
     // Async wrapper around `read`.
-    public async fun read_async(n: int): Result<byte[], IoError> {
+    public async fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
+        CancellationToken.rejected(token, IoError.cancelled())?;
         return this.read(n);
     }
 
@@ -80,7 +82,8 @@ public class FileHandle {
     }
 
     // Async wrapper around `write`.
-    public async fun write_async(data: byte[]): Result<int, IoError> {
+    public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
+        CancellationToken.rejected(token, IoError.cancelled())?;
         return this.write(data);
     }
 
@@ -93,7 +96,8 @@ public class FileHandle {
     }
 
     // Async wrapper around `seek`.
-    public async fun seek_async(pos: long): Result<bool, IoError> {
+    public async fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+        CancellationToken.rejected(token, IoError.cancelled())?;
         return this.seek(pos);
     }
 

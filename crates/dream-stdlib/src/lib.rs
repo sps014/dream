@@ -838,6 +838,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             "system.json",
             "system.encoding",
             "system.net",
+            "system",
         ],
         files: &[
             (

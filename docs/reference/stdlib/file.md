@@ -37,6 +37,8 @@ async fun main(): void {
 
 `File.stat` returns `FileStats` (`size`, `mtime_millis` / `ctime_millis` / `atime_millis`, `mode`, `kind`) with `is_file` / `is_dir` / `is_symlink`. With `import system;`, `modified()` / `created()` yield `DateTime`.
 
+Async `File` / `FileHandle` methods take an optional last `token: Option<CancellationToken>`; a cancelled token yields `IoError` with code `ECANCELLED`.
+
 ## `FileHandle` / `FileStream`
 
 Open with a mode, then `read` / `write` / `seek` / `tell` / `seek_end` / `read_line` / `write_text` / `close` (sync, plus `*_async` variants except `close`). `FileStream` also has `read_all`, `has_more`, `position`, `.length`, `reset`.

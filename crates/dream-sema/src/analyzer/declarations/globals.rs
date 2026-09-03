@@ -63,9 +63,12 @@ impl<'a> Analyzer<'a> {
 
             let gtable = self.global_symbol_table.clone();
             self.hir_global_init_begin();
+            let saved_expected = self.current_expected_type.take();
+            self.current_expected_type = global.declared_type.clone();
             let init_type = self
                 .analyze_expression(&global.initializer, &init_fn, &gtable, diagnostics)
                 .unwrap_or(Type::Void);
+            self.current_expected_type = saved_expected;
             self.hir_global_init_finish(&global.name.text);
 
             let resolved = match &global.declared_type {

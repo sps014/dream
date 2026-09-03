@@ -19,6 +19,42 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::Literal(number) => {
+                if let Type::Struct(base, Some(args)) = number {
+                    if let [Type::Struct(member, None)] = args.as_slice() {
+                        if let Some(t) = self.analyze_variant_construction(
+                            &base.text,
+                            member,
+                            &[],
+                            parent_function,
+                            symbol_table,
+                            diagnostics,
+                        )? {
+                            return Ok(t);
+                        }
+                        if self.enum_table.contains_key(&base.text) {
+                            let enum_ty = Type::Struct(base.clone(), None);
+                            match self.enum_member_value(&base.text, &member.text) {
+                                Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
+                                None => {
+                                    diagnostics.report_error(
+                                        format!(
+                                            "Enum '{}' has no member '{}'",
+                                            base.text, member.text
+                                        ),
+                                        Some(member.position),
+                                    );
+                                    self.hir_none();
+                                }
+                            }
+                            return Ok(enum_ty);
+                        }
+                        diagnostics.report_error(
+                            format!("cannot use '{}.{}' as a default value", base.text, member.text),
+                            Some(member.position),
+                        );
+                        return Ok(Type::Unknown);
+                    }
+                }
                 let mut ty =
                     Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
 

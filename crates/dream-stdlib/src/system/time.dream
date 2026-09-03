@@ -2,14 +2,49 @@ module system;
 
 // Timing utilities.
 public static class Time {
+    @intrinsic("sleep")
+    static extern async fun sleep_host(ms: int): void;
+
+    @runtime("delayMs")
+    static extern async fun delay_host(ms: int): void;
+
     // Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for
     // wall-clock animation pacing in the browser.
-    @intrinsic("sleep")
-    static extern async fun sleep(ms: int): void;
+    public static async fun sleep(ms: int, token: Option<CancellationToken> = Option.None): void {
+        await Time.wait_ms(ms, token, true);
+    }
 
     // Wall-clock delay (`setTimeout` in the browser; real sleep natively).
-    @runtime("delayMs")
-    static extern async fun delay(ms: int): void;
+    public static async fun delay(ms: int, token: Option<CancellationToken> = Option.None): void {
+        await Time.wait_ms(ms, token, false);
+    }
+
+    static async fun wait_ms(ms: int, token: Option<CancellationToken>, virtual_clock: bool): void {
+        CancellationToken.throw_if_opt(token);
+        if token.is_none() {
+            if virtual_clock {
+                await Time.sleep_host(ms);
+            } else {
+                await Time.delay_host(ms);
+            }
+            return;
+        }
+        let remaining = ms;
+        while remaining > 0 {
+            CancellationToken.throw_if_opt(token);
+            let slice = remaining;
+            if slice > 16 {
+                slice = 16;
+            }
+            if virtual_clock {
+                await Time.sleep_host(slice);
+            } else {
+                await Time.delay_host(slice);
+            }
+            remaining = remaining - slice;
+        }
+        CancellationToken.throw_if_opt(token);
+    }
 
     // Returns a high-resolution, monotonically increasing timestamp in nanoseconds.
     // Useful for benchmarking and measuring elapsed time.

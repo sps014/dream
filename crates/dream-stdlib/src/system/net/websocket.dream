@@ -31,12 +31,13 @@ public class WebSocket {
     }
 
     // Opens a WebSocket connection to `url` with no connect timeout.
-    public static async fun connect(url: string): Result<WebSocket, NetError> {
-        return await WebSocket.connect_timeout(url, 0);
+    public static async fun connect(url: string, token: Option<CancellationToken> = Option.None): Result<WebSocket, NetError> {
+        return await WebSocket.connect_timeout(url, 0, token);
     }
 
     // Opens a WebSocket connection with a connect timeout in milliseconds (`0` = none).
-    public static async fun connect_timeout(url: string, timeout_ms: int): Result<WebSocket, NetError> {
+    public static async fun connect_timeout(url: string, timeout_ms: int, token: Option<CancellationToken> = Option.None): Result<WebSocket, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         let wire = await WebSocket.ws_connect(url, timeout_ms);
         let reader = NetWireReader(wire);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
@@ -51,7 +52,8 @@ public class WebSocket {
     }
 
     // Sends a text frame. `Ok(true)` on success.
-    public async fun send_text(text: string): Result<bool, NetError> {
+    public async fun send_text(text: string, token: Option<CancellationToken> = Option.None): Result<bool, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
@@ -60,7 +62,8 @@ public class WebSocket {
     }
 
     // Sends a binary frame. `Ok(true)` on success.
-    public async fun send_binary(data: byte[]): Result<bool, NetError> {
+    public async fun send_binary(data: byte[], token: Option<CancellationToken> = Option.None): Result<bool, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
@@ -79,7 +82,8 @@ public class WebSocket {
 
     // Waits for the next message. Resolves `NetError` on transport failure; a peer-initiated
     // close arrives as `Ok(WebSocketMessage.Close(...))`, not an error.
-    public async fun receive(): Result<WebSocketMessage, NetError> {
+    public async fun receive(token: Option<CancellationToken> = Option.None): Result<WebSocketMessage, NetError> {
+        CancellationToken.rejected(token, NetError.cancelled())?;
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }

@@ -1042,7 +1042,7 @@ fn emit_dep_call(
             } else if pty == "HttpIncoming" {
                 dep_args.push("req".into());
             } else if pty == "RequestContext" {
-                s.push_str(&format!("{ind}let {tmp} = RequestContext(req);\n"));
+                s.push_str(&format!("{ind}let {tmp} = ctx;\n"));
                 dep_args.push(tmp);
             } else {
                 s.push_str(&format!(

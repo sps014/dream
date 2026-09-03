@@ -27,10 +27,10 @@ async fun main(): void {
 
 ## `TcpClient`
 
-`connect` / `connect_timeout`, then `send` / `send_text`, `receive(max_bytes)`, `close()`.
+`connect` / `connect_timeout`, then `send` / `send_text`, `receive(max_bytes)`, `close()`. Optional last `token` on the async methods; cancelled → `NetError` `ECANCELLED`.
 
 ## `WebSocket`
 
-`connect` / `connect_timeout`, `send_text` / `send_binary`, `receive()` → `WebSocketMessage`, `close` / `close_with(code, reason)`.
+`connect` / `connect_timeout`, `send_text` / `send_binary`, `receive()` → `WebSocketMessage`, `close` / `close_with(code, reason)`. Optional last `token` on the async methods; cancelled → `NetError` `ECANCELLED`.
 
 Failures are `NetError`.

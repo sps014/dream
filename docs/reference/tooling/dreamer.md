@@ -266,7 +266,7 @@ A repo can hold multiple packages behind one root `dream.toml`:
 ```toml
 # repo root
 [workspace]
-members = ["packages/shared", "apps/cli"]
+members = ["packages/greeter", "apps/cli"]
 ```
 
 Each member keeps a normal package `dream.toml` (with `[package]`). Path deps between members work
@@ -282,7 +282,7 @@ entry = "src/main.dream"
 targets = ["native"]
 
 [dependencies]
-shared = { version = "0.1.0", path = "../../packages/shared" }
+greeter = { version = "0.1.0", path = "../../packages/greeter" }
 ```
 
 Behavior:
@@ -299,7 +299,7 @@ Behavior:
 dreamer install
 dreamer run -p cli
 cd apps/cli && dreamer run          # same package, no -p
-dreamer publish -p shared           # one package at a time
+dreamer publish -p greeter           # one package at a time
 ```
 
 **Runtime host** vs **pack triple** (unchanged naming):
@@ -314,14 +314,14 @@ CodeLens) and that member’s `dream_packages/` symlink for import completion.
 
 ### Publishing from a monorepo
 
-Publish is always a **single member** (`dreamer publish -p shared`, or `cd` into the member). The
+Publish is always a **single member** (`dreamer publish -p greeter`, or `cd` into the member). The
 tarball still contains only that package’s `dream.toml` + `src/` + README — not siblings.
 
-Path-only deps (`shared = { path = "..." }` with no version) cannot be resolved by registry
+Path-only deps (`greeter = { path = "..." }` with no version) cannot be resolved by registry
 consumers; `dreamer publish` errors and asks you to write:
 
 ```toml
-shared = { version = "0.1.0", path = "../../packages/shared" }
+greeter = { version = "0.1.0", path = "../../packages/greeter" }
 ```
 
 Install still prefers the path locally; the published index records the version requirement.

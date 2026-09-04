@@ -1,7 +1,7 @@
 version = 1
 
 [[package]]
-name = "shared"
+name = "greeter"
 version = "0.1.0"
-source = "path+/Users/shivendra/Desktop/Projects/Dream/sample/monorepo/packages/shared"
+source = "path+/Users/shivendra/Desktop/Projects/dream/sample/monorepo/packages/greeter"
 dependencies = []

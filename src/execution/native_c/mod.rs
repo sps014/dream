@@ -198,15 +198,16 @@ fn libdream_dir() -> Option<PathBuf> {
 
 const DEBUG_CC_FLAGS: &[&str] = &["-g", "-O0", "-fno-omit-frame-pointer"];
 
-/// Zig 0.16 `windows-gnu` LTO pulls `zigc.lib` without MinGW CRT math/wchar
-/// symbols (`frexpf`, `wmemchr`, …). Keep `-O3`; drop LTO on that host only.
+/// Zig 0.16 LTO is not usable on every host: `windows-gnu` pulls `zigc.lib` without MinGW CRT
+/// math/wchar symbols, and macOS zig-cc errors with "LTO requires using LLD". Keep `-O3`; drop
+/// `-flto` on those hosts.
 fn host_cc_opt_flags(opt: OptLevel, debug: bool) -> Vec<&'static str> {
     let flags: &[&str] = if debug {
         DEBUG_CC_FLAGS
     } else {
         opt.cc_flags()
     };
-    if cfg!(target_os = "windows") {
+    if cfg!(target_os = "windows") || cfg!(target_os = "macos") {
         flags
             .iter()
             .copied()
@@ -393,7 +394,7 @@ mod tests {
     fn windows_release_drops_lto() {
         let flags = host_cc_opt_flags(OptLevel::O3, false);
         assert!(flags.contains(&"-O3"));
-        if cfg!(target_os = "windows") {
+        if cfg!(target_os = "windows") || cfg!(target_os = "macos") {
             assert!(!flags.iter().any(|f| *f == "-flto"));
         } else {
             assert!(flags.contains(&"-flto"));

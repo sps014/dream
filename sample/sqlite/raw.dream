@@ -67,6 +67,9 @@ fun main(): void {
     let qerr: long = 0L;
     let qrc = sqlite3_exec(db, "SELECT x FROM t ORDER BY x;", print_row, 0L, ref qerr);
     System.println("SELECT rc=" + qrc);
+    if qrc != 0 {
+        System.println("SELECT errmsg ptr=" + qerr);
+    }
 
     let closed = sqlite3_close(db);
     System.println("closed with rc=" + closed);

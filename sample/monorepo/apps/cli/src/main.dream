@@ -1,4 +1,4 @@
-import shared;
+import greeter;
 import system;
 
 fun main(): void {

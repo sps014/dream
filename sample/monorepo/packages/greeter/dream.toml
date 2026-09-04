@@ -1,5 +1,5 @@
 [package]
-name = "shared"
+name = "greeter"
 version = "0.1.0"
 type = "lib"
 edition = "2026"

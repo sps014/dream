@@ -24,7 +24,7 @@ async fun main(): void {
     let seq_start = Time.nano_time();
     let i = 0;
     while i < tasks {
-        let r = heavy("seq");
+        heavy("seq");
         i = i + 1;
     }
     let seq_end = Time.nano_time();
@@ -39,7 +39,7 @@ async fun main(): void {
     }
     let c = 0;
     while c < tasks {
-        let r = await workers[c];
+        await workers[c];
         c = c + 1;
     }
     let par_end = Time.nano_time();

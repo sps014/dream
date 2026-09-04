@@ -5,8 +5,8 @@ Minimal Dream `[workspace]` layout:
 ```text
 sample/monorepo/
   dream.toml                 # [workspace] members = [...]
-  packages/shared/           # lib member
-  apps/cli/                  # bin member (path-depends on shared)
+  packages/greeter/          # lib member
+  apps/cli/                  # bin member (path-depends on greeter)
 ```
 
 ```bash

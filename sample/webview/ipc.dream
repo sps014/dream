@@ -46,16 +46,16 @@ async fun main() {
 
     switch (WebView.create("Counter", 480, 320)) {
         Ok(view) => {
-            let id = view.id;
             view.on<Inc>("inc", (msg) => {
                 state.count = state.count + msg.by;
                 System.println("inc -> " + state.count.to_string());
-                WebView.emit_on(id, "count", Count(state.count));
+                view.emit("count", Count(state.count));
             });
             view.serve<Empty, Count>("get_count", (_req) => {
                 System.println("get_count -> " + state.count.to_string());
                 return Count(state.count);
             });
+            System.println("count starts at " + state.count.to_string());
 
             switch (view.load_file(ui)) {
                 Ok(_) => {},

@@ -42,6 +42,40 @@ internal class WebViewServeBytesEntry {
     }
 }
 
+// Generic method bodies cannot emit nested lambdas into HIR; wrap the typed handler
+// so `on`/`serve` pass a method-group `fire` instead of an inline closure.
+internal class WebViewJsonOn<T> {
+    public handler: fun(T): void;
+
+    public constructor(handler: fun(T): void) {
+        this.handler = handler;
+    }
+
+    public fun fire(body: string): void {
+        let handler = this.handler;
+        switch (Json.deserialize<T>(body)) {
+            Ok(value) => handler(value),
+            Err(e) => System.println("WebView.on deserialize failed: " + e.message()),
+        }
+    }
+}
+
+internal class WebViewJsonServe<Req, Res> {
+    public handler: fun(Req): Res;
+
+    public constructor(handler: fun(Req): Res) {
+        this.handler = handler;
+    }
+
+    public fun fire(body: string): string {
+        let handler = this.handler;
+        return switch (Json.deserialize<Req>(body)) {
+            Ok(req) => Json.serialize(handler(req)),
+            Err(e) => "__dream_webview_parse__:" + e.message(),
+        };
+    }
+}
+
 public class WebView {
     public id: int;
     _on: List<WebViewOnEntry>;
@@ -219,26 +253,12 @@ public class WebView {
 
     @native
     public fun on<T>(channel: string, handler: fun(T): void): void {
-        this.upsert_on(channel, (body: string) => {
-            switch (Json.deserialize<T>(body)) {
-                Ok(value) => {
-                    handler(value);
-                },
-                Err(e) => {
-                    System.println("WebView.on deserialize failed: " + e.message());
-                },
-            }
-        });
+        this.upsert_on(channel, WebViewJsonOn<T>(handler).fire);
     }
 
     @native
     public fun serve<Req, Res>(channel: string, handler: fun(Req): Res): void {
-        this.upsert_serve(channel, (body: string) => {
-            return switch (Json.deserialize<Req>(body)) {
-                Ok(req) => Json.serialize(handler(req)),
-                Err(e) => "__dream_webview_parse__:" + e.message(),
-            };
-        });
+        this.upsert_serve(channel, WebViewJsonServe<Req, Res>(handler).fire);
     }
 
     @native

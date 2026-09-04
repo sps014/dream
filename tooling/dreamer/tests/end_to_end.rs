@@ -390,37 +390,37 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     prefer_workspace_dream();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("mono");
-    let shared = root.join("packages").join("shared");
+    let shared = root.join("packages").join("greeter");
     let cli = root.join("apps").join("cli");
     std::fs::create_dir_all(shared.join("src")).unwrap();
     std::fs::create_dir_all(cli.join("src")).unwrap();
 
-    Manifest::new_workspace(vec!["packages/shared".into(), "apps/cli".into()])
+    Manifest::new_workspace(vec!["packages/greeter".into(), "apps/cli".into()])
         .save(&root.join("dream.toml"))
         .unwrap();
 
-    Manifest::new_lib("shared".into(), "0.1.0".into())
+    Manifest::new_lib("greeter".into(), "0.1.0".into())
         .save(&shared.join("dream.toml"))
         .unwrap();
     std::fs::write(
-        shared.join("src").join("shared.dream"),
+        shared.join("src").join("greeter.dream"),
         "public fun greet(name: string): string {\n    return \"hello, \" + name;\n}\n",
     )
     .unwrap();
 
     let mut cli_manifest = Manifest::new("cli".into(), "0.1.0".into(), "src/main.dream".into());
     cli_manifest.dependencies.insert(
-        "shared".into(),
+        "greeter".into(),
         dreamer::manifest::Dependency::Detailed(dreamer::manifest::DetailedDependency {
             version: Some("0.1.0".into()),
-            path: Some("../../packages/shared".into()),
+            path: Some("../../packages/greeter".into()),
             ..Default::default()
         }),
     );
     cli_manifest.save(&cli.join("dream.toml")).unwrap();
     std::fs::write(
         cli.join("src").join("main.dream"),
-        "import shared;\nimport system;\n\nfun main(): void {\n    System.println(greet(\"mono\"));\n}\n",
+        "import greeter;\nimport system;\n\nfun main(): void {\n    System.println(greet(\"mono\"));\n}\n",
     )
     .unwrap();
 
@@ -429,9 +429,9 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     assert!(root.join("dream.lock").is_file());
     assert!(root
         .join("dream_packages")
-        .join("shared")
+        .join("greeter")
         .join("src")
-        .join("shared.dream")
+        .join("greeter.dream")
         .is_file());
     let member_pkgs = cli.join("dream_packages");
     assert!(
@@ -440,11 +440,11 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     );
     assert!(
         member_pkgs
-            .join("shared")
+            .join("greeter")
             .join("src")
-            .join("shared.dream")
+            .join("greeter.dream")
             .is_file(),
-        "symlink should resolve to shared package sources"
+        "symlink should resolve to greeter package sources"
     );
 
     // -p required at virtual root; works from member cwd.
@@ -458,9 +458,9 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     // Publish rejects path-only; version+path is ok to attempt (file registry).
     let mut path_only = Manifest::new("cli".into(), "0.1.0".into(), "src/main.dream".into());
     path_only.dependencies.insert(
-        "shared".into(),
+        "greeter".into(),
         dreamer::manifest::Dependency::Detailed(dreamer::manifest::DetailedDependency {
-            path: Some("../../packages/shared".into()),
+            path: Some("../../packages/greeter".into()),
             ..Default::default()
         }),
     );

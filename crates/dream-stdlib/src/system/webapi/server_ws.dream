@@ -11,7 +11,7 @@ public class ServerWebSocket {
         this.is_closed = false;
     }
 
-    public static fun upgrade(req: HttpIncoming): Option<ServerWebSocket> {
+    public static fun upgrade(borrow req: HttpIncoming): Option<ServerWebSocket> {
         let handle = WebApp.host_ws_upgrade(req.req_id);
         if handle <= 0 {
             let none: Option<ServerWebSocket> = Option.None;

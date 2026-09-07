@@ -109,7 +109,7 @@ fun nullable_paths() {
     b = Option.None;
 }
 
-fun pass_borrow(n: Node): int {
+fun pass_borrow(borrow n: Node): int {
     return n.val;
 }
 

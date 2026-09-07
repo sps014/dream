@@ -3,12 +3,12 @@
 //! [`super::RcInsertion`] runs *before* inlining so callee size (and destruction timing) stay
 //! stable. The inliner then splices `a[i] = s` into a larger CFG where `s` is dead — but a baked
 //! `Retain(s)` / missing `s = null` stay. Re-running insertion on fused `generated_dispatch` is too
-//! expensive. This pass is linear and only rewrites last-use **index** stores of hidden-borrow
-//! types: null the source and drop a share-`Retain` into that store. Field stores stay on
+//! expensive. This pass is linear and only rewrites last-use **index** stores of owned RC
+//! sources: null the source and drop a share-`Retain` into that store. Field stores stay on
 //! [`super::RcInsertion`].
 
 use super::liveness::{self, live_after_stmt};
-use super::tokens::{is_hidden_borrow_ty, is_owned_local};
+use super::tokens::is_owned_local;
 use super::uniqueness::container_store_src;
 use crate::passes::MirPass;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
@@ -40,7 +40,6 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
             let src = match stmt {
                 Statement::Assign(Place::Index { .. }, _) => container_store_src(stmt).filter(|&src| {
                     is_owned_local(func, interner, src)
-                        && is_hidden_borrow_ty(func, interner, src)
                         && !live_after_stmt(func, &live_out, bi, si, src)
                 }),
                 _ => None,

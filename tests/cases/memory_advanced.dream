@@ -45,7 +45,7 @@ fun build_list(n: int): IntList {
     return list;
 }
 
-fun sum_list(list: IntList): int {
+fun sum_list(borrow list: IntList): int {
     return switch (list) {
         Cons(h, t) => h + sum_list(t),
         Nil        => 0,
@@ -59,7 +59,7 @@ fun build_tree(depth: int): Tree {
     return Tree.Branch(build_tree(depth - 1), build_tree(depth - 1));
 }
 
-fun sum_tree(t: Tree): int {
+fun sum_tree(borrow t: Tree): int {
     return switch (t) {
         Leaf(v)      => v,
         Branch(l, r) => sum_tree(l) + sum_tree(r),

@@ -380,6 +380,13 @@ impl IntrinsicOp {
         })
     }
 
+    /// True when a runtime helper may keep a raw guest pointer after the call returns, without a
+    /// MIR `Retain`. RC last-use destroy waits for a later use. Every current intrinsic copies or
+    /// retains through ARC; add a `true` arm when introducing a stasher (plus a MIR unit test).
+    pub fn holds_raw_borrow(self) -> bool {
+        false
+    }
+
     /// True for `Vector<T>` SIMD ops that the backend lowers inline (no `$simd_*` helper call).
     pub fn is_simd(self) -> bool {
         matches!(
@@ -396,4 +403,9 @@ impl IntrinsicOp {
                 | IntrinsicOp::SimdV128Sum
         )
     }
+}
+
+/// Intrinsic attribute keys that stash a raw guest pointer (see [`IntrinsicOp::holds_raw_borrow`]).
+pub fn holds_raw_borrow(key: &str) -> bool {
+    IntrinsicOp::from_key(key).is_some_and(IntrinsicOp::holds_raw_borrow)
 }

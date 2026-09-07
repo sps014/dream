@@ -20,7 +20,7 @@ enum Box {
     Empty,
 }
 
-fun open(b: Box): int {
+fun open(borrow b: Box): int {
     return switch (b) {
         Full(t) => t.id,
         Empty   => 0 - 1,

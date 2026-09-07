@@ -273,7 +273,7 @@ public class WebApp {
         return Option.Some(UploadedFile(filename, ctype, reader.read_remaining_bytes()));
     }
 
-    public static fun json_escape(s: string): string {
+    public static fun json_escape(borrow s: string): string {
         let sb = StringBuilder();
         sb.append_char('"');
         let i = 0;
@@ -296,7 +296,7 @@ public class WebApp {
         return sb.build();
     }
 
-    public static fun swagger_html(title: string, openapi_url: string): string {
+    public static fun swagger_html(borrow title: string, borrow openapi_url: string): string {
         return "<!DOCTYPE html><html><head><title>"
             + title
             + "</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>window.onload=function(){window.ui=SwaggerUIBundle({url:"
@@ -304,7 +304,7 @@ public class WebApp {
             + ",dom_id:'#swagger-ui'});};</script></body></html>";
     }
 
-    public static fun redoc_html(title: string, openapi_url: string): string {
+    public static fun redoc_html(borrow title: string, borrow openapi_url: string): string {
         return "<!DOCTYPE html><html><head><title>"
             + title
             + "</title></head><body><redoc spec-url="
@@ -411,30 +411,33 @@ public class WebApp {
     }
 
     @native
-    static async fun handle_one(req: HttpIncoming, options: WebAppOptions): void {
+    static async fun handle_one(req: HttpIncoming, borrow options: WebAppOptions): void {
         if CancellationToken.is_cancelled_opt(webapi_cancel_token) {
             return;
         }
         let ctx = RequestContext(req);
         ctx.cancellation_token = webapi_cancel_token;
         let leaf: fun(): Future<HttpOutgoing> = async () => {
-            if !options.openapi_url.is_empty() && req.method == "GET" && req.path == options.openapi_url {
+            let incoming = ctx.incoming;
+            if !options.openapi_url.is_empty() && incoming.method == "GET" && incoming.path == options.openapi_url {
                 return HttpOutgoing.json_text(WebApp.openapi_document(options), 200);
             }
-            if !options.docs_url.is_empty() && req.method == "GET" && req.path == options.docs_url {
+            if !options.docs_url.is_empty() && incoming.method == "GET" && incoming.path == options.docs_url {
                 return HttpOutgoing.html(WebApp.swagger_html(options.title, options.openapi_url), 200);
             }
-            if !options.redoc_url.is_empty() && req.method == "GET" && req.path == options.redoc_url {
+            if !options.redoc_url.is_empty() && incoming.method == "GET" && incoming.path == options.redoc_url {
                 return HttpOutgoing.html(WebApp.redoc_html(options.title, options.openapi_url), 200);
             }
-            return await WebApp.generated_dispatch(ctx);
+            let out = await WebApp.generated_dispatch(ctx);
+            let _ = incoming.req_id;
+            return out;
         };
         let res = await WebApp.run_middleware(ctx, 0, leaf);
         WebApp.send_outgoing(req.req_id, res);
     }
 
     public static async fun run_middleware(
-        ctx: RequestContext,
+        borrow ctx: RequestContext,
         index: int,
         leaf: fun(): Future<HttpOutgoing>
     ): HttpOutgoing {
@@ -449,7 +452,7 @@ public class WebApp {
     }
 
     public static async fun run_local_middleware(
-        ctx: RequestContext,
+        borrow ctx: RequestContext,
         chain: List<Middleware>,
         index: int,
         leaf: fun(): Future<HttpOutgoing>
@@ -462,6 +465,14 @@ public class WebApp {
             return await WebApp.run_local_middleware(ctx, chain, index + 1, leaf);
         });
         return await mw.invoke(ctx, next);
+    }
+
+    static fun spawn_handle(parsed: Option<HttpIncoming>, borrow options: WebAppOptions): void {
+        if parsed.is_none() {
+            return;
+        }
+        let req = parsed.unwrap();
+        Promise.start(WebApp.handle_one(req, options));
     }
 
     @native
@@ -478,12 +489,7 @@ public class WebApp {
             if WebApp.wire_starts(wire, "err") {
                 return;
             }
-            let parsed = WebApp.parse_incoming(wire);
-            if parsed.is_none() {
-                continue;
-            }
-            let req = parsed.unwrap();
-            Promise.start(WebApp.handle_one(req, options));
+            WebApp.spawn_handle(WebApp.parse_incoming(wire), options);
         }
     }
 
@@ -572,7 +578,7 @@ public class WebApp {
         }
     }
 
-    public static fun openapi_document(options: WebAppOptions): string {
+    public static fun openapi_document(borrow options: WebAppOptions): string {
         let paths = WebApp.generated_openapi_paths();
         return "{\"openapi\":\"3.0.3\",\"info\":{\"title\":"
             + WebApp.json_escape(options.title)

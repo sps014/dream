@@ -3,20 +3,19 @@
 use super::is_borrowed_copy;
 use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
 use super::tokens::{
-    apply_stmt_tokens, assigns_local, dest_holds_token, is_hidden_borrow_ty, is_owned_local,
-    move_source, needs_rebind_temp, rc_op_on_local, release_and_null, sink_call_args,
-    source_line_end, take_arg_effects, TokenAnalysis,
+    apply_stmt_tokens, assigns_local, dest_holds_token, is_owned_local, leftover_keep, move_source,
+    needs_rebind_temp, null_local, rc_op_on_local, release_and_null, sink_call_args, source_line_end,
+    take_arg_effects, terminator_live_locals, AliasMap, TokenAnalysis,
 };
 use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
-    container_store_src, field_store_is_non_strong,
 };
 use crate::passes::cfg;
 use crate::passes::MirPass;
 use crate::{
     Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
-use dream_types::TypeInterner;
+use dream_types::{DefId, TypeInterner};
 use std::collections::{HashMap, HashSet};
 
 pub struct RcInsertion;
@@ -47,8 +46,9 @@ impl RcInsertion {
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        holds: &HashSet<DefId>,
     ) -> bool {
-        RcInsertion.run_inner(func, interner, layouts)
+        RcInsertion.run_inner(func, interner, layouts, holds)
     }
 
     fn run_inner(
@@ -56,15 +56,39 @@ impl RcInsertion {
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        holds: &HashSet<DefId>,
     ) -> bool {
-        super::cursor::infer_cursors(func, interner);
+        super::cursor::infer_cursors(func, interner, layouts);
 
         let local_is_ref: Vec<bool> = func
             .locals
             .iter()
             .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
-        let analysis = TokenAnalysis::analyze(func, interner, layouts);
+        let analysis = TokenAnalysis::analyze(func, interner, layouts, holds);
+        let aliases = AliasMap::of(func);
+        let is_cursor: Vec<bool> = func.locals.iter().map(|d| d.is_cursor).collect();
+        let start_keep: Vec<HashSet<u32>> = analysis
+            .start_release
+            .iter()
+            .map(|s| leftover_keep(func, s.iter().copied()))
+            .collect();
+        let end_keep: Vec<HashSet<u32>> = analysis
+            .end_release
+            .iter()
+            .map(|s| leftover_keep(func, s.iter().copied()))
+            .collect();
+        let mut die_keep: HashMap<(usize, usize), HashSet<u32>> = HashMap::new();
+        {
+            let mut groups: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
+            for &(bi, si, local) in &analysis.die_after {
+                groups.entry((bi, si)).or_default().push(local);
+            }
+            for (k, ids) in groups {
+                die_keep.insert(k, leftover_keep(func, ids));
+            }
+        }
+        let n_orig = func.locals.len() as u32;
         let owned_flags: Vec<bool> = (0..func.locals.len() as u32)
             .map(|l| is_owned_local(func, interner, l))
             .collect();
@@ -74,8 +98,22 @@ impl RcInsertion {
         let mut realloc_readers: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
         let mut slot_readers: HashMap<SlotId, Vec<u32>> = HashMap::new();
         let live_out_rc = liveness::live_out(func);
-        let hidden_borrow: Vec<bool> = (0..func.locals.len() as u32)
-            .map(|l| is_hidden_borrow_ty(func, interner, l))
+        let start_live: Vec<HashSet<u32>> = (0..func.blocks.len())
+            .map(|bi| {
+                let mut live = live_in_of(func, &live_out_rc, bi);
+                terminator_live_locals(&func.blocks[bi].terminator, &mut live);
+                live
+            })
+            .collect();
+        let end_live: Vec<HashSet<u32>> = func
+            .blocks
+            .iter()
+            .enumerate()
+            .map(|(bi, block)| {
+                let mut live = live_out_rc[bi].clone();
+                terminator_live_locals(&block.terminator, &mut live);
+                live
+            })
             .collect();
         let in_loop: HashSet<usize> = cfg::natural_loops(func)
             .iter()
@@ -138,7 +176,12 @@ impl RcInsertion {
             for &local in &analysis.start_release[bi] {
                 // Join/loop-header leftover: the other pred may have copied this pointer into a
                 // still-live container. Unique destroy ignores RC and would free that copy.
-                out.extend(release_and_null(local, false));
+                if should_release_leftover(&aliases, &is_cursor, &start_keep[bi], n_orig, local, &start_live[bi])
+                {
+                    out.extend(release_and_null(local, false));
+                } else {
+                    out.push(null_local(local));
+                }
                 if (local as usize) < tokens.len() {
                     tokens[local as usize] = false;
                     unique[local as usize] = false;
@@ -166,13 +209,11 @@ impl RcInsertion {
                     .map(|(d, _, _, _)| dest_holds_token(&tokens, d.0))
                     .unwrap_or(false);
                 // Loop-header token join treats the entry pred as empty, so a loop-carried
-                // hidden-borrow local can overwrite a still-resident pointer with `had_dest`
-                // false. Drop the previous value whenever this block is in a natural loop.
+                // owned local can overwrite a still-resident pointer with `had_dest` false.
                 let drop_previous = dest_had_token
-                    || ref_dest.as_ref().is_some_and(|(d, _, _, _)| {
-                        hidden_borrow.get(d.0 as usize).copied().unwrap_or(false)
-                            && in_loop.contains(&bi)
-                    });
+                    || ref_dest
+                        .as_ref()
+                        .is_some_and(|(d, _, _, _)| is_owned(d.0) && in_loop.contains(&bi));
                 let had_unique = ref_dest
                     .as_ref()
                     .map(|(d, _, _, _)| {
@@ -373,7 +414,13 @@ impl RcInsertion {
                             local,
                             unique.get(local as usize).copied().unwrap_or(false),
                         );
-                        out.extend(release_and_null(local, u));
+                        let one = HashSet::from([local]);
+                        let keep = die_keep.get(&(bi, si)).unwrap_or(&one);
+                        if should_release_leftover(&aliases, &is_cursor, keep, n_orig, local, &end_live[bi]) {
+                            out.extend(release_and_null(local, u));
+                        } else {
+                            out.push(null_local(local));
+                        }
                         tokens[local as usize] = false;
                         unique[local as usize] = false;
                         changed = true;
@@ -396,13 +443,9 @@ impl RcInsertion {
             }
             for &local in &analysis.end_release[bi] {
                 if dest_holds_token(&tokens, local) {
-                    let u = unique_destroy(
-                        interner,
-                        &local_types,
-                        &take_flags,
-                        local,
-                        unique.get(local as usize).copied().unwrap_or(false),
-                    );
+                    // Leftover may run after a field/Result store that retained an alias.
+                    // ReleaseUnique ignores RC and would free that copy (`JsonValue.get`,
+                    // `Result.Ok(from_json)`).
                     // Do not null an Await dest: resume is a C-only store, so `x = null`
                     // here lets SCCP prove `x` is null in the resume block.
                     let clobber_await_dest = matches!(
@@ -414,9 +457,27 @@ impl RcInsertion {
                         } if *d != *f && d.0 == local
                     );
                     if clobber_await_dest {
-                        out.push(release_one(local, u));
+                        if should_release_leftover(
+                            &aliases,
+                            &is_cursor,
+                            &end_keep[bi],
+                            n_orig,
+                            local,
+                            &end_live[bi],
+                        ) {
+                            out.push(release_one(local, false));
+                        }
+                    } else if should_release_leftover(
+                        &aliases,
+                        &is_cursor,
+                        &end_keep[bi],
+                        n_orig,
+                        local,
+                        &end_live[bi],
+                    ) {
+                        out.extend(release_and_null(local, false));
                     } else {
-                        out.extend(release_and_null(local, u));
+                        out.push(null_local(local));
                     }
                     tokens[local as usize] = false;
                     unique[local as usize] = false;
@@ -482,12 +543,12 @@ impl RcInsertion {
             if is_async_complete {
                 insert_complete_value_drops(func, interner, bi, skip, &mut changed);
             }
-            // Hidden-borrow types skip `end_release`, so leftovers still have a token here.
+            // Tokens still owned at Return/AsyncComplete (not destroyed earlier) are released here.
             // Classes already dropped on the arms; sweeping every RC local would double-free
             // at joins (`unbalanced_if_releases_on_kept_arm`).
             let tokens = analysis.token_out.get(bi);
-            let _unique_out = analysis.unique_out.get(bi);
             let nloc = func.locals.len().min(tokens.map(|t| t.len()).unwrap_or(0));
+            let mut ret_drop: Vec<u32> = Vec::new();
             for i in 0..nloc {
                 let local = i as u32;
                 if Some(local) == skip || !is_owned_local(func, interner, local) {
@@ -496,33 +557,27 @@ impl RcInsertion {
                 if !tokens.and_then(|row| row.get(i).copied()).unwrap_or(false) {
                     continue;
                 }
-                // Loop-carried liveness can keep a token on a local after a *strong* field/index
-                // store (`GenSyntaxBlock.body`). Skipping leftover then is correct. `unowned` /
-                // `weak` stores do not take the token — leftover must still run (`unowned_field_runtime`).
-                if local_sunk_into_container(func, layouts, local) {
+                // A last-use field/index store in *this* block already took the token.
+                // Loop-carried `token_out` can still look owned after that move. A sink in
+                // another block must not suppress leftover here (last-iteration future/funcbox).
+                if analysis
+                    .sink_move
+                    .iter()
+                    .any(|&(b, _, l)| b == bi && l == local)
+                {
                     continue;
                 }
-                // A Retain in this block is a second owner (Result.Ok payload, alias copy).
-                // Unique destroy would `free` under that copy (`GenContext.from_snapshot`).
-                let retained = func.blocks[bi].stmts.iter().any(|s| {
-                    matches!(
-                        s,
-                        Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == local
-                    )
-                });
-                let u = !retained
-                    && unique_destroy(
-                        interner,
-                        &local_types,
-                        &take_flags,
-                        local,
-                        _unique_out
-                            .and_then(|row| row.get(i).copied())
-                            .unwrap_or(false),
-                    );
-                func.blocks[bi]
-                    .stmts
-                    .extend(release_and_null(local, u));
+                ret_drop.push(local);
+            }
+            let mut ret_live = HashSet::new();
+            terminator_live_locals(&func.blocks[bi].terminator, &mut ret_live);
+            let ret_keep = leftover_keep(func, ret_drop.iter().copied());
+            for local in ret_drop {
+                if should_release_leftover(&aliases, &is_cursor, &ret_keep, n_orig, local, &ret_live) {
+                    func.blocks[bi].stmts.extend(release_and_null(local, false));
+                } else {
+                    func.blocks[bi].stmts.push(null_local(local));
+                }
                 changed = true;
             }
         }
@@ -537,29 +592,32 @@ impl MirPass for RcInsertion {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        self.run_inner(func, interner, &dream_hir::LayoutTable::default())
+        self.run_inner(
+            func,
+            interner,
+            &dream_hir::LayoutTable::default(),
+            &HashSet::new(),
+        )
     }
-}
-
-fn local_sunk_into_container(
-    func: &MirFunction,
-    layouts: &dream_hir::LayoutTable,
-    local: u32,
-) -> bool {
-    for block in &func.blocks {
-        for stmt in &block.stmts {
-            if container_store_src(stmt) == Some(local)
-                && !field_store_is_non_strong(func, layouts, stmt)
-            {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 /// Intra-procedural Unique is not object uniqueness: a take param may be a copy the caller
 /// still holds (field extract, still-live local). Unique-destroy would `free` under them.
+/// Skip leftover last-ref when a still-live local aliases `local` (`unwrap_or` None).
+fn should_release_leftover(
+    aliases: &AliasMap,
+    is_cursor: &[bool],
+    keep: &HashSet<u32>,
+    n_orig: u32,
+    local: u32,
+    live: &HashSet<u32>,
+) -> bool {
+    if aliases.live_owned_alias(is_cursor, local, live) {
+        return false;
+    }
+    keep.contains(&local) || local >= n_orig
+}
+
 fn unique_destroy(
     interner: &TypeInterner,
     local_types: &[dream_types::TypeId],
@@ -583,13 +641,36 @@ fn release_one(local: u32, unique: bool) -> Statement {
     }
 }
 
+fn resume_uses_owned(block: &crate::BasicBlock, local: u32) -> bool {
+    for stmt in &block.stmts {
+        if rc_op_on_local(stmt, local) {
+            continue;
+        }
+        if stmt_reads_local(stmt, local) {
+            return true;
+        }
+    }
+    match &block.terminator {
+        Terminator::Await {
+            future: Operand::Copy(Place::Local(f)),
+            ..
+        } if f.0 == local => true,
+        Terminator::Return(Some(Operand::Copy(Place::Local(f))))
+        | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(f))))
+            if f.0 == local =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 fn insert_await_resume_releases(
     func: &mut MirFunction,
     interner: &TypeInterner,
     changed: &mut bool,
 ) {
     let is_owned = |l: u32| is_owned_local(func, interner, l);
-    let live_out = liveness::live_out(func);
     let mut resume_releases: Vec<(usize, u32)> = Vec::new();
     for block in &func.blocks {
         if let Terminator::Await {
@@ -607,7 +688,10 @@ fn insert_await_resume_releases(
             if !is_owned(l.0) {
                 continue;
             }
-            if live_in_of(func, &live_out, resume.0 as usize).contains(&l.0) {
+            // Token analysis drops the future at Await. Post-insertion liveness still
+            // treats it as live into resume when the next loop body's drop_previous
+            // reads it; skipping here leaks the last iteration's future.
+            if resume_uses_owned(&func.blocks[resume.0 as usize], l.0) {
                 continue;
             }
             resume_releases.push((resume.0 as usize, l.0));
@@ -945,7 +1029,8 @@ mod tests {
     use super::*;
     use crate::build::FunctionBuilder;
     use crate::Callee;
-    use dream_types::{DefKind, TypeCtx};
+    use dream_types::{DefId, DefKind, TypeCtx};
+    use std::collections::HashSet;
 
     fn point_ty(ctx: &mut TypeCtx) -> dream_types::TypeId {
         let vs_def = ctx.register(DefKind::Struct, "Point", vec![]);
@@ -1177,7 +1262,46 @@ mod tests {
                 )
             })
             .count();
-        assert_eq!(nulls, 1, "x is consumed");
+        assert_eq!(
+            nulls, 2,
+            "x is consumed and leftover y is nulled: {:?}",
+            func.blocks[0].stmts
+        );
+    }
+
+    /// `unwrap_or` None: leftover of `fallback` must not last-ref the returned alias.
+    #[test]
+    fn unwrap_or_none_does_not_release_returned_fallback() {
+        let mut ctx = TypeCtx::new();
+        let (_def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("unwrap_or", ty);
+        let fallback = b.new_take_param(ty, Some("fallback".into()));
+        let dest = b.new_local(ty, Some("switch_result".into()));
+        b.assign(
+            Place::Local(dest),
+            Rvalue::Use(Operand::Copy(Place::Local(fallback))),
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(dest)))));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let stmts = &func.blocks[0].stmts;
+        let rel_fb = stmts.iter().position(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                if *l == fallback
+            )
+        });
+        let retain_dest = stmts.iter().position(|s| {
+            matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == dest)
+        });
+        assert!(
+            rel_fb.is_none()
+                || retain_dest.is_some_and(|r| rel_fb.is_some_and(|f| r > f)),
+            "leftover fallback last-ref before return of alias: {:?}",
+            stmts
+        );
     }
 
     #[test]
@@ -1542,7 +1666,69 @@ mod tests {
     }
 
     #[test]
-    fn hidden_borrow_string_not_released_mid_block_after_call() {
+    fn unread_local_survives_until_rebind() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let x = b.new_local(ty, Some("x".into()));
+        let tmp = b.new_local(ctx.interner.int(), Some("tmp".into()));
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Local(tmp),
+            Rvalue::Binary(
+                crate::BinOp::Add,
+                Operand::Const(Const::Int(1)),
+                Operand::Const(Const::Int(2)),
+            ),
+        );
+        b.assign(
+            Place::Local(x),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let stmts = &func.blocks[0].stmts;
+        let first_new = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(Place::Local(l), Rvalue::New { .. }) if *l == x))
+            .unwrap();
+        let add_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(_, Rvalue::Binary(..))))
+            .unwrap();
+        let early = stmts.iter().enumerate().any(|(idx, st)| {
+            idx > first_new
+                && idx < add_at
+                && matches!(
+                    st,
+                    Statement::Release(Operand::Copy(Place::Local(l)))
+                        | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == x
+                )
+        });
+        assert!(
+            !early,
+            "destroying x after the first New UAFs a later rebind's occupant: {:?}",
+            stmts
+        );
+    }
+
+    #[test]
+    fn ends_last_use_string_released_after_borrow_call() {
         let i = dream_types::TypeInterner::new();
         let peek = dream_types::DefId(0);
         let mut b = FunctionBuilder::new("f", i.void());
@@ -1577,19 +1763,258 @@ mod tests {
             .iter()
             .position(|s| matches!(s, Statement::Call { .. }))
             .unwrap();
-        let add_at = stmts
+        let rel_at = stmts.iter().position(
+            |st| matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s),
+        );
+        assert!(
+            rel_at.is_some() && rel_at.unwrap() > call_at,
+            "Ends borrow call last-use must Release after the call: {:?}",
+            stmts
+        );
+    }
+
+    #[test]
+    fn held_call_does_not_release_before_later_read() {
+        let i = dream_types::TypeInterner::new();
+        let peek = DefId(7);
+        let mut b = FunctionBuilder::new("f", i.void());
+        let s = b.new_local(i.string(), Some("s".into()));
+        let n = b.new_local(i.int(), Some("n".into()));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(Const::Str("x".into()))),
+        );
+        b.push(Statement::Call {
+            callee: Callee {
+                def: peek,
+                args: vec![],
+                ret: i.void(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(s))],
+        });
+        b.assign(
+            Place::Local(n),
+            Rvalue::StrLen(Operand::Copy(Place::Local(s))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        let mut holds = HashSet::new();
+        holds.insert(peek);
+        RcInsertion::run_with_layouts(&mut func, &i, &dream_hir::LayoutTable::default(), &holds);
+        let stmts = &func.blocks[0].stmts;
+        let call_at = stmts
             .iter()
-            .position(|s| matches!(s, Statement::Assign(_, Rvalue::Binary(..))))
+            .position(|s| matches!(s, Statement::Call { .. }))
+            .unwrap();
+        let len_at = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(_, Rvalue::StrLen(_))))
             .unwrap();
         let mid = stmts.iter().enumerate().any(|(idx, st)| {
             idx > call_at
-                && idx < add_at
+                && idx < len_at
                 && matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s)
         });
         assert!(
             !mid,
-            "string must not be released between hidden-borrow call and later work: {:?}",
+            "Held call must not Release before a later read: {:?}",
             stmts
+        );
+        let after = stmts.iter().enumerate().any(|(idx, st)| {
+            idx > len_at
+                && matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s)
+        });
+        assert!(after, "string still released after last read: {:?}", stmts);
+    }
+
+    #[test]
+    fn await_call_borrow_arg_not_released_before_await() {
+        let i = dream_types::TypeInterner::new();
+        let read = DefId(11);
+        let mut b = FunctionBuilder::new("f", i.void());
+        b.set_async(true);
+        let path = b.new_local(i.string(), Some("path".into()));
+        let fut = b.new_local(i.string(), Some("fut".into()));
+        let resume = b.new_block();
+        b.assign(
+            Place::Local(path),
+            Rvalue::Use(Operand::Const(Const::Str("p".into()))),
+        );
+        b.assign(
+            Place::Local(fut),
+            Rvalue::Call {
+                callee: Callee {
+                    def: read,
+                    args: vec![],
+                    ret: i.string(),
+                    take_params: vec![false],
+                },
+                args: vec![Operand::Copy(Place::Local(path))],
+            },
+        );
+        b.terminate(Terminator::Await {
+            future: Operand::Copy(Place::Local(fut)),
+            dest: None,
+            resume,
+        });
+        b.switch_to(resume);
+        b.terminate(Terminator::AsyncComplete(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &i);
+        let await_rel = func.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == path
+            )
+        });
+        assert!(
+            !await_rel,
+            "borrow arg of an awaited call must stay alive until resume: {:?}",
+            func.blocks[0].stmts
+        );
+        let resume_rel = func.blocks[resume.0 as usize].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == path
+            )
+        });
+        assert!(
+            resume_rel,
+            "path must Release after await resumes: {:?}",
+            func.blocks[resume.0 as usize].stmts
+        );
+    }
+
+    #[test]
+    fn loop_rebind_array_releases_previous() {
+        let mut ctx = TypeCtx::new();
+        let ch = ctx.interner.char();
+        let arr_ty = ctx.interner.array(ch);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let wire = b.new_local(arr_ty, Some("wire".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.assign(
+            Place::Local(wire),
+            Rvalue::ArrayNew {
+                elem_ty: ch,
+                len: Operand::Const(Const::Int(0)),
+            },
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(wire),
+            Rvalue::ArrayNew {
+                elem_ty: ch,
+                len: Operand::Const(Const::Int(4)),
+            },
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcInsertion.run(&mut func, &ctx.interner));
+        let body_rel = func.blocks[body.0 as usize].stmts.iter().any(
+            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == wire),
+        );
+        assert!(
+            body_rel,
+            "loop-carried array rebind must drop the previous block: {:?}",
+            func.blocks[body.0 as usize].stmts
+        );
+    }
+
+    #[test]
+    fn loop_field_store_of_take_param_releases_at_return() {
+        let mut ctx = TypeCtx::new();
+        let (_def, ty) = class_ty(&mut ctx);
+        let peek = ctx.register(DefKind::Function, "peek", vec![]);
+        let mut b = FunctionBuilder::new("insert", ctx.interner.void());
+        let this = b.new_param(ty, Some("this".into()));
+        let key = b.new_take_param(ty, Some("key".into()));
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Field {
+                base: this,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Copy(Place::Local(key))),
+        );
+        b.push(Statement::Call {
+            callee: Callee {
+                def: peek,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(key))],
+        });
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let exit_rel = func.blocks[exit.0 as usize].stmts.iter().any(
+            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == key),
+        );
+        assert!(
+            exit_rel,
+            "take-param retained into a field in a loop must leftover-Release: {:?}",
+            func.blocks[exit.0 as usize].stmts
+        );
+    }
+
+    #[test]
+    fn union_last_use_released_at_return() {
+        let mut ctx = TypeCtx::new();
+        let udef = ctx.register(DefKind::Union, "Opt", vec![]);
+        let uty = ctx.interner.union_ty(udef, vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let a = b.new_local(uty, Some("a".into()));
+        b.assign(
+            Place::Local(a),
+            Rvalue::UnionNew {
+                def: udef,
+                ty: uty,
+                variant: 0,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let rel = func.blocks[0].stmts.iter().any(
+            |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == a),
+        );
+        assert!(
+            rel,
+            "owned union must Release before return: {:?}",
+            func.blocks[0].stmts
         );
     }
 
@@ -1700,10 +2125,7 @@ mod tests {
         let mut b = FunctionBuilder::new("f", ctx.interner.void());
         let a = b.new_local(uty, Some("a".into()));
         let bb = b.new_local(uty, Some("b".into()));
-        b.assign(
-            Place::Local(a),
-            Rvalue::Use(Operand::Const(Const::Null)),
-        );
+        b.assign(Place::Local(a), Rvalue::Use(Operand::Const(Const::Null)));
         b.assign(
             Place::Local(bb),
             Rvalue::UnionNew {
@@ -1713,11 +2135,11 @@ mod tests {
                 args: vec![],
             },
         );
-        b.assign(Place::Local(a), Rvalue::Use(Operand::Copy(Place::Local(bb))));
         b.assign(
-            Place::Local(bb),
-            Rvalue::Use(Operand::Const(Const::Null)),
+            Place::Local(a),
+            Rvalue::Use(Operand::Copy(Place::Local(bb))),
         );
+        b.assign(Place::Local(bb), Rvalue::Use(Operand::Const(Const::Null)));
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
         RcInsertion.run(&mut func, &ctx.interner);
@@ -1813,6 +2235,61 @@ mod tests {
     }
 
     #[test]
+    fn loop_await_releases_future_on_resume() {
+        let mut ctx = TypeCtx::new();
+        let (def, ty) = class_ty(&mut ctx);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        b.set_async(true);
+        let c = b.new_local(ctx.interner.bool(), Some("c".into()));
+        let fut = b.new_local(ty, Some("fut".into()));
+        let header = b.new_block();
+        let body = b.new_block();
+        let resume = b.new_block();
+        let exit = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: body,
+            else_blk: exit,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(fut),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.terminate(Terminator::Await {
+            future: Operand::Copy(Place::Local(fut)),
+            dest: None,
+            resume,
+        });
+        b.switch_to(resume);
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(exit);
+        b.terminate(Terminator::AsyncComplete(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        let resume_rel = func.blocks[resume.0 as usize].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+                    if *l == fut
+            )
+        });
+        assert!(
+            resume_rel,
+            "await future must Release on resume even if the next iteration drop_previous would keep it live: {:?}",
+            func.blocks[resume.0 as usize].stmts
+        );
+    }
+
+    #[test]
     fn unique_new_uses_release_unique() {
         let mut ctx = TypeCtx::new();
         let (def, ty) = class_ty(&mut ctx);
@@ -1830,17 +2307,19 @@ mod tests {
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &ctx.interner));
-        let has_unique = func.blocks[0]
-            .stmts
-            .iter()
-            .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        let has_release = func.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Release(_) | Statement::ReleaseUnique(_)
+            )
+        });
         let has_retain = func.blocks[0]
             .stmts
             .iter()
             .any(|s| matches!(s, Statement::Retain(_)));
         assert!(
-            has_unique,
-            "unique birth should ReleaseUnique: {:?}",
+            has_release,
+            "unique leftover must still Release: {:?}",
             func.blocks[0].stmts
         );
         assert!(!has_retain);
@@ -1944,9 +2423,9 @@ mod tests {
             .iter()
             .position(|st| matches!(st, Statement::Assign(Place::Index { .. }, _)))
             .expect("index store");
-        let retain_after_store = func.blocks[0].stmts[store_at + 1..].iter().any(|st| {
-            matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == s)
-        });
+        let retain_after_store = func.blocks[0].stmts[store_at + 1..]
+            .iter()
+            .any(|st| matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == s));
         assert!(
             !retain_after_store,
             "move into string[] must not Retain after the store: {:?}",

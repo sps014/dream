@@ -1505,7 +1505,7 @@ public static class JsonGenerator {
         JsonGenerator.append_block(cb, to_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public fun write_json(sb: StringBuilder): void {");
+        cb.line("public fun write_json(borrow sb: StringBuilder): void {");
         cb.indent();
         JsonGenerator.append_block(cb, write_cb.to_string());
         cb.dedent();
@@ -1835,7 +1835,7 @@ public static class JsonGenerator {
         JsonGenerator.append_block(cb, to_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public fun write_json(sb: StringBuilder): void {");
+        cb.line("public fun write_json(borrow sb: StringBuilder): void {");
         cb.indent();
         JsonGenerator.append_block(cb, write_cb.to_string());
         cb.dedent();

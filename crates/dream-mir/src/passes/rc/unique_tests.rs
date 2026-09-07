@@ -275,13 +275,13 @@ fn self_ref_field_call_is_not_container_move() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    let uniq = func.blocks[0]
+    let rel = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == n));
     assert!(
-        uniq,
-        "n itself can still unique-destroy; Call rvalue is not a local move: {:?}",
+        rel,
+        "n leftover-releases (call is not a local move): {:?}",
         func.blocks[0].stmts
     );
 }
@@ -399,13 +399,13 @@ fn interface_typed_unique_still_release_unique() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    let uniq = func.blocks[0]
+    let rel = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::Release(_) | Statement::ReleaseUnique(_)));
     assert!(
-        uniq,
-        "interface unique last-use is ReleaseUnique (tag-dispatch destroy): {:?}",
+        rel,
+        "interface leftover still destroys: {:?}",
         func.blocks[0].stmts
     );
 }
@@ -602,5 +602,47 @@ fn self_ref_union_new_does_not_share_at_loop_header() {
         retains, 0,
         "self-ref Cons stays Unique; extra header retain leaks the tail: {:?}",
         func.blocks
+    );
+}
+
+#[test]
+fn last_use_primitive_field_inserts_one_release() {
+    let mut ctx = TypeCtx::new();
+    let (def, ty) = class_ty(&mut ctx);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let x = b.new_local(ty, Some("x".into()));
+    let id = b.new_local(ctx.interner.int(), Some("id".into()));
+    b.assign(Place::Local(x), new_obj(def, ty));
+    b.assign(
+        Place::Local(id),
+        Rvalue::Use(Operand::Copy(Place::Field {
+            base: x,
+            field: 0,
+        })),
+    );
+    b.push(Statement::Print {
+        arg: Operand::Copy(Place::Local(id)),
+        ty: ctx.interner.int(),
+        newline: true,
+    });
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    let releases: Vec<_> = func.blocks[0]
+        .stmts
+        .iter()
+        .filter(|s| {
+            matches!(
+                s,
+                Statement::Release(Operand::Copy(Place::Local(l)))
+                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x
+            )
+        })
+        .collect();
+    assert_eq!(
+        releases.len(),
+        1,
+        "last-use of a primitive field must destroy once, not leftover a second time: {:?}",
+        func.blocks[0].stmts
     );
 }

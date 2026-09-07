@@ -4,13 +4,14 @@
 //! assign/sink, stay put on `borrow`, and die at last-use destroy, join balancing, or return.
 //! This is CFG dataflow, not ownership-SSA.
 
+use super::lifetime::{call_args_kept_across_await, may_die_after, stmt_borrow, StmtBorrow};
 use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
 use super::uniqueness::{apply_stmt_unique, collect_container_moves, meet_unique};
 use super::{is_borrowed_copy, is_pure_rvalue, rvalue_reads_local};
 use crate::passes::cfg;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::TypeInterner;
-use std::collections::{BTreeSet, HashSet};
+use dream_types::{DefId, TypeInterner};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Owned-RC locals (not cursors, not borrow params). Take-params are owned.
 pub(crate) fn is_owned_local(func: &MirFunction, interner: &TypeInterner, local: u32) -> bool {
@@ -35,25 +36,6 @@ pub(crate) fn take_param_set(func: &MirFunction) -> HashSet<u32> {
         .collect()
 }
 
-/// Strings / arrays / funcboxes / unions may be borrowed by a callee that stashes a raw pointer
-/// (funcbox env, union spine, group buffer). Do not destroy these until block-end or return —
-/// a mid-block `Release` after a hidden borrow is UAF.
-pub(crate) fn is_hidden_borrow_ty(func: &MirFunction, interner: &TypeInterner, local: u32) -> bool {
-    let ty = func.locals[local as usize].ty;
-    ty == interner.string()
-        || matches!(
-            interner.kind(ty),
-            dream_types::TyKind::Array(_)
-                | dream_types::TyKind::Func(_, _)
-                | dream_types::TyKind::Union(_, _)
-        )
-}
-
-/// Classes / `js` may destroy at last use; hidden-borrow types wait for block-end or return.
-pub(crate) fn is_early_destroy_ty(func: &MirFunction, interner: &TypeInterner, local: u32) -> bool {
-    !is_hidden_borrow_ty(func, interner, local)
-}
-
 /// Rebind of an owned dest whose RHS may observe the old pointer (`x = f(x)`, `New`, calls).
 /// Lower as `tmp = rhs; Release(x); x = tmp` so the call cannot UAF.
 /// Concat / ConcatInt only read their operands; native C reuses `dest` in place when unique.
@@ -76,7 +58,6 @@ pub(crate) struct TokenAnalysis {
     pub token_in: Vec<Vec<bool>>,
     pub token_out: Vec<Vec<bool>>,
     pub unique_in: Vec<Vec<bool>>,
-    pub unique_out: Vec<Vec<bool>>,
     /// Unique token on this block, Shared on a successor that still holds it: Retain before the join.
     pub share_at_end: Vec<BTreeSet<u32>>,
     /// Await dest written at the top of this resume block.
@@ -96,7 +77,10 @@ struct TokenFlow<'a> {
     preds: &'a [Vec<crate::BlockId>],
     entry: usize,
     loop_headers: &'a HashSet<usize>,
+    loop_bodies: &'a [HashSet<usize>],
+    loop_assigns: &'a [HashSet<u32>],
     await_resume_dest: &'a [Option<u32>],
+    holds: &'a HashSet<DefId>,
 }
 
 impl TokenAnalysis {
@@ -104,6 +88,7 @@ impl TokenAnalysis {
         func: &MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        holds: &HashSet<DefId>,
     ) -> TokenAnalysis {
         let n = func.blocks.len();
         let nloc = func.locals.len();
@@ -139,6 +124,9 @@ impl TokenAnalysis {
         let mut sink_move = HashSet::new();
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
+                if stmt_borrow(stmt, holds) == StmtBorrow::Held {
+                    continue;
+                }
                 for local in take_owned_arg_locals(stmt, &is_owned) {
                     if !live_after_stmt(func, &live_out, bi, si, local) {
                         sink_move.insert((bi, si, local));
@@ -158,43 +146,78 @@ impl TokenAnalysis {
         collect_container_moves(func, interner, &live_out, is_owned, layouts, &mut sink_move);
         transferred.extend(sink_move.iter().copied());
 
+        // Last-use destroy only at leftover (token_out / Return), Print, and a primitive field
+        // load of the owned local (`last_use_destroy`: drop after `println(x.id)`). Destroying
+        // after an arbitrary last *read* (RC field/index, Call, union payload) UAFs cursors or
+        // last-refs a value still stored in the parent. Sinks are already in `transferred`.
+        let rc_snaps = rc_snapshots_of(func, interner);
+        let snapshot_locals: HashSet<u32> = rc_snaps.values().flatten().copied().collect();
         let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
         for (bi, block) in func.blocks.iter().enumerate() {
+            let kept_await = call_args_kept_across_await(block, nloc);
             for (si, stmt) in block.stmts.iter().enumerate() {
                 for local in 0..nloc as u32 {
                     if !is_owned(local) || take_params.contains(&local) {
                         continue;
                     }
-                    if !is_early_destroy_ty(func, interner, local) {
+                    if snapshot_locals.contains(&local) {
                         continue;
                     }
                     if transferred.contains(&(bi, si, local)) || rc_op_on_local(stmt, local) {
                         continue;
                     }
-                    let used = stmt_reads_local(stmt, local);
-                    let defined_dead = assigns_local(stmt, local)
-                        && !live_after_stmt(func, &live_out, bi, si, local);
-                    if !used && !defined_dead {
+                    if kept_await.contains(&local) {
                         continue;
                     }
-                    if used && live_after_stmt(func, &live_out, bi, si, local) {
+                    if live_after_stmt(func, &live_out, bi, si, local) {
                         continue;
                     }
-                    if defined_dead || (used && !live_after_stmt(func, &live_out, bi, si, local)) {
-                        if !allows_early_destroy(stmt) {
-                            continue;
-                        }
-                        die_after.insert((bi, source_line_end(block, si), local));
+                    // Do not unique-destroy on `x = rhs` merely because `x` is unread before a
+                    // later rebind (`held = make_adder(7); mid = …; held = make_adder(0)`).
+                    if assigns_local(stmt, local) {
+                        continue;
                     }
+                    if !stmt_reads_local(stmt, local) {
+                        continue;
+                    }
+                    if rc_snaps.get(&local).is_some_and(|ds| {
+                        ds.iter()
+                            .any(|&d| live_after_stmt(func, &live_out, bi, si, d))
+                    }) {
+                        continue;
+                    }
+                    if !last_use_destroy_site(stmt, local, func, interner, holds) {
+                        continue;
+                    }
+                    die_after.insert((bi, source_line_end(block, si), local));
                 }
             }
         }
 
         let preds = cfg::predecessors(func);
         let entry = func.entry.0 as usize;
-        let loop_headers: HashSet<usize> = cfg::natural_loops(func)
+        let natural_loops = cfg::natural_loops(func);
+        let loop_headers: HashSet<usize> = natural_loops
             .iter()
             .map(|lp| lp.header.0 as usize)
+            .collect();
+        let loop_bodies: Vec<HashSet<usize>> = natural_loops
+            .iter()
+            .map(|lp| lp.body.iter().map(|b| b.0 as usize).collect())
+            .collect();
+        let loop_assigns: Vec<HashSet<u32>> = natural_loops
+            .iter()
+            .map(|lp| {
+                let mut asg = HashSet::new();
+                for b in &lp.body {
+                    for stmt in &func.blocks[b.0 as usize].stmts {
+                        if let Statement::Assign(Place::Local(d), _) = stmt {
+                            asg.insert(d.0);
+                        }
+                    }
+                }
+                asg
+            })
             .collect();
         let mut await_resume_dest = vec![None; n];
         for block in &func.blocks {
@@ -224,7 +247,10 @@ impl TokenAnalysis {
             preds: &preds,
             entry,
             loop_headers: &loop_headers,
+            loop_bodies: &loop_bodies,
+            loop_assigns: &loop_assigns,
             await_resume_dest: &await_resume_dest,
+            holds,
         };
         let mut start_release = vec![BTreeSet::new(); n];
         let mut end_release = vec![BTreeSet::new(); n];
@@ -271,7 +297,7 @@ impl TokenAnalysis {
             .into_iter()
             .map(|row| row.into_iter().map(|t| t.unwrap_or(false)).collect())
             .collect();
-        let mut unique_out: Vec<Vec<bool>> = unique_out
+        let unique_out: Vec<Vec<bool>> = unique_out
             .into_iter()
             .map(|row| row.into_iter().map(|t| t.unwrap_or(false)).collect())
             .collect();
@@ -306,9 +332,6 @@ impl TokenAnalysis {
                     }
                 }
             }
-            for &local in &share_at_end[bi] {
-                unique_out[bi][local as usize] = false;
-            }
         }
 
         TokenAnalysis {
@@ -320,7 +343,6 @@ impl TokenAnalysis {
             token_in,
             token_out,
             unique_in,
-            unique_out,
             share_at_end,
             await_resume_dest,
             has_await,
@@ -431,6 +453,16 @@ fn pred_tokens_unbalanced(
     saw_owned && saw_empty
 }
 
+/// Outer locals that are never written in a natural loop stay in scope across it
+/// (`warm` in `closure_env_reclaim`). Leftover on the header/back-edge would drop them
+/// after a pre-loop `Debug.live_objects` baseline.
+fn keep_unread_across_loop(flow: &TokenFlow<'_>, bi: usize, local: u32) -> bool {
+    flow.loop_bodies
+        .iter()
+        .zip(flow.loop_assigns.iter())
+        .any(|(body, asg)| body.contains(&bi) && !asg.contains(&local))
+}
+
 fn transfer_block(
     flow: &TokenFlow<'_>,
     token_in: &[bool],
@@ -448,10 +480,19 @@ fn transfer_block(
         if !*slot || flow.take_params.contains(&local) || !(flow.is_owned)(local) {
             continue;
         }
-        if is_hidden_borrow_ty(flow.func, flow.interner, local) {
+        if live_in.contains(&local) || flow.live_out[bi].contains(&local) {
             continue;
         }
-        if live_in.contains(&local) || flow.live_out[bi].contains(&local) {
+        if keep_unread_across_loop(flow, bi, local) {
+            continue;
+        }
+        // Return leftover runs after this block's stmts (`print` then drop). A mixed-join
+        // start_release would unique-destroy here first (`in_union` dropped Tracked before
+        // printing the payload id).
+        if matches!(
+            block.terminator,
+            Terminator::Return(_) | Terminator::AsyncComplete(_)
+        ) {
             continue;
         }
         // Only the split edge of a mixed join. A single-pred successor (switch arm) is not a
@@ -519,6 +560,20 @@ fn transfer_block(
         _ => None,
     };
 
+    let delay_held = matches!(block.terminator, Terminator::Await { .. });
+    let mut held_args = call_args_kept_across_await(block, tokens.len());
+    if delay_held {
+        for stmt in &block.stmts {
+            if stmt_borrow(stmt, flow.holds) == StmtBorrow::Held {
+                for local in 0..tokens.len() as u32 {
+                    if stmt_reads_local(stmt, local) && (flow.is_owned)(local) {
+                        held_args.insert(local);
+                    }
+                }
+            }
+        }
+    }
+
     let mut end = BTreeSet::new();
     for (local, slot) in tokens.iter_mut().enumerate() {
         let local = local as u32;
@@ -526,13 +581,22 @@ fn transfer_block(
         if !*slot || !(flow.is_owned)(local) {
             continue;
         }
-        if flow.take_params.contains(&local) && !clobber {
+        if flow.take_params.contains(&local)
+            && !clobber
+            && !matches!(
+                block.terminator,
+                Terminator::Return(_) | Terminator::AsyncComplete(_)
+            )
+        {
             continue;
         }
-        if is_hidden_borrow_ty(flow.func, flow.interner, local) && !clobber {
+        if delay_held && held_args.contains(&local) && !clobber {
             continue;
         }
         if flow.live_out[bi].contains(&local) && !clobber {
+            continue;
+        }
+        if keep_unread_across_loop(flow, bi, local) {
             continue;
         }
         if !clobber && terminator_reads_local(&block.terminator, local) {
@@ -625,6 +689,180 @@ fn add_op(op: &Operand, live: &mut HashSet<u32>) {
     }
 }
 
+/// Copy / niche-union / `unwrap_or`-shaped call: dest aliases `src`.
+pub(crate) struct AliasMap {
+    parent: HashMap<u32, u32>,
+}
+
+impl AliasMap {
+    pub(crate) fn of(func: &MirFunction) -> Self {
+        Self {
+            parent: alias_parent_map(func, false),
+        }
+    }
+
+    pub(crate) fn root(&self, mut x: u32) -> u32 {
+        let mut seen = HashSet::new();
+        while seen.insert(x) {
+            if let Some(&p) = self.parent.get(&x) {
+                x = p;
+            } else {
+                break;
+            }
+        }
+        x
+    }
+
+    fn root_stop_at_index(&self, mut x: u32, index_defined: &HashSet<u32>) -> u32 {
+        let mut seen = HashSet::new();
+        while seen.insert(x) {
+            if index_defined.contains(&x) {
+                return x;
+            }
+            if let Some(&p) = self.parent.get(&x) {
+                x = p;
+            } else {
+                break;
+            }
+        }
+        x
+    }
+
+    /// True when an *owned* still-live local peels to the same object. Cursor aliases must
+    /// not suppress leftover of the root (`last_use_destroy`). Owned `unwrap_or` dest must
+    /// suppress leftover of `fallback` on the None path.
+    pub(crate) fn live_owned_alias(&self, is_cursor: &[bool], local: u32, live: &HashSet<u32>) -> bool {
+        let r = self.root(local);
+        live.iter().any(|&o| {
+            o != local
+                && is_cursor.get(o as usize).copied() != Some(true)
+                && self.root(o) == r
+        })
+    }
+}
+
+pub(crate) fn terminator_live_locals(term: &Terminator, live: &mut HashSet<u32>) {
+    match term {
+        Terminator::Return(Some(Operand::Copy(Place::Local(l))))
+        | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) => {
+            live.insert(l.0);
+        }
+        _ => {}
+    }
+}
+
+/// Copy / niche-union / `unwrap_or`-shaped call: dest aliases `src`, so leftover must
+/// Release only one of them (two last-refs free a Map occupant still stored in `obj_map`).
+fn alias_parent_map(func: &MirFunction, snapshots: bool) -> HashMap<u32, u32> {
+    let mut parent = HashMap::new();
+    let ty = |l: u32| func.locals.get(l as usize).map(|d| d.ty);
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            match stmt {
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Use(Operand::Copy(Place::Local(src))),
+                ) if ty(dest.0) == ty(src.0) => {
+                    parent.insert(dest.0, src.0);
+                }
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Use(Operand::Copy(Place::Field { base, .. })),
+                ) if snapshots => {
+                    parent.insert(dest.0, base.0);
+                }
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Use(Operand::Copy(Place::Index { base, .. })),
+                ) if snapshots => {
+                    parent.insert(dest.0, base.0);
+                }
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::UnionField {
+                        base: Operand::Copy(Place::Local(src)),
+                        ..
+                    },
+                ) => {
+                    parent.insert(dest.0, src.0);
+                }
+                Statement::Assign(Place::Local(dest), Rvalue::Call { args, .. })
+                    if args.len() == 2 =>
+                {
+                    let Operand::Copy(Place::Local(src)) = &args[0] else {
+                        continue;
+                    };
+                    let Operand::Copy(Place::Local(fb)) = &args[1] else {
+                        continue;
+                    };
+                    // `unwrap_or(this, fallback)`: dest aliases `this` on Some (niche Option
+                    // vs payload types differ). Two leftovers last-ref a Map occupant.
+                    if ty(dest.0) == ty(fb.0) {
+                        parent.insert(dest.0, src.0);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    parent
+}
+
+/// Locals in `ids` that should `Release` (one per alias group). Others only null.
+///
+/// Peel Field / UnionField / copy / `unwrap_or` so a Map occupant and its parent do not both
+/// last-ref. Stop at Index dests: those extra-retain the slot, so they last-ref *and* the
+/// container last-refs (`nested_array`). Field-of-index payloads skip leftover (the Index
+/// dest already owns the slot).
+pub(crate) fn leftover_keep(func: &MirFunction, ids: impl IntoIterator<Item = u32>) -> HashSet<u32> {
+    let aliases = AliasMap {
+        parent: alias_parent_map(func, true),
+    };
+    let index_defined = index_defined_locals(func);
+    let set: BTreeSet<u32> = ids.into_iter().collect();
+    let mut seen_root = HashSet::new();
+    let mut keep = HashSet::new();
+    for &l in &set {
+        if index_defined.contains(&l) {
+            keep.insert(l);
+            continue;
+        }
+        let r = aliases.root_stop_at_index(l, &index_defined);
+        if index_defined.contains(&r) {
+            continue;
+        }
+        if seen_root.insert(r) {
+            keep.insert(l);
+        }
+    }
+    keep
+}
+
+fn index_defined_locals(func: &MirFunction) -> HashSet<u32> {
+    let mut index_defined = HashSet::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
+                if matches!(
+                    rvalue,
+                    Rvalue::Use(Operand::Copy(Place::Index { .. }))
+                        | Rvalue::Cast(Operand::Copy(Place::Index { .. }), _, _)
+                ) {
+                    index_defined.insert(dest.0);
+                }
+            }
+        }
+    }
+    index_defined
+}
+
+pub(crate) fn null_local(local: u32) -> Statement {
+    Statement::Assign(
+        Place::Local(Local(local)),
+        Rvalue::Use(Operand::Const(Const::Null)),
+    )
+}
+
 pub(crate) fn release_and_null(local: u32, unique: bool) -> [Statement; 2] {
     let op = Operand::Copy(Place::Local(Local(local)));
     [
@@ -656,25 +894,52 @@ pub(crate) fn assigns_local(stmt: &Statement, local: u32) -> bool {
     matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local)
 }
 
-pub(crate) fn allows_early_destroy(stmt: &Statement) -> bool {
+fn rc_snapshots_of(func: &MirFunction, interner: &TypeInterner) -> HashMap<u32, Vec<u32>> {
+    let mut m: HashMap<u32, Vec<u32>> = HashMap::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Statement::Assign(Place::Local(dest), rv) = stmt else {
+                continue;
+            };
+            if !interner.is_rc_tracked(func.locals[dest.0 as usize].ty) {
+                continue;
+            }
+            let base = match rv {
+                Rvalue::Use(Operand::Copy(Place::Field { base, .. }))
+                | Rvalue::Use(Operand::Copy(Place::Index { base, .. }))
+                | Rvalue::Cast(Operand::Copy(Place::Field { base, .. }), _, _)
+                | Rvalue::Cast(Operand::Copy(Place::Index { base, .. }), _, _) => base.0,
+                Rvalue::UnionField {
+                    base: Operand::Copy(Place::Local(b)),
+                    ..
+                } => b.0,
+                _ => continue,
+            };
+            m.entry(base).or_default().push(dest.0);
+        }
+    }
+    m
+}
+
+fn last_use_destroy_site(
+    stmt: &Statement,
+    local: u32,
+    func: &MirFunction,
+    interner: &TypeInterner,
+    holds: &HashSet<DefId>,
+) -> bool {
+    if !may_die_after(stmt, holds) {
+        return false;
+    }
     match stmt {
-        Statement::Print { .. } | Statement::JsCall { .. } => true,
-        Statement::Assign(_, rv) => matches!(
-            rv,
-            Rvalue::Use(_)
-                | Rvalue::Select { .. }
-                | Rvalue::Unary(_, _)
-                | Rvalue::Binary(_, _, _)
-                | Rvalue::UnionField { .. }
-                | Rvalue::ToString(_)
-                | Rvalue::Concat(_)
-                | Rvalue::ConcatInt { .. }
-                | Rvalue::StrLen(_)
-                | Rvalue::StrByteSize(_)
-                | Rvalue::CharAt(_, _, _)
-                | Rvalue::ByteAt(_, _, _)
-                | Rvalue::HashCode(_)
-        ),
+        Statement::Print { .. } => true,
+        Statement::Assign(Place::Local(dest), rv) => match rv {
+            Rvalue::Use(Operand::Copy(Place::Field { base, .. })) if base.0 == local => func
+                .locals
+                .get(dest.0 as usize)
+                .is_some_and(|d| !interner.is_rc_tracked(d.ty)),
+            _ => false,
+        },
         _ => false,
     }
 }

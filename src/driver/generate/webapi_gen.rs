@@ -710,11 +710,10 @@ fn emit_extend(
     s.push_str(&json_string(&openapi_paths(routes, json_names, acc)));
     s.push_str(";\n    }\n\n");
     s.push_str(
-        "    public static async fun generated_dispatch(ctx: RequestContext): HttpOutgoing {\n",
+        "    public static async fun generated_dispatch(borrow ctx: RequestContext): HttpOutgoing {\n",
     );
-    s.push_str("        let req = ctx.incoming;\n");
-    s.push_str("        let method = req.method;\n");
-    s.push_str("        let path = req.path;\n");
+    s.push_str("        let method = ctx.incoming.method;\n");
+    s.push_str("        let path = ctx.incoming.path;\n");
     for (i, r) in routes.iter().enumerate() {
         s.push_str(&format!(
             "        let __m{i} = WebApp.match_path(\"{}\", path);\n",
@@ -797,13 +796,13 @@ fn emit_extractors(
         .any(|p| matches!(p.kind, ParamKind::Form(_) | ParamKind::File(_)));
     if needs_multipart {
         s.push_str(&format!(
-            "{ind}if WebApp.host_parse_multipart(req.req_id) != 1 {{ return HttpOutgoing.from_status(HttpStatus(400, \"expected multipart/form-data\")); }}\n"
+            "{ind}if WebApp.host_parse_multipart(ctx.incoming.req_id) != 1 {{ return HttpOutgoing.from_status(HttpStatus(400, \"expected multipart/form-data\")); }}\n"
         ));
     }
     for p in &r.params {
         match &p.kind {
             ParamKind::Incoming => {
-                s.push_str(&format!("{ind}let {} = req;\n", p.name));
+                s.push_str(&format!("{ind}let {} = ctx.incoming;\n", p.name));
                 args.push(p.name.clone());
             }
             ParamKind::Context => {
@@ -812,7 +811,7 @@ fn emit_extractors(
             }
             ParamKind::ServerWs => {
                 s.push_str(&format!(
-                    "{ind}let __ws_{} = ServerWebSocket.upgrade(req);\n",
+                    "{ind}let __ws_{} = ServerWebSocket.upgrade(ctx.incoming);\n",
                     p.name
                 ));
                 s.push_str(&format!(
@@ -835,7 +834,7 @@ fn emit_extractors(
             }
             ParamKind::Query(key) => {
                 s.push_str(&format!(
-                    "{ind}let __q_{} = req.query_param(\"{key}\");\n",
+                    "{ind}let __q_{} = ctx.incoming.query_param(\"{key}\");\n",
                     p.name
                 ));
                 if option_inner(&p.ty).is_some() {
@@ -857,7 +856,7 @@ fn emit_extractors(
             }
             ParamKind::Header(key) => {
                 s.push_str(&format!(
-                    "{ind}let __h_{} = req.header(\"{key}\");\n",
+                    "{ind}let __h_{} = ctx.incoming.header(\"{key}\");\n",
                     p.name
                 ));
                 if option_inner(&p.ty).is_some() {
@@ -876,7 +875,7 @@ fn emit_extractors(
             }
             ParamKind::Cookie(key) => {
                 s.push_str(&format!(
-                    "{ind}let __c_{} = req.cookie(\"{key}\");\n",
+                    "{ind}let __c_{} = ctx.incoming.cookie(\"{key}\");\n",
                     p.name
                 ));
                 if option_inner(&p.ty).is_some() {
@@ -895,13 +894,16 @@ fn emit_extractors(
             }
             ParamKind::Body => {
                 s.push_str(&format!(
-                    "{ind}let __body_{} = req.read_body_text();\n",
+                    "{ind}let __body_{} = ctx.incoming.read_body_text();\n",
                     p.name
                 ));
                 if p.ty == "string" {
                     s.push_str(&format!("{ind}let {} = __body_{};\n", p.name, p.name));
                 } else if p.ty == "byte[]" {
-                    s.push_str(&format!("{ind}let {} = req.read_body_bytes();\n", p.name));
+                    s.push_str(&format!(
+                        "{ind}let {} = ctx.incoming.read_body_bytes();\n",
+                        p.name
+                    ));
                 } else {
                     s.push_str(&format!(
                         "{ind}let __bj_{} = Json.deserialize<{}>(__body_{});\n",
@@ -920,7 +922,7 @@ fn emit_extractors(
             }
             ParamKind::Form(key) => {
                 s.push_str(&format!(
-                    "{ind}let __f_{} = WebApp.multipart_field(req.req_id, \"{key}\");\n",
+                    "{ind}let __f_{} = WebApp.multipart_field(ctx.incoming.req_id, \"{key}\");\n",
                     p.name
                 ));
                 if option_inner(&p.ty).is_some() {
@@ -939,7 +941,7 @@ fn emit_extractors(
             }
             ParamKind::File(key) => {
                 s.push_str(&format!(
-                    "{ind}let __file_{} = WebApp.multipart_file(req.req_id, \"{key}\");\n",
+                    "{ind}let __file_{} = WebApp.multipart_file(ctx.incoming.req_id, \"{key}\");\n",
                     p.name
                 ));
                 if option_inner(&p.ty).is_some() {
@@ -1021,7 +1023,7 @@ fn emit_dep_call(
                 dep_args.push(tmp);
             } else if has_attr(&p.attributes, "header") {
                 let h = attr_string(&p.attributes, "header").unwrap_or_else(|| p.name.text.clone());
-                s.push_str(&format!("{ind}let {tmp}_o = req.header(\"{h}\");\n"));
+                s.push_str(&format!("{ind}let {tmp}_o = ctx.incoming.header(\"{h}\");\n"));
                 if option_inner(&pty).is_some() {
                     s.push_str(&format!("{ind}let {tmp} = {tmp}_o;\n"));
                 } else {
@@ -1036,11 +1038,11 @@ fn emit_dep_call(
             } else if has_attr(&p.attributes, "query") {
                 let q = attr_string(&p.attributes, "query").unwrap_or_else(|| p.name.text.clone());
                 s.push_str(&format!(
-                    "{ind}let {tmp} = req.query_param(\"{q}\").unwrap_or(string.empty);\n"
+                    "{ind}let {tmp} = ctx.incoming.query_param(\"{q}\").unwrap_or(string.empty);\n"
                 ));
                 dep_args.push(tmp);
             } else if pty == "HttpIncoming" {
-                dep_args.push("req".into());
+                dep_args.push("ctx.incoming".into());
             } else if pty == "RequestContext" {
                 s.push_str(&format!("{ind}let {tmp} = ctx;\n"));
                 dep_args.push(tmp);

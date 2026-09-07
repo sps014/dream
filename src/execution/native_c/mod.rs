@@ -48,6 +48,13 @@ pub fn compile_and_capture_ex(
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
+    if std::env::var("DREAM_NATIVE_SANITIZE")
+        .ok()
+        .is_some_and(|s| s.contains("address") || s.contains("leak"))
+        && std::env::var("ASAN_OPTIONS").is_err()
+    {
+        cmd.env("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1");
+    }
     cmd.args(extra_args);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -86,7 +93,21 @@ pub fn compile_and_capture_ex(
         )
         .into());
     }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if let Some(live) = parse_leak_live(&stderr) {
+        if live != 0 {
+            return Err(format!("guest leak check live={live} (want 0)\n{stderr}").into());
+        }
+    }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+fn parse_leak_live(stderr: &str) -> Option<i32> {
+    let marker = "[dream] leak check: live=";
+    let i = stderr.find(marker)?;
+    let rest = &stderr[i + marker.len()..];
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
 }
 
 pub fn run_native_bin(
@@ -124,7 +145,11 @@ pub(crate) fn native_run_env_pairs(c_path: &str) -> Vec<(String, String)> {
         };
         let mut paths = dir.display().to_string();
         if let Ok(prev) = std::env::var(key) {
-            let sep = if cfg!(target_os = "windows") { ';' } else { ':' };
+            let sep = if cfg!(target_os = "windows") {
+                ';'
+            } else {
+                ':'
+            };
             paths = format!("{paths}{sep}{prev}");
         }
         out.push((key.to_string(), paths));
@@ -201,6 +226,26 @@ const DEBUG_CC_FLAGS: &[&str] = &["-g", "-O0", "-fno-omit-frame-pointer"];
 /// Zig 0.16 LTO is not usable on every host: `windows-gnu` pulls `zigc.lib` without MinGW CRT
 /// math/wchar symbols, and macOS zig-cc errors with "LTO requires using LLD". Keep `-O3`; drop
 /// `-flto` on those hosts.
+fn native_sanitize_args() -> Vec<String> {
+    match std::env::var("DREAM_NATIVE_SANITIZE") {
+        Ok(v) if !v.trim().is_empty() => vec![format!("-fsanitize={}", v.trim())],
+        // Zig 0.16 `cc` turns on UBSan at `-O0`. Keep that opt-in via `DREAM_NATIVE_SANITIZE`.
+        _ => vec!["-fno-sanitize=undefined".into()],
+    }
+}
+
+fn sanitize_cache_tag() -> String {
+    std::env::var("DREAM_NATIVE_SANITIZE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            s.chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .collect()
+        })
+        .unwrap_or_else(|| "nosan".into())
+}
+
 fn host_cc_opt_flags(opt: OptLevel, debug: bool) -> Vec<&'static str> {
     let flags: &[&str] = if debug {
         DEBUG_CC_FLAGS
@@ -229,9 +274,11 @@ fn runtime_archive(
     } else {
         opt.native_rt_subdir()
     };
-    let dir = cc::native_rt_cache_root()
-        .join(sub)
-        .join(format!("need_{:x}", need.bits()));
+    let dir = cc::native_rt_cache_root().join(sub).join(format!(
+        "need_{:x}_{}",
+        need.bits(),
+        sanitize_cache_tag()
+    ));
     std::fs::create_dir_all(&dir)?;
     // Cross-process: each `dream` PID has its own Mutex, so parallel probe jobs can race `ar`.
     let lock_file = OpenOptions::new()
@@ -263,12 +310,14 @@ fn runtime_archive(
     }
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
     cflags.extend(host_cc_opt_flags(opt, debug));
+    let san = native_sanitize_args();
     let toolchain = cc::resolve_cc()?;
     let mut objs = Vec::new();
     for (i, u) in units.iter().enumerate() {
         let obj = dir.join(format!("{i}.o"));
         let mut cmd = toolchain.cc_command();
         cmd.args(&cflags);
+        cmd.args(&san);
         for inc in &u.include_dirs {
             cmd.arg(format!("-I{}", inc.display()));
         }
@@ -329,9 +378,11 @@ pub fn compile_native_c(
     ];
     let include = format!("-I{}", native_runtime_include_dir().display());
     let opt_flags = host_cc_opt_flags(opt, debug);
+    let san = native_sanitize_args();
 
     let mut ccmd = toolchain.cc_command();
     ccmd.args(&opt_flags);
+    ccmd.args(&san);
     ccmd.args(warn);
     ccmd.arg(&include);
     if crate::driver::ui::color_enabled() {
@@ -343,6 +394,7 @@ pub fn compile_native_c(
 
     let mut lcmd = toolchain.cc_command();
     lcmd.args(&opt_flags);
+    lcmd.args(&san);
     lcmd.args(warn);
     lcmd.arg(&obj);
     lcmd.arg(&rt);
@@ -395,7 +447,7 @@ mod tests {
         let flags = host_cc_opt_flags(OptLevel::O3, false);
         assert!(flags.contains(&"-O3"));
         if cfg!(target_os = "windows") || cfg!(target_os = "macos") {
-            assert!(!flags.iter().any(|f| *f == "-flto"));
+            assert!(!flags.contains(&"-flto"));
         } else {
             assert!(flags.contains(&"-flto"));
         }

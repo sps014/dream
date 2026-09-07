@@ -31,7 +31,7 @@ fun create(@body item: Item): Item {
 }
 
 @middleware
-async fun request_id(ctx: RequestContext, next: Next): HttpOutgoing {
+async fun request_id(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
     ctx.set("rid", "1");
     let res = await next.call();
     res.set_header("X-Request-Id", ctx.get("rid").unwrap_or("0"));
@@ -71,4 +71,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
+    await WebApp.wait();
 }

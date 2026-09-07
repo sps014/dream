@@ -8,7 +8,7 @@ fun secret(): string {
 }
 
 @middleware
-async fun deny(ctx: RequestContext, next: Next): HttpOutgoing {
+async fun deny(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
     return HttpOutgoing.from_status(HttpStatus.unauthorized());
 }
 
@@ -20,4 +20,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
+    await WebApp.wait();
 }

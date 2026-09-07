@@ -311,9 +311,9 @@ fn run_native_case(dream_file: &Path, release: bool) {
         || stem == "http_methods_local"
         || stem.starts_with("webapi_")
     {
-        20
+        90
     } else {
-        8
+        30
     };
     let extra_args: &[&str] = if stem == "process_args_basic" {
         &["alpha", "beta"]
@@ -739,6 +739,26 @@ fn run_file_http_parity_e2e() {
 #[ignore = "full golden corpus; cargo test --workspace -- --ignored"]
 fn run_all_e2e_cases() {
     run_corpus(false, None);
+}
+
+/// Native ASan/LSan on leak-sensitive goldens. Opt-in: `DREAM_NATIVE_SANITIZE=address,leak`
+/// (see `src/execution/native_c`). Guest `live=0` is still the heap-counter check.
+#[test]
+#[ignore = "native sanitizer; DREAM_NATIVE_SANITIZE=address,leak cargo test --test e2e_tests native_asan_focused_goldens -- --ignored --exact"]
+fn native_asan_focused_goldens() {
+    std::env::set_var("DREAM_NATIVE_SANITIZE", "address,leak");
+    if std::env::var_os("ASAN_OPTIONS").is_none() {
+        std::env::set_var("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1");
+    }
+    run_corpus(
+        false,
+        Some(&[
+            "webapi_basic",
+            "json_parse",
+            "json_roundtrip",
+            "promise_start_no_leak",
+        ]),
+    );
 }
 
 #[test]

@@ -152,8 +152,8 @@ impl Lowerer<'_> {
             targets.push((*variant as i64, blk));
             let saved = self.b.current();
             self.b.switch_to(blk);
-            // Bind the active variant's payload fields; each is a borrow of the union's field (no
-            // retain), so releasing the union later frees them exactly once.
+            // Bind the active variant's payload fields. Last-use destroy of the scrutinee waits
+            // until these aliases die in-block; a payload that outlives the union is retained.
             for (i, &binding) in bindings.iter().enumerate() {
                 let local = self.mir_local(binding);
                 self.b.assign(

@@ -720,7 +720,15 @@ impl<'a> Analyzer<'a> {
         let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type.clone());
         let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
         // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
-        self.hir_set_generic_method_call(receiver, base, instance, arg_hirs, &ret_type);
+        // `store_sig.is_take` is the instance's sink ABI (`take_params_for(base)` is empty).
+        self.hir_set_generic_method_call(
+            receiver,
+            base,
+            instance,
+            arg_hirs,
+            &ret_type,
+            store_sig.is_take.clone(),
+        );
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(
             method.position,

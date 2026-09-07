@@ -15,6 +15,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   Implicit `this` is never a sink. Call sites **move on last use**, otherwise **retain a copy**
   (Nim sink semantics).
 - Cursor locals: non-escaping field/index loads skip retain/release.
+  Union-field snapshots always own a retain (match payloads outlive the scrutinee).
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 12-byte `[size][tag][ref_count]` header.
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
@@ -29,8 +30,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   through a call/`New` evaluates the RHS into a temp, then `Release`s the old occupant
   (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of loop-carried owned
   locals start **Owned**/**Unique** so the first dataflow pass does not treat a back-edge as Empty.
-  Strings/arrays/funcboxes/unions are not destroyed mid-block (hidden borrows); they wait until
-  return. Sink/take params still drop at callee return so inlining cannot copy-prop an early
+  Last-use destroy applies to every owned RC local. [`StmtBorrow::Held`](../../crates/dream-mir/src/passes/rc/lifetime.rs) delays destroy only for callees in [`holds_raw_borrow`](../../crates/dream-abi/src/intrinsics.rs) and `@async_host` imports (see `held_defs`). Sink/take params still drop at callee return so inlining cannot copy-prop an early
   `= null` onto a caller argument that is still live. After inlining, `RcElision` can cancel
   retain/release pairs that a call barrier would have kept.
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.

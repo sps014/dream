@@ -43,7 +43,7 @@ public class Middleware {
         this.handler = handler;
     }
 
-    public async fun invoke(ctx: RequestContext, next: Next): HttpOutgoing {
+    public async fun invoke(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
         let handler = this.handler;
         return await handler(ctx, next);
     }

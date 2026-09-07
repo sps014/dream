@@ -232,18 +232,11 @@ pub(crate) fn can_container_move(interner: &TypeInterner, ty: TypeId) -> bool {
         && !matches!(interner.kind(ty), TyKind::Js)
 }
 
-/// True when a typed unique-destroy (skip RC RMW) is allowed. `js`, `@shared`, and strings stay on
-/// ordinary release (`js` is a host handle; shared needs atomics; strings have slice RC). Arrays
-/// stay ordinary too: unique-destroy of a `this.items` snapshot frees the buffer still stored in
-/// the `List` (`push` / generator `syntax_blocks`).
-pub(crate) fn can_unique_destroy(interner: &TypeInterner, ty: TypeId) -> bool {
-    can_container_move(interner, ty)
-        && !matches!(
-            interner.kind(ty),
-            TyKind::Prim(dream_types::PrimTy::String)
-                | TyKind::Func(_, _)
-                | TyKind::Array(_)
-        )
+/// Typed unique-destroy skips the RC RMW and `free`s. Intra-procedural Unique is not object
+/// uniqueness: field/index snapshots, `Result.Ok` payloads, and Map slots keep aliases. Ordinary
+/// `Release` still destroys when last (`dream_rc_last`).
+pub(crate) fn can_unique_destroy(_interner: &TypeInterner, _ty: TypeId) -> bool {
+    false
 }
 
 fn is_fresh_alloc(rvalue: &Rvalue) -> bool {

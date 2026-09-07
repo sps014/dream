@@ -908,8 +908,7 @@ mod tests {
     }
 
     #[test]
-    fn strings_not_early_released_after_print() {
-        // Group/concat strings may alias a parent buffer; last-use destroy skips `string`.
+    fn last_use_string_released_after_print() {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("f", i.void());
         let s = b.new_local(i.string(), Some("s".into()));
@@ -950,8 +949,8 @@ mod tests {
                 && matches!(st, Statement::Release(Operand::Copy(Place::Local(l))) if *l == s)
         });
         assert!(
-            !early_release,
-            "string locals stay until scope exit, got {:?}",
+            early_release,
+            "last-use string after print must Release before later work: {:?}",
             stmts
         );
     }

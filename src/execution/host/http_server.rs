@@ -269,6 +269,9 @@ pub(crate) fn listen(host: &str, port: i32, tls_cert: &str, tls_key: &str) -> Ve
             }
             match listener.accept() {
                 Ok((stream, _)) => {
+                    if shutdown_loop.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let tx = tx.clone();
                     let shutdown_conn = shutdown_loop.clone();
                     let acceptor = acceptor.clone();
@@ -305,7 +308,7 @@ fn serve_connection(
         Ok(rt) => rt,
         Err(_) => return,
     };
-    let _ = rt.block_on(async move {
+    rt.block_on(async move {
         let tstream = match TcpStream::from_std(stream) {
             Ok(s) => s,
             Err(_) => return,
@@ -436,17 +439,14 @@ async fn serve_one(
             cmd_rx,
         }) => {
             let join = tokio::task::spawn(async move {
-                match on_upgrade.await {
-                    Ok(upgraded) => {
-                        let ws = WebSocketStream::from_raw_socket(
-                            TokioIo::new(upgraded),
-                            Role::Server,
-                            None,
-                        )
-                        .await;
-                        run_ws_loop(ws, cmd_rx).await;
-                    }
-                    Err(_) => {}
+                if let Ok(upgraded) = on_upgrade.await {
+                    let ws = WebSocketStream::from_raw_socket(
+                        TokioIo::new(upgraded),
+                        Role::Server,
+                        None,
+                    )
+                    .await;
+                    run_ws_loop(ws, cmd_rx).await;
                 }
             });
             ws_joins.lock().expect("ws joins").push(join);

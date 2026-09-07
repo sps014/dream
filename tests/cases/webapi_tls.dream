@@ -15,4 +15,5 @@ async fun main(): void {
     let port = await WebApp.listen_with("127.0.0.1", 0, opts);
     System.println(port > 0);
     WebApp.shutdown();
+    await WebApp.wait();
 }

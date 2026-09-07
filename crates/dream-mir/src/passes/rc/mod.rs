@@ -9,6 +9,7 @@ mod cursor;
 mod elision;
 mod hop;
 mod insertion;
+pub(crate) mod lifetime;
 pub(crate) mod liveness;
 mod repair;
 mod tokens;

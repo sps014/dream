@@ -1,24 +1,41 @@
 //! Cursor inference: mark non-escaping field/index loads as non-owning aliases.
 
-use crate::{Callee, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use super::liveness::{self, live_after_stmt, stmt_reads_local};
+use crate::{Callee, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use dream_hir::LayoutTable;
 use dream_types::TypeInterner;
 use std::collections::HashSet;
 
 /// Mark locals that only hold a non-escaping field/index (or union-field) load, or a forwarding
 /// copy of another RC local, as cursors so [`super::RcInsertion`] skips retain/release on them.
-pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
+pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner, layouts: &LayoutTable) {
     let n = func.locals.len();
     let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
     let mut candidates: HashSet<u32> = HashSet::new();
     let mut forwarding: HashSet<u32> = HashSet::new();
+    let mut forwarding_copies: Vec<(u32, u32, usize, usize)> = Vec::new();
     let mut escaped: HashSet<u32> = HashSet::new();
     let mut def_count: Vec<u32> = vec![0; n];
-
+    let mut index_defined: HashSet<u32> = HashSet::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
+                if matches!(
+                    rvalue,
+                    Rvalue::Use(Operand::Copy(Place::Index { .. }))
+                        | Rvalue::Cast(Operand::Copy(Place::Index { .. }), _, _)
+                ) {
+                    index_defined.insert(dest.0);
+                }
+            }
+        }
+    }
+
+    for (bi, block) in func.blocks.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
                 let d = dest.0 as usize;
-                if d < n {
+                if d < n && !is_null_init(rvalue) {
                     def_count[d] += 1;
                 }
                 let rc = !params.contains(&dest.0)
@@ -29,11 +46,16 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
                     if let Rvalue::Use(Operand::Copy(Place::Local(src))) = rvalue {
                         if func.locals[src.0 as usize].ty == func.locals[dest.0 as usize].ty {
                             forwarding.insert(dest.0);
+                            forwarding_copies.push((dest.0, src.0, bi, si));
                         } else {
                             escaped.insert(dest.0);
                             forwarding.remove(&dest.0);
                         }
                     }
+                } else if is_null_init(rvalue) {
+                    // Lowering null-inits every local (`x = null; x = this.f`). That is not a
+                    // second owner and must not escape a later field/index snapshot: leftover
+                    // last-ref of an owned `this.obj_map` copy frees the Map still in `JsonValue`.
                 } else if !is_cursor_source(rvalue) && !is_forwarding_copy(rvalue) {
                     escaped.insert(dest.0);
                     forwarding.remove(&dest.0);
@@ -42,6 +64,56 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
             mark_stmt_escapes(stmt, &mut escaped);
         }
         mark_term_escapes(&block.terminator, &mut escaped);
+    }
+
+    // Occupants of arrays/maps: Field of an index load (and UnionField of that Option)
+    // must own. Cursor-walking through `this.obj_map` would leftover-last-ref the value
+    // still stored in the Map (`JsonValue.get` / `unwrap_or`).
+    {
+        let mut snapshot_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        for block in &func.blocks {
+            for stmt in &block.stmts {
+                if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
+                    if let Some(base) = snapshot_base(rvalue) {
+                        snapshot_of.insert(dest.0, base);
+                    }
+                }
+            }
+        }
+        let mut copy_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        for &(dest, src, _, _) in &forwarding_copies {
+            copy_of.insert(dest, src);
+        }
+        let reaches_index = |mut x: u32| {
+            let mut seen = HashSet::new();
+            while seen.insert(x) {
+                if index_defined.contains(&x) {
+                    return true;
+                }
+                if let Some(&s) = copy_of.get(&x) {
+                    x = s;
+                } else if let Some(&s) = snapshot_of.get(&x) {
+                    x = s;
+                } else {
+                    break;
+                }
+            }
+            index_defined.contains(&x)
+        };
+        for block in &func.blocks {
+            for stmt in &block.stmts {
+                if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
+                    let Some(base) = snapshot_base(rvalue) else {
+                        continue;
+                    };
+                    if reaches_index(base) {
+                        candidates.remove(&dest.0);
+                        escaped.insert(dest.0);
+                        forwarding.remove(&dest.0);
+                    }
+                }
+            }
+        }
     }
 
     for block in &func.blocks {
@@ -58,7 +130,16 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
         }
     }
 
-    escape_slot_overwrite_readers(func, &mut candidates, &mut escaped);
+    let mut overwrite_escaped: HashSet<u32> = HashSet::new();
+    escape_slot_overwrite_readers(func, &mut candidates, &mut escaped, &mut overwrite_escaped);
+    let mut outlive_escaped: HashSet<u32> = HashSet::new();
+    escape_cursors_outliving_base(
+        func,
+        &mut candidates,
+        &mut escaped,
+        &mut outlive_escaped,
+        &forwarding_copies,
+    );
 
     for (i, &defs) in def_count.iter().enumerate() {
         let id = i as u32;
@@ -97,11 +178,140 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner) {
         }
     }
 
-    for id in candidates.union(&forwarding).copied() {
+    for &id in &candidates {
         if !escaped.contains(&id) {
             func.locals[id as usize].is_cursor = true;
         }
     }
+
+    // `this.f` of a borrow/`this` param (or of a cursor into one) is an alias of a slot the
+    // callee does not own. Must run before forwarding copies so `m = this_2.obj_map` stays a
+    // cursor (`JsonValue.get` leftover last-ref would free the Map).
+    //
+    // Do not walk through index loads: `slots[i].value` is a Map occupant. Treating it as a
+    // cursor lets leftover last-ref of `JsonValue.get` / `unwrap_or` destroy the value still
+    // stored in `obj_map`.
+    let borrow_params: HashSet<u32> = func
+        .params
+        .iter()
+        .filter(|p| !func.locals[p.0 as usize].is_take)
+        .map(|p| p.0)
+        .collect();
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for block in &func.blocks {
+            for stmt in &block.stmts {
+                let Statement::Assign(Place::Local(dest), rvalue) = stmt else {
+                    continue;
+                };
+                if overwrite_escaped.contains(&dest.0)
+                    || outlive_escaped.contains(&dest.0)
+                    || func.locals[dest.0 as usize].is_cursor
+                {
+                    continue;
+                }
+                if !borrow_field_snapshot(rvalue, &func.locals, &borrow_params, &index_defined) {
+                    continue;
+                }
+                func.locals[dest.0 as usize].is_cursor = true;
+                grew = true;
+            }
+        }
+    }
+
+    // A `weak`/`unowned` field load is not a strong owner. Retaining it would keep the
+    // referent alive after the last strong leftover (`weak_field_runtime`).
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Statement::Assign(Place::Local(dest), rvalue) = stmt else {
+                continue;
+            };
+            // Slot overwrite must not force a strong owner: a weak store does not last-ref
+            // the occupant, and the following load is still a non-owning alias.
+            if !weak_or_unowned_field_load(rvalue, func, layouts) {
+                continue;
+            }
+            func.locals[dest.0 as usize].is_cursor = true;
+        }
+    }
+
+    let live_out = liveness::live_out(func);
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for &(dest, src, bi, si) in &forwarding_copies {
+            if !forwarding.contains(&dest)
+                || escaped.contains(&dest)
+                || overwrite_escaped.contains(&dest)
+                || outlive_escaped.contains(&dest)
+                || func.locals[dest as usize].is_cursor
+            {
+                continue;
+            }
+            // Last-use `y = x` is a move (dest owns). A still-live source is an alias cursor
+            // (`t = s; return s`). Copies of field snapshots stay cursors.
+            if func.locals[src as usize].is_cursor
+                || live_after_stmt(func, &live_out, bi, si, src)
+            {
+                func.locals[dest as usize].is_cursor = true;
+                grew = true;
+            }
+        }
+    }
+}
+
+fn snapshot_base(rvalue: &Rvalue) -> Option<u32> {
+    match cursor_source_slot(rvalue) {
+        Some(SourceSlot::Field(b, _) | SourceSlot::IndexBase(b) | SourceSlot::UnionBase(b)) => {
+            Some(b)
+        }
+        None => None,
+    }
+}
+
+/// Field / UnionField of borrow `this` (and Field of a cursor Map in that object). Index loads
+/// and field snapshots of those loads own a retain — they alias container occupants.
+fn weak_or_unowned_field_load(
+    rvalue: &Rvalue,
+    func: &MirFunction,
+    layouts: &LayoutTable,
+) -> bool {
+    let (base, field) = match rvalue {
+        Rvalue::Use(Operand::Copy(Place::Field { base, field }))
+        | Rvalue::Cast(Operand::Copy(Place::Field { base, field }), _, _) => (*base, *field),
+        _ => return false,
+    };
+    layouts
+        .get(func.local_ty(base))
+        .and_then(|layout| layout.fields.get(field))
+        .is_some_and(|f| f.is_weak || f.is_unowned)
+}
+
+fn borrow_field_snapshot(
+    rvalue: &Rvalue,
+    locals: &[crate::LocalDecl],
+    borrow_params: &HashSet<u32>,
+    index_defined: &HashSet<u32>,
+) -> bool {
+    let Some(slot) = cursor_source_slot(rvalue) else {
+        return false;
+    };
+    match slot {
+        SourceSlot::IndexBase(_) => false,
+        SourceSlot::Field(base, _) => {
+            !index_defined.contains(&base)
+                && (borrow_params.contains(&base) || locals[base as usize].is_cursor)
+        }
+        SourceSlot::UnionBase(base) => {
+            !index_defined.contains(&base)
+                && (borrow_params.contains(&base) || locals[base as usize].is_cursor)
+        }
+    }
+}
+
+fn is_null_init(rvalue: &Rvalue) -> bool {
+    matches!(rvalue, Rvalue::Use(Operand::Const(Const::Null)))
 }
 
 fn is_forwarding_copy(rvalue: &Rvalue) -> bool {
@@ -112,10 +322,8 @@ fn is_cursor_source(rvalue: &Rvalue) -> bool {
     matches!(
         rvalue,
         Rvalue::Use(Operand::Copy(Place::Field { .. }))
-            | Rvalue::Use(Operand::Copy(Place::Index { .. }))
             | Rvalue::UnionField { .. }
             | Rvalue::Cast(Operand::Copy(Place::Field { .. }), _, _)
-            | Rvalue::Cast(Operand::Copy(Place::Index { .. }), _, _)
     )
 }
 
@@ -156,6 +364,7 @@ fn escape_slot_overwrite_readers(
     func: &MirFunction,
     candidates: &mut HashSet<u32>,
     escaped: &mut HashSet<u32>,
+    overwrite_escaped: &mut HashSet<u32>,
 ) {
     let mut stored_fields: HashSet<(u32, u32)> = HashSet::new();
     let mut stored_index_bases: HashSet<u32> = HashSet::new();
@@ -169,7 +378,9 @@ fn escape_slot_overwrite_readers(
                 Statement::Assign(Place::Index { base, .. }, _) => {
                     stored_index_bases.insert(base.0);
                 }
-                Statement::Assign(Place::Local(l), _) => def_counts[l.0 as usize] += 1,
+                Statement::Assign(Place::Local(l), rv) if !is_null_init(rv) => {
+                    def_counts[l.0 as usize] += 1;
+                }
                 _ => {}
             }
         }
@@ -201,7 +412,12 @@ fn escape_slot_overwrite_readers(
                 stored_fields.contains(&(base, field)) || overwritten_bases.contains(&base)
             }
             SourceSlot::IndexBase(base) => {
-                stored_index_bases.contains(&base) || overwritten_bases.contains(&base)
+                // Loads and stores often materialize different temps for the same array
+                // (`t0 = arr; x = t0[i]` vs `t1 = arr; t1[i] = w`). Matching only the load's
+                // base would leave `x` a cursor across the store.
+                stored_index_bases.contains(&base)
+                    || overwritten_bases.contains(&base)
+                    || !stored_index_bases.is_empty()
             }
             // A union local's whole value is its slot: any rebind frees the old payload.
             SourceSlot::UnionBase(base) => overwritten_bases.contains(&base),
@@ -209,7 +425,203 @@ fn escape_slot_overwrite_readers(
         if overwritten {
             candidates.remove(&id);
             escaped.insert(id);
+            overwrite_escaped.insert(id);
         }
+    }
+}
+
+/// A field/index snapshot is only a cursor while its base object is still live. Last-use
+/// destroy of `field` after `fname = field.name` (no retain) leaves `fname` dangling.
+fn escape_cursors_outliving_base(
+    func: &MirFunction,
+    candidates: &mut HashSet<u32>,
+    escaped: &mut HashSet<u32>,
+    outlive_escaped: &mut HashSet<u32>,
+    forwarding_copies: &[(u32, u32, usize, usize)],
+) {
+    let live_out = liveness::live_out(func);
+    let mut copy_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    for &(dest, src, _, _) in forwarding_copies {
+        copy_of.insert(dest, src);
+    }
+    let mut snapshot_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
+                if let Some(base) = snapshot_base(rvalue) {
+                    snapshot_of.insert(dest.0, base);
+                }
+            }
+        }
+    }
+    let peel = |mut x: u32| {
+        let mut seen = HashSet::new();
+        while seen.insert(x) {
+            if let Some(&s) = copy_of.get(&x) {
+                x = s;
+            } else if let Some(&s) = snapshot_of.get(&x) {
+                x = s;
+            } else {
+                break;
+            }
+        }
+        x
+    };
+    let borrow_param = |l: u32| {
+        func.params.iter().any(|p| p.0 == l) && !func.locals[l as usize].is_take
+    };
+    let sources: Vec<(u32, u32)> = func
+        .blocks
+        .iter()
+        .flat_map(|block| &block.stmts)
+        .filter_map(|stmt| match stmt {
+            Statement::Assign(Place::Local(dest), rvalue) if candidates.contains(&dest.0) => {
+                cursor_source_slot(rvalue).map(|slot| {
+                    let base = match slot {
+                        SourceSlot::Field(b, _)
+                        | SourceSlot::IndexBase(b)
+                        | SourceSlot::UnionBase(b) => b,
+                    };
+                    (dest.0, base)
+                })
+            }
+            _ => None,
+        })
+        .collect();
+    for (id, base) in sources {
+        if id == base {
+            continue;
+        }
+        // `this_2 = this;` then `m = this_2.obj_map`: `this_2` is dead at leftover of `m`,
+        // but the borrow `this` still owns the object.
+        if borrow_param(peel(base)) {
+            continue;
+        }
+        let mut outlives = live_out
+            .iter()
+            .any(|out| out.contains(&id) && !out.contains(&base));
+        if !outlives {
+            for (bi, block) in func.blocks.iter().enumerate() {
+                for (si, stmt) in block.stmts.iter().enumerate() {
+                    let defines = matches!(
+                        stmt,
+                        Statement::Assign(Place::Local(d), _) if d.0 == id
+                    );
+                    if !defines {
+                        continue;
+                    }
+                    if !base_consumed_after(block, base, si) {
+                        continue;
+                    }
+                    let last_id = last_read_in_block(block, id);
+                    if last_id.is_some_and(|li| li > si) || live_out[bi].contains(&id) {
+                        outlives = true;
+                        break;
+                    }
+                }
+                if outlives {
+                    break;
+                }
+            }
+        }
+        if outlives {
+            candidates.remove(&id);
+            escaped.insert(id);
+            outlive_escaped.insert(id);
+        }
+    }
+}
+
+fn last_read_in_block(block: &crate::BasicBlock, local: u32) -> Option<usize> {
+    let mut last = None;
+    for (si, stmt) in block.stmts.iter().enumerate() {
+        if stmt_reads_local(stmt, local) {
+            last = Some(si);
+        }
+    }
+    if terminator_reads_local(&block.terminator, local) {
+        last = Some(block.stmts.len());
+    }
+    last
+}
+
+fn base_consumed_after(block: &crate::BasicBlock, base: u32, after_si: usize) -> bool {
+    block.stmts.iter().enumerate().skip(after_si + 1).any(|(_, stmt)| {
+        assigns_local_cursor(stmt, base) || stmt_sinks_local(stmt, base)
+    })
+}
+
+fn assigns_local_cursor(stmt: &Statement, local: u32) -> bool {
+    matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local)
+}
+
+/// Last-use of `local` at `stmt` transfers the +1 (sink call or container store), so a
+/// snapshot of `local` cannot stay a cursor past this statement.
+pub(crate) fn stmt_sinks_local(stmt: &Statement, local: u32) -> bool {
+    if let Some((takes, args)) = call_take_args(stmt) {
+        for (i, arg) in args.iter().enumerate() {
+            if takes.get(i).copied().unwrap_or(false) && operand_mentions_local(arg, local) {
+                return true;
+            }
+        }
+    }
+    matches!(
+        stmt,
+        Statement::Assign(
+            Place::Field { .. } | Place::Index { .. } | Place::Global(_),
+            Rvalue::Use(Operand::Copy(Place::Local(l))),
+        ) if l.0 == local
+    )
+}
+
+fn call_take_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])> {
+    match stmt {
+        Statement::Call { callee, args } => Some((callee.take_params.clone(), args)),
+        Statement::Assign(_, Rvalue::Call { callee, args, .. }) => {
+            Some((callee.take_params.clone(), args))
+        }
+        Statement::Assign(
+            _,
+            Rvalue::New {
+                ctor: Some(_),
+                args,
+                ..
+            },
+        ) => Some((vec![true; args.len()], args)),
+        Statement::IndirectCall { args, .. } | Statement::InterfaceCall { args, .. } => {
+            Some((vec![true; args.len()], args))
+        }
+        Statement::Assign(_, Rvalue::IndirectCall { args, .. })
+        | Statement::Assign(_, Rvalue::InterfaceCall { args, .. }) => {
+            Some((vec![true; args.len()], args))
+        }
+        _ => None,
+    }
+}
+
+fn terminator_reads_local(term: &Terminator, local: u32) -> bool {
+    match term {
+        Terminator::If { cond, .. } => operand_mentions_local(cond, local),
+        Terminator::Switch { value, .. } => operand_mentions_local(value, local),
+        Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
+            operand_mentions_local(o, local)
+        }
+        Terminator::TailCall { args, .. } => args.iter().any(|a| operand_mentions_local(a, local)),
+        Terminator::Await { future, .. } => operand_mentions_local(future, local),
+        _ => false,
+    }
+}
+
+fn operand_mentions_local(op: &Operand, local: u32) -> bool {
+    match op {
+        Operand::Copy(Place::Local(l)) | Operand::Copy(Place::Deref { ptr: l, .. }) => {
+            l.0 == local
+        }
+        Operand::Copy(Place::Field { base, .. }) => base.0 == local,
+        Operand::Copy(Place::Index { base, index, .. }) => {
+            base.0 == local || operand_mentions_local(index, local)
+        }
+        _ => false,
     }
 }
 

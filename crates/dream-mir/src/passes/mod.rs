@@ -206,7 +206,7 @@ impl Default for PassManager {
 ///
 /// [`ExpandSimpleCtors`] runs *before* [`RcInsertion`] so `o.field = arg` is what RC sees, not a
 /// `New` whose args are all treated as sinks. After inlining, [`RcLastUseRepair`] fixes last-use
-/// index stores of hidden-borrow values on the fused CFG (inlined `split` temps). Then
+/// index stores of owned RC values on the fused CFG (inlined `split` temps). Then
 /// [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     optimize_module_opts(mir, interner, true)
@@ -222,8 +222,9 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     let _ = ExpandSimpleCtors.run(mir, interner);
     crate::prune_module(mir, interner);
     let layouts = mir.layouts.clone();
+    let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-        RcInsertion::run_with_layouts(f, interner, &layouts);
+        RcInsertion::run_with_layouts(f, interner, &layouts, &holds);
     }
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
     // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag

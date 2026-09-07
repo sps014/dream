@@ -13,7 +13,7 @@ fun open(): string {
     return "o";
 }
 
-async fun require_auth(ctx: RequestContext, next: Next): HttpOutgoing {
+async fun require_auth(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
     if ctx.incoming.header("Authorization").is_none() {
         return HttpOutgoing.from_status(HttpStatus.unauthorized());
     }
@@ -38,4 +38,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
+    await WebApp.wait();
 }

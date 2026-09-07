@@ -721,6 +721,7 @@ impl<'a> Analyzer<'a> {
         instance: Vec<TypeId>,
         args: Vec<Option<HExpr>>,
         ret: &Type,
+        take_params: Vec<bool>,
     ) {
         if !self.active() {
             self.hir.last = None;
@@ -738,7 +739,6 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
-        let take_params = self.take_params_for(base_name);
         let callee = Callee {
             def,
             instance,

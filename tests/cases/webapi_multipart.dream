@@ -22,4 +22,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
+    await WebApp.wait();
 }

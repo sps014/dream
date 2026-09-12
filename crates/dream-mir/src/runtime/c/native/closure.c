@@ -16,7 +16,7 @@ static dream_ptr funcbox_get_env(dream_ptr box) {
 }
 
 dream_ptr dream_funcbox_new(int32_t idx, dream_ptr env) {
-    dream_ptr p = dream_malloc(16, TAG_STRUCT_BASE);
+    dream_ptr p = dream_malloc(16, TAG_FUNCBOX);
     memcpy(dream_p(p), &idx, sizeof(idx));
     funcbox_set_env(p, env);
     if (env) {
@@ -37,6 +37,13 @@ dream_ptr dream_funcbox_env(dream_ptr box) {
     return box ? funcbox_get_env(box) : 0;
 }
 
+/* Closure env is either one RC object or a TAG_ARRAY of `dream_ptr` slots. Arrays are untyped
+ * (no esize in the header), so `dream_release_object` would shallow-free them and leak
+ * CaptureCell slots (`webapi_basic` middleware onion). */
+void dream_release_closure_env(dream_ptr env) {
+    dream_release_object(env);
+}
+
 void dream_release_funcbox(dream_ptr box) {
     dream_ptr env;
     dream_ptr zero = 0;
@@ -48,6 +55,6 @@ void dream_release_funcbox(dream_ptr box) {
     }
     env = funcbox_get_env(box);
     funcbox_set_env(box, zero);
-    dream_release_object(env);
+    dream_release_closure_env(env);
     dream_free(box);
 }

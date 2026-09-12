@@ -467,6 +467,10 @@ __attribute__((weak)) const char *dream_tag_name(int32_t tag) {
         return "string";
     case TAG_ARRAY:
         return "array";
+    case TAG_FUNCBOX:
+        return "funcbox";
+    case TAG_FUTURE:
+        return "future";
     default:
         return "object";
     }

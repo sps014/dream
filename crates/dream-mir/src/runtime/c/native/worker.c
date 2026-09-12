@@ -216,7 +216,7 @@ static void destroy_worker(Worker *w) {
     if (w->reply) {
         dream_release(w->reply);
     }
-    dream_release_object(w->env);
+    dream_release_closure_env(w->env);
     pthread_mutex_destroy(&w->mu);
     pthread_cond_destroy(&w->cv);
     free(w);

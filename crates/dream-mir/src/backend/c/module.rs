@@ -407,6 +407,10 @@ fn emit_tag_names(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             keys: vec![super::ast::CaseKey::Ident("TAG_ARRAY")],
             body: vec![Stmt::Return(Some(Expr::cstr("array")))],
         },
+        super::ast::SwitchArm {
+            keys: vec![super::ast::CaseKey::Ident("TAG_FUNCBOX")],
+            body: vec![Stmt::Return(Some(Expr::cstr("funcbox")))],
+        },
     ];
     for (tag, name) in pairs {
         arms.push(super::ast::SwitchArm {

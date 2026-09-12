@@ -81,6 +81,8 @@ struct TokenFlow<'a> {
     loop_assigns: &'a [HashSet<u32>],
     await_resume_dest: &'a [Option<u32>],
     holds: &'a HashSet<DefId>,
+    alias_parent: &'a HashMap<u32, u32>,
+    order_parent: &'a HashMap<u32, u32>,
 }
 
 impl TokenAnalysis {
@@ -235,6 +237,8 @@ impl TokenAnalysis {
         let mut unique_in = vec![vec![false; nloc]; n];
         let mut unique_out: Vec<Vec<Option<bool>>> = vec![vec![None; nloc]; n];
 
+        let alias_parent = leftover_alias_parent(func, false);
+        let order_parent = leftover_alias_parent(func, true);
         let flow = TokenFlow {
             func,
             interner,
@@ -251,6 +255,8 @@ impl TokenAnalysis {
             loop_assigns: &loop_assigns,
             await_resume_dest: &await_resume_dest,
             holds,
+            alias_parent: &alias_parent,
+            order_parent: &order_parent,
         };
         let mut start_release = vec![BTreeSet::new(); n];
         let mut end_release = vec![BTreeSet::new(); n];
@@ -486,6 +492,14 @@ fn transfer_block(
         if keep_unread_across_loop(flow, bi, local) {
             continue;
         }
+        // Dest leftover waits for leftover of its alias parent (same leftover_keep batch).
+        // Mid-block leftover of a `JsonValue.get` dest last-refs a map occupant (`union_json`).
+        if leftover_waits_for_live_parent(flow.alias_parent, local, &live_in)
+            || leftover_waits_for_live_parent(flow.alias_parent, local, &flow.live_out[bi])
+            || flow.order_parent.contains_key(&local)
+        {
+            continue;
+        }
         // Return leftover runs after this block's stmts (`print` then drop). A mixed-join
         // start_release would unique-destroy here first (`in_union` dropped Tracked before
         // printing the payload id).
@@ -599,6 +613,11 @@ fn transfer_block(
         if keep_unread_across_loop(flow, bi, local) {
             continue;
         }
+        if leftover_waits_for_live_parent(flow.alias_parent, local, &flow.live_out[bi])
+            || flow.order_parent.contains_key(&local)
+        {
+            continue;
+        }
         if !clobber && terminator_reads_local(&block.terminator, local) {
             continue;
         }
@@ -689,71 +708,12 @@ fn add_op(op: &Operand, live: &mut HashSet<u32>) {
     }
 }
 
-/// Copy / niche-union / `unwrap_or`-shaped call: dest aliases `src`.
-pub(crate) struct AliasMap {
-    parent: HashMap<u32, u32>,
-}
-
-impl AliasMap {
-    pub(crate) fn of(func: &MirFunction) -> Self {
-        Self {
-            parent: alias_parent_map(func, false),
-        }
-    }
-
-    pub(crate) fn root(&self, mut x: u32) -> u32 {
-        let mut seen = HashSet::new();
-        while seen.insert(x) {
-            if let Some(&p) = self.parent.get(&x) {
-                x = p;
-            } else {
-                break;
-            }
-        }
-        x
-    }
-
-    fn root_stop_at_index(&self, mut x: u32, index_defined: &HashSet<u32>) -> u32 {
-        let mut seen = HashSet::new();
-        while seen.insert(x) {
-            if index_defined.contains(&x) {
-                return x;
-            }
-            if let Some(&p) = self.parent.get(&x) {
-                x = p;
-            } else {
-                break;
-            }
-        }
-        x
-    }
-
-    /// True when an *owned* still-live local peels to the same object. Cursor aliases must
-    /// not suppress leftover of the root (`last_use_destroy`). Owned `unwrap_or` dest must
-    /// suppress leftover of `fallback` on the None path.
-    pub(crate) fn live_owned_alias(&self, is_cursor: &[bool], local: u32, live: &HashSet<u32>) -> bool {
-        let r = self.root(local);
-        live.iter().any(|&o| {
-            o != local
-                && is_cursor.get(o as usize).copied() != Some(true)
-                && self.root(o) == r
-        })
-    }
-}
-
-pub(crate) fn terminator_live_locals(term: &Terminator, live: &mut HashSet<u32>) {
-    match term {
-        Terminator::Return(Some(Operand::Copy(Place::Local(l))))
-        | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) => {
-            live.insert(l.0);
-        }
-        _ => {}
-    }
-}
-
-/// Copy / niche-union / `unwrap_or`-shaped call: dest aliases `src`, so leftover must
-/// Release only one of them (two last-refs free a Map occupant still stored in `obj_map`).
-fn alias_parent_map(func: &MirFunction, snapshots: bool) -> HashMap<u32, u32> {
+/// Copy / niche-union / field / index / `unwrap_or`: dest aliases `src`.
+///
+/// `calls`: also `dest = f(src, …)` so leftover_order releases a `JsonValue.get` dest before
+/// leftover of `this`. Do not use that edge for leftover_waits: `r.text()` / concat dests would
+/// wait for a still-live receiver and leak (`webapi_basic`).
+pub(crate) fn leftover_alias_parent(func: &MirFunction, calls: bool) -> HashMap<u32, u32> {
     let mut parent = HashMap::new();
     let ty = |l: u32| func.locals.get(l as usize).map(|d| d.ty);
     for block in &func.blocks {
@@ -762,20 +722,20 @@ fn alias_parent_map(func: &MirFunction, snapshots: bool) -> HashMap<u32, u32> {
                 Statement::Assign(
                     Place::Local(dest),
                     Rvalue::Use(Operand::Copy(Place::Local(src))),
-                ) if ty(dest.0) == ty(src.0) => {
-                    parent.insert(dest.0, src.0);
+                ) if calls || ty(dest.0) == ty(src.0) => {
+                    parent.entry(dest.0).or_insert(src.0);
                 }
                 Statement::Assign(
                     Place::Local(dest),
                     Rvalue::Use(Operand::Copy(Place::Field { base, .. })),
-                ) if snapshots => {
-                    parent.insert(dest.0, base.0);
+                ) => {
+                    parent.entry(dest.0).or_insert(base.0);
                 }
                 Statement::Assign(
                     Place::Local(dest),
                     Rvalue::Use(Operand::Copy(Place::Index { base, .. })),
-                ) if snapshots => {
-                    parent.insert(dest.0, base.0);
+                ) => {
+                    parent.entry(dest.0).or_insert(base.0);
                 }
                 Statement::Assign(
                     Place::Local(dest),
@@ -784,21 +744,48 @@ fn alias_parent_map(func: &MirFunction, snapshots: bool) -> HashMap<u32, u32> {
                         ..
                     },
                 ) => {
-                    parent.insert(dest.0, src.0);
+                    parent.entry(dest.0).or_insert(src.0);
                 }
-                Statement::Assign(Place::Local(dest), Rvalue::Call { args, .. })
-                    if args.len() == 2 =>
+                Statement::Assign(Place::Local(dest), Rvalue::Call { callee, args, .. })
+                    if !args.is_empty() =>
                 {
                     let Operand::Copy(Place::Local(src)) = &args[0] else {
                         continue;
                     };
-                    let Operand::Copy(Place::Local(fb)) = &args[1] else {
-                        continue;
-                    };
-                    // `unwrap_or(this, fallback)`: dest aliases `this` on Some (niche Option
-                    // vs payload types differ). Two leftovers last-ref a Map occupant.
-                    if ty(dest.0) == ty(fb.0) {
-                        parent.insert(dest.0, src.0);
+                    if dest.0 != src.0 {
+                        // Borrow `this` methods (`JsonValue.get`): leftover dest waits for `this`
+                        // and leftover_order releases dest first. Take first-arg (`concat`) must
+                        // not wait — the dest is a new object and the first arg may stay live.
+                        let borrow_this = callee.take_params.first() != Some(&true);
+                        if calls || borrow_this {
+                            parent.entry(dest.0).or_insert(src.0);
+                        }
+                    }
+                    if args.len() == 2 {
+                        let Operand::Copy(Place::Local(fb)) = &args[1] else {
+                            continue;
+                        };
+                        if ty(dest.0) == ty(fb.0) {
+                            parent.entry(dest.0).or_insert(src.0);
+                        }
+                    }
+                    // `funcbox_new(idx, env)`: dest is a fun, arg0 is int. Leftover the box before
+                    // leftover of the env array so typed array release still sees the last +1.
+                    if calls && args.len() >= 2 && ty(dest.0) != ty(src.0) {
+                        if let Operand::Copy(Place::Local(env)) = &args[1] {
+                            parent.insert(dest.0, env.0);
+                        }
+                    }
+                }
+                Statement::Assign(Place::Local(dest), Rvalue::New { args, .. }) if calls => {
+                    for arg in args.iter().rev() {
+                        let Operand::Copy(Place::Local(src)) = arg else {
+                            continue;
+                        };
+                        if dest.0 != src.0 {
+                            parent.entry(dest.0).or_insert(src.0);
+                            break;
+                        }
                     }
                 }
                 _ => {}
@@ -808,52 +795,87 @@ fn alias_parent_map(func: &MirFunction, snapshots: bool) -> HashMap<u32, u32> {
     parent
 }
 
-/// Locals in `ids` that should `Release` (one per alias group). Others only null.
-///
-/// Peel Field / UnionField / copy / `unwrap_or` so a Map occupant and its parent do not both
-/// last-ref. Stop at Index dests: those extra-retain the slot, so they last-ref *and* the
-/// container last-refs (`nested_array`). Field-of-index payloads skip leftover (the Index
-/// dest already owns the slot).
-pub(crate) fn leftover_keep(func: &MirFunction, ids: impl IntoIterator<Item = u32>) -> HashSet<u32> {
-    let aliases = AliasMap {
-        parent: alias_parent_map(func, true),
-    };
-    let index_defined = index_defined_locals(func);
-    let set: BTreeSet<u32> = ids.into_iter().collect();
-    let mut seen_root = HashSet::new();
-    let mut keep = HashSet::new();
-    for &l in &set {
-        if index_defined.contains(&l) {
-            keep.insert(l);
-            continue;
+fn leftover_waits_for_live_parent(
+    parent: &HashMap<u32, u32>,
+    local: u32,
+    live: &HashSet<u32>,
+) -> bool {
+    let mut x = local;
+    let mut seen = HashSet::new();
+    while seen.insert(x) {
+        let Some(&p) = parent.get(&x) else {
+            return false;
+        };
+        if live.contains(&p) && p != local {
+            return true;
         }
-        let r = aliases.root_stop_at_index(l, &index_defined);
-        if index_defined.contains(&r) {
-            continue;
-        }
-        if seen_root.insert(r) {
-            keep.insert(l);
-        }
+        x = p;
     }
-    keep
+    false
 }
 
-fn index_defined_locals(func: &MirFunction) -> HashSet<u32> {
-    let mut index_defined = HashSet::new();
-    for block in &func.blocks {
-        for stmt in &block.stmts {
-            if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
-                if matches!(
-                    rvalue,
-                    Rvalue::Use(Operand::Copy(Place::Index { .. }))
-                        | Rvalue::Cast(Operand::Copy(Place::Index { .. }), _, _)
-                ) {
-                    index_defined.insert(dest.0);
+/// Locals in `ids` that should `Release`. Dest leftover is delayed until the parent leftover
+/// site (`order_parent` skip in `transfer_block`) so extras and `this` share one batch;
+/// skip-coalesce here last-refs a map occupant (`union_json`) or leaks extras (`json_parse`).
+pub(crate) fn leftover_keep(_func: &MirFunction, ids: impl IntoIterator<Item = u32>) -> HashSet<u32> {
+    ids.into_iter().collect()
+}
+
+/// Child alias dests before parents so leftover Release of an extra-retain occupant runs while
+/// the container still holds +1 (parent-first last-refs the map slot under the dest).
+pub(crate) fn leftover_order(parent: &HashMap<u32, u32>, ids: impl IntoIterator<Item = u32>) -> Vec<u32> {
+    let ids: Vec<u32> = ids.into_iter().collect();
+    let set: HashSet<u32> = ids.iter().copied().collect();
+    let mut indeg: HashMap<u32, u32> = ids.iter().map(|&x| (x, 0)).collect();
+    let mut edge: HashMap<u32, u32> = HashMap::new();
+    for &d in &ids {
+        let mut x = d;
+        let mut seen = HashSet::new();
+        while seen.insert(x) {
+            let Some(&p) = parent.get(&x) else {
+                break;
+            };
+            if set.contains(&p) {
+                edge.insert(d, p);
+                if let Some(n) = indeg.get_mut(&p) {
+                    *n += 1;
+                }
+                break;
+            }
+            x = p;
+        }
+    }
+    let mut ready: BTreeSet<(u8, u32)> = indeg
+        .iter()
+        .filter(|(_, n)| **n == 0)
+        .map(|(&x, _)| {
+            // Children (have a parent) before roots so leftover of `this` (often local 0)
+            // cannot last-ref a map under still-live get/unwrap dests.
+            let child = if parent.contains_key(&x) { 0 } else { 1 };
+            (child, x)
+        })
+        .collect();
+    let mut out = Vec::with_capacity(ids.len());
+    let mut left = set;
+    while let Some((_, d)) = ready.pop_first() {
+        if !left.remove(&d) {
+            continue;
+        }
+        out.push(d);
+        if let Some(&p) = edge.get(&d) {
+            if let Some(n) = indeg.get_mut(&p) {
+                *n = n.saturating_sub(1);
+                if *n == 0 && left.contains(&p) {
+                    let child = if parent.contains_key(&p) { 0 } else { 1 };
+                    ready.insert((child, p));
                 }
             }
         }
     }
-    index_defined
+    let mut rest: Vec<u32> = left.into_iter().collect();
+    rest.sort_unstable();
+    out.extend(rest);
+    out
 }
 
 pub(crate) fn null_local(local: u32) -> Statement {
@@ -997,6 +1019,12 @@ pub(crate) fn take_arg_effects(
     let Some((take_params, args)) = sink_call_args(stmt) else {
         return (Vec::new(), Vec::new());
     };
+    // Fun-value calls (`IndirectCall`) have no per-param ABI on `TyKind::Func`. Treating every
+    // arg as sink retains borrow params of `Middleware.invoke` into a borrow handler (`webapi_basic`).
+    let fun_value = matches!(
+        stmt,
+        Statement::IndirectCall { .. } | Statement::Assign(_, Rvalue::IndirectCall { .. })
+    );
     let mut retains = Vec::new();
     let mut nulls = Vec::new();
     for (i, arg) in args.iter().enumerate() {
@@ -1007,6 +1035,9 @@ pub(crate) fn take_arg_effects(
             Operand::Copy(Place::Local(l))
                 if local_is_ref.get(l.0 as usize).copied().unwrap_or(false) =>
             {
+                if fun_value && !is_owned_ref(l.0) {
+                    continue;
+                }
                 if is_owned_ref(l.0) && is_move(l.0) {
                     nulls.push(Statement::Assign(
                         Place::Local(*l),

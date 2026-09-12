@@ -1020,6 +1020,7 @@ dream_ptr dream_funcbox_new(int32_t idx, dream_ptr env);
 int32_t dream_funcbox_funcidx(dream_ptr box);
 dream_ptr dream_funcbox_env(dream_ptr box);
 void dream_release_funcbox(dream_ptr box);
+void dream_release_closure_env(dream_ptr env);
 /* Generated per-module: decrement + typed last-drop (struct fields, nested funcboxes). */
 void dream_release_object(dream_ptr p);
 

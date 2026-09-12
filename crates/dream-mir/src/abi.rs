@@ -21,6 +21,9 @@ pub const TAG_BYTE: i32 = 11;
 /// Coroutine `Future` frames (`dream_new_future`). Distinct from tag 0 (untagged C/weak blocks)
 /// so last-release can run the per-poll slot destructor.
 pub const TAG_FUTURE: i32 = 256;
+/// First-class `fun` value (`dream_funcbox_new`). Distinct from `TAG_STRUCT_BASE` so
+/// `dream_release_object` does not run the first struct's destructor on a funcbox.
+pub const TAG_FUNCBOX: i32 = 257;
 /// Structs/unions are assigned consecutive tags starting here, ordered by sorted type name.
 pub const TAG_STRUCT_BASE: i32 = 12;
 /// Header tag high bit: object is concurrently refcounted (`@shared` / published worker
@@ -439,6 +442,7 @@ mod abi_h_lockstep {
         assert_eq!(header_define(h, "TAG_ULONG"), TAG_ULONG as i64);
         assert_eq!(header_define(h, "TAG_BYTE"), TAG_BYTE as i64);
         assert_eq!(header_define(h, "TAG_FUTURE"), TAG_FUTURE as i64);
+        assert_eq!(header_define(h, "TAG_FUNCBOX"), TAG_FUNCBOX as i64);
         assert_eq!(header_define(h, "TAG_STRUCT_BASE"), TAG_STRUCT_BASE as i64);
         assert_eq!(header_define(h, "TAG_SHARED"), TAG_SHARED as i64);
         assert_eq!(header_define(h, "TAG_VALUE_MASK"), TAG_VALUE_MASK as i64);

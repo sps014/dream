@@ -990,6 +990,13 @@ fn emit_object_tag_dispatch(
         ],
     });
     arms.push(SwitchArm {
+        keys: vec![CaseKey::Ident("TAG_FUNCBOX")],
+        body: vec![
+            Stmt::call("dream_release_funcbox", vec![Expr::id("p")]),
+            Stmt::Return(None),
+        ],
+    });
+    arms.push(SwitchArm {
         keys: vec![],
         body: vec![Stmt::call("dream_release", vec![Expr::id("p")])],
     });

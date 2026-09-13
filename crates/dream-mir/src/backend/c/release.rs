@@ -356,6 +356,8 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     for p in &mir.polls {
         collect_array_elems(interner, p, &mut array_elems);
     }
+    // Funcbox last-drop of `TAG_CLOSURE_ENV` always forwards to `release_array_t{object}`.
+    array_elems.insert(interner.object());
     let p = vec![Param {
         ty: CTy::Ptr,
         name: "p".into(),
@@ -995,6 +997,16 @@ fn emit_object_tag_dispatch(
             Stmt::call("dream_release_funcbox", vec![Expr::id("p")]),
             Stmt::Return(None),
         ],
+    });
+    let env_elem = cx.interner.object();
+    let env_arr = if destroy {
+        c_ident(&format!("destroy_array_t{}", env_elem.0))
+    } else {
+        c_ident(&format!("release_array_t{}", env_elem.0))
+    };
+    arms.push(SwitchArm {
+        keys: vec![CaseKey::Ident("TAG_CLOSURE_ENV")],
+        body: vec![Stmt::call(env_arr, vec![Expr::id("p")]), Stmt::Return(None)],
     });
     arms.push(SwitchArm {
         keys: vec![],

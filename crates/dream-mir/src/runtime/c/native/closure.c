@@ -37,9 +37,9 @@ dream_ptr dream_funcbox_env(dream_ptr box) {
     return box ? funcbox_get_env(box) : 0;
 }
 
-/* Closure env is either one RC object or a TAG_ARRAY of `dream_ptr` slots. Arrays are untyped
- * (no esize in the header), so `dream_release_object` would shallow-free them and leak
- * CaptureCell slots (`webapi_basic` middleware onion). */
+/* Single-capture env is a tagged CaptureCell; multi-capture is `TAG_CLOSURE_ENV` so
+ * `dream_release_object` runs typed `release_array_t{object}` instead of shallow-freeing
+ * `TAG_ARRAY`. */
 void dream_release_closure_env(dream_ptr env) {
     dream_release_object(env);
 }

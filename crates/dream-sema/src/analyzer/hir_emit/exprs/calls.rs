@@ -241,8 +241,8 @@ impl<'a> Analyzer<'a> {
     /// `CaptureCell<T>` pointer, reinterpreted to `int` — see [`build_funcbox`]) instead of a null one:
     /// the lambda's own lifted function reads it back apart at its own prologue (see
     /// `Analyzer::hir_begin_function`). Drops coverage if the name is not a registered function def.
-    /// The funcbox owns a retain on `env_cell` (via `$funcbox_new`); the creator's scope-exit release
-    /// of the cell is balanced by that ownership transfer.
+    /// The funcbox owns a retain on `env_cell` (via `$funcbox_new`); leftover of the cell is
+    /// released only in the same leftover batch as the box.
     pub(in crate::analyzer) fn hir_set_capturing_func_value(
         &mut self,
         name: &str,
@@ -279,8 +279,8 @@ impl<'a> Analyzer<'a> {
     /// `Analyzer::receive_closure_captures`. Each cell is written into the array as an ordinary
     /// `object[]` store, so the emitter's normal container-store rule retains it on the array's
     /// behalf (see `mir::passes::rc`'s doc comment). The array itself is owned by the funcbox
-    /// (`$funcbox_new` retains it); the `__closure_env_array` local's scope-exit release is
-    /// balanced by that ownership transfer.
+    /// (`$funcbox_new` retains it); leftover of `__closure_env_array` last-drops it only in the
+    /// same batch as the box (typed `TAG_CLOSURE_ENV`).
     pub(in crate::analyzer) fn hir_set_multi_capturing_func_value(
         &mut self,
         name: &str,
@@ -311,7 +311,7 @@ impl<'a> Analyzer<'a> {
         self.hir.next_local += 1;
         self.hir.local_decls.push(HLocal {
             id: array_local,
-            name: "__closure_env_array".to_string(),
+            name: dream_abi::intrinsics::CLOSURE_ENV_ARRAY_LOCAL.to_string(),
             ty: array_ty,
         });
         self.push_stmt(HStmt::Let {

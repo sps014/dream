@@ -379,7 +379,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
 
 #define PUBLISH_SEEN_MAX 256
 
-static int native_is_live_ptr(dream_ptr ptr) {
+int dream_heap_is_live(dream_ptr ptr) {
     char *block;
     if (ptr == 0 || (ptr & (sizeof(dream_ptr) - 1)) != 0) {
         return 0;
@@ -406,7 +406,7 @@ static void publish_walk_payload(dream_ptr ptr, dream_ptr *seen, int *nseen) {
     for (off = 0; off + (int32_t)sizeof(dream_ptr) <= payload; off += (int32_t)sizeof(dream_ptr)) {
         dream_ptr child = 0;
         memcpy(&child, data + off, sizeof(child));
-        if (native_is_live_ptr(child)) {
+        if (dream_heap_is_live(child)) {
             publish_rec(child, seen, nseen);
         }
     }
@@ -416,7 +416,7 @@ static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
     int32_t *tag;
     int32_t kind;
     int i;
-    if (!native_is_live_ptr(ptr)) {
+    if (!dream_heap_is_live(ptr)) {
         return;
     }
     for (i = 0; i < *nseen; i++) {
@@ -467,6 +467,8 @@ __attribute__((weak)) const char *dream_tag_name(int32_t tag) {
         return "string";
     case TAG_ARRAY:
         return "array";
+    case TAG_CLOSURE_ENV:
+        return "closure_env";
     case TAG_FUNCBOX:
         return "funcbox";
     case TAG_FUTURE:

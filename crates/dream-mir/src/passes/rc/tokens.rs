@@ -10,7 +10,7 @@ use super::uniqueness::{apply_stmt_unique, collect_container_moves, meet_unique}
 use super::{is_borrowed_copy, is_pure_rvalue, rvalue_reads_local};
 use crate::passes::cfg;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::{DefId, TypeInterner};
+use dream_types::{DefId, TyKind, TypeInterner};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Owned-RC locals (not cursors, not borrow params). Take-params are owned.
@@ -237,8 +237,8 @@ impl TokenAnalysis {
         let mut unique_in = vec![vec![false; nloc]; n];
         let mut unique_out: Vec<Vec<Option<bool>>> = vec![vec![None; nloc]; n];
 
-        let alias_parent = leftover_alias_parent(func, false);
-        let order_parent = leftover_alias_parent(func, true);
+        let alias_parent = leftover_alias_parent(func, interner, false);
+        let order_parent = leftover_alias_parent(func, interner, true);
         let flow = TokenFlow {
             func,
             interner,
@@ -713,7 +713,11 @@ fn add_op(op: &Operand, live: &mut HashSet<u32>) {
 /// `calls`: also `dest = f(src, …)` so leftover_order releases a `JsonValue.get` dest before
 /// leftover of `this`. Do not use that edge for leftover_waits: `r.text()` / concat dests would
 /// wait for a still-live receiver and leak (`webapi_basic`).
-pub(crate) fn leftover_alias_parent(func: &MirFunction, calls: bool) -> HashMap<u32, u32> {
+pub(crate) fn leftover_alias_parent(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    calls: bool,
+) -> HashMap<u32, u32> {
     let mut parent = HashMap::new();
     let ty = |l: u32| func.locals.get(l as usize).map(|d| d.ty);
     for block in &func.blocks {
@@ -723,6 +727,14 @@ pub(crate) fn leftover_alias_parent(func: &MirFunction, calls: bool) -> HashMap<
                     Place::Local(dest),
                     Rvalue::Use(Operand::Copy(Place::Local(src))),
                 ) if calls || ty(dest.0) == ty(src.0) => {
+                    parent.entry(dest.0).or_insert(src.0);
+                }
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Cast(Operand::Copy(Place::Local(src)), _, _),
+                ) => {
+                    // `funcbox_new(idx, env as int)`: leftover the box before leftover of the
+                    // env array so typed `release_array_*` still sees the last +1.
                     parent.entry(dest.0).or_insert(src.0);
                 }
                 Statement::Assign(
@@ -776,6 +788,15 @@ pub(crate) fn leftover_alias_parent(func: &MirFunction, calls: bool) -> HashMap<
                             parent.insert(dest.0, env.0);
                         }
                     }
+                    // `Next(handler)`: dest is the cell, last arg is the funcbox. Leftover of
+                    // `Next` must count as covering that box so env leftover still 2→1 then last-drop.
+                    if calls {
+                        if let Some(Operand::Copy(Place::Local(last))) = args.last() {
+                            if matches!(interner.kind(func.local_ty(*last)), TyKind::Func(..)) {
+                                parent.insert(dest.0, last.0);
+                            }
+                        }
+                    }
                 }
                 Statement::Assign(Place::Local(dest), Rvalue::New { args, .. }) if calls => {
                     for arg in args.iter().rev() {
@@ -821,9 +842,79 @@ pub(crate) fn leftover_keep(_func: &MirFunction, ids: impl IntoIterator<Item = u
     ids.into_iter().collect()
 }
 
+pub(crate) fn leftover_covers(parent: &HashMap<u32, u32>, set: &HashSet<u32>, dest: u32) -> bool {
+    if set.contains(&dest) {
+        return true;
+    }
+    for &id in set {
+        let mut x = id;
+        let mut seen = HashSet::new();
+        while seen.insert(x) {
+            if x == dest {
+                return true;
+            }
+            match parent.get(&x) {
+                Some(&p) => x = p,
+                None => break,
+            }
+        }
+    }
+    false
+}
+
+/// `(funcbox dest, env RC root)` for each `funcbox_new` (env may be an `int` pun of an `object[]`).
+pub(crate) fn funcbox_env_pairs(func: &MirFunction, interner: &TypeInterner) -> Vec<(u32, u32)> {
+    let parent = leftover_alias_parent(func, interner, true);
+    let mut pairs = Vec::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let (dest, args) = match stmt {
+                Statement::Assign(Place::Local(dest), Rvalue::Call { args, .. }) => (dest, args),
+                _ => continue,
+            };
+            if args.len() < 2 {
+                continue;
+            }
+            if !matches!(interner.kind(func.local_ty(*dest)), TyKind::Func(..)) {
+                continue;
+            }
+            let Operand::Copy(Place::Local(env)) = &args[1] else {
+                continue;
+            };
+            let mut x = env.0;
+            let mut seen = HashSet::new();
+            loop {
+                if !seen.insert(x) {
+                    break;
+                }
+                if interner.is_rc_tracked(func.local_ty(Local(x))) {
+                    pairs.push((dest.0, x));
+                    break;
+                }
+                match parent.get(&x) {
+                    Some(&p) => x = p,
+                    None => break,
+                }
+            }
+        }
+    }
+    pairs
+}
+
+pub(crate) fn funcbox_env_rc_roots(func: &MirFunction, interner: &TypeInterner) -> HashSet<u32> {
+    funcbox_env_pairs(func, interner)
+        .into_iter()
+        .map(|(_, env)| env)
+        .collect()
+}
+
 /// Child alias dests before parents so leftover Release of an extra-retain occupant runs while
 /// the container still holds +1 (parent-first last-refs the map slot under the dest).
-pub(crate) fn leftover_order(parent: &HashMap<u32, u32>, ids: impl IntoIterator<Item = u32>) -> Vec<u32> {
+pub(crate) fn leftover_order(
+    parent: &HashMap<u32, u32>,
+    ids: impl IntoIterator<Item = u32>,
+    defer: &HashSet<u32>,
+) -> Vec<u32> {
     let ids: Vec<u32> = ids.into_iter().collect();
     let set: HashSet<u32> = ids.iter().copied().collect();
     let mut indeg: HashMap<u32, u32> = ids.iter().map(|&x| (x, 0)).collect();
@@ -875,7 +966,20 @@ pub(crate) fn leftover_order(parent: &HashMap<u32, u32>, ids: impl IntoIterator<
     let mut rest: Vec<u32> = left.into_iter().collect();
     rest.sort_unstable();
     out.extend(rest);
-    out
+    if defer.is_empty() {
+        return out;
+    }
+    let mut first = Vec::with_capacity(out.len());
+    let mut last = Vec::new();
+    for x in out {
+        if defer.contains(&x) {
+            last.push(x);
+        } else {
+            first.push(x);
+        }
+    }
+    first.extend(last);
+    first
 }
 
 pub(crate) fn null_local(local: u32) -> Statement {

@@ -664,6 +664,38 @@ mod tests {
     }
 
     #[test]
+    fn closure_env_array_uses_typed_tag() {
+        let mut i = TypeInterner::new();
+        let obj = i.object();
+        let arr = i.array(obj);
+        let mut b = FunctionBuilder::new("f", i.void());
+        let env = b.new_local(
+            arr,
+            Some(dream_abi::intrinsics::CLOSURE_ENV_ARRAY_LOCAL.into()),
+        );
+        b.assign(
+            Place::Local(env),
+            Rvalue::ArrayNew {
+                elem_ty: obj,
+                len: Operand::Const(Const::Int(3)),
+            },
+        );
+        b.push(Statement::Release(Operand::Copy(Place::Local(env))));
+        b.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            ..Default::default()
+        };
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("dream_closure_env_array_new"), "{c}");
+        assert!(c.contains("TAG_CLOSURE_ENV"), "{c}");
+        assert!(
+            c.contains(&format!("release_array_t{}", obj.0)),
+            "typed object[] last-drop must exist:\n{c}"
+        );
+    }
+
+    #[test]
     fn future_layout_wide_not_alias_remaining() {
         let n = crate::abi::FutureLayout::native();
         assert_ne!(n.wide, n.remaining);

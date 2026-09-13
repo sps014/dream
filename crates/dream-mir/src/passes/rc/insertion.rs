@@ -3,9 +3,10 @@
 use super::is_borrowed_copy;
 use super::liveness::{self, live_after_stmt, stmt_reads_local};
 use super::tokens::{
-    apply_stmt_tokens, assigns_local, dest_holds_token, is_owned_local, leftover_alias_parent,
-    leftover_keep, leftover_order, move_source, needs_rebind_temp, null_local, rc_op_on_local,
-    release_and_null, sink_call_args, source_line_end, take_arg_effects, TokenAnalysis,
+    apply_stmt_tokens, assigns_local, dest_holds_token, funcbox_env_pairs, funcbox_env_rc_roots,
+    is_owned_local, leftover_alias_parent, leftover_covers, leftover_keep, leftover_order,
+    move_source, needs_rebind_temp, null_local, rc_op_on_local, release_and_null, sink_call_args,
+    source_line_end, take_arg_effects, TokenAnalysis,
 };
 use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
@@ -66,7 +67,9 @@ impl RcInsertion {
             .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
         let analysis = TokenAnalysis::analyze(func, interner, layouts, holds);
-        let leftover_parent = leftover_alias_parent(func, true);
+        let leftover_parent = leftover_alias_parent(func, interner, true);
+        let env_defer = funcbox_env_rc_roots(func, interner);
+        let env_pairs = funcbox_env_pairs(func, interner);
         let start_keep: Vec<HashSet<u32>> = analysis
             .start_release
             .iter()
@@ -155,10 +158,25 @@ impl RcInsertion {
             let mut tokens = analysis.token_in[bi].clone();
             let mut unique = analysis.unique_in[bi].clone();
             let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len() + 8);
-            for local in leftover_order(&leftover_parent, analysis.start_release[bi].iter().copied()) {
+            let start_batch: HashSet<u32> =
+                analysis.start_release[bi].iter().copied().collect();
+            for local in leftover_order(
+                &leftover_parent,
+                analysis.start_release[bi].iter().copied(),
+                &env_defer,
+            ) {
                 // Join/loop-header leftover: the other pred may have copied this pointer into a
                 // still-live container. Unique destroy ignores RC and would free that copy.
-                if should_release_leftover(&start_keep[bi], n_orig, local) {
+                if should_release_leftover(&start_keep[bi], n_orig, local)
+                    && leftover_env_ok(
+                        local,
+                        &tokens,
+                        &env_defer,
+                        &env_pairs,
+                        &start_batch,
+                        &leftover_parent,
+                    )
+                {
                     out.extend(release_and_null(local, false));
                 } else {
                     out.push(null_local(local));
@@ -389,7 +407,7 @@ impl RcInsertion {
                 let dying: Vec<u32> = (0..tokens.len() as u32)
                     .filter(|&local| analysis.die_after.contains(&(bi, si, local)))
                     .collect();
-                for local in leftover_order(&leftover_parent, dying) {
+                for local in leftover_order(&leftover_parent, dying, &env_defer) {
                     let u = unique_destroy(
                         interner,
                         &local_types,
@@ -399,7 +417,16 @@ impl RcInsertion {
                     );
                     let one = HashSet::from([local]);
                     let keep = die_keep.get(&(bi, si)).unwrap_or(&one);
-                    if should_release_leftover(keep, n_orig, local) {
+                    if should_release_leftover(keep, n_orig, local)
+                        && leftover_env_ok(
+                            local,
+                            &tokens,
+                            &env_defer,
+                            &env_pairs,
+                            &one,
+                            &leftover_parent,
+                        )
+                    {
                         out.extend(release_and_null(local, u));
                     } else {
                         out.push(null_local(local));
@@ -423,7 +450,13 @@ impl RcInsertion {
                     changed = true;
                 }
             }
-            for local in leftover_order(&leftover_parent, analysis.end_release[bi].iter().copied()) {
+            let end_batch: HashSet<u32> =
+                analysis.end_release[bi].iter().copied().collect();
+            for local in leftover_order(
+                &leftover_parent,
+                analysis.end_release[bi].iter().copied(),
+                &env_defer,
+            ) {
                 if dest_holds_token(&tokens, local) {
                     // Leftover may run after a field/Result store that retained an alias.
                     // ReleaseUnique ignores RC and would free that copy (`JsonValue.get`,
@@ -438,11 +471,20 @@ impl RcInsertion {
                             ..
                         } if *d != *f && d.0 == local
                     );
+                    let rel = should_release_leftover(&end_keep[bi], n_orig, local)
+                        && leftover_env_ok(
+                            local,
+                            &tokens,
+                            &env_defer,
+                            &env_pairs,
+                            &end_batch,
+                            &leftover_parent,
+                        );
                     if clobber_await_dest {
-                        if should_release_leftover(&end_keep[bi], n_orig, local) {
+                        if rel {
                             out.push(release_one(local, false));
                         }
-                    } else if should_release_leftover(&end_keep[bi], n_orig, local) {
+                    } else if rel {
                         out.extend(release_and_null(local, false));
                     } else {
                         out.push(null_local(local));
@@ -538,8 +580,19 @@ impl RcInsertion {
                 ret_drop.push(local);
             }
             let ret_keep = leftover_keep(func, ret_drop.iter().copied());
-            for local in leftover_order(&leftover_parent, ret_drop.iter().copied()) {
-                if should_release_leftover(&ret_keep, n_orig, local) {
+            let ret_batch: HashSet<u32> = ret_drop.iter().copied().collect();
+            let token_row = tokens.cloned().unwrap_or_default();
+            for local in leftover_order(&leftover_parent, ret_drop.iter().copied(), &env_defer) {
+                if should_release_leftover(&ret_keep, n_orig, local)
+                    && leftover_env_ok(
+                        local,
+                        &token_row,
+                        &env_defer,
+                        &env_pairs,
+                        &ret_batch,
+                        &leftover_parent,
+                    )
+                {
                     func.blocks[bi].stmts.extend(release_and_null(local, false));
                 } else {
                     func.blocks[bi].stmts.push(null_local(local));
@@ -571,6 +624,23 @@ impl MirPass for RcInsertion {
 /// still holds (field extract, still-live local). Unique-destroy would `free` under them.
 fn should_release_leftover(keep: &HashSet<u32>, n_orig: u32, local: u32) -> bool {
     keep.contains(&local) || local >= n_orig
+}
+
+fn leftover_env_ok(
+    local: u32,
+    tokens: &[bool],
+    env_defer: &HashSet<u32>,
+    pairs: &[(u32, u32)],
+    batch: &HashSet<u32>,
+    parent: &HashMap<u32, u32>,
+) -> bool {
+    if !env_defer.contains(&local) {
+        return true;
+    }
+    pairs.iter().any(|(dest, env)| {
+        *env == local
+            && (dest_holds_token(tokens, *dest) || leftover_covers(parent, batch, *dest))
+    })
 }
 
 fn unique_destroy(

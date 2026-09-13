@@ -440,7 +440,7 @@ impl<'a> Analyzer<'a> {
         self.hir.next_local += 1;
         self.hir.local_decls.push(HLocal {
             id: array_local,
-            name: "__closure_env_array".to_string(),
+            name: dream_abi::intrinsics::CLOSURE_ENV_ARRAY_LOCAL.to_string(),
             ty: array_ty,
         });
         self.push_stmt(HStmt::Let {

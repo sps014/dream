@@ -125,6 +125,20 @@ impl<'a> Emitter<'a> {
                 if self.simd_assign(place, rv) {
                     return;
                 }
+                if let (Place::Local(l), crate::Rvalue::ArrayNew { elem_ty, len }) = (place, rv) {
+                    if self.f.locals[l.0 as usize].name.as_deref()
+                        == Some(dream_abi::intrinsics::CLOSURE_ENV_ARRAY_LOCAL)
+                    {
+                        let es = elem_size(self.cx, *elem_ty);
+                        let rhs = Expr::call(
+                            "dream_closure_env_array_new",
+                            vec![self.operand(len), Expr::i(es as i64)],
+                        );
+                        let stored = self.store(place, rv, rhs);
+                        self.b.expr_stmt(stored);
+                        return;
+                    }
+                }
                 if let (
                     Place::Local(l),
                     crate::Rvalue::UnionNew {

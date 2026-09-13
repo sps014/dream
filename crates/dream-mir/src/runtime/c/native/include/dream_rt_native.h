@@ -850,6 +850,7 @@ int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_new_shared(int32_t len, int32_t esize);
+dream_ptr dream_closure_env_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
 dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
                                  void (*release)(dream_ptr));
@@ -1021,6 +1022,7 @@ int32_t dream_funcbox_funcidx(dream_ptr box);
 dream_ptr dream_funcbox_env(dream_ptr box);
 void dream_release_funcbox(dream_ptr box);
 void dream_release_closure_env(dream_ptr env);
+int dream_heap_is_live(dream_ptr ptr);
 /* Generated per-module: decrement + typed last-drop (struct fields, nested funcboxes). */
 void dream_release_object(dream_ptr p);
 

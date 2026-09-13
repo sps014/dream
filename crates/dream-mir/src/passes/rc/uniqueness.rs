@@ -260,7 +260,7 @@ fn call_result_may_alias(rvalue: &Rvalue) -> bool {
     )
 }
 
-/// `CaptureCell` env is copied/cast to `int` before `$funcbox_new`. That alias is a retain in the
+/// `CaptureCell` env is copied/cast to `int` before `$funcbox_new`. That alias is owned by the
 /// box, so Unique last-use destroy of the cell would free under the funcbox.
 fn pointer_pun_escape(rvalue: &Rvalue, dest: u32, is_owned: &dyn Fn(u32) -> bool) -> Option<u32> {
     if is_owned(dest) {

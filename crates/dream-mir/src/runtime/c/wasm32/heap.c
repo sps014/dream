@@ -537,7 +537,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
 
 #define PUBLISH_SEEN_MAX 256
 
-static int wasm_is_live_ptr(dream_ptr ptr) {
+int dream_heap_is_live(dream_ptr ptr) {
     int32_t block;
     int32_t sz;
     int32_t rc;
@@ -568,7 +568,7 @@ static void publish_walk_payload(dream_ptr ptr, dream_ptr *seen, int *nseen) {
     payload = sz - (int32_t)HEAP_HEADER_SIZE;
     for (off = 0; off + 4 <= payload; off += 4) {
         dream_ptr child = (dream_ptr)i32_at((int32_t)ptr + off);
-        if (wasm_is_live_ptr(child)) {
+        if (dream_heap_is_live(child)) {
             publish_rec(child, seen, nseen);
         }
     }
@@ -578,7 +578,7 @@ static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
     int32_t *tag;
     int32_t kind;
     int i;
-    if (!wasm_is_live_ptr(ptr)) {
+    if (!dream_heap_is_live(ptr)) {
         return;
     }
     for (i = 0; i < *nseen; i++) {

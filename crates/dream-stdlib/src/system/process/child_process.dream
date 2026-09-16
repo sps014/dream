@@ -10,7 +10,7 @@ public class ChildProcess {
 
     @native @node
     @runtime("processWriteStdin")
-    static extern fun host_write_stdin(handle: int, data: byte[]): bool;
+    static extern fun host_write_stdin(handle: int, borrow data: byte[]): bool;
 
     // `stream`: 0 = stdout, 1 = stderr.
     @native @node

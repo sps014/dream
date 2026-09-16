@@ -17,13 +17,13 @@ public class FileHandle {
     }
 
     @runtime("fileOpen")
-    static extern fun file_open(path: string, mode: string): int;
+    static extern fun file_open(borrow path: string, borrow mode: string): int;
 
     @runtime("fileHandleRead")
     static extern fun file_handle_read(id: int, n: int): byte[];
 
     @runtime("fileHandleWrite")
-    static extern fun file_handle_write(id: int, data: byte[]): long;
+    static extern fun file_handle_write(id: int, borrow data: byte[]): long;
 
     @runtime("fileHandleSeek")
     static extern fun file_handle_seek(id: int, pos: long): int;

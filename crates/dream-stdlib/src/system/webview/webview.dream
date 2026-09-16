@@ -93,19 +93,19 @@ public class WebView {
 
     @native
     @runtime("webviewCreate")
-    static extern fun host_create(title: string, width: int, height: int): int;
+    static extern fun host_create(borrow title: string, width: int, height: int): int;
 
     @native
     @runtime("webviewLoadUrl")
-    static extern fun host_load_url(id: int, url: string): int;
+    static extern fun host_load_url(id: int, borrow url: string): int;
 
     @native
     @runtime("webviewLoadHtml")
-    static extern fun host_load_html(id: int, html: string): int;
+    static extern fun host_load_html(id: int, borrow html: string): int;
 
     @native
     @runtime("webviewLoadFile")
-    static extern fun host_load_file(id: int, path: string): int;
+    static extern fun host_load_file(id: int, borrow path: string): int;
 
     @native
     @runtime("webviewClose")
@@ -125,27 +125,27 @@ public class WebView {
 
     @native
     @runtime("webviewReply")
-    static extern fun host_reply(id: int, reply_id: int, body: string): void;
+    static extern fun host_reply(id: int, reply_id: int, borrow body: string): void;
 
     @native
     @runtime("webviewReplyErr")
-    static extern fun host_reply_err(id: int, reply_id: int, message: string): void;
+    static extern fun host_reply_err(id: int, reply_id: int, borrow message: string): void;
 
     @native
     @runtime("webviewReplyBytes")
-    static extern fun host_reply_bytes(id: int, reply_id: int, body: byte[]): void;
+    static extern fun host_reply_bytes(id: int, reply_id: int, borrow body: byte[]): void;
 
     @native
     @runtime("webviewEmit")
-    static extern fun host_emit(id: int, channel: string, body: string): void;
+    static extern fun host_emit(id: int, borrow channel: string, borrow body: string): void;
 
     @native
     @runtime("webviewEmitBytes")
-    static extern fun host_emit_bytes(id: int, channel: string, body: byte[]): void;
+    static extern fun host_emit_bytes(id: int, borrow channel: string, borrow body: byte[]): void;
 
     @native
     @runtime("webviewEval")
-    static extern async fun host_eval(id: int, js: string): char[];
+    static extern async fun host_eval(id: int, borrow js: string): char[];
 
     @native
     public static fun create(title: string, width: int, height: int): Result<WebView, WebViewError> {

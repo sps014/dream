@@ -6,7 +6,7 @@ public static class SecureRandom {
     static extern fun bytes_host(n: int): byte[];
 
     @runtime("cryptoSecureRandomFill")
-    static extern fun fill_host(dest: byte[]): void;
+    static extern fun fill_host(borrow dest: byte[]): void;
 
     // Allocates `n` random bytes (`n <= 0` yields an empty array).
     public static fun bytes(n: int): byte[] {

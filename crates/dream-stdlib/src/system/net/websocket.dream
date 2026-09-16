@@ -8,22 +8,22 @@ public class WebSocket {
 
     @async_host
     @runtime("wsConnect")
-    static extern async fun ws_connect(url: string, timeout_ms: int): char[];
+    static extern async fun ws_connect(borrow url: string, timeout_ms: int): char[];
 
     @async_host
     @runtime("wsSendText")
-    static extern async fun ws_send_text(handle: int, text: string): char[];
+    static extern async fun ws_send_text(handle: int, borrow text: string): char[];
 
     @async_host
     @runtime("wsSendBinary")
-    static extern async fun ws_send_binary(handle: int, data: byte[]): char[];
+    static extern async fun ws_send_binary(handle: int, borrow data: byte[]): char[];
 
     @async_host
     @runtime("wsReceive")
     static extern async fun ws_receive(handle: int): char[];
 
     @runtime("wsClose")
-    static extern fun ws_close(handle: int, code: int, reason: string): bool;
+    static extern fun ws_close(handle: int, code: int, borrow reason: string): bool;
 
     constructor(handle: int) {
         this.handle = handle;

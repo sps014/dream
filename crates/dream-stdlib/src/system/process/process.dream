@@ -5,11 +5,11 @@ module system.process;
 public static class Process {
     @native @node
     @runtime("processRun")
-    static extern async fun host_run(cmd: string, args: string, cwd: string): char[];
+    static extern async fun host_run(borrow cmd: string, borrow args: string, borrow cwd: string): char[];
 
     @native @node
     @runtime("processSpawn")
-    static extern async fun host_spawn(cmd: string, args: string, cwd: string): char[];
+    static extern async fun host_spawn(borrow cmd: string, borrow args: string, borrow cwd: string): char[];
 
     // Joins `args` with '\n', the wire format the host functions split on.
     static fun join_args(args: string[]): string {

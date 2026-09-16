@@ -5,7 +5,7 @@ public class FileHandler : LogHandler {
     path: string;
 
     @runtime("fileAppend")
-    static extern fun file_append(path: string, content: string): long;
+    static extern fun file_append(borrow path: string, borrow content: string): long;
 
     // Creates a handler that appends to `path`.
     public constructor(path: string) {

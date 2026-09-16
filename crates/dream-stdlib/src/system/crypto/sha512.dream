@@ -3,7 +3,7 @@ module system.crypto;
 // SHA-512 digest (64-byte output). Host-backed via `Dream.cryptoSha512`.
 public static class Sha512 {
     @runtime("cryptoSha512")
-    static extern fun hash_host(data: byte[]): byte[];
+    static extern fun hash_host(borrow data: byte[]): byte[];
 
     // Digests `data` and returns the 64-byte hash.
     public static fun hash(data: byte[]): byte[] {

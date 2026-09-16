@@ -4,16 +4,16 @@ module system.text;
 
 public static class Unicode {
     @runtime("unicodeNormalize")
-    static extern fun normalize_host(text: string, form: int): string;
+    static extern fun normalize_host(borrow text: string, form: int): string;
 
     @runtime("unicodeToLower")
-    static extern fun to_lower_host(text: string): string;
+    static extern fun to_lower_host(borrow text: string): string;
 
     @runtime("unicodeToUpper")
-    static extern fun to_upper_host(text: string): string;
+    static extern fun to_upper_host(borrow text: string): string;
 
     @runtime("unicodeGraphemes")
-    static extern fun graphemes_host(text: string): string[];
+    static extern fun graphemes_host(borrow text: string): string[];
 
     // Normalizes `text` to the requested Unicode form.
     public static fun normalize(text: string, form: UnicodeNormForm): string {

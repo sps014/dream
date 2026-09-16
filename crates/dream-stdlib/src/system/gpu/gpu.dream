@@ -51,10 +51,10 @@ public static class Gpu {
     static extern fun buffer_alloc_bytes(n: int): int;
 
     @runtime("gpuBufferWriteBytes")
-    static extern fun buffer_write_bytes(id: int, data: byte[]): void;
+    static extern fun buffer_write_bytes(id: int, borrow data: byte[]): void;
 
     @runtime("gpuBufferWriteBytesAt")
-    static extern fun buffer_write_bytes_at(id: int, byte_offset: int, data: byte[]): void;
+    static extern fun buffer_write_bytes_at(id: int, byte_offset: int, borrow data: byte[]): void;
 
     @runtime("gpuBufferReadBytes")
     static extern async fun buffer_read_bytes(id: int, n: int): byte[];
@@ -73,33 +73,33 @@ public static class Gpu {
 
     @runtime("gpuDispatch")
     static extern async fun dispatch(
-        kernel: string,
-        buffer_ids: int[],
-        texture_ids: int[],
-        sampler_ids: int[],
+        borrow kernel: string,
+        borrow buffer_ids: int[],
+        borrow texture_ids: int[],
+        borrow sampler_ids: int[],
         ex: int,
         ey: int,
         ez: int,
-        uniforms: byte[]
+        borrow uniforms: byte[]
     ): int;
 
     @runtime("gpuDispatchIndirect")
     static extern async fun dispatch_indirect(
-        kernel: string,
-        buffer_ids: int[],
-        texture_ids: int[],
-        sampler_ids: int[],
+        borrow kernel: string,
+        borrow buffer_ids: int[],
+        borrow texture_ids: int[],
+        borrow sampler_ids: int[],
         indirect_id: int,
         indirect_offset: int
     ): int;
 
     @runtime("gpuShaderFromWgsl")
-    static extern fun shader_from_wgsl(source: string, entry: string): int;
+    static extern fun shader_from_wgsl(borrow source: string, borrow entry: string): int;
 
     @runtime("gpuDispatchShader")
     static extern async fun dispatch_shader(
         shader_id: int,
-        buffer_ids: int[],
+        borrow buffer_ids: int[],
         wx: int,
         wy: int,
         wz: int
@@ -126,7 +126,7 @@ public static class Gpu {
     @runtime("gpuTextureWriteRgba")
     static extern async fun texture_write_rgba(
         id: int,
-        pixels: byte[],
+        borrow pixels: byte[],
         x: int,
         y: int,
         w: int,
@@ -160,11 +160,11 @@ public static class Gpu {
 
     @web @native
     @runtime("gpuSurfaceFromCanvas")
-    static extern fun surface_from_canvas(canvas_id: string): int;
+    static extern fun surface_from_canvas(borrow canvas_id: string): int;
 
     @web @native
     @runtime("gpuSurfaceCreate")
-    static extern fun surface_create(title: string, width: int, height: int): int;
+    static extern fun surface_create(borrow title: string, width: int, height: int): int;
 
     @web @native
     @runtime("gpuSurfaceConfigure")
@@ -184,7 +184,7 @@ public static class Gpu {
 
     @web @native
     @runtime("gpuSurfaceKeyDown")
-    static extern fun surface_key_down(id: int, code: string): bool;
+    static extern fun surface_key_down(id: int, borrow code: string): bool;
 
     @web @native
     @runtime("gpuSurfaceGamepads")
@@ -227,12 +227,12 @@ public static class Gpu {
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
     @runtime("gpuRenderPipelineCreate")
-    static extern async fun render_pipeline_create(vertex: string, fragment: string): int;
+    static extern async fun render_pipeline_create(borrow vertex: string, borrow fragment: string): int;
 
     @runtime("gpuRenderPipelineCreateEx")
     static extern async fun render_pipeline_create_ex(
-        vertex: string,
-        fragment: string,
+        borrow vertex: string,
+        borrow fragment: string,
         topology: int,
         cull_mode: int,
         front_face: int,
@@ -250,7 +250,7 @@ public static class Gpu {
         pipeline_id: int,
         vertex_buffer_id: int,
         vertex_count: int,
-        uniforms: byte[],
+        borrow uniforms: byte[],
         clear_r: float,
         clear_g: float,
         clear_b: float,
@@ -265,7 +265,7 @@ public static class Gpu {
         vertex_buffer_id: int,
         vertex_count: int,
         instance_count: int,
-        uniforms: byte[],
+        borrow uniforms: byte[],
         clear_r: float,
         clear_g: float,
         clear_b: float,
@@ -282,7 +282,7 @@ public static class Gpu {
         vertex_buffer_id: int,
         index_buffer_id: int,
         index_count: int,
-        uniforms: byte[],
+        borrow uniforms: byte[],
         clear_r: float,
         clear_g: float,
         clear_b: float,
@@ -298,7 +298,7 @@ public static class Gpu {
         index_buffer_id: int,
         index_count: int,
         instance_count: int,
-        uniforms: byte[],
+        borrow uniforms: byte[],
         clear_r: float,
         clear_g: float,
         clear_b: float,
@@ -316,7 +316,7 @@ public static class Gpu {
         vertex_buffer_id: int,
         vertex_count: int,
         instance_count: int,
-        uniforms: byte[],
+        borrow uniforms: byte[],
         clear_r: float,
         clear_g: float,
         clear_b: float,
@@ -365,23 +365,23 @@ public static class Gpu {
     @runtime("gpuPassDispatch")
     static extern fun pass_dispatch(
         pass_id: int,
-        kernel: string,
-        buffer_ids: int[],
-        texture_ids: int[],
-        sampler_ids: int[],
+        borrow kernel: string,
+        borrow buffer_ids: int[],
+        borrow texture_ids: int[],
+        borrow sampler_ids: int[],
         ex: int,
         ey: int,
         ez: int,
-        uniforms: byte[]
+        borrow uniforms: byte[]
     ): void;
 
     @runtime("gpuPassDispatchIndirect")
     static extern fun pass_dispatch_indirect(
         pass_id: int,
-        kernel: string,
-        buffer_ids: int[],
-        texture_ids: int[],
-        sampler_ids: int[],
+        borrow kernel: string,
+        borrow buffer_ids: int[],
+        borrow texture_ids: int[],
+        borrow sampler_ids: int[],
         indirect_id: int,
         indirect_offset: int
     ): void;

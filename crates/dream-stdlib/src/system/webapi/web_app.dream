@@ -54,12 +54,12 @@ public class WebApp {
 
     @native
     @runtime("httpServerStartStream")
-    internal static extern fun host_start_stream(req: int, status: int, headers: string): int;
+    internal static extern fun host_start_stream(req: int, status: int, borrow headers: string): int;
 
     @native
     @async_host
     @runtime("httpServerWriteChunk")
-    internal static extern async fun host_write_chunk(req: int, data: byte[]): int;
+    internal static extern async fun host_write_chunk(req: int, borrow data: byte[]): int;
 
     @native
     @runtime("httpServerEndStream")
@@ -72,7 +72,7 @@ public class WebApp {
     @native
     @async_host
     @runtime("httpServerWsSend")
-    internal static extern async fun host_ws_send(handle: int, kind: int, data: byte[]): char[];
+    internal static extern async fun host_ws_send(handle: int, kind: int, borrow data: byte[]): char[];
 
     @native
     @async_host
@@ -81,7 +81,7 @@ public class WebApp {
 
     @native
     @runtime("httpServerWsClose")
-    internal static extern fun host_ws_close(handle: int, code: int, reason: string): int;
+    internal static extern fun host_ws_close(handle: int, code: int, borrow reason: string): int;
 
     @native
     @runtime("httpServerParseMultipart")
@@ -89,11 +89,11 @@ public class WebApp {
 
     @native
     @runtime("httpServerMultipartField")
-    internal static extern fun host_multipart_field(req: int, name: string): char[];
+    internal static extern fun host_multipart_field(req: int, borrow name: string): char[];
 
     @native
     @runtime("httpServerMultipartFile")
-    internal static extern fun host_multipart_file(req: int, name: string): char[];
+    internal static extern fun host_multipart_file(req: int, borrow name: string): char[];
 
     @native
     @runtime("httpServerShutdown")

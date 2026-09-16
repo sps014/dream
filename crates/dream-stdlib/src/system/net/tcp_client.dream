@@ -8,15 +8,15 @@ public class TcpClient {
 
     @native @node
     @runtime("tcpConnect")
-    static extern async fun tcp_connect(host: string, port: int, timeout_ms: int): char[];
+    static extern async fun tcp_connect(borrow host: string, port: int, timeout_ms: int): char[];
 
     @native @node
     @runtime("tcpSend")
-    static extern async fun tcp_send(handle: int, data: byte[]): char[];
+    static extern async fun tcp_send(handle: int, borrow data: byte[]): char[];
 
     @native @node
     @runtime("tcpSendText")
-    static extern async fun tcp_send_text(handle: int, text: string): char[];
+    static extern async fun tcp_send_text(handle: int, borrow text: string): char[];
 
     @native @node
     @runtime("tcpReceive")

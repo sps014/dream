@@ -5,7 +5,7 @@ module system;
 // fixed offset. Use with `DateTime.now_in`/`DateTime.of_zoned`/`DateTime.to_zone`.
 public struct TimeZone {
     @runtime("dateZoneOffsetMinutes")
-    static extern fun host_zone_offset_minutes(zone_name: string, epoch_millis: long): int;
+    static extern fun host_zone_offset_minutes(borrow zone_name: string, epoch_millis: long): int;
 
     @runtime("dateLocalZoneName")
     static extern fun host_local_zone_name(): string;

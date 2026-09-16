@@ -20,14 +20,14 @@ public static class AesGcm {
 
     @native @node
     @runtime("cryptoAesGcmEncrypt")
-    static extern fun encrypt_host(key: byte[], nonce: byte[], plaintext: byte[], aad: byte[]): byte[];
+    static extern fun encrypt_host(borrow key: byte[], borrow nonce: byte[], borrow plaintext: byte[], borrow aad: byte[]): byte[];
 
     // Host returns `[ok_flag, ...payload]` (see `decrypt_host`'s doc) so a hard authentication
     // failure can be distinguished from a genuinely empty plaintext without throwing across the
     // host boundary.
     @native @node
     @runtime("cryptoAesGcmDecrypt")
-    static extern fun decrypt_host(key: byte[], nonce: byte[], ciphertext: byte[], aad: byte[]): byte[];
+    static extern fun decrypt_host(borrow key: byte[], borrow nonce: byte[], borrow ciphertext: byte[], borrow aad: byte[]): byte[];
 
     // Encrypts `plaintext` under `key`/`nonce`, authenticating `aad` (additional authenticated
     // data, not encrypted but tamper-checked) alongside it. Returns ciphertext with a 16-byte

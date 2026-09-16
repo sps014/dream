@@ -329,12 +329,20 @@ impl<'a> Emitter<'a> {
                 let es = elem_size(self.cx, ety);
                 let addr = self.index_addr(*base, index, es, *unchecked);
                 if self.cx.interner.is_value_type(ety) {
+                    // The element is copied by value, so an allocating rvalue's box has no owner
+                    // once the copy is made: its type is not reference-counted, so no scope exit
+                    // covers it. The local, field, and global stores free it in `memcpy_value`.
+                    let frees = value_rvalue_allocates(rv);
                     return self.b.expr_block(|b| {
+                        let v = b.temp(CTy::Ptr, Some(rhs.clone()));
                         b.call(
                             "memcpy",
-                            vec![addr.clone(), Expr::dream_p(rhs.clone()), Expr::i(es as i64)],
+                            vec![addr.clone(), Expr::dream_p(v.clone()), Expr::i(es as i64)],
                         );
-                        rhs.clone()
+                        if frees {
+                            b.call("dream_free", vec![v.clone()]);
+                        }
+                        v
                     });
                 }
                 let cast = load_cast(self.cx, ety);
@@ -776,6 +784,10 @@ fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {
             | crate::Rvalue::ArrayLit { .. }
             | crate::Rvalue::ArrayNew { .. }
             | crate::Rvalue::ArrayRealloc { .. }
+            // `dream_from_bytes` hands back a heap box. A local or field destination copies out of
+            // it and frees it in `store_from_bytes_value`, but an array element reaches the generic
+            // store instead, and the box's type is not reference-counted so no scope exit covers it.
+            | crate::Rvalue::FromBytes { .. }
     )
 }
 

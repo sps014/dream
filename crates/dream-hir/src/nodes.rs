@@ -218,6 +218,9 @@ pub enum HExprKind {
         instance: Vec<TypeId>,
         ctor: Option<DefId>,
         args: Vec<HExpr>,
+        /// Per-argument `take` flags from the constructor's declaration (empty = none). A `borrow`
+        /// constructor parameter retains inside the constructor body, so the call site must not.
+        take_params: Vec<bool>,
     },
     /// Union variant construction `Union.Variant(args)`.
     UnionNew {

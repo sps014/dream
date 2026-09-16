@@ -126,7 +126,9 @@ rcgen = "0.13"
 debug = "line-tables-only"
 
 [profile.test]
-opt-level = 3
+# `-O1` keeps the compiler-heavy e2e cases fast to *run* while cutting test *build* time
+# roughly in half versus `-O3` (the big crates are compiled a second time as test harnesses).
+opt-level = 1
 debug-assertions = true
 overflow-checks = true
 

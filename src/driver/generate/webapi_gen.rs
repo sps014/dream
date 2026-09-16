@@ -150,15 +150,19 @@ pub fn expand_from_acc(
             continue;
         }
         match build_route(
-            c.f,
-            &method,
-            &path,
-            &c.call,
-            uses,
-            websocket,
-            &fns,
-            &json_names,
-            acc,
+            RouteSpec {
+                f: c.f,
+                method: &method,
+                path: &path,
+                call: &c.call,
+                uses,
+                websocket,
+            },
+            RouteCx {
+                fns: &fns,
+                json_names: &json_names,
+                acc,
+            },
             diagnostics,
         ) {
             Some(r) => routes.push(r),
@@ -486,18 +490,41 @@ fn result_parts(ty: &str) -> Option<(&str, &str)> {
     None
 }
 
-fn build_route(
-    f: &FunctionNode<'_>,
-    method: &str,
-    path: &str,
-    call: &str,
+/// One `@get`/`@post`/… handler as written in source, before parameter binding is resolved.
+struct RouteSpec<'a, 'src> {
+    f: &'a FunctionNode<'src>,
+    method: &'a str,
+    path: &'a str,
+    call: &'a str,
     uses: Vec<String>,
     websocket: bool,
-    fns: &IndexMap<String, &FunctionNode<'_>>,
-    json_names: &HashSet<String>,
-    acc: &ProgramAccumulator<'_>,
+}
+
+/// Program-wide tables every route binding resolves against.
+struct RouteCx<'a, 'src> {
+    fns: &'a IndexMap<String, &'a FunctionNode<'src>>,
+    json_names: &'a HashSet<String>,
+    acc: &'a ProgramAccumulator<'src>,
+}
+
+fn build_route(
+    spec: RouteSpec<'_, '_>,
+    cx: RouteCx<'_, '_>,
     diagnostics: &mut DiagnosticBag,
 ) -> Option<Route> {
+    let RouteSpec {
+        f,
+        method,
+        path,
+        call,
+        uses,
+        websocket,
+    } = spec;
+    let RouteCx {
+        fns,
+        json_names,
+        acc,
+    } = cx;
     let placeholders = path_placeholders(path);
     let mut used_path: HashSet<String> = HashSet::new();
     let mut params = Vec::new();
@@ -724,7 +751,7 @@ fn emit_extend(
             r.method
         ));
         s.push_str(&format!("            let __params{i} = __m{i}.unwrap();\n"));
-        emit_handler_body(&mut s, r, i, json_names, acc);
+        emit_handler_body(&mut s, r, i, acc);
         s.push_str("        }\n");
     }
     s.push_str("        return HttpOutgoing.not_found();\n");
@@ -751,13 +778,7 @@ fn json_string(raw: &str) -> String {
     out
 }
 
-fn emit_handler_body(
-    s: &mut String,
-    r: &Route,
-    i: usize,
-    json_names: &HashSet<String>,
-    acc: &ProgramAccumulator<'_>,
-) {
+fn emit_handler_body(s: &mut String, r: &Route, i: usize, acc: &ProgramAccumulator<'_>) {
     let wrap = !r.uses.is_empty();
     let ind = if wrap {
         "                "
@@ -767,7 +788,7 @@ fn emit_handler_body(
     if wrap {
         s.push_str("            let __leaf: fun(): Future<HttpOutgoing> = async () => {\n");
     }
-    emit_extractors(s, r, i, json_names, acc, ind);
+    emit_extractors(s, r, i, acc, ind);
     if wrap {
         s.push_str("            };\n");
         s.push_str("            let __uses = List<Middleware>();\n");
@@ -780,14 +801,7 @@ fn emit_handler_body(
     }
 }
 
-fn emit_extractors(
-    s: &mut String,
-    r: &Route,
-    i: usize,
-    json_names: &HashSet<String>,
-    acc: &ProgramAccumulator<'_>,
-    ind: &str,
-) {
+fn emit_extractors(s: &mut String, r: &Route, i: usize, acc: &ProgramAccumulator<'_>, ind: &str) {
     let mut args: Vec<String> = Vec::new();
     let mut dep_memo: HashSet<String> = HashSet::new();
     let needs_multipart = r
@@ -975,7 +989,7 @@ fn emit_extractors(
         s.push_str(&format!("{ind}return HttpOutgoing.already_sent();\n"));
         return;
     }
-    emit_return(s, ind, &r.ret, &call, json_names);
+    emit_return(s, ind, &r.ret, &call);
 }
 
 fn emit_parse_scalar(s: &mut String, ind: &str, name: &str, ty: &str, src: &str) {
@@ -1023,7 +1037,9 @@ fn emit_dep_call(
                 dep_args.push(tmp);
             } else if has_attr(&p.attributes, "header") {
                 let h = attr_string(&p.attributes, "header").unwrap_or_else(|| p.name.text.clone());
-                s.push_str(&format!("{ind}let {tmp}_o = ctx.incoming.header(\"{h}\");\n"));
+                s.push_str(&format!(
+                    "{ind}let {tmp}_o = ctx.incoming.header(\"{h}\");\n"
+                ));
                 if option_inner(&pty).is_some() {
                     s.push_str(&format!("{ind}let {tmp} = {tmp}_o;\n"));
                 } else {
@@ -1091,7 +1107,7 @@ fn emit_dep_call(
     s.push_str(&format!("{ind}let {bind} = {slot};\n"));
 }
 
-fn emit_return(s: &mut String, ind: &str, ret: &str, call: &str, json_names: &HashSet<String>) {
+fn emit_return(s: &mut String, ind: &str, ret: &str, call: &str) {
     if ret == "HttpOutgoing" {
         s.push_str(&format!("{ind}return {call};\n"));
         return;
@@ -1118,7 +1134,7 @@ fn emit_return(s: &mut String, ind: &str, ret: &str, call: &str, json_names: &Ha
                 "{ind}if __out.is_err() {{ return HttpOutgoing.from_status(__out.unwrap_err()); }}\n"
             ));
             s.push_str(&format!("{ind}let __ok = __out.unwrap();\n"));
-            emit_value_return(s, ind, ok, "__ok", json_names);
+            emit_value_return(s, ind, ok, "__ok");
             return;
         }
         if err == "string" {
@@ -1131,27 +1147,17 @@ fn emit_return(s: &mut String, ind: &str, ret: &str, call: &str, json_names: &Ha
             ));
         }
         s.push_str(&format!("{ind}let __ok = __out.unwrap();\n"));
-        emit_value_return(s, ind, ok, "__ok", json_names);
+        emit_value_return(s, ind, ok, "__ok");
         return;
     }
-    emit_value_return(s, ind, ret, "__out", json_names);
+    emit_value_return(s, ind, ret, "__out");
 }
 
-fn emit_value_return(
-    s: &mut String,
-    ind: &str,
-    ty: &str,
-    expr: &str,
-    json_names: &HashSet<String>,
-) {
+fn emit_value_return(s: &mut String, ind: &str, ty: &str, expr: &str) {
     if ty == "string" {
         s.push_str(&format!("{ind}return HttpOutgoing.text({expr}, 200);\n"));
     } else if ty == "HttpOutgoing" {
         s.push_str(&format!("{ind}return {expr};\n"));
-    } else if json_names.contains(ty) || ty == "JsonValue" {
-        s.push_str(&format!(
-            "{ind}return HttpOutgoing.json_text(Json.serialize({expr}), 200);\n"
-        ));
     } else {
         s.push_str(&format!(
             "{ind}return HttpOutgoing.json_text(Json.serialize({expr}), 200);\n"

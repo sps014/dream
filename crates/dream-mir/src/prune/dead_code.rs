@@ -17,7 +17,7 @@ fn rvalue_callees(rv: &Rvalue, out: &mut Vec<FnKey>) {
         }
         Rvalue::New {
             ctor: Some(ctor), ..
-        } => out.push((*ctor, vec![])),
+        } => out.push((ctor.def, vec![])),
         _ => {}
     }
 }
@@ -325,7 +325,7 @@ fn collect_import_defs_rvalue(rv: &Rvalue, out: &mut HashSet<dream_types::DefId>
         Rvalue::New {
             ctor: Some(ctor), ..
         } => {
-            out.insert(*ctor);
+            out.insert(ctor.def);
         }
         _ => {}
     }

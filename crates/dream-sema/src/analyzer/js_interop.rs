@@ -680,7 +680,51 @@ impl<'a> Analyzer<'a> {
         let fut = self
             .type_ctx
             .lower(&Self::future_type(Self::option_js_type()));
-        self.js_bridge_call("await_promise", vec![recv], fut)
+        // `await_promise`'s `token` parameter defaults to `Option.None`, but default substitution
+        // only runs for calls written in source — a synthetic bridge call has to spell it out.
+        let token = self.option_none(&Self::cancellation_token_type())?;
+        self.js_bridge_call("await_promise", vec![recv, token], fut)
+    }
+
+    /// The AST type of `CancellationToken`.
+    fn cancellation_token_type() -> Type {
+        Type::Struct(
+            synthetic_token(TokenKind::IdentifierToken, "CancellationToken"),
+            None,
+        )
+    }
+
+    /// `Option<inner>.None` as HIR, instantiating `Option<inner>` if this is its first use.
+    fn option_none(&mut self, inner: &Type) -> Option<HExpr> {
+        use dream_syntax::nodes::types::mangle_generic;
+        let mut throwaway = DiagnosticBag::new(None);
+        let no_span = TextSpan {
+            start: 0,
+            end: 0,
+            line_no: 0,
+            col_no: 0,
+        };
+        let args = std::slice::from_ref(inner);
+        self.ensure_union_instantiated("Option", args, &no_span, &mut throwaway);
+        let mangled = mangle_generic("Option", args);
+        let def = self.type_ctx.defs.lookup(DefKind::Union, &mangled)?;
+        let variant = self
+            .union_table
+            .get(&mangled)?
+            .variant("None")?
+            .discriminant as usize;
+        let ty = self.type_ctx.lower(&Type::Struct(
+            synthetic_token(TokenKind::IdentifierToken, "Option"),
+            Some(vec![inner.clone()]),
+        ));
+        Some(HExpr::new(
+            ty,
+            HExprKind::UnionNew {
+                def,
+                variant,
+                args: vec![],
+            },
+        ))
     }
 
     /// `recv[key]` -> `js.index_get(recv, box(key))`. Sets `hir.last`.

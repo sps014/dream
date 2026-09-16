@@ -3,10 +3,10 @@
 use super::is_borrowed_copy;
 use super::liveness::{self, live_after_stmt, stmt_reads_local};
 use super::tokens::{
-    apply_stmt_tokens, assigns_local, dest_holds_token, funcbox_env_pairs, funcbox_env_rc_roots,
-    is_owned_local, leftover_alias_parent, leftover_covers, leftover_keep, leftover_order,
-    move_source, needs_rebind_temp, null_local, rc_op_on_local, release_and_null, sink_call_args,
-    source_line_end, take_arg_effects, TokenAnalysis,
+    apply_stmt_tokens, assigns_local, dest_holds_token, funcbox_env_rc_roots, is_owned_local,
+    leftover_alias_parent, leftover_keep, leftover_order, move_source, needs_rebind_temp,
+    null_local, rc_op_on_local, release_and_null, sink_call_args, source_line_end,
+    take_arg_effects, terminator_reads_local, TokenAnalysis,
 };
 use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
@@ -69,7 +69,6 @@ impl RcInsertion {
         let analysis = TokenAnalysis::analyze(func, interner, layouts, holds);
         let leftover_parent = leftover_alias_parent(func, interner, true);
         let env_defer = funcbox_env_rc_roots(func, interner);
-        let env_pairs = funcbox_env_pairs(func, interner);
         let start_keep: Vec<HashSet<u32>> = analysis
             .start_release
             .iter()
@@ -100,6 +99,20 @@ impl RcInsertion {
         let mut realloc_readers: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
         let mut slot_readers: HashMap<SlotId, Vec<u32>> = HashMap::new();
         let live_out_rc = liveness::live_out(func);
+        let is_async = func.is_async;
+        // Resume blocks get their awaited future's Release from `insert_await_resume_releases`,
+        // which runs after this loop and treats an existing `x = null` as "already handled".
+        let mut resume_futures: Vec<HashSet<u32>> = vec![HashSet::new(); func.blocks.len()];
+        for block in &func.blocks {
+            if let Terminator::Await {
+                future: Operand::Copy(Place::Local(f)),
+                resume,
+                ..
+            } = &block.terminator
+            {
+                resume_futures[resume.0 as usize].insert(f.0);
+            }
+        }
         let in_loop: HashSet<usize> = cfg::natural_loops(func)
             .iter()
             .flat_map(|lp| lp.body.iter().map(|b| b.0 as usize))
@@ -158,8 +171,6 @@ impl RcInsertion {
             let mut tokens = analysis.token_in[bi].clone();
             let mut unique = analysis.unique_in[bi].clone();
             let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len() + 8);
-            let start_batch: HashSet<u32> =
-                analysis.start_release[bi].iter().copied().collect();
             for local in leftover_order(
                 &leftover_parent,
                 analysis.start_release[bi].iter().copied(),
@@ -168,14 +179,7 @@ impl RcInsertion {
                 // Join/loop-header leftover: the other pred may have copied this pointer into a
                 // still-live container. Unique destroy ignores RC and would free that copy.
                 if should_release_leftover(&start_keep[bi], n_orig, local)
-                    && leftover_env_ok(
-                        local,
-                        &tokens,
-                        &env_defer,
-                        &env_pairs,
-                        &start_batch,
-                        &leftover_parent,
-                    )
+                    && leftover_env_ok(local, &tokens, &env_defer)
                 {
                     out.extend(release_and_null(local, false));
                 } else {
@@ -302,6 +306,10 @@ impl RcInsertion {
                         if retain {
                             out.push(Statement::Retain(Operand::Copy(Place::Local(dest))));
                         }
+                        // The temp handed its reference to `dest`. Leaving it set lets copy
+                        // propagation rewrite later uses of `dest` back onto it, and an async
+                        // frame spills it, so `drop_*` would release the pointer a second time.
+                        out.push(null_local(tmp.0));
                         for n in sink_nulls.into_iter().filter(|n| {
                             !matches!(
                                 n,
@@ -418,14 +426,7 @@ impl RcInsertion {
                     let one = HashSet::from([local]);
                     let keep = die_keep.get(&(bi, si)).unwrap_or(&one);
                     if should_release_leftover(keep, n_orig, local)
-                        && leftover_env_ok(
-                            local,
-                            &tokens,
-                            &env_defer,
-                            &env_pairs,
-                            &one,
-                            &leftover_parent,
-                        )
+                        && leftover_env_ok(local, &tokens, &env_defer)
                     {
                         out.extend(release_and_null(local, u));
                     } else {
@@ -450,8 +451,6 @@ impl RcInsertion {
                     changed = true;
                 }
             }
-            let end_batch: HashSet<u32> =
-                analysis.end_release[bi].iter().copied().collect();
             for local in leftover_order(
                 &leftover_parent,
                 analysis.end_release[bi].iter().copied(),
@@ -472,14 +471,7 @@ impl RcInsertion {
                         } if *d != *f && d.0 == local
                     );
                     let rel = should_release_leftover(&end_keep[bi], n_orig, local)
-                        && leftover_env_ok(
-                            local,
-                            &tokens,
-                            &env_defer,
-                            &env_pairs,
-                            &end_batch,
-                            &leftover_parent,
-                        );
+                        && leftover_env_ok(local, &tokens, &env_defer);
                     if clobber_await_dest {
                         if rel {
                             out.push(release_one(local, false));
@@ -491,6 +483,41 @@ impl RcInsertion {
                     }
                     tokens[local as usize] = false;
                     unique[local as usize] = false;
+                    changed = true;
+                }
+            }
+            // A poll frame spills every local and `drop_*` releases every non-null ref slot, so a
+            // dead local that no longer owns its pointer (its token moved into a sink or to a
+            // rebound alias) would be released a second time when the future is destroyed.
+            if is_async {
+                let await_dest = match &block.terminator {
+                    Terminator::Await { dest: Some(d), .. } => Some(d.0),
+                    _ => None,
+                };
+                for local in 0..tokens.len() as u32 {
+                    if dest_holds_token(&tokens, local)
+                        || Some(local) == await_dest
+                        || resume_futures[bi].contains(&local)
+                        || terminator_reads_local(&block.terminator, local)
+                        || !local_is_ref.get(local as usize).copied().unwrap_or(false)
+                        || live_out_rc[bi].contains(&local)
+                    {
+                        continue;
+                    }
+                    let already_null = out
+                        .iter()
+                        .rev()
+                        .find_map(|s| match s {
+                            Statement::Assign(Place::Local(l), rv) if l.0 == local => {
+                                Some(matches!(rv, Rvalue::Use(Operand::Const(Const::Null))))
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(false);
+                    if already_null {
+                        continue;
+                    }
+                    out.push(null_local(local));
                     changed = true;
                 }
             }
@@ -580,18 +607,10 @@ impl RcInsertion {
                 ret_drop.push(local);
             }
             let ret_keep = leftover_keep(func, ret_drop.iter().copied());
-            let ret_batch: HashSet<u32> = ret_drop.iter().copied().collect();
             let token_row = tokens.cloned().unwrap_or_default();
             for local in leftover_order(&leftover_parent, ret_drop.iter().copied(), &env_defer) {
                 if should_release_leftover(&ret_keep, n_orig, local)
-                    && leftover_env_ok(
-                        local,
-                        &token_row,
-                        &env_defer,
-                        &env_pairs,
-                        &ret_batch,
-                        &leftover_parent,
-                    )
+                    && leftover_env_ok(local, &token_row, &env_defer)
                 {
                     func.blocks[bi].stmts.extend(release_and_null(local, false));
                 } else {
@@ -626,21 +645,15 @@ fn should_release_leftover(keep: &HashSet<u32>, n_orig: u32, local: u32) -> bool
     keep.contains(&local) || local >= n_orig
 }
 
-fn leftover_env_ok(
-    local: u32,
-    tokens: &[bool],
-    env_defer: &HashSet<u32>,
-    pairs: &[(u32, u32)],
-    batch: &HashSet<u32>,
-    parent: &HashMap<u32, u32>,
-) -> bool {
+/// Leftover of a funcbox env releases whenever this local still holds the env's token.
+/// `funcbox_new` retains the array on the box's behalf, so that is a 2→1 step while the box
+/// lives and the typed 1→0 last-drop once it is gone. Gating it on the box's own leftover
+/// instead leaked the leaf middleware env, whose box is released in another function.
+fn leftover_env_ok(local: u32, tokens: &[bool], env_defer: &HashSet<u32>) -> bool {
     if !env_defer.contains(&local) {
         return true;
     }
-    pairs.iter().any(|(dest, env)| {
-        *env == local
-            && (dest_holds_token(tokens, *dest) || leftover_covers(parent, batch, *dest))
-    })
+    dest_holds_token(tokens, local)
 }
 
 fn unique_destroy(
@@ -1318,12 +1331,11 @@ mod tests {
                 if *l == fallback
             )
         });
-        let retain_dest = stmts.iter().position(|s| {
-            matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == dest)
-        });
+        let retain_dest = stmts.iter().position(
+            |s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == dest),
+        );
         assert!(
-            rel_fb.is_none()
-                || retain_dest.is_some_and(|r| rel_fb.is_some_and(|f| r > f)),
+            rel_fb.is_none() || retain_dest.is_some_and(|r| rel_fb.is_some_and(|f| r > f)),
             "leftover fallback last-ref before return of alias: {:?}",
             stmts
         );
@@ -1729,7 +1741,9 @@ mod tests {
         let stmts = &func.blocks[0].stmts;
         let first_new = stmts
             .iter()
-            .position(|s| matches!(s, Statement::Assign(Place::Local(l), Rvalue::New { .. }) if *l == x))
+            .position(
+                |s| matches!(s, Statement::Assign(Place::Local(l), Rvalue::New { .. }) if *l == x),
+            )
             .unwrap();
         let add_at = stmts
             .iter()
@@ -2332,12 +2346,10 @@ mod tests {
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
         assert!(RcInsertion.run(&mut func, &ctx.interner));
-        let has_release = func.blocks[0].stmts.iter().any(|s| {
-            matches!(
-                s,
-                Statement::Release(_) | Statement::ReleaseUnique(_)
-            )
-        });
+        let has_release = func.blocks[0]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::Release(_) | Statement::ReleaseUnique(_)));
         let has_retain = func.blocks[0]
             .stmts
             .iter()

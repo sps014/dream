@@ -190,17 +190,17 @@ fn expand_in_function(
                     Rvalue::New {
                         def,
                         ty,
-                        ctor: Some(ctor_def),
+                        ctor: Some(ctor),
                         args,
                     },
                 ) => {
-                    let Some(inits) = ctor_inits.get(&ctor_def) else {
+                    let Some(inits) = ctor_inits.get(&ctor.def) else {
                         new_stmts.push(Statement::Assign(
                             Place::Local(o),
                             Rvalue::New {
                                 def,
                                 ty,
-                                ctor: Some(ctor_def),
+                                ctor: Some(ctor),
                                 args,
                             },
                         ));
@@ -217,7 +217,7 @@ fn expand_in_function(
                             Rvalue::New {
                                 def,
                                 ty,
-                                ctor: Some(ctor_def),
+                                ctor: Some(ctor),
                                 args,
                             },
                         ));
@@ -714,7 +714,10 @@ mod tests {
             Rvalue::New {
                 def: class_def,
                 ty: i.int(),
-                ctor: Some(ctor_def),
+                ctor: Some(crate::NewCtor {
+                    def: ctor_def,
+                    take_params: vec![],
+                }),
                 args: vec![Operand::Const(Const::Int(7))],
             },
         );
@@ -782,7 +785,10 @@ mod tests {
             Rvalue::New {
                 def: class_def,
                 ty: class_ty,
-                ctor: Some(ctor_def),
+                ctor: Some(crate::NewCtor {
+                    def: ctor_def,
+                    take_params: vec![],
+                }),
                 args: vec![Operand::Copy(Place::Local(s))],
             },
         );
@@ -801,10 +807,9 @@ mod tests {
         );
         let stmts = &mir.functions[1].blocks[0].stmts;
         assert!(
-            stmts.iter().any(|st| matches!(
-                st,
-                Statement::Assign(_, Rvalue::New { ctor: None, .. })
-            )),
+            stmts
+                .iter()
+                .any(|st| matches!(st, Statement::Assign(_, Rvalue::New { ctor: None, .. }))),
             "default New: {:?}",
             stmts
         );
@@ -818,10 +823,9 @@ mod tests {
             stmts
         );
         assert!(
-            !stmts.iter().any(|s| matches!(
-                s,
-                Statement::Assign(_, Rvalue::New { ctor: Some(_), .. })
-            )),
+            !stmts
+                .iter()
+                .any(|s| matches!(s, Statement::Assign(_, Rvalue::New { ctor: Some(_), .. }))),
             "ctor New must be gone: {:?}",
             stmts
         );

@@ -615,10 +615,7 @@ fn last_use_primitive_field_inserts_one_release() {
     b.assign(Place::Local(x), new_obj(def, ty));
     b.assign(
         Place::Local(id),
-        Rvalue::Use(Operand::Copy(Place::Field {
-            base: x,
-            field: 0,
-        })),
+        Rvalue::Use(Operand::Copy(Place::Field { base: x, field: 0 })),
     );
     b.push(Statement::Print {
         arg: Operand::Copy(Place::Local(id)),

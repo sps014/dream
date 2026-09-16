@@ -71,7 +71,7 @@ fn ctor_only_defs(mir: &Mir) -> HashSet<DefId> {
                 Rvalue::New {
                     ctor: Some(ctor), ..
                 } => {
-                    as_ctor.insert(*ctor);
+                    as_ctor.insert(ctor.def);
                 }
                 _ => {}
             },
@@ -241,10 +241,10 @@ fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
                 return false;
             }
             if let Some(ctor) = ctor {
-                let Some(g) = cx.mir.functions.iter().find(|cf| cf.def == *ctor) else {
+                let Some(g) = cx.mir.functions.iter().find(|cf| cf.def == ctor.def) else {
                     return false;
                 };
-                if !cx.ctor_only.contains(ctor) {
+                if !cx.ctor_only.contains(&ctor.def) {
                     return false;
                 }
                 region_safe(cx, g)

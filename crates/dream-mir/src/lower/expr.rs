@@ -117,13 +117,20 @@ impl Lowerer<'_> {
             // A function name used as a value becomes its function-table index.
             HExprKind::Var(Binding::Func(callee)) => Rvalue::FuncRef(self.lower_callee(callee)),
             HExprKind::New {
-                def, ctor, args, ..
+                def,
+                ctor,
+                args,
+                take_params,
+                ..
             } => {
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                 Rvalue::New {
                     def: *def,
                     ty: e.ty,
-                    ctor: *ctor,
+                    ctor: ctor.map(|def| crate::NewCtor {
+                        def,
+                        take_params: take_params.clone(),
+                    }),
                     args: lowered,
                 }
             }

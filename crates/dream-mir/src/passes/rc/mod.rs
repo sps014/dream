@@ -23,8 +23,8 @@ mod unique_tests;
 pub use elision::RcElision;
 pub use hop::HopElision;
 pub use insertion::RcInsertion;
-pub use repair::RcLastUseRepair;
 pub(crate) use liveness::stmt_reads_local;
+pub use repair::RcLastUseRepair;
 pub(crate) use uniqueness::container_move_locals;
 
 use crate::{Global, Local, Operand, Place, Rvalue, Statement};

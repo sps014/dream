@@ -86,10 +86,7 @@ fn null_then_field_load_stays_cursor() {
     let mut b = FunctionBuilder::new("f", ctx.interner.void());
     let this = b.new_local(opt_ty, Some("self".into()));
     let snap = b.new_local(list, Some("s".into()));
-    b.assign(
-        Place::Local(snap),
-        Rvalue::Use(Operand::Const(Const::Null)),
-    );
+    b.assign(Place::Local(snap), Rvalue::Use(Operand::Const(Const::Null)));
     b.assign(
         Place::Local(snap),
         Rvalue::Use(Operand::Copy(Place::Field {
@@ -122,10 +119,7 @@ fn borrow_this_copy_then_field_stays_cursor() {
         Place::Local(this2),
         Rvalue::Use(Operand::Copy(Place::Local(this))),
     );
-    b.assign(
-        Place::Local(snap),
-        Rvalue::Use(Operand::Const(Const::Null)),
-    );
+    b.assign(Place::Local(snap), Rvalue::Use(Operand::Const(Const::Null)));
     b.assign(
         Place::Local(snap),
         Rvalue::Use(Operand::Copy(Place::Field {
@@ -139,9 +133,7 @@ fn borrow_this_copy_then_field_stays_cursor() {
     assert!(
         func.locals[snap.0 as usize].is_cursor,
         "obj_map snapshot must stay a cursor: this2={:?} snap={:?} stmts={:?}",
-        func.locals[this2.0 as usize],
-        func.locals[snap.0 as usize],
-        func.blocks[0].stmts
+        func.locals[this2.0 as usize], func.locals[snap.0 as usize], func.blocks[0].stmts
     );
 }
 
@@ -445,9 +437,10 @@ fn cursor_escapes_when_base_dies_before_last_use() {
         "fname must own after base last-use: {:?}",
         func.locals[fname.0 as usize]
     );
-    let has_retain = func.blocks[0].stmts.iter().any(
-        |s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == fname),
-    );
+    let has_retain = func.blocks[0]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == fname));
     assert!(
         has_retain,
         "field-load that outlives the holder must Retain: {:?}",
@@ -501,9 +494,9 @@ fn union_payload_escapes_when_scrutinee_dies() {
     let mut func = b.finish();
     assert!(RcInsertion.run(&mut func, &ctx.interner));
     let stmts = &func.blocks[0].stmts;
-    let peek_at = stmts.iter().position(|s| {
-        matches!(s, Statement::Call { callee, .. } if callee.def == peek)
-    });
+    let peek_at = stmts
+        .iter()
+        .position(|s| matches!(s, Statement::Call { callee, .. } if callee.def == peek));
     let drop_res = stmts.iter().position(|s| {
         matches!(
             s,
@@ -515,9 +508,9 @@ fn union_payload_escapes_when_scrutinee_dies() {
     let peek_at = peek_at.expect("peek call");
     let drop_res = drop_res.expect("res must still be destroyed");
     let owns = !func.locals[root.0 as usize].is_cursor;
-    let has_retain = stmts.iter().any(
-        |s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == root),
-    );
+    let has_retain = stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == root));
     assert!(
         (owns && has_retain) || drop_res > peek_at,
         "payload must own or Result must live until peek: cursor={} retain={} drop={} peek={} {:?}",
@@ -570,9 +563,9 @@ fn field_cursor_keeps_base_alive_until_last_use() {
     let mut func = b.finish();
     assert!(RcInsertion.run(&mut func, &ctx.interner));
     let stmts = &func.blocks[0].stmts;
-    let peek_at = stmts.iter().position(|s| {
-        matches!(s, Statement::Call { callee, .. } if callee.def == peek)
-    });
+    let peek_at = stmts
+        .iter()
+        .position(|s| matches!(s, Statement::Call { callee, .. } if callee.def == peek));
     let drop_res = stmts.iter().position(|s| {
         matches!(
             s,
@@ -583,9 +576,9 @@ fn field_cursor_keeps_base_alive_until_last_use() {
     });
     let peek_at = peek_at.expect("peek call");
     let drop_res = drop_res.expect("res must still be destroyed");
-    let has_retain = stmts.iter().any(
-        |s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == root),
-    );
+    let has_retain = stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == root));
     assert!(
         has_retain || drop_res > peek_at,
         "field snapshot must Retain or keep Result alive until peek: {:?}",
@@ -669,10 +662,7 @@ fn union_hop_payload_is_not_cursor() {
     );
     b.assign(
         Place::Local(curr),
-        Rvalue::Use(Operand::Copy(Place::Field {
-            base: n,
-            field: 0,
-        })),
+        Rvalue::Use(Operand::Copy(Place::Field { base: n, field: 0 })),
     );
     b.push(Statement::Call {
         callee: Callee {

@@ -527,7 +527,7 @@ pub enum Rvalue {
     New {
         def: DefId,
         ty: TypeId,
-        ctor: Option<DefId>,
+        ctor: Option<NewCtor>,
         args: Vec<Operand>,
     },
     /// Inline positional tuple construction: zero the destination then store each element at its
@@ -609,6 +609,15 @@ pub enum Rvalue {
         method: Option<Operand>,
         args: Vec<(Operand, TypeId)>,
     },
+}
+
+/// The user `constructor(){}` a [`Rvalue::New`] calls, with the per-argument `take` flags from its
+/// declaration (empty = unknown). A `borrow` constructor parameter retains inside the constructor
+/// body, so the call site must not retain it a second time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewCtor {
+    pub def: DefId,
+    pub take_params: Vec<bool>,
 }
 
 /// A resolved call target carried into MIR. The backend derives the emitted symbol from

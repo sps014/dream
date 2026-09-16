@@ -8,7 +8,11 @@ use std::collections::HashSet;
 
 /// Mark locals that only hold a non-escaping field/index (or union-field) load, or a forwarding
 /// copy of another RC local, as cursors so [`super::RcInsertion`] skips retain/release on them.
-pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner, layouts: &LayoutTable) {
+pub(crate) fn infer_cursors(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    layouts: &LayoutTable,
+) {
     let n = func.locals.len();
     let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
     let mut candidates: HashSet<u32> = HashSet::new();
@@ -251,8 +255,7 @@ pub(crate) fn infer_cursors(func: &mut MirFunction, interner: &TypeInterner, lay
             }
             // Last-use `y = x` is a move (dest owns). A still-live source is an alias cursor
             // (`t = s; return s`). Copies of field snapshots stay cursors.
-            if func.locals[src as usize].is_cursor
-                || live_after_stmt(func, &live_out, bi, si, src)
+            if func.locals[src as usize].is_cursor || live_after_stmt(func, &live_out, bi, si, src)
             {
                 func.locals[dest as usize].is_cursor = true;
                 grew = true;
@@ -272,11 +275,7 @@ fn snapshot_base(rvalue: &Rvalue) -> Option<u32> {
 
 /// Field / UnionField of borrow `this` (and Field of a cursor Map in that object). Index loads
 /// and field snapshots of those loads own a retain — they alias container occupants.
-fn weak_or_unowned_field_load(
-    rvalue: &Rvalue,
-    func: &MirFunction,
-    layouts: &LayoutTable,
-) -> bool {
+fn weak_or_unowned_field_load(rvalue: &Rvalue, func: &MirFunction, layouts: &LayoutTable) -> bool {
     let (base, field) = match rvalue {
         Rvalue::Use(Operand::Copy(Place::Field { base, field }))
         | Rvalue::Cast(Operand::Copy(Place::Field { base, field }), _, _) => (*base, *field),
@@ -467,9 +466,8 @@ fn escape_cursors_outliving_base(
         }
         x
     };
-    let borrow_param = |l: u32| {
-        func.params.iter().any(|p| p.0 == l) && !func.locals[l as usize].is_take
-    };
+    let borrow_param =
+        |l: u32| func.params.iter().any(|p| p.0 == l) && !func.locals[l as usize].is_take;
     let sources: Vec<(u32, u32)> = func
         .blocks
         .iter()
@@ -546,9 +544,12 @@ fn last_read_in_block(block: &crate::BasicBlock, local: u32) -> Option<usize> {
 }
 
 fn base_consumed_after(block: &crate::BasicBlock, base: u32, after_si: usize) -> bool {
-    block.stmts.iter().enumerate().skip(after_si + 1).any(|(_, stmt)| {
-        assigns_local_cursor(stmt, base) || stmt_sinks_local(stmt, base)
-    })
+    block
+        .stmts
+        .iter()
+        .enumerate()
+        .skip(after_si + 1)
+        .any(|(_, stmt)| assigns_local_cursor(stmt, base) || stmt_sinks_local(stmt, base))
 }
 
 fn assigns_local_cursor(stmt: &Statement, local: u32) -> bool {
@@ -614,9 +615,7 @@ fn terminator_reads_local(term: &Terminator, local: u32) -> bool {
 
 fn operand_mentions_local(op: &Operand, local: u32) -> bool {
     match op {
-        Operand::Copy(Place::Local(l)) | Operand::Copy(Place::Deref { ptr: l, .. }) => {
-            l.0 == local
-        }
+        Operand::Copy(Place::Local(l)) | Operand::Copy(Place::Deref { ptr: l, .. }) => l.0 == local,
         Operand::Copy(Place::Field { base, .. }) => base.0 == local,
         Operand::Copy(Place::Index { base, index, .. }) => {
             base.0 == local || operand_mentions_local(index, local)

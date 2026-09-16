@@ -95,7 +95,7 @@ fn stmt_rvalue_keys(rv: &Rvalue, out: &mut Vec<FnKey>) {
         }
         Rvalue::New {
             ctor: Some(ctor), ..
-        } => out.push((*ctor, vec![])),
+        } => out.push((ctor.def, vec![])),
         _ => {}
     }
 }

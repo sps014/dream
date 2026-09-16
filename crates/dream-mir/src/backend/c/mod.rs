@@ -687,11 +687,12 @@ mod tests {
             ..Default::default()
         };
         let c = emit_c_module(&mir, &i);
-        assert!(c.contains("dream_closure_env_array_new"), "{c}");
-        assert!(c.contains("TAG_CLOSURE_ENV"), "{c}");
+        assert!(c.contains("dream_closure_env_array_new"), "{}", c);
+        assert!(c.contains("TAG_CLOSURE_ENV"), "{}", c);
         assert!(
             c.contains(&format!("release_array_t{}", obj.0)),
-            "typed object[] last-drop must exist:\n{c}"
+            "typed object[] last-drop must exist:\n{}",
+            c
         );
     }
 

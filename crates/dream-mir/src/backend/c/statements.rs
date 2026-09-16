@@ -168,7 +168,13 @@ impl<'a> Emitter<'a> {
                     {
                         // Construct directly into the shadow-stack slot: skips the
                         // heap temp + memcpy + free round-trip of the generic path.
-                        self.struct_new_at(Expr::local(l.0), *ty, *def, *ctor, args);
+                        self.struct_new_at(
+                            Expr::local(l.0),
+                            *ty,
+                            *def,
+                            ctor.as_ref().map(|c| c.def),
+                            args,
+                        );
                         return;
                     }
                 }

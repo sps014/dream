@@ -677,7 +677,7 @@ fn reads_local_in_block(block: &crate::BasicBlock, local: u32) -> bool {
     block.stmts.iter().any(|s| stmt_reads_local(s, local))
 }
 
-fn terminator_reads_local(term: &Terminator, local: u32) -> bool {
+pub(crate) fn terminator_reads_local(term: &Terminator, local: u32) -> bool {
     let mut live = HashSet::new();
     match term {
         Terminator::If { cond, .. } => add_op(cond, &mut live),
@@ -838,28 +838,11 @@ fn leftover_waits_for_live_parent(
 /// Locals in `ids` that should `Release`. Dest leftover is delayed until the parent leftover
 /// site (`order_parent` skip in `transfer_block`) so extras and `this` share one batch;
 /// skip-coalesce here last-refs a map occupant (`union_json`) or leaks extras (`json_parse`).
-pub(crate) fn leftover_keep(_func: &MirFunction, ids: impl IntoIterator<Item = u32>) -> HashSet<u32> {
+pub(crate) fn leftover_keep(
+    _func: &MirFunction,
+    ids: impl IntoIterator<Item = u32>,
+) -> HashSet<u32> {
     ids.into_iter().collect()
-}
-
-pub(crate) fn leftover_covers(parent: &HashMap<u32, u32>, set: &HashSet<u32>, dest: u32) -> bool {
-    if set.contains(&dest) {
-        return true;
-    }
-    for &id in set {
-        let mut x = id;
-        let mut seen = HashSet::new();
-        while seen.insert(x) {
-            if x == dest {
-                return true;
-            }
-            match parent.get(&x) {
-                Some(&p) => x = p,
-                None => break,
-            }
-        }
-    }
-    false
 }
 
 /// `(funcbox dest, env RC root)` for each `funcbox_new` (env may be an `int` pun of an `object[]`).
@@ -1094,14 +1077,25 @@ pub(crate) fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])
         Statement::Assign(_, Rvalue::Call { callee, args, .. }) => {
             Some((callee.take_params.clone(), args))
         }
+        // A constructor arg is a sink unless the ctor declares that parameter `borrow`/`ref`, in
+        // which case the ctor body's own field store does the retain. Flags that don't line up with
+        // the args mean the ctor's declaration wasn't resolvable, and unknown must retain —
+        // under-retaining frees a live object.
         Statement::Assign(
             _,
             Rvalue::New {
-                ctor: Some(_),
+                ctor: Some(c),
                 args,
                 ..
             },
-        ) => Some((vec![true; args.len()], args)),
+        ) => {
+            let flags = if c.take_params.len() == args.len() {
+                c.take_params.clone()
+            } else {
+                vec![true; args.len()]
+            };
+            Some((flags, args))
+        }
         Statement::IndirectCall { args, .. } => Some((vec![true; args.len()], args)),
         Statement::Assign(_, Rvalue::IndirectCall { args, .. }) => {
             Some((vec![true; args.len()], args))

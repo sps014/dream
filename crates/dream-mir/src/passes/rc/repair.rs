@@ -38,10 +38,12 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
         while si < func.blocks[bi].stmts.len() {
             let stmt = &func.blocks[bi].stmts[si];
             let src = match stmt {
-                Statement::Assign(Place::Index { .. }, _) => container_store_src(stmt).filter(|&src| {
-                    is_owned_local(func, interner, src)
-                        && !live_after_stmt(func, &live_out, bi, si, src)
-                }),
+                Statement::Assign(Place::Index { .. }, _) => {
+                    container_store_src(stmt).filter(|&src| {
+                        is_owned_local(func, interner, src)
+                            && !live_after_stmt(func, &live_out, bi, si, src)
+                    })
+                }
                 _ => None,
             };
             let Some(src) = src else {
@@ -122,8 +124,7 @@ mod tests {
             .filter(|st| matches!(st, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == s))
             .count();
         assert_eq!(
-            retains,
-            0,
+            retains, 0,
             "last-use store must not keep a share Retain: {:?}",
             stmts
         );

@@ -13,6 +13,21 @@ impl<'a> Analyzer<'a> {
             .unwrap_or_default()
     }
 
+    /// Per-argument `take` flags for a resolved constructor def, aligned with the constructor's user
+    /// arguments. A registered constructor signature carries `this` as parameter 0, which the `New`
+    /// argument list does not, so that flag is dropped here.
+    pub(in crate::analyzer) fn ctor_take_params(&self, ctor: Option<DefId>) -> Vec<bool> {
+        let Some(ctor) = ctor else {
+            return Vec::new();
+        };
+        let mut flags = self.take_params_for(self.type_ctx.defs.name(ctor));
+        if flags.is_empty() {
+            return flags;
+        }
+        flags.remove(0);
+        flags
+    }
+
     /// Records the HIR for a direct free-function call `name(args)`. Resolves `name` to its function
     /// `DefId`; if it is not a registered (non-generic, non-overloaded) function or any argument is
     /// not representable, the call is dropped from HIR coverage (enclosing function may fail
@@ -132,6 +147,7 @@ impl<'a> Analyzer<'a> {
                 instance: vec![],
                 ctor,
                 args: vec![value],
+                take_params: self.ctor_take_params(ctor),
             },
         ))
     }
@@ -657,6 +673,7 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ty = self.type_ctx.lower(result_ty);
+        let take_params = self.ctor_take_params(ctor);
         self.hir.last = Some(HExpr::new(
             ty,
             HExprKind::New {
@@ -664,6 +681,7 @@ impl<'a> Analyzer<'a> {
                 instance: vec![],
                 ctor,
                 args: collected,
+                take_params,
             },
         ));
     }

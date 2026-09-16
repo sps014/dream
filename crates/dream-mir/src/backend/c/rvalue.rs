@@ -155,7 +155,7 @@ impl<'a> Emitter<'a> {
                 ty,
                 ctor,
                 args,
-            } => self.emit_new(*def, *ty, *ctor, args),
+            } => self.emit_new(*def, *ty, ctor.as_ref().map(|c| c.def), args),
             Rvalue::Tuple { ty, elems } => self.emit_tuple(*ty, elems),
             Rvalue::UnionNew {
                 def,

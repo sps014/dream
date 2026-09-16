@@ -457,7 +457,11 @@ dream_ptr dream_sleep(int32_t ms) {
     return f;
 }
 
+#ifndef DREAM_WASM32
+/* Native stand-in for the `@runtime("delayMs")` host field. On wasm32 that name belongs to the
+ * JS import the emitter declares, with the async `(future, arg)` shape. */
 dream_ptr delayMs(int32_t ms) { return dream_sleep(ms); }
+#endif
 
 static void combinator_progress(dream_ptr w, dream_ptr child) {
     int32_t kind = i32_at(w, F_KIND)[0];

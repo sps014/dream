@@ -97,6 +97,7 @@ fn remap_operand(op: &mut Operand, base: u32) {
 
 fn remap_rvalue(rv: &mut Rvalue, base: u32) {
     match rv {
+        Rvalue::Move { src, .. } => src.0 += base,
         Rvalue::Select {
             cond,
             then_val,

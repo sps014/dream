@@ -242,7 +242,7 @@ impl<'a> Emitter<'a> {
                         });
                     }
                     let release = crate::backend::c::release::release_sym(self.cx, ty);
-                    let move_id = unique_move_src(self.f, self.cx.interner, rv);
+                    let move_id = unique_move_src(rv);
                     let stored = self.rc_store(
                         load_cast(self.cx, ty),
                         Expr::addr_of(Expr::global(g.0)),
@@ -304,7 +304,7 @@ impl<'a> Emitter<'a> {
                 }
                 if self.cx.interner.is_reference(fld.ty) && !fld.is_weak {
                     let release = crate::backend::c::release::release_sym(self.cx, fld.ty);
-                    let move_id = unique_move_src(self.f, self.cx.interner, rv);
+                    let move_id = unique_move_src(rv);
                     let stored = self.rc_store(
                         cast,
                         slot,
@@ -354,7 +354,7 @@ impl<'a> Emitter<'a> {
                 }
                 if self.cx.interner.is_reference(ety) {
                     let release = crate::backend::c::release::release_sym(self.cx, ety);
-                    let move_id = unique_move_src(self.f, self.cx.interner, rv);
+                    let move_id = unique_move_src(rv);
                     let stored = self.rc_store(
                         cast,
                         addr,
@@ -566,7 +566,7 @@ impl<'a> Emitter<'a> {
             // The niche `UnionNew` emitter retained a non-moved payload (callee-style copy).
             // A weak slot takes no ownership, so drop that retain again — exactly what the
             // boxed path did by releasing the temp union after memcpy.
-            let retain_copy = unique_move_src(self.f, self.cx.interner, rv).is_none();
+            let retain_copy = unique_move_src(rv).is_none();
             return self.b.expr_block(|b| {
                 let new = b.temp(CTy::Ptr, Some(Expr::cast(CTy::Ptr, rhs.clone())));
                 let old = b.temp(CTy::Ptr, Some(Expr::load(CTy::Ptr, slot.clone())));
@@ -759,18 +759,16 @@ fn boxes_into_object(interner: &TypeInterner, rv: &crate::Rvalue) -> bool {
         && !interner.is_rc_tracked(*from)
 }
 
-fn unique_move_src(
-    f: &crate::MirFunction,
-    interner: &TypeInterner,
-    rv: &crate::Rvalue,
-) -> Option<u32> {
+/// The local whose reference-count token this store adopts, as recorded by `RcInsertion` or
+/// `RcLastUseRepair` (see [`crate::Rvalue::Move`]). `None` is an ordinary copy: the slot takes its
+/// own reference, so the store retains.
+fn unique_move_src(rv: &crate::Rvalue) -> Option<u32> {
     match rv {
-        crate::Rvalue::Use(op) | crate::Rvalue::Cast(op, _, _) => {
-            crate::backend::shared::unique_container_move_local(f, interner, op)
-        }
+        crate::Rvalue::Move { src, .. } => Some(src.0),
         _ => None,
     }
 }
+
 
 fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {
     matches!(

@@ -446,6 +446,26 @@ pub enum Const {
 #[derive(Debug, Clone)]
 pub enum Rvalue {
     Use(Operand),
+    /// A store into a container (field / index / global) that hands `src`'s reference-count token to
+    /// the destination: the container adopts the existing `+1` rather than retaining, and `src` must
+    /// not be released afterwards.
+    ///
+    /// Two passes decide this and both record it here: [`passes::RcInsertion`] for field and global
+    /// stores, and [`passes::RcLastUseRepair`] for the index stores that only become last-use once
+    /// inlining has fused the CFG. Previously neither recorded anything and the C backend re-derived
+    /// the transfer by scanning for the store's `src = null`, which was wrong in both directions:
+    /// copy propagation could rewrite the store's operand to the local it was copied from, splitting
+    /// the pair so the container retained a second reference while the null still discarded the
+    /// first; and the scan matched any local nulled anywhere in the function, skipping retains that
+    /// were genuinely needed.
+    ///
+    /// `src` is a [`Local`] rather than an [`Operand`] so operand-rewriting passes have nothing here
+    /// to substitute.
+    Move {
+        src: Local,
+        /// The widening the equivalent [`Rvalue::Cast`] would have applied, if any.
+        cast: Option<(TypeId, TypeId)>,
+    },
     /// Branchless selection `cond ? then_val : else_val`, lowered to WASM `select`. Both value
     /// operands are evaluated eagerly, so if-conversion only produces this for side-effect- and
     /// trap-free scalar operands (constants / plain local reads).

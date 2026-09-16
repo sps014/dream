@@ -276,6 +276,7 @@ fn stmt_region_safe(
 fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
     match rv {
         Rvalue::Use(_)
+        | Rvalue::Move { .. }
         | Rvalue::Select { .. }
         | Rvalue::Binary(_, _, _)
         | Rvalue::Unary(_, _)

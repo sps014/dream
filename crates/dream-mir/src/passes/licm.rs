@@ -364,6 +364,7 @@ fn place_base_reads(place: &Place, f: &mut impl FnMut(Local)) {
 
 fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
     match rv {
+        Rvalue::Move { src, .. } => f(*src),
         Rvalue::Select {
             cond,
             then_val,

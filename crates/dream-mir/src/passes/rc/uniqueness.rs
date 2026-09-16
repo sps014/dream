@@ -7,7 +7,7 @@
 use super::liveness::{live_after_stmt, stmt_reads_local};
 use super::tokens::move_source;
 use super::{is_borrowed_copy, rvalue_reads_local};
-use crate::{MirFunction, Operand, Place, Rvalue, Statement};
+use crate::{Const, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
 use std::collections::HashSet;
@@ -81,7 +81,114 @@ pub(crate) fn container_store_src(stmt: &Statement) -> Option<u32> {
             Rvalue::Use(Operand::Copy(Place::Local(src)))
             | Rvalue::Cast(Operand::Copy(Place::Local(src)), _, _),
         ) => Some(src.0),
+        // Already settled as a handoff; still a container store to everything that asks.
+        Statement::Assign(_, Rvalue::Move { src, .. }) => Some(src.0),
         _ => None,
+    }
+}
+
+/// For each local, whether every value it is ever given is freshly allocated — so it holds the only
+/// reference to its object, and a container store reading it adopts that `+1` instead of taking its
+/// own reference.
+///
+/// This is what separates a real handoff from a store that merely *looks* like one. A local copied
+/// from a parameter, from a string literal, or out of another container owns nothing, so a store
+/// reading it has to retain; marking such a store as a move drops the object's only owner. Answering
+/// it per local and over the whole function also covers a `switch` result, which is assigned in each
+/// arm and reaches the store from a predecessor block. Nulls are skipped: they end a local's life
+/// rather than give it a value.
+pub(crate) fn fresh_locals(func: &MirFunction, interner: &TypeInterner) -> Vec<bool> {
+    #[derive(Clone, Copy)]
+    enum Def {
+        Alloc,
+        /// A copy or cast of another local, which is fresh exactly when its source is.
+        From(u32),
+        Borrow,
+    }
+    let n = func.locals.len();
+    let mut defs: Vec<Vec<Def>> = vec![Vec::new(); n];
+    for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
+        let Statement::Assign(Place::Local(d), rv) = stmt else {
+            continue;
+        };
+        if d.0 as usize >= n || matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
+            continue;
+        }
+        defs[d.0 as usize].push(if rvalue_allocates(interner, rv) {
+            Def::Alloc
+        } else {
+            match rv {
+                Rvalue::Use(Operand::Copy(Place::Local(s)))
+                | Rvalue::Cast(Operand::Copy(Place::Local(s)), _, _) => Def::From(s.0),
+                _ => Def::Borrow,
+            }
+        });
+    }
+    // Optimistic, then narrowed to a fixpoint, so a chain of copies off one allocation stays fresh
+    // while a single borrowing definition anywhere in the chain disqualifies the whole chain.
+    let mut fresh: Vec<bool> = defs
+        .iter()
+        .map(|d| !d.is_empty() && !d.iter().any(|k| matches!(k, Def::Borrow)))
+        .collect();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for l in 0..n {
+            if !fresh[l] {
+                continue;
+            }
+            if defs[l]
+                .iter()
+                .any(|k| matches!(k, Def::From(s) if !fresh[*s as usize]))
+            {
+                fresh[l] = false;
+                changed = true;
+            }
+        }
+    }
+    fresh
+}
+
+/// Whether the rvalue yields a fresh `+1` rather than a reference someone else still owns. A niche
+/// union is a pointer pun over its payload, not an allocation, so it hands over nothing of its own.
+fn rvalue_allocates(interner: &TypeInterner, rv: &Rvalue) -> bool {
+    match rv {
+        Rvalue::UnionNew { ty, .. } => !interner.is_niche_union(*ty),
+        Rvalue::Call { .. }
+        | Rvalue::IndirectCall { .. }
+        | Rvalue::InterfaceCall { .. }
+        | Rvalue::New { .. }
+        | Rvalue::ArrayNew { .. }
+        | Rvalue::ArrayLit { .. }
+        | Rvalue::Tuple { .. }
+        | Rvalue::Concat(_)
+        | Rvalue::ConcatInt { .. }
+        | Rvalue::ToString(_) => true,
+        _ => false,
+    }
+}
+
+/// Records in the store itself that it adopts `src`'s token, so the C backend reads the transfer off
+/// the statement rather than re-deriving it from the `src = null` that follows. The null stays: it
+/// keeps the dead pointer out of async frame spills and later reads, but it no longer carries the
+/// ownership meaning by itself.
+pub(crate) fn mark_container_move(stmt: &mut Statement, src_local: u32) {
+    let Statement::Assign(place, rvalue) = stmt else {
+        return;
+    };
+    if !matches!(
+        place,
+        Place::Field { .. } | Place::Index { .. } | Place::Global(_)
+    ) {
+        return;
+    }
+    let (src, cast) = match &*rvalue {
+        Rvalue::Use(Operand::Copy(Place::Local(src))) => (*src, None),
+        Rvalue::Cast(Operand::Copy(Place::Local(src)), from, to) => (*src, Some((*from, *to))),
+        _ => return,
+    };
+    if src.0 == src_local {
+        *rvalue = Rvalue::Move { src, cast };
     }
 }
 
@@ -138,6 +245,7 @@ fn operand_local_reads(op: &Operand, local: u32) -> u32 {
 
 fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
     match rv {
+        Rvalue::Move { src, .. } => u32::from(src.0 == local),
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)

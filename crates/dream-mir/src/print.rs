@@ -200,6 +200,7 @@ fn terminator(t: &Terminator) -> String {
 fn rvalue(r: &Rvalue) -> String {
     match r {
         Rvalue::Use(o) => operand(o),
+        Rvalue::Move { src, .. } => format!("move _{}", src.0),
         Rvalue::Select {
             cond,
             then_val,

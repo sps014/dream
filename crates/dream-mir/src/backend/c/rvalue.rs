@@ -8,6 +8,15 @@ impl<'a> Emitter<'a> {
     pub(super) fn rvalue(&mut self, rv: &Rvalue) -> Expr {
         match rv {
             Rvalue::Use(o) => self.operand(o),
+            // The value is just the source local; what makes this a `Move` is that the store site
+            // adopts its `+1` instead of retaining.
+            Rvalue::Move { src, cast } => {
+                let o = crate::Operand::Copy(crate::Place::Local(*src));
+                match cast {
+                    Some((from, to)) => self.emit_cast(&o, *from, *to),
+                    None => self.operand(&o),
+                }
+            }
             Rvalue::Select {
                 cond,
                 then_val,

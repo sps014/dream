@@ -126,6 +126,7 @@ fn rvalue_borrow(rv: &Rvalue, holds: &HashSet<DefId>) -> StmtBorrow {
     match rv {
         Rvalue::Call { callee, .. } | Rvalue::JsCall { callee, .. } => callee_borrow(callee, holds),
         Rvalue::Use(_)
+        | Rvalue::Move { .. }
         | Rvalue::Select { .. }
         | Rvalue::Binary(_, _, _)
         | Rvalue::Unary(_, _)

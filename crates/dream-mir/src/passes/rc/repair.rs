@@ -9,7 +9,7 @@
 
 use super::liveness::{self, live_after_stmt};
 use super::tokens::is_owned_local;
-use super::uniqueness::container_store_src;
+use super::uniqueness::{can_container_move, container_store_src, fresh_locals, mark_container_move};
 use crate::passes::MirPass;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
@@ -121,6 +121,7 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
         return false;
     }
     let live_out = liveness::live_out(func);
+    let fresh = fresh_locals(func, interner);
     let mut changed = false;
     for bi in 0..func.blocks.len() {
         let mut si = 0;
@@ -130,6 +131,7 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
                 Statement::Assign(Place::Index { .. }, _) => {
                     container_store_src(stmt).filter(|&src| {
                         is_owned_local(func, interner, src)
+                            && can_container_move(interner, func.locals[src as usize].ty)
                             && !live_after_stmt(func, &live_out, bi, si, src)
                     })
                 }
@@ -140,10 +142,31 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
                 continue;
             };
             if let Some((rb, ri)) = baked_retain(func, &live_out, bi, si, src, interner) {
+                // The stripped `Retain` is replaced by the one the store makes for itself, so the
+                // slot still ends up holding a reference of its own and the source's is given up by
+                // the null below.
                 func.blocks[rb].stmts.remove(ri);
                 if rb == bi {
                     si -= 1;
                 }
+                changed = true;
+            } else if fresh[src as usize] {
+                // Nothing retained on this store's behalf and the source is freshly allocated, so
+                // the store adopts that `+1`. Recording it on the statement, before the per-function
+                // pipeline runs, is what stops copy propagation from rewriting the store's operand
+                // and splitting it from the null below — which would leave the slot retaining a
+                // second reference while the null still discarded the first.
+                mark_container_move(&mut func.blocks[bi].stmts[si], src);
+                changed = true;
+            } else {
+                // The store retains for itself and nothing was stripped to pay for it, so the
+                // reference the source came in with is still its own and this is its last use. The
+                // null below ends its life without giving that reference up, so give it up here.
+                func.blocks[bi].stmts.insert(
+                    si + 1,
+                    Statement::Release(Operand::Copy(Place::Local(Local(src)))),
+                );
+                si += 1;
                 changed = true;
             }
             let already_null = func.blocks[bi].stmts.get(si + 1).is_some_and(|n| {

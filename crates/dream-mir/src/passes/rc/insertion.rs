@@ -10,6 +10,7 @@ use super::tokens::{
 };
 use super::uniqueness::{
     apply_stmt_unique, can_unique_destroy, constructed_payload_locals, container_move_locals,
+    mark_container_move,
 };
 use crate::passes::cfg;
 use crate::passes::MirPass;
@@ -248,6 +249,16 @@ impl RcInsertion {
                     changed = true;
                 }
                 out.extend(pre_releases);
+                // Whether each container-store source actually holds a `+1` of its own here.
+                // `sink_move` says only that the token flow is done with the local; this says there
+                // was a token to hand over, and a copy of a string literal is the first without
+                // being the second. A store that adopts from one leaves the object with no
+                // owner to release it.
+                let src_owns: Vec<u32> = container_srcs
+                    .iter()
+                    .copied()
+                    .filter(|&src| dest_holds_token(&tokens, src))
+                    .collect();
                 apply_stmt_tokens(
                     &stmt,
                     interner,
@@ -393,18 +404,23 @@ impl RcInsertion {
                         for r in sink_retains {
                             out.push(r);
                         }
+                        let mut stmt = stmt;
+                        let moved: Vec<u32> = container_srcs
+                            .into_iter()
+                            .filter(|src| analysis.sink_move.contains(&(bi, si, *src)))
+                            .collect();
+                        for &src in &moved {
+                            if src_owns.contains(&src) {
+                                mark_container_move(&mut stmt, src);
+                            }
+                        }
                         out.push(stmt);
                         for n in sink_nulls {
                             out.push(n);
                         }
-                        for src in container_srcs {
-                            if analysis.sink_move.contains(&(bi, si, src)) {
-                                out.push(Statement::Assign(
-                                    Place::Local(Local(src)),
-                                    Rvalue::Use(Operand::Const(Const::Null)),
-                                ));
-                                had_sink = true;
-                            }
+                        for src in moved {
+                            out.push(null_local(src));
+                            had_sink = true;
                         }
                         if had_sink {
                             changed = true;

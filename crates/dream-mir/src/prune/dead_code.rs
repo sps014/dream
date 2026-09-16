@@ -273,6 +273,12 @@ fn collect_callee_types(callee: &crate::Callee, seed: &mut impl FnMut(TypeId)) {
 
 fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
     match rv {
+        Rvalue::Move { cast, .. } => {
+            if let Some((from, to)) = cast {
+                seed(*from);
+                seed(*to);
+            }
+        }
         Rvalue::New { ty, .. }
         | Rvalue::UnionNew { ty, .. }
         | Rvalue::Tuple { ty, .. }
@@ -653,6 +659,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
 
 fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
     match rv {
+        Rvalue::Move { .. } => {}
         Rvalue::Select {
             cond,
             then_val,

@@ -234,6 +234,7 @@ fn strings_in_term(t: &Terminator, out: &mut Vec<String>) {
 
 fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
     match rv {
+        Rvalue::Move { .. } => {}
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::StrLen(o)

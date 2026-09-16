@@ -97,6 +97,7 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         }
     };
     match rvalue {
+        Rvalue::Move { src, .. } => check(&Operand::Copy(Place::Local(*src))),
         Rvalue::Select {
             cond,
             then_val,

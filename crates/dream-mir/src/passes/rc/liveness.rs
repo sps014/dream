@@ -194,6 +194,7 @@ fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
 fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
     let mut add = |op: &Operand| add_operand_reads(op, live);
     match rv {
+        Rvalue::Move { src, .. } => add(&Operand::Copy(Place::Local(*src))),
         Rvalue::Select {
             cond,
             then_val,

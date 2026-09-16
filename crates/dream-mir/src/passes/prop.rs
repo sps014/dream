@@ -166,6 +166,9 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
 
 fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> bool {
     match rvalue {
+        // No operand to rewrite: a `Move` names its source local directly, so propagation cannot
+        // redirect the store to the local it was copied from and split the transfer.
+        Rvalue::Move { .. } => false,
         Rvalue::Select {
             cond,
             then_val,

@@ -220,6 +220,9 @@ fn read_place_base(place: &Place, read: &mut HashSet<Local>) {
 
 fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
     match rvalue {
+        Rvalue::Move { src, .. } => {
+            read.insert(*src);
+        }
         Rvalue::Select {
             cond,
             then_val,

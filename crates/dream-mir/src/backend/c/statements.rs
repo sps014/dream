@@ -178,7 +178,9 @@ impl<'a> Emitter<'a> {
                         return;
                     }
                 }
-                if self.store_js_to_value_struct(place, rv) {
+                if self.store_js_to_value_struct(place, rv)
+                    || self.store_from_bytes_value(place, rv)
+                {
                     return;
                 }
                 let rhs = self.rvalue(rv);
@@ -533,6 +535,35 @@ impl<'a> Emitter<'a> {
             }
             _ => None,
         }
+    }
+
+    /// `dream_from_bytes` hands back a heap box. A scalar destination unboxes and frees it in the
+    /// rvalue itself, but a value struct is copied out by the generic store, which leaves nobody
+    /// holding the box — and its type is not RC-tracked, so no scope-exit release covers it. Copy
+    /// and free here instead.
+    fn store_from_bytes_value(&mut self, place: &Place, rv: &crate::Rvalue) -> bool {
+        let crate::Rvalue::FromBytes { ty, .. } = rv else {
+            return false;
+        };
+        if !self.cx.interner.is_value_type(*ty) {
+            return false;
+        }
+        let Some(dst) = self.js_value_struct_dst(place) else {
+            return false;
+        };
+        let size = super::types::native_scalar_size(self.cx, *ty).0.max(1);
+        let src = self.rvalue(rv);
+        let boxed = self.b.temp(CTy::Ptr, Some(src));
+        self.b.call(
+            "memcpy",
+            vec![
+                Expr::dream_p(dst),
+                Expr::dream_p(boxed.clone()),
+                Expr::i(size as i64),
+            ],
+        );
+        self.b.call("dream_release", vec![boxed]);
+        true
     }
 
     fn store_js_to_value_struct(&mut self, place: &Place, rv: &crate::Rvalue) -> bool {

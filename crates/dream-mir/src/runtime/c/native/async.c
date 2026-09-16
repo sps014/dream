@@ -474,7 +474,16 @@ static void combinator_progress(dream_ptr w, dream_ptr child) {
         return;
     }
     if (kind == KIND_ANY) {
+        /* The winner's result moves into `w`'s slot, so complete before dropping the retains
+         * `combinator_new` took. Losers may still be in flight; `dream_start` gave each a
+         * scheduler retain, and their later `combinator_progress` sees `F_STATUS` set and
+         * returns, so dropping our reference here cannot free one out from under the loop. */
         dream_async_complete(w, ptr_at(child, F_RESULT)[0]);
+        n = i32_at(w, F_COUNT)[0];
+        kids = ptr_at(w, F_CHILDREN)[0];
+        for (i = 0; i < n; i++) {
+            dream_release(arr_get(kids, i));
+        }
         return;
     }
     rem = i32_at(w, F_REMAINING)[0] - 1;

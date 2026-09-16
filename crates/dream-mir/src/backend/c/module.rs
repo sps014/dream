@@ -573,10 +573,19 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 // The constructor returned a lazy future; launch it before draining.
                 Stmt::call("dream_start", vec![Expr::id("result")]),
                 Stmt::call("dream_run_loop", vec![]),
-                Stmt::Return(Some(Expr::load(
+                // The settled value moves out of the future's result slot, exactly as an `await`
+                // resume takes it (the future's drop glue skips that slot for this reason), so the
+                // drained future itself is this call's to release.
+                Stmt::decl(
                     CTy::Ptr,
-                    Expr::ptr_add(Expr::id("result"), Expr::i(result_off)),
-                ))),
+                    "__settled",
+                    Some(Expr::load(
+                        CTy::Ptr,
+                        Expr::ptr_add(Expr::id("result"), Expr::i(result_off)),
+                    )),
+                ),
+                Stmt::call("dream_release", vec![Expr::id("result")]),
+                Stmt::Return(Some(Expr::id("__settled"))),
             ],
         }];
         arms.push(super::ast::SwitchArm {

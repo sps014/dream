@@ -71,7 +71,10 @@ pub(super) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
             // up the element id would steal a redirected *element* `release_Foo` and drop the
             // array header as if it were a `Foo` — SIGSEGV when two classes share a layout
             // (e.g. `Job` and `CancelledError`) and `Option.unwrap` temps a `T[]`.
-            return Some(format!("{}_into", c_ident(&format!("release_array_t{}", e.0))));
+            return Some(format!(
+                "{}_into",
+                c_ident(&format!("release_array_t{}", e.0))
+            ));
         }
         _ => return None,
     };

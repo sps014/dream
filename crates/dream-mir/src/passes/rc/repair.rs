@@ -11,7 +11,7 @@ use super::liveness::{self, live_after_stmt};
 use super::tokens::is_owned_local;
 use super::uniqueness::container_store_src;
 use crate::passes::MirPass;
-use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
+use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 
 pub struct RcLastUseRepair;
@@ -24,6 +24,95 @@ impl MirPass for RcLastUseRepair {
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
         repair(func, interner)
     }
+}
+
+/// Location of the `Retain` that feeds the index store at `(bi, si)`, if one was baked in ahead of
+/// it.
+///
+/// An index store retains for itself, so the value reaching it must be a borrow. Inlining a
+/// returning callee leaves behind both the callee's `Retain` — the `+1` a real return would have
+/// handed back — and a `dest = <returned local>` copy of its result, and the two land on opposite
+/// sides of the splice, so the retain is neither the previous statement nor necessarily in this
+/// block. Walk back through that copy, crossing at most the one `goto` edge the splice leaves, and
+/// only while the copy source is dead after the store: a still-live alias owns the reference, and
+/// dropping the retain would free it early.
+///
+/// Looking through a copy also demands that the retained local was read out of a container, so the
+/// `Retain` is provably the inlined return's `+1` and not the only reference to a fresh value.
+fn baked_retain(
+    func: &MirFunction,
+    live_out: &[std::collections::HashSet<u32>],
+    bi: usize,
+    si: usize,
+    src: u32,
+    interner: &TypeInterner,
+) -> Option<(usize, usize)> {
+    let mut alias = src;
+    let mut copied = false;
+    let mut block = bi;
+    let mut end = si;
+    loop {
+        for ri in (0..end).rev() {
+            match &func.blocks[block].stmts[ri] {
+                Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == alias => {
+                    if copied && !defines_borrow(&func.blocks[block].stmts[..ri], alias) {
+                        return None;
+                    }
+                    return Some((block, ri));
+                }
+                Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s))))
+                    if d.0 == alias =>
+                {
+                    if !is_owned_local(func, interner, s.0)
+                        || live_after_stmt(func, live_out, bi, si, s.0)
+                    {
+                        return None;
+                    }
+                    alias = s.0;
+                    copied = true;
+                }
+                _ => return None,
+            }
+        }
+        if block != bi {
+            return None;
+        }
+        block = sole_goto_pred(func, bi)?;
+        end = func.blocks[block].stmts.len();
+    }
+}
+
+/// The unique predecessor of `bi` when it reaches `bi` by a plain `goto` — the shape inlining
+/// leaves between a spliced callee body and the continuation holding the call's destination.
+fn sole_goto_pred(func: &MirFunction, bi: usize) -> Option<usize> {
+    let mut found = None;
+    for (pi, block) in func.blocks.iter().enumerate() {
+        if !block
+            .terminator
+            .successors()
+            .iter()
+            .any(|s| s.0 as usize == bi)
+        {
+            continue;
+        }
+        if found.is_some() || !matches!(block.terminator, Terminator::Goto(_)) {
+            return None;
+        }
+        found = Some(pi);
+    }
+    found
+}
+
+/// Whether the last statement in `stmts` defining `local` reads it out of a container, which makes
+/// it a borrow that owns nothing of its own.
+fn defines_borrow(stmts: &[Statement], local: u32) -> bool {
+    stmts.iter().rev().find_map(|st| match st {
+        Statement::Assign(Place::Local(d), rv) if d.0 == local => Some(matches!(
+            rv,
+            Rvalue::Use(Operand::Copy(Place::Index { .. } | Place::Field { .. }))
+        )),
+        _ => None,
+    }) == Some(true)
 }
 
 fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
@@ -50,14 +139,11 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
                 si += 1;
                 continue;
             };
-            if si > 0
-                && matches!(
-                    &func.blocks[bi].stmts[si - 1],
-                    Statement::Retain(Operand::Copy(Place::Local(l))) if l.0 == src
-                )
-            {
-                func.blocks[bi].stmts.remove(si - 1);
-                si -= 1;
+            if let Some((rb, ri)) = baked_retain(func, &live_out, bi, si, src, interner) {
+                func.blocks[rb].stmts.remove(ri);
+                if rb == bi {
+                    si -= 1;
+                }
                 changed = true;
             }
             let already_null = func.blocks[bi].stmts.get(si + 1).is_some_and(|n| {

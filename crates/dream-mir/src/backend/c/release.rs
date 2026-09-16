@@ -112,6 +112,10 @@ pub(super) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
         }
         TyKind::Func(..) => "dream_release_funcbox".into(),
         TyKind::Prim(dream_types::PrimTy::String) if mir.uses_defer => "release_string".into(),
+        // The static type says nothing about the referent's layout, so the runtime tag has to
+        // pick the cascade — a flat `dream_release` recycles the block and strands its fields.
+        // `destroy_sym` already dispatches this way.
+        TyKind::Object | TyKind::Interface(..) => c_ident("dream_release_object"),
         _ => "dream_release".into(),
     }
 }

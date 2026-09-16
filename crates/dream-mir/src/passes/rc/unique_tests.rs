@@ -54,8 +54,11 @@ fn diamond_both_arms_unique_no_join_retain() {
     assert_eq!(retains, 0, "Unique∧Unique stays Unique: {:?}", func.blocks);
 }
 
+/// The aliasing arm pays for its own copy: `y = x` retains so the consuming `take(y)` is balanced,
+/// which leaves `x`'s original +1 for the return on *both* arms. The arm that never aliased must not
+/// retain — the join dropping to Shared is not a second owner, and a +1 there has nothing to drop it.
 #[test]
-fn diamond_unique_vs_shared_retains_on_unique_arm() {
+fn diamond_shared_join_does_not_retain_on_unique_arm() {
     let mut ctx = TypeCtx::new();
     let (def, ty) = class_ty(&mut ctx);
     let mut b = FunctionBuilder::new("f", ctx.interner.void());
@@ -95,8 +98,17 @@ fn diamond_unique_vs_shared_retains_on_unique_arm() {
         .iter()
         .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == x));
     assert!(
-        else_retain,
-        "Unique arm must Retain before Shared join: {:?}",
+        !else_retain,
+        "Shared join is not a second owner; Retain on the non-aliasing arm leaks: {:?}",
+        func.blocks
+    );
+    let alias_retain = func.blocks[then_blk.0 as usize]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == y));
+    assert!(
+        alias_retain,
+        "aliasing arm must Retain the copy the sink call consumes: {:?}",
         func.blocks
     );
 }

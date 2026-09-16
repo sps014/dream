@@ -249,7 +249,7 @@ impl<'a> Emitter<'a> {
                         rhs,
                         crate::backend::c::release::retain_sym(self.cx, ty),
                         release,
-                        borrowed_ref_store(rv) && move_id.is_none(),
+                        borrowed_ref_store(self.cx.interner, rv) && move_id.is_none(),
                     );
                     return self.after_unique_move(stored, move_id);
                 }
@@ -311,7 +311,7 @@ impl<'a> Emitter<'a> {
                         rhs,
                         crate::backend::c::release::retain_sym(self.cx, fld.ty),
                         release,
-                        borrowed_ref_store(rv) && move_id.is_none(),
+                        borrowed_ref_store(self.cx.interner, rv) && move_id.is_none(),
                     );
                     return self.after_unique_move(stored, move_id);
                 }
@@ -353,7 +353,7 @@ impl<'a> Emitter<'a> {
                         rhs,
                         crate::backend::c::release::retain_sym(self.cx, ety),
                         release,
-                        borrowed_ref_store(rv) && move_id.is_none(),
+                        borrowed_ref_store(self.cx.interner, rv) && move_id.is_none(),
                     );
                     return self.after_unique_move(stored, move_id);
                 }
@@ -734,8 +734,21 @@ fn realloc_self_store(place: &Place, rv: &crate::Rvalue) -> bool {
     eq_place(place, src)
 }
 
-fn borrowed_ref_store(rv: &crate::Rvalue) -> bool {
-    !value_rvalue_allocates(rv)
+fn borrowed_ref_store(interner: &TypeInterner, rv: &crate::Rvalue) -> bool {
+    !value_rvalue_allocates(rv) && !boxes_into_object(interner, rv)
+}
+
+/// `int` → `object` and friends allocate the box they yield (`dream_box_*`), so the slot they are
+/// stored into takes that fresh +1. Retaining instead would leave the box's original reference with
+/// no owner to drop it. A `string` → `object` cast is a no-op pun, not a box, and is excluded by the
+/// reference-counted check.
+fn boxes_into_object(interner: &TypeInterner, rv: &crate::Rvalue) -> bool {
+    let crate::Rvalue::Cast(_, from, to) = rv else {
+        return false;
+    };
+    matches!(interner.kind(*to), dream_types::TyKind::Object)
+        && matches!(interner.kind(*from), dream_types::TyKind::Prim(_))
+        && !interner.is_rc_tracked(*from)
 }
 
 fn unique_move_src(

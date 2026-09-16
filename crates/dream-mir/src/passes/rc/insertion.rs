@@ -438,18 +438,7 @@ impl RcInsertion {
                 }
             }
             for &local in &analysis.share_at_end[bi] {
-                // Take params already own +1. A loop-header "become shared" Retain
-                // plus a later unique/ordinary destroy of an alias, then `x = null`,
-                // leaks that +1 (HttpHeaders.add_all, WebApp.serve_loop options).
-                if take_flags.get(local as usize) == Some(&true) {
-                    unique[local as usize] = false;
-                    continue;
-                }
-                if dest_holds_token(&tokens, local) {
-                    out.push(Statement::Retain(Operand::Copy(Place::Local(Local(local)))));
-                    unique[local as usize] = false;
-                    changed = true;
-                }
+                unique[local as usize] = false;
             }
             for local in leftover_order(
                 &leftover_parent,

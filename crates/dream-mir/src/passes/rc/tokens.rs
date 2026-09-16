@@ -58,7 +58,12 @@ pub(crate) struct TokenAnalysis {
     pub token_in: Vec<Vec<bool>>,
     pub token_out: Vec<Vec<bool>>,
     pub unique_in: Vec<Vec<bool>>,
-    /// Unique token on this block, Shared on a successor that still holds it: Retain before the join.
+    /// Unique token on this block, Shared on a successor that still holds it — the lattice drops to
+    /// Shared at the join. This used to also Retain on the edge, to keep a later unique destroy from
+    /// freeing under the second owner, but [`super::uniqueness::can_unique_destroy`] is now always
+    /// false: `RcInsertion` emits no unconditional free, so there is nothing for that +1 to protect
+    /// and it simply leaked whenever the successor was Shared only because of a borrowed alias (an
+    /// inlined method copying the receiver into `this`).
     pub share_at_end: Vec<BTreeSet<u32>>,
     /// Await dest written at the top of this resume block.
     pub await_resume_dest: Vec<Option<u32>>,

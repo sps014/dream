@@ -5,7 +5,10 @@ module system.collections;
 // Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
 // so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
 // `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
-fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
+// The parameters are owned, not `borrow`: `sort_by` reaches this through a `fun(T, T): int` value,
+// and `TyKind::Func` carries no per-parameter ABI, so an indirect call has to retain every argument.
+// A `borrow` signature would leave those retains with no matching release.
+fun compare_ascending<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }
 

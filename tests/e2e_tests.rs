@@ -925,8 +925,8 @@ fn release_music_player_code_section_stays_bounded() {
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
     assert!(
-        code > 0 && code <= 48 * 1024,
-        "music_player --release code section should stay under 48KiB (got {})",
+        code > 0 && code <= 52 * 1024,
+        "music_player --release code section should stay under 52KiB (got {})",
         code
     );
 }

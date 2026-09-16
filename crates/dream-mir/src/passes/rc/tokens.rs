@@ -212,10 +212,16 @@ impl TokenAnalysis {
             .map(|lp| {
                 let mut asg = HashSet::new();
                 for b in &lp.body {
-                    for stmt in &func.blocks[b.0 as usize].stmts {
+                    let block = &func.blocks[b.0 as usize];
+                    for stmt in &block.stmts {
                         if let Statement::Assign(Place::Local(d), _) = stmt {
                             asg.insert(d.0);
                         }
+                    }
+                    // An `Await` binds its result into `dest`, so a loop-carried await dest is
+                    // reassigned every iteration like any other in-loop assignment.
+                    if let Terminator::Await { dest: Some(d), .. } = &block.terminator {
+                        asg.insert(d.0);
                     }
                 }
                 asg

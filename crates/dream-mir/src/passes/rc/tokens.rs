@@ -1102,13 +1102,18 @@ pub(crate) fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])
             };
             Some((flags, args))
         }
-        Statement::IndirectCall { args, .. } => Some((vec![true; args.len()], args)),
+        // A funcbox target has been given the +0 ABI by `FuncboxAbi` (it retains its own `take`
+        // parameters on entry), so an indirect call transfers nothing: retaining here would be the
+        // second half of a pair the callee never completes.
+        Statement::IndirectCall { args, .. } => Some((vec![false; args.len()], args)),
         Statement::Assign(_, Rvalue::IndirectCall { args, .. }) => {
-            Some((vec![true; args.len()], args))
+            Some((vec![false; args.len()], args))
         }
-        Statement::InterfaceCall { args, .. } => Some((vec![true; args.len()], args)),
+        // Interface dispatch passes at +0 for the same reason as `IndirectCall`: the itable slot
+        // hides the concrete method, so the implementation does its own entry retain.
+        Statement::InterfaceCall { args, .. } => Some((vec![false; args.len()], args)),
         Statement::Assign(_, Rvalue::InterfaceCall { args, .. }) => {
-            Some((vec![true; args.len()], args))
+            Some((vec![false; args.len()], args))
         }
         _ => None,
     }
@@ -1123,12 +1128,6 @@ pub(crate) fn take_arg_effects(
     let Some((take_params, args)) = sink_call_args(stmt) else {
         return (Vec::new(), Vec::new());
     };
-    // Fun-value calls (`IndirectCall`) have no per-param ABI on `TyKind::Func`. Treating every
-    // arg as sink retains borrow params of `Middleware.invoke` into a borrow handler (`webapi_basic`).
-    let fun_value = matches!(
-        stmt,
-        Statement::IndirectCall { .. } | Statement::Assign(_, Rvalue::IndirectCall { .. })
-    );
     let mut retains = Vec::new();
     let mut nulls = Vec::new();
     for (i, arg) in args.iter().enumerate() {
@@ -1139,9 +1138,6 @@ pub(crate) fn take_arg_effects(
             Operand::Copy(Place::Local(l))
                 if local_is_ref.get(l.0 as usize).copied().unwrap_or(false) =>
             {
-                if fun_value && !is_owned_ref(l.0) {
-                    continue;
-                }
                 if is_owned_ref(l.0) && is_move(l.0) {
                     nulls.push(Statement::Assign(
                         Place::Local(*l),

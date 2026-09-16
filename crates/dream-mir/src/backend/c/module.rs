@@ -522,6 +522,10 @@ fn emit_worker_invoke(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             args: vec![Expr::id("arg")],
         }),
     ));
+    // The body is reached through the function table, so it takes its parameters borrowed like any
+    // other funcbox target. Both callers (the native worker loop and the JS host's `writeString`)
+    // hand over a freshly built wire string, which makes this trampoline its owner.
+    raw.call("dream_release", vec![Expr::id("arg")]);
     if cx.target.is_wasm32() {
         // Worker bodies cross the string wire. A `TAG_FUTURE` return is a lazy frame; launch it
         // so JS `F_STATUS` polling observes progress. (Futures used to be tag 0.) Native

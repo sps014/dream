@@ -17,6 +17,7 @@ public static class Buffer {
     // ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.
     @intrinsic("array_realloc")
     @unsafe
+    @consuming
     static extern fun realloc<T>(arr: T[], new_len: int): T[];
 
     // Bulk-copies `count` unmanaged elements from `src[src_off..]` into `dst[dst_off..]`. The
@@ -85,5 +86,6 @@ public static class Buffer {
     // verify `arr` has no other owners.
     @intrinsic("force_free")
     @unsafe
+    @consuming
     static extern fun free<T>(arr: T[]): void;
 }

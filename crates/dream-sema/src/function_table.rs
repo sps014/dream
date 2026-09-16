@@ -656,13 +656,22 @@ impl FunctionTableInfo {
         let mut defaults: Vec<Option<Type>> = vec![];
         let mut is_ref: Vec<bool> = vec![];
         let mut is_take: Vec<bool> = vec![];
+        // A host function cannot release a Dream reference, so the sink default is backwards for an
+        // `extern`: it makes the call site retain an argument nothing will ever drop. Externs pass at
+        // +0 unless the declaration opts in with `@consuming` (`Buffer.free`, which really does take
+        // the array).
+        let host_borrows = func.is_extern
+            && !func
+                .attributes
+                .iter()
+                .any(|a| a.name.text == dream_abi::attributes::CONSUMING);
         for i in func.parameters.iter() {
             let j = i.clone();
             parameters.push(j.type_.get_type());
             parameter_types.push(j.type_);
             defaults.push(j.default);
             is_ref.push(j.is_ref);
-            is_take.push(!j.is_ref && !j.is_borrow && j.name.text != "this");
+            is_take.push(!j.is_ref && !j.is_borrow && j.name.text != "this" && !host_borrows);
             param_names.push(j.name.text);
         }
         let intrinsic_name = dream_abi::intrinsics::intrinsic_key(&func.attributes);

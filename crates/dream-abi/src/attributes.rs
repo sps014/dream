@@ -169,7 +169,16 @@ pub fn find_spec(name: &str) -> Option<&'static AttributeSpec> {
 /// Every attribute name the compiler recognizes. Adding a new attribute means adding one entry
 /// here; [`validate_program_attributes`] then enforces its placement/shape everywhere, and the
 /// feature module only needs to implement attribute-specific *meaning* on top.
+pub const CONSUMING: &str = "consuming";
+
 pub const ATTRIBUTES: &[AttributeSpec] = &[
+    AttributeSpec {
+        name: CONSUMING,
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.",
+    },
     AttributeSpec {
         name: "intrinsic",
         targets: &[AttributeTarget::ExternFunction],

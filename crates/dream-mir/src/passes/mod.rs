@@ -8,6 +8,7 @@ mod const_fold;
 mod dce;
 mod devirt;
 mod dse;
+mod funcbox_abi;
 mod global_prop;
 mod gvn;
 mod inline;
@@ -30,6 +31,7 @@ pub(crate) use dce::is_pure;
 pub use dce::Dce;
 pub use devirt::Devirt;
 pub use dse::Dse;
+pub use funcbox_abi::FuncboxAbi;
 pub use global_prop::GlobalProp;
 pub use gvn::Gvn;
 pub use inline::Inliner;
@@ -220,6 +222,9 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
     let _ = ExpandSimpleCtors.run(mir, interner);
+    // Before RC insertion: address-taken functions move their parameter retains to the callee so a
+    // funcbox call site can pass at +0 (see `funcbox_abi`).
+    let _ = FuncboxAbi.run(mir, interner);
     crate::prune_module(mir, interner);
     let layouts = mir.layouts.clone();
     let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);

@@ -149,7 +149,66 @@ fn region_safe_body(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
             }
         }
     }
+    // The birth site adopts this function's result as region memory, so it is only sound if the
+    // function allocated it. A getter hands back an occupant the container still owns — and for a
+    // niche union (`JsonValue.get` returning `Option.Some(child)`) the wrapper *is* that child's
+    // pointer, so the leave's alias nulls would drop the caller's reference to a live object.
+    if cx.interner.is_rc_tracked(f.ret) && !returns_fresh(cx.interner, f) {
+        return false;
+    }
     true
+}
+
+/// Every `Return` hands back memory this function allocated, directly or through copies of such a
+/// local. A niche `UnionNew` is excluded: it yields its payload's pointer rather than a new block.
+fn returns_fresh(interner: &TypeInterner, f: &MirFunction) -> bool {
+    let mut fresh: HashSet<u32> = HashSet::new();
+    for b in &f.blocks {
+        for s in &b.stmts {
+            let Statement::Assign(Place::Local(d), rv) = s else {
+                continue;
+            };
+            let allocates = match rv {
+                Rvalue::UnionNew { ty, .. } => !interner.is_niche_union(*ty),
+                Rvalue::New { .. }
+                | Rvalue::ArrayNew { .. }
+                | Rvalue::ArrayLit { .. }
+                | Rvalue::Tuple { .. }
+                | Rvalue::Concat(_)
+                | Rvalue::ConcatInt { .. }
+                | Rvalue::ToString(_)
+                | Rvalue::ToBytes { .. } => true,
+                _ => false,
+            };
+            if allocates {
+                fresh.insert(d.0);
+            }
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for b in &f.blocks {
+            for s in &b.stmts {
+                let Statement::Assign(Place::Local(d), rv) = s else {
+                    continue;
+                };
+                let src = match rv {
+                    Rvalue::Use(Operand::Copy(Place::Local(s)))
+                    | Rvalue::Cast(Operand::Copy(Place::Local(s)), _, _) => s.0,
+                    _ => continue,
+                };
+                if fresh.contains(&src) && fresh.insert(d.0) {
+                    changed = true;
+                }
+            }
+        }
+    }
+    f.blocks.iter().all(|b| match &b.terminator {
+        Terminator::Return(Some(Operand::Copy(Place::Local(l)))) => fresh.contains(&l.0),
+        Terminator::Return(Some(_)) => false,
+        _ => true,
+    })
 }
 
 fn callee_safe(cx: &mut SafeCx<'_>, callee: &Callee) -> bool {

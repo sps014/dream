@@ -41,7 +41,10 @@ public class Seq<T> {
         this.skip_n = 0;
     }
 
-    fun from_stage(parent_seq: Seq<T>): Seq<T> {
+    // `parent_seq` is borrowed: every caller passes `this`, which it does not own, so a sink
+    // parameter would make each stage retain the receiver only to hand that same reference to the
+    // `parent` field.
+    fun from_stage(borrow parent_seq: Seq<T>): Seq<T> {
         let s = Seq<T>(parent_seq.items);
         s.parent = Option.Some(parent_seq);
         return s;

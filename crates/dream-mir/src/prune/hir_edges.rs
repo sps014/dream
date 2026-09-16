@@ -32,7 +32,7 @@ pub(crate) fn hir_body_edges(body: &[dream_hir::HStmt], out: &mut HirEdges) {
 fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
     use dream_hir::{HPlace, HStmt};
     match stmt {
-        HStmt::Let { value, .. } | HStmt::Expr(value) | HStmt::Await(value) => {
+        HStmt::Let { value, .. } | HStmt::Expr(value) | HStmt::Await { future: value, .. } => {
             hir_expr_edges(value, out)
         }
         HStmt::Assign { place, value } => {

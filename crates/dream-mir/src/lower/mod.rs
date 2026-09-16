@@ -423,18 +423,25 @@ impl Lowerer<'_> {
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);
             }
-            // A bare `await e;` in a coroutine suspends on the future and discards its result.
-            HStmt::Await(e) if self.async_coroutine => {
-                let fut = self.lower_operand(e);
+            // A bare `await e;` in a coroutine suspends on the future and discards its result. A
+            // discarded result that is an owned reference still binds a dest: the future's drop glue
+            // deliberately skips its result slot (an awaiter is expected to move the value out), so
+            // leaving `dest` empty strands that `+1`. With a dest, RC releases it at scope exit.
+            HStmt::Await { future, settled } if self.async_coroutine => {
+                let fut = self.lower_operand(future);
+                let dest = self
+                    .interner
+                    .is_reference(*settled)
+                    .then(|| self.b.new_temp(*settled));
                 let resume = self.b.new_block();
                 self.b.terminate(Terminator::Await {
                     future: fut,
-                    dest: None,
+                    dest,
                     resume,
                 });
                 self.b.switch_to(resume);
             }
-            HStmt::Expr(e) | HStmt::Await(e) => match &e.kind {
+            HStmt::Expr(e) | HStmt::Await { future: e, .. } => match &e.kind {
                 // A bare call keeps its `Call` statement form (return value discarded). This matters
                 // for void calls: materializing them into a temp (the fallback below) would emit a
                 // `local.set` with nothing on the stack. A call whose discarded result is an owned

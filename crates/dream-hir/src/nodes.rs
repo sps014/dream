@@ -99,8 +99,12 @@ pub enum HStmt {
     },
     Break(Option<String>),
     Continue(Option<String>),
-    /// `await e;` at statement position (the only legal await position).
-    Await(HExpr),
+    /// `await e;` at statement position (the only legal await position). `settled` is the type the
+    /// future resolves to; the result is discarded, but MIR still binds it so RC can release it.
+    Await {
+        future: HExpr,
+        settled: TypeId,
+    },
     /// A debug-info marker recording the 1-based source line of the *next* executable statement.
     /// Emitted only when the compiler runs with debug-info enabled; lowers to a `Statement::DebugLine`
     /// in MIR and, ultimately, a call to the host `dream_debug.line` hook. Carries no runtime value.

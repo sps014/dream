@@ -12,13 +12,15 @@ enum BoxKind {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Appends `await e;` at statement position.
-    pub(in crate::analyzer) fn hir_await_stmt(&mut self, value: Option<HExpr>) {
+    /// Appends `await e;` at statement position. `settled` is the type the awaited future resolves
+    /// to, which MIR needs to bind (and release) the discarded result.
+    pub(in crate::analyzer) fn hir_await_stmt(&mut self, value: Option<HExpr>, settled: &Type) {
         if !self.active() {
             return;
         }
+        let settled = self.type_ctx.lower(settled);
         match value {
-            Some(v) => self.push_stmt(HStmt::Await(v)),
+            Some(v) => self.push_stmt(HStmt::Await { future: v, settled }),
             None => self.hir.ok = false,
         }
     }

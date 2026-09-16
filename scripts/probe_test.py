@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_LEAK = re.compile(r"\[dream\] leak check: live=(\d+)")
 
 root = Path(__file__).resolve().parents[1]
 dream = root / "target/debug/dream"
@@ -97,6 +98,21 @@ def run_group(args, timeout, stdin=None, env=None):
             pass
         proc.wait()
         return -9, "timeout", ""
+
+
+def leak_failure(*streams):
+    """A guest ARC leak, if the runtime's leak checker reported one.
+
+    The check prints to stderr and `dream run` passes it through without inspecting it (only the
+    captured-output path in `src/execution/native_c` fails on it), so the corpus has to look for
+    itself. A non-zero `live` count is a failure the same as a wrong stdout: every case is expected
+    to end holding nothing.
+    """
+    for s in streams:
+        m = _LEAK.search(s or "")
+        if m and m.group(1) != "0":
+            return f"leak live={m.group(1)}"
+    return None
 
 
 def run_output_body(out):
@@ -271,6 +287,9 @@ clearTimeout(timer);
         got = run_output_body(out)
         if got != want:
             return stem, "fail", f"output mismatch got={got[:80]!r}"
+    leak = leak_failure(err_txt, out)
+    if leak:
+        return stem, "fail", leak
     return stem, "ok", ""
 
 
@@ -313,6 +332,9 @@ def one(f: Path):
         got = run_output_body(out)
         if got != want:
             return stem, "fail", f"output mismatch got={got[:80]!r}"
+    leak = leak_failure(err, out)
+    if leak:
+        return stem, "fail", leak
     return stem, "ok", ""
 
 

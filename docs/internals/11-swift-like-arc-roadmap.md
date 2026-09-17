@@ -30,7 +30,10 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   through a call/`New` evaluates the RHS into a temp, then `Release`s the old occupant
   (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of loop-carried owned
   locals start **Owned**/**Unique** so the first dataflow pass does not treat a back-edge as Empty.
-  Last-use destroy applies to every owned RC local. [`StmtBorrow::Held`](../../crates/dream-mir/src/passes/rc/lifetime.rs) delays destroy only for callees in [`holds_raw_borrow`](../../crates/dream-abi/src/intrinsics.rs) and `@async_host` imports (see `held_defs`). Sink/take params still drop at callee return so inlining cannot copy-prop an early
+  Last-use destroy applies to every owned RC local. `StmtBorrow::Held`
+  (`crates/dream-mir/src/passes/rc/lifetime.rs`) delays destroy only for callees in
+  `holds_raw_borrow` (`crates/dream-abi/src/intrinsics.rs`) and `@async_host` imports (see
+  `held_defs`). Sink/take params still drop at callee return so inlining cannot copy-prop an early
   `= null` onto a caller argument that is still live. After inlining, `RcElision` can cancel
   retain/release pairs that a call barrier would have kept.
 - `@shared class` atomic retain/release; silent SROA for non-escaping class instances.

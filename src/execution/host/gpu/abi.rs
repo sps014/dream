@@ -49,7 +49,7 @@ fn default_color_targets() -> u32 {
     1
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct GpuBindingMeta {
     /// WGSL `@group(N)`. Binding indices are unique per group, not per shader.
     #[serde(default)]
@@ -58,6 +58,20 @@ pub struct GpuBindingMeta {
     pub kind: String,
     #[serde(default)]
     pub read_write: bool,
+    /// Texture bindings: WebGPU `viewDimension` (`"2d"`, `"cube"`, …).
+    #[serde(default)]
+    pub view_dimension: String,
+    /// Sampled textures: WebGPU `sampleType`. Samplers: the binding type (`"filtering"` /
+    /// `"comparison"`).
+    #[serde(default)]
+    pub sample_type: String,
+    #[serde(default)]
+    pub multisampled: bool,
+    /// Storage textures only.
+    #[serde(default)]
+    pub storage_format: String,
+    #[serde(default)]
+    pub storage_access: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

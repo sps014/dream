@@ -22,27 +22,48 @@ pub struct BufEntry {
 pub struct TexEntry {
     pub width: u32,
     pub height: u32,
-    pub format: wgpu::TextureFormat,
+    /// Resolved once at creation: the shared format spec plus its `wgpu` code.
+    pub format: super::formats::ResolvedFormat,
     pub cpu: Vec<u8>,
     pub gpu: Option<wgpu::Texture>,
     /// Cached default view; cleared when `gpu` is recreated.
     pub view: Option<wgpu::TextureView>,
+    /// Needs `STORAGE_BINDING` usage: either created with a `storage_access`, or later bound to a
+    /// `texture_storage_*` slot.
     pub storage: bool,
-    pub depth: bool,
+    pub dimension: wgpu::TextureDimension,
+    /// Array layers for 1D/2D, or depth slices for 3D.
     pub layers: u32,
-    /// Cubemap: the 6 array layers must be viewed as `TextureViewDimension::Cube`, not `D2Array`,
-    /// or `textureSample` on a `texture_cube<f32>` binding fails validation.
-    pub cube: bool,
+    /// How bindings view the layers. A 6-layer 2D texture is a cubemap only if it says so here —
+    /// `textureSample` on a `texture_cube<f32>` binding fails validation against a `D2Array` view.
+    pub view_dimension: wgpu::TextureViewDimension,
     /// GPU mip chain length. `1` until `texture_generate_mipmaps`; recreate paths must honor this
     /// so a later `ensure_texture` / blit does not wipe the chain back to a single level.
     pub mip_levels: u32,
+    pub sample_count: u32,
     pub dirty_cpu: bool,
 }
 
+impl TexEntry {
+    pub fn depth(&self) -> bool {
+        self.format.is_depth()
+    }
+
+    pub fn wgpu_format(&self) -> wgpu::TextureFormat {
+        self.format.wgpu
+    }
+}
+
 pub struct SampEntry {
-    pub filter: i32,
-    pub address: i32,
+    pub mag_filter: i32,
+    pub min_filter: i32,
     pub mip_filter: i32,
+    pub address: [i32; 3],
+    pub lod: (f32, f32),
+    /// `GpuCompareFunction` code for a comparison (shadow) sampler, `None` otherwise. A comparison
+    /// sampler binds only to `sampler_comparison`, so the layout depends on this.
+    pub compare: Option<i32>,
+    pub max_anisotropy: u16,
     pub gpu: Option<wgpu::Sampler>,
 }
 
@@ -317,3 +338,7 @@ pub const ERR_UNAVAILABLE: i32 = 1;
 pub const ERR_TIMEOUT: i32 = 2;
 pub const ERR_VALIDATION: i32 = 3;
 pub const ERR_OTHER: i32 = 4;
+/// The request is well-formed but the adapter lacks the feature or limit it needs — a
+/// block-compressed format on a device without that family, say. Distinct from `ERR_VALIDATION`
+/// because the fix is to pick a different resource, not to correct the call.
+pub const ERR_UNSUPPORTED: i32 = 5;

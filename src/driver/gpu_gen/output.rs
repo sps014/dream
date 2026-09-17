@@ -76,14 +76,19 @@ fn bindings_json(bindings: &[super::types::GpuBinding]) -> String {
         .iter()
         .map(|b| {
             format!(
-                "{{ \"name\": \"{}\", \"group\": {}, \"binding\": {}, \"kind\": \"{}\", \"type\": \"{}\", \"read_write\": {}, \"atomic\": {} }}",
+                "{{ \"name\": \"{}\", \"group\": {}, \"binding\": {}, \"kind\": \"{}\", \"type\": \"{}\", \"read_write\": {}, \"atomic\": {}, \"view_dimension\": \"{}\", \"sample_type\": \"{}\", \"multisampled\": {}, \"storage_format\": \"{}\", \"storage_access\": \"{}\" }}",
                 json_escape(&b.name),
                 b.group,
                 b.binding,
                 b.kind,
                 json_escape(&b.wgsl_ty),
                 b.read_write,
-                b.atomic
+                b.atomic,
+                b.view_dimension,
+                b.sample_type,
+                b.multisampled,
+                b.storage_format,
+                b.storage_access
             )
         })
         .collect::<Vec<_>>()

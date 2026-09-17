@@ -10,31 +10,43 @@ public class GpuSampler {
         return this._id;
     }
 
-    // Linear filtering sampler (clamp-to-edge).
+    // Trilinear, clamp-to-edge.
     public static fun linear(): GpuSampler {
-        let s = GpuSampler();
-        s._id = Gpu.sampler_create(1);
-        return s;
+        return GpuSampler.create(GpuSamplerDesc.linear());
     }
 
-    // Nearest-neighbor filtering sampler (clamp-to-edge).
+    // Nearest-neighbor, clamp-to-edge.
     public static fun nearest(): GpuSampler {
-        let s = GpuSampler();
-        s._id = Gpu.sampler_create(0);
-        return s;
+        return GpuSampler.create(GpuSamplerDesc.nearest());
     }
 
-    // Custom filter / address / mip mode (named enums; host ints match discriminants).
-    public static fun create(
-        filter: GpuFilterMode,
-        address: GpuAddressMode,
-        mip_filter: GpuFilterMode
-    ): GpuSampler {
-        let f: int = filter;
-        let a: int = address;
-        let m: int = mip_filter;
+    // Builds a sampler from full state: filters, per-axis addressing, LOD clamp, anisotropy, and
+    // an optional depth comparison.
+    public static fun create(desc: GpuSamplerDesc): GpuSampler {
+        let mag: int = desc.mag_filter;
+        let min: int = desc.min_filter;
+        let mip: int = desc.mip_filter;
+        let au: int = desc.address_u;
+        let av: int = desc.address_v;
+        let aw: int = desc.address_w;
+        let compare: int = -1;
+        if desc.compare.is_some() {
+            let c: int = desc.compare.unwrap();
+            compare = c;
+        }
         let s = GpuSampler();
-        s._id = Gpu.sampler_create_ex(f, a, m);
+        s._id = Gpu.sampler_create(
+            mag,
+            min,
+            mip,
+            au,
+            av,
+            aw,
+            desc.lod_min,
+            desc.lod_max,
+            compare,
+            desc.max_anisotropy
+        );
         return s;
     }
 

@@ -703,68 +703,15 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
     let format = st.render_format;
     ensure_blit(&mut st, &device, format);
 
-    let tex = st
+    let had_gpu = st
         .textures
-        .get_mut(&texture_id)
-        .ok_or_else(|| format!("unknown texture {texture_id}"))?;
-    let mut tex_gpu_recreated = false;
-    if tex.dirty_cpu && tex.mip_levels > 1 {
-        tex.mip_levels = 1;
-        if let Some(gpu) = tex.gpu.take() {
-            gpu.destroy();
-        }
-        tex.view = None;
-    }
-    if tex.gpu.is_none() {
-        let usage = wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::COPY_SRC
-            | wgpu::TextureUsages::RENDER_ATTACHMENT;
-        tex.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("dream-blit-src"),
-            size: wgpu::Extent3d {
-                width: tex.width.max(1),
-                height: tex.height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: tex.mip_levels.max(1),
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: tex.format,
-            usage,
-            view_formats: &[],
-        }));
-        tex.view = None;
-        tex_gpu_recreated = true;
-    }
-    if tex.dirty_cpu && !tex.cpu.is_empty() && !tex.depth {
-        let bpp = if tex.format == wgpu::TextureFormat::Rgba16Float {
-            8
-        } else {
-            4
-        };
-        let gpu = tex.gpu.as_ref().unwrap();
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: gpu,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &tex.cpu,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(tex.width * bpp),
-                rows_per_image: Some(tex.height),
-            },
-            wgpu::Extent3d {
-                width: tex.width,
-                height: tex.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        tex.dirty_cpu = false;
-    }
+        .get(&texture_id)
+        .ok_or_else(|| format!("unknown texture {texture_id}"))?
+        .gpu
+        .is_some();
+    super::compute::ensure_texture(&mut st, &device, &queue, texture_id, false)?;
+    let tex = st.textures.get_mut(&texture_id).unwrap();
+    let tex_gpu_recreated = !had_gpu || tex.gpu.is_none();
 
     let src = tex.gpu.as_ref().unwrap().clone();
     let src_view = if let Some(v) = tex.view.as_ref() {

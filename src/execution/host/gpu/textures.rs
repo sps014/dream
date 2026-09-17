@@ -4,97 +4,217 @@
 #![allow(clippy::too_many_arguments)]
 
 use super::error::classify_err;
+use super::formats;
 use super::state::{lock_state, SampEntry, TexEntry};
 
-pub fn sampler_create(filter: i32) -> i32 {
-    sampler_create_ex(filter, 0, 0)
-}
-
-pub fn sampler_create_ex(filter: i32, address: i32, mip_filter: i32) -> i32 {
+#[allow(clippy::too_many_arguments)]
+pub fn sampler_create(
+    mag_filter: i32,
+    min_filter: i32,
+    mip_filter: i32,
+    address_u: i32,
+    address_v: i32,
+    address_w: i32,
+    lod_min: f32,
+    lod_max: f32,
+    compare: i32,
+    max_anisotropy: i32,
+) -> i32 {
     let mut st = lock_state();
     let id = st.alloc_id();
     st.samplers.insert(
         id,
         SampEntry {
-            filter,
-            address,
+            mag_filter,
+            min_filter,
             mip_filter,
+            address: [address_u, address_v, address_w],
+            lod: (lod_min, lod_max.max(lod_min)),
+            compare: (compare >= 0).then_some(compare),
+            max_anisotropy: max_anisotropy.clamp(1, 16) as u16,
             gpu: None,
         },
     );
     id
 }
 
-pub fn texture_create_rgba8(width: i32, height: i32) -> i32 {
-    texture_create(width, height, wgpu::TextureFormat::Rgba8Unorm, false, 1)
-}
-
-pub fn texture_create_depth(width: i32, height: i32) -> i32 {
-    texture_create(width, height, wgpu::TextureFormat::Depth24Plus, true, 1)
-}
-
-pub fn texture_create_rgba16float(width: i32, height: i32) -> i32 {
-    texture_create(width, height, wgpu::TextureFormat::Rgba16Float, false, 1)
-}
-
-pub fn texture_create_cube_rgba8(size: i32) -> i32 {
-    texture_create(size, size, wgpu::TextureFormat::Rgba8Unorm, false, 6)
-}
-
-/// Default view honoring cube dimensionality. A 6-layer 2D texture defaults to `D2Array`, which
-/// cannot be bound to a `texture_cube<f32>` slot.
+/// Default view honoring the declared view dimension. A 6-layer 2D texture defaults to `D2Array`,
+/// which cannot be bound to a `texture_cube<f32>` slot.
 pub(crate) fn default_view(t: &TexEntry, gpu: &wgpu::Texture) -> wgpu::TextureView {
-    if t.cube {
-        gpu.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::Cube),
-            ..Default::default()
-        })
-    } else {
-        gpu.create_view(&wgpu::TextureViewDescriptor::default())
-    }
+    gpu.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(t.view_dimension),
+        ..Default::default()
+    })
 }
 
-fn texture_create(
+/// Allocates a texture from a `GpuTextureDesc`. Returns the id, or a negated `GpuError` code when
+/// the format needs an unavailable device feature or the shape is impossible.
+#[allow(clippy::too_many_arguments)]
+pub fn texture_create(
+    format: i32,
+    dimension: i32,
     width: i32,
     height: i32,
-    format: wgpu::TextureFormat,
-    depth: bool,
-    layers: u32,
+    depth_or_layers: i32,
+    mip_levels: i32,
+    sample_count: i32,
+    storage_access: i32,
+    view_dimension: i32,
 ) -> i32 {
     let mut st = lock_state();
-    let id = st.alloc_id();
+    let features = st
+        .device
+        .as_ref()
+        .map(|d| d.features())
+        // Before the device exists the format is accepted and re-checked at `ensure_texture`.
+        .unwrap_or_else(wgpu::Features::all);
     let w = width.max(1) as u32;
     let h = height.max(1) as u32;
-    let bpp = if format == wgpu::TextureFormat::Rgba16Float {
-        8
-    } else if depth {
-        0
-    } else {
-        4
+    let layers = depth_or_layers.max(1) as u32;
+    let mips = mip_levels.max(1) as u32;
+    let samples = sample_count.max(1) as u32;
+    let plan = (|| {
+        let resolved = formats::resolve(format, features)?;
+        let dim = formats::dimension(dimension)?;
+        let view = formats::view_dimension(view_dimension)?;
+        let access = if storage_access < 0 {
+            None
+        } else if !resolved.spec.storage {
+            return Err(format!(
+                "validation: texture format {} cannot be a storage texture",
+                resolved.spec.name
+            ));
+        } else {
+            Some(formats::storage_access(storage_access)?)
+        };
+        validate_shape(&resolved, dim, view, w, h, layers, mips, samples)?;
+        Ok((resolved, dim, view, access))
+    })();
+    let (resolved, dim, view, access) = match plan {
+        Ok(p) => p,
+        Err(e) => {
+            let code = classify_err(&e);
+            st.set_last_error(e);
+            return -code;
+        }
     };
-    let cpu = if bpp == 0 {
-        Vec::new()
-    } else {
-        vec![0u8; (w * h * layers * bpp) as usize]
+
+    let id = st.alloc_id();
+    // Only linearly copyable color formats get a CPU mirror; compressed and depth textures are
+    // GPU-only, so their reads and writes are rejected rather than silently going through a
+    // shadow buffer.
+    let cpu = match resolved.bytes_per_texel() {
+        Some(bpt) if !resolved.is_depth() => vec![0u8; (w * h * layers * bpt) as usize],
+        _ => Vec::new(),
     };
     st.textures.insert(
         id,
         TexEntry {
             width: w,
             height: h,
-            format,
+            format: resolved,
             cpu,
             gpu: None,
             view: None,
-            storage: false,
-            depth,
+            storage: access.is_some(),
+            dimension: dim,
             layers,
-            cube: layers == 6,
-            mip_levels: 1,
+            view_dimension: view,
+            mip_levels: mips,
+            sample_count: samples,
             dirty_cpu: true,
         },
     );
     id
+}
+
+/// Usage flags for a texture. Dream does not ask callers to declare usage, so every texture gets
+/// everything its format and shape can legally support — WebGPU rejects flags a format cannot
+/// honor, so the set has to be narrowed rather than always maximal.
+pub(crate) fn texture_usage(t: &TexEntry) -> wgpu::TextureUsages {
+    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING;
+    // Multisampled textures cannot be the source or destination of a copy.
+    if t.sample_count <= 1 {
+        usage |= wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST;
+    }
+    // Block-compressed and 1D/3D textures cannot be rendered into.
+    if t.format.spec.block.is_none() && t.dimension == wgpu::TextureDimension::D2 {
+        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
+    }
+    if t.storage {
+        usage |= wgpu::TextureUsages::STORAGE_BINDING;
+    }
+    usage
+}
+
+/// WebGPU shape rules that would otherwise fail deep inside `wgpu` with an opaque message.
+#[allow(clippy::too_many_arguments)]
+fn validate_shape(
+    resolved: &formats::ResolvedFormat,
+    dim: wgpu::TextureDimension,
+    view: wgpu::TextureViewDimension,
+    width: u32,
+    height: u32,
+    layers: u32,
+    mips: u32,
+    samples: u32,
+) -> Result<(), String> {
+    let cube = matches!(
+        view,
+        wgpu::TextureViewDimension::Cube | wgpu::TextureViewDimension::CubeArray
+    );
+    if cube {
+        if !layers.is_multiple_of(6) {
+            return Err(format!(
+                "validation: a cube view needs a multiple of 6 layers, got {layers}"
+            ));
+        }
+        if width != height {
+            return Err(format!(
+                "validation: cube faces must be square, got {width}x{height}"
+            ));
+        }
+    }
+    if view == wgpu::TextureViewDimension::D3 && dim != wgpu::TextureDimension::D3 {
+        return Err("validation: a 3d view needs a 3d texture".to_string());
+    }
+    if dim == wgpu::TextureDimension::D3 && cube {
+        return Err("validation: a 3d texture cannot have a cube view".to_string());
+    }
+    if dim == wgpu::TextureDimension::D1 && height > 1 {
+        return Err(format!(
+            "validation: a 1d texture must be 1 texel tall, got height {height}"
+        ));
+    }
+    if samples > 1 {
+        if mips > 1 {
+            return Err("validation: a multisampled texture cannot have mip levels".to_string());
+        }
+        if layers > 1 {
+            return Err("validation: a multisampled texture cannot be layered".to_string());
+        }
+        if dim != wgpu::TextureDimension::D2 {
+            return Err("validation: only 2d textures can be multisampled".to_string());
+        }
+        if !matches!(samples, 2 | 4 | 8 | 16) {
+            return Err(format!("validation: unsupported sample count {samples}"));
+        }
+    }
+    let max_mips = 32 - (width.max(height).max(if dim == wgpu::TextureDimension::D3 {
+        layers
+    } else {
+        1
+    }))
+    .leading_zeros();
+    if mips > max_mips {
+        return Err(format!(
+            "validation: {width}x{height} allows at most {max_mips} mip levels, got {mips}"
+        ));
+    }
+    if resolved.spec.block.is_some() && samples > 1 {
+        return Err("validation: block-compressed textures cannot be multisampled".to_string());
+    }
+    Ok(())
 }
 
 /// Base-level CPU content changed: drop any mip chain so the next GPU create uses a single level.
@@ -115,14 +235,16 @@ pub fn texture_write_rgba(id: i32, pixels: Vec<u8>, x: i32, y: i32, w: i32, h: i
     let Some(tex) = st.textures.get_mut(&id) else {
         return classify_err(&format!("unknown texture {id}"));
     };
-    if tex.depth {
-        return classify_err("validation: cannot write rgba to depth texture");
-    }
+    let Some(bpp) = tex.format.bytes_per_texel().filter(|_| !tex.depth()) else {
+        return classify_err(&format!(
+            "validation: cannot write texels to a {} texture",
+            tex.format.spec.name
+        ));
+    };
     let px = x.max(0) as u32;
     let py = y.max(0) as u32;
     let pw = w.max(0) as u32;
     let ph = h.max(0) as u32;
-    let bpp = 4u32;
     for row in 0..ph {
         let dst = ((py + row) * tex.width + px) * bpp;
         let src = (row * pw * bpp) as usize;
@@ -144,7 +266,14 @@ pub fn texture_read_rgba(id: i32) -> Vec<u8> {
     let Some(t) = st.textures.get(&id) else {
         return Vec::new();
     };
-    if t.dirty_cpu || t.gpu.is_none() || t.depth || t.format != wgpu::TextureFormat::Rgba8Unorm {
+    let readable = t
+        .format
+        .bytes_per_texel()
+        .filter(|_| !t.depth() && t.sample_count <= 1);
+    let Some(bpp) = readable else {
+        return t.cpu.clone();
+    };
+    if t.dirty_cpu || t.gpu.is_none() {
         return t.cpu.clone();
     }
     let (width, height) = (t.width.max(1), t.height.max(1));
@@ -154,8 +283,8 @@ pub fn texture_read_rgba(id: i32) -> Vec<u8> {
     };
 
     // `copy_texture_to_buffer` requires 256-byte row alignment, so the staging rows are padded and
-    // then compacted back to a tight `width * 4` stride.
-    let unpadded = (width * 4) as usize;
+    // then compacted back to a tight `width * bpp` stride.
+    let unpadded = (width * bpp) as usize;
     let padded = unpadded.div_ceil(256) * 256;
     let staging = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("dream-tex-readback"),
@@ -248,8 +377,19 @@ pub fn texture_destroy(id: i32) {
     }
 }
 
-/// GPU texture↔texture copy (rgba8/rgba16f). Falls back to a CPU-shadow copy when the GPU
-/// resources are unavailable so headless/e2e paths still round-trip pixels.
+/// Snapshot of one side of a texture↔texture copy, taken before the mutable borrows begin.
+struct CopyMeta {
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    bytes_per_texel: Option<u32>,
+    depth: bool,
+    gpu: Option<wgpu::Texture>,
+}
+
+/// GPU texture↔texture copy between same-format, linearly copyable textures. Falls back to a
+/// CPU-shadow copy when the GPU resources are unavailable so headless/e2e paths still round-trip
+/// pixels.
 pub fn texture_copy(
     src_id: i32,
     dst_id: i32,
@@ -261,27 +401,25 @@ pub fn texture_copy(
     height: i32,
 ) {
     let mut st = lock_state();
-    let (src_meta, dst_meta) = {
-        let src = st.textures.get(&src_id);
-        let dst = st.textures.get(&dst_id);
-        match (src, dst) {
-            (Some(s), Some(d)) => (
-                (s.width, s.height, s.format, s.depth, s.gpu.clone()),
-                (d.width, d.height, d.format, d.depth, d.gpu.clone()),
-            ),
-            _ => return,
-        }
+    let meta = |t: &TexEntry| CopyMeta {
+        width: t.width,
+        height: t.height,
+        format: t.wgpu_format(),
+        bytes_per_texel: t.format.bytes_per_texel(),
+        depth: t.depth(),
+        gpu: t.gpu.clone(),
     };
-    if src_meta.3 || dst_meta.3 {
+    let (Some(src_meta), Some(dst_meta)) = (
+        st.textures.get(&src_id).map(meta),
+        st.textures.get(&dst_id).map(meta),
+    ) else {
+        return;
+    };
+    if src_meta.depth || dst_meta.depth || src_meta.format != dst_meta.format {
         return;
     }
-    if src_meta.2 != dst_meta.2 {
+    let Some(bpp) = src_meta.bytes_per_texel else {
         return;
-    }
-    let bpp = if src_meta.2 == wgpu::TextureFormat::Rgba16Float {
-        8u32
-    } else {
-        4
     };
     let sx = src_x.max(0) as u32;
     let sy = src_y.max(0) as u32;
@@ -289,17 +427,17 @@ pub fn texture_copy(
     let dy = dst_y.max(0) as u32;
     let mut w = width.max(0) as u32;
     let mut h = height.max(0) as u32;
-    if sx + w > src_meta.0 {
-        w = src_meta.0.saturating_sub(sx);
+    if sx + w > src_meta.width {
+        w = src_meta.width.saturating_sub(sx);
     }
-    if sy + h > src_meta.1 {
-        h = src_meta.1.saturating_sub(sy);
+    if sy + h > src_meta.height {
+        h = src_meta.height.saturating_sub(sy);
     }
-    if dx + w > dst_meta.0 {
-        w = dst_meta.0.saturating_sub(dx);
+    if dx + w > dst_meta.width {
+        w = dst_meta.width.saturating_sub(dx);
     }
-    if dy + h > dst_meta.1 {
-        h = dst_meta.1.saturating_sub(dy);
+    if dy + h > dst_meta.height {
+        h = dst_meta.height.saturating_sub(dy);
     }
     if w == 0 || h == 0 {
         return;
@@ -308,8 +446,8 @@ pub fn texture_copy(
     if let (Some(device), Some(queue), Some(src_gpu), Some(dst_gpu)) = (
         st.device.clone(),
         st.queue.clone(),
-        src_meta.4.clone(),
-        dst_meta.4.clone(),
+        src_meta.gpu.clone(),
+        dst_meta.gpu.clone(),
     ) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("dream-tex-copy"),
@@ -348,8 +486,8 @@ pub fn texture_copy(
         .map(|t| t.cpu.clone())
         .unwrap_or_default();
     if let Some(dst) = st.textures.get_mut(&dst_id) {
-        let stride_src = (src_meta.0 * bpp) as usize;
-        let stride_dst = (dst_meta.0 * bpp) as usize;
+        let stride_src = (src_meta.width * bpp) as usize;
+        let stride_dst = (dst_meta.width * bpp) as usize;
         let row_bytes = (w * bpp) as usize;
         for row in 0..h {
             let so = ((sy + row) as usize) * stride_src + (sx * bpp) as usize;
@@ -385,14 +523,6 @@ fn collapse_dst_mips_after_level0_gpu_write(
     let width = dst.width.max(1);
     let height = dst.height.max(1);
     let layers = dst.layers.max(1);
-    let format = dst.format;
-    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
-        | wgpu::TextureUsages::COPY_DST
-        | wgpu::TextureUsages::COPY_SRC
-        | wgpu::TextureUsages::RENDER_ATTACHMENT;
-    if dst.storage {
-        usage |= wgpu::TextureUsages::STORAGE_BINDING;
-    }
     let new_tex = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("dream-tex-base"),
         size: wgpu::Extent3d {
@@ -401,10 +531,10 @@ fn collapse_dst_mips_after_level0_gpu_write(
             depth_or_array_layers: layers,
         },
         mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage,
+        sample_count: dst.sample_count.max(1),
+        dimension: dst.dimension,
+        format: dst.wgpu_format(),
+        usage: texture_usage(dst),
         view_formats: &[],
     });
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -447,16 +577,17 @@ pub fn texture_generate_mipmaps(id: i32) -> i32 {
     let Some(tex) = st.textures.get_mut(&id) else {
         return classify_err(&format!("unknown texture {id}"));
     };
-    if tex.depth {
-        return classify_err("validation: cannot generate mipmaps for depth texture");
-    }
-    if tex.format != wgpu::TextureFormat::Rgba8Unorm {
-        return classify_err("validation: mipmap generation requires rgba8unorm texture");
+    // The downsample below is a fixed 4-channel 8-bit box filter, so it only fits rgba8.
+    if tex.wgpu_format() != wgpu::TextureFormat::Rgba8Unorm {
+        return classify_err(&format!(
+            "validation: mipmap generation requires an rgba8unorm texture, got {}",
+            tex.format.spec.name
+        ));
     }
     let width = tex.width.max(1);
     let height = tex.height.max(1);
     let layers = tex.layers.max(1);
-    let format = tex.format;
+    let format = tex.wgpu_format();
     let need = (width * height * 4) as usize;
     if tex.cpu.len() < need {
         tex.cpu.resize(need, 0);

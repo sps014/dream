@@ -7,6 +7,7 @@ pub(crate) mod compute;
 pub(crate) mod device;
 pub(crate) mod encoder;
 pub(crate) mod error;
+pub(crate) mod formats;
 mod gamepad;
 mod icon;
 mod input;

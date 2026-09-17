@@ -33,6 +33,9 @@ pub fn plan_groups(binds: &[GpuBindingMeta]) -> Vec<BindGroupPlan> {
         .collect()
 }
 
+/// The layout entry a binding needs, taken from the shape the shader declared. The emitter records
+/// the view dimension, sample type, and storage format/access alongside `kind`, so nothing here
+/// has to guess at `2d`/`rgba8unorm`/write-only defaults.
 pub fn layout_entry(
     b: &GpuBindingMeta,
     visibility: wgpu::ShaderStages,
@@ -50,26 +53,20 @@ pub fn layout_entry(
             has_dynamic_offset: false,
             min_binding_size: None,
         },
-        "sampler" => wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-        "depth_texture" => wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Depth,
-            view_dimension: wgpu::TextureViewDimension::D2,
-            multisampled: false,
-        },
-        "texture_cube" => wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-            view_dimension: wgpu::TextureViewDimension::Cube,
-            multisampled: false,
-        },
+        "sampler" => wgpu::BindingType::Sampler(if b.sample_type == "comparison" {
+            wgpu::SamplerBindingType::Comparison
+        } else {
+            wgpu::SamplerBindingType::Filtering
+        }),
         "storage_texture" => wgpu::BindingType::StorageTexture {
-            access: wgpu::StorageTextureAccess::WriteOnly,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            view_dimension: wgpu::TextureViewDimension::D2,
+            access: storage_access(&b.storage_access),
+            format: storage_format(&b.storage_format),
+            view_dimension: view_dimension(&b.view_dimension),
         },
         _ => wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-            view_dimension: wgpu::TextureViewDimension::D2,
-            multisampled: false,
+            sample_type: sample_type(&b.sample_type),
+            view_dimension: view_dimension(&b.view_dimension),
+            multisampled: b.multisampled,
         },
     };
     wgpu::BindGroupLayoutEntry {
@@ -78,6 +75,39 @@ pub fn layout_entry(
         ty,
         count: None,
     }
+}
+
+fn view_dimension(name: &str) -> wgpu::TextureViewDimension {
+    match name {
+        "1d" => wgpu::TextureViewDimension::D1,
+        "2d-array" => wgpu::TextureViewDimension::D2Array,
+        "cube" => wgpu::TextureViewDimension::Cube,
+        "cube-array" => wgpu::TextureViewDimension::CubeArray,
+        "3d" => wgpu::TextureViewDimension::D3,
+        _ => wgpu::TextureViewDimension::D2,
+    }
+}
+
+fn sample_type(name: &str) -> wgpu::TextureSampleType {
+    match name {
+        "depth" => wgpu::TextureSampleType::Depth,
+        "unfilterable-float" => wgpu::TextureSampleType::Float { filterable: false },
+        _ => wgpu::TextureSampleType::Float { filterable: true },
+    }
+}
+
+fn storage_access(name: &str) -> wgpu::StorageTextureAccess {
+    match name {
+        "read-only" => wgpu::StorageTextureAccess::ReadOnly,
+        "read-write" => wgpu::StorageTextureAccess::ReadWrite,
+        _ => wgpu::StorageTextureAccess::WriteOnly,
+    }
+}
+
+fn storage_format(name: &str) -> wgpu::TextureFormat {
+    dream_abi::gpu_format::by_name(name)
+        .map(super::formats::to_wgpu_unchecked)
+        .unwrap_or(wgpu::TextureFormat::Rgba8Unorm)
 }
 
 /// Dense per-group layouts for a pipeline layout. Index `i` is `@group(i)`; unused indices get an

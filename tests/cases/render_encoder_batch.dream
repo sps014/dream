@@ -59,11 +59,7 @@ async fun main(): void {
         System.println("texture write failed");
         return;
     }
-    let samp = GpuSampler.create(
-        GpuFilterMode.Nearest,
-        GpuAddressMode.ClampToEdge,
-        GpuFilterMode.Nearest
-    );
+    let samp = GpuSampler.create(GpuSamplerDesc.nearest());
 
     let verts = GpuBuffer<Vertex>.vertex_from([
         make_vert(-1.0, -1.0),

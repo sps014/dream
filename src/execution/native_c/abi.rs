@@ -360,33 +360,57 @@ pub extern "C" fn gpuRenderPipelineDestroy(id: i32) {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSamplerCreate(filter: i32) -> i32 {
-    textures::sampler_create(filter)
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn gpuSamplerCreate(
+    mag_filter: i32,
+    min_filter: i32,
+    mip_filter: i32,
+    address_u: i32,
+    address_v: i32,
+    address_w: i32,
+    lod_min: f32,
+    lod_max: f32,
+    compare: i32,
+    max_anisotropy: i32,
+) -> i32 {
+    textures::sampler_create(
+        mag_filter,
+        min_filter,
+        mip_filter,
+        address_u,
+        address_v,
+        address_w,
+        lod_min,
+        lod_max,
+        compare,
+        max_anisotropy,
+    )
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSamplerCreateEx(filter: i32, address: i32, mip_filter: i32) -> i32 {
-    textures::sampler_create_ex(filter, address, mip_filter)
-}
-
-#[no_mangle]
-pub extern "C" fn gpuTextureCreateRgba8(w: i32, h: i32) -> i32 {
-    textures::texture_create_rgba8(w, h)
-}
-
-#[no_mangle]
-pub extern "C" fn gpuTextureCreateDepth(w: i32, h: i32) -> i32 {
-    textures::texture_create_depth(w, h)
-}
-
-#[no_mangle]
-pub extern "C" fn gpuTextureCreateRgba16Float(w: i32, h: i32) -> i32 {
-    textures::texture_create_rgba16float(w, h)
-}
-
-#[no_mangle]
-pub extern "C" fn gpuTextureCreateCubeRgba8(size: i32) -> i32 {
-    textures::texture_create_cube_rgba8(size)
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn gpuTextureCreate(
+    format: i32,
+    dimension: i32,
+    width: i32,
+    height: i32,
+    depth_or_layers: i32,
+    mip_levels: i32,
+    sample_count: i32,
+    storage_access: i32,
+    view_dimension: i32,
+) -> i32 {
+    textures::texture_create(
+        format,
+        dimension,
+        width,
+        height,
+        depth_or_layers,
+        mip_levels,
+        sample_count,
+        storage_access,
+        view_dimension,
+    )
 }
 
 #[no_mangle]

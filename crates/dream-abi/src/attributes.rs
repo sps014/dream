@@ -383,22 +383,54 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "On a `@compute` `GpuBuffer` parameter: storage access is read-only (WGSL `read`).",
     },
-    // Storage-texture opt-in: WGSL `texture_storage_2d<rgba8unorm, write>` instead of a sampled
-    // `texture_2d<f32>`. Sampling is the default because it is what render stages need.
+    // Storage-texture opt-in: WGSL `texture_storage_*` instead of a sampled `texture_*`. Sampling
+    // is the default because it is what render stages need.
     AttributeSpec {
         name: "storage",
         targets: &[AttributeTarget::Parameter],
-        args: ArgShape::None,
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String, ArgKind::String],
+            min: 0,
+            max: 2,
+        },
         repeatable: false,
-        doc: "On a `GpuTexture` parameter: bind as a writable storage texture (WGSL `texture_storage_2d<rgba8unorm, write>`) instead of a sampled texture.",
+        doc: "On a `GpuTexture` parameter: bind as a storage texture instead of a sampled one. Optional args are the texel format and access mode: `@storage(\"rgba8unorm\", \"write\")` (the default).",
     },
-    // Cubemap texture parameter attribute: WGSL `texture_cube<f32>`.
+    // Texture view shape: picks the WGSL `texture_*` suffix and the layout's `viewDimension`.
     AttributeSpec {
-        name: "cube",
+        name: "view",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "On a `GpuTexture` parameter: how the binding views the texture's layers — `\"1d\"`, `\"2d\"` (the default), `\"2d-array\"`, `\"cube\"`, `\"cube-array\"`, or `\"3d\"`.",
+    },
+    // Depth-aspect sampled texture: WGSL `texture_depth_*`, the shadow-map read path.
+    AttributeSpec {
+        name: "depth",
         targets: &[AttributeTarget::Parameter],
         args: ArgShape::None,
         repeatable: false,
-        doc: "On a `GpuTexture` parameter: binds a cubemap texture (WGSL `texture_cube<f32>`).",
+        doc: "On a `GpuTexture` parameter: bind the depth aspect (WGSL `texture_depth_2d`), readable with `Gpu.texture_sample_compare` against a `@compare` sampler.",
+    },
+    // Multisampled attachment read: WGSL `texture_multisampled_2d`, fetched with `textureLoad`.
+    AttributeSpec {
+        name: "multisampled",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "On a `GpuTexture` parameter: bind a multisampled texture (WGSL `texture_multisampled_2d`). Such textures cannot be sampled, only `texture_load`ed per sample index.",
+    },
+    // Comparison sampler: WGSL `sampler_comparison`.
+    AttributeSpec {
+        name: "compare",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "On a `GpuSampler` parameter: bind a comparison sampler (WGSL `sampler_comparison`) for `Gpu.texture_sample_compare`. The sampler must have been created with `GpuSamplerDesc.comparison`.",
     },
     // WebGPU vertex stage: body emitted as WGSL, not WASM.
     AttributeSpec {
@@ -1295,6 +1327,20 @@ pub fn param_group_override(attributes: &[AttributeNode]) -> Option<u32> {
 /// Optional `@binding(N)` on a shader parameter. `None` when absent or not a valid `u32`.
 pub fn param_binding_override(attributes: &[AttributeNode]) -> Option<u32> {
     parse_named_u32(attributes, "binding")
+}
+
+/// The `i`th string argument of `@name(...)`, or `None` when absent.
+pub fn named_attr_string_arg<'a>(
+    attributes: &'a [AttributeNode],
+    name: &str,
+    i: usize,
+) -> Option<&'a str> {
+    attributes
+        .iter()
+        .find(|a| a.name.text == name)?
+        .args
+        .get(i)?
+        .as_string()
 }
 
 /// True when a field is the clip-space position builtin (`@builtin("position")` or name `position`).

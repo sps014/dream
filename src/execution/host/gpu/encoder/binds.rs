@@ -274,7 +274,7 @@ fn build(
                 slots.push((b.binding, Slot::Sampler(samplers.len())));
                 samplers.push(g);
             }
-            "texture" | "storage_texture" | "texture_cube" | "depth_texture" => {
+            "texture" | "storage_texture" => {
                 let id = *texture_ids.get(tex_idx).unwrap_or(&-1);
                 tex_idx += 1;
                 super::super::compute::ensure_texture(

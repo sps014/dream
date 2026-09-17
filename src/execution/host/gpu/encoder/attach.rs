@@ -203,33 +203,7 @@ fn texture_attachment(
             "texture {id} cannot be an MSAA attachment: offscreen multisampling needs a multisampled texture"
         ));
     }
-    let depth = st
-        .textures
-        .get(&id)
-        .map(|t| t.depth)
-        .ok_or_else(|| format!("unknown texture {id}"))?;
-    if depth {
-        let t = st.textures.get_mut(&id).unwrap();
-        if t.gpu.is_none() {
-            t.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("dream-depth"),
-                size: wgpu::Extent3d {
-                    width: t.width.max(1),
-                    height: t.height.max(1),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: t.mip_levels.max(1),
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: DEPTH_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            }));
-        }
-    } else {
-        super::super::compute::ensure_texture(st, device, queue, id, false)?;
-    }
+    super::super::compute::ensure_texture(st, device, queue, id, false)?;
     let t = st
         .textures
         .get(&id)
@@ -238,9 +212,10 @@ fn texture_attachment(
         .gpu
         .as_ref()
         .ok_or_else(|| format!("texture {id} not on GPU"))?;
-    // Depth textures ignore `TexEntry::format`: the GPU texture is always created as `DEPTH_FORMAT`.
-    let format = if depth { DEPTH_FORMAT } else { t.format };
-    Ok((super::super::textures::default_view(t, gpu), format))
+    Ok((
+        super::super::textures::default_view(t, gpu),
+        t.wgpu_format(),
+    ))
 }
 
 fn load_color(op: i32, clear: [f32; 4]) -> wgpu::LoadOp<wgpu::Color> {

@@ -13,6 +13,7 @@ mod ident;
 mod layout;
 mod output;
 mod stmt;
+mod texture_ty;
 mod ty;
 mod types;
 mod validate;

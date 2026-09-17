@@ -1,0 +1,82 @@
+module system.gpu;
+
+// Shape, format, and intended use of a texture, for `GpuTexture.create`.
+//
+// Build one with `GpuTextureDesc.d2(...)` (or `d2_array` / `d3` / `cube`) and then adjust the
+// optional fields:
+//
+// ```dream
+// let d = GpuTextureDesc.d2(1024, 1024, GpuTextureFormat.Rgba8Unorm);
+// d.mip_levels = 11;
+// let albedo = GpuTexture.create(d)?;
+// ```
+public struct GpuTextureDesc {
+    // Texel format. Depth formats produce a depth attachment, not a writable color texture.
+    public format: GpuTextureFormat;
+    // Physical grid shape. `D3` uses `depth_or_layers` as a depth, everything else as a layer count.
+    public dimension: GpuTextureDimension;
+    // How shader bindings view the layers. Six layers viewed as `Cube` are a cubemap; the same six
+    // viewed as `D2Array` are an array — the host cannot guess, so this is explicit.
+    public view_dimension: GpuTextureViewDimension;
+    public width: int;
+    public height: int;
+    // Array layers for `D1`/`D2`, or slices for `D3`. Cube views need a multiple of 6.
+    public depth_or_layers: int;
+    // Mip chain length. `1` means no mips; a larger value allocates the levels but leaves them
+    // undefined until `generate_mipmaps` or an explicit per-level write fills them.
+    public mip_levels: int;
+    // MSAA samples. Must be `1` unless the texture is used only as a render attachment, and
+    // multisampled textures cannot have mips, be arrays, or be written from the CPU.
+    public sample_count: int;
+    // Non-`None` marks the texture usable as a WGSL `texture_storage_*` binding with this access.
+    // Only formats where `GpuTextureFormat` permits storage can be used.
+    public storage_access: Option<GpuStorageAccess>;
+
+    // A plain 2D texture.
+    public static fun d2(width: int, height: int, format: GpuTextureFormat): GpuTextureDesc {
+        let d = GpuTextureDesc();
+        d.format = format;
+        d.dimension = GpuTextureDimension.D2;
+        d.view_dimension = GpuTextureViewDimension.D2;
+        d.width = width;
+        d.height = height;
+        d.depth_or_layers = 1;
+        d.mip_levels = 1;
+        d.sample_count = 1;
+        d.storage_access = Option.None;
+        return d;
+    }
+
+    // A 2D array of `layers` slices, bound as `texture_2d_array`.
+    public static fun d2_array(width: int, height: int, layers: int, format: GpuTextureFormat): GpuTextureDesc {
+        let d = GpuTextureDesc.d2(width, height, format);
+        d.view_dimension = GpuTextureViewDimension.D2Array;
+        d.depth_or_layers = layers;
+        return d;
+    }
+
+    // A volume texture, bound as `texture_3d`.
+    public static fun d3(width: int, height: int, depth: int, format: GpuTextureFormat): GpuTextureDesc {
+        let d = GpuTextureDesc.d2(width, height, format);
+        d.dimension = GpuTextureDimension.D3;
+        d.view_dimension = GpuTextureViewDimension.D3;
+        d.depth_or_layers = depth;
+        return d;
+    }
+
+    // A cubemap with six `size`×`size` faces, bound as `texture_cube`.
+    public static fun cube(size: int, format: GpuTextureFormat): GpuTextureDesc {
+        let d = GpuTextureDesc.d2(size, size, format);
+        d.view_dimension = GpuTextureViewDimension.Cube;
+        d.depth_or_layers = 6;
+        return d;
+    }
+
+    // A cubemap array of `cubes` cubemaps, bound as `texture_cube_array`.
+    public static fun cube_array(size: int, cubes: int, format: GpuTextureFormat): GpuTextureDesc {
+        let d = GpuTextureDesc.d2(size, size, format);
+        d.view_dimension = GpuTextureViewDimension.CubeArray;
+        d.depth_or_layers = cubes * 6;
+        return d;
+    }
+}

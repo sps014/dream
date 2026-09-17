@@ -1,11 +1,20 @@
 module system.gpu;
 
-// RGBA / depth / cube textures for compute paint and render passes.
+// A GPU texture of any format and shape the adapter supports.
+//
+// `create` takes a `GpuTextureDesc`; the named constructors below are the common shapes spelled
+// out. Allocation can fail — a block-compressed format on an adapter without that feature, or an
+// impossible shape like a multisampled mip chain — so `create` returns a `Result`.
 public class GpuTexture {
     _id: int;
     public width: int;
     public height: int;
-    public format: string;
+    // Slices for `D3`, array layers otherwise. `6` for a cubemap.
+    public depth_or_layers: int;
+    public mip_levels: int;
+    public sample_count: int;
+    public format: GpuTextureFormat;
+    public view_dimension: GpuTextureViewDimension;
 
     internal constructor() {}
 
@@ -13,44 +22,76 @@ public class GpuTexture {
         return this._id;
     }
 
-    // Allocates an empty RGBA8 texture of `width`×`height`.
-    public static fun rgba8(width: int, height: int): GpuTexture {
+    // Asks the host for a texture matching `desc`. Negative results are `GpuError` codes.
+    static fun allocate(desc: GpuTextureDesc): int {
+        let access: int = -1;
+        if desc.storage_access.is_some() {
+            let a: int = desc.storage_access.unwrap();
+            access = a;
+        }
+        let format: int = desc.format;
+        let dimension: int = desc.dimension;
+        let view: int = desc.view_dimension;
+        return Gpu.texture_create(
+            format,
+            dimension,
+            desc.width,
+            desc.height,
+            desc.depth_or_layers,
+            desc.mip_levels,
+            desc.sample_count,
+            access,
+            view
+        );
+    }
+
+    static fun wrap(id: int, desc: GpuTextureDesc): GpuTexture {
         let t = GpuTexture();
-        t._id = Gpu.texture_create_rgba8(width, height);
-        t.width = width;
-        t.height = height;
-        t.format = "rgba8unorm";
+        t._id = id;
+        t.width = desc.width;
+        t.height = desc.height;
+        t.depth_or_layers = desc.depth_or_layers;
+        t.mip_levels = desc.mip_levels;
+        t.sample_count = desc.sample_count;
+        t.format = desc.format;
+        t.view_dimension = desc.view_dimension;
         return t;
+    }
+
+    // Allocates a texture matching `desc`.
+    public static fun create(desc: GpuTextureDesc): Result<GpuTexture, GpuError> {
+        let id = GpuTexture.allocate(desc);
+        if id < 0 {
+            return Result.Err(GpuError.from_code(-id, "GpuTexture.create failed"));
+        }
+        return Result.Ok(GpuTexture.wrap(id, desc));
+    }
+
+    // The shapes below use always-available formats and shapes the host clamps rather than
+    // rejects, so they allocate directly instead of going through the fallible `create`.
+
+    // An empty RGBA8 texture of `width`×`height`.
+    public static fun rgba8(width: int, height: int): GpuTexture {
+        let d = GpuTextureDesc.d2(width, height, GpuTextureFormat.Rgba8Unorm);
+        return GpuTexture.wrap(GpuTexture.allocate(d), d);
     }
 
     // Depth attachment texture (`depth24plus`) for mesh pipelines.
     public static fun depth24(width: int, height: int): GpuTexture {
-        let t = GpuTexture();
-        t._id = Gpu.texture_create_depth(width, height);
-        t.width = width;
-        t.height = height;
-        t.format = "depth24plus";
-        return t;
+        let d = GpuTextureDesc.d2(width, height, GpuTextureFormat.Depth24Plus);
+        return GpuTexture.wrap(GpuTexture.allocate(d), d);
     }
 
     // HDR color texture (`rgba16float`) for post / bloom targets.
     public static fun rgba16float(width: int, height: int): GpuTexture {
-        let t = GpuTexture();
-        t._id = Gpu.texture_create_rgba16float(width, height);
-        t.width = width;
-        t.height = height;
-        t.format = "rgba16float";
-        return t;
+        let d = GpuTextureDesc.d2(width, height, GpuTextureFormat.Rgba16Float);
+        return GpuTexture.wrap(GpuTexture.allocate(d), d);
     }
 
     // Cube map with six `size`×`size` RGBA8 faces.
     public static fun cube_rgba8(size: int): GpuTexture {
-        let t = GpuTexture();
-        t._id = Gpu.texture_create_cube_rgba8(size);
-        t.width = size;
-        t.height = size;
-        t.format = "cube-rgba8unorm";
-        return t;
+        let d = GpuTextureDesc.cube(size, GpuTextureFormat.Rgba8Unorm);
+        return GpuTexture.wrap(GpuTexture.allocate(d), d);
     }
 
     // Uploads a full-texture RGBA8 pixel buffer.

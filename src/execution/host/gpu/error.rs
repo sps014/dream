@@ -1,6 +1,8 @@
 //! Shared GPU host error codes + classification (parity with JS `classifyErr`).
 
-use super::state::{lock_state, ERR_OTHER, ERR_TIMEOUT, ERR_UNAVAILABLE, ERR_VALIDATION};
+use super::state::{
+    lock_state, ERR_OTHER, ERR_TIMEOUT, ERR_UNAVAILABLE, ERR_UNSUPPORTED, ERR_VALIDATION,
+};
 use std::cell::RefCell;
 
 thread_local! {
@@ -10,7 +12,9 @@ thread_local! {
 /// Map an error message to a Dream `GpuError` host code.
 pub fn classify_err(msg: &str) -> i32 {
     let lower = msg.to_ascii_lowercase();
-    if lower.contains("not initialized")
+    if lower.contains("unsupported") {
+        ERR_UNSUPPORTED
+    } else if lower.contains("not initialized")
         || lower.contains("no adapter")
         || lower.contains("unavailable")
         || lower.contains("no window")

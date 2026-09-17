@@ -41,3 +41,120 @@ public enum GpuAddressMode {
     // Mirror on every other repeat.
     MirrorRepeat = 2,
 }
+
+// Texel format of a `GpuTexture`. Discriminants are the host wire values and are append-only —
+// the compiler's `dream-abi::gpu_format::ALL` table and both hosts index by them, and a test
+// asserts this enum and that table stay in step.
+public enum GpuTextureFormat {
+    R8Unorm = 0,
+    Rg8Unorm = 1,
+    Rgba8Unorm = 2,
+    Rgba8UnormSrgb = 3,
+    Bgra8Unorm = 4,
+    Bgra8UnormSrgb = 5,
+    R16Float = 6,
+    Rg16Float = 7,
+    Rgba16Float = 8,
+    // The `r32/rg32/rgba32` floats are unfilterable without the `float32-filterable` feature;
+    // sample them with a `GpuFilterMode.Nearest` sampler unless the adapter reports it.
+    R32Float = 9,
+    Rg32Float = 10,
+    Rgba32Float = 11,
+    Rg11b10Ufloat = 12,
+    Rgb10a2Unorm = 13,
+    Depth16Unorm = 14,
+    Depth24Plus = 15,
+    Depth24PlusStencil8 = 16,
+    Depth32Float = 17,
+    // Needs the `depth32float-stencil8` device feature.
+    Depth32FloatStencil8 = 18,
+    // Block-compressed formats each need their family's device feature: BC on desktop, ETC2 and
+    // ASTC on mobile. Creation fails with `GpuError.unsupported` when the adapter lacks it.
+    Bc1RgbaUnorm = 19,
+    Bc3RgbaUnorm = 20,
+    Bc5RgUnorm = 21,
+    Bc7RgbaUnorm = 22,
+    Etc2Rgb8Unorm = 23,
+    Etc2Rgba8Unorm = 24,
+    Astc4x4Unorm = 25,
+    Astc8x8Unorm = 26,
+}
+
+// Physical shape of a texture's texel grid.
+public enum GpuTextureDimension {
+    D1 = 0,
+    D2 = 1,
+    D3 = 2,
+}
+
+// How a binding interprets a texture's layers. Must match the WGSL `texture_*` type the shader
+// declares: `texture_2d_array` needs `D2Array`, `texture_cube` needs `Cube`, and so on.
+public enum GpuTextureViewDimension {
+    D1 = 0,
+    D2 = 1,
+    D2Array = 2,
+    Cube = 3,
+    CubeArray = 4,
+    D3 = 5,
+}
+
+// Access a shader has to a `texture_storage_*` binding.
+public enum GpuStorageAccess {
+    ReadOnly = 0,
+    WriteOnly = 1,
+    // Needs a storage format that supports read-write access (`r32float`, `rgba8unorm`, …).
+    ReadWrite = 2,
+}
+
+// Depth/stencil comparison, used by comparison samplers (shadow maps) and depth state.
+public enum GpuCompareFunction {
+    Never = 0,
+    Less = 1,
+    Equal = 2,
+    LessEqual = 3,
+    Greater = 4,
+    NotEqual = 5,
+    GreaterEqual = 6,
+    Always = 7,
+}
+
+// Whether a vertex buffer advances per vertex or per instance.
+public enum GpuVertexStepMode {
+    Vertex = 0,
+    Instance = 1,
+}
+
+// Element format of a single vertex attribute. Discriminants are host wire values and are
+// append-only, mirrored by `GpuVertexFormat` handling in both hosts.
+public enum GpuVertexFormat {
+    Uint8x2 = 0,
+    Uint8x4 = 1,
+    Sint8x2 = 2,
+    Sint8x4 = 3,
+    Unorm8x2 = 4,
+    Unorm8x4 = 5,
+    Snorm8x2 = 6,
+    Snorm8x4 = 7,
+    Uint16x2 = 8,
+    Uint16x4 = 9,
+    Sint16x2 = 10,
+    Sint16x4 = 11,
+    Unorm16x2 = 12,
+    Unorm16x4 = 13,
+    Snorm16x2 = 14,
+    Snorm16x4 = 15,
+    Float16x2 = 16,
+    Float16x4 = 17,
+    Float32 = 18,
+    Float32x2 = 19,
+    Float32x3 = 20,
+    Float32x4 = 21,
+    Uint32 = 22,
+    Uint32x2 = 23,
+    Uint32x3 = 24,
+    Uint32x4 = 25,
+    Sint32 = 26,
+    Sint32x2 = 27,
+    Sint32x3 = 28,
+    Sint32x4 = 29,
+}

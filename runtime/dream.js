@@ -1943,10 +1943,103 @@ function makeGpuHost(getInstance) {
   const ERR_TIMEOUT = 2;
   const ERR_VALIDATION = 3;
   const ERR_OTHER = 4;
+  const ERR_UNSUPPORTED = 5;
+
+  // Mirrors of the enum tables owned by `crates/dream-abi/src/gpu_format.rs`, indexed by the
+  // `GpuTextureFormat` / `GpuTextureDimension` / … discriminants Dream passes as ints. Keep these
+  // in step with that file: the codes are the wire format, so reordering silently reinterprets
+  // every guest call.
+  const TEXTURE_FORMATS = [
+    { name: "r8unorm", bytesPerTexel: 1, storage: false },
+    { name: "rg8unorm", bytesPerTexel: 2, storage: false },
+    { name: "rgba8unorm", bytesPerTexel: 4, storage: true },
+    { name: "rgba8unorm-srgb", bytesPerTexel: 4, storage: false },
+    { name: "bgra8unorm", bytesPerTexel: 4, storage: false },
+    { name: "bgra8unorm-srgb", bytesPerTexel: 4, storage: false },
+    { name: "r16float", bytesPerTexel: 2, storage: true },
+    { name: "rg16float", bytesPerTexel: 4, storage: true },
+    { name: "rgba16float", bytesPerTexel: 8, storage: true },
+    { name: "r32float", bytesPerTexel: 4, storage: true, feature: "float32-filterable" },
+    { name: "rg32float", bytesPerTexel: 8, storage: true, feature: "float32-filterable" },
+    { name: "rgba32float", bytesPerTexel: 16, storage: true, feature: "float32-filterable" },
+    { name: "rg11b10ufloat", bytesPerTexel: 4, storage: false },
+    { name: "rgb10a2unorm", bytesPerTexel: 4, storage: false },
+    { name: "depth16unorm", bytesPerTexel: 0, storage: false, depth: true },
+    { name: "depth24plus", bytesPerTexel: 0, storage: false, depth: true },
+    { name: "depth24plus-stencil8", bytesPerTexel: 0, storage: false, depth: true },
+    { name: "depth32float", bytesPerTexel: 0, storage: false, depth: true },
+    {
+      name: "depth32float-stencil8",
+      bytesPerTexel: 0,
+      storage: false,
+      depth: true,
+      feature: "depth32float-stencil8",
+    },
+    { name: "bc1-rgba-unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-bc" },
+    { name: "bc3-rgba-unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-bc" },
+    { name: "bc5-rg-unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-bc" },
+    { name: "bc7-rgba-unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-bc" },
+    { name: "etc2-rgb8unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-etc2" },
+    { name: "etc2-rgba8unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-etc2" },
+    { name: "astc-4x4-unorm", bytesPerTexel: 0, storage: false, block: 4, feature: "texture-compression-astc" },
+    { name: "astc-8x8-unorm", bytesPerTexel: 0, storage: false, block: 8, feature: "texture-compression-astc" },
+  ];
+  const TEXTURE_DIMENSIONS = ["1d", "2d", "3d"];
+  const VIEW_DIMENSIONS = ["1d", "2d", "2d-array", "cube", "cube-array", "3d"];
+  const FILTER_MODES = ["nearest", "linear"];
+  const ADDRESS_MODES = ["clamp-to-edge", "repeat", "mirror-repeat"];
+  const COMPARE_FUNCTIONS = [
+    "never", "less", "equal", "less-equal", "greater", "not-equal", "greater-equal", "always",
+  ];
+  const VERTEX_FORMATS = [
+    "uint8x2", "uint8x4", "sint8x2", "sint8x4",
+    "unorm8x2", "unorm8x4", "snorm8x2", "snorm8x4",
+    "uint16x2", "uint16x4", "sint16x2", "sint16x4",
+    "unorm16x2", "unorm16x4", "snorm16x2", "snorm16x4",
+    "float16x2", "float16x4",
+    "float32", "float32x2", "float32x3", "float32x4",
+    "uint32", "uint32x2", "uint32x3", "uint32x4",
+    "sint32", "sint32x2", "sint32x3", "sint32x4",
+  ];
+
+  /// WebGPU shape rules, checked up front so a bad descriptor reports a Dream error instead of a
+  /// device-level validation message. Returns an error string, or `null` when the shape is legal.
+  function validateTextureShape(spec, dim, view, width, height, layers, mips, samples) {
+    const cube = view === "cube" || view === "cube-array";
+    if (cube) {
+      if (layers % 6 !== 0) {
+        return `validation: a cube view needs a multiple of 6 layers, got ${layers}`;
+      }
+      if (width !== height) {
+        return `validation: cube faces must be square, got ${width}x${height}`;
+      }
+    }
+    if (view === "3d" && dim !== "3d") return "validation: a 3d view needs a 3d texture";
+    if (dim === "3d" && cube) return "validation: a 3d texture cannot have a cube view";
+    if (dim === "1d" && height > 1) {
+      return `validation: a 1d texture must be 1 texel tall, got height ${height}`;
+    }
+    if (samples > 1) {
+      if (mips > 1) return "validation: a multisampled texture cannot have mip levels";
+      if (layers > 1) return "validation: a multisampled texture cannot be layered";
+      if (dim !== "2d") return "validation: only 2d textures can be multisampled";
+      if (![2, 4, 8, 16].includes(samples)) {
+        return `validation: unsupported sample count ${samples}`;
+      }
+      if (spec.block) return "validation: block-compressed textures cannot be multisampled";
+    }
+    const extent = Math.max(width, height, dim === "3d" ? layers : 1);
+    const maxMips = Math.floor(Math.log2(extent)) + 1;
+    if (mips > maxMips) {
+      return `validation: ${width}x${height} allows at most ${maxMips} mip levels, got ${mips}`;
+    }
+    return null;
+  }
 
   function classifyErr(err) {
     const msg = String(err && err.message ? err.message : err);
     lastError = msg;
+    if (/unsupported/i.test(msg)) return ERR_UNSUPPORTED;
     if (/not available|no WebGPU|no WebGPU adapter/i.test(msg)) return ERR_UNAVAILABLE;
     if (/timed out|timeout/i.test(msg)) return ERR_TIMEOUT;
     if (/WGSL|validation|compile/i.test(msg)) return ERR_VALIDATION;
@@ -2495,69 +2588,73 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return b.gpuBuffer;
   }
 
-  async function ensureTexture(dev, t, storage) {
-    // Always request STORAGE_BINDING + TEXTURE_BINDING together. Compute paint writes
-    // via storage; blit samples the same texture. Recreating when the flags differed
-    // wiped GPU contents and produced a black canvas with no error.
-    if (storage) t.storage = true;
-    const format = t.format || "rgba8unorm";
-    const usage =
-      GPUTextureUsage.TEXTURE_BINDING |
-      (format === "rgba8unorm" ? GPUTextureUsage.STORAGE_BINDING : 0) |
-      GPUTextureUsage.COPY_DST |
-      GPUTextureUsage.COPY_SRC |
-      (t.depth ? GPUTextureUsage.RENDER_ATTACHMENT : 0);
-    if (t.texture) return t.texture;
-    const desc = {
-      size: [t.width, t.height, t.depth_or_layers || 1],
-      format,
-      usage,
-      mipLevelCount: Math.max(1, t.mip_levels | 0 || 1),
-    };
-    if (t.dimension === "cube") {
-      desc.size = [t.width, t.height, 6];
+  /// Usage flags for a texture. Dream does not ask callers to declare usage, so every texture gets
+  /// everything its format and shape can legally support — WebGPU rejects flags a format cannot
+  /// honor, so the set has to be narrowed rather than always maximal.
+  function textureUsage(t) {
+    let usage = GPUTextureUsage.TEXTURE_BINDING;
+    // Multisampled textures cannot be the source or destination of a copy.
+    if ((t.sample_count | 0) <= 1) {
+      usage |= GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
     }
-    t.texture = dev.createTexture(desc);
-    if (t.cpu && !t.depth) {
-      const bpp = format === "rgba16float" ? 8 : 4;
+    // Block-compressed and 1d/3d textures cannot be rendered into.
+    if (!(t.spec && t.spec.block) && (t.dimension || "2d") === "2d") {
+      usage |= GPUTextureUsage.RENDER_ATTACHMENT;
+    }
+    if (t.storage) usage |= GPUTextureUsage.STORAGE_BINDING;
+    return usage;
+  }
+
+  async function ensureTexture(dev, t, storage) {
+    // A texture created without a storage access but bound to a `texture_storage_*` slot needs
+    // STORAGE_BINDING, which cannot be added after the fact — drop and recreate.
+    if (storage && !t.storage) {
+      t.storage = true;
+      if (t.texture) {
+        try { t.texture.destroy(); } catch (_) {}
+        t.texture = null;
+      }
+    }
+    if (t.texture) return t.texture;
+    t.texture = dev.createTexture({
+      size: [t.width, t.height, t.depth_or_layers || 1],
+      format: t.format,
+      usage: textureUsage(t),
+      dimension: t.dimension || "2d",
+      mipLevelCount: Math.max(1, t.mip_levels | 0 || 1),
+      sampleCount: Math.max(1, t.sample_count | 0 || 1),
+    });
+    if (t.cpu) {
+      // `cpu` only exists for linearly copyable color formats, so this upload is always valid.
+      // Every layer goes up: a cubemap's five other faces are in the mirror too.
+      const bpp = t.spec ? t.spec.bytesPerTexel : 4;
       dev.queue.writeTexture(
         { texture: t.texture },
         t.cpu,
-        { bytesPerRow: t.width * bpp },
-        [t.width, t.height],
+        { bytesPerRow: t.width * bpp, rowsPerImage: t.height },
+        [t.width, t.height, t.depth_or_layers || 1],
       );
     }
     return t.texture;
   }
 
-  async function ensureDepthTexture(dev, t) {
-    t.depth = true;
-    t.format = t.format || "depth24plus";
-    const usage =
-      GPUTextureUsage.TEXTURE_BINDING |
-      GPUTextureUsage.RENDER_ATTACHMENT |
-      GPUTextureUsage.COPY_SRC;
-    if (t.texture) return t.texture;
-    t.texture = dev.createTexture({
-      size: [t.width, t.height],
-      format: t.format,
-      usage,
-    });
-    return t.texture;
-  }
-
   async function ensureSampler(dev, s) {
     if (s.sampler) return s.sampler;
-    const filter = s.filter === 1 ? "linear" : s.filter === 2 ? "linear" : "nearest";
-    const address = ["clamp-to-edge", "repeat", "mirror-repeat"][s.address | 0] || "clamp-to-edge";
+    // WebGPU requires all three filters to be linear before anisotropy takes effect, and rejects
+    // an anisotropy above 1 otherwise.
+    const trilinear =
+      s.magFilter === "linear" && s.minFilter === "linear" && s.mipmapFilter === "linear";
     s.sampler = dev.createSampler({
-      magFilter: filter === "linear" ? "linear" : "nearest",
-      minFilter: filter === "linear" ? "linear" : "nearest",
-      mipmapFilter: s.mip_filter === 1 ? "linear" : "nearest",
-      addressModeU: address,
-      addressModeV: address,
-      addressModeW: address,
-      compare: s.compare || undefined,
+      magFilter: s.magFilter,
+      minFilter: s.minFilter,
+      mipmapFilter: s.mipmapFilter,
+      addressModeU: s.addressModeU,
+      addressModeV: s.addressModeV,
+      addressModeW: s.addressModeW,
+      lodMinClamp: s.lodMinClamp,
+      lodMaxClamp: s.lodMaxClamp,
+      compare: s.compare,
+      maxAnisotropy: trilinear ? s.maxAnisotropy : 1,
     });
     return s.sampler;
   }
@@ -2593,22 +2690,31 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       };
     }
     if (b.kind === "sampler") {
-      return { ...base, sampler: { type: "filtering" } };
+      return {
+        ...base,
+        sampler: { type: b.sample_type === "comparison" ? "comparison" : "filtering" },
+      };
     }
     if (b.kind === "storage_texture") {
       return {
         ...base,
-        storageTexture: { access: "write-only", format: "rgba8unorm", viewDimension: "2d" },
+        storageTexture: {
+          access: b.storage_access || "write-only",
+          format: b.storage_format || "rgba8unorm",
+          viewDimension: b.view_dimension || "2d",
+        },
       };
     }
-    if (b.kind === "texture_cube") {
-      return { ...base, texture: { sampleType: "float", viewDimension: "cube" } };
-    }
-    if (b.kind === "depth_texture") {
-      return { ...base, texture: { sampleType: "depth" } };
-    }
-    // sampled 2D texture
-    return { ...base, texture: { sampleType: "float", viewDimension: "2d" } };
+    // Sampled texture. The emitter records the shape the shader declared, so nothing here has to
+    // guess at a 2d/float default.
+    return {
+      ...base,
+      texture: {
+        sampleType: b.sample_type || "float",
+        viewDimension: b.view_dimension || "2d",
+        multisampled: !!b.multisampled,
+      },
+    };
   }
 
   /// Dense per-group layouts for a pipeline layout; unused group indices get an empty layout so
@@ -2742,7 +2848,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           const t = textures.get(id);
           if (!t) throw new Error(`missing texture id ${id} for binding ${bind.binding}`);
           const tex = await ensureTexture(dev, t, bind.kind === "storage_texture");
-          resources.push({ binding: bind.binding, resource: textureViewFor(t, tex, bind.kind) });
+          resources.push({ binding: bind.binding, resource: textureViewFor(t, tex) });
         }
       }
       out.push({ group, bindGroup: dev.createBindGroup({ layout: pipe.layouts[group], entries: resources }) });
@@ -2750,12 +2856,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return out;
   }
 
-  /// A 6-layer 2D texture defaults to a `2d-array` view, which cannot fill a `texture_cube` slot.
-  function textureViewFor(t, tex, kind) {
-    if (kind === "texture_cube" || t.dimension === "cube") {
-      return tex.createView({ dimension: "cube" });
-    }
-    return tex.createView();
+  /// Views a texture as its declared view dimension. A 6-layer 2D texture defaults to `2d-array`,
+  /// which cannot fill a `texture_cube` slot.
+  function textureViewFor(t, tex) {
+    return tex.createView({ dimension: t.viewDimension || "2d" });
   }
 
   function setBindGroups(pass, groups) {
@@ -2887,18 +2991,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           const s = samplers.get(id);
           if (!s) throw new Error(`missing sampler id ${id} for @group(${group}) @binding(${bind.binding})`);
           entries.push({ binding: bind.binding, resource: await ensureSampler(dev, s) });
-        } else if (bind.kind === "depth_texture") {
-          const id = nextTex();
-          const t = textures.get(id);
-          if (!t) throw new Error(`missing texture id ${id} for @group(${group}) @binding(${bind.binding})`);
-          const tex = await ensureDepthTexture(dev, t);
-          entries.push({ binding: bind.binding, resource: tex.createView() });
         } else {
           const id = nextTex();
           const t = textures.get(id);
           if (!t) throw new Error(`missing texture id ${id} for @group(${group}) @binding(${bind.binding})`);
           const tex = await ensureTexture(dev, t, bind.kind === "storage_texture");
-          entries.push({ binding: bind.binding, resource: textureViewFor(t, tex, bind.kind) });
+          entries.push({ binding: bind.binding, resource: textureViewFor(t, tex) });
         }
       }
       const bindGroup = dev.createBindGroup({ layout: rp.layouts[group], entries });
@@ -3154,7 +3252,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     } else if (desc.depthId >= 0) {
       const dt = textures.get(desc.depthId);
       if (!dt) throw new Error(`unknown depth GpuTexture ${desc.depthId}`);
-      depthView = (await ensureDepthTexture(dev, dt)).createView();
+      if (!dt.depth) {
+        throw new Error(
+          `validation: GpuTexture ${desc.depthId} is ${dt.format}, not a depth format`,
+        );
+      }
+      depthView = (await ensureTexture(dev, dt, false)).createView();
     } else if (desc.depthId !== -1) {
       throw new Error(`unknown depth attachment target ${desc.depthId}`);
     }
@@ -3519,63 +3622,70 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       }
     },
 
-    gpuSamplerCreate: (filter) => {
-      const id = nextId++;
-      samplers.set(id, { sampler: null, filter: filter | 0, address: 0, mip_filter: 0 });
-      return id;
-    },
-
-    gpuSamplerCreateEx: (filter, address, mipFilter) => {
+    gpuSamplerCreate: (
+      magFilter, minFilter, mipFilter,
+      addressU, addressV, addressW,
+      lodMin, lodMax, compare, maxAnisotropy,
+    ) => {
       const id = nextId++;
       samplers.set(id, {
         sampler: null,
-        filter: filter | 0,
-        address: address | 0,
-        mip_filter: mipFilter | 0,
+        magFilter: FILTER_MODES[magFilter | 0] || "nearest",
+        minFilter: FILTER_MODES[minFilter | 0] || "nearest",
+        mipmapFilter: FILTER_MODES[mipFilter | 0] || "nearest",
+        addressModeU: ADDRESS_MODES[addressU | 0] || "clamp-to-edge",
+        addressModeV: ADDRESS_MODES[addressV | 0] || "clamp-to-edge",
+        addressModeW: ADDRESS_MODES[addressW | 0] || "clamp-to-edge",
+        lodMinClamp: lodMin,
+        lodMaxClamp: Math.max(lodMin, lodMax),
+        compare: compare >= 0 ? COMPARE_FUNCTIONS[compare | 0] : undefined,
+        maxAnisotropy: Math.min(16, Math.max(1, maxAnisotropy | 0)),
       });
       return id;
     },
 
-    gpuTextureCreateRgba8: (width, height) => {
-      const id = nextId++;
+    gpuTextureCreate: (
+      format, dimension, width, height,
+      depthOrLayers, mipLevels, sampleCount, storageAccess, viewDimension,
+    ) => {
+      const spec = TEXTURE_FORMATS[format | 0];
+      if (!spec) return -classifyErr(new Error(`unknown texture format ${format}`));
+      const dim = TEXTURE_DIMENSIONS[dimension | 0];
+      const view = VIEW_DIMENSIONS[viewDimension | 0];
+      if (!dim || !view) {
+        return -classifyErr(new Error(`unknown texture dimension ${dimension}/${viewDimension}`));
+      }
+      if (storageAccess >= 0 && !spec.storage) {
+        return -classifyErr(
+          new Error(`validation: texture format ${spec.name} cannot be a storage texture`),
+        );
+      }
       const w = Math.max(1, width | 0);
       const h = Math.max(1, height | 0);
-      textures.set(id, {
-        texture: null, width: w, height: h, cpu: new Uint8Array(w * h * 4),
-        storage: false, format: "rgba8unorm", mip_levels: 1,
-      });
-      return id;
-    },
-
-    gpuTextureCreateDepth: (width, height) => {
+      const layers = Math.max(1, depthOrLayers | 0);
+      const mips = Math.max(1, mipLevels | 0);
+      const samples = Math.max(1, sampleCount | 0);
+      const shapeErr = validateTextureShape(spec, dim, view, w, h, layers, mips, samples);
+      if (shapeErr) return -classifyErr(new Error(shapeErr));
       const id = nextId++;
-      const w = Math.max(1, width | 0);
-      const h = Math.max(1, height | 0);
       textures.set(id, {
-        texture: null, width: w, height: h, cpu: null,
-        storage: false, format: "depth24plus", depth: true, mip_levels: 1,
-      });
-      return id;
-    },
-
-    gpuTextureCreateRgba16Float: (width, height) => {
-      const id = nextId++;
-      const w = Math.max(1, width | 0);
-      const h = Math.max(1, height | 0);
-      textures.set(id, {
-        texture: null, width: w, height: h, cpu: new Uint8Array(w * h * 8),
-        storage: false, format: "rgba16float", mip_levels: 1,
-      });
-      return id;
-    },
-
-    gpuTextureCreateCubeRgba8: (size) => {
-      const id = nextId++;
-      const s = Math.max(1, size | 0);
-      textures.set(id, {
-        texture: null, width: s, height: s, cpu: new Uint8Array(s * s * 4 * 6),
-        storage: false, format: "rgba8unorm", dimension: "cube",
-        depth_or_layers: 6, mip_levels: 1,
+        texture: null,
+        width: w,
+        height: h,
+        // Only linearly copyable color formats get a CPU mirror; compressed and depth textures
+        // are GPU-only, so writes and reads through it are rejected instead.
+        cpu: spec.bytesPerTexel && !spec.depth
+          ? new Uint8Array(w * h * layers * spec.bytesPerTexel)
+          : null,
+        storage: storageAccess >= 0,
+        format: spec.name,
+        spec,
+        depth: spec.depth,
+        dimension: dim,
+        viewDimension: view,
+        depth_or_layers: layers,
+        mip_levels: mips,
+        sample_count: samples,
       });
       return id;
     },

@@ -43,6 +43,13 @@ public class GpuError : Error {
         return GpuError("EIO", message);
     }
 
+    // The request was well-formed but the adapter lacks the feature or limit it needs — a
+    // block-compressed texture format on a device without that family, for instance. Recover by
+    // picking a different resource, not by correcting the call.
+    public static fun unsupported(message: string): GpuError {
+        return GpuError("UNSUPPORTED", message);
+    }
+
     // Cooperative cancellation (`CancellationToken`).
     public static fun cancelled(): GpuError {
         return GpuError("ECANCELLED", "operation cancelled");
@@ -59,6 +66,7 @@ public class GpuError : Error {
         if code == 1 { return GpuError.unavailable(msg); }
         if code == 2 { return GpuError.timeout(msg); }
         if code == 3 { return GpuError.validation(msg); }
+        if code == 5 { return GpuError.unsupported(msg); }
         return GpuError.other(msg);
     }
 

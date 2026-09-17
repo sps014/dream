@@ -14,6 +14,43 @@ pub struct GpuBinding {
     pub read_write: bool,
     /// When true, storage element type is `atomic<…>` (int/uint buffers used with atomics).
     pub atomic: bool,
+    /// Texture bindings: WebGPU `viewDimension` (`"2d"`, `"cube"`, …). Empty for non-textures.
+    pub view_dimension: &'static str,
+    /// Sampled textures: WebGPU `sampleType` (`"float"`, `"unfilterable-float"`, `"depth"`).
+    /// Samplers: the binding type (`"filtering"`, `"comparison"`). Empty otherwise.
+    pub sample_type: &'static str,
+    pub multisampled: bool,
+    /// Storage textures: texel format and access, both empty otherwise.
+    pub storage_format: &'static str,
+    pub storage_access: &'static str,
+}
+
+impl GpuBinding {
+    /// A non-texture, non-sampler binding: buffers and the uniform block.
+    pub fn buffer(
+        name: String,
+        group: u32,
+        binding: u32,
+        kind: &'static str,
+        wgsl_ty: String,
+        read_write: bool,
+        atomic: bool,
+    ) -> Self {
+        Self {
+            name,
+            group,
+            binding,
+            kind,
+            wgsl_ty,
+            read_write,
+            atomic,
+            view_dimension: "",
+            sample_type: "",
+            multisampled: false,
+            storage_format: "",
+            storage_access: "",
+        }
+    }
 }
 
 /// One vertex-buffer attribute slot.

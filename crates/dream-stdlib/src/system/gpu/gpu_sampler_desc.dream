@@ -1,0 +1,88 @@
+module system.gpu;
+
+// Full sampling state, for `GpuSampler.create`.
+//
+// A comparison sampler (`compare` set) binds to a WGSL `sampler_comparison` and is read with
+// `Gpu.texture_sample_compare` — the shadow-mapping path. An ordinary sampler leaves `compare`
+// as `Option.None`; the two are not interchangeable.
+public struct GpuSamplerDesc {
+    // Filtering when the texture is magnified (one texel covers many fragments).
+    public mag_filter: GpuFilterMode;
+    // Filtering when it is minified.
+    public min_filter: GpuFilterMode;
+    // Filtering between mip levels.
+    public mip_filter: GpuFilterMode;
+    public address_u: GpuAddressMode;
+    public address_v: GpuAddressMode;
+    public address_w: GpuAddressMode;
+    // Mip level clamp. Use these to pin sampling to a level range, e.g. a prefiltered roughness
+    // chain where the shader picks the level itself.
+    public lod_min: float;
+    public lod_max: float;
+    // Set for a comparison (shadow) sampler: the test applied between the reference value and the
+    // fetched depth.
+    public compare: Option<GpuCompareFunction>;
+    // Maximum anisotropic samples. `1` disables it; values above `1` require linear mag, min, and
+    // mip filtering.
+    public max_anisotropy: int;
+
+    // Trilinear, clamp-to-edge, no anisotropy — a sensible default for sampled color textures.
+    public static fun linear(): GpuSamplerDesc {
+        let d = GpuSamplerDesc();
+        d.mag_filter = GpuFilterMode.Linear;
+        d.min_filter = GpuFilterMode.Linear;
+        d.mip_filter = GpuFilterMode.Linear;
+        d.address_u = GpuAddressMode.ClampToEdge;
+        d.address_v = GpuAddressMode.ClampToEdge;
+        d.address_w = GpuAddressMode.ClampToEdge;
+        d.lod_min = 0.0;
+        d.lod_max = 32.0;
+        d.compare = Option.None;
+        d.max_anisotropy = 1;
+        return d;
+    }
+
+    // Point sampling, clamp-to-edge — for data textures and pixel art.
+    public static fun nearest(): GpuSamplerDesc {
+        let d = GpuSamplerDesc.linear();
+        d.mag_filter = GpuFilterMode.Nearest;
+        d.min_filter = GpuFilterMode.Nearest;
+        d.mip_filter = GpuFilterMode.Nearest;
+        return d;
+    }
+
+    // A comparison sampler for shadow maps: linear filtering gives hardware PCF across the
+    // comparison results, and `LessEqual` passes fragments at or nearer than the stored depth.
+    public static fun comparison(compare: GpuCompareFunction): GpuSamplerDesc {
+        let d = GpuSamplerDesc.linear();
+        d.compare = Option.Some(compare);
+        return d;
+    }
+
+    // Sets all three address modes at once.
+    public fun with_address(address: GpuAddressMode): GpuSamplerDesc {
+        let d = this;
+        d.address_u = address;
+        d.address_v = address;
+        d.address_w = address;
+        return d;
+    }
+
+    // Requests `samples`-tap anisotropic filtering, forcing the linear filters it requires.
+    public fun with_anisotropy(samples: int): GpuSamplerDesc {
+        let d = this;
+        d.mag_filter = GpuFilterMode.Linear;
+        d.min_filter = GpuFilterMode.Linear;
+        d.mip_filter = GpuFilterMode.Linear;
+        d.max_anisotropy = samples;
+        return d;
+    }
+
+    // Clamps sampling to the mip range `[min, max]`.
+    public fun with_lod(min: float, max: float): GpuSamplerDesc {
+        let d = this;
+        d.lod_min = min;
+        d.lod_max = max;
+        return d;
+    }
+}

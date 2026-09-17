@@ -287,9 +287,7 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
                     "uniform" => return b.wgsl_ty.clone(),
                     // Bare storage names are arrays — avoid treating them as scalars.
                     "storage" => return format!("array<{}>", b.wgsl_ty),
-                    "texture" | "storage_texture" | "sampler" | "texture_cube" => {
-                        return b.wgsl_ty.clone()
-                    }
+                    "texture" | "storage_texture" | "sampler" => return b.wgsl_ty.clone(),
                     _ => {}
                 }
             }

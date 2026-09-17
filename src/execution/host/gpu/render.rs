@@ -8,16 +8,12 @@ use super::error::classify_err;
 use super::state::{lock_state, BindGroupEntry, RenderPipe, RenderPipeBuild};
 use indexmap::IndexMap;
 
+/// Unknown spellings cannot reach here from a compiled program — the emitter only writes names
+/// from the shared registry — so an unrecognized one falls back rather than failing the pipeline.
 fn vertex_format(s: &str) -> wgpu::VertexFormat {
-    match s {
-        "float32" => wgpu::VertexFormat::Float32,
-        "float32x2" => wgpu::VertexFormat::Float32x2,
-        "float32x3" => wgpu::VertexFormat::Float32x3,
-        "float32x4" => wgpu::VertexFormat::Float32x4,
-        "sint32" => wgpu::VertexFormat::Sint32,
-        "uint32" => wgpu::VertexFormat::Uint32,
-        _ => wgpu::VertexFormat::Float32x4,
-    }
+    super::formats::vertex_format_named(s)
+        .map(|(f, _)| f)
+        .unwrap_or(wgpu::VertexFormat::Float32x4)
 }
 
 fn topology(t: i32) -> wgpu::PrimitiveTopology {

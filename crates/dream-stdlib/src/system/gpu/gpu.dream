@@ -105,23 +105,36 @@ public static class Gpu {
         wz: int
     ): int;
 
+    // Full sampler state. `compare` is a `GpuCompareFunction` for a comparison (shadow) sampler or
+    // `-1` for an ordinary one; `anisotropy` is the max sample count (1 disables it).
     @runtime("gpuSamplerCreate")
-    static extern fun sampler_create(filter: int): int;
+    static extern fun sampler_create(
+        mag_filter: int,
+        min_filter: int,
+        mip_filter: int,
+        address_u: int,
+        address_v: int,
+        address_w: int,
+        lod_min: float,
+        lod_max: float,
+        compare: int,
+        anisotropy: int
+    ): int;
 
-    @runtime("gpuSamplerCreateEx")
-    static extern fun sampler_create_ex(filter: int, address: int, mip_filter: int): int;
-
-    @runtime("gpuTextureCreateRgba8")
-    static extern fun texture_create_rgba8(width: int, height: int): int;
-
-    @runtime("gpuTextureCreateDepth")
-    static extern fun texture_create_depth(width: int, height: int): int;
-
-    @runtime("gpuTextureCreateRgba16Float")
-    static extern fun texture_create_rgba16float(width: int, height: int): int;
-
-    @runtime("gpuTextureCreateCubeRgba8")
-    static extern fun texture_create_cube_rgba8(size: int): int;
+    // Allocates a texture from a full descriptor. Returns the id, or a negated `GpuError` code
+    // when the format needs a device feature the adapter lacks or the shape is invalid.
+    @runtime("gpuTextureCreate")
+    static extern fun texture_create(
+        format: int,
+        dimension: int,
+        width: int,
+        height: int,
+        depth_or_layers: int,
+        mip_levels: int,
+        sample_count: int,
+        storage_access: int,
+        view_dimension: int
+    ): int;
 
     @runtime("gpuTextureWriteRgba")
     static extern async fun texture_write_rgba(

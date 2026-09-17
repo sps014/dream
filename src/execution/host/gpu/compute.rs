@@ -5,7 +5,9 @@
 
 use super::buffers::ensure_gpu_buffer;
 use super::error::{classify_err, drain_uncaptured};
+use super::formats;
 use super::state::{lock_state, ComputePipe, PassOp};
+use super::textures::texture_usage;
 use indexmap::IndexMap;
 
 /// `(binding, index into the matching owned resource vec, kind tag)`, where the kind tag is
@@ -272,7 +274,7 @@ fn encode_op(
                     entries.push((bind.binding, samplers.len(), 2));
                     samplers.push(g);
                 }
-                "texture" | "storage_texture" | "texture_cube" | "depth_texture" => {
+                "texture" | "storage_texture" => {
                     let id = *texture_ids.get(tex_idx).unwrap_or(&-1);
                     tex_idx += 1;
                     ensure_texture(st, device, queue, id, bind.kind == "storage_texture")?;
@@ -490,28 +492,27 @@ pub(crate) fn ensure_sampler(
     if s.gpu.is_some() {
         return Ok(());
     }
-    let filter = if s.filter == 1 {
-        wgpu::FilterMode::Linear
+    let compare = s.compare.map(formats::compare_function).transpose()?;
+    // WebGPU requires all three filters to be linear before anisotropy takes effect, and rejects
+    // an anisotropy above 1 otherwise.
+    let anisotropy = if s.mag_filter == 1 && s.min_filter == 1 && s.mip_filter == 1 {
+        s.max_anisotropy.max(1)
     } else {
-        wgpu::FilterMode::Nearest
-    };
-    let address = match s.address {
-        1 => wgpu::AddressMode::Repeat,
-        2 => wgpu::AddressMode::MirrorRepeat,
-        _ => wgpu::AddressMode::ClampToEdge,
+        1
     };
     s.gpu = Some(device.create_sampler(&wgpu::SamplerDescriptor {
-        mag_filter: filter,
-        min_filter: filter,
-        mipmap_filter: if s.mip_filter == 1 {
-            wgpu::FilterMode::Linear
-        } else {
-            wgpu::FilterMode::Nearest
-        },
-        address_mode_u: address,
-        address_mode_v: address,
-        address_mode_w: address,
-        ..Default::default()
+        label: Some("dream-sampler"),
+        mag_filter: formats::filter_mode(s.mag_filter),
+        min_filter: formats::filter_mode(s.min_filter),
+        mipmap_filter: formats::filter_mode(s.mip_filter),
+        address_mode_u: formats::address_mode(s.address[0]),
+        address_mode_v: formats::address_mode(s.address[1]),
+        address_mode_w: formats::address_mode(s.address[2]),
+        lod_min_clamp: s.lod.0,
+        lod_max_clamp: s.lod.1,
+        compare,
+        anisotropy_clamp: anisotropy,
+        border_color: None,
     }));
     Ok(())
 }
@@ -529,8 +530,15 @@ pub(crate) fn ensure_texture(
             .textures
             .get_mut(&id)
             .ok_or_else(|| format!("missing texture {id}"))?;
-        if storage {
+        // A texture created without `storage_access` but bound to a `texture_storage_*` slot needs
+        // `STORAGE_BINDING`, which cannot be added after the fact — drop and recreate.
+        if storage && !t.storage {
             t.storage = true;
+            if let Some(gpu) = t.gpu.take() {
+                gpu.destroy();
+            }
+            t.view = None;
+            t.dirty_cpu = true;
         }
         if t.gpu.is_some() && !t.dirty_cpu {
             return Ok(());
@@ -544,13 +552,6 @@ pub(crate) fn ensure_texture(
             t.view = None;
         }
         if t.gpu.is_none() {
-            let mut usage = wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::RENDER_ATTACHMENT;
-            if t.storage {
-                usage |= wgpu::TextureUsages::STORAGE_BINDING;
-            }
             t.gpu = Some(device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("dream-tex"),
                 size: wgpu::Extent3d {
@@ -559,21 +560,19 @@ pub(crate) fn ensure_texture(
                     depth_or_array_layers: t.layers.max(1),
                 },
                 mip_level_count: t.mip_levels.max(1),
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: t.format,
-                usage,
+                sample_count: t.sample_count.max(1),
+                dimension: t.dimension,
+                format: t.wgpu_format(),
+                usage: texture_usage(t),
                 view_formats: &[],
             }));
             t.view = None;
             recreated = true;
         }
-        if t.dirty_cpu && !t.cpu.is_empty() && !t.depth {
-            let bpp = if t.format == wgpu::TextureFormat::Rgba16Float {
-                8
-            } else {
-                4
-            };
+        if t.dirty_cpu && !t.cpu.is_empty() {
+            // `cpu` is only populated for linearly copyable color formats, so a mirror existing at
+            // all means this upload is valid.
+            let bpp = t.format.bytes_per_texel().unwrap_or(4);
             let tex = t.gpu.as_ref().unwrap();
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -591,7 +590,9 @@ pub(crate) fn ensure_texture(
                 wgpu::Extent3d {
                     width: t.width,
                     height: t.height,
-                    depth_or_array_layers: 1,
+                    // Uploads every layer: a cubemap's five other faces are in the mirror too, and
+                    // only copying layer 0 left them undefined.
+                    depth_or_array_layers: t.layers.max(1),
                 },
             );
             t.dirty_cpu = false;
@@ -691,6 +692,7 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
                     binding: i as u32,
                     kind: "storage".into(),
                     read_write: true,
+                    ..Default::default()
                 })
                 .collect(),
             source,

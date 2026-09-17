@@ -1,4 +1,5 @@
-depth24plus
-rgba16float
-cube-rgba8unorm
+true
+true
+true
+true
 ok

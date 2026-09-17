@@ -1,6 +1,7 @@
 //! Shader resource parameters: bind-group/binding allocation and WGSL resource declarations.
 
 use super::ident::escape_wgsl_ident;
+use super::texture_ty::{sampler_binding_type, sampler_wgsl_ty, texture_decl};
 use super::ty::dream_ty_to_wgsl;
 use super::types::GpuBinding;
 use dream_abi::attributes::{has_named_attr, param_binding_override, param_group_override};
@@ -108,26 +109,15 @@ pub(super) fn next_binding_slot(
 }
 
 pub(super) enum ResClass {
-    Texture { storage: bool },
-    TextureCube,
+    Texture,
     Sampler,
     Storage { elem: String },
     Uniform { ty: String },
 }
 
 pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
-    let is_cube = has_named_attr(&param.attributes, "cube");
-    let is_storage = has_named_attr(&param.attributes, "storage");
     match &param.type_ {
-        Type::Struct(tok, None) if tok.text == "GpuTexture" => {
-            if is_cube {
-                ResClass::TextureCube
-            } else {
-                ResClass::Texture {
-                    storage: is_storage,
-                }
-            }
-        }
+        Type::Struct(tok, None) if tok.text == "GpuTexture" => ResClass::Texture,
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ResClass::Sampler,
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
             ResClass::Storage {
@@ -137,6 +127,53 @@ pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
         other => ResClass::Uniform {
             ty: dream_ty_to_wgsl(other),
         },
+    }
+}
+
+/// The `GpuBinding` for a `GpuTexture` parameter, shared by the render and compute paths.
+pub(super) fn texture_binding(
+    param: &ParameterNode,
+    name: String,
+    group: u32,
+    binding: u32,
+) -> Result<GpuBinding, String> {
+    let decl = texture_decl(param)?;
+    Ok(GpuBinding {
+        name,
+        group,
+        binding,
+        kind: decl.kind,
+        wgsl_ty: decl.wgsl_ty,
+        read_write: decl.read_write,
+        atomic: false,
+        view_dimension: decl.view_dimension,
+        sample_type: decl.sample_type,
+        multisampled: decl.multisampled,
+        storage_format: decl.storage_format,
+        storage_access: decl.storage_access,
+    })
+}
+
+/// The `GpuBinding` for a `GpuSampler` parameter.
+pub(super) fn sampler_binding(
+    param: &ParameterNode,
+    name: String,
+    group: u32,
+    binding: u32,
+) -> GpuBinding {
+    GpuBinding {
+        name,
+        group,
+        binding,
+        kind: "sampler",
+        wgsl_ty: sampler_wgsl_ty(param).to_string(),
+        read_write: false,
+        atomic: false,
+        view_dimension: "",
+        sample_type: sampler_binding_type(param),
+        multisampled: false,
+        storage_format: "",
+        storage_access: "",
     }
 }
 
@@ -153,55 +190,23 @@ pub(super) fn emit_resource_param(
     let pname = param.name.text.clone();
     let wgsl_name = format!("{entry}_{pname}");
     match classify_resource(param) {
-        ResClass::Texture { storage } => {
+        ResClass::Texture => {
             let (group, binding) = next_binding_slot(param, alloc)?;
-            let (kind, wgsl_ty) = if storage {
-                ("storage_texture", "texture_storage_2d<rgba8unorm, write>")
-            } else {
-                ("texture", "texture_2d<f32>")
-            };
+            let b = texture_binding(param, pname, group, binding)?;
             header.push_str(&format!(
-                "@group({group}) @binding({binding}) var {wgsl_name}: {wgsl_ty};\n"
+                "@group({group}) @binding({binding}) var {wgsl_name}: {};\n",
+                b.wgsl_ty
             ));
-            bindings.push(GpuBinding {
-                name: pname,
-                group,
-                binding,
-                kind,
-                wgsl_ty: wgsl_ty.into(),
-                read_write: storage,
-                atomic: false,
-            });
-        }
-        ResClass::TextureCube => {
-            let (group, binding) = next_binding_slot(param, alloc)?;
-            header.push_str(&format!(
-                "@group({group}) @binding({binding}) var {wgsl_name}: texture_cube<f32>;\n"
-            ));
-            bindings.push(GpuBinding {
-                name: pname,
-                group,
-                binding,
-                kind: "texture_cube",
-                wgsl_ty: "texture_cube<f32>".into(),
-                read_write: false,
-                atomic: false,
-            });
+            bindings.push(b);
         }
         ResClass::Sampler => {
             let (group, binding) = next_binding_slot(param, alloc)?;
+            let b = sampler_binding(param, pname, group, binding);
             header.push_str(&format!(
-                "@group({group}) @binding({binding}) var {wgsl_name}: sampler;\n"
+                "@group({group}) @binding({binding}) var {wgsl_name}: {};\n",
+                b.wgsl_ty
             ));
-            bindings.push(GpuBinding {
-                name: pname,
-                group,
-                binding,
-                kind: "sampler",
-                wgsl_ty: "sampler".into(),
-                read_write: false,
-                atomic: false,
-            });
+            bindings.push(b);
         }
         ResClass::Storage { elem } => {
             let (group, binding) = next_binding_slot(param, alloc)?;
@@ -209,30 +214,22 @@ pub(super) fn emit_resource_param(
             header.push_str(&format!(
                 "@group({group}) @binding({binding}) var<storage, read> {wgsl_name}: array<{elem_ty}>;\n"
             ));
-            bindings.push(GpuBinding {
-                name: pname,
+            bindings.push(GpuBinding::buffer(
+                pname,
                 group,
                 binding,
-                kind: "storage",
-                wgsl_ty: elem,
+                "storage",
+                elem,
                 // Render stages only ever read storage buffers; `read_write` needs a kernel.
-                read_write: false,
-                atomic: false,
-            });
+                false,
+                false,
+            ));
         }
         ResClass::Uniform { ty } => {
             *has_uniform = true;
             alloc.note_uniform(param)?;
             uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
-            bindings.push(GpuBinding {
-                name: pname,
-                group: 0,
-                binding: 0,
-                kind: "uniform",
-                wgsl_ty: ty,
-                read_write: false,
-                atomic: false,
-            });
+            bindings.push(GpuBinding::buffer(pname, 0, 0, "uniform", ty, false, false));
         }
     }
     Ok(())

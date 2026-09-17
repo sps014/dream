@@ -538,7 +538,9 @@ static void dump_scan_map(char *base, size_t len, DumpHist *h, int *nh, DumpStr 
             p += 16;
             continue;
         }
-        if (mag == MAGIC_LIVE) {
+        // Pinned singletons (`pin_immortal_obj`) are never freed by design and already left
+        // `live_objects`, so counting them here would report a leak the accounting denies.
+        if (mag == MAGIC_LIVE && ((int32_t *)p)[3] != INT32_MAX) {
             int32_t tag = ((int32_t *)p)[2] & TAG_VALUE_MASK;
             dump_hist_add(h, nh, tag);
             if (tag == TAG_STRING) {

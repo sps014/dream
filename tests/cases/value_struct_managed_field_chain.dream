@@ -1,0 +1,67 @@
+import system;
+
+// A value struct whose managed field is carried through a chain of returning factories. Each
+// return is a move, so exactly one owner may release the field no matter how deep the inliner
+// fuses the chain — an extra drop here is a double free, a missing one is a leak.
+enum Slot { First = 0, Second = 1 }
+
+struct Desc {
+    public n: int;
+    public slot: Option<Slot>;
+    public label: string;
+
+    public static fun base(n: int): Desc {
+        let d = Desc();
+        d.n = n;
+        d.slot = Option.None;
+        d.label = "base";
+        return d;
+    }
+
+    public static fun wide(n: int): Desc {
+        let d = Desc.base(n);
+        d.n = n + 1;
+        d.slot = Option.Some(Slot.Second);
+        return d;
+    }
+
+    public static fun widest(n: int): Desc {
+        let d = Desc.wide(n);
+        d.label = "widest";
+        return d;
+    }
+}
+
+class Sink {
+    // Takes the struct by value, so the caller's copy must transfer rather than share.
+    public static fun consume(d: Desc): int {
+        let bump = 0;
+        if d.slot.is_some() {
+            bump = d.slot.unwrap();
+        }
+        return d.n + bump + d.label.length;
+    }
+
+    public static fun through_wide(n: int): int {
+        let d = Desc.wide(n);
+        return Sink.consume(d);
+    }
+
+    public static fun through_widest(n: int): int {
+        let d = Desc.widest(n);
+        return Sink.consume(d);
+    }
+}
+
+fun main(): void {
+    System.println(Sink.consume(Desc.base(10)));
+    System.println(Sink.through_wide(20));
+    System.println(Sink.through_widest(30));
+
+    // Repeat in a loop so a stale field pointer left by an earlier iteration would be reused.
+    let total = 0;
+    for (let i = 0; i < 4; i = i + 1) {
+        total = total + Sink.through_widest(i);
+    }
+    System.println(total);
+}

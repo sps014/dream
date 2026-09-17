@@ -362,7 +362,6 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
                                 decl.name = Some("__vret".into());
                             }
                             decl.is_ref = false;
-                            decl.manual_drop = false;
                         }
                     }
                     bb.stmts

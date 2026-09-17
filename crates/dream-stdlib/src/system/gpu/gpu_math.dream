@@ -286,7 +286,10 @@ public static class GpuMath {
 
     // Determinant of a 4x4 matrix (WGSL `determinant`).
     public static fun determinant(m: GpuMat4): float {
-        return 0.0;
+        // Expanded along the first row against the cofactors `inverse` also needs, so the two
+        // agree on sign conventions by construction.
+        let c = GpuMath.cofactors4(m);
+        return m.c0.x * c.c0.x + m.c0.y * c.c1.x + m.c0.z * c.c2.x + m.c0.w * c.c3.x;
     }
 
     // Multiplicative inverse of a 2x2 matrix: `m^-1` such that `m * m^-1 = I`.
@@ -303,31 +306,134 @@ public static class GpuMath {
 
     // Multiplicative inverse of a 3x3 matrix (WGSL `inverse`).
     public static fun inverse(m: GpuMat3): GpuMat3 {
-        return GpuMat3.identity();
+        let det = GpuMath.determinant(m);
+        if det == 0.0 { return GpuMat3.identity(); }
+        let d = 1.0 / det;
+        // Adjugate, transposed into columns. `cN` is a column, so `cN.y` is row 1 of column N.
+        return GpuMat3.of(
+            GpuVec3.of(
+                (m.c1.y * m.c2.z - m.c2.y * m.c1.z) * d,
+                (m.c2.y * m.c0.z - m.c0.y * m.c2.z) * d,
+                (m.c0.y * m.c1.z - m.c1.y * m.c0.z) * d
+            ),
+            GpuVec3.of(
+                (m.c2.x * m.c1.z - m.c1.x * m.c2.z) * d,
+                (m.c0.x * m.c2.z - m.c2.x * m.c0.z) * d,
+                (m.c1.x * m.c0.z - m.c0.x * m.c1.z) * d
+            ),
+            GpuVec3.of(
+                (m.c1.x * m.c2.y - m.c2.x * m.c1.y) * d,
+                (m.c2.x * m.c0.y - m.c0.x * m.c2.y) * d,
+                (m.c0.x * m.c1.y - m.c1.x * m.c0.y) * d
+            )
+        );
     }
 
     // Multiplicative inverse of a 4x4 matrix (WGSL `inverse`).
     public static fun inverse(m: GpuMat4): GpuMat4 {
-        return GpuMat4.identity();
+        let c = GpuMath.cofactors4(m);
+        let det = m.c0.x * c.c0.x + m.c0.y * c.c1.x + m.c0.z * c.c2.x + m.c0.w * c.c3.x;
+        if det == 0.0 { return GpuMat4.identity(); }
+        let d = 1.0 / det;
+        return GpuMat4.of(
+            GpuVec4.of(c.c0.x * d, c.c0.y * d, c.c0.z * d, c.c0.w * d),
+            GpuVec4.of(c.c1.x * d, c.c1.y * d, c.c1.z * d, c.c1.w * d),
+            GpuVec4.of(c.c2.x * d, c.c2.y * d, c.c2.z * d, c.c2.w * d),
+            GpuVec4.of(c.c3.x * d, c.c3.y * d, c.c3.z * d, c.c3.w * d)
+        );
+    }
+
+    // Transposed cofactor matrix of `m` — the adjugate, which is the inverse scaled by the
+    // determinant. Shared so `determinant` and `inverse` cannot drift apart on sign conventions:
+    // expanding `m`'s first row against column 0 of this gives the determinant.
+    static fun cofactors4(m: GpuMat4): GpuMat4 {
+        // Row-major names over Dream's column-major storage: `r<row><col>`.
+        let r00 = m.c0.x; let r01 = m.c1.x; let r02 = m.c2.x; let r03 = m.c3.x;
+        let r10 = m.c0.y; let r11 = m.c1.y; let r12 = m.c2.y; let r13 = m.c3.y;
+        let r20 = m.c0.z; let r21 = m.c1.z; let r22 = m.c2.z; let r23 = m.c3.z;
+        let r30 = m.c0.w; let r31 = m.c1.w; let r32 = m.c2.w; let r33 = m.c3.w;
+
+        // 2x2 minors of the bottom two rows, reused across the top-row cofactors.
+        let s0 = r20 * r31 - r30 * r21;
+        let s1 = r20 * r32 - r30 * r22;
+        let s2 = r20 * r33 - r30 * r23;
+        let s3 = r21 * r32 - r31 * r22;
+        let s4 = r21 * r33 - r31 * r23;
+        let s5 = r22 * r33 - r32 * r23;
+        // The same for the top two rows, for the bottom-row cofactors.
+        let t0 = r00 * r11 - r10 * r01;
+        let t1 = r00 * r12 - r10 * r02;
+        let t2 = r00 * r13 - r10 * r03;
+        let t3 = r01 * r12 - r11 * r02;
+        let t4 = r01 * r13 - r11 * r03;
+        let t5 = r02 * r13 - r12 * r03;
+
+        return GpuMat4.of(
+            GpuVec4.of(
+                r11 * s5 - r12 * s4 + r13 * s3,
+                -(r10 * s5) + r12 * s2 - r13 * s1,
+                r10 * s4 - r11 * s2 + r13 * s0,
+                -(r10 * s3) + r11 * s1 - r12 * s0
+            ),
+            GpuVec4.of(
+                -(r01 * s5) + r02 * s4 - r03 * s3,
+                r00 * s5 - r02 * s2 + r03 * s1,
+                -(r00 * s4) + r01 * s2 - r03 * s0,
+                r00 * s3 - r01 * s1 + r02 * s0
+            ),
+            GpuVec4.of(
+                r31 * t5 - r32 * t4 + r33 * t3,
+                -(r30 * t5) + r32 * t2 - r33 * t1,
+                r30 * t4 - r31 * t2 + r33 * t0,
+                -(r30 * t3) + r31 * t1 - r32 * t0
+            ),
+            GpuVec4.of(
+                -(r21 * t5) + r22 * t4 - r23 * t3,
+                r20 * t5 - r22 * t2 + r23 * t1,
+                -(r20 * t4) + r21 * t2 - r23 * t0,
+                r20 * t3 - r21 * t1 + r22 * t0
+            )
+        );
     }
 
     // Number of 1 bits in the 32-bit integer binary representation (WGSL `countOneBits` / popcount).
+    //
+    // The bit functions all go through `uint` so a negative `int` shifts in zeros rather than
+    // sign bits, matching how WGSL counts over a `u32`.
     public static fun count_one_bits(x: int): int {
-        return 0;
+        let bits = (uint)x;
+        let n = 0;
+        for (let i = 0; i < 32; i = i + 1) {
+            n = n + (int)((bits >> (uint)i) & 1u);
+        }
+        return n;
     }
 
     // Reverses the order of the bits in a 32-bit integer (WGSL `reverseBits`).
     public static fun reverse_bits(x: int): int {
-        return 0;
+        let bits = (uint)x;
+        let out = 0u;
+        for (let i = 0; i < 32; i = i + 1) {
+            out = (out << 1u) | ((bits >> (uint)i) & 1u);
+        }
+        return (int)out;
     }
 
     // Number of consecutive zero bits starting from the most significant bit (WGSL `countLeadingZeros` / clz).
     public static fun count_leading_zeros(x: int): int {
-        return 0;
+        let bits = (uint)x;
+        for (let i = 0; i < 32; i = i + 1) {
+            if ((bits >> (uint)(31 - i)) & 1u) == 1u { return i; }
+        }
+        return 32;
     }
 
     // Number of consecutive zero bits starting from the least significant bit (WGSL `countTrailingZeros` / ctz).
     public static fun count_trailing_zeros(x: int): int {
-        return 0;
+        let bits = (uint)x;
+        for (let i = 0; i < 32; i = i + 1) {
+            if ((bits >> (uint)i) & 1u) == 1u { return i; }
+        }
+        return 32;
     }
 }

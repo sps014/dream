@@ -2,6 +2,7 @@
 
 use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
+use indexmap::IndexSet;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
     build_struct_field_tys, emit_fragment_out_struct_wgsl, emit_interface_struct_wgsl, find_struct,
@@ -27,6 +28,8 @@ pub(super) fn emit_fragment(
 
     let mut interface_ty = String::new();
     let mut struct_header = String::new();
+    // Stage interface structs, so helper emission does not declare them a second time.
+    let mut declared_structs: IndexSet<String> = IndexSet::new();
     let mut bindings = Vec::new();
     let mut alloc = BindingAlloc::default();
     let mut header = String::new();
@@ -43,6 +46,7 @@ pub(super) fn emit_fragment(
         }
         Some(Type::Struct(tok, None)) => {
             if let Some(decl) = find_struct(program, &tok.text) {
+                declared_structs.insert(decl.name.text.clone());
                 match emit_fragment_out_struct_wgsl(decl) {
                     Ok((s, sname)) => {
                         struct_header.push_str(&s);
@@ -91,6 +95,7 @@ pub(super) fn emit_fragment(
                     }
                     interface_ty = sname.to_string();
                     vary_param = Some((first.name.text.clone(), sname.to_string()));
+                    declared_structs.insert(decl.name.text.clone());
                     match emit_interface_struct_wgsl(decl, true) {
                         Ok(s) => struct_header.push_str(&s),
                         Err(e) => diagnostics.report_error(e, Some(func.name.position)),
@@ -172,7 +177,7 @@ pub(super) fn emit_fragment(
         emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
     }
 
-    let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
+    let helpers = emit_helpers_wgsl(func.body, program, &declared_structs, diagnostics);
 
     let mut wgsl = String::new();
     if uses_primitive_index {
@@ -217,7 +222,7 @@ pub(super) fn emit_fragment(
         interface_ty,
         color_targets,
         uniform_size,
-        wgsl,
+        wgsl: super::intrinsic_wgsl::prepend_intrinsics(wgsl),
     }
 }
 

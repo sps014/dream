@@ -206,9 +206,14 @@ pub(super) fn emit_kernel(
     reject_gpu_nameof(func.body, &ctx);
     emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
 
+    let helpers = super::helpers::emit_helpers_wgsl(func.body, program, &value_structs, diagnostics);
+
     let mut wgsl = String::new();
     wgsl.push_str(&header);
     wgsl.push('\n');
+    // After the binding declarations, since a helper may read a storage buffer, and before the
+    // entry point, because WGSL wants a function declared ahead of its callers.
+    wgsl.push_str(&helpers);
     wgsl.push_str(&workgroup_decls);
     if !workgroup_decls.is_empty() {
         wgsl.push('\n');
@@ -251,7 +256,7 @@ pub(super) fn emit_kernel(
         workgroup,
         bindings,
         uniform_size,
-        wgsl,
+        wgsl: super::intrinsic_wgsl::prepend_intrinsics(wgsl),
     }
 }
 

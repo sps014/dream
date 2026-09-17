@@ -48,6 +48,97 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Types a multi-component swizzle read (`v.xyz`, `color.rgb`, `uv.yx`) on a `GpuVecN`.
+    ///
+    /// `None` means the member is not a swizzle and the caller should carry on to its own
+    /// "no such field" reporting. Single-component reads are also `None`: `v.x` is a real struct
+    /// field and resolves before this is ever reached.
+    ///
+    /// Shader bodies are emitted from the AST, where this stays a member access and becomes a
+    /// native WGSL swizzle. Only the CPU path takes the `GpuVecN.of(...)` desugar below, which
+    /// mentions the receiver once per component — hence the restriction to receivers that are
+    /// free to re-read.
+    pub(super) fn try_gpu_swizzle(
+        &mut self,
+        obj: &'a ExpressionNode<'a>,
+        obj_type: &Type,
+        member: &SyntaxToken,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Option<Result<Type, SemanticError>> {
+        let name = Self::gpu_struct_name(obj_type)?;
+        let arity = Self::gpu_vec_rank(name)? as usize;
+        if !dream_abi::gpu_swizzle::is_component_name(&member.text) {
+            return None;
+        }
+
+        let Some(comps) = dream_abi::gpu_swizzle::components(&member.text, arity) else {
+            // Component letters that do not resolve: either past the end of this vector, or the
+            // `xyzw` and `rgba` spellings mixed in one name. Worth its own message, since the
+            // caller's "field not found" would send the reader looking for a field.
+            self.hir_none();
+            return Some(Err(report(
+                diagnostics,
+                format!(
+                    "'{}' is not a valid swizzle of {name}; components must all be from 'xyzw' or \
+                     all from 'rgba', and must fit in the {arity} components of {name}",
+                    member.text
+                ),
+                Some(member.position),
+            )));
+        };
+        if comps.len() == 1 {
+            return None;
+        }
+
+        if !self.current_function_is_gpu && !Self::is_rereadable(obj) {
+            self.hir_none();
+            return Some(Err(report(
+                diagnostics,
+                format!(
+                    "swizzle '.{}' needs a receiver that can be read more than once on the CPU; \
+                     bind the value to a local first",
+                    member.text
+                ),
+                Some(member.position),
+            )));
+        }
+
+        let result = format!("GpuVec{}", comps.len());
+        let args: Vec<ExpressionNode<'a>> = comps
+            .iter()
+            .map(|&i| {
+                let field = synthetic_token(TokenKind::IdentifierToken, Self::VEC_FIELDS[i]);
+                ExpressionNode::MemberAccess(obj, field)
+            })
+            .collect();
+        let recv = &*self
+            .arena
+            .alloc(ExpressionNode::Identifier(synthetic_token(
+                TokenKind::IdentifierToken,
+                &result,
+            )));
+        let of = synthetic_token(TokenKind::IdentifierToken, "of");
+        let call = ExpressionNode::MethodCall(recv, of, None, args);
+        Some(self.analyze_expression(&call, parent_function, symbol_table, diagnostics))
+    }
+
+    /// Storage field name for each vector component, in order.
+    const VEC_FIELDS: [&'static str; 4] = ["x", "y", "z", "w"];
+
+    /// Whether `expr` can be evaluated repeatedly with no extra cost or effect.
+    ///
+    /// Reads of locals and walks of their fields qualify; anything that could call code or index
+    /// does not, because the swizzle desugar would duplicate it once per component.
+    fn is_rereadable(expr: &ExpressionNode<'_>) -> bool {
+        match expr {
+            ExpressionNode::Identifier(_) => true,
+            ExpressionNode::MemberAccess(inner, _) => Self::is_rereadable(inner),
+            _ => false,
+        }
+    }
+
     /// When `op` is WGSL-legal on GPU vectors/matrices, types the result and lowers CPU HIR to
     /// stdlib methods. `None` means this is not GPU arithmetic (fall through to numeric rules).
     pub(super) fn try_gpu_binary(

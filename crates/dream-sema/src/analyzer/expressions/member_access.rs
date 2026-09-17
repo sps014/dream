@@ -334,6 +334,15 @@ impl<'a> Analyzer<'a> {
                     parent_function,
                 ) {
                     Ok(func_ty)
+                } else if let Some(swizzled) = self.try_gpu_swizzle(
+                    obj,
+                    &obj_type,
+                    member,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                ) {
+                    swizzled
                 } else {
                     self.hir_none();
                     Err(report_with_code(

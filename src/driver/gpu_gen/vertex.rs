@@ -3,6 +3,7 @@
 use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
 use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
+use indexmap::IndexSet;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
     assign_locations_from, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
@@ -30,6 +31,8 @@ pub(super) fn emit_vertex(
     let mut vertex_buffers = Vec::new();
     let mut interface_ty = String::new();
     let mut struct_header = String::new();
+    // Stage interface structs, so helper emission does not declare them a second time.
+    let mut declared_structs: IndexSet<String> = IndexSet::new();
     let mut bindings = Vec::new();
     let mut alloc = BindingAlloc::default();
     let mut header = String::new();
@@ -65,6 +68,7 @@ pub(super) fn emit_vertex(
                     .max()
                     .unwrap_or(base);
                 vertex_buffers.push(buffer);
+                declared_structs.insert(decl.name.text.clone());
                 match emit_vertex_in_struct(decl, base) {
                     Ok(s) => struct_header.push_str(&s),
                     Err(e) => diagnostics.report_error(e, Some(func.name.position)),
@@ -107,6 +111,7 @@ pub(super) fn emit_vertex(
                     Some(func.name.position),
                 );
             }
+            declared_structs.insert(decl.name.text.clone());
             match emit_interface_struct_wgsl(decl, false) {
                 Ok(s) => struct_header.push_str(&s),
                 Err(e) => diagnostics.report_error(e, Some(func.name.position)),
@@ -155,7 +160,7 @@ pub(super) fn emit_vertex(
         emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
     }
 
-    let helpers = emit_helpers_wgsl(func.body, program, diagnostics);
+    let helpers = emit_helpers_wgsl(func.body, program, &declared_structs, diagnostics);
 
     let mut wgsl = String::new();
     wgsl.push_str(&struct_header);
@@ -193,7 +198,7 @@ pub(super) fn emit_vertex(
         interface_ty,
         color_targets: 0,
         uniform_size,
-        wgsl,
+        wgsl: super::intrinsic_wgsl::prepend_intrinsics(wgsl),
     }
 }
 

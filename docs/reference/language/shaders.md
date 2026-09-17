@@ -178,8 +178,36 @@ fun fs(v: VsOut): FsOut {
 `ceil` / `fract` / `sqrt` / `exp` / `pow` take `float` or `GpuVecN`. `normalize` /
 `length` / `dot` use the same name for vec2/3/4. `GpuVecN.splat(s)` is WGSL `vecN(s)`.
 `GpuMat2.of(c0, c1)` becomes WGSL `mat2x2<f32>(c0, c1)`. `GpuMath.transpose` maps to WGSL
-`transpose` (overloaded for `GpuMat2` / `GpuMat3` / `GpuMat4`). Shader `let` is inferred
-from the initializer — `let s = GpuMath.sin(t)` needs no `: float`.
+`transpose` (overloaded for `GpuMat2` / `GpuMat3` / `GpuMat4`), and `GpuMath.inverse` /
+`GpuMath.determinant` cover all three sizes. Shader `let` is inferred from the initializer —
+`let s = GpuMath.sin(t)` needs no `: float`.
+
+### Swizzles
+
+Reading two to four components at once gives a smaller (or reordered) vector, as in WGSL:
+
+```dream
+let rgb  = color.xyz;   // GpuVec3
+let uv   = p.xy;        // GpuVec2
+let flip = p.wzyx;      // GpuVec4, reversed
+let grey = c.xxx;       // GpuVec3, broadcast
+```
+
+`rgba` is an interchangeable spelling for `xyzw` (`color.rgb` is `color.xyz`), but the two cannot
+be mixed in one name. Components past the end of the source are an error: `.xyz` on a `GpuVec2`
+does not compile.
+
+The same expressions work on the CPU, where a swizzle builds a new `GpuVecN` and so reads its
+receiver once per component. On the CPU the receiver therefore has to be something re-readable — a
+local or a field path. Bind anything else to a local first:
+
+```dream
+let n = GpuMath.normalize(v);   // on the CPU, `GpuMath.normalize(v).xyz` is an error
+let dir = n.xyz;
+```
+
+Inside shaders there is no such restriction, because the swizzle becomes a native WGSL one that
+evaluates its receiver a single time.
 
 ```dream
 @gpu

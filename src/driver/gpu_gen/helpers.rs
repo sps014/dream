@@ -239,6 +239,7 @@ pub(super) fn build_helper_return_tys(program: &ProgramNode<'_>) -> IndexMap<Str
 pub(super) fn emit_helpers_wgsl(
     entry_body: &[StatementNode<'_>],
     program: &ProgramNode<'_>,
+    already_declared: &IndexSet<String>,
     diagnostics: &mut DiagnosticBag,
 ) -> String {
     let mut needed = IndexSet::new();
@@ -264,7 +265,7 @@ pub(super) fn emit_helpers_wgsl(
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = build_helper_return_tys(program);
     let mut emitted = IndexSet::new();
-    let mut out = String::new();
+    let mut out = emit_used_data_structs(&needed, program, already_declared, diagnostics);
     let mut guard = 0;
     while emitted.len() < needed.len() && guard < needed.len() + 2 {
         guard += 1;
@@ -323,6 +324,83 @@ pub(super) fn emit_helpers_wgsl(
         }
     }
     out
+}
+
+/// WGSL definitions for plain structs that shader code passes around.
+///
+/// `already_declared` names the stage interface structs the caller emitted itself; re-declaring
+/// one would be a duplicate definition, and the decorated interface version is the one the stage
+/// boundary needs.
+///
+/// Reached through both the names in `needed` (a `Ray()` constructor shows up there as a call) and
+/// the signatures of the helpers those names resolve to, then followed through struct-typed fields
+/// so a struct holding another struct emits both, dependency first.
+fn emit_used_data_structs(
+    needed: &IndexSet<String>,
+    program: &ProgramNode<'_>,
+    already_declared: &IndexSet<String>,
+    diagnostics: &mut DiagnosticBag,
+) -> String {
+    let mut roots: IndexSet<String> = IndexSet::new();
+    for name in needed {
+        if find_struct(program, name).is_some() {
+            roots.insert(name.clone());
+        }
+        let Some(func) = find_helper(program, name) else {
+            continue;
+        };
+        let sig = func
+            .parameters
+            .iter()
+            .map(|p| &p.type_)
+            .chain(func.return_type.iter());
+        for ty in sig {
+            if let dream_syntax::nodes::Type::Struct(tok, None) = ty {
+                if find_struct(program, &tok.text).is_some() {
+                    roots.insert(tok.text.clone());
+                }
+            }
+        }
+    }
+
+    let mut done: IndexSet<String> = already_declared.clone();
+    let mut out = String::new();
+    for root in &roots {
+        emit_struct_with_deps(root, program, &mut done, &mut out, diagnostics);
+    }
+    out
+}
+
+/// Emits `name`'s definition after the definitions of any structs it stores, recording each in
+/// `done` so shared dependencies are declared exactly once.
+fn emit_struct_with_deps(
+    name: &str,
+    program: &ProgramNode<'_>,
+    done: &mut IndexSet<String>,
+    out: &mut String,
+    diagnostics: &mut DiagnosticBag,
+) {
+    if done.contains(name) {
+        return;
+    }
+    let Some(decl) = find_struct(program, name) else {
+        return;
+    };
+    // Recorded before recursing: a struct that reaches itself would otherwise loop, and the
+    // resulting WGSL is rejected for the cycle anyway.
+    done.insert(name.to_string());
+    for field in &decl.fields {
+        if let dream_syntax::nodes::Type::Struct(tok, None) = &field.field_type {
+            emit_struct_with_deps(&tok.text, program, done, out, diagnostics);
+        }
+    }
+    match super::layout::emit_data_struct_wgsl(decl) {
+        Ok(s) => out.push_str(&s),
+        Err(e) => diagnostics.report_error(
+            format!("GPU struct '{name}' cannot be used in shader code: {e}"),
+            Some(decl.name.position),
+        ),
+    }
 }
 
 fn emit_one_helper(

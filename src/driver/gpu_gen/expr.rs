@@ -281,16 +281,14 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 .first()
                 .map(|a| infer_wgsl_ty(a, ctx))
                 .unwrap_or_else(|| "mat2x2<f32>".into());
-            // WGSL has no `inverse` builtin; match `GpuMath.inverse` (adjugate / det, identity if singular).
-            match ty.as_str() {
-                "mat2x2<f32>" => format!(
-                    "(mat2x2<f32>(vec2<f32>({m}[1][1], -{m}[0][1]), vec2<f32>(-{m}[1][0], {m}[0][0])) * (1.0 / determinant({m})))"
-                ),
-                "mat3x3<f32>" => {
-                    "mat3x3<f32>(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)".into()
-                }
-                _ => "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)".into(),
-            }
+            // WGSL has no `inverse` builtin, so this calls a helper emitted alongside the entry
+            // point (see `intrinsic_wgsl`), which mirrors `GpuMath.inverse` on the CPU.
+            let helper = match ty.as_str() {
+                "mat2x2<f32>" => "dream_inverse_mat2",
+                "mat3x3<f32>" => "dream_inverse_mat3",
+                _ => "dream_inverse_mat4",
+            };
+            format!("{helper}({m})")
         }
         "splat" => {
             ctx.report_error(

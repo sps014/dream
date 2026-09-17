@@ -10,6 +10,7 @@ mod expr;
 mod fragment;
 mod helpers;
 mod ident;
+mod intrinsic_wgsl;
 mod layout;
 mod output;
 mod stmt;

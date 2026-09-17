@@ -1,0 +1,79 @@
+import system;
+import system.gpu;
+
+// mat3/mat4 inverse in a kernel used to compile to an identity matrix, so the shader silently
+// disagreed with GpuMath.inverse on the CPU. Both sides invert the same matrices here and the
+// product with the original must be the identity.
+@compute
+fun invert(out: GpuBuffer<float>): void {
+    if global_id.x != 0 { return; }
+    let a = GpuMat3.of(
+        GpuVec3.of(1.0, 4.0, 7.0),
+        GpuVec3.of(2.0, 5.0, 8.0),
+        GpuVec3.of(3.0, 6.0, 10.0)
+    );
+    let p3 = GpuMath.mul(a, GpuMath.inverse(a));
+    out[0] = p3.c0.x;
+    out[1] = p3.c1.y;
+    out[2] = p3.c2.z;
+    out[3] = p3.c1.x;
+
+    let b = GpuMat4.of(
+        GpuVec4.of(2.0, 0.0, 1.0, 0.0),
+        GpuVec4.of(0.0, 3.0, 0.0, 2.0),
+        GpuVec4.of(1.0, 0.0, 4.0, 0.0),
+        GpuVec4.of(3.0, 1.0, 0.0, 5.0)
+    );
+    let p4 = GpuMath.mul(b, GpuMath.inverse(b));
+    out[4] = p4.c0.x;
+    out[5] = p4.c1.y;
+    out[6] = p4.c2.z;
+    out[7] = p4.c3.w;
+    out[8] = p4.c2.x;
+    out[9] = GpuMath.determinant(b);
+}
+
+// The CPU path runs the same two matrices through GpuMath, so a shader that disagreed with it
+// would show up as a differing line rather than needing a hardcoded reference.
+fun cpu_checks(): float[] {
+    let a = GpuMat3.of(
+        GpuVec3.of(1.0, 4.0, 7.0),
+        GpuVec3.of(2.0, 5.0, 8.0),
+        GpuVec3.of(3.0, 6.0, 10.0)
+    );
+    let p3 = GpuMath.mul(a, GpuMath.inverse(a));
+    let b = GpuMat4.of(
+        GpuVec4.of(2.0, 0.0, 1.0, 0.0),
+        GpuVec4.of(0.0, 3.0, 0.0, 2.0),
+        GpuVec4.of(1.0, 0.0, 4.0, 0.0),
+        GpuVec4.of(3.0, 1.0, 0.0, 5.0)
+    );
+    let p4 = GpuMath.mul(b, GpuMath.inverse(b));
+    let out = Buffer.alloc<float>(10);
+    out[0] = p3.c0.x; out[1] = p3.c1.y; out[2] = p3.c2.z; out[3] = p3.c1.x;
+    out[4] = p4.c0.x; out[5] = p4.c1.y; out[6] = p4.c2.z; out[7] = p4.c3.w;
+    out[8] = p4.c2.x; out[9] = GpuMath.determinant(b);
+    return out;
+}
+
+// Rounded to thousandths so float noise in the inverse does not make the golden output brittle.
+fun milli(x: float): string {
+    return ((int)(x * 1000.0 + 0.5)).to_string();
+}
+
+async fun main(): Result<bool, GpuError> {
+    let cpu = cpu_checks();
+    for (let i = 0; i < 10; i = i + 1) {
+        System.println("cpu[" + i.to_string() + "]=" + milli(cpu[i]));
+    }
+
+    (await Gpu.try_init())?;
+    let out = GpuBuffer<float>.alloc(10);
+    let bufs = [out];
+    (await Compute.run_3d("invert", bufs, 1, 1, 1, Buffer.alloc<byte>(0)))?;
+    let gpu = await out.read();
+    for (let i = 0; i < 10; i = i + 1) {
+        System.println("gpu[" + i.to_string() + "]=" + milli(gpu[i]));
+    }
+    return Result.Ok(true);
+}

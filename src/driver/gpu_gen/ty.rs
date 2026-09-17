@@ -255,14 +255,23 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             }
             let base = infer_wgsl_ty(obj, ctx);
             if base.starts_with("vec") {
-                // .x/.y/.z/.w of vecN → component type
-                if base.contains("f32") {
-                    return "f32".into();
+                let comp = if base.contains("f32") {
+                    "f32"
+                } else if base.contains("u32") {
+                    "u32"
+                } else {
+                    "i32"
+                };
+                // A swizzle of two or more components is itself a vector; `.x` is a scalar. The
+                // source arity is unrestricted here because the analyzer already rejected
+                // swizzles reaching past the end of the vector.
+                let width = dream_abi::gpu_swizzle::components(&member.text, 4)
+                    .map(|c| c.len())
+                    .unwrap_or(1);
+                if width > 1 {
+                    return format!("vec{width}<{comp}>");
                 }
-                if base.contains("u32") {
-                    return "u32".into();
-                }
-                return "i32".into();
+                return comp.into();
             }
             if is_mat_wgsl(&base) {
                 if base.starts_with("mat2") {

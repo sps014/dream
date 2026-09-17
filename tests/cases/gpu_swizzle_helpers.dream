@@ -1,0 +1,67 @@
+import system;
+import system.gpu;
+
+// Multi-component swizzles (`v.xyz`, `v.rg`) and @gpu helpers inside a @compute kernel. Helpers
+// used to be emitted for @vertex/@fragment only, and a plain struct passed between them had no
+// WGSL definition at all.
+struct Ray { public origin: GpuVec3; public dir: GpuVec3; }
+
+@gpu
+fun scale(x: float): float { return x * 2.0; }
+
+@gpu
+fun twice(x: float): float { return scale(x) + scale(x); }
+
+@gpu
+fun make_ray(seed: float): Ray {
+    let r = Ray();
+    r.origin = GpuVec3.of(seed, 0.0, 0.0);
+    r.dir = GpuVec3.of(0.0, 1.0, 0.0);
+    return r;
+}
+
+@gpu
+fun advance(r: Ray, t: float): GpuVec3 {
+    return r.origin + r.dir * t;
+}
+
+@compute
+fun k(out: GpuBuffer<float>): void {
+    if global_id.x != 0 { return; }
+    out[0] = twice(3.0);
+    let p = advance(make_ray(5.0), 2.0);
+    out[1] = p.x;
+    out[2] = p.y;
+
+    let v = GpuVec4.of(9.0, 8.0, 7.0, 6.0);
+    out[3] = GpuMath.length(v.xy);
+    out[4] = v.wzyx.x;
+    out[5] = v.rgb.z;
+    out[6] = v.xxxx.w;
+    // A swizzle of a call result: shaders read the value once, so this needs no local.
+    out[7] = GpuMath.normalize(v).xyz.x;
+}
+
+// Rounded to thousandths so float noise does not make the golden output brittle.
+fun milli(x: float): string {
+    return ((int)(x * 1000.0 + 0.5)).to_string();
+}
+
+async fun main(): Result<bool, GpuError> {
+    // The CPU desugars a swizzle to a GpuVecN.of(...) build, so check it agrees with the shader.
+    let v = GpuVec4.of(9.0, 8.0, 7.0, 6.0);
+    System.println("cpu xy=" + milli(GpuMath.length(v.xy)));
+    System.println("cpu wzyx.x=" + milli(v.wzyx.x));
+    System.println("cpu rgb.z=" + milli(v.rgb.z));
+    System.println("cpu xxxx.w=" + milli(v.xxxx.w));
+
+    (await Gpu.try_init())?;
+    let out = GpuBuffer<float>.alloc(8);
+    let bufs = [out];
+    (await Compute.run_3d("k", bufs, 1, 1, 1, Buffer.alloc<byte>(0)))?;
+    let r = await out.read();
+    for (let i = 0; i < 8; i = i + 1) {
+        System.println("gpu[" + i.to_string() + "]=" + milli(r[i]));
+    }
+    return Result.Ok(true);
+}

@@ -1,0 +1,12 @@
+cpu xy=12042
+cpu wzyx.x=6000
+cpu rgb.z=7000
+cpu xxxx.w=9000
+gpu[0]=12000
+gpu[1]=5000
+gpu[2]=2000
+gpu[3]=12042
+gpu[4]=6000
+gpu[5]=7000
+gpu[6]=9000
+gpu[7]=593

@@ -343,6 +343,30 @@ pub(super) fn emit_interface_struct_wgsl(
     Ok(s)
 }
 
+/// A plain data struct, for types passed between helpers rather than across a stage boundary.
+///
+/// No `@location` or `@builtin` decorators: those describe an interface between pipeline stages,
+/// and applying them to an ordinary struct would be rejected by WGSL.
+pub(super) fn emit_data_struct_wgsl(decl: &StructDeclarationNode<'_>) -> Result<String, String> {
+    let sname = escape_wgsl_ident(&decl.name.text);
+    let mut s = format!("struct {sname} {{\n");
+    for field in &decl.fields {
+        let Some(wgsl_ty) = dream_ty_to_wgsl_vec(&field.field_type) else {
+            return Err(format!(
+                "field '{}' has unsupported shader type '{}'",
+                field.name.text,
+                field.field_type.get_type()
+            ));
+        };
+        s.push_str(&format!(
+            "  {}: {wgsl_ty},\n",
+            escape_wgsl_ident(&field.name.text)
+        ));
+    }
+    s.push_str("}\n");
+    Ok(s)
+}
+
 /// Fragment output struct (`@location` color targets + optional `@builtin(frag_depth)`).
 pub(super) fn emit_fragment_out_struct_wgsl(
     decl: &StructDeclarationNode<'_>,

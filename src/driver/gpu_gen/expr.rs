@@ -31,6 +31,20 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             .map(|a| coerce_expr_to_wgsl_ty(a, want, ctx))
             .collect()
     };
+    // Argument `i` coerced to `ty`. The fallback only matters for a call the analyzer already
+    // rejected for its argument count, where emitting something type-correct keeps the WGSL
+    // parseable so the real diagnostic is what the user sees.
+    let at = |i: usize, ty: &str, fallback: &str| -> String {
+        args.get(i)
+            .map(|a| coerce_expr_to_wgsl_ty(a, ty, ctx))
+            .unwrap_or_else(|| fallback.to_string())
+    };
+    // Argument `i` as-is, for resources (textures, samplers, buffers) that have no coercion.
+    let raw = |i: usize, fallback: &str| -> String {
+        args.get(i)
+            .map(|a| emit_expr(a, ctx))
+            .unwrap_or_else(|| fallback.to_string())
+    };
     match name {
         "workgroup_barrier" => "workgroupBarrier()".into(),
         "storage_barrier" => "storageBarrier()".into(),
@@ -68,6 +82,16 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             };
             format!("{op}(&{buf}[u32({idx})], {val})")
         }
+        "atomic_compare_exchange" => format!(
+            // WGSL returns a struct of the old value and whether the store happened. Dream
+            // exposes the old value alone, which the caller compares against `cmp` — the standard
+            // CAS-loop idiom, and the only part that has a Dream type today.
+            "atomicCompareExchangeWeak(&{}[u32({})], {}, {}).old_value",
+            raw(0, "buf"),
+            at(1, "i32", "0"),
+            at(2, "i32", "0"),
+            at(3, "i32", "0")
+        ),
         "count_one_bits" => {
             let val = args
                 .first()
@@ -206,6 +230,95 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
                 .unwrap_or_else(|| "0.0".into());
             format!("textureSample({tex}, {samp}, vec2<f32>({u}, {v}))")
         }
+        "texture_load_level" => format!(
+            "textureLoad({}, vec2<i32>({}, {}), {})",
+            raw(0, "tex"),
+            at(1, "i32", "0"),
+            at(2, "i32", "0"),
+            at(3, "i32", "0")
+        ),
+        "texture_load_layer" => format!(
+            "textureLoad({}, vec2<i32>({}, {}), {}, {})",
+            raw(0, "tex"),
+            at(1, "i32", "0"),
+            at(2, "i32", "0"),
+            at(3, "i32", "0"),
+            at(4, "i32", "0")
+        ),
+        // WGSL returns these as u32; Dream types texture metadata as `int`.
+        "texture_num_levels" => format!("i32(textureNumLevels({}))", raw(0, "tex")),
+        "texture_num_layers" => format!("i32(textureNumLayers({}))", raw(0, "tex")),
+        "texture_sample_layer" => format!(
+            "textureSample({}, {}, vec2<f32>({}, {}), {})",
+            raw(0, "tex"),
+            raw(1, "samp"),
+            at(2, "f32", "0.0"),
+            at(3, "f32", "0.0"),
+            at(4, "i32", "0")
+        ),
+        "texture_sample_bias" => format!(
+            "textureSampleBias({}, {}, vec2<f32>({}, {}), {})",
+            raw(0, "tex"),
+            raw(1, "samp"),
+            at(2, "f32", "0.0"),
+            at(3, "f32", "0.0"),
+            at(4, "f32", "0.0")
+        ),
+        "texture_sample_grad" => format!(
+            "textureSampleGrad({}, {}, {}, {}, {})",
+            raw(0, "tex"),
+            raw(1, "samp"),
+            at(2, "vec2<f32>", "vec2<f32>(0.0)"),
+            at(3, "vec2<f32>", "vec2<f32>(0.0)"),
+            at(4, "vec2<f32>", "vec2<f32>(0.0)")
+        ),
+        "texture_gather" => {
+            // WGSL wants the component as a const-expression, so a literal is the only form that
+            // can be lowered; anything else would emit WGSL that fails to compile.
+            let literal = match args.first() {
+                Some(ExpressionNode::Literal(dream_syntax::nodes::Type::Integer(tok))) => {
+                    tok.text.parse::<u32>().ok().filter(|&c| c < 4)
+                }
+                _ => None,
+            };
+            let component = match literal {
+                Some(c) => c.to_string(),
+                None => {
+                    ctx.report_error(
+                        format!(
+                            "GPU shader '{}' needs a literal 0, 1, 2, or 3 for the component of \
+                             Gpu.texture_gather",
+                            ctx.kernel
+                        ),
+                        args.first().and_then(|a| a.position()),
+                    );
+                    "0".to_string()
+                }
+            };
+            format!(
+                "textureGather({component}, {}, {}, vec2<f32>({}, {}))",
+                raw(1, "tex"),
+                raw(2, "samp"),
+                at(3, "f32", "0.0"),
+                at(4, "f32", "0.0")
+            )
+        }
+        "texture_sample_compare" => format!(
+            "textureSampleCompare({}, {}, vec2<f32>({}, {}), {})",
+            raw(0, "tex"),
+            raw(1, "samp"),
+            at(2, "f32", "0.0"),
+            at(3, "f32", "0.0"),
+            at(4, "f32", "0.0")
+        ),
+        "texture_sample_compare_level" => format!(
+            "textureSampleCompareLevel({}, {}, vec2<f32>({}, {}), {})",
+            raw(0, "tex"),
+            raw(1, "samp"),
+            at(2, "f32", "0.0"),
+            at(3, "f32", "0.0"),
+            at(4, "f32", "0.0")
+        ),
         "of" => {
             let args_s: Vec<String> = args.iter().map(|a| emit_expr(a, ctx)).collect();
             let tys: Vec<String> = args.iter().map(|a| infer_wgsl_ty(a, ctx)).collect();
@@ -549,6 +662,8 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 TokenKind::BitWiseAmpersandToken => "&",
                 TokenKind::BitWisePipeToken => "|",
                 TokenKind::BitWiseXorToken => "^",
+                TokenKind::ShiftLeftToken => "<<",
+                TokenKind::ShiftRightToken => ">>",
                 _ => {
                     ctx.report_error(
                         format!(
@@ -571,6 +686,17 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             }
             let lt = infer_wgsl_ty(l, ctx);
             let rt = infer_wgsl_ty(r, ctx);
+            // A WGSL shift keeps the left operand's type and requires an unsigned shift count,
+            // so the two sides are not unified the way the arithmetic operators are.
+            if matches!(
+                op.kind,
+                TokenKind::ShiftLeftToken | TokenKind::ShiftRightToken
+            ) {
+                return format!(
+                    "({ls} {op_s} {})",
+                    cast_wgsl_if_needed(rs, &rt, "u32")
+                );
+            }
             let common = common_arith_wgsl_ty(&lt, &rt);
             // WGSL already allows `vecN op f32` / `f32 op vecN` without constructor casts.
             if ((is_vec_wgsl(&lt) || is_mat_wgsl(&lt)) && rt == "f32")

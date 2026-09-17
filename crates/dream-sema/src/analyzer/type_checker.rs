@@ -92,6 +92,12 @@ impl<'a> Analyzer<'a> {
             for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
                 let _ = param_table.add_symbol(name.to_string(), id3.clone());
             }
+            // The flattened counterpart of `local_id`, and the natural index into workgroup
+            // memory, so it is a scalar rather than a `GpuId3`.
+            let _ = param_table.add_symbol(
+                "local_invocation_index".to_string(),
+                Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int")),
+            );
         }
         if dream_abi::attributes::has_vertex_attr(&function.attributes) {
             let i32ty = Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int"));

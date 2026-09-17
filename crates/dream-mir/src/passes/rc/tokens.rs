@@ -1135,6 +1135,11 @@ pub(crate) fn take_arg_effects(
     };
     let mut retains = Vec::new();
     let mut nulls = Vec::new();
+    // A local handed to several `take` parameters of one call (`f(xs, xs)`) owes the callee one
+    // reference per parameter, but the caller holds a single one. Counting the occurrences first
+    // means a move can null the source once and retain for the rest; nulling per occurrence would
+    // transfer the same reference twice and the callee would release it twice.
+    let mut take_counts: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
     for (i, arg) in args.iter().enumerate() {
         if !take_params.get(i).copied().unwrap_or(false) {
             continue;
@@ -1143,14 +1148,7 @@ pub(crate) fn take_arg_effects(
             Operand::Copy(Place::Local(l))
                 if local_is_ref.get(l.0 as usize).copied().unwrap_or(false) =>
             {
-                if is_owned_ref(l.0) && is_move(l.0) {
-                    nulls.push(Statement::Assign(
-                        Place::Local(*l),
-                        Rvalue::Use(Operand::Const(Const::Null)),
-                    ));
-                } else {
-                    retains.push(Statement::Retain(Operand::Copy(Place::Local(*l))));
-                }
+                *take_counts.entry(l.0).or_insert(0) += 1;
             }
             Operand::Copy(Place::Field { .. })
             | Operand::Copy(Place::Index { .. })
@@ -1158,6 +1156,21 @@ pub(crate) fn take_arg_effects(
                 retains.push(Statement::Retain(arg.clone()));
             }
             _ => {}
+        }
+    }
+    for (local, n) in take_counts {
+        let moved = is_owned_ref(local) && is_move(local);
+        let retain_count = if moved { n - 1 } else { n };
+        for _ in 0..retain_count {
+            retains.push(Statement::Retain(Operand::Copy(Place::Local(
+                crate::Local(local),
+            ))));
+        }
+        if moved {
+            nulls.push(Statement::Assign(
+                Place::Local(crate::Local(local)),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ));
         }
     }
     (retains, nulls)

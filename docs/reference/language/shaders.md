@@ -141,6 +141,45 @@ let _ = await GpuRenderPass.draw_ex(
 );
 ```
 
+## Sampling textures
+
+`Gpu.texture_sample(tex, samp, u, v)` is the everyday filtered read, and every one of these returns
+all four channels as a `GpuVec4` (except the depth comparisons, which return a single fraction):
+
+| Call | WGSL | Notes |
+|---|---|---|
+| `texture_sample` | `textureSample` | `@fragment` only; picks the mip level from derivatives |
+| `texture_sample_level` | `textureSampleLevel` | explicit mip level, so also usable from `@compute` |
+| `texture_sample_bias` | `textureSampleBias` | `@fragment` only; shifts the chosen mip level |
+| `texture_sample_grad` | `textureSampleGrad` | supplies the derivatives by hand |
+| `texture_sample_cube` | `textureSample` | samples a `@view("cube")` texture along a direction |
+| `texture_sample_layer` | `textureSample` | one layer of a `@view("2d-array")` texture |
+| `texture_gather` | `textureGather` | one component of the four texels filtering would blend |
+| `texture_load` / `_level` / `_layer` | `textureLoad` | unfiltered texel fetch by integer coordinate |
+| `texture_num_levels` / `_num_layers` | `textureNumLevels` / `Layers` | `_num_layers` needs an array texture |
+
+`texture_gather` needs a literal `0`–`3` for its component, because WGSL requires a constant there.
+
+### Shadow maps
+
+A `@depth` texture read through a `@compare` sampler does the depth test in hardware and filters
+the four results, so one call returns how much of the texel neighbourhood the fragment is lit by:
+
+```dream
+@fragment
+fun lit_fs(
+    v: VsOut,
+    @group(0) @binding(0) @depth shadow: GpuTexture,
+    @group(0) @binding(1) @compare shadow_samp: GpuSampler
+): GpuVec4 {
+    let lit = Gpu.texture_sample_compare(shadow, shadow_samp, v.uv.x, v.uv.y, v.light_depth);
+    return GpuVec4.of(lit, lit, lit, 1.0);
+}
+```
+
+`texture_sample_compare` is `@fragment` only; `texture_sample_compare_level` pins mip level 0 and
+works from `@compute` too.
+
 ## Fragment outputs (MRT)
 
 ```dream

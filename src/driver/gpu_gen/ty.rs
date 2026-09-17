@@ -175,12 +175,26 @@ pub(super) fn builtin_return_wgsl_ty(
         | "atomic_or"
         | "atomic_xor"
         | "atomic_exchange"
+        | "atomic_compare_exchange"
+        | "texture_num_levels"
+        | "texture_num_layers"
         | "count_one_bits"
         | "reverse_bits"
         | "count_leading_zeros"
         | "count_trailing_zeros" => Some("i32".into()),
-        "texture_load" | "texture_sample_level" => Some("f32".into()),
-        "texture_sample" | "texture_sample_cube" => Some("vec4<f32>".into()),
+        // Every WGSL texel read is a vec4, including the "load a single texel" forms.
+        "texture_load"
+        | "texture_load_level"
+        | "texture_load_layer"
+        | "texture_sample_level"
+        | "texture_sample"
+        | "texture_sample_cube"
+        | "texture_sample_layer"
+        | "texture_sample_bias"
+        | "texture_sample_grad"
+        | "texture_gather" => Some("vec4<f32>".into()),
+        // Depth comparison collapses the four neighbours to one pass fraction.
+        "texture_sample_compare" | "texture_sample_compare_level" => Some("f32".into()),
         "texture_dimensions" => Some("vec2<f32>".into()),
         "splat" => None,
         "of" => {

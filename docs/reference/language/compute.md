@@ -207,6 +207,8 @@ Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z
 - `local_id` — local invocation id
 - `workgroup_id` — workgroup id
 - `num_workgroups` — dispatch size in workgroups
+- `local_invocation_index` — `local_id` flattened to a single `int`, the natural index into
+  workgroup memory
 
 ## Language surface
 
@@ -214,6 +216,15 @@ Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels),
 `return`, ternary, integer `switch`, arithmetic/bitwise, `GpuBuffer` indexing / `.length`,
 unmanaged value structs, calls to **`@gpu` helpers** (and other `@compute` kernels),
 `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`.
+Shifts (`<<`, `>>`) count as arithmetic; the right operand is taken as unsigned, matching WGSL.
+
+`Gpu.atomic_compare_exchange(buf, i, cmp, v)` stores `v` only if `buf[i]` holds `cmp`, and reports
+the value that was there beforehand — so the store happened exactly when the result equals `cmp`.
+It may also fail spuriously, which is why it belongs in a retry loop.
+
+Texture reads from a kernel need an explicit mip level, since there are no derivatives to infer one
+from: `Gpu.texture_load` fetches a texel unfiltered and `Gpu.texture_sample_level` filters at a
+level you name. See [sampling textures](shaders.md#sampling-textures) for the full set.
 
 Forbidden: bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`,
 union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions that are

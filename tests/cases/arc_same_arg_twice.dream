@@ -1,0 +1,39 @@
+// Handing one managed value to several owning parameters of the same call.
+//
+// The caller holds a single reference but owes the callee one per parameter. Argument effects
+// used to be decided per occurrence, so a last-use move nulled the source once for each slot and
+// transferred that one reference twice; the callee then released it twice, corrupting the free
+// list and crashing whichever later allocation walked it.
+import system;
+
+fun sum_lengths(a: int[], b: int[], c: int[]): int {
+    return a.length + b.length + c.length;
+}
+
+// Constructor arguments are a separate branch of the same decision, so cover them too.
+class Holder {
+    public n: int;
+    public constructor(first: int[], second: int[]) {
+        this.n = first.length + second.length;
+    }
+}
+
+fun main(): void {
+    let xs = Buffer.alloc<int>(3);
+    System.println("three=" + sum_lengths(xs, xs, xs).to_string());
+    let ys = Buffer.alloc<int>(5);
+    System.println("mixed=" + sum_lengths(ys, xs, ys).to_string());
+
+    let h = Holder(xs, xs);
+    System.println("ctor=" + h.n.to_string());
+
+    // Allocations after the calls: these walk the free list, so a double release above shows up
+    // here rather than at the call itself.
+    let a = Buffer.alloc<int>(4);
+    a[0] = 7;
+    let b = Buffer.alloc<int>(8);
+    b[0] = 9;
+    let c = Buffer.alloc<int>(16);
+    System.println("after=" + a[0].to_string() + "," + b[0].to_string() + "," + c.length.to_string());
+    System.println("still=" + xs.length.to_string() + "," + ys.length.to_string());
+}

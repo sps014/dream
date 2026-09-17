@@ -187,6 +187,7 @@ pub(super) fn emit_kernel(
     let helper_returns = super::helpers::build_helper_return_tys(program);
     // Shadowed as vec3<i32> in the prologue (`global_id_i`, …); type them for inference.
     let mut scopes = IndexMap::new();
+    scopes.insert("local_invocation_index".to_string(), "i32".into());
     for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
         scopes.insert(name.to_string(), "vec3<i32>".into());
     }
@@ -226,7 +227,9 @@ pub(super) fn emit_kernel(
     wgsl.push_str("  @builtin(local_invocation_id) local_id: vec3<u32>,\n");
     wgsl.push_str("  @builtin(workgroup_id) workgroup_id: vec3<u32>,\n");
     wgsl.push_str("  @builtin(num_workgroups) num_workgroups: vec3<u32>,\n");
+    wgsl.push_str("  @builtin(local_invocation_index) _lii: u32,\n");
     wgsl.push_str(") {\n");
+    wgsl.push_str("  let local_invocation_index = i32(_lii);\n");
     // Shadow builtins as i32 structs so Dream-style `.x` field access typechecks in source
     // (`GpuId3`) while WGSL uses `vec3<u32>` builtins.
     wgsl.push_str(

@@ -1,0 +1,136 @@
+// Texel reads, texture queries, gather, shift/bitwise operators, and compare-exchange.
+//
+// texture_load and texture_sample_level had never worked: both were declared to return `float`
+// while the WGSL builtins they lower to return a vec4, so any use failed shader validation.
+// `<<` / `>>` were rejected by the emitter, and there was no local_invocation_index or
+// compare-exchange at all.
+import system;
+import system.gpu;
+
+struct Vertex { public pos: GpuVec2; }
+struct VsOut { public position: GpuVec4; public uv: GpuVec2; }
+
+@compute
+fun bits(out: GpuBuffer<int>): void {
+    if global_id.x != 0 { return; }
+    let a = 5;
+    out[0] = a << 3;
+    out[1] = 40 >> 2;
+    out[2] = a & 3;
+    out[3] = a ^ 1;
+    out[4] = local_invocation_index;
+}
+
+@compute
+fun cas(buf: GpuBuffer<int>, out: GpuBuffer<int>): void {
+    if global_id.x != 0 { return; }
+    // buf[0] holds 7, so comparing against 99 must leave it alone and comparing against 7 must
+    // store. Both calls report the value that was there beforehand.
+    out[0] = Gpu.atomic_compare_exchange(buf, 0, 99, 11);
+    out[1] = Gpu.atomic_load(buf, 0);
+    out[2] = Gpu.atomic_compare_exchange(buf, 0, 7, 11);
+    out[3] = Gpu.atomic_load(buf, 0);
+}
+
+@compute
+fun tex(t: GpuTexture, samp: GpuSampler, out: GpuBuffer<float>): void {
+    if global_id.x != 0 { return; }
+    // Source is 2x1: texel 0 red, texel 1 blue.
+    let a = Gpu.texture_load(t, 0, 0);
+    out[0] = a.x;
+    out[1] = a.z;
+    let b = Gpu.texture_load_level(t, 1, 0, 0);
+    out[2] = b.x;
+    out[3] = b.z;
+    // u=0.75 lands in the right-hand texel.
+    let s = Gpu.texture_sample_level(t, samp, 0.75, 0.5, 0.0);
+    out[4] = s.x;
+    out[5] = s.z;
+    out[6] = (float)Gpu.texture_num_levels(t);
+    // Red channel of the four texels bilinear filtering would blend: one red, one blue, twice
+    // over from the clamped edges.
+    let g = Gpu.texture_gather(0, t, samp, 0.5, 0.5);
+    out[7] = g.x + g.y + g.z + g.w;
+}
+
+@vertex
+fun vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.uv = GpuVec2.of(v.pos.x * 0.5 + 0.5, 0.5 - v.pos.y * 0.5);
+    return o;
+}
+
+// Not dispatched: these need implicit derivatives and so are @fragment-only, but every shader in
+// the program is emitted and validated, which is what checks the lowering. texture_sample_compare
+// in particular has to be handed a @depth texture and a @compare sampler to validate at all.
+@fragment
+fun fs(
+    v: VsOut,
+    @group(0) @binding(0) @depth shadow: GpuTexture,
+    @group(0) @binding(1) @compare shadow_samp: GpuSampler,
+    @group(0) @binding(2) albedo: GpuTexture,
+    @group(0) @binding(3) samp: GpuSampler
+): GpuVec4 {
+    let lit = Gpu.texture_sample_compare(shadow, shadow_samp, v.uv.x, v.uv.y, 0.5);
+    let grad = Gpu.texture_sample_grad(
+        albedo, samp, v.uv, GpuVec2.of(0.01, 0.0), GpuVec2.of(0.0, 0.01));
+    let biased = Gpu.texture_sample_bias(albedo, samp, v.uv.x, v.uv.y, 1.0);
+    let gathered = Gpu.texture_gather(1, albedo, samp, v.uv.x, v.uv.y);
+    return GpuVec4.of(lit * grad.x, biased.y, gathered.x, 1.0);
+}
+
+@compute
+fun shadow_cs(
+    @depth shadow: GpuTexture,
+    @compare shadow_samp: GpuSampler,
+    out: GpuBuffer<float>
+): void {
+    out[0] = Gpu.texture_sample_compare_level(shadow, shadow_samp, 0.5, 0.5, 0.5);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+    let none_i = Buffer.alloc<int>(0);
+    let no_uniforms = Buffer.alloc<byte>(0);
+
+    let bo = GpuBuffer<int>.from([0, 0, 0, 0, 0]);
+    let rb = await Compute.run_resources(
+        "bits", [bo.id], none_i, none_i, 1, 1, 1, no_uniforms);
+    if rb.is_err() { System.println("bits dispatch failed"); return; }
+    let br = await bo.read();
+    for (let i = 0; i < 5; i = i + 1) {
+        System.println("bits[" + i.to_string() + "]=" + br[i].to_string());
+    }
+
+    let buf = GpuBuffer<int>.from([7]);
+    let co = GpuBuffer<int>.from([0, 0, 0, 0]);
+    let rc = await Compute.run_resources(
+        "cas", [buf.id, co.id], none_i, none_i, 1, 1, 1, no_uniforms);
+    if rc.is_err() { System.println("cas dispatch failed"); return; }
+    let cr = await co.read();
+    for (let i = 0; i < 4; i = i + 1) {
+        System.println("cas[" + i.to_string() + "]=" + cr[i].to_string());
+    }
+
+    let t = GpuTexture.rgba8(2, 1);
+    let px = Buffer.alloc<byte>(8);
+    px[0] = (byte)255; px[1] = (byte)0; px[2] = (byte)0;   px[3] = (byte)255;
+    px[4] = (byte)0;   px[5] = (byte)0; px[6] = (byte)255; px[7] = (byte)255;
+    let w = await t.write_rgba(px);
+    if w.is_err() { System.println("texture write failed"); return; }
+    let samp = GpuSampler.create(GpuSamplerDesc.nearest());
+
+    let out = GpuBuffer<float>.from([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    let rt = await Compute.run_resources(
+        "tex", [out.id], [t.id], [samp.id], 1, 1, 1, no_uniforms);
+    if rt.is_err() { System.println("tex dispatch failed"); return; }
+    let v = await out.read();
+    for (let i = 0; i < 8; i = i + 1) {
+        System.println("tex[" + i.to_string() + "]=" + ((int)(v[i] * 100.0 + 0.5)).to_string());
+    }
+}

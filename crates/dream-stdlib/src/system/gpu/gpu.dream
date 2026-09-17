@@ -367,6 +367,18 @@ public static class Gpu {
     public static fun atomic_xor(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicExchange` to atomically swap `v` into `buf[i]`; returns the old value.
     public static fun atomic_exchange(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    // WGSL `atomicCompareExchangeWeak`: stores `v` into `buf[i]` only if it currently holds
+    // `cmp`. Returns the old value either way, so the store happened exactly when the result
+    // equals `cmp`. "Weak" means it may also fail spuriously, hence the retry loop:
+    //
+    //     let old = Gpu.atomic_compare_exchange(buf, i, seen, next);
+    //     if old == seen { break; }   // won; otherwise re-read and try again
+    public static fun atomic_compare_exchange(
+        buf: GpuBuffer<int>,
+        i: int,
+        cmp: int,
+        v: int
+    ): int { return 0; }
 
     // Screen-space partial derivative with respect to window X coordinate (WGSL `dpdx`); `@fragment` stage only.
     public static fun dpdx(v: float): float { return 0.0; }
@@ -399,8 +411,34 @@ public static class Gpu {
     public static fun texture_dimensions(tex: GpuTexture): GpuVec2 {
         return GpuVec2.of((float)tex.width, (float)tex.height);
     }
-    // WGSL `textureLoad` (texel fetch) for `@compute`; CPU stub returns `0`.
-    public static fun texture_load(tex: GpuTexture, x: int, y: int): float { return 0.0; }
+    // WGSL `textureLoad` (texel fetch, no filtering) for `@compute`; CPU stub returns zeros.
+    // Reads mip level 0; use `texture_load_level` for a specific level.
+    public static fun texture_load(tex: GpuTexture, x: int, y: int): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // WGSL `textureLoad` at an explicit mip `level`; CPU stub returns zeros.
+    public static fun texture_load_level(
+        tex: GpuTexture,
+        x: int,
+        y: int,
+        level: int
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // WGSL `textureLoad` from one `layer` of a `@view("2d-array")` texture; CPU stub returns zeros.
+    public static fun texture_load_layer(
+        tex: GpuTexture,
+        x: int,
+        y: int,
+        layer: int,
+        level: int
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // Mip level count of `tex` (WGSL `textureNumLevels`); CPU stub returns `1`.
+    public static fun texture_num_levels(tex: GpuTexture): int { return 1; }
+    // Array layer count of `tex` (WGSL `textureNumLayers`); CPU stub returns `1`.
+    public static fun texture_num_layers(tex: GpuTexture): int { return 1; }
     // WGSL `textureStore` for `@compute`; CPU stub is a no-op.
     public static fun texture_store(
         tex: GpuTexture,
@@ -411,14 +449,17 @@ public static class Gpu {
         b: float,
         a: float
     ): void {}
-    // WGSL `textureSampleLevel` for `@compute`; CPU stub returns `0`.
+    // WGSL `textureSampleLevel` — filtered sample at an explicit mip `level`, so it is usable
+    // from `@compute` where there are no implicit derivatives. CPU stub returns zeros.
     public static fun texture_sample_level(
         tex: GpuTexture,
         samp: GpuSampler,
         u: float,
         v: float,
         level: float
-    ): float { return 0.0; }
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
     // WGSL `textureSample` for `@fragment`; CPU stub returns zeros.
     public static fun texture_sample(
         tex: GpuTexture,
@@ -436,4 +477,68 @@ public static class Gpu {
     ): GpuVec4 {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
+    // Samples one `layer` of a `@view("2d-array")` texture (WGSL `textureSample`); `@fragment` only.
+    public static fun texture_sample_layer(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float,
+        layer: int
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // WGSL `textureSampleBias` — like `texture_sample` with `bias` added to the computed mip
+    // level, to sharpen or blur relative to what the derivatives chose. `@fragment` only.
+    public static fun texture_sample_bias(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float,
+        bias: float
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // WGSL `textureSampleGrad` — samples with explicit derivatives instead of the implicit ones,
+    // which is what lets a `@fragment` shader filter correctly across a discontinuous mapping.
+    public static fun texture_sample_grad(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        uv: GpuVec2,
+        ddx: GpuVec2,
+        ddy: GpuVec2
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // WGSL `textureGather` — the single component `component` (0..3) of the four texels that
+    // bilinear filtering would blend, which is how a shader hand-rolls its own filter kernel.
+    // `component` must be a literal.
+    public static fun texture_gather(
+        component: int,
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float
+    ): GpuVec4 {
+        return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
+    }
+    // WGSL `textureSampleCompare` — hardware depth comparison against `depth_ref`, returning the
+    // filtered fraction of the four neighbouring texels that pass. This is the shadow-map lookup:
+    // `tex` must be `@depth` and `samp` must be `@compare`. `@fragment` only, since it uses
+    // implicit derivatives; `texture_sample_compare_level` is the any-stage form.
+    public static fun texture_sample_compare(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float,
+        depth_ref: float
+    ): float { return 0.0; }
+    // WGSL `textureSampleCompareLevel` — as `texture_sample_compare`, but pinned to mip level 0
+    // and so callable from `@compute` as well.
+    public static fun texture_sample_compare_level(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float,
+        depth_ref: float
+    ): float { return 0.0; }
 }

@@ -683,22 +683,38 @@ impl<'a> Analyzer<'a> {
                     let mut has_color = false;
                     for (fname, field) in &info.fields {
                         if let Some(b) = field.builtin.as_deref() {
-                            if b != "frag_depth" {
-                                diagnostics.report_error(
-                                    format!(
-                                        "@fragment shader '{}' output field '{}' has unsupported @builtin(\"{b}\")",
-                                        function.name.text, fname
-                                    ),
-                                    Some(function.name.position),
-                                );
-                            } else if !matches!(&field.type_, Type::Float(_)) {
-                                diagnostics.report_error(
-                                    format!(
-                                        "@fragment shader '{}' frag_depth field '{}' must be float",
-                                        function.name.text, fname
-                                    ),
-                                    Some(function.name.position),
-                                );
+                            match b {
+                                "frag_depth" if !matches!(&field.type_, Type::Float(_)) => {
+                                    diagnostics.report_error(
+                                        format!(
+                                            "@fragment shader '{}' frag_depth field '{}' must be float",
+                                            function.name.text, fname
+                                        ),
+                                        Some(function.name.position),
+                                    );
+                                }
+                                // Writing coverage is how alpha-to-coverage and custom MSAA
+                                // masking work. `int` because that is what the bitwise
+                                // operators building a mask produce.
+                                "sample_mask" if !matches!(&field.type_, Type::Integer(_)) => {
+                                    diagnostics.report_error(
+                                        format!(
+                                            "@fragment shader '{}' sample_mask field '{}' must be int",
+                                            function.name.text, fname
+                                        ),
+                                        Some(function.name.position),
+                                    );
+                                }
+                                "frag_depth" | "sample_mask" => {}
+                                _ => {
+                                    diagnostics.report_error(
+                                        format!(
+                                            "@fragment shader '{}' output field '{}' has unsupported @builtin(\"{b}\")",
+                                            function.name.text, fname
+                                        ),
+                                        Some(function.name.position),
+                                    );
+                                }
                             }
                         } else {
                             has_color = true;

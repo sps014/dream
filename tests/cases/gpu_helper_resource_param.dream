@@ -1,0 +1,20 @@
+// Buffers, textures and samplers are module-scope bindings in WGSL, so they cannot be passed to
+// a function. This used to emit the Dream type name as the WGSL parameter type, and the failure
+// surfaced as a naga "unknown identifier: GpuBuffer" instead of a Dream diagnostic.
+import system;
+import system.gpu;
+
+@gpu
+fun bump(counter: GpuBuffer<int>): int {
+    counter[1] = counter[1] + 1;
+    return 2;
+}
+
+@compute
+fun k(out: GpuBuffer<int>): void {
+    out[0] = bump(out);
+}
+
+fun main(): void {
+    System.println("unreachable");
+}

@@ -389,12 +389,18 @@ fn emit_stmt(
             }
         }
         StatementNode::MemberAssignment(obj, member, value) => {
+            // The store is converted to the field's own type. WGSL only converts abstract
+            // literals implicitly, so a concrete mismatch (an `int` expression into a `float`
+            // field, or the `u32`-typed sample_mask builtin) is an error there without this.
+            let want = ctx
+                .lookup_struct_field(&infer_wgsl_ty(obj, ctx), &member.text)
+                .unwrap_or_default();
             out.push_str(&format!(
                 "{}{}.{} = {};\n",
                 p,
                 emit_expr(obj, ctx),
                 escape_wgsl_ident(&member.text),
-                emit_expr(value, ctx)
+                coerce_expr_to_wgsl_ty(value, &want, ctx)
             ));
         }
         StatementNode::Return(None) => out.push_str(&format!("{}return;\n", p)),

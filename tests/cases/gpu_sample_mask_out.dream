@@ -1,0 +1,109 @@
+// Writing `@builtin("sample_mask")` from a fragment shader controls which samples the fragment
+// covers, which is how alpha-to-coverage and custom MSAA masking work. Only reading the mask was
+// supported before; the output form was rejected outright.
+//
+// At sample_count 1 the mask is a single bit, so clearing it discards the fragment entirely and
+// the clear colour survives — checkable without an MSAA target and a resolve.
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    @interpolate("flat") public unused: float;
+}
+
+struct FsOut {
+    @location(0) public color: GpuVec4;
+    @builtin("sample_mask") public coverage: int;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+@vertex
+fun mask_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.unused = 0.0;
+    return o;
+}
+
+@fragment
+fun mask_fs(v: VsOut, @group(0) @binding(0) keep: float): FsOut {
+    let o = FsOut();
+    o.color = GpuVec4.of(0.0, 1.0, 0.0, 1.0);
+    // Uniform-driven so one pipeline covers both cases: bit 0 set keeps the sample, clear
+    // discards it. `& 0x1` also exercises the bitwise path producing the mask.
+    o.coverage = (int)keep & 0x1;
+    return o;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
+    ]);
+
+    let desc = GpuRenderPipelineDesc.defaults();
+    let pipe_r = await GpuRenderPipeline.create_ex("mask_vs", "mask_fs", desc);
+    if pipe_r.is_err() {
+        System.println("pipeline create failed: " + pipe_r.unwrap_err().message());
+        return;
+    }
+    let pipe = pipe_r.unwrap();
+
+    let target = GpuTexture.rgba8(2, 2);
+    let enc = GpuEncoder.begin();
+    let pass = enc.render_pass(
+        GpuRenderTarget.texture(target).clear(GpuVec4.of(1.0, 0.0, 0.0, 1.0))
+    );
+    pass.set_pipeline(pipe);
+    pass.set_vertex_buffer(0, verts);
+    // Coverage cleared: the green triangle must not reach the target.
+    pass.set_uniforms(Uniforms.pack_f32([0.0]));
+    pass.draw(3, 1, 0, 0);
+    pass.end();
+
+    let submitted = await enc.submit();
+    if submitted.is_err() {
+        System.println("submit failed: " + submitted.unwrap_err().message());
+        return;
+    }
+    let masked = await target.read_rgba();
+    System.println("masked_out=" + ((int)masked[0]).to_string() + ","
+        + ((int)masked[1]).to_string() + "," + ((int)masked[2]).to_string());
+
+    let enc2 = GpuEncoder.begin();
+    let pass2 = enc2.render_pass(
+        GpuRenderTarget.texture(target).clear(GpuVec4.of(1.0, 0.0, 0.0, 1.0))
+    );
+    pass2.set_pipeline(pipe);
+    pass2.set_vertex_buffer(0, verts);
+    // Coverage set: the fragment survives.
+    pass2.set_uniforms(Uniforms.pack_f32([1.0]));
+    pass2.draw(3, 1, 0, 0);
+    pass2.end();
+
+    let submitted2 = await enc2.submit();
+    if submitted2.is_err() {
+        System.println("second submit failed: " + submitted2.unwrap_err().message());
+        return;
+    }
+    let kept = await target.read_rgba();
+    System.println("kept=" + ((int)kept[0]).to_string() + ","
+        + ((int)kept[1]).to_string() + "," + ((int)kept[2]).to_string());
+}

@@ -78,7 +78,7 @@ let _ = await GpuRenderPass.draw_instanced(
 | Attribute wire format | Matches the field's type | `@format("unorm8x4")` etc. to pack it smaller |
 | Clip position | Field named **`position: GpuVec4`** | or `@builtin("position")` on any `GpuVec4` field |
 | Interpolation | perspective | `@interpolate("flat"\|"linear"\|"perspective")`, plus an optional sampling qualifier |
-| Fragment color | Return **`GpuVec4`** | or an output struct with `@location` colors (+ optional `@builtin("frag_depth")`) |
+| Fragment color | Return **`GpuVec4`** | or an output struct with `@location` colors (+ optional `@builtin("frag_depth")` / `@builtin("sample_mask")`) |
 | Bindings | auto `@group(0)`, binding index auto-assigned per group | `@group(N)` / `@binding(N)` on resource params |
 | `GpuTexture` binding | sampled `texture_2d<f32>` | `@storage` for a writable storage texture; `@cube` for `texture_cube<f32>` |
 | `GpuBuffer<T>` binding | `read_write` storage | `@readonly` for read-only storage |
@@ -218,8 +218,18 @@ fun fs(v: VsOut): FsOut {
   referenced (`primitive_index` emits `enable primitive_index;`)
 
 `sample_mask` is the incoming coverage mask: bit *N* is set when sample *N* of this fragment is
-covered, so `GpuMath.count_one_bits(sample_mask)` counts covered samples. Writing the mask to
-control coverage is not supported yet.
+covered, so `GpuMath.count_one_bits(sample_mask)` counts covered samples.
+
+An output struct can also **write** `@builtin("sample_mask")` as an `int` field, which is how
+alpha-to-coverage and custom MSAA masking work — clearing a bit discards that sample, and
+clearing every bit discards the fragment:
+
+```dream
+struct FsOut {
+    @location(0) public color: GpuVec4;
+    @builtin("sample_mask") public coverage: int;
+}
+```
 
 ## Control flow
 
@@ -327,7 +337,10 @@ fun sea_octave(ux: float, uz: float, choppy: float): float {
 }
 ```
 
-Rules: top-level only; not generic/async/extern; explicit non-void return type.
+Rules: top-level only; not generic/async/extern; explicit non-void return type. Parameters carry
+values, so a `GpuBuffer` / `GpuTexture` / `GpuSampler` cannot be one — those are bound to a stage,
+not passed. Index the resource in the stage function and pass the element, or make the helper its
+own `@compute` kernel with its own binding.
 
 ## Matrices
 

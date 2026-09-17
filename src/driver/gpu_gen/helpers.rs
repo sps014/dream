@@ -454,6 +454,27 @@ fn emit_one_helper(
     let mut params = Vec::new();
     let mut scopes = vec![IndexMap::new()];
     for p in &func.parameters {
+        // Buffers, textures and samplers are module-scope bindings in WGSL, not values, so they
+        // cannot cross a function boundary. Without this the resource's Dream type name was
+        // emitted as the parameter type and the failure surfaced as a WGSL "unknown identifier"
+        // naming a Dream type.
+        if let dream_syntax::nodes::Type::Struct(tok, _) = &p.type_ {
+            if matches!(
+                tok.text.as_str(),
+                "GpuBuffer" | "GpuTexture" | "GpuSampler"
+            ) {
+                diagnostics.report_error(
+                    format!(
+                        "@gpu helper '{name}' cannot take '{}' as a parameter: {} is bound to a \
+                         shader stage, not passed as a value. Index it in the @compute/@vertex/\
+                         @fragment function and pass the element, or make '{name}' a @compute \
+                         kernel with its own binding",
+                        tok.text, tok.text
+                    ),
+                    Some(p.name.position),
+                );
+            }
+        }
         let pty = dream_ty_to_wgsl(&p.type_);
         let pname = escape_wgsl_ident(&p.name.text);
         scopes[0].insert(p.name.text.clone(), pty.clone());

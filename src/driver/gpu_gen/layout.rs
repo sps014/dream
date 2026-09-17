@@ -112,9 +112,15 @@ pub(super) fn build_struct_field_tys(
     for st in &program.structs {
         let mut fields = IndexMap::new();
         for field in &st.fields {
-            let ty = dream_ty_to_wgsl_vec(&field.field_type)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| dream_ty_to_wgsl(&field.field_type));
+            let ty = if field_builtin(field).as_deref() == Some(SAMPLE_MASK_BUILTIN) {
+                // Declared `int` in Dream but `u32` in WGSL, so stores into it have to be
+                // converted; reporting the field's own type here would emit an `i32` store.
+                "u32".to_string()
+            } else {
+                dream_ty_to_wgsl_vec(&field.field_type)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| dream_ty_to_wgsl(&field.field_type))
+            };
             fields.insert(field.name.text.clone(), ty);
         }
         map.insert(st.name.text.clone(), fields);
@@ -421,7 +427,12 @@ pub(super) fn emit_data_struct_wgsl(decl: &StructDeclarationNode<'_>) -> Result<
     Ok(s)
 }
 
-/// Fragment output struct (`@location` color targets + optional `@builtin(frag_depth)`).
+/// The one output builtin whose Dream and WGSL types differ, so both the struct emitter and the
+/// field-type table have to agree on the exception.
+const SAMPLE_MASK_BUILTIN: &str = "sample_mask";
+
+/// Fragment output struct (`@location` color targets + optional `@builtin(frag_depth)` /
+/// `@builtin(sample_mask)`).
 pub(super) fn emit_fragment_out_struct_wgsl(
     decl: &StructDeclarationNode<'_>,
 ) -> Result<(String, String), String> {
@@ -440,19 +451,35 @@ pub(super) fn emit_fragment_out_struct_wgsl(
         };
         let builtin = field_builtin(field);
         if let Some(ref b) = builtin {
-            if b != "frag_depth" {
-                return Err(format!(
-                    "fragment output field '{}' has unsupported @builtin(\"{b}\"); only \"frag_depth\" is allowed",
-                    field.name.text
-                ));
+            match b.as_str() {
+                "frag_depth" => {
+                    if wgsl_ty != "f32" {
+                        return Err(format!(
+                            "builtin frag_depth field '{}' must be float",
+                            field.name.text
+                        ));
+                    }
+                    s.push_str(&format!("  @builtin(frag_depth) {fname}: {wgsl_ty},\n"));
+                }
+                // Writing coverage discards samples, which is how alpha-to-coverage and custom
+                // MSAA masking work. WGSL types it `u32`; Dream spells it `int` because that is
+                // what the bitwise operators produce.
+                SAMPLE_MASK_BUILTIN => {
+                    if wgsl_ty != "i32" {
+                        return Err(format!(
+                            "builtin sample_mask field '{}' must be int",
+                            field.name.text
+                        ));
+                    }
+                    s.push_str(&format!("  @builtin(sample_mask) {fname}: u32,\n"));
+                }
+                _ => {
+                    return Err(format!(
+                        "fragment output field '{}' has unsupported @builtin(\"{b}\"); only \"frag_depth\" and \"sample_mask\" are allowed",
+                        field.name.text
+                    ));
+                }
             }
-            if wgsl_ty != "f32" {
-                return Err(format!(
-                    "builtin frag_depth field '{}' must be float",
-                    field.name.text
-                ));
-            }
-            s.push_str(&format!("  @builtin(frag_depth) {fname}: {wgsl_ty},\n"));
         } else {
             if wgsl_ty != "vec4<f32>" {
                 return Err(format!(

@@ -1,22 +1,38 @@
 //! Last-use move repair after inlining.
 //!
 //! [`super::RcInsertion`] runs *before* inlining so callee size (and destruction timing) stay
-//! stable. The inliner then splices `a[i] = s` into a larger CFG where `s` is dead — but a baked
-//! `Retain(s)` / missing `s = null` stay. Re-running insertion on fused `generated_dispatch` is too
-//! expensive. This pass is linear and only rewrites last-use **index** stores of owned RC
-//! sources: null the source and drop a share-`Retain` into that store. Field stores stay on
-//! [`super::RcInsertion`].
+//! stable. The inliner then splices `a[i] = s` / `o.f = s` into a larger CFG where `s` is dead —
+//! but a baked `Retain(s)` / missing `s = null` stay. Re-running insertion on fused
+//! `generated_dispatch` is too expensive. This pass is linear and rewrites last-use **container**
+//! stores (index and field) of owned RC sources: null the source and drop a share-`Retain` into
+//! that store.
+//!
+//! Field stores need a [`LayoutTable`] to tell a strong field from a `weak`/`unowned` one (those
+//! don't retain, so there is no token to repair). Without one the pass restricts itself to index
+//! stores; [`Self::run_with_layouts`] is the form the module pipeline uses.
 
 use super::liveness::{self, live_after_stmt};
 use super::tokens::is_owned_local;
 use super::uniqueness::{
-    can_container_move, container_store_src, fresh_locals, mark_container_move,
+    can_container_move, container_store_src, field_store_is_non_strong, fresh_locals,
+    mark_container_move,
 };
 use crate::passes::MirPass;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use dream_hir::LayoutTable;
 use dream_types::TypeInterner;
 
 pub struct RcLastUseRepair;
+
+impl RcLastUseRepair {
+    pub fn run_with_layouts(
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &LayoutTable,
+    ) -> bool {
+        repair(func, interner, Some(layouts))
+    }
+}
 
 impl MirPass for RcLastUseRepair {
     fn name(&self) -> &'static str {
@@ -24,7 +40,7 @@ impl MirPass for RcLastUseRepair {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        repair(func, interner)
+        repair(func, interner, None)
     }
 }
 
@@ -117,7 +133,11 @@ fn defines_borrow(stmts: &[Statement], local: u32) -> bool {
     }) == Some(true)
 }
 
-fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
+fn repair(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    layouts: Option<&LayoutTable>,
+) -> bool {
     let nloc = func.locals.len();
     if nloc == 0 {
         return false;
@@ -126,29 +146,51 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
     let fresh = fresh_locals(func, interner);
     let mut changed = false;
     for bi in 0..func.blocks.len() {
+        // Candidate sources per original statement index, then one backward sweep to learn which
+        // of them are dead after their store. Both are computed before any mutation so inserted
+        // statements can't shift the indices they were keyed by.
+        let probes: Vec<Option<u32>> = func.blocks[bi]
+            .stmts
+            .iter()
+            .map(|stmt| {
+                let repairable = match stmt {
+                    Statement::Assign(Place::Index { .. }, _) => true,
+                    Statement::Assign(Place::Field { .. }, _) => {
+                        layouts.is_some_and(|l| !field_store_is_non_strong(func, l, stmt))
+                    }
+                    _ => false,
+                };
+                repairable
+                    .then(|| {
+                        container_store_src(stmt).filter(|&src| {
+                            is_owned_local(func, interner, src)
+                                && can_container_move(interner, func.locals[src as usize].ty)
+                        })
+                    })
+                    .flatten()
+            })
+            .collect();
+        let live_after = liveness::live_after_each(func, &live_out, bi, &probes);
+        let mut candidates: Vec<Option<u32>> = probes
+            .into_iter()
+            .zip(live_after)
+            .map(|(src, live)| src.filter(|_| !live))
+            .collect();
+
         let mut si = 0;
         while si < func.blocks[bi].stmts.len() {
-            let stmt = &func.blocks[bi].stmts[si];
-            let src = match stmt {
-                Statement::Assign(Place::Index { .. }, _) => {
-                    container_store_src(stmt).filter(|&src| {
-                        is_owned_local(func, interner, src)
-                            && can_container_move(interner, func.locals[src as usize].ty)
-                            && !live_after_stmt(func, &live_out, bi, si, src)
-                    })
-                }
-                _ => None,
-            };
-            let Some(src) = src else {
+            let Some(src) = candidates.get(si).copied().flatten() else {
                 si += 1;
                 continue;
             };
+            candidates[si] = None;
             if let Some((rb, ri)) = baked_retain(func, &live_out, bi, si, src, interner) {
                 // The stripped `Retain` is replaced by the one the store makes for itself, so the
                 // slot still ends up holding a reference of its own and the source's is given up by
                 // the null below.
                 func.blocks[rb].stmts.remove(ri);
                 if rb == bi {
+                    candidates.remove(ri);
                     si -= 1;
                 }
                 changed = true;
@@ -168,6 +210,7 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
                     si + 1,
                     Statement::Release(Operand::Copy(Place::Local(Local(src)))),
                 );
+                candidates.insert(si + 1, None);
                 si += 1;
                 changed = true;
             }
@@ -186,6 +229,7 @@ fn repair(func: &mut MirFunction, interner: &TypeInterner) -> bool {
                         Rvalue::Use(Operand::Const(Const::Null)),
                     ),
                 );
+                candidates.insert(si + 1, None);
                 changed = true;
                 si += 2;
             } else {

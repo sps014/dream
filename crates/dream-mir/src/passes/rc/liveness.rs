@@ -61,6 +61,30 @@ pub(crate) fn live_after_stmt(
     live.contains(&local)
 }
 
+/// Answers [`live_after_stmt`] for every statement of one block in a single backward sweep.
+///
+/// `probes[si]` is the local to ask about at that index (`None` to skip). Asking per statement
+/// instead would re-walk the block suffix each time, which is quadratic in blocks with thousands
+/// of container stores (a fused `@json` unit).
+pub(crate) fn live_after_each(
+    func: &MirFunction,
+    live_out: &[HashSet<u32>],
+    bi: usize,
+    probes: &[Option<u32>],
+) -> Vec<bool> {
+    let block = &func.blocks[bi];
+    let mut live = live_out[bi].clone();
+    add_terminator_reads(&block.terminator, &mut live);
+    let mut out = vec![false; probes.len()];
+    for si in (0..block.stmts.len()).rev() {
+        if let Some(local) = probes.get(si).copied().flatten() {
+            out[si] = live.contains(&local);
+        }
+        transfer_stmt(&block.stmts[si], &mut live);
+    }
+    out
+}
+
 fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut HashSet<u32>) {
     add_terminator_reads(term, live);
     for stmt in stmts.iter().rev() {

@@ -208,7 +208,7 @@ impl Default for PassManager {
 ///
 /// [`ExpandSimpleCtors`] runs *before* [`RcInsertion`] so `o.field = arg` is what RC sees, not a
 /// `New` whose args are all treated as sinks. After inlining, [`RcLastUseRepair`] fixes last-use
-/// index stores of owned RC values on the fused CFG (inlined `split` temps). Then
+/// container stores of owned RC values on the fused CFG (inlined `split` temps). Then
 /// [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     optimize_module_opts(mir, interner, true)
@@ -238,7 +238,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
     if !inline {
         for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-            RcLastUseRepair.run(f, interner);
+            RcLastUseRepair::run_with_layouts(f, interner, &layouts);
         }
         let _ = UniqueRegion.run(mir, interner);
         return;
@@ -256,7 +256,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
         let _ = Devirt.run(mir, interner);
     }
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-        RcLastUseRepair.run(f, interner);
+        RcLastUseRepair::run_with_layouts(f, interner, &layouts);
     }
     let _ = UniqueRegion.run(mir, interner);
 }

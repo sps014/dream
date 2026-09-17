@@ -1,0 +1,100 @@
+// A `@vertex` stage taking two struct parameters gets two vertex buffer slots: the first steps per
+// vertex, the `@instance` one steps per instance. The instance colour also rides as `@format`
+// packed bytes, four on the wire instead of sixteen, while the shader still reads a GpuVec4.
+//
+// Two instances are drawn side by side into a 4x1 target, each offset by its own instance data, so
+// a slot that never reached the pipeline or stepping that ignored the instance index would leave
+// both halves the same colour.
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct Instance {
+    public offset: GpuVec2;
+    @format("unorm8x4") public tint: GpuVec4;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+fun make_inst(dx: float, r: float, g: float, b: float): Instance {
+    let i = Instance();
+    i.offset = GpuVec2.of(dx, 0.0);
+    i.tint = GpuVec4.of(r, g, b, 1.0);
+    return i;
+}
+
+@vertex
+fun bar_vs(v: Vertex, @instance inst: Instance): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x + inst.offset.x, v.pos.y, 0.0, 1.0);
+    o.color = inst.tint;
+    return o;
+}
+
+@fragment
+fun bar_fs(v: VsOut): GpuVec4 {
+    return v.color;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    // A half-width quad at the left of clip space; the instance offset slides it right.
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(0.0, -1.0),
+        make_vert(-1.0, 1.0),
+        make_vert(0.0, -1.0),
+        make_vert(0.0, 1.0),
+        make_vert(-1.0, 1.0),
+    ]);
+
+    // `@format("unorm8x4")` stores each channel as a byte, so the buffer holds packed bytes
+    // rather than the floats the shader reads.
+    let instances = GpuBuffer<byte>.vertex_from([
+        // offset (-0.0, 0.0) as two f32, then the tint as four unorm8 bytes: red.
+        (byte)0, (byte)0, (byte)0, (byte)0,
+        (byte)0, (byte)0, (byte)0, (byte)0,
+        (byte)255, (byte)0, (byte)0, (byte)255,
+        // offset (1.0, 0.0), tint blue.
+        (byte)0, (byte)0, (byte)128, (byte)63,
+        (byte)0, (byte)0, (byte)0, (byte)0,
+        (byte)0, (byte)0, (byte)255, (byte)255,
+    ]);
+
+    let made = await GpuRenderPipeline.create("bar_vs", "bar_fs");
+    if made.is_err() { System.println("pipeline failed"); return; }
+    let pipeline = made.unwrap();
+    let target = GpuTexture.rgba8(4, 1);
+
+    let enc = GpuEncoder.begin();
+    let pass = enc.render_pass(GpuRenderTarget.texture(target).clear(GpuVec4.of(0.0, 0.0, 0.0, 1.0)));
+    pass.set_pipeline(pipeline);
+    pass.set_vertex_buffer(0, verts);
+    pass.set_vertex_buffer(1, instances);
+    pass.draw(6, 2, 0, 0);
+    pass.end();
+    let sent = await enc.submit();
+    if sent.is_err() { System.println("submit failed"); return; }
+
+    let px = await target.read_rgba();
+    System.println("left=" + ((int)px[0]).to_string() + "," + ((int)px[1]).to_string() + "," + ((int)px[2]).to_string());
+    // Pixel (3, 0) starts 12 bytes in.
+    System.println("right=" + ((int)px[12]).to_string() + "," + ((int)px[13]).to_string() + "," + ((int)px[14]).to_string());
+}

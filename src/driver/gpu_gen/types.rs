@@ -57,8 +57,18 @@ impl GpuBinding {
 #[derive(Debug, Clone)]
 pub struct GpuVertexAttr {
     pub location: u32,
+    /// WebGPU vertex format name; the wire format, which `@format` may pack below the field type.
     pub format: &'static str,
     pub offset: u32,
+}
+
+/// One vertex buffer slot: the struct a `@vertex` parameter takes, as a buffer layout.
+#[derive(Debug, Clone)]
+pub struct GpuVertexBuffer {
+    pub attributes: Vec<GpuVertexAttr>,
+    pub stride: u32,
+    /// `"vertex"` or `"instance"` (`@instance` on the parameter).
+    pub step_mode: &'static str,
 }
 
 /// Metadata for one `@compute` kernel.
@@ -82,9 +92,9 @@ pub struct GpuShaderInfo {
     pub stage: &'static str,
     pub entry: String,
     pub bindings: Vec<GpuBinding>,
-    /// Vertex stage only: attribute layout for the first vertex-struct parameter.
-    pub vertex_layout: Vec<GpuVertexAttr>,
-    pub vertex_stride: u32,
+    /// Vertex stage only: one layout per vertex-struct parameter, in `set_vertex_buffer` slot
+    /// order.
+    pub vertex_buffers: Vec<GpuVertexBuffer>,
     /// Dream type name of the VS return / FS first param interface struct (empty if none).
     pub interface_ty: String,
     /// Fragment stage: number of `@location` color targets (1 for bare `GpuVec4` return).

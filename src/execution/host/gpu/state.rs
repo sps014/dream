@@ -121,8 +121,9 @@ pub struct RenderPipeBuild {
     pub vs_entry: String,
     pub fs_entry: String,
     pub layout: wgpu::PipelineLayout,
-    pub vertex_attribs: Vec<wgpu::VertexAttribute>,
-    pub vertex_stride: u32,
+    /// One entry per vertex buffer slot. `wgpu::VertexBufferLayout` borrows its attributes, so
+    /// they are owned here and the layouts are rebuilt for each pipeline variant.
+    pub vertex_buffers: Vec<VertexBufferBuild>,
     pub color_targets: u32,
     pub topology: wgpu::PrimitiveTopology,
     pub front_face: wgpu::FrontFace,
@@ -130,6 +131,12 @@ pub struct RenderPipeBuild {
     pub blend: Option<wgpu::BlendState>,
     pub depth_stencil: Option<wgpu::DepthStencilState>,
     pub sample_count: u32,
+}
+
+pub struct VertexBufferBuild {
+    pub stride: u32,
+    pub step_mode: wgpu::VertexStepMode,
+    pub attributes: Vec<wgpu::VertexAttribute>,
 }
 
 pub struct RenderPipe {

@@ -4274,15 +4274,19 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const layout = layouts.length
           ? dev.createPipelineLayout({ bindGroupLayouts: layouts })
           : "auto";
-        const attribs = (vsMeta.vertex_layout || []).map((a) => ({
-          shaderLocation: a.location | 0,
-          offset: a.offset | 0,
-          format: a.format || "float32x4",
-        }));
-        const stride = (vsMeta.vertex_stride | 0) || 0;
-        const vertexBuffers = stride > 0 && attribs.length > 0
-          ? [{ arrayStride: stride, stepMode: "vertex", attributes: attribs }]
-          : [];
+        // One layout per `@vertex` struct parameter, in `set_vertex_buffer` slot order. A buffer
+        // whose struct has no attributes contributes no slot, which keeps the array contiguous.
+        const vertexBuffers = (vsMeta.vertex_buffers || [])
+          .filter((b) => (b.stride | 0) > 0 && (b.attributes || []).length > 0)
+          .map((b) => ({
+            arrayStride: b.stride | 0,
+            stepMode: b.step_mode === "instance" ? "instance" : "vertex",
+            attributes: b.attributes.map((a) => ({
+              shaderLocation: a.location | 0,
+              offset: a.offset | 0,
+              format: a.format || "float32x4",
+            })),
+          }));
         const topologies = [
           "triangle-list", "triangle-strip", "line-list", "line-strip", "point-list",
         ];

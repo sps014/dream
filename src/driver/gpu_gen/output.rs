@@ -45,25 +45,36 @@ fn shaders_json(shaders: &[GpuShaderInfo]) -> String {
     let mut entries = Vec::new();
     for sh in shaders {
         let binds = bindings_json(&sh.bindings);
-        let layout: Vec<String> = sh
-            .vertex_layout
+        let buffers: Vec<String> = sh
+            .vertex_buffers
             .iter()
-            .map(|a| {
+            .map(|b| {
+                let attrs: Vec<String> = b
+                    .attributes
+                    .iter()
+                    .map(|a| {
+                        format!(
+                            "{{ \"location\": {}, \"format\": \"{}\", \"offset\": {} }}",
+                            a.location,
+                            json_escape(a.format),
+                            a.offset
+                        )
+                    })
+                    .collect();
                 format!(
-                    "{{ \"location\": {}, \"format\": \"{}\", \"offset\": {} }}",
-                    a.location,
-                    json_escape(a.format),
-                    a.offset
+                    "{{ \"stride\": {}, \"step_mode\": \"{}\", \"attributes\": [{}] }}",
+                    b.stride,
+                    b.step_mode,
+                    attrs.join(", ")
                 )
             })
             .collect();
         entries.push(format!(
-            "{{ \"name\": \"{}\", \"stage\": \"{}\", \"entry\": \"{}\", \"bindings\": [{binds}], \"vertex_layout\": [{}], \"vertex_stride\": {}, \"interface\": \"{}\", \"color_targets\": {}, \"uniform_size\": {}, \"source\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"stage\": \"{}\", \"entry\": \"{}\", \"bindings\": [{binds}], \"vertex_buffers\": [{}], \"interface\": \"{}\", \"color_targets\": {}, \"uniform_size\": {}, \"source\": \"{}\" }}",
             json_escape(&sh.name),
             sh.stage,
             json_escape(&sh.entry),
-            layout.join(", "),
-            sh.vertex_stride,
+            buffers.join(", "),
             json_escape(&sh.interface_ty),
             sh.color_targets,
             sh.uniform_size,

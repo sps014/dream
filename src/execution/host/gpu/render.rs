@@ -157,16 +157,27 @@ fn create_inner(
         vs_entry: vs.entry.clone(),
         fs_entry: fs.entry.clone(),
         layout: pl,
-        vertex_attribs: vs
-            .vertex_layout
+        vertex_buffers: vs
+            .vertex_buffers
             .iter()
-            .map(|a| wgpu::VertexAttribute {
-                format: vertex_format(&a.format),
-                offset: a.offset as u64,
-                shader_location: a.location,
+            .map(|b| super::state::VertexBufferBuild {
+                stride: b.stride,
+                step_mode: if b.step_mode == "instance" {
+                    wgpu::VertexStepMode::Instance
+                } else {
+                    wgpu::VertexStepMode::Vertex
+                },
+                attributes: b
+                    .attributes
+                    .iter()
+                    .map(|a| wgpu::VertexAttribute {
+                        format: vertex_format(&a.format),
+                        offset: a.offset as u64,
+                        shader_location: a.location,
+                    })
+                    .collect(),
             })
             .collect(),
-        vertex_stride: vs.vertex_stride,
         color_targets: fs.color_targets.max(1),
         topology: topology(topology_i),
         front_face: if front_face == 1 {
@@ -224,15 +235,16 @@ fn build_pipeline(
     b: &RenderPipeBuild,
     format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
-    let vertex_buffers = if b.vertex_stride > 0 && !b.vertex_attribs.is_empty() {
-        vec![wgpu::VertexBufferLayout {
-            array_stride: b.vertex_stride as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &b.vertex_attribs,
-        }]
-    } else {
-        Vec::new()
-    };
+    let vertex_buffers: Vec<wgpu::VertexBufferLayout<'_>> = b
+        .vertex_buffers
+        .iter()
+        .filter(|v| v.stride > 0 && !v.attributes.is_empty())
+        .map(|v| wgpu::VertexBufferLayout {
+            array_stride: u64::from(v.stride),
+            step_mode: v.step_mode,
+            attributes: &v.attributes,
+        })
+        .collect();
     let targets: Vec<Option<wgpu::ColorTargetState>> = (0..b.color_targets)
         .map(|_| {
             Some(wgpu::ColorTargetState {

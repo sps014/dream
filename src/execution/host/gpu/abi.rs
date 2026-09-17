@@ -38,10 +38,9 @@ pub struct GpuShaderMeta {
     pub entry: String,
     #[serde(default)]
     pub bindings: Vec<GpuBindingMeta>,
+    /// One layout per vertex-struct parameter, in `set_vertex_buffer` slot order.
     #[serde(default)]
-    pub vertex_layout: Vec<GpuVertexAttrMeta>,
-    #[serde(default)]
-    pub vertex_stride: u32,
+    pub vertex_buffers: Vec<GpuVertexBufferMeta>,
     #[serde(default = "default_color_targets")]
     pub color_targets: u32,
     /// Byte size of the shared uniform block, `0` when the stage declares none.
@@ -85,6 +84,16 @@ pub struct GpuVertexAttrMeta {
     pub location: u32,
     pub format: String,
     pub offset: u32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct GpuVertexBufferMeta {
+    pub stride: u32,
+    /// `"vertex"` or `"instance"`.
+    #[serde(default)]
+    pub step_mode: String,
+    #[serde(default)]
+    pub attributes: Vec<GpuVertexAttrMeta>,
 }
 
 #[derive(Debug, Deserialize)]

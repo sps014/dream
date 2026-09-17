@@ -5,11 +5,12 @@ use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
-    assign_locations, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
+    assign_locations_from, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
     emit_interface_struct_wgsl, find_struct, has_position_gpuvec4, struct_name_of,
 };
 use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::types::GpuShaderInfo;
+use dream_abi::attributes::has_named_attr;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
@@ -26,8 +27,7 @@ pub(super) fn emit_vertex(
     let name = func.name.text.clone();
     let entry = format!("dream_{}", name);
 
-    let mut vertex_layout = Vec::new();
-    let mut vertex_stride = 0u32;
+    let mut vertex_buffers = Vec::new();
     let mut interface_ty = String::new();
     let mut struct_header = String::new();
     let mut bindings = Vec::new();
@@ -35,54 +35,47 @@ pub(super) fn emit_vertex(
     let mut header = String::new();
     let mut uniforms: Vec<(String, String)> = Vec::new();
     let mut uniform_size = 0u32;
-    let mut vertex_param: Option<(String, String)> = None; // (param_name, struct_name)
+    let mut vertex_params: Vec<(String, String)> = Vec::new(); // (param_name, struct_name)
 
-    let mut param_iter = func.parameters.iter();
-    if let Some(first) = param_iter.next() {
-        let consumed = if let Some(sname) = struct_name_of(&first.type_) {
-            if !matches!(sname, "GpuTexture" | "GpuSampler") {
-                if let Some(decl) = find_struct(program, sname) {
-                    match build_vertex_layout(decl) {
-                        Ok((layout, stride)) => {
-                            vertex_layout = layout;
-                            vertex_stride = stride;
-                            vertex_param = Some((first.name.text.clone(), sname.to_string()));
-                            match emit_vertex_in_struct(decl) {
-                                Ok(s) => struct_header.push_str(&s),
-                                Err(e) => diagnostics.report_error(e, Some(func.name.position)),
-                            }
-                            true
-                        }
-                        Err(e) => {
-                            diagnostics.report_error(e, Some(first.name.position));
-                            true
-                        }
-                    }
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        } else {
-            false
+    // Leading struct parameters are vertex buffers, one slot each in declaration order; everything
+    // from the first non-struct parameter on is a shader resource. Attribute locations run across
+    // all the buffers, so a later buffer continues where the previous one stopped.
+    let mut params = func.parameters.iter().peekable();
+    let mut next_location = 0u32;
+    while let Some(param) = params.peek() {
+        let Some(decl) = struct_name_of(&param.type_)
+            .filter(|sname| !matches!(*sname, "GpuTexture" | "GpuSampler"))
+            .and_then(|sname| find_struct(program, sname))
+        else {
+            break;
         };
-        if !consumed {
-            // First param is a resource/uniform, not vertex attrs.
-            if let Err(e) = emit_resource_param(
-                first,
-                &entry,
-                &mut header,
-                &mut bindings,
-                &mut alloc,
-                &mut uniforms,
-            ) {
-                diagnostics.report_error(e, Some(first.name.position));
+        let param = params.next().expect("peeked");
+        let step_mode = if has_named_attr(&param.attributes, "instance") {
+            "instance"
+        } else {
+            "vertex"
+        };
+        let base = next_location;
+        match build_vertex_layout(decl, step_mode, base) {
+            Ok(buffer) => {
+                next_location = buffer
+                    .attributes
+                    .iter()
+                    .map(|a| a.location + 1)
+                    .max()
+                    .unwrap_or(base);
+                vertex_buffers.push(buffer);
+                match emit_vertex_in_struct(decl, base) {
+                    Ok(s) => struct_header.push_str(&s),
+                    Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+                }
             }
+            Err(e) => diagnostics.report_error(e, Some(param.name.position)),
         }
+        vertex_params.push((param.name.text.clone(), decl.name.text.clone()));
     }
 
-    for param in param_iter {
+    for param in params {
         if let Err(e) = emit_resource_param(
             param,
             &entry,
@@ -142,7 +135,7 @@ pub(super) fn emit_vertex(
     let mut scopes = vec![IndexMap::new()];
     scopes[0].insert("vertex_index".into(), "i32".into());
     scopes[0].insert("instance_index".into(), "i32".into());
-    if let Some((ref vp, ref sname)) = vertex_param {
+    for (vp, sname) in &vertex_params {
         scopes[0].insert(vp.clone(), sname.clone());
     }
     let mut workgroup_decls = String::new();
@@ -173,7 +166,7 @@ pub(super) fn emit_vertex(
     // WGSL forbids identifiers starting with `__` (reserved); use a single-underscore prefix.
     wgsl.push_str("  @builtin(vertex_index) _vi: u32,\n");
     wgsl.push_str("  @builtin(instance_index) _ii: u32,\n");
-    if let Some((ref vp, ref sname)) = vertex_param {
+    for (vp, sname) in &vertex_params {
         wgsl.push_str(&format!(
             "  {}: {},\n",
             escape_wgsl_ident(vp),
@@ -196,8 +189,7 @@ pub(super) fn emit_vertex(
         stage: "vertex",
         entry,
         bindings,
-        vertex_layout,
-        vertex_stride,
+        vertex_buffers,
         interface_ty,
         color_targets: 0,
         uniform_size,
@@ -205,8 +197,11 @@ pub(super) fn emit_vertex(
     }
 }
 
-fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, String> {
-    let locs = assign_locations(decl)?;
+fn emit_vertex_in_struct(
+    decl: &StructDeclarationNode<'_>,
+    base_location: u32,
+) -> Result<String, String> {
+    let locs = assign_locations_from(decl, base_location)?;
     let sname = escape_wgsl_ident(&decl.name.text);
     let mut s = format!("struct {sname} {{\n");
     for field in &decl.fields {

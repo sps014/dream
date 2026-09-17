@@ -2,7 +2,7 @@
 
 use dream_abi::attributes::{
     field_builtin_name, field_interpolate_mode, field_is_position_builtin, field_location_override,
-    has_named_attr,
+    field_vertex_format, has_named_attr,
 };
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::Type;
@@ -10,7 +10,7 @@ use dream_syntax::nodes::ProgramNode;
 use indexmap::IndexMap;
 
 use super::ident::escape_wgsl_ident;
-use super::types::GpuVertexAttr;
+use super::types::{GpuVertexAttr, GpuVertexBuffer};
 
 pub(super) fn find_struct<'a>(
     program: &'a ProgramNode<'a>,
@@ -99,6 +99,8 @@ pub(super) fn build_struct_field_tys(
     map
 }
 
+/// Default wire format for a field, when `@format` does not override it: the unpacked format
+/// matching the field's own type.
 pub(super) fn vertex_format_of(ty: &Type) -> Option<&'static str> {
     match ty {
         Type::Float(_) | Type::Double(_) => Some("float32"),
@@ -114,14 +116,43 @@ pub(super) fn vertex_format_of(ty: &Type) -> Option<&'static str> {
     }
 }
 
-pub(super) fn vertex_attr_bytes(format: &str) -> u32 {
-    match format {
-        "float32" | "sint32" | "uint32" => 4,
-        "float32x2" => 8,
-        "float32x3" => 12,
-        "float32x4" => 16,
-        _ => 4,
+/// Resolves a field's declared `@format` against the shared registry.
+///
+/// A packed format only changes how many bytes the buffer holds — the shader still reads the
+/// field's own type — so the format's WGSL type has to be the one the field already has, or the
+/// vertex stage would be reading something other than what was written.
+fn packed_format(
+    field: &dream_syntax::nodes::struct_node::StructFieldNode,
+    declared: &str,
+) -> Result<&'static str, String> {
+    let spec = dream_abi::gpu_format::vertex_format_by_name(declared).ok_or_else(|| {
+        format!(
+            "unknown @format(\"{declared}\") on vertex attribute '{}'",
+            field.name.text
+        )
+    })?;
+    let wgsl = dream_ty_to_wgsl_vec(&field.field_type).ok_or_else(|| {
+        format!(
+            "vertex attribute '{}' has unsupported type '{}'",
+            field.name.text,
+            field.field_type.get_type()
+        )
+    })?;
+    if spec.wgsl != wgsl {
+        return Err(format!(
+            "@format(\"{declared}\") reads as '{}' in a shader, but vertex attribute '{}' is declared '{}'",
+            spec.wgsl,
+            field.name.text,
+            field.field_type.get_type()
+        ));
     }
+    Ok(spec.name)
+}
+
+fn vertex_attr_bytes(format: &str) -> u32 {
+    dream_abi::gpu_format::vertex_format_by_name(format)
+        .map(|s| s.size)
+        .unwrap_or(4)
 }
 
 fn field_builtin(field: &dream_syntax::nodes::struct_node::StructFieldNode) -> Option<String> {
@@ -148,9 +179,20 @@ fn interpolate_wgsl(mode: &str) -> Option<&'static str> {
 pub(super) fn assign_locations(
     decl: &StructDeclarationNode<'_>,
 ) -> Result<IndexMap<String, u32>, String> {
+    assign_locations_from(decl, 0)
+}
+
+/// Like [`assign_locations`], starting auto-assignment at `base`.
+///
+/// Locations are unique across the whole vertex stage, not per struct, so a second vertex buffer
+/// continues where the first left off. An explicit `@location(N)` is absolute either way.
+pub(super) fn assign_locations_from(
+    decl: &StructDeclarationNode<'_>,
+    base: u32,
+) -> Result<IndexMap<String, u32>, String> {
     let mut map = IndexMap::new();
     let mut used: IndexMap<u32, String> = IndexMap::new();
-    let mut auto = 0u32;
+    let mut auto = base;
     for field in &decl.fields {
         if field_builtin(field).is_some() {
             continue;
@@ -182,10 +224,16 @@ pub(super) fn assign_locations(
     Ok(map)
 }
 
+/// One vertex buffer's attribute layout, derived from the struct a `@vertex` parameter takes.
+///
+/// Attributes are laid out tightly in declaration order, so the Dream-side struct the caller
+/// uploads and the layout the pipeline declares agree by construction.
 pub(super) fn build_vertex_layout(
     decl: &StructDeclarationNode<'_>,
-) -> Result<(Vec<GpuVertexAttr>, u32), String> {
-    let locs = assign_locations(decl)?;
+    step_mode: &'static str,
+    base_location: u32,
+) -> Result<GpuVertexBuffer, String> {
+    let locs = assign_locations_from(decl, base_location)?;
     let mut layout = Vec::new();
     let mut offset = 0u32;
     for field in &decl.fields {
@@ -195,12 +243,15 @@ pub(super) fn build_vertex_layout(
                 field.name.text
             ));
         }
-        let Some(format) = vertex_format_of(&field.field_type) else {
-            return Err(format!(
-                "vertex attribute '{}' has unsupported type '{}'; use float, int, uint, or GpuVec2/3/4",
-                field.name.text,
-                field.field_type.get_type()
-            ));
+        let format = match field_vertex_format(&field.attributes) {
+            Some(declared) => packed_format(field, &declared)?,
+            None => vertex_format_of(&field.field_type).ok_or_else(|| {
+                format!(
+                    "vertex attribute '{}' has unsupported type '{}'; use float, int, uint, or GpuVec2/3/4",
+                    field.name.text,
+                    field.field_type.get_type()
+                )
+            })?,
         };
         let location = *locs.get(&field.name.text).ok_or_else(|| {
             format!(
@@ -215,7 +266,11 @@ pub(super) fn build_vertex_layout(
         });
         offset += vertex_attr_bytes(format);
     }
-    Ok((layout, offset))
+    Ok(GpuVertexBuffer {
+        attributes: layout,
+        stride: offset,
+        step_mode,
+    })
 }
 
 fn emit_field_decorators(

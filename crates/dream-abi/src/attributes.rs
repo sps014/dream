@@ -492,6 +492,26 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "WGSL interpolation qualifier on a varying (`\"perspective\"`, `\"linear\"`, or `\"flat\"`).",
     },
+    // Wire format of a vertex attribute, when it differs from the field's own type.
+    AttributeSpec {
+        name: "format",
+        targets: &[AttributeTarget::Field],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Packed wire format of a vertex attribute (`\"unorm8x4\"`, `\"float16x2\"`, …). The buffer stores the packed bytes; the shader still sees the field's type.",
+    },
+    // Per-instance rather than per-vertex stepping for one vertex buffer.
+    AttributeSpec {
+        name: "instance",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Steps a `@vertex` struct parameter's buffer once per instance instead of once per vertex.",
+    },
     // Explicit bind-group index override (default group 0).
     AttributeSpec {
         name: "group",
@@ -1304,6 +1324,15 @@ pub fn field_location_override(attributes: &[AttributeNode]) -> Option<u32> {
 /// Optional `@builtin("name")` on a struct field. `None` when absent or malformed.
 pub fn field_builtin_name(attributes: &[AttributeNode]) -> Option<String> {
     let attr = attributes.iter().find(|a| a.name.text == "builtin")?;
+    attr.args
+        .first()
+        .and_then(|t| t.as_string())
+        .map(|s| s.to_string())
+}
+
+/// Optional `@format("name")` on a vertex-attribute field. `None` when absent or malformed.
+pub fn field_vertex_format(attributes: &[AttributeNode]) -> Option<String> {
+    let attr = attributes.iter().find(|a| a.name.text == "format")?;
     attr.args
         .first()
         .and_then(|t| t.as_string())

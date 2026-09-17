@@ -74,12 +74,38 @@ let _ = await GpuRenderPass.draw_instanced(
 | Stage | — | **`@vertex` / `@fragment` required** |
 | Shared helpers | — | **`@gpu`** on ordinary functions called from shaders |
 | Attribute / varying slots | Field order → `0, 1, 2…` | `@location(N)` to remap |
+| Vertex buffer slots | One per leading `@vertex` struct param, in order | `@instance` on a param to step it per instance |
+| Attribute wire format | Matches the field's type | `@format("unorm8x4")` etc. to pack it smaller |
 | Clip position | Field named **`position: GpuVec4`** | or `@builtin("position")` on any `GpuVec4` field |
 | Interpolation | perspective | `@interpolate("flat"\|"linear"\|"perspective")` |
 | Fragment color | Return **`GpuVec4`** | or an output struct with `@location` colors (+ optional `@builtin("frag_depth")`) |
 | Bindings | auto `@group(0)`, binding index auto-assigned per group | `@group(N)` / `@binding(N)` on resource params |
 | `GpuTexture` binding | sampled `texture_2d<f32>` | `@storage` for a writable storage texture; `@cube` for `texture_cube<f32>` |
 | `GpuBuffer<T>` binding | `read_write` storage | `@readonly` for read-only storage |
+
+## Vertex buffers
+
+Every leading struct parameter of a `@vertex` function is one vertex buffer slot, in declaration
+order, matching `set_vertex_buffer(slot, …)`. Attribute locations run across all of them, so a
+second buffer continues where the first stopped. Mark a parameter `@instance` to step its buffer
+once per instance instead of once per vertex:
+
+```dream
+struct Vertex { public pos: GpuVec3; public uv: GpuVec2; }
+
+struct Instance {
+    public model_row0: GpuVec4;
+    @format("unorm8x4") public tint: GpuVec4;
+}
+
+@vertex
+fun mesh_vs(v: Vertex, @instance inst: Instance, mvp: GpuMat4): VsOut { /* … */ }
+```
+
+`@format` sets the *wire* format only: the buffer stores the packed bytes while the shader still
+reads the field's declared type, so `unorm8x4` turns a `GpuVec4` tint from 16 bytes into 4. The
+format's shader type has to be the field's own type, which rules out reading `unorm8x4` as anything
+but a `GpuVec4`. Attributes are otherwise packed tightly in declaration order.
 
 ## Resource bindings
 

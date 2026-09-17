@@ -1,0 +1,95 @@
+// Three things a batching renderer needs from one draw: uint16 indices (half the index memory of
+// uint32), a storage buffer read in the vertex stage (per-draw data too large for a uniform), and
+// draw_indexed_indirect (draw arguments produced on the GPU rather than by the CPU).
+//
+// Renders two triangles covering a 2x1 target, each taking its colour from the storage buffer by
+// vertex index, with the index count read out of an indirect argument buffer.
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    @interpolate("flat") public color: GpuVec4;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+@vertex
+fun tri_vs(v: Vertex, @group(0) @binding(0) @readonly tints: GpuBuffer<float>): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    // The first quad's vertices read the first tint, the second quad's the second.
+    let base = 0;
+    if vertex_index >= 4 { base = 4; }
+    o.color = GpuVec4.of(tints[base], tints[base + 1], tints[base + 2], tints[base + 3]);
+    return o;
+}
+
+@fragment
+fun tri_fs(v: VsOut): GpuVec4 {
+    return v.color;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    // Two quads: x in [-1, 0] and x in [0, 1].
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(0.0, -1.0),
+        make_vert(-1.0, 1.0),
+        make_vert(0.0, 1.0),
+        make_vert(0.0, -1.0),
+        make_vert(1.0, -1.0),
+        make_vert(0.0, 1.0),
+        make_vert(1.0, 1.0),
+    ]);
+
+    // Indices 0..7 as little-endian uint16 pairs: two triangle strips' worth of triangles.
+    let order = [0, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7];
+    let packed = Buffer.alloc<byte>(order.length * 2);
+    for (let i = 0; i < order.length; i = i + 1) {
+        packed[i * 2] = (byte)order[i];
+        packed[i * 2 + 1] = (byte)0;
+    }
+    let indices = GpuBuffer<byte>.vertex_from(packed);
+
+    // Red for the left quad, blue for the right.
+    let tints = GpuBuffer<float>.from([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0]);
+
+    // draw_indexed_indirect reads 5 x u32: index_count, instance_count, first_index,
+    // base_vertex, first_instance.
+    let args = GpuBuffer<int>.from([12, 1, 0, 0, 0]);
+
+    let made = await GpuRenderPipeline.create("tri_vs", "tri_fs");
+    if made.is_err() { System.println("pipeline failed"); return; }
+    let pipeline = made.unwrap();
+    let target = GpuTexture.rgba8(2, 1);
+
+    let enc = GpuEncoder.begin();
+    let pass = enc.render_pass(GpuRenderTarget.texture(target).clear(GpuVec4.of(0.0, 0.0, 0.0, 1.0)));
+    pass.set_pipeline(pipeline);
+    pass.set_bind_list(GpuBindList.begin().buffer(tints));
+    pass.set_vertex_buffer(0, verts);
+    pass.set_index_buffer(indices, GpuIndexFormat.Uint16);
+    pass.draw_indexed_indirect(args, 0);
+    pass.end();
+    let sent = await enc.submit();
+    if sent.is_err() { System.println("submit failed"); return; }
+
+    let px = await target.read_rgba();
+    System.println("left=" + ((int)px[0]).to_string() + "," + ((int)px[1]).to_string() + "," + ((int)px[2]).to_string());
+    System.println("right=" + ((int)px[4]).to_string() + "," + ((int)px[5]).to_string() + "," + ((int)px[6]).to_string());
+}

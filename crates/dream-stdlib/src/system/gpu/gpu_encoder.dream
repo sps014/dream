@@ -94,7 +94,10 @@ public class GpuRenderPassEncoder {
         return this;
     }
 
-    public fun set_index_buffer(b: GpuBuffer<int>, format: GpuIndexFormat): GpuRenderPassEncoder {
+    // `Uint32` indices are one `int` each, so `GpuBuffer<int>` is the natural carrier. `Uint16`
+    // has no Dream element type, so pack the pairs into a `GpuBuffer<byte>` yourself — halving
+    // index memory is worth the packing for a large mesh.
+    public fun set_index_buffer<T : unmanaged>(b: GpuBuffer<T>, format: GpuIndexFormat): GpuRenderPassEncoder {
         this._s.op(GpuCmdOp.SetIndexBuffer);
         this._s.i32(b.id);
         let f: int = format;

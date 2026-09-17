@@ -1,5 +1,6 @@
 //! `@vertex` shader emission.
 
+use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
 use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
 use super::ident::escape_wgsl_ident;
@@ -8,13 +9,9 @@ use super::layout::{
     emit_interface_struct_wgsl, find_struct, has_position_gpuvec4, struct_name_of,
 };
 use super::stmt::{emit_stmts, reject_gpu_nameof};
-use super::ty::dream_ty_to_wgsl;
-use super::types::{GpuBinding, GpuShaderInfo};
-use dream_abi::attributes::{
-    has_named_attr, has_readonly_attr, param_binding_override, param_group_override,
-};
+use super::types::GpuShaderInfo;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
+use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::Type;
 use dream_syntax::nodes::ProgramNode;
@@ -34,7 +31,7 @@ pub(super) fn emit_vertex(
     let mut interface_ty = String::new();
     let mut struct_header = String::new();
     let mut bindings = Vec::new();
-    let mut binding_idx = 0u32;
+    let mut alloc = BindingAlloc::default();
     let mut header = String::new();
     let mut uniform_fields = String::new();
     let mut has_uniform = false;
@@ -77,7 +74,7 @@ pub(super) fn emit_vertex(
                 &entry,
                 &mut header,
                 &mut bindings,
-                &mut binding_idx,
+                &mut alloc,
                 &mut uniform_fields,
                 &mut has_uniform,
             ) {
@@ -92,7 +89,7 @@ pub(super) fn emit_vertex(
             &entry,
             &mut header,
             &mut bindings,
-            &mut binding_idx,
+            &mut alloc,
             &mut uniform_fields,
             &mut has_uniform,
         ) {
@@ -103,7 +100,7 @@ pub(super) fn emit_vertex(
     if has_uniform {
         finalize_uniforms(
             &entry,
-            binding_idx,
+            &mut alloc,
             &uniform_fields,
             &mut header,
             &mut bindings,
@@ -234,198 +231,3 @@ fn emit_vertex_in_struct(decl: &StructDeclarationNode<'_>) -> Result<String, Str
     Ok(s)
 }
 
-pub(super) enum ResClass {
-    Texture { storage: bool },
-    TextureCube,
-    Sampler,
-    Storage { elem: String },
-    Uniform { ty: String },
-}
-
-pub(super) fn classify_resource(param: &ParameterNode) -> ResClass {
-    let readonly = has_readonly_attr(&param.attributes);
-    let is_cube = dream_abi::attributes::has_named_attr(&param.attributes, "cube");
-    match &param.type_ {
-        Type::Struct(tok, None) if tok.text == "GpuTexture" => {
-            if is_cube {
-                ResClass::TextureCube
-            } else {
-                ResClass::Texture { storage: !readonly }
-            }
-        }
-        Type::Struct(tok, None) if tok.text == "GpuSampler" => ResClass::Sampler,
-        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
-            ResClass::Storage {
-                elem: dream_ty_to_wgsl(&args[0]),
-            }
-        }
-        other => ResClass::Uniform {
-            ty: dream_ty_to_wgsl(other),
-        },
-    }
-}
-
-pub(super) fn next_binding_slot(
-    param: &ParameterNode,
-    binding_idx: &mut u32,
-) -> Result<(u32, u32), String> {
-    let group = if has_named_attr(&param.attributes, "group") {
-        param_group_override(&param.attributes).ok_or_else(|| {
-            format!(
-                "invalid @group on parameter '{}'; expected an integer literal",
-                param.name.text
-            )
-        })?
-    } else {
-        0
-    };
-    let binding = match param_binding_override(&param.attributes) {
-        Some(n) => n,
-        None if has_named_attr(&param.attributes, "binding") => {
-            return Err(format!(
-                "invalid @binding on parameter '{}'; expected an integer literal",
-                param.name.text
-            ));
-        }
-        None => {
-            let n = *binding_idx;
-            *binding_idx += 1;
-            n
-        }
-    };
-    if param_binding_override(&param.attributes).is_some() {
-        *binding_idx = (*binding_idx).max(binding + 1);
-    }
-    Ok((group, binding))
-}
-
-pub(super) fn emit_resource_param(
-    param: &ParameterNode,
-    entry: &str,
-    header: &mut String,
-    bindings: &mut Vec<GpuBinding>,
-    binding_idx: &mut u32,
-    uniform_fields: &mut String,
-    has_uniform: &mut bool,
-) -> Result<(), String> {
-    match classify_resource(param) {
-        ResClass::Texture { storage } => {
-            let pname = param.name.text.clone();
-            let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx)?;
-            let (kind, decl) = if storage {
-                (
-                    "storage_texture",
-                    format!(
-                        "@group({group}) @binding({binding}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
-                    ),
-                )
-            } else {
-                (
-                    "texture",
-                    format!(
-                        "@group({group}) @binding({binding}) var {wgsl_name}: texture_2d<f32>;\n"
-                    ),
-                )
-            };
-            header.push_str(&decl);
-            bindings.push(GpuBinding {
-                name: pname,
-                binding,
-                kind,
-                wgsl_ty: if storage {
-                    "texture_storage_2d<rgba8unorm, write>".into()
-                } else {
-                    "texture_2d<f32>".into()
-                },
-                read_write: storage,
-                atomic: false,
-            });
-        }
-        ResClass::TextureCube => {
-            let pname = param.name.text.clone();
-            let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx)?;
-            let decl = format!(
-                "@group({group}) @binding({binding}) var {wgsl_name}: texture_cube<f32>;\n"
-            );
-            header.push_str(&decl);
-            bindings.push(GpuBinding {
-                name: pname,
-                binding,
-                kind: "texture_cube",
-                wgsl_ty: "texture_cube<f32>".into(),
-                read_write: false,
-                atomic: false,
-            });
-        }
-        ResClass::Sampler => {
-            let pname = param.name.text.clone();
-            let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx)?;
-            header.push_str(&format!(
-                "@group({group}) @binding({binding}) var {wgsl_name}: sampler;\n"
-            ));
-            bindings.push(GpuBinding {
-                name: pname,
-                binding,
-                kind: "sampler",
-                wgsl_ty: "sampler".into(),
-                read_write: false,
-                atomic: false,
-            });
-        }
-        ResClass::Storage { elem } => {
-            let pname = param.name.text.clone();
-            let wgsl_name = format!("{entry}_{pname}");
-            let (group, binding) = next_binding_slot(param, binding_idx)?;
-            let elem_ty = escape_wgsl_ident(&elem);
-            header.push_str(&format!(
-                "@group({group}) @binding({binding}) var<storage, read> {wgsl_name}: array<{elem_ty}>;\n"
-            ));
-            bindings.push(GpuBinding {
-                name: pname,
-                binding,
-                kind: "storage",
-                wgsl_ty: elem,
-                read_write: false,
-                atomic: false,
-            });
-        }
-        ResClass::Uniform { ty } => {
-            *has_uniform = true;
-            let pname = param.name.text.clone();
-            uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
-            let (_group, binding) = next_binding_slot(param, binding_idx)?;
-            bindings.push(GpuBinding {
-                name: pname,
-                binding,
-                kind: "uniform",
-                wgsl_ty: ty,
-                read_write: false,
-                atomic: false,
-            });
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn finalize_uniforms(
-    entry: &str,
-    binding_idx: u32,
-    uniform_fields: &str,
-    header: &mut String,
-    bindings: &mut [GpuBinding],
-) {
-    let u_struct = format!("DreamUniforms_{entry}");
-    let u_var = format!("dream_uniforms_{entry}");
-    header.push_str(&format!("struct {u_struct} {{\n{uniform_fields}}}\n"));
-    header.push_str(&format!(
-        "@group(0) @binding({binding_idx}) var<uniform> {u_var}: {u_struct};\n"
-    ));
-    for b in bindings.iter_mut() {
-        if b.kind == "uniform" {
-            b.binding = binding_idx;
-        }
-    }
-}

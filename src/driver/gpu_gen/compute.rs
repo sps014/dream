@@ -1,13 +1,13 @@
 //! Single-kernel emission: bindings header, body, entry point wrapper.
 
+use super::bind::{finalize_uniforms, next_binding_slot, BindingAlloc};
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
 use super::layout::{build_struct_field_tys, emit_value_struct_wgsl, find_struct};
 use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
-use super::vertex::next_binding_slot;
-use dream_abi::attributes::{compute_workgroup_size, has_readonly_attr};
+use dream_abi::attributes::{compute_workgroup_size, has_named_attr, has_readonly_attr};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
@@ -75,7 +75,7 @@ pub(super) fn emit_kernel(
     let atomic_bufs = collect_atomic_buffer_names(func.body);
 
     let mut bindings = Vec::new();
-    let mut binding_idx = 0u32;
+    let mut alloc = BindingAlloc::default();
     let mut header = String::new();
     let mut uniform_fields = String::new();
     let mut has_uniform = false;
@@ -106,7 +106,7 @@ pub(super) fn emit_kernel(
                     escape_wgsl_ident(&elem)
                 };
                 let wgsl_name = format!("{entry}_{pname}");
-                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                let (group, binding) = match next_binding_slot(param, &mut alloc) {
                     Ok(slot) => slot,
                     Err(e) => {
                         diagnostics.report_error(e, Some(param.name.position));
@@ -118,6 +118,7 @@ pub(super) fn emit_kernel(
                 ));
                 bindings.push(GpuBinding {
                     name: pname,
+                    group,
                     binding,
                     kind: "storage",
                     wgsl_ty: elem,
@@ -127,57 +128,46 @@ pub(super) fn emit_kernel(
             }
             ParamClass::Texture { storage } => {
                 let wgsl_name = format!("{entry}_{pname}");
-                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                let (group, binding) = match next_binding_slot(param, &mut alloc) {
                     Ok(slot) => slot,
                     Err(e) => {
                         diagnostics.report_error(e, Some(param.name.position));
                         continue;
                     }
                 };
-                let (kind, decl) = if storage {
-                    (
-                        "storage_texture",
-                        format!(
-                            "@group({group}) @binding({binding}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
-                        ),
-                    )
+                let (kind, wgsl_ty) = if storage {
+                    ("storage_texture", "texture_storage_2d<rgba8unorm, write>")
                 } else {
-                    (
-                        "texture",
-                        format!(
-                            "@group({group}) @binding({binding}) var {wgsl_name}: texture_2d<f32>;\n"
-                        ),
-                    )
+                    ("texture", "texture_2d<f32>")
                 };
-                header.push_str(&decl);
+                header.push_str(&format!(
+                    "@group({group}) @binding({binding}) var {wgsl_name}: {wgsl_ty};\n"
+                ));
                 bindings.push(GpuBinding {
                     name: pname,
+                    group,
                     binding,
                     kind,
-                    wgsl_ty: if storage {
-                        "texture_storage_2d<rgba8unorm, write>".into()
-                    } else {
-                        "texture_2d<f32>".into()
-                    },
+                    wgsl_ty: wgsl_ty.into(),
                     read_write: storage,
                     atomic: false,
                 });
             }
             ParamClass::TextureCube => {
                 let wgsl_name = format!("{entry}_{pname}");
-                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                let (group, binding) = match next_binding_slot(param, &mut alloc) {
                     Ok(slot) => slot,
                     Err(e) => {
                         diagnostics.report_error(e, Some(param.name.position));
                         continue;
                     }
                 };
-                let decl = format!(
+                header.push_str(&format!(
                     "@group({group}) @binding({binding}) var {wgsl_name}: texture_cube<f32>;\n"
-                );
-                header.push_str(&decl);
+                ));
                 bindings.push(GpuBinding {
                     name: pname,
+                    group,
                     binding,
                     kind: "texture_cube",
                     wgsl_ty: "texture_cube<f32>".into(),
@@ -187,7 +177,7 @@ pub(super) fn emit_kernel(
             }
             ParamClass::Sampler => {
                 let wgsl_name = format!("{entry}_{pname}");
-                let (group, binding) = match next_binding_slot(param, &mut binding_idx) {
+                let (group, binding) = match next_binding_slot(param, &mut alloc) {
                     Ok(slot) => slot,
                     Err(e) => {
                         diagnostics.report_error(e, Some(param.name.position));
@@ -199,6 +189,7 @@ pub(super) fn emit_kernel(
                 ));
                 bindings.push(GpuBinding {
                     name: pname,
+                    group,
                     binding,
                     kind: "sampler",
                     wgsl_ty: "sampler".into(),
@@ -208,10 +199,15 @@ pub(super) fn emit_kernel(
             }
             ParamClass::Uniform { ty } => {
                 has_uniform = true;
+                if let Err(e) = alloc.note_uniform(param) {
+                    diagnostics.report_error(e, Some(param.name.position));
+                    continue;
+                }
                 uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
                 bindings.push(GpuBinding {
                     name: pname,
-                    binding: binding_idx, // assigned after we know the uniform struct binding
+                    group: 0,
+                    binding: 0, // back-patched by `finalize_uniforms`
                     kind: "uniform",
                     wgsl_ty: ty,
                     read_write: false,
@@ -222,24 +218,14 @@ pub(super) fn emit_kernel(
     }
 
     if has_uniform {
-        // Uniforms share one binding struct at the end of the storage bindings.
-        let u_bind = binding_idx;
-        let u_struct = format!("DreamUniforms_{entry}");
-        let u_var = format!("dream_uniforms_{entry}");
-        header.push_str(&format!("struct {u_struct} {{\n"));
-        header.push_str(&uniform_fields);
-        header.push_str("}\n");
-        header.push_str(&format!(
-            "@group(0) @binding({u_bind}) var<uniform> {u_var}: {u_struct};\n"
-        ));
-        for b in bindings.iter_mut() {
-            if b.kind == "uniform" {
-                b.binding = u_bind;
-            }
-        }
-        binding_idx += 1;
+        finalize_uniforms(
+            &entry,
+            &mut alloc,
+            &uniform_fields,
+            &mut header,
+            &mut bindings,
+        );
     }
-    let _ = binding_idx;
 
     let mut workgroup_names = Vec::new();
     collect_workgroup_names(func.body, &mut workgroup_names);
@@ -321,7 +307,7 @@ enum ParamClass {
         atomic: bool,
     },
     Texture {
-        /// `true` → `texture_storage_2d` (write); `false` → sampled `texture_2d`.
+        /// `@storage` → `texture_storage_2d` (write); otherwise sampled `texture_2d`.
         storage: bool,
     },
     TextureCube,
@@ -333,7 +319,8 @@ enum ParamClass {
 
 fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
     let readonly = has_readonly_attr(&param.attributes);
-    let is_cube = dream_abi::attributes::has_named_attr(&param.attributes, "cube");
+    let is_cube = has_named_attr(&param.attributes, "cube");
+    let is_storage = has_named_attr(&param.attributes, "storage");
     match &param.type_ {
         // Bare `T[]` params are rejected in sema; only `GpuBuffer<T>` is storage.
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
@@ -349,7 +336,9 @@ fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
             if is_cube {
                 ParamClass::TextureCube
             } else {
-                ParamClass::Texture { storage: !readonly }
+                ParamClass::Texture {
+                    storage: is_storage,
+                }
             }
         }
         Type::Struct(tok, None) if tok.text == "GpuSampler" => ParamClass::Sampler,

@@ -1,0 +1,63 @@
+module system.gpu;
+
+// A bind group built once against a pipeline's `@group(N)` layout and reused across frames.
+//
+// This is what makes a material system cheap: the per-material texture/sampler set is resolved
+// into a host object at load time instead of being rebuilt on every draw.
+//
+// ```dream
+// let material = (await GpuBindGroup.create(
+//     pipe, 1, GpuBindList.begin().texture(albedo).sampler(linear)
+// ))?;
+// pass.set_bind_group(1, material);
+// ```
+//
+// The uniform block is *not* part of a bind group: it is supplied per draw with
+// `GpuRenderPassEncoder.set_uniforms`, so the host combines the two when it builds the group.
+public class GpuBindGroup {
+    _id: int;
+    _group: int;
+
+    internal constructor() {}
+
+    public get id(): int {
+        return this._id;
+    }
+
+    // Which `@group(N)` this was built for.
+    public get group(): int {
+        return this._group;
+    }
+
+    // Resolves `binds` against `pipeline`'s layout for `group`. Resources are consumed in the
+    // order the shader declares them within that group, separately per kind.
+    @web @native
+    public static async fun create(
+        pipeline: GpuRenderPipeline,
+        group: int,
+        binds: GpuBindList,
+        token: Option<CancellationToken> = Option.None
+    ): Result<GpuBindGroup, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
+        let id = await Gpu.bind_group_create(
+            pipeline.id,
+            group,
+            binds.buffer_ids(),
+            binds.texture_ids(),
+            binds.sampler_ids()
+        );
+        if id < 0 {
+            return Result.Err(GpuError.from_code(0 - id, "bind group create failed"));
+        }
+        let bg = GpuBindGroup();
+        bg._id = id;
+        bg._group = group;
+        return Result.Ok(bg);
+    }
+
+    // Releases the host bind group.
+    public fun destroy(): void {
+        Gpu.bind_group_destroy(this._id);
+        this._id = -1;
+    }
+}

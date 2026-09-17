@@ -115,6 +115,7 @@ fn reconfigure_surface(st: &mut super::state::GpuState, id: i32, width: u32, hei
     surf.height = h;
     surf.color = None;
     surf.depth = None;
+    surf.msaa = None;
     surf.pending_frame = None;
     let Some(device) = st.device.as_ref().cloned() else {
         return;
@@ -420,7 +421,10 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
             client_width: client_w,
             client_height: client_h,
             color: None,
+            msaa: None,
+            msaa_samples: 1,
             depth: None,
+            depth_samples: 1,
             window: Some(window),
             surface: Some(surface),
             config: Some(config),

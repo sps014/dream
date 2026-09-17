@@ -8,6 +8,22 @@ public enum GpuLoadOp {
     Load = 1,
 }
 
+// Attachment store operation for recorded render passes.
+public enum GpuStoreOp {
+    // Keep the rendered contents.
+    Store = 0,
+    // Throw the contents away (cheaper for attachments nothing reads back).
+    Discard = 1,
+}
+
+// Index buffer element width for `GpuRenderPassEncoder.set_index_buffer`.
+public enum GpuIndexFormat {
+    // 32-bit indices (`GpuBuffer<int>`).
+    Uint32 = 0,
+    // 16-bit indices, two per `int` slot.
+    Uint16 = 1,
+}
+
 // Mag/min filter for `GpuSampler.create` (matches host filter ints).
 public enum GpuFilterMode {
     // Nearest-neighbor sampling.

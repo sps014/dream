@@ -1924,7 +1924,9 @@ function makeGpuHost(getInstance) {
   const surfaces = new Map();
   const passes = new Map(); // id -> { ops: [...] }
   const pipelineCache = new Map();
-  const renderPipelines = new Map(); // id -> { pipeline, vsMeta, fsMeta, layout }
+  const renderPipelines = new Map(); // id -> { pipeline, vsMeta, fsMeta, layouts, groups }
+  const bindGroups = new Map(); // id -> { pipelineId, group, bufferIds, textureIds, samplerIds }
+  const renderBgCache = new Map(); // `pipeline:group:handle:uniformSlot` -> GPUBindGroup
   const renderPipelineCache = new Map(); // key -> id
   let nextId = 1;
   let devicePromise = null;
@@ -2560,8 +2562,27 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return s.sampler;
   }
 
-  function layoutEntryForBinding(b) {
-    const base = { binding: b.binding, visibility: GPUShaderStage.COMPUTE };
+  // WGSL binding indices are unique per `@group`, so bindings are grouped and each group gets its
+  // own layout. `(group, binding)` pairs are deduped: a vertex and fragment stage declaring the
+  // same slot describe one resource.
+  function planGroups(binds) {
+    const seen = new Set();
+    const byGroup = new Map();
+    for (const b of binds || []) {
+      const group = b.group | 0;
+      const key = `${group}\0${b.binding | 0}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!byGroup.has(group)) byGroup.set(group, []);
+      byGroup.get(group).push(b);
+    }
+    return [...byGroup.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([group, bindings]) => ({ group, bindings }));
+  }
+
+  function layoutEntryForBinding(b, visibility) {
+    const base = { binding: b.binding, visibility };
     if (b.kind === "uniform") {
       return { ...base, buffer: { type: "uniform" } };
     }
@@ -2580,8 +2601,30 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         storageTexture: { access: "write-only", format: "rgba8unorm", viewDimension: "2d" },
       };
     }
-    // sampled texture
-    return { ...base, texture: { sampleType: "float" } };
+    if (b.kind === "texture_cube") {
+      return { ...base, texture: { sampleType: "float", viewDimension: "cube" } };
+    }
+    if (b.kind === "depth_texture") {
+      return { ...base, texture: { sampleType: "depth" } };
+    }
+    // sampled 2D texture
+    return { ...base, texture: { sampleType: "float", viewDimension: "2d" } };
+  }
+
+  /// Dense per-group layouts for a pipeline layout; unused group indices get an empty layout so
+  /// the array stays contiguous (a shader using groups 0 and 2 still needs a slot for 1).
+  function createGroupLayouts(dev, plans, visibility) {
+    if (!plans.length) return [];
+    const maxGroup = Math.max(...plans.map((p) => p.group));
+    const out = [];
+    for (let g = 0; g <= maxGroup; g++) {
+      const plan = plans.find((p) => p.group === g);
+      const entries = plan
+        ? plan.bindings.map((b) => layoutEntryForBinding(b, visibility))
+        : [];
+      out.push(dev.createBindGroupLayout({ entries }));
+    }
+    return out;
   }
 
   async function getPipeline(dev, kernel) {
@@ -2601,20 +2644,13 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           errs.map((m) => `${m.message} @${m.lineNum}:${m.linePos}`).join("\n"));
       }
     }
-    const entries = (meta.bindings || []).map(layoutEntryForBinding);
-    const seen = new Set();
-    const unique = [];
-    for (const e of entries) {
-      if (seen.has(e.binding)) continue;
-      seen.add(e.binding);
-      unique.push(e);
-    }
-    const layout = dev.createBindGroupLayout({ entries: unique });
+    const groups = planGroups(meta.bindings);
+    const layouts = createGroupLayouts(dev, groups, GPUShaderStage.COMPUTE);
     const pipeline = await dev.createComputePipelineAsync({
-      layout: dev.createPipelineLayout({ bindGroupLayouts: [layout] }),
+      layout: dev.createPipelineLayout({ bindGroupLayouts: layouts }),
       compute: { module, entryPoint: meta.entry },
     });
-    pipe = { pipeline, layout, meta, uniformPool: [], uniformCursor: 0 };
+    pipe = { pipeline, layouts, groups, meta, uniformPool: [], uniformCursor: 0 };
     pipelineCache.set(kernel, pipe);
     return pipe;
   }
@@ -2642,84 +2678,109 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return pipe.uniformPool[slot];
   }
 
-  function ensureRenderUniform(dev, rp) {
-    if (!rp.uniformBuf) {
-      rp.uniformBuf = dev.createBuffer({
+  /// Hands out a fresh uniform slot per `set_uniforms`, so batched draws in one submit can carry
+  /// different uniform data instead of the last write winning for all of them.
+  function allocRenderUniform(dev, rp, bytes) {
+    if (!rp.uniformPool) {
+      rp.uniformPool = [];
+      rp.uniformCursor = 0;
+    }
+    const slot = rp.uniformCursor++;
+    while (rp.uniformPool.length <= slot) {
+      rp.uniformPool.push(dev.createBuffer({
         size: UNIFORM_BYTES,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      });
-      rp.uniformBindGroup = null;
+      }));
     }
-    return rp.uniformBuf;
+    const padded = new Uint8Array(UNIFORM_BYTES);
+    if (bytes.byteLength > 0) {
+      padded.set(bytes.subarray(0, Math.min(bytes.byteLength, UNIFORM_BYTES)), 0);
+    }
+    dev.queue.writeBuffer(rp.uniformPool[slot], 0, padded);
+    return slot;
   }
 
+  /// Resolves the resource id arrays into one bind group per `@group`. Ids are consumed
+  /// positionally per kind, which is the order `GpuBindList` appends them in.
   async function buildBindGroup(dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
-    const meta = pipe.meta;
     const bufIds = toI32Arr(bufferIds);
     const texIds = toI32Arr(textureIds);
     const sampIds = toI32Arr(samplerIds);
-    const resources = [];
-    const usedBindings = new Set();
     let storageIdx = 0;
     let textureIdx = 0;
     let samplerIdx = 0;
     const extra = toU8(uniforms);
-    for (const bind of meta.bindings || []) {
-      if (usedBindings.has(bind.binding)) continue;
-      usedBindings.add(bind.binding);
-      if (bind.kind === "uniform") {
-        const ubuf = allocComputeUniform(dev, pipe);
-        const bytes = new Uint8Array(UNIFORM_BYTES);
-        const i32 = new Int32Array(bytes.buffer);
-        i32[0] = ex | 0;
-        i32[1] = ey | 0;
-        i32[2] = ez | 0;
-        if (extra.byteLength > 0) {
-          bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES - 12)), 12);
+    const out = [];
+    for (const { group, bindings } of pipe.groups) {
+      const resources = [];
+      for (const bind of bindings) {
+        if (bind.kind === "uniform") {
+          const ubuf = allocComputeUniform(dev, pipe);
+          const bytes = new Uint8Array(UNIFORM_BYTES);
+          const i32 = new Int32Array(bytes.buffer);
+          i32[0] = ex | 0;
+          i32[1] = ey | 0;
+          i32[2] = ez | 0;
+          if (extra.byteLength > 0) {
+            bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES - 12)), 12);
+          }
+          dev.queue.writeBuffer(ubuf, 0, bytes);
+          resources.push({ binding: bind.binding, resource: { buffer: ubuf } });
+        } else if (bind.kind === "storage") {
+          const id = bufIds[storageIdx++] | 0;
+          const b = buffers.get(id);
+          if (!b) throw new Error(`missing buffer id ${id} for binding ${bind.binding}`);
+          const gpuBuf = await ensureGpuBuffer(dev, b);
+          resources.push({ binding: bind.binding, resource: { buffer: gpuBuf } });
+        } else if (bind.kind === "sampler") {
+          const id = sampIds[samplerIdx++] | 0;
+          const s = samplers.get(id);
+          if (!s) throw new Error(`missing sampler id ${id} for binding ${bind.binding}`);
+          resources.push({ binding: bind.binding, resource: await ensureSampler(dev, s) });
+        } else {
+          const id = texIds[textureIdx++] | 0;
+          const t = textures.get(id);
+          if (!t) throw new Error(`missing texture id ${id} for binding ${bind.binding}`);
+          const tex = await ensureTexture(dev, t, bind.kind === "storage_texture");
+          resources.push({ binding: bind.binding, resource: textureViewFor(t, tex, bind.kind) });
         }
-        dev.queue.writeBuffer(ubuf, 0, bytes);
-        resources.push({ binding: bind.binding, resource: { buffer: ubuf } });
-      } else if (bind.kind === "storage") {
-        const id = bufIds[storageIdx++] | 0;
-        const b = buffers.get(id);
-        if (!b) throw new Error(`missing buffer id ${id} for binding ${bind.binding}`);
-        const gpuBuf = await ensureGpuBuffer(dev, b);
-        resources.push({ binding: bind.binding, resource: { buffer: gpuBuf } });
-      } else if (bind.kind === "sampler") {
-        const id = sampIds[samplerIdx++] | 0;
-        const s = samplers.get(id);
-        if (!s) throw new Error(`missing sampler id ${id} for binding ${bind.binding}`);
-        resources.push({ binding: bind.binding, resource: await ensureSampler(dev, s) });
-      } else if (bind.kind === "storage_texture" || bind.kind === "texture") {
-        const id = texIds[textureIdx++] | 0;
-        const t = textures.get(id);
-        if (!t) throw new Error(`missing texture id ${id} for binding ${bind.binding}`);
-        const tex = await ensureTexture(dev, t, bind.kind === "storage_texture");
-        resources.push({ binding: bind.binding, resource: tex.createView() });
       }
+      out.push({ group, bindGroup: dev.createBindGroup({ layout: pipe.layouts[group], entries: resources }) });
     }
-    return dev.createBindGroup({ layout: pipe.layout, entries: resources });
+    return out;
   }
 
-  function encodeDispatch(encoder, pipe, bg, ex, ey, ez) {
+  /// A 6-layer 2D texture defaults to a `2d-array` view, which cannot fill a `texture_cube` slot.
+  function textureViewFor(t, tex, kind) {
+    if (kind === "texture_cube" || t.dimension === "cube") {
+      return tex.createView({ dimension: "cube" });
+    }
+    return tex.createView();
+  }
+
+  function setBindGroups(pass, groups) {
+    for (const { group, bindGroup } of groups) pass.setBindGroup(group, bindGroup);
+  }
+
+  function encodeDispatch(encoder, pipe, bgs, ex, ey, ez) {
     const wg = pipe.meta.workgroup || [64, 1, 1];
     const gx = Math.max(1, Math.ceil((ex | 0) / (wg[0] || 64)));
     const gy = Math.max(1, Math.ceil((ey | 0) / (wg[1] || 1)));
     const gz = Math.max(1, Math.ceil((ez | 0) / (wg[2] || 1)));
     const pass = encoder.beginComputePass();
     pass.setPipeline(pipe.pipeline);
-    pass.setBindGroup(0, bg);
+    setBindGroups(pass, bgs);
     pass.dispatchWorkgroups(gx, gy, gz);
     pass.end();
   }
 
-  async function encodeDispatchIndirect(dev, encoder, pipe, bg, indirectId, offset) {
+  async function encodeDispatchIndirect(dev, encoder, pipe, bgs, indirectId, offset) {
     const b = buffers.get(indirectId);
     if (!b) throw new Error(`missing indirect buffer ${indirectId}`);
     const gpuBuf = await ensureGpuBuffer(dev, b);
     const pass = encoder.beginComputePass();
     pass.setPipeline(pipe.pipeline);
-    pass.setBindGroup(0, bg);
+    setBindGroups(pass, bgs);
     pass.dispatchWorkgroupsIndirect(gpuBuf, Math.max(0, offset | 0));
     pass.end();
   }
@@ -2754,37 +2815,505 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return 0;
   }
 
-  async function buildRenderBindGroup(dev, rp, uniforms) {
-    const binds = [...(rp.vsMeta.bindings || []), ...(rp.fsMeta.bindings || [])];
-    if (binds.length === 0) return null;
-    const used = new Set();
-    const entries = [];
-    const extra = toU8(uniforms);
-    let wroteUniform = false;
-    for (const bind of binds) {
-      if (used.has(bind.binding)) continue;
-      used.add(bind.binding);
-      if (bind.kind === "uniform") {
-        const ubuf = ensureRenderUniform(dev, rp);
-        if (!wroteUniform) {
-          const bytes = new Uint8Array(UNIFORM_BYTES);
-          if (extra.byteLength > 0) {
-            bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES)), 0);
-          }
-          dev.queue.writeBuffer(ubuf, 0, bytes);
-          wroteUniform = true;
-        }
-        entries.push({ binding: bind.binding, resource: { buffer: ubuf } });
-      }
-      // textures/samplers for render draws can be added later via dedicated APIs
+  /// Number of buffer / texture / sampler ids a group consumes from a bind list.
+  function groupArity(bindings) {
+    let bufs = 0, texs = 0, samps = 0;
+    for (const b of bindings) {
+      if (b.kind === "uniform") continue;
+      else if (b.kind === "storage") bufs++;
+      else if (b.kind === "sampler") samps++;
+      else texs++;
     }
-    if (entries.length === 0) return null;
-    if (rp.uniformBindGroup) return rp.uniformBindGroup;
-    rp.uniformBindGroup = dev.createBindGroup({
-      layout: rp.pipeline.getBindGroupLayout(0),
-      entries,
-    });
-    return rp.uniformBindGroup;
+    return { bufs, texs, samps };
+  }
+
+  /// One bind group per `@group` declared by the VS/FS pair.
+  ///
+  /// A group named by `set_bind_group` uses that handle's pinned resources; the rest draw from the
+  /// `set_bind_list` ids, in group order, consumed positionally per kind.
+  async function buildRenderBindGroups(dev, rp, pipelineId, explicit, list, uniformSlot) {
+    if (!rp.groups.length) return [];
+    const bufIds = list ? list.buffers : [];
+    const texIds = list ? list.textures : [];
+    const sampIds = list ? list.samplers : [];
+    let storageIdx = 0;
+    let textureIdx = 0;
+    let samplerIdx = 0;
+    const out = [];
+    for (const { group, bindings } of rp.groups) {
+      const handleId = explicit.has(group) ? explicit.get(group) : -1;
+      let pinned = null;
+      if (handleId >= 0) {
+        pinned = bindGroups.get(handleId);
+        if (!pinned) throw new Error(`unknown bind group ${handleId}`);
+        if (pinned.pipelineId !== pipelineId || pinned.group !== group) {
+          throw new Error(
+            `bind group ${handleId} was built for pipeline ${pinned.pipelineId} @group(${pinned.group}), ` +
+            `not pipeline ${pipelineId} @group(${group})`,
+          );
+        }
+        const cached = renderBgCache.get(`${pipelineId}:${group}:${handleId}:${uniformSlot ?? -1}`);
+        if (cached) {
+          out.push({ group, bindGroup: cached });
+          continue;
+        }
+      }
+      // A pinned handle brings its own ids and must not consume from the list, or the groups
+      // after it would shift.
+      const take = pinned
+        ? { b: pinned.bufferIds, t: pinned.textureIds, s: pinned.samplerIds, bi: 0, ti: 0, si: 0 }
+        : null;
+      const nextBuf = () => (take ? take.b[take.bi++] | 0 : bufIds[storageIdx++] | 0);
+      const nextTex = () => (take ? take.t[take.ti++] | 0 : texIds[textureIdx++] | 0);
+      const nextSamp = () => (take ? take.s[take.si++] | 0 : sampIds[samplerIdx++] | 0);
+      const entries = [];
+      for (const bind of bindings) {
+        if (bind.kind === "uniform") {
+          if (uniformSlot == null) {
+            throw new Error(
+              `@group(${group}) @binding(${bind.binding}) needs a uniform block; ` +
+              "call set_uniforms before the draw",
+            );
+          }
+          entries.push({ binding: bind.binding, resource: { buffer: rp.uniformPool[uniformSlot] } });
+        } else if (bind.kind === "storage") {
+          const id = nextBuf();
+          const b = buffers.get(id);
+          if (!b) throw new Error(`missing buffer id ${id} for @group(${group}) @binding(${bind.binding})`);
+          const gpuBuf = await ensureGpuBuffer(dev, b, GPUBufferUsage.STORAGE);
+          entries.push({ binding: bind.binding, resource: { buffer: gpuBuf } });
+        } else if (bind.kind === "sampler") {
+          const id = nextSamp();
+          const s = samplers.get(id);
+          if (!s) throw new Error(`missing sampler id ${id} for @group(${group}) @binding(${bind.binding})`);
+          entries.push({ binding: bind.binding, resource: await ensureSampler(dev, s) });
+        } else if (bind.kind === "depth_texture") {
+          const id = nextTex();
+          const t = textures.get(id);
+          if (!t) throw new Error(`missing texture id ${id} for @group(${group}) @binding(${bind.binding})`);
+          const tex = await ensureDepthTexture(dev, t);
+          entries.push({ binding: bind.binding, resource: tex.createView() });
+        } else {
+          const id = nextTex();
+          const t = textures.get(id);
+          if (!t) throw new Error(`missing texture id ${id} for @group(${group}) @binding(${bind.binding})`);
+          const tex = await ensureTexture(dev, t, bind.kind === "storage_texture");
+          entries.push({ binding: bind.binding, resource: textureViewFor(t, tex, bind.kind) });
+        }
+      }
+      const bindGroup = dev.createBindGroup({ layout: rp.layouts[group], entries });
+      // Only pinned handles are cached: a bind list's resources are whatever the caller passed
+      // this frame, so caching them would be wrong the moment they change.
+      if (handleId >= 0) {
+        renderBgCache.set(`${pipelineId}:${group}:${handleId}:${uniformSlot ?? -1}`, bindGroup);
+      }
+      out.push({ group, bindGroup });
+    }
+    return out;
+  }
+
+  // --- Recorded command streams ---------------------------------------------------------------
+  // Wire format is documented once, in `crates/dream-stdlib/src/system/gpu/gpu_cmd.dream`.
+
+  const CMD_VERSION = 1;
+
+  function decodeStream(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let pos = 0;
+    const i32 = () => {
+      if (pos + 4 > dv.byteLength) throw new Error("command stream truncated");
+      const v = dv.getInt32(pos, true);
+      pos += 4;
+      return v;
+    };
+    const f32 = () => {
+      if (pos + 4 > dv.byteLength) throw new Error("command stream truncated");
+      const v = dv.getFloat32(pos, true);
+      pos += 4;
+      return v;
+    };
+    const arr = () => {
+      const n = Math.max(0, i32());
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) out[i] = i32();
+      return out;
+    };
+    const blob = () => {
+      const n = Math.max(0, i32());
+      const padded = (n + 3) & ~3;
+      if (pos + padded > dv.byteLength) throw new Error("command stream blob truncated");
+      const out = bytes.subarray(pos, pos + n);
+      pos += padded;
+      return out;
+    };
+
+    const version = i32();
+    if (version !== CMD_VERSION) {
+      throw new Error(`unsupported command stream version ${version} (host understands ${CMD_VERSION})`);
+    }
+    const records = [];
+    while (pos < dv.byteLength) {
+      const op = i32();
+      switch (op) {
+        case 1: {
+          const colorCount = Math.max(0, i32());
+          const desc = {
+            depthId: i32(),
+            depthLoad: i32(),
+            depthStore: i32(),
+            depthClear: f32(),
+            stencilLoad: i32(),
+            stencilStore: i32(),
+            stencilClear: i32(),
+            colors: [],
+          };
+          for (let i = 0; i < colorCount; i++) {
+            desc.colors.push({
+              kind: i32(),
+              id: i32(),
+              resolveId: i32(),
+              load: i32(),
+              store: i32(),
+              clear: [f32(), f32(), f32(), f32()],
+            });
+          }
+          records.push({ op: "beginPass", desc });
+          break;
+        }
+        case 2: records.push({ op: "endPass" }); break;
+        case 3: records.push({ op: "setPipeline", id: i32() }); break;
+        case 4: records.push({ op: "setBindGroup", group: i32(), id: i32() }); break;
+        case 5: records.push({ op: "setUniforms", bytes: blob() }); break;
+        case 6: records.push({ op: "setVertexBuffer", slot: i32(), buffer: i32() }); break;
+        case 7: records.push({ op: "setIndexBuffer", buffer: i32(), fmt: i32() }); break;
+        case 8:
+          records.push({
+            op: "setViewport",
+            x: f32(), y: f32(), w: f32(), h: f32(), minDepth: f32(), maxDepth: f32(),
+          });
+          break;
+        case 9: records.push({ op: "setScissor", x: i32(), y: i32(), w: i32(), h: i32() }); break;
+        case 10:
+          records.push({
+            op: "draw",
+            vertexCount: i32(), instanceCount: i32(), firstVertex: i32(), firstInstance: i32(),
+          });
+          break;
+        case 11:
+          records.push({
+            op: "drawIndexed",
+            indexCount: i32(), instanceCount: i32(), firstIndex: i32(),
+            baseVertex: i32(), firstInstance: i32(),
+          });
+          break;
+        case 12: records.push({ op: "drawIndirect", buffer: i32(), offset: i32() }); break;
+        case 13: records.push({ op: "drawIndexedIndirect", buffer: i32(), offset: i32() }); break;
+        case 14:
+          records.push({ op: "setBindList", buffers: arr(), textures: arr(), samplers: arr() });
+          break;
+        default: throw new Error(`unknown command stream opcode ${op}`);
+      }
+    }
+    return records;
+  }
+
+  function ensureCanvasContext(dev, s) {
+    if (!s.context) {
+      s.context = s.canvas.getContext("webgpu");
+      if (!s.context) throw new Error("canvas webgpu context unavailable");
+    }
+    if (!s.configured) {
+      s.context.configure({
+        device: dev,
+        format: navigator.gpu.getPreferredCanvasFormat(),
+        alphaMode: s.alphaMode || "opaque",
+      });
+      s.configured = true;
+    }
+    return s.context;
+  }
+
+  /// Multisampled color target for a canvas pass, resolved into the swapchain view.
+  function ensureSurfaceMsaa(dev, s, format, samples) {
+    if (!s.msaa || s.msaaSamples !== samples || s.msaaWidth !== s.canvas.width ||
+        s.msaaHeight !== s.canvas.height) {
+      s.msaa = dev.createTexture({
+        size: [Math.max(1, s.canvas.width), Math.max(1, s.canvas.height)],
+        format,
+        sampleCount: samples,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      s.msaaSamples = samples;
+      s.msaaWidth = s.canvas.width;
+      s.msaaHeight = s.canvas.height;
+    }
+    return s.msaa.createView();
+  }
+
+  function ensureSurfaceDepth(dev, s, samples) {
+    if (!s.depthTex || s.depthSamples !== samples || s.depthWidth !== s.canvas.width ||
+        s.depthHeight !== s.canvas.height) {
+      s.depthTex = dev.createTexture({
+        size: [Math.max(1, s.canvas.width), Math.max(1, s.canvas.height)],
+        format: "depth24plus",
+        sampleCount: samples,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      s.depthSamples = samples;
+      s.depthWidth = s.canvas.width;
+      s.depthHeight = s.canvas.height;
+    }
+    return s.depthTex.createView();
+  }
+
+  /// A `GpuTexture` used as a color attachment needs RENDER_ATTACHMENT usage, which `ensureTexture`
+  /// doesn't set; recreate up-front if it's missing (cheap — draw targets are stable).
+  function ensureRenderTarget(dev, t) {
+    if (!t.texture) {
+      const format = t.format || "rgba8unorm";
+      t.texture = dev.createTexture({
+        size: [t.width, t.height, t.depth_or_layers || 1],
+        format,
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.RENDER_ATTACHMENT |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.COPY_SRC |
+          (format === "rgba8unorm" ? GPUTextureUsage.STORAGE_BINDING : 0),
+        mipLevelCount: Math.max(1, (t.mip_levels | 0) || 1),
+      });
+      if (t.cpu) {
+        const bpp = format === "rgba16float" ? 8 : 4;
+        dev.queue.writeTexture(
+          { texture: t.texture },
+          t.cpu,
+          { bytesPerRow: t.width * bpp },
+          [t.width, t.height],
+        );
+      }
+    }
+    return t.texture;
+  }
+
+  async function resolveAttachments(dev, desc, sampleCount) {
+    if (!desc.colors.length) throw new Error("render pass has no color attachments");
+    const colors = [];
+    const touched = [];
+    let format = null;
+    let surfaceId = -1;
+    for (const c of desc.colors) {
+      let view, resolveTarget = undefined, fmt;
+      if (c.kind === 0) {
+        const s = surfaces.get(c.id);
+        if (!s) throw new Error(`unknown GpuSurface ${c.id}`);
+        surfaceId = c.id;
+        fmt = navigator.gpu.getPreferredCanvasFormat();
+        const single = ensureCanvasContext(dev, s).getCurrentTexture().createView();
+        if (sampleCount > 1) {
+          view = ensureSurfaceMsaa(dev, s, fmt, sampleCount);
+          resolveTarget = single;
+        } else {
+          view = single;
+        }
+      } else if (c.kind === 1) {
+        const t = textures.get(c.id);
+        if (!t) throw new Error(`unknown color GpuTexture ${c.id}`);
+        if (t.depth) throw new Error("validation: color target cannot be a depth texture");
+        if (sampleCount > 1) {
+          throw new Error(
+            `texture ${c.id} cannot be an MSAA attachment: offscreen multisampling needs a multisampled texture`,
+          );
+        }
+        fmt = t.format || "rgba8unorm";
+        view = ensureRenderTarget(dev, t).createView();
+        touched.push(t);
+        if (c.resolveId >= 0) {
+          const rt = textures.get(c.resolveId);
+          if (!rt) throw new Error(`unknown resolve GpuTexture ${c.resolveId}`);
+          resolveTarget = ensureRenderTarget(dev, rt).createView();
+          touched.push(rt);
+        }
+      } else {
+        throw new Error(`unknown color attachment target ${c.kind}`);
+      }
+      if (format == null) format = fmt;
+      colors.push({
+        view,
+        resolveTarget,
+        clearValue: { r: c.clear[0], g: c.clear[1], b: c.clear[2], a: c.clear[3] },
+        loadOp: c.load === 1 ? "load" : "clear",
+        storeOp: c.store === 1 ? "discard" : "store",
+      });
+    }
+
+    const passDesc = { colorAttachments: colors };
+    let depthView = null;
+    if (desc.depthId === -2) {
+      if (surfaceId < 0) throw new Error("surface_depth() needs a surface color attachment");
+      depthView = ensureSurfaceDepth(dev, surfaces.get(surfaceId), sampleCount);
+    } else if (desc.depthId >= 0) {
+      const dt = textures.get(desc.depthId);
+      if (!dt) throw new Error(`unknown depth GpuTexture ${desc.depthId}`);
+      depthView = (await ensureDepthTexture(dev, dt)).createView();
+    } else if (desc.depthId !== -1) {
+      throw new Error(`unknown depth attachment target ${desc.depthId}`);
+    }
+    if (depthView) {
+      passDesc.depthStencilAttachment = {
+        view: depthView,
+        depthClearValue: desc.depthClear,
+        depthLoadOp: desc.depthLoad === 1 ? "load" : "clear",
+        depthStoreOp: desc.depthStore === 1 ? "discard" : "store",
+      };
+    }
+    return { passDesc, format, touched };
+  }
+
+  /// Resolves one pass's resources into a flat step list, then replays it.
+  ///
+  /// Resources are resolved before `beginRenderPass` so no `await` lands inside the pass, where an
+  /// interleaved host call could record into it.
+  async function replayPass(dev, encoder, desc, body) {
+    const firstPipeline = body.find((r) => r.op === "setPipeline");
+    if (!firstPipeline) throw new Error("render pass issued no set_pipeline");
+    const firstRp = renderPipelines.get(firstPipeline.id);
+    if (!firstRp) throw new Error(`unknown GpuRenderPipeline ${firstPipeline.id}`);
+    const { passDesc, touched } = await resolveAttachments(dev, desc, firstRp.sampleCount || 1);
+
+    const steps = [];
+    let pipelineId = -1;
+    let rp = null;
+    let explicit = new Map();
+    let list = null;
+    let uniformSlot = null;
+    for (const rec of body) {
+      switch (rec.op) {
+        case "setPipeline": {
+          rp = renderPipelines.get(rec.id);
+          if (!rp) throw new Error(`unknown GpuRenderPipeline ${rec.id}`);
+          pipelineId = rec.id;
+          // A pipeline switch invalidates the previous pipeline's group layouts.
+          explicit = new Map();
+          list = null;
+          steps.push({ op: "pipeline", pipeline: rp.pipeline });
+          break;
+        }
+        case "setBindGroup": explicit.set(rec.group, rec.id); break;
+        case "setBindList": list = rec; break;
+        case "setUniforms":
+          if (!rp) throw new Error("set_uniforms before set_pipeline");
+          uniformSlot = allocRenderUniform(dev, rp, rec.bytes);
+          break;
+        case "setVertexBuffer": {
+          const b = buffers.get(rec.buffer);
+          if (!b) throw new Error(`unknown vertex GpuBuffer ${rec.buffer}`);
+          steps.push({
+            op: "vertexBuffer",
+            slot: rec.slot,
+            buffer: await ensureGpuBuffer(dev, b, GPUBufferUsage.VERTEX),
+          });
+          break;
+        }
+        case "setIndexBuffer": {
+          const b = buffers.get(rec.buffer);
+          if (!b) throw new Error(`unknown index GpuBuffer ${rec.buffer}`);
+          steps.push({
+            op: "indexBuffer",
+            buffer: await ensureGpuBuffer(dev, b, GPUBufferUsage.INDEX),
+            fmt: rec.fmt === 1 ? "uint16" : "uint32",
+          });
+          break;
+        }
+        case "setViewport":
+        case "setScissor":
+          steps.push(rec);
+          break;
+        case "draw":
+        case "drawIndexed":
+        case "drawIndirect":
+        case "drawIndexedIndirect": {
+          if (!rp) throw new Error("draw before set_pipeline");
+          const bgs = await buildRenderBindGroups(dev, rp, pipelineId, explicit, list, uniformSlot);
+          if (bgs.length) steps.push({ op: "bindGroups", bgs });
+          if (rec.op === "drawIndirect" || rec.op === "drawIndexedIndirect") {
+            const b = buffers.get(rec.buffer);
+            if (!b) throw new Error(`unknown indirect GpuBuffer ${rec.buffer}`);
+            steps.push({
+              op: rec.op,
+              buffer: await ensureGpuBuffer(dev, b, GPUBufferUsage.INDIRECT),
+              offset: Math.max(0, rec.offset | 0),
+            });
+          } else {
+            steps.push(rec);
+          }
+          break;
+        }
+        default: throw new Error(`unexpected command '${rec.op}' inside a render pass`);
+      }
+    }
+
+    const pass = encoder.beginRenderPass(passDesc);
+    for (const step of steps) {
+      switch (step.op) {
+        case "pipeline": pass.setPipeline(step.pipeline); break;
+        case "bindGroups": setBindGroups(pass, step.bgs); break;
+        case "vertexBuffer": pass.setVertexBuffer(step.slot, step.buffer); break;
+        case "indexBuffer": pass.setIndexBuffer(step.buffer, step.fmt); break;
+        case "setViewport":
+          pass.setViewport(step.x, step.y, step.w, step.h, step.minDepth, step.maxDepth);
+          break;
+        case "setScissor": pass.setScissorRect(step.x, step.y, step.w, step.h); break;
+        case "draw":
+          pass.draw(
+            Math.max(0, step.vertexCount | 0), Math.max(1, step.instanceCount | 0),
+            step.firstVertex | 0, step.firstInstance | 0,
+          );
+          break;
+        case "drawIndexed":
+          pass.drawIndexed(
+            Math.max(0, step.indexCount | 0), Math.max(1, step.instanceCount | 0),
+            step.firstIndex | 0, step.baseVertex | 0, step.firstInstance | 0,
+          );
+          break;
+        case "drawIndirect": pass.drawIndirect(step.buffer, step.offset); break;
+        case "drawIndexedIndirect": pass.drawIndexedIndirect(step.buffer, step.offset); break;
+      }
+    }
+    pass.end();
+    return touched;
+  }
+
+  async function submitStream(stream) {
+    const bytes = toU8(stream);
+    if (bytes.byteLength === 0) return 0;
+    const records = decodeStream(bytes);
+    const dev = await ensureDevice();
+    // Uniform pool slots are handed out per submit, so every draw in this frame gets its own.
+    for (const rp of renderPipelines.values()) rp.uniformCursor = 0;
+
+    const encoder = dev.createCommandEncoder();
+    const touched = [];
+    let i = 0;
+    while (i < records.length) {
+      if (records[i].op !== "beginPass") {
+        throw new Error(`command '${records[i].op}' outside of a render pass`);
+      }
+      const desc = records[i++].desc;
+      const body = [];
+      let closed = false;
+      while (i < records.length) {
+        const rec = records[i++];
+        if (rec.op === "endPass") { closed = true; break; }
+        body.push(rec);
+      }
+      if (!closed) throw new Error("render pass was never ended");
+      touched.push(...await replayPass(dev, encoder, desc, body));
+    }
+    dev.queue.submit([encoder.finish()]);
+    await dev.queue.onSubmittedWorkDone();
+    // Render targets now hold fresh GPU content, so their CPU mirrors are stale.
+    for (const t of touched) t.cpu = null;
+    return 0;
   }
 
   const host = {
@@ -3310,7 +3839,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       }
       t.mip_levels = mipCount;
       // Force ensureTexture to recreate with the new mip count; the caller will re-encode
-      // the texture on next use (via runDispatch, buildRenderBindGroup, or ensureBlit).
+      // the texture on next use (via runDispatch, buildRenderBindGroups, or ensureBlit).
       if (t.texture) {
         try { t.texture.destroy(); } catch (_) {}
         t.texture = null;
@@ -3347,6 +3876,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       const rp = renderPipelines.get(id);
       if (!rp) return;
       renderPipelines.delete(id);
+      for (const key of renderBgCache.keys()) {
+        if (key.split(":")[0] === String(id)) renderBgCache.delete(key);
+      }
+      for (const [bgId, bg] of bindGroups) {
+        if (bg.pipelineId === id) bindGroups.delete(bgId);
+      }
       // Remove any cache entries pointing at this pipeline so a subsequent create can rebuild.
       for (const [k, v] of renderPipelineCache) {
         if (v === id) renderPipelineCache.delete(k);
@@ -3547,56 +4082,15 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const vsModule = dev.createShaderModule({ code: vsMeta.source || "" });
         const fsModule = dev.createShaderModule({ code: fsMeta.source || "" });
         const format = navigator.gpu.getPreferredCanvasFormat();
-        const bindEntries = [];
         const allBinds = [...(vsMeta.bindings || []), ...(fsMeta.bindings || [])];
-        const seenBind = new Set();
-        for (const b of allBinds) {
-          if (seenBind.has(b.binding)) continue;
-          seenBind.add(b.binding);
-          const visibility =
-            (vsMeta.bindings || []).some((x) => x.binding === b.binding)
-              ? GPUShaderStage.VERTEX
-              : 0;
-          const fragVis =
-            (fsMeta.bindings || []).some((x) => x.binding === b.binding)
-              ? GPUShaderStage.FRAGMENT
-              : 0;
-          const vis = (visibility | fragVis) || (GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT);
-          if (b.kind === "uniform") {
-            bindEntries.push({ binding: b.binding, visibility: vis, buffer: { type: "uniform" } });
-          } else if (b.kind === "storage") {
-            bindEntries.push({
-              binding: b.binding,
-              visibility: vis,
-              buffer: { type: b.read_write ? "storage" : "read-only-storage" },
-            });
-          } else if (b.kind === "sampler") {
-            bindEntries.push({ binding: b.binding, visibility: vis, sampler: { type: "filtering" } });
-          } else if (b.kind === "texture") {
-            bindEntries.push({
-              binding: b.binding,
-              visibility: vis,
-              texture: { sampleType: "float" },
-            });
-          } else if (b.kind === "depth_texture") {
-            bindEntries.push({
-              binding: b.binding,
-              visibility: vis,
-              texture: { sampleType: "depth" },
-            });
-          } else if (b.kind === "storage_texture") {
-            bindEntries.push({
-              binding: b.binding,
-              visibility: vis,
-              storageTexture: { access: "write-only", format: "rgba8unorm" },
-            });
-          }
-        }
-        const bgl = bindEntries.length
-          ? dev.createBindGroupLayout({ entries: bindEntries })
-          : null;
-        const layout = bgl
-          ? dev.createPipelineLayout({ bindGroupLayouts: [bgl] })
+        const groups = planGroups(allBinds);
+        const layouts = createGroupLayouts(
+          dev,
+          groups,
+          GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        );
+        const layout = layouts.length
+          ? dev.createPipelineLayout({ bindGroupLayouts: layouts })
           : "auto";
         const attribs = (vsMeta.vertex_layout || []).map((a) => ({
           shaderLocation: a.location | 0,
@@ -3664,7 +4158,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const pipeline = await dev.createRenderPipelineAsync(desc);
         const id = nextId++;
         renderPipelines.set(id, {
-          pipeline, vsMeta, fsMeta, bgl,
+          pipeline, vsMeta, fsMeta, layouts, groups,
           depthEnabled: !!depthEnabled,
           sampleCount: Math.max(1, sampleCount | 0),
         });
@@ -3676,248 +4170,54 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       }
     },
 
-    gpuRenderDraw: async (
-      surfaceId, pipelineId, vertexBufferId, vertexCount,
-      uniforms, clearR, clearG, clearB, clearA,
-    ) => {
-      return await host.gpuRenderDrawEx(
-        surfaceId, pipelineId, vertexBufferId, vertexCount, 1,
-        uniforms, clearR, clearG, clearB, clearA, -1, 0,
-      );
-    },
-
-    gpuRenderDrawEx: async (
-      surfaceId, pipelineId, vertexBufferId, vertexCount, instanceCount,
-      uniforms, clearR, clearG, clearB, clearA, depthTextureId, loadOp,
-    ) => {
+    gpuEncoderSubmit: async (stream) => {
       try {
-        const s = surfaces.get(surfaceId);
-        if (!s) throw new Error(`unknown GpuSurface ${surfaceId}`);
-        const rp = renderPipelines.get(pipelineId);
-        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
-        const dev = await ensureDevice();
-        if (!s.context) {
-          s.context = s.canvas.getContext("webgpu");
-          if (!s.context) throw new Error("canvas webgpu context unavailable");
-        }
-        if (!s.configured) {
-          s.context.configure({
-            device: dev,
-            format: navigator.gpu.getPreferredCanvasFormat(),
-            alphaMode: "opaque",
-          });
-          s.configured = true;
-        }
-        const view = s.context.getCurrentTexture().createView();
-        const encoder = dev.createCommandEncoder();
-        const passDesc = {
-          colorAttachments: [{
-            view,
-            clearValue: {
-              r: +clearR || 0,
-              g: +clearG || 0,
-              b: +clearB || 0,
-              a: clearA === undefined || clearA === null ? 1 : +clearA,
-            },
-            loadOp: (loadOp | 0) === 1 ? "load" : "clear",
-            storeOp: "store",
-          }],
-        };
-        if (rp.depthEnabled && depthTextureId >= 0) {
-          const dt = textures.get(depthTextureId);
-          if (!dt) throw new Error(`unknown depth GpuTexture ${depthTextureId}`);
-          await ensureDepthTexture(dev, dt);
-          passDesc.depthStencilAttachment = {
-            view: dt.texture.createView(),
-            depthClearValue: 1.0,
-            depthLoadOp: (loadOp | 0) === 1 ? "load" : "clear",
-            depthStoreOp: "store",
-          };
-        }
-        const pass = encoder.beginRenderPass(passDesc);
-        pass.setPipeline(rp.pipeline);
-        const vb = buffers.get(vertexBufferId);
-        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
-          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
-          pass.setVertexBuffer(0, gpuVb);
-        }
-        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
-        if (bg) pass.setBindGroup(0, bg);
-        pass.draw(Math.max(0, vertexCount | 0), Math.max(1, instanceCount | 0));
-        pass.end();
-        dev.queue.submit([encoder.finish()]);
-        await dev.queue.onSubmittedWorkDone();
-        return 0;
+        return await submitStream(stream);
       } catch (e) {
-        console.error("Dream gpuRenderDrawEx:", e);
+        console.error("Dream gpuEncoderSubmit:", e);
         return classifyErr(e);
       }
     },
 
-    gpuRenderDrawTo: async (
-      colorTextureId, pipelineId, vertexBufferId, vertexCount, instanceCount,
-      uniforms, clearR, clearG, clearB, clearA, depthTextureId, loadOp,
-    ) => {
+    /// Pins a resource set for one `@group` of a pipeline so the host resolves it once instead of
+    /// on every draw. Validated here so a bad material fails at load time.
+    gpuBindGroupCreate: async (pipelineId, group, bufferIds, textureIds, samplerIds) => {
       try {
-        const target = textures.get(colorTextureId);
-        if (!target) throw new Error(`unknown color GpuTexture ${colorTextureId}`);
-        if (target.depth) throw new Error("validation: color target cannot be a depth texture");
         const rp = renderPipelines.get(pipelineId);
         if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
-        const dev = await ensureDevice();
-        // The target texture must have RENDER_ATTACHMENT. `ensureTexture` doesn't set it, so we
-        // recreate up-front if missing — cheap given draw targets are typically stable.
-        if (!target.texture) {
-          const usage =
-            GPUTextureUsage.TEXTURE_BINDING |
-            GPUTextureUsage.RENDER_ATTACHMENT |
-            GPUTextureUsage.COPY_DST |
-            GPUTextureUsage.COPY_SRC |
-            ((target.format || "rgba8unorm") === "rgba8unorm"
-              ? GPUTextureUsage.STORAGE_BINDING
-              : 0);
-          target.texture = dev.createTexture({
-            size: [target.width, target.height, target.depth_or_layers || 1],
-            format: target.format || "rgba8unorm",
-            usage,
-            mipLevelCount: Math.max(1, (target.mip_levels | 0) || 1),
-          });
-          if (target.cpu) {
-            const bpp = (target.format || "rgba8unorm") === "rgba16float" ? 8 : 4;
-            dev.queue.writeTexture(
-              { texture: target.texture },
-              target.cpu,
-              { bytesPerRow: target.width * bpp },
-              [target.width, target.height],
-            );
-          }
+        const plan = rp.groups.find((g) => g.group === (group | 0));
+        if (!plan) {
+          throw new Error(`validation: pipeline ${pipelineId} declares no @group(${group})`);
         }
-        const view = target.texture.createView();
-        const encoder = dev.createCommandEncoder();
-        const passDesc = {
-          colorAttachments: [{
-            view,
-            clearValue: {
-              r: +clearR || 0,
-              g: +clearG || 0,
-              b: +clearB || 0,
-              a: clearA === undefined || clearA === null ? 1 : +clearA,
-            },
-            loadOp: (loadOp | 0) === 1 ? "load" : "clear",
-            storeOp: "store",
-          }],
-        };
-        if (rp.depthEnabled && depthTextureId >= 0) {
-          const dt = textures.get(depthTextureId);
-          if (!dt) throw new Error(`unknown depth GpuTexture ${depthTextureId}`);
-          await ensureDepthTexture(dev, dt);
-          passDesc.depthStencilAttachment = {
-            view: dt.texture.createView(),
-            depthClearValue: 1.0,
-            depthLoadOp: (loadOp | 0) === 1 ? "load" : "clear",
-            depthStoreOp: "store",
-          };
+        const bufs = toI32Arr(bufferIds);
+        const texs = toI32Arr(textureIds);
+        const samps = toI32Arr(samplerIds);
+        const want = groupArity(plan.bindings);
+        if (bufs.length < want.bufs || texs.length < want.texs || samps.length < want.samps) {
+          throw new Error(
+            `validation: @group(${group}) needs ${want.bufs} buffer(s), ${want.texs} texture(s), ` +
+            `${want.samps} sampler(s); got ${bufs.length}, ${texs.length}, ${samps.length}`,
+          );
         }
-        const pass = encoder.beginRenderPass(passDesc);
-        pass.setPipeline(rp.pipeline);
-        const vb = buffers.get(vertexBufferId);
-        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
-          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
-          pass.setVertexBuffer(0, gpuVb);
-        }
-        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
-        if (bg) pass.setBindGroup(0, bg);
-        pass.draw(Math.max(0, vertexCount | 0), Math.max(1, instanceCount | 0));
-        pass.end();
-        dev.queue.submit([encoder.finish()]);
-        await dev.queue.onSubmittedWorkDone();
-        target.cpu = null;
-        return 0;
+        const id = nextId++;
+        bindGroups.set(id, {
+          pipelineId,
+          group: group | 0,
+          bufferIds: Array.from(bufs),
+          textureIds: Array.from(texs),
+          samplerIds: Array.from(samps),
+        });
+        return id;
       } catch (e) {
-        console.error("Dream gpuRenderDrawTo:", e);
-        return classifyErr(e);
+        console.error("Dream gpuBindGroupCreate:", e);
+        return -(classifyErr(e) || ERR_OTHER);
       }
     },
 
-    gpuRenderDrawIndexed: async (
-      surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount,
-      uniforms, clearR, clearG, clearB, clearA,
-    ) => {
-      return await host.gpuRenderDrawIndexedEx(
-        surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount, 1,
-        uniforms, clearR, clearG, clearB, clearA, -1, 0,
-      );
-    },
-
-    gpuRenderDrawIndexedEx: async (
-      surfaceId, pipelineId, vertexBufferId, indexBufferId, indexCount, instanceCount,
-      uniforms, clearR, clearG, clearB, clearA, depthTextureId, loadOp,
-    ) => {
-      try {
-        const s = surfaces.get(surfaceId);
-        if (!s) throw new Error(`unknown GpuSurface ${surfaceId}`);
-        const rp = renderPipelines.get(pipelineId);
-        if (!rp) throw new Error(`unknown GpuRenderPipeline ${pipelineId}`);
-        const dev = await ensureDevice();
-        if (!s.context) {
-          s.context = s.canvas.getContext("webgpu");
-          if (!s.context) throw new Error("canvas webgpu context unavailable");
-        }
-        if (!s.configured) {
-          s.context.configure({
-            device: dev,
-            format: navigator.gpu.getPreferredCanvasFormat(),
-            alphaMode: "opaque",
-          });
-          s.configured = true;
-        }
-        const view = s.context.getCurrentTexture().createView();
-        const encoder = dev.createCommandEncoder();
-        const passDesc = {
-          colorAttachments: [{
-            view,
-            clearValue: {
-              r: +clearR || 0,
-              g: +clearG || 0,
-              b: +clearB || 0,
-              a: clearA === undefined || clearA === null ? 1 : +clearA,
-            },
-            loadOp: (loadOp | 0) === 1 ? "load" : "clear",
-            storeOp: "store",
-          }],
-        };
-        if (rp.depthEnabled && depthTextureId >= 0) {
-          const dt = textures.get(depthTextureId);
-          if (!dt) throw new Error(`unknown depth GpuTexture ${depthTextureId}`);
-          await ensureDepthTexture(dev, dt);
-          passDesc.depthStencilAttachment = {
-            view: dt.texture.createView(),
-            depthClearValue: 1.0,
-            depthLoadOp: (loadOp | 0) === 1 ? "load" : "clear",
-            depthStoreOp: "store",
-          };
-        }
-        const pass = encoder.beginRenderPass(passDesc);
-        pass.setPipeline(rp.pipeline);
-        const vb = buffers.get(vertexBufferId);
-        if (vb && (rp.vsMeta.vertex_stride | 0) > 0) {
-          const gpuVb = await ensureGpuBuffer(dev, vb, GPUBufferUsage.VERTEX);
-          pass.setVertexBuffer(0, gpuVb);
-        }
-        const ib = buffers.get(indexBufferId);
-        if (!ib) throw new Error(`unknown index GpuBuffer ${indexBufferId}`);
-        const gpuIb = await ensureGpuBuffer(dev, ib, GPUBufferUsage.INDEX);
-        pass.setIndexBuffer(gpuIb, "uint32");
-        const bg = await buildRenderBindGroup(dev, rp, toU8(uniforms));
-        if (bg) pass.setBindGroup(0, bg);
-        pass.drawIndexed(Math.max(0, indexCount | 0), Math.max(1, instanceCount | 0));
-        pass.end();
-        dev.queue.submit([encoder.finish()]);
-        await dev.queue.onSubmittedWorkDone();
-        return 0;
-      } catch (e) {
-        console.error("Dream gpuRenderDrawIndexedEx:", e);
-        return classifyErr(e);
+    gpuBindGroupDestroy: (id) => {
+      bindGroups.delete(id);
+      for (const key of renderBgCache.keys()) {
+        if (key.split(":")[2] === String(id)) renderBgCache.delete(key);
       }
     },
 

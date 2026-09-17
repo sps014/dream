@@ -1,0 +1,176 @@
+module system.gpu;
+
+// One color attachment of a recorded render pass.
+internal struct GpuColorAttachment {
+    // `0` the surface swapchain, `1` an offscreen texture.
+    public kind: int;
+    public id: int;
+    // MSAA resolve destination texture id, or `-1`.
+    public resolve_id: int;
+    public load_op: GpuLoadOp;
+    public store_op: GpuStoreOp;
+    public clear: GpuVec4;
+}
+
+// Attachment set for one render pass: up to N color targets (MRT) plus optional depth/stencil.
+//
+// ```dream
+// let target = GpuRenderTarget.surface(surface)
+//     .clear(GpuVec4.of(0.05, 0.06, 0.08, 1.0))
+//     .surface_depth(GpuLoadOp.Clear);
+// ```
+public class GpuRenderTarget {
+    _colors: GpuColorAttachment[];
+    _n: int;
+    _depth_id: int;
+    _depth_load: GpuLoadOp;
+    _depth_store: GpuStoreOp;
+    _depth_clear: float;
+    _stencil_load: GpuLoadOp;
+    _stencil_store: GpuStoreOp;
+    _stencil_clear: int;
+
+    static fun empty(): GpuRenderTarget {
+        let t = GpuRenderTarget();
+        t._colors = Buffer.alloc<GpuColorAttachment>(4);
+        t._n = 0;
+        t._depth_id = -1;
+        t._depth_load = GpuLoadOp.Clear;
+        t._depth_store = GpuStoreOp.Store;
+        t._depth_clear = 1.0;
+        t._stencil_load = GpuLoadOp.Clear;
+        t._stencil_store = GpuStoreOp.Store;
+        t._stencil_clear = 0;
+        return t;
+    }
+
+    fun push(kind: int, id: int): GpuRenderTarget {
+        if this._n + 1 > this._colors.length {
+            let n = this._colors.length;
+            if n < 1 { n = 1; }
+            while n < this._n + 1 { n = n * 2; }
+            let out = Buffer.alloc<GpuColorAttachment>(n);
+            for (let i = 0; i < this._n; i = i + 1) {
+                out[i] = this._colors[i];
+            }
+            this._colors = out;
+        }
+        let a = GpuColorAttachment();
+        a.kind = kind;
+        a.id = id;
+        a.resolve_id = -1;
+        a.load_op = GpuLoadOp.Clear;
+        a.store_op = GpuStoreOp.Store;
+        a.clear = GpuVec4.of(0.0, 0.0, 0.0, 1.0);
+        this._colors[this._n] = a;
+        this._n = this._n + 1;
+        return this;
+    }
+
+    // Renders into the surface swapchain.
+    public static fun surface(s: GpuSurface): GpuRenderTarget {
+        return GpuRenderTarget.empty().push(0, s.id);
+    }
+
+    // Renders into an offscreen color texture.
+    public static fun texture(t: GpuTexture): GpuRenderTarget {
+        return GpuRenderTarget.empty().push(1, t.id);
+    }
+
+    // Appends another color attachment (MRT). The fragment shader must declare a matching
+    // `@location(N)` output for each.
+    public fun color(t: GpuTexture): GpuRenderTarget {
+        return this.push(1, t.id);
+    }
+
+    // Clears the most recently added attachment to `c`.
+    public fun clear(c: GpuVec4): GpuRenderTarget {
+        if this._n > 0 {
+            this._colors[this._n - 1].load_op = GpuLoadOp.Clear;
+            this._colors[this._n - 1].clear = c;
+        }
+        return this;
+    }
+
+    // Preserves the existing contents of the most recently added attachment.
+    public fun load(): GpuRenderTarget {
+        if this._n > 0 {
+            this._colors[this._n - 1].load_op = GpuLoadOp.Load;
+        }
+        return this;
+    }
+
+    // Discards the most recently added attachment after the pass instead of storing it.
+    public fun discard(): GpuRenderTarget {
+        if this._n > 0 {
+            this._colors[this._n - 1].store_op = GpuStoreOp.Discard;
+        }
+        return this;
+    }
+
+    // MSAA resolve destination for the most recently added attachment.
+    public fun resolve(t: GpuTexture): GpuRenderTarget {
+        if this._n > 0 {
+            this._colors[this._n - 1].resolve_id = t.id;
+        }
+        return this;
+    }
+
+    // Attaches an explicit depth texture.
+    public fun depth(t: GpuTexture, op: GpuLoadOp): GpuRenderTarget {
+        this._depth_id = t.id;
+        this._depth_load = op;
+        return this;
+    }
+
+    // Attaches the depth texture the surface manages itself (sized to the swapchain).
+    public fun surface_depth(op: GpuLoadOp): GpuRenderTarget {
+        this._depth_id = -2;
+        this._depth_load = op;
+        return this;
+    }
+
+    // Depth clear value (default `1.0`).
+    public fun depth_clear(v: float): GpuRenderTarget {
+        this._depth_clear = v;
+        return this;
+    }
+
+    // Discards depth after the pass (the common case — nothing samples it later).
+    public fun depth_discard(): GpuRenderTarget {
+        this._depth_store = GpuStoreOp.Discard;
+        return this;
+    }
+
+    // Stencil load/store ops and clear value.
+    public fun stencil(load: GpuLoadOp, store: GpuStoreOp, clear_value: int): GpuRenderTarget {
+        this._stencil_load = load;
+        this._stencil_store = store;
+        this._stencil_clear = clear_value;
+        return this;
+    }
+
+    internal fun record(s: GpuCmdStream): void {
+        s.op(GpuCmdOp.BeginRenderPass);
+        s.i32(this._n);
+        s.i32(this._depth_id);
+        s.load_op(this._depth_load);
+        s.store_op(this._depth_store);
+        s.f32(this._depth_clear);
+        s.load_op(this._stencil_load);
+        s.store_op(this._stencil_store);
+        s.i32(this._stencil_clear);
+        for (let i = 0; i < this._n; i = i + 1) {
+            let a = this._colors[i];
+            s.i32(a.kind);
+            s.i32(a.id);
+            s.i32(a.resolve_id);
+            s.load_op(a.load_op);
+            s.store_op(a.store_op);
+            s.f32(a.clear.x);
+            s.f32(a.clear.y);
+            s.f32(a.clear.z);
+            s.f32(a.clear.w);
+        }
+    }
+}

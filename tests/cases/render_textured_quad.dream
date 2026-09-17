@@ -1,0 +1,103 @@
+// A fragment shader that samples a texture: the draw path has to fill the `texture` and `sampler`
+// slots of @group(0), not just the uniform block. Renders a solid green source texture over a
+// 4x4 target and reads the result back.
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public uv: GpuVec2;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+@vertex
+fun quad_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.uv = GpuVec2.of(v.pos.x * 0.5 + 0.5, 0.5 - v.pos.y * 0.5);
+    return o;
+}
+
+@fragment
+fun quad_fs(
+    v: VsOut,
+    @group(0) @binding(0) albedo: GpuTexture,
+    @group(0) @binding(1) samp: GpuSampler
+): GpuVec4 {
+    return Gpu.texture_sample(albedo, samp, v.uv.x, v.uv.y);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    let albedo = GpuTexture.rgba8(1, 1);
+    let pixels = Buffer.alloc<byte>(4);
+    pixels[0] = (byte)0;
+    pixels[1] = (byte)255;
+    pixels[2] = (byte)0;
+    pixels[3] = (byte)255;
+    let wrote = await albedo.write_rgba(pixels);
+    if wrote.is_err() {
+        System.println("texture write failed");
+        return;
+    }
+    let samp = GpuSampler.create(
+        GpuFilterMode.Nearest,
+        GpuAddressMode.ClampToEdge,
+        GpuFilterMode.Nearest
+    );
+
+    // Oversized triangle covering the whole target.
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
+    ]);
+
+    let desc = GpuRenderPipelineDesc.defaults();
+    let pipe_r = await GpuRenderPipeline.create_ex("quad_vs", "quad_fs", desc);
+    if pipe_r.is_err() {
+        System.println("pipeline create failed");
+        return;
+    }
+    let pipe = pipe_r.unwrap();
+
+    let target = GpuTexture.rgba8(4, 4);
+    let no_depth: Option<GpuTexture> = Option.None;
+    let binds = GpuBindList.begin().texture(albedo).sampler(samp);
+    let drawn = await GpuRenderPass.draw_to(
+        target,
+        no_depth,
+        pipe,
+        verts,
+        3,
+        1,
+        Buffer.alloc<byte>(0),
+        GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+        GpuLoadOp.Clear,
+        Option.Some(binds)
+    );
+    if drawn.is_err() {
+        System.println("draw_to failed");
+        return;
+    }
+
+    let out = await target.read_rgba();
+    System.println("r=" + ((int)out[0]).to_string());
+    System.println("g=" + ((int)out[1]).to_string());
+    System.println("b=" + ((int)out[2]).to_string());
+    System.println("a=" + ((int)out[3]).to_string());
+}

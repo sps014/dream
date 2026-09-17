@@ -355,61 +355,6 @@ pub unsafe extern "C" fn gpuRenderPipelineCreateEx(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuRenderDrawEx(
-    sid: i32,
-    pid: i32,
-    vb: i32,
-    n: i32,
-    inst: i32,
-    uniforms: usize,
-    cr: f32,
-    cg: f32,
-    cb: f32,
-    ca: f32,
-    depth: i32,
-    load: i32,
-) -> i32 {
-    render::draw_ex(
-        sid,
-        pid,
-        vb,
-        n,
-        inst,
-        &read_bytes(uniforms),
-        [cr, cg, cb, ca],
-        depth,
-        load,
-        None,
-    )
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn gpuRenderDraw(
-    sid: i32,
-    pid: i32,
-    vb: i32,
-    n: i32,
-    uniforms: usize,
-    cr: f32,
-    cg: f32,
-    cb: f32,
-    ca: f32,
-) -> i32 {
-    render::draw_ex(
-        sid,
-        pid,
-        vb,
-        n,
-        1,
-        &read_bytes(uniforms),
-        [cr, cg, cb, ca],
-        -1,
-        0,
-        None,
-    )
-}
-
-#[no_mangle]
 pub extern "C" fn gpuRenderPipelineDestroy(id: i32) {
     render::pipeline_destroy(id);
 }
@@ -639,88 +584,30 @@ pub unsafe extern "C" fn gpuPassDispatchIndirect(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuRenderDrawIndexed(
-    sid: i32,
+pub unsafe extern "C" fn gpuEncoderSubmit(stream: usize) -> i32 {
+    crate::execution::host::gpu::encoder::submit(&read_bytes(stream))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gpuBindGroupCreate(
     pid: i32,
-    vb: i32,
-    ib: i32,
-    n: i32,
-    uniforms: usize,
-    cr: f32,
-    cg: f32,
-    cb: f32,
-    ca: f32,
+    group: i32,
+    bufs: usize,
+    tex: usize,
+    samp: usize,
 ) -> i32 {
-    render::draw_ex(
-        sid,
+    render::bind_group_create(
         pid,
-        vb,
-        n,
-        1,
-        &read_bytes(uniforms),
-        [cr, cg, cb, ca],
-        -1,
-        0,
-        Some((ib, n)),
+        group,
+        &read_i32s(bufs),
+        &read_i32s(tex),
+        &read_i32s(samp),
     )
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuRenderDrawIndexedEx(
-    sid: i32,
-    pid: i32,
-    vb: i32,
-    ib: i32,
-    n: i32,
-    inst: i32,
-    uniforms: usize,
-    cr: f32,
-    cg: f32,
-    cb: f32,
-    ca: f32,
-    depth: i32,
-    load: i32,
-) -> i32 {
-    render::draw_ex(
-        sid,
-        pid,
-        vb,
-        n,
-        inst,
-        &read_bytes(uniforms),
-        [cr, cg, cb, ca],
-        depth,
-        load,
-        Some((ib, n)),
-    )
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn gpuRenderDrawTo(
-    color: i32,
-    pid: i32,
-    vb: i32,
-    n: i32,
-    inst: i32,
-    uniforms: usize,
-    cr: f32,
-    cg: f32,
-    cb: f32,
-    ca: f32,
-    depth: i32,
-    load: i32,
-) -> i32 {
-    render::draw_to(
-        color,
-        pid,
-        vb,
-        n,
-        inst,
-        &read_bytes(uniforms),
-        [cr, cg, cb, ca],
-        depth,
-        load,
-    )
+pub extern "C" fn gpuBindGroupDestroy(id: i32) {
+    render::bind_group_destroy(id);
 }
 
 #[no_mangle]

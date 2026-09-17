@@ -1,0 +1,104 @@
+// `@group(N)` / `@binding(N)` on shader parameters: the uniform block sits in group 0 while the
+// material texture + sampler live in group 1, so the host must build one bind group per group.
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public uv: GpuVec2;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+@vertex
+fun tint_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.uv = GpuVec2.of(v.pos.x * 0.5 + 0.5, 0.5 - v.pos.y * 0.5);
+    return o;
+}
+
+@fragment
+fun tint_fs(
+    v: VsOut,
+    @group(0) @binding(0) tint: GpuVec4,
+    @group(1) @binding(0) albedo: GpuTexture,
+    @group(1) @binding(1) samp: GpuSampler
+): GpuVec4 {
+    let base = Gpu.texture_sample(albedo, samp, v.uv.x, v.uv.y);
+    return GpuVec4.of(base.x * tint.x, base.y * tint.y, base.z * tint.z, base.w * tint.w);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    // Yellow source texture; a cyan tint leaves only green.
+    let albedo = GpuTexture.rgba8(1, 1);
+    let pixels = Buffer.alloc<byte>(4);
+    pixels[0] = (byte)255;
+    pixels[1] = (byte)255;
+    pixels[2] = (byte)0;
+    pixels[3] = (byte)255;
+    let wrote = await albedo.write_rgba(pixels);
+    if wrote.is_err() {
+        System.println("texture write failed");
+        return;
+    }
+    let samp = GpuSampler.create(
+        GpuFilterMode.Nearest,
+        GpuAddressMode.ClampToEdge,
+        GpuFilterMode.Nearest
+    );
+
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
+    ]);
+
+    let desc = GpuRenderPipelineDesc.defaults();
+    let pipe_r = await GpuRenderPipeline.create_ex("tint_vs", "tint_fs", desc);
+    if pipe_r.is_err() {
+        System.println("pipeline create failed");
+        return;
+    }
+    let pipe = pipe_r.unwrap();
+
+    let target = GpuTexture.rgba8(4, 4);
+    let no_depth: Option<GpuTexture> = Option.None;
+    let binds = GpuBindList.begin().texture(albedo).sampler(samp);
+    let drawn = await GpuRenderPass.draw_to(
+        target,
+        no_depth,
+        pipe,
+        verts,
+        3,
+        1,
+        Uniforms.pack_f32([0.0, 1.0, 1.0, 1.0]),
+        GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+        GpuLoadOp.Clear,
+        Option.Some(binds)
+    );
+    if drawn.is_err() {
+        System.println("draw_to failed");
+        return;
+    }
+
+    let out = await target.read_rgba();
+    System.println("r=" + ((int)out[0]).to_string());
+    System.println("g=" + ((int)out[1]).to_string());
+    System.println("b=" + ((int)out[2]).to_string());
+    System.println("a=" + ((int)out[3]).to_string());
+}

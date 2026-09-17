@@ -141,7 +141,7 @@ fun paint(
     @readonly dens: GpuBuffer<float>,
     @readonly vx: GpuBuffer<float>,
     @readonly vy: GpuBuffer<float>,
-    tex: GpuTexture,
+    @storage tex: GpuTexture,
     n: int
 ): void {
     let x = global_id.x;

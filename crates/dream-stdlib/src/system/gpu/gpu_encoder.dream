@@ -1,0 +1,187 @@
+module system.gpu;
+
+// Records a whole frame — any number of render passes and draws — and submits it in one host call.
+//
+// ```dream
+// let enc = GpuEncoder.begin();
+// let pass = enc.render_pass(GpuRenderTarget.surface(surface).clear(sky));
+// pass.set_pipeline(pipe).set_vertex_buffer(0, verts);
+// for (let i = 0; i < meshes.length; i = i + 1) {
+//     pass.set_bind_group(1, meshes[i].material);
+//     pass.set_uniforms(meshes[i].uniforms);
+//     pass.draw(meshes[i].count, 1, 0, 0);
+// }
+// pass.end();
+// (await enc.submit())?;
+// ```
+public class GpuEncoder {
+    _s: GpuCmdStream;
+
+    internal constructor() {}
+
+    // Starts an empty command stream.
+    public static fun begin(): GpuEncoder {
+        let e = GpuEncoder();
+        e._s = GpuCmdStream.begin();
+        return e;
+    }
+
+    // Begins a render pass over `target`. Call `end()` on the returned recorder before starting
+    // another pass; passes may not be interleaved.
+    public fun render_pass(target: GpuRenderTarget): GpuRenderPassEncoder {
+        target.record(this._s);
+        let p = GpuRenderPassEncoder();
+        p._s = this._s;
+        return p;
+    }
+
+    // Replays every recorded pass into a single host command buffer and submits it.
+    @web @native
+    public async fun submit(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
+        let payload = this._s.bytes();
+        let code = await Gpu.encoder_submit(payload);
+        if code == 0 { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "encoder submit failed"));
+    }
+}
+
+// Records draw commands for one render pass. Mirrors WebGPU's `GPURenderPassEncoder`.
+public class GpuRenderPassEncoder {
+    internal _s: GpuCmdStream;
+
+    internal constructor() {}
+
+    public fun set_pipeline(p: GpuRenderPipeline): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetPipeline);
+        this._s.i32(p.id);
+        return this;
+    }
+
+    public fun set_bind_group(group: int, bg: GpuBindGroup): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetBindGroup);
+        this._s.i32(group);
+        this._s.i32(bg.id);
+        return this;
+    }
+
+    // Supplies resources for every group the pipeline declares at once, consumed in shader
+    // declaration order per kind. Convenient for a one-off draw; a `GpuBindGroup` is cheaper
+    // per frame because the host resolves it only once.
+    public fun set_bind_list(binds: GpuBindList): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetBindList);
+        let bufs = binds.buffer_ids();
+        let texs = binds.texture_ids();
+        let samps = binds.sampler_ids();
+        this._s.i32_array(bufs);
+        this._s.i32_array(texs);
+        this._s.i32_array(samps);
+        return this;
+    }
+
+    // Sets the uniform block for the following draws (`Uniforms.pack` / `pack_f32`). Each call
+    // takes a fresh slot in the pipeline's uniform pool, so draws in one pass can differ.
+    public fun set_uniforms(uniforms: byte[]): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetUniforms);
+        this._s.blob(uniforms);
+        return this;
+    }
+
+    public fun set_vertex_buffer<T : unmanaged>(slot: int, b: GpuBuffer<T>): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetVertexBuffer);
+        this._s.i32(slot);
+        this._s.i32(b.id);
+        return this;
+    }
+
+    public fun set_index_buffer(b: GpuBuffer<int>, format: GpuIndexFormat): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetIndexBuffer);
+        this._s.i32(b.id);
+        let f: int = format;
+        this._s.i32(f);
+        return this;
+    }
+
+    // Viewport in framebuffer pixels; `min_depth`/`max_depth` are normally `0.0` / `1.0`.
+    public fun set_viewport(
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        min_depth: float,
+        max_depth: float
+    ): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetViewport);
+        this._s.f32(x);
+        this._s.f32(y);
+        this._s.f32(width);
+        this._s.f32(height);
+        this._s.f32(min_depth);
+        this._s.f32(max_depth);
+        return this;
+    }
+
+    public fun set_scissor(x: int, y: int, width: int, height: int): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.SetScissor);
+        this._s.i32(x);
+        this._s.i32(y);
+        this._s.i32(width);
+        this._s.i32(height);
+        return this;
+    }
+
+    public fun draw(
+        vertex_count: int,
+        instance_count: int,
+        first_vertex: int,
+        first_instance: int
+    ): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.Draw);
+        this._s.i32(vertex_count);
+        this._s.i32(instance_count);
+        this._s.i32(first_vertex);
+        this._s.i32(first_instance);
+        return this;
+    }
+
+    public fun draw_indexed(
+        index_count: int,
+        instance_count: int,
+        first_index: int,
+        base_vertex: int,
+        first_instance: int
+    ): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.DrawIndexed);
+        this._s.i32(index_count);
+        this._s.i32(instance_count);
+        this._s.i32(first_index);
+        this._s.i32(base_vertex);
+        this._s.i32(first_instance);
+        return this;
+    }
+
+    // Reads draw arguments from `b` at `byte_offset` (4 x u32: vertex_count, instance_count,
+    // first_vertex, first_instance).
+    public fun draw_indirect<T : unmanaged>(b: GpuBuffer<T>, byte_offset: int): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.DrawIndirect);
+        this._s.i32(b.id);
+        this._s.i32(byte_offset);
+        return this;
+    }
+
+    // Reads indexed draw arguments from `b` at `byte_offset` (5 x u32: index_count,
+    // instance_count, first_index, base_vertex, first_instance).
+    public fun draw_indexed_indirect<T : unmanaged>(
+        b: GpuBuffer<T>,
+        byte_offset: int
+    ): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.DrawIndexedIndirect);
+        this._s.i32(b.id);
+        this._s.i32(byte_offset);
+        return this;
+    }
+
+    public fun end(): void {
+        this._s.op(GpuCmdOp.EndPass);
+    }
+}

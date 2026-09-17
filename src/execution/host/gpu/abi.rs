@@ -51,6 +51,9 @@ fn default_color_targets() -> u32 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GpuBindingMeta {
+    /// WGSL `@group(N)`. Binding indices are unique per group, not per shader.
+    #[serde(default)]
+    pub group: u32,
     pub binding: u32,
     pub kind: String,
     #[serde(default)]

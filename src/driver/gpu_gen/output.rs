@@ -76,8 +76,9 @@ fn bindings_json(bindings: &[super::types::GpuBinding]) -> String {
         .iter()
         .map(|b| {
             format!(
-                "{{ \"name\": \"{}\", \"binding\": {}, \"kind\": \"{}\", \"type\": \"{}\", \"read_write\": {}, \"atomic\": {} }}",
+                "{{ \"name\": \"{}\", \"group\": {}, \"binding\": {}, \"kind\": \"{}\", \"type\": \"{}\", \"read_write\": {}, \"atomic\": {} }}",
                 json_escape(&b.name),
+                b.group,
                 b.binding,
                 b.kind,
                 json_escape(&b.wgsl_ty),

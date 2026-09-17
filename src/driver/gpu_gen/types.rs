@@ -4,6 +4,8 @@
 #[derive(Debug, Clone)]
 pub struct GpuBinding {
     pub name: String,
+    /// WGSL `@group(N)`. Binding indices are unique per group, not per shader.
+    pub group: u32,
     pub binding: u32,
     /// `"storage"`, `"uniform"`, `"texture"`, `"storage_texture"`, or `"sampler"`.
     pub kind: &'static str,

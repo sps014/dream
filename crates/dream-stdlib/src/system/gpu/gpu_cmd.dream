@@ -1,0 +1,147 @@
+module system.gpu;
+
+// Wire format for recorded GPU command streams.
+//
+// `GpuEncoder` records draws into a growable little-endian byte buffer and submits the whole
+// frame in one host call; both hosts decode it into a single command encoder (native
+// `gpu/encoder.rs`, browser `gpu.js`). Recording in the guest and replaying once in the host is
+// the same shape `ComputePass` already uses, generalized so one call carries many passes.
+//
+//   header:  [ version:i32 ]
+//   records: [ opcode:i32, operands... ] repeated to the end of the buffer
+//
+// Operand layout per opcode (f32 operands are IEEE-754 bit patterns):
+//
+//   BeginRenderPass    color_count:i32
+//                      depth_tex:i32      (-1 none, -2 the surface's own depth, else texture id)
+//                      depth_load:i32 depth_store:i32 depth_clear:f32
+//                      stencil_load:i32 stencil_store:i32 stencil_clear:i32
+//                      then color_count x [ kind:i32 (0 surface, 1 texture)
+//                                           id:i32
+//                                           resolve:i32 (-1 none, else texture id)
+//                                           load:i32 store:i32
+//                                           clear_r:f32 clear_g:f32 clear_b:f32 clear_a:f32 ]
+//   EndPass            -
+//   SetPipeline        pipeline:i32
+//   SetBindGroup       group:i32 bind_group:i32
+//   SetBindList        3 x [ count:i32, count x id:i32 ] — buffers, textures, samplers
+//   SetUniforms        blob (length-prefixed, padded to 4 bytes)
+//   SetVertexBuffer    slot:i32 buffer:i32
+//   SetIndexBuffer     buffer:i32 format:i32 (0 uint32, 1 uint16)
+//   SetViewport        x:f32 y:f32 w:f32 h:f32 min_depth:f32 max_depth:f32
+//   SetScissor         x:i32 y:i32 w:i32 h:i32
+//   Draw               vertex_count:i32 instance_count:i32 first_vertex:i32 first_instance:i32
+//   DrawIndexed        index_count:i32 instance_count:i32 first_index:i32 base_vertex:i32
+//                      first_instance:i32
+//   DrawIndirect       buffer:i32 offset:i32
+//   DrawIndexedIndirect buffer:i32 offset:i32
+internal enum GpuCmdOp {
+    BeginRenderPass = 1,
+    EndPass = 2,
+    SetPipeline = 3,
+    SetBindGroup = 4,
+    SetUniforms = 5,
+    SetVertexBuffer = 6,
+    SetIndexBuffer = 7,
+    SetViewport = 8,
+    SetScissor = 9,
+    Draw = 10,
+    DrawIndexed = 11,
+    DrawIndirect = 12,
+    DrawIndexedIndirect = 13,
+    SetBindList = 14,
+}
+
+// Current stream format version. Hosts reject anything else rather than mis-decoding.
+internal static class GpuCmdVersion {
+    public static fun current(): int { return 1; }
+}
+
+// Growable little-endian writer for the format above.
+internal class GpuCmdStream {
+    _buf: byte[];
+    _len: int;
+
+    public static fun begin(): GpuCmdStream {
+        let s = GpuCmdStream();
+        s._buf = Buffer.alloc<byte>(256);
+        s._len = 0;
+        s.i32(GpuCmdVersion.current());
+        return s;
+    }
+
+    fun reserve(extra: int): void {
+        let need = this._len + extra;
+        if need <= this._buf.length { return; }
+        let n = this._buf.length;
+        if n < 1 { n = 1; }
+        while n < need { n = n * 2; }
+        let out = Buffer.alloc<byte>(n);
+        for (let i = 0; i < this._len; i = i + 1) {
+            out[i] = this._buf[i];
+        }
+        this._buf = out;
+    }
+
+    public fun i32(v: int): void {
+        this.reserve(4);
+        this._buf[this._len] = (byte)(v & 255);
+        this._buf[this._len + 1] = (byte)((v >> 8) & 255);
+        this._buf[this._len + 2] = (byte)((v >> 16) & 255);
+        this._buf[this._len + 3] = (byte)((v >> 24) & 255);
+        this._len = this._len + 4;
+    }
+
+    public fun f32(v: float): void {
+        let eb = Bytes.of(v);
+        this.reserve(4);
+        for (let j = 0; j < 4; j = j + 1) {
+            this._buf[this._len + j] = eb[j];
+        }
+        this._len = this._len + 4;
+    }
+
+    public fun op(o: GpuCmdOp): void {
+        let v: int = o;
+        this.i32(v);
+    }
+
+    public fun load_op(o: GpuLoadOp): void {
+        let v: int = o;
+        this.i32(v);
+    }
+
+    public fun store_op(o: GpuStoreOp): void {
+        let v: int = o;
+        this.i32(v);
+    }
+
+    public fun i32_array(a: int[]): void {
+        this.i32(a.length);
+        for (let i = 0; i < a.length; i = i + 1) {
+            this.i32(a[i]);
+        }
+    }
+
+    // Length-prefixed payload, zero-padded so the following record stays 4-byte aligned.
+    public fun blob(data: byte[]): void {
+        this.i32(data.length);
+        let pad = (4 - (data.length & 3)) & 3;
+        this.reserve(data.length + pad);
+        for (let i = 0; i < data.length; i = i + 1) {
+            this._buf[this._len + i] = data[i];
+        }
+        for (let i = 0; i < pad; i = i + 1) {
+            this._buf[this._len + data.length + i] = (byte)0;
+        }
+        this._len = this._len + data.length + pad;
+    }
+
+    public fun bytes(): byte[] {
+        let out = Buffer.alloc<byte>(this._len);
+        for (let i = 0; i < this._len; i = i + 1) {
+            out[i] = this._buf[i];
+        }
+        return out;
+    }
+}

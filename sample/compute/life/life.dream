@@ -56,7 +56,7 @@ fun rd_step(
 fun rd_paint(
     @readonly u_buf: GpuBuffer<float>,
     @readonly v_buf: GpuBuffer<float>,
-    tex: GpuTexture,
+    @storage tex: GpuTexture,
     n: int
 ): void {
     let x = global_id.x;

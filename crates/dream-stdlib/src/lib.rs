@@ -479,6 +479,22 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/gpu_render_pipeline.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_bind_group.dream",
+                include_str!("system/gpu/gpu_bind_group.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_cmd.dream",
+                include_str!("system/gpu/gpu_cmd.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_render_target.dream",
+                include_str!("system/gpu/gpu_render_target.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_encoder.dream",
+                include_str!("system/gpu/gpu_encoder.dream"),
+            ),
+            (
                 "<std>/system/gpu/gpu_render_pass.dream",
                 include_str!("system/gpu/gpu_render_pass.dream"),
             ),

@@ -1,6 +1,8 @@
 module system.gpu;
 
-// Fixed-function blit plus programmable draw helpers for `@vertex` / `@fragment` pipelines.
+// One-draw convenience helpers over `GpuEncoder`. Each call records a single-pass, single-draw
+// command stream and submits it; reach for `GpuEncoder` directly when a frame has more than one
+// draw, since these submit once per call.
 public class GpuRenderPass {
     // Blits `source` onto `surface` (fullscreen textured triangle).
     @web @native
@@ -9,6 +11,56 @@ public class GpuRenderPass {
         let code = await Gpu.render_blit(surface.id, source.id);
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "blit failed"));
+    }
+
+    // Records `set_uniforms` + the caller's bindings, then submits one draw.
+    static async fun submit_one<T : unmanaged>(
+        target: GpuRenderTarget,
+        pipeline: GpuRenderPipeline,
+        vertices: GpuBuffer<T>,
+        indices: Option<GpuBuffer<int>>,
+        count: int,
+        instance_count: int,
+        uniforms: byte[],
+        binds: Option<GpuBindList>,
+        token: Option<CancellationToken>
+    ): Result<bool, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
+        let enc = GpuEncoder.begin();
+        let pass = enc.render_pass(target);
+        pass.set_pipeline(pipeline);
+        pass.set_uniforms(uniforms);
+        switch (binds) {
+            Some(b) => { pass.set_bind_list(b); },
+            None => {},
+        }
+        pass.set_vertex_buffer(0, vertices);
+        switch (indices) {
+            Some(ib) => {
+                pass.set_index_buffer(ib, GpuIndexFormat.Uint32);
+                pass.draw_indexed(count, instance_count, 0, 0, 0);
+            },
+            None => {
+                pass.draw(count, instance_count, 0, 0);
+            },
+        }
+        pass.end();
+        return await enc.submit(token);
+    }
+
+    static fun surface_target(
+        surface: GpuSurface,
+        clear: GpuVec4,
+        depth: Option<GpuTexture>,
+        load_op: GpuLoadOp
+    ): GpuRenderTarget {
+        let t = GpuRenderTarget.surface(surface);
+        if load_op == GpuLoadOp.Load { t.load(); } else { t.clear(clear); }
+        switch (depth) {
+            Some(d) => { t.depth(d, load_op); },
+            None => { t.surface_depth(load_op); },
+        }
+        return t;
     }
 
     // Clears the surface (black) and draws `vertex_count` vertices with `pipeline`.
@@ -27,11 +79,13 @@ public class GpuRenderPass {
             vertex_count,
             Buffer.alloc<byte>(0),
             GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+            Option.None,
             token
         );
     }
 
     // Like `draw`, with shader uniforms (`Uniforms.pack` / `pack_f32`) and a clear color.
+    // `binds` supplies the textures / samplers / storage buffers the shaders declare in group 0.
     @web @native
     public static async fun draw_ex<T : unmanaged>(
         surface: GpuSurface,
@@ -40,6 +94,7 @@ public class GpuRenderPass {
         vertex_count: int,
         uniforms: byte[],
         clear: GpuVec4,
+        binds: Option<GpuBindList> = Option.None,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_depth: Option<GpuTexture> = Option.None;
@@ -53,6 +108,7 @@ public class GpuRenderPass {
             clear,
             no_depth,
             GpuLoadOp.Clear,
+            binds,
             token
         );
     }
@@ -69,30 +125,21 @@ public class GpuRenderPass {
         clear: GpuVec4,
         depth: Option<GpuTexture>,
         load_op: GpuLoadOp,
+        binds: Option<GpuBindList> = Option.None,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        CancellationToken.rejected(token, GpuError.cancelled())?;
-        let depth_id = switch (depth) {
-            Some(t) => t.id,
-            None => -1,
-        };
-        let load: int = load_op;
-        let code = await Gpu.render_draw_ex(
-            surface.id,
-            pipeline.id,
-            vertices.id,
+        let no_indices: Option<GpuBuffer<int>> = Option.None;
+        return await GpuRenderPass.submit_one(
+            GpuRenderPass.surface_target(surface, clear, depth, load_op),
+            pipeline,
+            vertices,
+            no_indices,
             vertex_count,
             instance_count,
             uniforms,
-            clear.x,
-            clear.y,
-            clear.z,
-            clear.w,
-            depth_id,
-            load
+            binds,
+            token
         );
-        if code == 0 { return Result.Ok(true); }
-        return Result.Err(GpuError.from_code(code, "draw failed"));
     }
 
     // Clears the surface and draws indexed geometry (indices are `int` → WebGPU `uint32`).
@@ -113,11 +160,12 @@ public class GpuRenderPass {
             index_count,
             Buffer.alloc<byte>(0),
             GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+            Option.None,
             token
         );
     }
 
-    // Like `draw_indexed`, with uniforms and clear color.
+    // Like `draw_indexed`, with uniforms, clear color, and shader resource bindings.
     @web @native
     public static async fun draw_indexed_ex<T : unmanaged>(
         surface: GpuSurface,
@@ -127,6 +175,7 @@ public class GpuRenderPass {
         index_count: int,
         uniforms: byte[],
         clear: GpuVec4,
+        binds: Option<GpuBindList> = Option.None,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_depth: Option<GpuTexture> = Option.None;
@@ -141,6 +190,7 @@ public class GpuRenderPass {
             clear,
             no_depth,
             GpuLoadOp.Clear,
+            binds,
             token
         );
     }
@@ -158,31 +208,20 @@ public class GpuRenderPass {
         clear: GpuVec4,
         depth: Option<GpuTexture>,
         load_op: GpuLoadOp,
+        binds: Option<GpuBindList> = Option.None,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        CancellationToken.rejected(token, GpuError.cancelled())?;
-        let depth_id = switch (depth) {
-            Some(t) => t.id,
-            None => -1,
-        };
-        let load: int = load_op;
-        let code = await Gpu.render_draw_indexed_ex(
-            surface.id,
-            pipeline.id,
-            vertices.id,
-            indices.id,
+        return await GpuRenderPass.submit_one(
+            GpuRenderPass.surface_target(surface, clear, depth, load_op),
+            pipeline,
+            vertices,
+            Option.Some(indices),
             index_count,
             instance_count,
             uniforms,
-            clear.x,
-            clear.y,
-            clear.z,
-            clear.w,
-            depth_id,
-            load
+            binds,
+            token
         );
-        if code == 0 { return Result.Ok(true); }
-        return Result.Err(GpuError.from_code(code, "draw_indexed failed"));
     }
 
     // Draws into an offscreen color texture (optional depth), not the swapchain.
@@ -197,29 +236,26 @@ public class GpuRenderPass {
         uniforms: byte[],
         clear: GpuVec4,
         load_op: GpuLoadOp,
+        binds: Option<GpuBindList> = Option.None,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        CancellationToken.rejected(token, GpuError.cancelled())?;
-        let depth_id = switch (depth) {
-            Some(t) => t.id,
-            None => -1,
-        };
-        let load: int = load_op;
-        let code = await Gpu.render_draw_to(
-            color.id,
-            pipeline.id,
-            vertices.id,
+        let target = GpuRenderTarget.texture(color);
+        if load_op == GpuLoadOp.Load { target.load(); } else { target.clear(clear); }
+        switch (depth) {
+            Some(d) => { target.depth(d, load_op); },
+            None => {},
+        }
+        let no_indices: Option<GpuBuffer<int>> = Option.None;
+        return await GpuRenderPass.submit_one(
+            target,
+            pipeline,
+            vertices,
+            no_indices,
             vertex_count,
             instance_count,
             uniforms,
-            clear.x,
-            clear.y,
-            clear.z,
-            clear.w,
-            depth_id,
-            load
+            binds,
+            token
         );
-        if code == 0 { return Result.Ok(true); }
-        return Result.Err(GpuError.from_code(code, "draw_to failed"));
     }
 }

@@ -383,6 +383,15 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "On a `@compute` `GpuBuffer` parameter: storage access is read-only (WGSL `read`).",
     },
+    // Storage-texture opt-in: WGSL `texture_storage_2d<rgba8unorm, write>` instead of a sampled
+    // `texture_2d<f32>`. Sampling is the default because it is what render stages need.
+    AttributeSpec {
+        name: "storage",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "On a `GpuTexture` parameter: bind as a writable storage texture (WGSL `texture_storage_2d<rgba8unorm, write>`) instead of a sampled texture.",
+    },
     // Cubemap texture parameter attribute: WGSL `texture_cube<f32>`.
     AttributeSpec {
         name: "cube",

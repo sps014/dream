@@ -243,87 +243,27 @@ public static class Gpu {
         sample_count: int
     ): int;
 
+    // Replays a recorded command stream (see `gpu_cmd.dream`) as one command buffer + submit.
     @web @native
-    @runtime("gpuRenderDraw")
-    static extern async fun render_draw(
-        surface_id: int,
+    @runtime("gpuEncoderSubmit")
+    static extern async fun encoder_submit(borrow stream: byte[]): int;
+
+    // Builds a reusable bind group for `pipeline`'s `@group(group)`. `buffer_ids` /
+    // `texture_ids` / `sampler_ids` fill that group's slots in ABI declaration order, exactly as
+    // `Compute.run_resources` does for kernels. Returns the id, or a negated `GpuError` code.
+    @web @native
+    @runtime("gpuBindGroupCreate")
+    static extern async fun bind_group_create(
         pipeline_id: int,
-        vertex_buffer_id: int,
-        vertex_count: int,
-        borrow uniforms: byte[],
-        clear_r: float,
-        clear_g: float,
-        clear_b: float,
-        clear_a: float
+        group: int,
+        borrow buffer_ids: int[],
+        borrow texture_ids: int[],
+        borrow sampler_ids: int[]
     ): int;
 
     @web @native
-    @runtime("gpuRenderDrawEx")
-    static extern async fun render_draw_ex(
-        surface_id: int,
-        pipeline_id: int,
-        vertex_buffer_id: int,
-        vertex_count: int,
-        instance_count: int,
-        borrow uniforms: byte[],
-        clear_r: float,
-        clear_g: float,
-        clear_b: float,
-        clear_a: float,
-        depth_texture_id: int,
-        load_op: int
-    ): int;
-
-    @web @native
-    @runtime("gpuRenderDrawIndexed")
-    static extern async fun render_draw_indexed(
-        surface_id: int,
-        pipeline_id: int,
-        vertex_buffer_id: int,
-        index_buffer_id: int,
-        index_count: int,
-        borrow uniforms: byte[],
-        clear_r: float,
-        clear_g: float,
-        clear_b: float,
-        clear_a: float
-    ): int;
-
-    @web @native
-    @runtime("gpuRenderDrawIndexedEx")
-    static extern async fun render_draw_indexed_ex(
-        surface_id: int,
-        pipeline_id: int,
-        vertex_buffer_id: int,
-        index_buffer_id: int,
-        index_count: int,
-        instance_count: int,
-        borrow uniforms: byte[],
-        clear_r: float,
-        clear_g: float,
-        clear_b: float,
-        clear_a: float,
-        depth_texture_id: int,
-        load_op: int
-    ): int;
-
-    // Draws into an offscreen color texture (not the swapchain).
-    @web @native
-    @runtime("gpuRenderDrawTo")
-    static extern async fun render_draw_to(
-        color_texture_id: int,
-        pipeline_id: int,
-        vertex_buffer_id: int,
-        vertex_count: int,
-        instance_count: int,
-        borrow uniforms: byte[],
-        clear_r: float,
-        clear_g: float,
-        clear_b: float,
-        clear_a: float,
-        depth_texture_id: int,
-        load_op: int
-    ): int;
+    @runtime("gpuBindGroupDestroy")
+    static extern fun bind_group_destroy(id: int): void;
 
     @runtime("gpuBufferDestroy")
     static extern fun buffer_destroy(id: int): void;

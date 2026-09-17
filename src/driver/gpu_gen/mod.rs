@@ -3,6 +3,7 @@
 //! Shader bodies never enter MIR/WAT. This pass walks the AST of every GPU-stage function and
 //! emits WGSL text plus binding metadata for the `.abi.json` `"gpu"` section / `.wgsl` sidecar.
 
+mod bind;
 mod compute;
 mod context;
 mod expr;

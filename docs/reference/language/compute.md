@@ -92,7 +92,7 @@ fun rd_step(
 fun rd_paint(
     @readonly u: GpuBuffer<float>,
     @readonly v: GpuBuffer<float>,
-    tex: GpuTexture,
+    @storage tex: GpuTexture,
     n: int
 ): void {
     Gpu.texture_store(tex, global_id.x, global_id.y, /* palette from v */);
@@ -175,8 +175,7 @@ index them (`a[i]`) and read **`a.length`** (WGSL `arrayLength`). Scalars and un
 value structs become uniforms. The host packs dispatch extents `ex, ey, ez` into the first
 three `i32` slots of that uniform block (so a trailing `n: int` often matches the grid size).
 
-Prefix a buffer (or texture) with **`@readonly`** for WGSL `var<storage, read>` / sampled
-`texture_2d` instead of `read_write` / storage-texture write:
+Prefix a buffer with **`@readonly`** for WGSL `var<storage, read>` instead of `read_write`:
 
 ```dream
 @compute(64)
@@ -185,6 +184,13 @@ fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     if i < n { out[i] = a[i] * 2.0; }
 }
 ```
+
+A `GpuTexture` parameter is a **sampled** `texture_2d<f32>` by default. Add **`@storage`** to bind
+it as a writable `texture_storage_2d<rgba8unorm, write>` (what `Gpu.texture_store` needs), or
+**`@cube`** for `texture_cube<f32>`.
+
+Bindings land in `@group(0)` with auto-assigned indices; **`@group(N)`** / **`@binding(N)`** name
+them explicitly. See [Shaders → Resource bindings](shaders.md#resource-bindings).
 
 Host dispatch still passes `GpuBuffer` instances to `Compute.run_*` in binding order.
 Kernels may also take `GpuTexture` / `GpuSampler`; use `Compute.run_resources` or

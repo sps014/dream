@@ -1,9 +1,11 @@
 //! Native wgpu host for `system.gpu` (libdream C ABI).
 
 mod abi;
+pub(crate) mod binds;
 pub(crate) mod buffers;
 pub(crate) mod compute;
 pub(crate) mod device;
+pub(crate) mod encoder;
 pub(crate) mod error;
 mod gamepad;
 mod icon;

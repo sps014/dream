@@ -7,9 +7,9 @@ use super::layout::{
     build_struct_field_tys, emit_fragment_out_struct_wgsl, emit_interface_struct_wgsl, find_struct,
     fragment_color_target_count, has_position_gpuvec4, struct_name_of,
 };
+use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
 use super::stmt::{emit_stmts, reject_gpu_nameof};
 use super::types::GpuShaderInfo;
-use super::vertex::{emit_resource_param, finalize_uniforms};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::types::Type;
@@ -28,7 +28,7 @@ pub(super) fn emit_fragment(
     let mut interface_ty = String::new();
     let mut struct_header = String::new();
     let mut bindings = Vec::new();
-    let mut binding_idx = 0u32;
+    let mut alloc = BindingAlloc::default();
     let mut header = String::new();
     let mut uniform_fields = String::new();
     let mut has_uniform = false;
@@ -111,7 +111,7 @@ pub(super) fn emit_fragment(
                 &entry,
                 &mut header,
                 &mut bindings,
-                &mut binding_idx,
+                &mut alloc,
                 &mut uniform_fields,
                 &mut has_uniform,
             ) {
@@ -126,7 +126,7 @@ pub(super) fn emit_fragment(
             &entry,
             &mut header,
             &mut bindings,
-            &mut binding_idx,
+            &mut alloc,
             &mut uniform_fields,
             &mut has_uniform,
         ) {
@@ -137,7 +137,7 @@ pub(super) fn emit_fragment(
     if has_uniform {
         finalize_uniforms(
             &entry,
-            binding_idx,
+            &mut alloc,
             &uniform_fields,
             &mut header,
             &mut bindings,

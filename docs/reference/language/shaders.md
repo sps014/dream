@@ -77,7 +77,43 @@ let _ = await GpuRenderPass.draw_instanced(
 | Clip position | Field named **`position: GpuVec4`** | or `@builtin("position")` on any `GpuVec4` field |
 | Interpolation | perspective | `@interpolate("flat"\|"linear"\|"perspective")` |
 | Fragment color | Return **`GpuVec4`** | or an output struct with `@location` colors (+ optional `@builtin("frag_depth")`) |
-| Bindings | auto `@group(0)` | `@group(N)` / `@binding(N)` on resource params |
+| Bindings | auto `@group(0)`, binding index auto-assigned per group | `@group(N)` / `@binding(N)` on resource params |
+| `GpuTexture` binding | sampled `texture_2d<f32>` | `@storage` for a writable storage texture; `@cube` for `texture_cube<f32>` |
+| `GpuBuffer<T>` binding | `read_write` storage | `@readonly` for read-only storage |
+
+## Resource bindings
+
+Resource parameters (`GpuTexture`, `GpuSampler`, `GpuBuffer<T>`, and anything else, which becomes a
+uniform) get `@group(0)` and an auto-incrementing binding index per group. Both can be named
+explicitly, which is what a material system needs — one group per update frequency, built once and
+reused across frames:
+
+```dream
+@fragment
+fun pbr_fs(
+    input: VsOut,
+    @group(0) @binding(0) camera: Camera,
+    @group(1) @binding(0) albedo: GpuTexture,
+    @group(1) @binding(1) samp: GpuSampler,
+    @group(2) @binding(0) @readonly lights: GpuBuffer<Light>,
+): GpuVec4 {
+    return Gpu.texture_sample(albedo, samp, input.uv.x, input.uv.y);
+}
+```
+
+All uniform parameters of one shader collapse into a single WGSL uniform block, so `@group` /
+`@binding` on any of them places the whole block; two uniform parameters asking for different slots
+is an error.
+
+App-side, textures, samplers, and storage buffers are supplied with a `GpuBindList` in the same
+order the shader declares them (ascending group, then binding, separately per kind):
+
+```dream
+let binds = GpuBindList.begin().texture(albedo).sampler(samp);
+let _ = await GpuRenderPass.draw_ex(
+    surface, pipe, verts, 3, uniforms, clear, Option.Some(binds)
+);
+```
 
 ## Fragment outputs (MRT)
 

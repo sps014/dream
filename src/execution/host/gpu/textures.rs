@@ -41,6 +41,19 @@ pub fn texture_create_cube_rgba8(size: i32) -> i32 {
     texture_create(size, size, wgpu::TextureFormat::Rgba8Unorm, false, 6)
 }
 
+/// Default view honoring cube dimensionality. A 6-layer 2D texture defaults to `D2Array`, which
+/// cannot be bound to a `texture_cube<f32>` slot.
+pub(crate) fn default_view(t: &TexEntry, gpu: &wgpu::Texture) -> wgpu::TextureView {
+    if t.cube {
+        gpu.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::Cube),
+            ..Default::default()
+        })
+    } else {
+        gpu.create_view(&wgpu::TextureViewDescriptor::default())
+    }
+}
+
 fn texture_create(
     width: i32,
     height: i32,
@@ -76,6 +89,7 @@ fn texture_create(
             storage: false,
             depth,
             layers,
+            cube: layers == 6,
             mip_levels: 1,
             dirty_cpu: true,
         },
@@ -122,12 +136,75 @@ pub fn texture_write_rgba(id: i32, pixels: Vec<u8>, x: i32, y: i32, w: i32, h: i
     0
 }
 
+/// Reads back RGBA8 pixels, pulling from the GPU when it holds the authoritative copy (after a
+/// render pass or compute write). Falls back to the CPU mirror when there is no GPU resource, so
+/// headless paths still round-trip whatever was uploaded.
 pub fn texture_read_rgba(id: i32) -> Vec<u8> {
-    let st = lock_state();
-    st.textures
-        .get(&id)
-        .map(|t| t.cpu.clone())
-        .unwrap_or_default()
+    let mut st = lock_state();
+    let Some(t) = st.textures.get(&id) else {
+        return Vec::new();
+    };
+    if t.dirty_cpu || t.gpu.is_none() || t.depth || t.format != wgpu::TextureFormat::Rgba8Unorm {
+        return t.cpu.clone();
+    }
+    let (width, height) = (t.width.max(1), t.height.max(1));
+    let texture = t.gpu.as_ref().unwrap().clone();
+    let (Some(device), Some(queue)) = (st.device.clone(), st.queue.clone()) else {
+        return t.cpu.clone();
+    };
+
+    // `copy_texture_to_buffer` requires 256-byte row alignment, so the staging rows are padded and
+    // then compacted back to a tight `width * 4` stride.
+    let unpadded = (width * 4) as usize;
+    let padded = unpadded.div_ceil(256) * 256;
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("dream-tex-readback"),
+        size: (padded * height as usize) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("dream-tex-readback"),
+    });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &staging,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded as u32),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.submit(Some(encoder.finish()));
+
+    let slice = staging.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |_| {});
+    let _ = device.poll(wgpu::Maintain::Wait);
+    let mapped = slice.get_mapped_range();
+    let mut out = vec![0u8; unpadded * height as usize];
+    for row in 0..height as usize {
+        let src = row * padded;
+        out[row * unpadded..(row + 1) * unpadded].copy_from_slice(&mapped[src..src + unpadded]);
+    }
+    drop(mapped);
+    staging.unmap();
+
+    if let Some(t) = st.textures.get_mut(&id) {
+        t.cpu = out.clone();
+    }
+    out
 }
 
 pub fn texture_copy_from_buffer(
@@ -354,7 +431,7 @@ fn collapse_dst_mips_after_level0_gpu_write(
     );
     queue.submit(Some(encoder.finish()));
     old.destroy();
-    dst.view = Some(new_tex.create_view(&wgpu::TextureViewDescriptor::default()));
+    dst.view = Some(default_view(dst, &new_tex));
     dst.gpu = Some(new_tex);
     dst.mip_levels = 1;
     dst.dirty_cpu = false;
@@ -460,7 +537,7 @@ pub fn texture_generate_mipmaps(id: i32) -> i32 {
             },
         );
     }
-    tex.view = Some(gpu.create_view(&wgpu::TextureViewDescriptor::default()));
+    tex.view = Some(default_view(tex, &gpu));
     tex.gpu = Some(gpu);
     tex.mip_levels = mip_count;
     tex.dirty_cpu = false;

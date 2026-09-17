@@ -30,6 +30,9 @@ pub struct TexEntry {
     pub storage: bool,
     pub depth: bool,
     pub layers: u32,
+    /// Cubemap: the 6 array layers must be viewed as `TextureViewDimension::Cube`, not `D2Array`,
+    /// or `textureSample` on a `texture_cube<f32>` binding fails validation.
+    pub cube: bool,
     /// GPU mip chain length. `1` until `texture_generate_mipmaps`; recreate paths must honor this
     /// so a later `ensure_texture` / blit does not wipe the chain back to a single level.
     pub mip_levels: u32,
@@ -81,24 +84,73 @@ pub struct ComputeBgKey {
 
 pub struct ComputePipe {
     pub pipeline: wgpu::ComputePipeline,
-    pub bgl: wgpu::BindGroupLayout,
+    /// Dense per-`@group` layouts; index `i` is `@group(i)`.
+    pub bgls: Vec<wgpu::BindGroupLayout>,
     /// Pool of 256-byte uniform buffers so batched dispatches don't clobber each other.
     pub uniform_pool: Vec<wgpu::Buffer>,
     /// Next pool slot to use; reset at the start of each submit/dispatch.
     pub uniform_cursor: usize,
-    pub bg_cache: IndexMap<ComputeBgKey, wgpu::BindGroup>,
+    /// One bind group per declared `@group`, in ascending group order.
+    pub bg_cache: IndexMap<ComputeBgKey, Vec<wgpu::BindGroup>>,
+}
+
+/// Everything needed to re-create a render pipeline for a different color-target format.
+/// A pipeline's color format is baked in at creation, but the same Dream pipeline handle is used
+/// for both the swapchain (`bgra8unorm`) and offscreen textures (`rgba8unorm`, `rgba16float`).
+pub struct RenderPipeBuild {
+    pub vs_mod: wgpu::ShaderModule,
+    pub fs_mod: wgpu::ShaderModule,
+    pub vs_entry: String,
+    pub fs_entry: String,
+    pub layout: wgpu::PipelineLayout,
+    pub vertex_attribs: Vec<wgpu::VertexAttribute>,
+    pub vertex_stride: u32,
+    pub color_targets: u32,
+    pub topology: wgpu::PrimitiveTopology,
+    pub front_face: wgpu::FrontFace,
+    pub cull_mode: Option<wgpu::Face>,
+    pub blend: Option<wgpu::BlendState>,
+    pub depth_stencil: Option<wgpu::DepthStencilState>,
+    pub sample_count: u32,
 }
 
 pub struct RenderPipe {
-    pub pipeline: wgpu::RenderPipeline,
-    pub bgl: Option<wgpu::BindGroupLayout>,
-    /// Uniform binding slots declared by VS/FS (Dream packs draw uniforms into each).
-    pub uniform_bindings: Vec<u32>,
-    /// Reusable 256-byte uniform buffer for draw uniforms.
-    pub uniform_buf: Option<wgpu::Buffer>,
+    /// Pipeline variants keyed by color-target format, minted on first use.
+    pub variants: IndexMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
+    pub build: RenderPipeBuild,
+    /// Dense per-`@group` layouts; index `i` is `@group(i)`.
+    pub bgls: Vec<wgpu::BindGroupLayout>,
+    /// Bindings declared by VS/FS, grouped by `@group` and deduped by `(group, binding)`.
+    pub groups: Vec<super::binds::BindGroupPlan>,
+    /// Pool of 256-byte uniform buffers so batched draws in one submit don't clobber each other.
+    pub uniform_pool: Vec<wgpu::Buffer>,
+    /// Next pool slot; reset at the start of each submit.
+    pub uniform_cursor: usize,
     pub depth_enabled: bool,
     pub sample_count: u32,
-    pub format: wgpu::TextureFormat,
+}
+
+/// A `GpuBindGroup` handle: a validated resource set for one `@group` of one pipeline.
+///
+/// Resource *ids* are stored rather than a built `wgpu::BindGroup` because the uniform block is
+/// supplied per draw, so the final bind group depends on which uniform pool slot the draw got.
+pub struct BindGroupEntry {
+    pub pipeline_id: i32,
+    pub group: u32,
+    pub buffer_ids: Vec<i32>,
+    pub texture_ids: Vec<i32>,
+    pub sampler_ids: Vec<i32>,
+}
+
+/// Cache key for a realized render bind group. Groups with no uniform binding get
+/// `uniform_slot: None`, so their entry is stable across frames — that stability is the whole
+/// point of building a `GpuBindGroup` once.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct RenderBgKey {
+    pub pipeline_id: i32,
+    pub group: u32,
+    pub bind_group_id: i32,
+    pub uniform_slot: Option<u32>,
 }
 
 pub struct SurfaceEntry {
@@ -110,7 +162,12 @@ pub struct SurfaceEntry {
     pub client_height: u32,
     /// Offscreen color target used when there is no window swapchain (or for blit).
     pub color: Option<wgpu::Texture>,
+    /// Multisampled color target resolved into the swapchain when a pipeline asks for MSAA.
+    pub msaa: Option<wgpu::Texture>,
+    pub msaa_samples: u32,
     pub depth: Option<wgpu::Texture>,
+    /// Sample count `depth` was created with; a pass at a different count recreates it.
+    pub depth_samples: u32,
     pub window: Option<Arc<winit::window::Window>>,
     pub surface: Option<wgpu::Surface<'static>>,
     pub config: Option<wgpu::SurfaceConfiguration>,
@@ -146,6 +203,8 @@ pub struct GpuState {
     pub passes: IndexMap<i32, Vec<PassOp>>,
     pub compute_pipes: IndexMap<String, ComputePipe>,
     pub render_pipes: IndexMap<i32, RenderPipe>,
+    pub bind_groups: IndexMap<i32, BindGroupEntry>,
+    pub render_bg_cache: IndexMap<RenderBgKey, wgpu::BindGroup>,
     pub surfaces: IndexMap<i32, SurfaceEntry>,
     pub render_format: wgpu::TextureFormat,
     pub blit: Option<BlitPipe>,
@@ -172,6 +231,8 @@ impl Default for GpuState {
             passes: IndexMap::new(),
             compute_pipes: IndexMap::new(),
             render_pipes: IndexMap::new(),
+            bind_groups: IndexMap::new(),
+            render_bg_cache: IndexMap::new(),
             surfaces: IndexMap::new(),
             render_format: wgpu::TextureFormat::Bgra8Unorm,
             blit: None,

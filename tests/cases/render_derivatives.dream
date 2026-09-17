@@ -22,8 +22,8 @@ fun deriv_vs(v: Vertex): VsOut {
 @fragment
 fun deriv_fs(
     v: VsOut,
-    @readonly tex: GpuTexture,
-    @readonly @cube cube_tex: GpuTexture,
+    tex: GpuTexture,
+    @cube cube_tex: GpuTexture,
     samp: GpuSampler
 ): GpuVec4 {
     let dx = Gpu.dpdx(v.uv.x);

@@ -7,7 +7,11 @@ use super::buffers::ensure_gpu_buffer;
 use super::error::{classify_err, drain_uncaptured};
 use super::state::{lock_state, ComputePipe, PassOp};
 use indexmap::IndexMap;
-use indexmap::IndexSet;
+
+/// `(binding, index into the matching owned resource vec, kind tag)`, where the kind tag is
+/// `0` uniform, `1` storage buffer, `2` sampler, `3` texture view. The indirection exists because
+/// `wgpu::BindGroupEntry` borrows its resource, so every resource must outlive the entry list.
+type PlannedEntry = (u32, usize, u8);
 
 pub fn dispatch(
     kernel: &str,
@@ -181,13 +185,10 @@ fn encode_op(
         }
     };
 
+    let groups = super::binds::plan_groups(&meta.bindings);
     let mut storage_idx = 0usize;
-    let mut seen = IndexSet::new();
     let mut recreated = false;
-    for bind in &meta.bindings {
-        if !seen.insert(bind.binding) {
-            continue;
-        }
+    for bind in groups.iter().flat_map(|g| g.bindings.iter()) {
         if bind.kind == "storage" {
             let id = *buffer_ids.get(storage_idx).unwrap_or(&-1);
             storage_idx += 1;
@@ -225,67 +226,64 @@ fn encode_op(
     let mut storage_bufs: Vec<wgpu::Buffer> = Vec::new();
     let mut samplers: Vec<wgpu::Sampler> = Vec::new();
     let mut views: Vec<wgpu::TextureView> = Vec::new();
-    let mut entry_plan: Vec<(u32, usize, u8)> = Vec::new();
+    let mut entry_plan: Vec<(u32, Vec<PlannedEntry>)> = Vec::new();
     let mut uniform_slot: u32 = 0;
     let mut uniform_buf: Option<wgpu::Buffer> = None;
 
-    seen.clear();
     storage_idx = 0;
     let mut tex_idx = 0usize;
     let mut samp_idx = 0usize;
 
-    for bind in &meta.bindings {
-        if !seen.insert(bind.binding) {
-            continue;
-        }
-        match bind.kind.as_str() {
-            "uniform" => {
-                let mut bytes = [0u8; 256];
-                bytes[0..4].copy_from_slice(&ex.to_le_bytes());
-                bytes[4..8].copy_from_slice(&ey.to_le_bytes());
-                bytes[8..12].copy_from_slice(&ez.to_le_bytes());
-                let n = uniforms.len().min(244);
-                if n > 0 {
-                    bytes[12..12 + n].copy_from_slice(&uniforms[..n]);
+    for plan in &groups {
+        let mut entries = Vec::new();
+        for bind in &plan.bindings {
+            match bind.kind.as_str() {
+                "uniform" => {
+                    let mut bytes = [0u8; 256];
+                    bytes[0..4].copy_from_slice(&ex.to_le_bytes());
+                    bytes[4..8].copy_from_slice(&ey.to_le_bytes());
+                    bytes[8..12].copy_from_slice(&ez.to_le_bytes());
+                    let n = uniforms.len().min(244);
+                    if n > 0 {
+                        bytes[12..12 + n].copy_from_slice(&uniforms[..n]);
+                    }
+                    let (slot, buf) = alloc_uniform_slot(st, device, kernel)?;
+                    queue.write_buffer(&buf, 0, &bytes);
+                    uniform_slot = slot;
+                    uniform_buf = Some(buf);
+                    entries.push((bind.binding, 0, 0));
                 }
-                let (slot, buf) = alloc_uniform_slot(st, device, kernel)?;
-                queue.write_buffer(&buf, 0, &bytes);
-                uniform_slot = slot;
-                uniform_buf = Some(buf);
-                entry_plan.push((bind.binding, 0, 0));
+                "storage" => {
+                    let id = *buffer_ids.get(storage_idx).unwrap_or(&-1);
+                    storage_idx += 1;
+                    let g = st
+                        .buffers
+                        .get(&id)
+                        .and_then(|b| b.gpu.clone())
+                        .ok_or_else(|| format!("buffer {id} not on GPU"))?;
+                    entries.push((bind.binding, storage_bufs.len(), 1));
+                    storage_bufs.push(g);
+                }
+                "sampler" => {
+                    let id = *sampler_ids.get(samp_idx).unwrap_or(&-1);
+                    samp_idx += 1;
+                    ensure_sampler(st, device, id)?;
+                    let g = st.samplers.get(&id).unwrap().gpu.clone().unwrap();
+                    entries.push((bind.binding, samplers.len(), 2));
+                    samplers.push(g);
+                }
+                "texture" | "storage_texture" | "texture_cube" | "depth_texture" => {
+                    let id = *texture_ids.get(tex_idx).unwrap_or(&-1);
+                    tex_idx += 1;
+                    ensure_texture(st, device, queue, id, bind.kind == "storage_texture")?;
+                    let view = texture_view(st, id)?;
+                    entries.push((bind.binding, views.len(), 3));
+                    views.push(view);
+                }
+                _ => {}
             }
-            "storage" => {
-                let id = *buffer_ids.get(storage_idx).unwrap_or(&-1);
-                storage_idx += 1;
-                let g = st
-                    .buffers
-                    .get(&id)
-                    .and_then(|b| b.gpu.clone())
-                    .ok_or_else(|| format!("buffer {id} not on GPU"))?;
-                let i = storage_bufs.len();
-                storage_bufs.push(g);
-                entry_plan.push((bind.binding, i, 1));
-            }
-            "sampler" => {
-                let id = *sampler_ids.get(samp_idx).unwrap_or(&-1);
-                samp_idx += 1;
-                ensure_sampler(st, device, id)?;
-                let g = st.samplers.get(&id).unwrap().gpu.clone().unwrap();
-                let i = samplers.len();
-                samplers.push(g);
-                entry_plan.push((bind.binding, i, 2));
-            }
-            "texture" | "storage_texture" => {
-                let id = *texture_ids.get(tex_idx).unwrap_or(&-1);
-                tex_idx += 1;
-                ensure_texture(st, device, queue, id, bind.kind == "storage_texture")?;
-                let view = texture_view(st, id)?;
-                let i = views.len();
-                views.push(view);
-                entry_plan.push((bind.binding, i, 3));
-            }
-            _ => {}
         }
+        entry_plan.push((plan.group, entries));
     }
 
     let bg_key = super::state::ComputeBgKey {
@@ -306,7 +304,9 @@ fn encode_op(
             .compute_pipes
             .get(kernel)
             .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
-        let needs_ub = entry_plan.iter().any(|(_, _, k)| *k == 0);
+        let needs_ub = entry_plan
+            .iter()
+            .any(|(_, entries)| entries.iter().any(|(_, _, k)| *k == 0));
         let ub_owned = if needs_ub {
             Some(
                 uniform_buf
@@ -317,28 +317,34 @@ fn encode_op(
         } else {
             None
         };
-        let bg_entries: Vec<wgpu::BindGroupEntry<'_>> = entry_plan
-            .iter()
-            .map(|(binding, idx, kind)| wgpu::BindGroupEntry {
-                binding: *binding,
-                resource: match kind {
-                    0 => ub_owned.as_ref().unwrap().as_entire_binding(),
-                    1 => storage_bufs[*idx].as_entire_binding(),
-                    2 => wgpu::BindingResource::Sampler(&samplers[*idx]),
-                    _ => wgpu::BindingResource::TextureView(&views[*idx]),
-                },
-            })
-            .collect();
-        let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("dream-compute-bg"),
-            layout: &pipe.bgl,
-            entries: &bg_entries,
-        });
+        let mut bgs = Vec::new();
+        for (group, entries) in &entry_plan {
+            let bgl = pipe.bgls.get(*group as usize).ok_or_else(|| {
+                format!("kernel '{kernel}' has no layout for @group({group})")
+            })?;
+            let bg_entries: Vec<wgpu::BindGroupEntry<'_>> = entries
+                .iter()
+                .map(|(binding, idx, kind)| wgpu::BindGroupEntry {
+                    binding: *binding,
+                    resource: match kind {
+                        0 => ub_owned.as_ref().unwrap().as_entire_binding(),
+                        1 => storage_bufs[*idx].as_entire_binding(),
+                        2 => wgpu::BindingResource::Sampler(&samplers[*idx]),
+                        _ => wgpu::BindingResource::TextureView(&views[*idx]),
+                    },
+                })
+                .collect();
+            bgs.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("dream-compute-bg"),
+                layout: bgl,
+                entries: &bg_entries,
+            }));
+        }
         st.compute_pipes
             .get_mut(kernel)
             .unwrap()
             .bg_cache
-            .insert(bg_key.clone(), bg);
+            .insert(bg_key.clone(), bgs);
     }
 
     let wg = meta.workgroup;
@@ -348,12 +354,14 @@ fn encode_op(
                 .compute_pipes
                 .get(kernel)
                 .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
-            let bg = pipe
+            let bgs = pipe
                 .bg_cache
                 .get(&bg_key)
                 .ok_or_else(|| "missing cached bind group".to_string())?;
             pass.set_pipeline(&pipe.pipeline);
-            pass.set_bind_group(0, bg, &[]);
+            for (i, bg) in bgs.iter().enumerate() {
+                pass.set_bind_group(i as u32, bg, &[]);
+            }
             if let Some((iid, off)) = indirect {
                 let indirect_buf = st
                     .buffers
@@ -382,7 +390,7 @@ fn encode_op(
     Ok(())
 }
 
-fn texture_view(st: &mut super::state::GpuState, id: i32) -> Result<wgpu::TextureView, String> {
+pub(crate) fn texture_view(st: &mut super::state::GpuState, id: i32) -> Result<wgpu::TextureView, String> {
     let t = st
         .textures
         .get_mut(&id)
@@ -391,8 +399,9 @@ fn texture_view(st: &mut super::state::GpuState, id: i32) -> Result<wgpu::Textur
         let gpu = t
             .gpu
             .as_ref()
-            .ok_or_else(|| format!("texture {id} has no GPU resource"))?;
-        t.view = Some(gpu.create_view(&Default::default()));
+            .ok_or_else(|| format!("texture {id} has no GPU resource"))?
+            .clone();
+        t.view = Some(super::textures::default_view(t, &gpu));
     }
     Ok(t.view.as_ref().unwrap().clone())
 }
@@ -428,55 +437,20 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         label: Some(&meta.name),
         source: wgpu::ShaderSource::Wgsl(meta.source.clone().into()),
     });
-    let mut seen = IndexSet::new();
-    let mut entries = Vec::new();
-    for b in &meta.bindings {
-        if !seen.insert(b.binding) {
-            continue;
-        }
-        let visibility = wgpu::ShaderStages::COMPUTE;
-        let ty = match b.kind.as_str() {
-            "uniform" => wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            "storage" => wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage {
-                    read_only: !b.read_write,
-                },
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            "sampler" => wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            "storage_texture" => wgpu::BindingType::StorageTexture {
-                access: wgpu::StorageTextureAccess::WriteOnly,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                view_dimension: wgpu::TextureViewDimension::D2,
-            },
-            _ => wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-        };
-        entries.push(wgpu::BindGroupLayoutEntry {
-            binding: b.binding,
-            visibility,
-            ty,
-            count: None,
-        });
-    }
-    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("dream-compute-bgl"),
-        entries: &entries,
-    });
+    let groups = super::binds::plan_groups(&meta.bindings);
+    let bgls = super::binds::create_group_layouts(
+        &device,
+        &groups,
+        wgpu::ShaderStages::COMPUTE,
+        "dream-compute",
+    );
+    let bgl_refs: Vec<&wgpu::BindGroupLayout> = bgls.iter().collect();
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("dream-compute"),
         layout: Some(
             &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("dream-compute-pl"),
-                bind_group_layouts: &[&bgl],
+                bind_group_layouts: &bgl_refs,
                 push_constant_ranges: &[],
             }),
         ),
@@ -495,7 +469,7 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         kernel.to_string(),
         ComputePipe {
             pipeline,
-            bgl,
+            bgls,
             uniform_pool: vec![uniform_buf],
             uniform_cursor: 0,
             bg_cache: IndexMap::new(),
@@ -504,7 +478,7 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn ensure_sampler(
+pub(crate) fn ensure_sampler(
     st: &mut super::state::GpuState,
     device: &wgpu::Device,
     id: i32,
@@ -542,7 +516,7 @@ fn ensure_sampler(
     Ok(())
 }
 
-fn ensure_texture(
+pub(crate) fn ensure_texture(
     st: &mut super::state::GpuState,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -713,6 +687,7 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
                 .iter()
                 .enumerate()
                 .map(|(i, _)| super::abi::GpuBindingMeta {
+                    group: 0,
                     binding: i as u32,
                     kind: "storage".into(),
                     read_write: true,

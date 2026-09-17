@@ -1,1 +1,1 @@
-Top-level variable 'shared' cannot be both 'public' and 'static'
+Top-level variable 'flag' cannot be both 'public' and 'static'

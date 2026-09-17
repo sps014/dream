@@ -1,0 +1,9 @@
+// `internal` (visible to every file declaring the same `module`) and `static` (readable only
+// inside this file) are mutually exclusive, for the same reason `public static` is. This used to
+// compile with `internal` silently winning, so the global was readable across the module despite
+// being marked `static`.
+module app;
+
+internal static let both_counter: int = 42;
+
+fun main(): void {}

@@ -40,10 +40,20 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&global.file_path);
             self.check_reserved_name(&global.name, "variable", diagnostics);
 
-            if global.visibility.is_public() && global.is_static {
+            // `internal` conflicts with `static` for the same reason `public` does, and silently
+            // let `internal` win before this check covered it.
+            if global.visibility.is_at_least_internal() && global.is_static {
+                let (modifier, shares) = if global.visibility.is_public() {
+                    ("public", "exports it to other modules and to the host")
+                } else {
+                    (
+                        "internal",
+                        "shares it with every file declaring the same 'module'",
+                    )
+                };
                 diagnostics.report_error(
                     format!(
-                        "Top-level variable '{}' cannot be both 'public' and 'static': they request opposite linkage ('public' exposes it to other modules, 'static' pins it to module-internal linkage)",
+                        "Top-level variable '{}' cannot be both '{modifier}' and 'static': '{modifier}' {shares}, while 'static' keeps it readable only inside this file. Drop 'static' to share it, or drop '{modifier}' to keep it file-local",
                         global.name.text
                     ),
                     Some(global.name.position),

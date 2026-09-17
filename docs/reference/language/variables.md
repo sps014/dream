@@ -90,16 +90,33 @@ fun main(): void {
 
 ### Visibility
 
-Top-level variables are **file-private by default**: readable anywhere in their own `.dream` file, but not visible to files that `import` it and not exported. Two modifiers adjust this:
+Top-level variables are **file-private by default**: readable anywhere in their own `.dream` file, but not visible to files that `import` it and not exported. Three modifiers adjust this:
 
 - `public` — importable from other files and exported to the WebAssembly host.
+- `internal` — importable from any other file that declares the **same [`module`](imports.md) path**, but not exported to the host.
 - `static` — kept file-local (the default for a non-public variable, made explicit).
 
-They are mutually exclusive on one declaration:
+`static` is the opposite of both sharing modifiers, so it cannot be combined with either:
 
 ```dream
 public let version: int = 1;   // exported to the host
+internal let budget: int = 64; // shared within `module app`, not exported
 static let cache: int = 0;     // file-local
 
 // public static let x = 1;    // error: cannot be both 'public' and 'static'
+// internal static let y = 1;  // error: cannot be both 'internal' and 'static'
 ```
+
+`internal` needs a declared module on **both** sides. A file with no `module` declaration has no module to share, so its `internal` globals stay file-private:
+
+```dream
+// lib.dream
+module app;
+internal let budget: int = 64;
+
+// main.dream
+module app;                    // same module, so `budget` resolves
+import lib;
+```
+
+Note that `static` here carries the C meaning — file-scope internal linkage — not the C#/Java "one shared instance" meaning. A top-level `let` is already a single value initialized once at module load, so `public let` is what `public static` denotes in those languages.

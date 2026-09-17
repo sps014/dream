@@ -1,0 +1,20 @@
+// WGSL has no loop labels, so a labelled break used to be emitted as a plain `break` and left
+// the inner loop while the CPU left the outer one. It is rejected instead of diverging silently.
+import system;
+import system.gpu;
+
+@compute
+fun k(out: GpuBuffer<int>): void {
+    let hits = 0;
+    outer: for (let i = 0; i < 3; i = i + 1) {
+        for (let j = 0; j < 3; j = j + 1) {
+            hits = hits + 1;
+            if j == 1 { break outer; }
+        }
+    }
+    out[0] = hits;
+}
+
+fun main(): void {
+    System.println("unreachable");
+}

@@ -1,0 +1,125 @@
+// Loops, `switch`, and enums inside shaders.
+//
+// Four separate defects met here: `continue` in a `for` skipped the step clause (the step was
+// emitted at the end of the body, where WGSL's `continue` never reaches it, so the loop spun
+// forever); `continue` in a `do`/`while` skipped the test the same way; a C-style `switch` could
+// not be compiled at all because label validation looked for HIR that shader bodies never emit;
+// and an enum member reached WGSL as `Mode.Mul`, which is not an identifier there.
+import system;
+import system.gpu;
+
+enum Mode { Add = 0, Mul = 1, Sub = 2 }
+
+@gpu
+fun pick(seed: int): int {
+    return seed + 2;
+}
+
+@compute
+fun loops(out: GpuBuffer<int>): void {
+    if global_id.x != 0 { return; }
+
+    let sum = 0;
+    for (let i = 0; i < 5; i = i + 1) {
+        if i == 2 { continue; }
+        sum = sum + i;
+    }
+    out[0] = sum;
+
+    let n = 0;
+    let seen = 0;
+    do {
+        n = n + 1;
+        if n == 2 { continue; }
+        seen = seen + n;
+    } while (n < 4);
+    out[1] = n;
+    out[2] = seen;
+
+    let w = 0;
+    let acc = 0;
+    while (w < 5) {
+        w = w + 1;
+        if w == 3 { continue; }
+        acc = acc + w;
+    }
+    out[3] = acc;
+}
+
+@compute
+fun switches(out: GpuBuffer<int>): void {
+    if global_id.x != 0 { return; }
+
+    let m = Mode.Sub;
+    switch (m) {
+        case Mode.Add: out[0] = 1;
+        case Mode.Mul: out[0] = 2;
+        case Mode.Sub: out[0] = 3;
+        default: out[0] = 0;
+    }
+
+    // The subject is bound once, so a call in it runs once rather than once per label.
+    switch (pick(0)) {
+        case 0: out[1] = 100;
+        case 1: out[1] = 200;
+        case 2: out[1] = 300;
+        default: out[1] = 900;
+    }
+
+    // `break` in a case body belongs to the loop, not the switch: i==3 leaves the loop.
+    let steps = 0;
+    for (let i = 0; i < 10; i = i + 1) {
+        steps = steps + 1;
+        switch (i) {
+            case 3: break;
+            default: steps = steps + 10;
+        }
+    }
+    out[2] = steps;
+
+    let flag = true;
+    switch (flag) {
+        case true: out[3] = 7;
+        default: out[3] = 8;
+    }
+
+    switch (global_id.y) {
+        case 0, 1, 2: out[4] = 42;
+        default: out[4] = 0;
+    }
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    let a = GpuBuffer<int>.from([0, 0, 0, 0]);
+    let ra = await Compute.run_resources(
+        "loops", [a.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0));
+    if ra.is_err() {
+        System.println("loops failed: " + ra.unwrap_err().message());
+        return;
+    }
+    let va = await a.read();
+    System.println("for_sum=" + va[0].to_string());
+    System.println("do_n=" + va[1].to_string());
+    System.println("do_seen=" + va[2].to_string());
+    System.println("while_acc=" + va[3].to_string());
+
+    let b = GpuBuffer<int>.from([0, 0, 0, 0, 0]);
+    let rb = await Compute.run_resources(
+        "switches", [b.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0));
+    if rb.is_err() {
+        System.println("switches failed: " + rb.unwrap_err().message());
+        return;
+    }
+    let vb = await b.read();
+    System.println("enum=" + vb[0].to_string());
+    System.println("call_subject=" + vb[1].to_string());
+    System.println("break_in_case=" + vb[2].to_string());
+    System.println("bool=" + vb[3].to_string());
+    System.println("multilabel=" + vb[4].to_string());
+}

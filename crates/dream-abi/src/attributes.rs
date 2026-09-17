@@ -480,17 +480,17 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "Marks a shader I/O field as a WGSL builtin (e.g. `\"position\"`, `\"frag_depth\"`). A field named `position: GpuVec4` is still accepted as sugar for `@builtin(\"position\")`.",
     },
-    // WGSL `@interpolate(mode)` on a varying field.
+    // WGSL `@interpolate(type)` / `@interpolate(type, sampling)` on a varying field.
     AttributeSpec {
         name: "interpolate",
         targets: &[AttributeTarget::Field],
         args: ArgShape::Args {
-            kinds: &[ArgKind::String],
+            kinds: &[ArgKind::String, ArgKind::String],
             min: 1,
-            max: 1,
+            max: 2,
         },
         repeatable: false,
-        doc: "WGSL interpolation qualifier on a varying (`\"perspective\"`, `\"linear\"`, or `\"flat\"`).",
+        doc: "WGSL interpolation qualifier on a varying (`\"perspective\"`, `\"linear\"`, or `\"flat\"`), with an optional sampling qualifier: `\"centroid\"` or `\"sample\"` for the first two, `\"first\"` or `\"either\"` for `\"flat\"`.",
     },
     // Wire format of a vertex attribute, when it differs from the field's own type.
     AttributeSpec {
@@ -1340,12 +1340,18 @@ pub fn field_vertex_format(attributes: &[AttributeNode]) -> Option<String> {
 }
 
 /// Optional `@interpolate("mode")` on a varying field. `None` when absent or malformed.
+/// The `@interpolate(...)` mode on a varying field, with the arguments joined by commas.
+///
+/// WGSL takes an interpolation type and an optional sampling qualifier as two arguments, so
+/// `@interpolate("perspective", "centroid")` reads back as `"perspective,centroid"` and the
+/// emitter matches on the pair.
 pub fn field_interpolate_mode(attributes: &[AttributeNode]) -> Option<String> {
     let attr = attributes.iter().find(|a| a.name.text == "interpolate")?;
-    attr.args
-        .first()
-        .and_then(|t| t.as_string())
-        .map(|s| s.to_string())
+    let parts: Vec<&str> = attr.args.iter().filter_map(|t| t.as_string()).collect();
+    if parts.is_empty() {
+        return None;
+    }
+    Some(parts.join(","))
 }
 
 /// Optional `@group(N)` on a shader parameter. `None` when absent or not a valid `u32`.

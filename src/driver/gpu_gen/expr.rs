@@ -92,6 +92,16 @@ pub(super) fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'
             at(2, "i32", "0"),
             at(3, "i32", "0")
         ),
+        // The WGSL pack builtins yield a u32; Dream's `int` is signed, so the bit pattern is
+        // reinterpreted rather than converted (a value conversion would saturate anything with
+        // the top bit set).
+        // These share their WGSL spelling, so the name passes through unchanged.
+        "pack4x8unorm" | "pack4x8snorm" | "pack2x16unorm" | "pack2x16snorm" => {
+            format!("bitcast<i32>({name}({}))", raw(0, "v"))
+        }
+        "unpack4x8unorm" | "unpack4x8snorm" | "unpack2x16unorm" | "unpack2x16snorm" => {
+            format!("{name}(bitcast<u32>({}))", at(0, "i32", "0"))
+        }
         "count_one_bits" => {
             let val = args
                 .first()
@@ -748,6 +758,11 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             }
         }
         ExpressionNode::MemberAccess(obj, member) => {
+            if let ExpressionNode::Identifier(name) = obj {
+                if let Some(value) = ctx.enum_member(&name.text, &member.text) {
+                    return value.to_string();
+                }
+            }
             let base = emit_expr(obj, ctx);
             if member.text == "length" {
                 format!("i32(arrayLength(&{}))", base)

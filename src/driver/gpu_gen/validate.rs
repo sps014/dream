@@ -22,17 +22,12 @@ pub(super) fn validate_gpu_wgsl(result: &GpuEmitResult, diagnostics: &mut Diagno
             diagnostics,
         );
     }
-    // Also ensure the concatenated sidecar parses when names don't collide. Soft: only report if
-    // per-shader checks already passed, so duplicate interface structs across VS/FS don't mask
-    // real bugs. The sidecar is documentation/load-fallback; runtime prefers per-shader source.
+    // The `.wgsl` sidecar joins every entry into one module, and `join_wgsl_module` folds the
+    // declarations stages share so that module is legal WGSL. Checking it only after the
+    // per-entry checks pass keeps a single broken shader from being reported twice.
     if !diagnostics.has_errors() {
         let joined = join_wgsl_module(result);
-        // Deduplicate by validating only when there is a single shader/kernel — multi-stage
-        // modules intentionally re-emit the shared interface struct.
-        let pieces = result.kernels.len() + result.shaders.len();
-        if pieces == 1 {
-            validate_one(&joined, "joined GPU WGSL module", diagnostics);
-        }
+        validate_one(&joined, "joined GPU WGSL module", diagnostics);
     }
 }
 

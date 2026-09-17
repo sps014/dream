@@ -114,7 +114,8 @@ impl<'a> Analyzer<'a> {
             let _ = param_table.add_symbol("frag_coord".to_string(), v4);
             let _ = param_table.add_symbol("front_facing".to_string(), boolty);
             let _ = param_table.add_symbol("sample_index".to_string(), i32ty.clone());
-            let _ = param_table.add_symbol("primitive_index".to_string(), i32ty);
+            let _ = param_table.add_symbol("primitive_index".to_string(), i32ty.clone());
+            let _ = param_table.add_symbol("sample_mask".to_string(), i32ty);
         }
         Ok(param_table)
     }

@@ -90,6 +90,14 @@ const BUILTIN_CALLS: &[&str] = &[
     "transpose",
     "determinant",
     "inverse",
+    "pack4x8unorm",
+    "pack4x8snorm",
+    "pack2x16unorm",
+    "pack2x16snorm",
+    "unpack4x8unorm",
+    "unpack4x8snorm",
+    "unpack2x16unorm",
+    "unpack2x16snorm",
     "count_one_bits",
     "reverse_bits",
     "count_leading_zeros",
@@ -275,6 +283,7 @@ pub(super) fn emit_helpers_wgsl(
     // Topo emit: repeatedly emit a helper whose callees are already emitted.
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = build_helper_return_tys(program);
+    let enum_values = super::layout::build_enum_values(program);
     let mut emitted = IndexSet::new();
     let mut out = emit_used_data_structs(&needed, program, already_declared, diagnostics);
     let mut guard = 0;
@@ -320,6 +329,7 @@ pub(super) fn emit_helpers_wgsl(
                 func,
                 &struct_fields,
                 &helper_returns,
+                &enum_values,
                 diagnostics,
             ));
             emitted.insert(name.clone());
@@ -418,6 +428,7 @@ fn emit_one_helper(
     func: &FunctionNode<'_>,
     struct_fields: &IndexMap<String, IndexMap<String, String>>,
     helper_returns: &IndexMap<String, String>,
+    enum_values: &IndexMap<String, IndexMap<String, i32>>,
     diagnostics: &mut DiagnosticBag,
 ) -> String {
     let name = func.name.text.as_str();
@@ -456,6 +467,7 @@ fn emit_one_helper(
         scopes: RefCell::new(scopes),
         struct_fields,
         helper_returns,
+        enum_values,
         kernel: name,
         diagnostics: RefCell::new(diagnostics),
     };

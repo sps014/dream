@@ -1,0 +1,69 @@
+// `GpuMath.pack*` / `unpack*` must produce the same bits on the CPU as in a shader, so a mesh
+// packed on the host unpacks correctly on the GPU. The CPU side is real arithmetic rather than a
+// stub, which is what makes host-side packing usable at all.
+import system;
+import system.gpu;
+
+@compute
+fun pack(out: GpuBuffer<int>): void {
+    if global_id.x != 0 { return; }
+    out[0] = GpuMath.pack4x8unorm(GpuVec4.of(0.0, 0.5, 1.0, 0.25));
+    out[1] = GpuMath.pack4x8snorm(GpuVec4.of(-1.0, -0.5, 0.5, 1.0));
+    out[2] = GpuMath.pack2x16unorm(GpuVec2.of(0.0, 1.0));
+    out[3] = GpuMath.pack2x16snorm(GpuVec2.of(-1.0, 0.5));
+
+    // Round-trips, scaled so the expected value is an exact integer.
+    let a = GpuMath.unpack4x8unorm(out[0]);
+    out[4] = (int)(a.y * 1000.0);
+    let b = GpuMath.unpack4x8snorm(out[1]);
+    out[5] = (int)(b.y * 1000.0);
+    let c = GpuMath.unpack2x16unorm(out[2]);
+    out[6] = (int)(c.y * 1000.0);
+    let d = GpuMath.unpack2x16snorm(out[3]);
+    out[7] = (int)(d.x * 1000.0);
+}
+
+fun cpu(): int[] {
+    let v = Buffer.alloc<int>(8);
+    v[0] = GpuMath.pack4x8unorm(GpuVec4.of(0.0, 0.5, 1.0, 0.25));
+    v[1] = GpuMath.pack4x8snorm(GpuVec4.of(-1.0, -0.5, 0.5, 1.0));
+    v[2] = GpuMath.pack2x16unorm(GpuVec2.of(0.0, 1.0));
+    v[3] = GpuMath.pack2x16snorm(GpuVec2.of(-1.0, 0.5));
+    v[4] = (int)(GpuMath.unpack4x8unorm(v[0]).y * 1000.0);
+    v[5] = (int)(GpuMath.unpack4x8snorm(v[1]).y * 1000.0);
+    v[6] = (int)(GpuMath.unpack2x16unorm(v[2]).y * 1000.0);
+    v[7] = (int)(GpuMath.unpack2x16snorm(v[3]).x * 1000.0);
+    return v;
+}
+
+async fun main(): void {
+    let host = cpu();
+    System.println("cpu=" + host[0].to_string() + "," + host[1].to_string() + ","
+        + host[2].to_string() + "," + host[3].to_string());
+    System.println("cpu_roundtrip=" + host[4].to_string() + "," + host[5].to_string() + ","
+        + host[6].to_string() + "," + host[7].to_string());
+
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+    let out = GpuBuffer<int>.from([0, 0, 0, 0, 0, 0, 0, 0]);
+    let r = await Compute.run_resources(
+        "pack", [out.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0));
+    if r.is_err() {
+        System.println("dispatch failed: " + r.unwrap_err().message());
+        return;
+    }
+    let v = await out.read();
+
+    let same = true;
+    for (let i = 0; i < 8; i = i + 1) {
+        if v[i] != host[i] { same = false; }
+    }
+    System.println("gpu=" + v[0].to_string() + "," + v[1].to_string() + ","
+        + v[2].to_string() + "," + v[3].to_string());
+    System.println("gpu_roundtrip=" + v[4].to_string() + "," + v[5].to_string() + ","
+        + v[6].to_string() + "," + v[7].to_string());
+    System.println("cpu_matches_gpu=" + same.to_string());
+}

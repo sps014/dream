@@ -432,7 +432,13 @@ pub fn compile_native_c(
         }
     }
     lcmd.arg("-o").arg(&bin);
-    crate::driver::c_wasm32::run_captured(&mut lcmd, &format!("cc link ({})", obj.display()))?;
+    if let Err(e) =
+        crate::driver::c_wasm32::run_captured(&mut lcmd, &format!("cc link ({})", obj.display()))
+    {
+        // Leaving the linker's partial output in place would poison a cached build directory.
+        let _ = std::fs::remove_file(&bin);
+        return Err(e.into());
+    }
     // Mach-O keeps only a stabs debug map in the linked binary; the DWARF itself stays in the
     // object file, so deleting it leaves the debugger with no line/variable info.
     if !debug {
@@ -446,6 +452,16 @@ fn mtime(path: &Path) -> Option<std::time::SystemTime> {
 }
 
 fn native_bin_fresh(bin: &Path, c_path: &Path, rt: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(bin) else {
+        return false;
+    };
+    // A link that fails after creating its output leaves an empty file behind, which is newer
+    // than every input and would otherwise look like a valid build for as long as the directory
+    // survives. For the cached `@json` harness that meant every later compile ran a 0-byte
+    // binary and reported the empty output as a generator failure.
+    if meta.len() == 0 {
+        return false;
+    }
     let Some(bin_t) = mtime(bin) else {
         return false;
     };

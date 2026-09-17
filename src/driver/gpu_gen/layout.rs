@@ -47,6 +47,29 @@ pub(super) fn dream_ty_to_wgsl_vec(ty: &Type) -> Option<&'static str> {
 }
 
 /// Struct → field → WGSL type map for member-access inference in shaders.
+/// Enum name → member name → integer value, for folding `Mode.Mul` to a literal.
+///
+/// Only C-style enums are included: a variant carrying a payload is a discriminated union, which
+/// has no shader representation, and folding it to its discriminant would quietly drop the
+/// payload rather than reporting that the type does not belong in a shader.
+pub(super) fn build_enum_values(
+    program: &ProgramNode<'_>,
+) -> IndexMap<String, IndexMap<String, i32>> {
+    let mut map = IndexMap::new();
+    for decl in &program.enums {
+        if decl.variants.iter().any(|v| !v.fields.is_empty()) {
+            continue;
+        }
+        let members = decl
+            .variants
+            .iter()
+            .map(|v| (v.name.text.clone(), v.value))
+            .collect();
+        map.insert(decl.name.text.clone(), members);
+    }
+    map
+}
+
 pub(super) fn build_struct_field_tys(
     program: &ProgramNode<'_>,
 ) -> IndexMap<String, IndexMap<String, String>> {
@@ -165,11 +188,26 @@ fn field_builtin(field: &dream_syntax::nodes::struct_node::StructFieldNode) -> O
     None
 }
 
+/// WGSL pairs an interpolation type with an optional sampling qualifier. `centroid` and `sample`
+/// only change anything under MSAA: they move the sample point inside the covered area, which
+/// keeps interpolated values from being extrapolated off the edge of a partially covered
+/// triangle, and `sample` additionally forces per-sample shading.
+///
+/// `flat` takes `first`/`either` instead, which pick the provoking vertex.
 fn interpolate_wgsl(mode: &str) -> Option<&'static str> {
     match mode {
         "perspective" => Some("@interpolate(perspective)"),
         "linear" => Some("@interpolate(linear)"),
         "flat" => Some("@interpolate(flat)"),
+        "perspective,centroid" => Some("@interpolate(perspective, centroid)"),
+        "perspective,sample" => Some("@interpolate(perspective, sample)"),
+        "linear,centroid" => Some("@interpolate(linear, centroid)"),
+        "linear,sample" => Some("@interpolate(linear, sample)"),
+        // Bare sampling qualifiers imply the default interpolation type.
+        "centroid" => Some("@interpolate(perspective, centroid)"),
+        "sample" => Some("@interpolate(perspective, sample)"),
+        "flat,first" => Some("@interpolate(flat, first)"),
+        "flat,either" => Some("@interpolate(flat, either)"),
         _ => None,
     }
 }
@@ -291,7 +329,9 @@ fn emit_field_decorators(
         if let Some(mode) = field_interpolate_mode(&field.attributes) {
             let Some(interp) = interpolate_wgsl(&mode) else {
                 return Err(format!(
-                    "unsupported @interpolate(\"{mode}\"); use \"perspective\", \"linear\", or \"flat\""
+                    "unsupported @interpolate({mode:?}); use \"perspective\", \"linear\" or \
+                     \"flat\", optionally with a second argument: \"centroid\" or \"sample\" \
+                     for the first two, \"first\" or \"either\" for \"flat\""
                 ));
             };
             parts.push_str(interp);
@@ -301,12 +341,26 @@ fn emit_field_decorators(
     Ok(parts)
 }
 
+/// WGSL name for a stage-interface struct.
+///
+/// One Dream struct becomes two different WGSL structs across a pipeline: the fragment input
+/// form drops the position field, which arrives as the `frag_coord` builtin instead. They need
+/// distinct names so the joined sidecar module can declare both.
+pub(super) fn interface_struct_wgsl_name(dream_name: &str, for_fragment_input: bool) -> String {
+    let base = escape_wgsl_ident(dream_name);
+    if for_fragment_input {
+        format!("{base}_fs_in")
+    } else {
+        base
+    }
+}
+
 pub(super) fn emit_interface_struct_wgsl(
     decl: &StructDeclarationNode<'_>,
     for_fragment_input: bool,
 ) -> Result<String, String> {
     let locs = assign_locations(decl)?;
-    let sname = escape_wgsl_ident(&decl.name.text);
+    let sname = interface_struct_wgsl_name(&decl.name.text, for_fragment_input);
     let mut s = format!("struct {sname} {{\n");
     for field in &decl.fields {
         let fname = escape_wgsl_ident(&field.name.text);

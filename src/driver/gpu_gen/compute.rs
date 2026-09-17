@@ -185,6 +185,7 @@ pub(super) fn emit_kernel(
     collect_workgroup_names(func.body, &mut workgroup_names);
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = super::helpers::build_helper_return_tys(program);
+    let enum_values = super::layout::build_enum_values(program);
     // Shadowed as vec3<i32> in the prologue (`global_id_i`, …); type them for inference.
     let mut scopes = IndexMap::new();
     scopes.insert("local_invocation_index".to_string(), "i32".into());
@@ -198,6 +199,7 @@ pub(super) fn emit_kernel(
         scopes: RefCell::new(vec![scopes]),
         struct_fields: &struct_fields,
         helper_returns: &helper_returns,
+        enum_values: &enum_values,
         kernel: &func.name.text,
         diagnostics: RefCell::new(diagnostics),
     };

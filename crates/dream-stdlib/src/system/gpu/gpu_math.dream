@@ -396,6 +396,120 @@ public static class GpuMath {
         );
     }
 
+    // Packs four normalized floats into the four bytes of a 32-bit integer (WGSL
+    // `pack4x8unorm`). Each component is clamped to [0, 1] and scaled by 255, with `x` in the
+    // low byte. Use it to halve the size of vertex colours and normals before upload; the
+    // shader-side `unpack4x8unorm` reverses it exactly.
+    //
+    // These run on the CPU as well as in a shader, so packing a mesh on the host and unpacking
+    // it in a shader agree bit for bit.
+    public static fun pack4x8unorm(v: GpuVec4): int {
+        return (int)(GpuMath.unorm8(v.x)
+            | (GpuMath.unorm8(v.y) << 8u)
+            | (GpuMath.unorm8(v.z) << 16u)
+            | (GpuMath.unorm8(v.w) << 24u));
+    }
+
+    // Packs four signed normalized floats into a 32-bit integer (WGSL `pack4x8snorm`). Each
+    // component is clamped to [-1, 1] and scaled by 127.
+    public static fun pack4x8snorm(v: GpuVec4): int {
+        return (int)(GpuMath.snorm8(v.x)
+            | (GpuMath.snorm8(v.y) << 8u)
+            | (GpuMath.snorm8(v.z) << 16u)
+            | (GpuMath.snorm8(v.w) << 24u));
+    }
+
+    // Packs two normalized floats into the halves of a 32-bit integer (WGSL `pack2x16unorm`).
+    // Each component is clamped to [0, 1] and scaled by 65535, with `x` in the low half.
+    public static fun pack2x16unorm(v: GpuVec2): int {
+        return (int)(GpuMath.unorm16(v.x) | (GpuMath.unorm16(v.y) << 16u));
+    }
+
+    // Packs two signed normalized floats into a 32-bit integer (WGSL `pack2x16snorm`). Each
+    // component is clamped to [-1, 1] and scaled by 32767.
+    public static fun pack2x16snorm(v: GpuVec2): int {
+        return (int)(GpuMath.snorm16(v.x) | (GpuMath.snorm16(v.y) << 16u));
+    }
+
+    // Reverses `pack4x8unorm` (WGSL `unpack4x8unorm`).
+    public static fun unpack4x8unorm(v: int): GpuVec4 {
+        let bits = (uint)v;
+        return GpuVec4.of(
+            (float)(bits & 255u) / 255.0,
+            (float)((bits >> 8u) & 255u) / 255.0,
+            (float)((bits >> 16u) & 255u) / 255.0,
+            (float)((bits >> 24u) & 255u) / 255.0
+        );
+    }
+
+    // Reverses `pack4x8snorm` (WGSL `unpack4x8snorm`). -128 decodes to -1, matching WGSL's
+    // clamp of the low end.
+    public static fun unpack4x8snorm(v: int): GpuVec4 {
+        let bits = (uint)v;
+        return GpuVec4.of(
+            GpuMath.decode_snorm8(bits & 255u),
+            GpuMath.decode_snorm8((bits >> 8u) & 255u),
+            GpuMath.decode_snorm8((bits >> 16u) & 255u),
+            GpuMath.decode_snorm8((bits >> 24u) & 255u)
+        );
+    }
+
+    // Reverses `pack2x16unorm` (WGSL `unpack2x16unorm`).
+    public static fun unpack2x16unorm(v: int): GpuVec2 {
+        let bits = (uint)v;
+        return GpuVec2.of(
+            (float)(bits & 65535u) / 65535.0,
+            (float)((bits >> 16u) & 65535u) / 65535.0
+        );
+    }
+
+    // Reverses `pack2x16snorm` (WGSL `unpack2x16snorm`).
+    public static fun unpack2x16snorm(v: int): GpuVec2 {
+        let bits = (uint)v;
+        return GpuVec2.of(
+            GpuMath.decode_snorm16(bits & 65535u),
+            GpuMath.decode_snorm16((bits >> 16u) & 65535u)
+        );
+    }
+
+    // Encodes one component of `pack4x8unorm`.
+    static fun unorm8(x: float): uint {
+        return (uint)(int)GpuMath.round(GpuMath.clamp(x, 0.0, 1.0) * 255.0);
+    }
+
+    // Encodes one component of `pack4x8snorm`. The result is masked to a byte so the shift in
+    // the caller does not carry the sign bits of a negative value into the next lane.
+    static fun snorm8(x: float): uint {
+        let n = (int)GpuMath.round(GpuMath.clamp(x, -1.0, 1.0) * 127.0);
+        return (uint)n & 255u;
+    }
+
+    static fun unorm16(x: float): uint {
+        return (uint)(int)GpuMath.round(GpuMath.clamp(x, 0.0, 1.0) * 65535.0);
+    }
+
+    static fun snorm16(x: float): uint {
+        let n = (int)GpuMath.round(GpuMath.clamp(x, -1.0, 1.0) * 32767.0);
+        return (uint)n & 65535u;
+    }
+
+    // Decodes a byte holding a two's-complement signed normalized value.
+    static fun decode_snorm8(b: uint): float {
+        let signed = (int)b;
+        if signed > 127 {
+            signed = signed - 256;
+        }
+        return GpuMath.max((float)signed / 127.0, -1.0);
+    }
+
+    static fun decode_snorm16(b: uint): float {
+        let signed = (int)b;
+        if signed > 32767 {
+            signed = signed - 65536;
+        }
+        return GpuMath.max((float)signed / 32767.0, -1.0);
+    }
+
     // Number of 1 bits in the 32-bit integer binary representation (WGSL `countOneBits` / popcount).
     //
     // The bit functions all go through `uint` so a negative `int` shifts in zeros rather than

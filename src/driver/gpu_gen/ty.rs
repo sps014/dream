@@ -178,6 +178,10 @@ pub(super) fn builtin_return_wgsl_ty(
         | "atomic_compare_exchange"
         | "texture_num_levels"
         | "texture_num_layers"
+        | "pack4x8unorm"
+        | "pack4x8snorm"
+        | "pack2x16unorm"
+        | "pack2x16snorm"
         | "count_one_bits"
         | "reverse_bits"
         | "count_leading_zeros"
@@ -192,7 +196,10 @@ pub(super) fn builtin_return_wgsl_ty(
         | "texture_sample_layer"
         | "texture_sample_bias"
         | "texture_sample_grad"
-        | "texture_gather" => Some("vec4<f32>".into()),
+        | "texture_gather"
+        | "unpack4x8unorm"
+        | "unpack4x8snorm" => Some("vec4<f32>".into()),
+        "unpack2x16unorm" | "unpack2x16snorm" => Some("vec2<f32>".into()),
         // Depth comparison collapses the four neighbours to one pass fraction.
         "texture_sample_compare" | "texture_sample_compare_level" => Some("f32".into()),
         "texture_dimensions" => Some("vec2<f32>".into()),
@@ -266,6 +273,11 @@ pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> Str
             // Buffer/array `.length` property (no call args). Vector length is `GpuMath.length(...)`.
             if member.text == "length" {
                 return "i32".into();
+            }
+            if let ExpressionNode::Identifier(name) = obj {
+                if ctx.enum_member(&name.text, &member.text).is_some() {
+                    return "i32".into();
+                }
             }
             let base = infer_wgsl_ty(obj, ctx);
             if base.starts_with("vec") {

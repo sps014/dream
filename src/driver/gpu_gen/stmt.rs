@@ -40,6 +40,40 @@ fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
     }
 }
 
+/// True when `stmts` contain a `break` that belongs to a loop enclosing them.
+///
+/// Dream's `switch` does not capture `break` (it has no fall-through, so a `break` in a case body
+/// targets the enclosing loop), but WGSL's `switch` does. Nested loops are skipped because their
+/// own `break` binds to them; nested switches are not, for the same reason on the Dream side.
+fn breaks_enclosing_loop(stmts: &[StatementNode<'_>]) -> bool {
+    stmts.iter().any(|s| match s {
+        StatementNode::Break(_) => true,
+        StatementNode::IfElse(_, then_b, elifs, else_b) => {
+            breaks_enclosing_loop(then_b)
+                || elifs.iter().any(|(_, b)| breaks_enclosing_loop(b))
+                || else_b.is_some_and(breaks_enclosing_loop)
+        }
+        StatementNode::Switch(_, cases, default) => {
+            cases.iter().any(|(_, b)| breaks_enclosing_loop(b))
+                || default.is_some_and(breaks_enclosing_loop)
+        }
+        StatementNode::Labeled(_, inner) => breaks_enclosing_loop(std::slice::from_ref(*inner)),
+        _ => false,
+    })
+}
+
+fn reject_label(stmt: &StatementNode<'_>, keyword: &str, label: &str, ctx: &EmitCtx<'_>) {
+    ctx.report_error(
+        format!(
+            "GPU shader '{}' cannot use '{keyword} {label}': WGSL has no loop labels, so \
+             {keyword} always applies to the innermost loop. Restructure with a flag local, or \
+             move the inner loop into a @gpu helper and return from it",
+            ctx.kernel
+        ),
+        stmt_span(stmt),
+    );
+}
+
 pub(super) fn emit_stmts(
     stmts: &[StatementNode<'_>],
     out: &mut String,
@@ -394,10 +428,12 @@ fn emit_stmt(
             out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::DoWhile(body, cond) => {
+            // The test goes in `continuing` rather than at the end of the body, so `continue`
+            // reaches it. Falling out of the body arrives there just the same.
             out.push_str(&format!("{}loop {{\n", p));
             emit_stmts(body, out, wg, indent + 1, ctx);
             out.push_str(&format!(
-                "{}  if (!({})) {{ break; }}\n",
+                "{}  continuing {{ break if !({}); }}\n",
                 p,
                 emit_expr(cond, ctx)
             ));
@@ -417,33 +453,80 @@ fn emit_stmt(
             }
             emit_stmts(body, out, wg, indent + 1, ctx);
             if let Some(s) = step {
-                emit_stmt(s, out, wg, indent + 1, ctx);
+                // WGSL `continue` re-enters at `continuing`, so a step left at the end of the
+                // body would be skipped by `continue` and the loop would never advance.
+                out.push_str(&format!("{}  continuing {{\n", p));
+                emit_stmt(s, out, wg, indent + 2, ctx);
+                out.push_str(&format!("{}  }}\n", p));
             }
             out.push_str(&format!("{}}}\n", p));
         }
-        StatementNode::Break(_) => out.push_str(&format!("{}break;\n", p)),
-        StatementNode::Continue(_) => out.push_str(&format!("{}continue;\n", p)),
+        // WGSL has no loop labels, and `break`/`continue` always target the innermost loop. A
+        // labelled one naming an outer loop used to emit the unlabelled form, which silently ran
+        // the wrong loop; rejecting it is the honest answer until the flag-variable lowering
+        // lands.
+        StatementNode::Break(label) => match label {
+            Some(name) => reject_label(stmt, "break", name, ctx),
+            None => out.push_str(&format!("{}break;\n", p)),
+        },
+        StatementNode::Continue(label) => match label {
+            Some(name) => reject_label(stmt, "continue", name, ctx),
+            None => out.push_str(&format!("{}continue;\n", p)),
+        },
         StatementNode::Labeled(_, inner) => emit_stmt(inner, out, wg, indent, ctx),
         StatementNode::Switch(subject, cases, default) => {
-            // Lower to if-else chain (WGSL switch is more limited).
+            // The subject is bound to a `let` so it is evaluated once: it is compared against
+            // every label, and splicing the expression into each comparison would re-run any
+            // call or buffer read inside it.
             let sub = emit_expr(subject, ctx);
-            let mut first = true;
-            for (labels, body) in cases {
-                let conds: Vec<String> = labels
-                    .iter()
-                    .map(|l| format!("({}) == ({})", sub, emit_expr(l, ctx)))
-                    .collect();
-                let kw = if first { "if" } else { "else if" };
-                first = false;
-                out.push_str(&format!("{}{} ({}) {{\n", p, kw, conds.join(" || ")));
-                emit_stmts(body, out, wg, indent + 1, ctx);
-                out.push_str(&format!("{}}}\n", p));
+            let subject_ty = infer_wgsl_ty(subject, ctx);
+            let scrutinee = "dream_sw";
+            out.push_str(&format!("{}{{\n", p));
+            out.push_str(&format!("{}  let {scrutinee} = {sub};\n", p));
+
+            // WGSL `switch` needs an integer selector and, because it captures `break`, case
+            // bodies that do not `break` an enclosing loop. Anything else keeps the if-else
+            // chain, which is equivalent but does not fold to a jump table.
+            let native = matches!(subject_ty.as_str(), "i32" | "u32")
+                && !cases.iter().any(|(_, b)| breaks_enclosing_loop(b))
+                && !default.is_some_and(breaks_enclosing_loop);
+
+            if native {
+                out.push_str(&format!("{}  switch ({scrutinee}) {{\n", p));
+                for (labels, body) in cases {
+                    let sel: Vec<String> = labels.iter().map(|l| emit_expr(l, ctx)).collect();
+                    out.push_str(&format!("{}    case {}: {{\n", p, sel.join(", ")));
+                    emit_stmts(body, out, wg, indent + 3, ctx);
+                    out.push_str(&format!("{}    }}\n", p));
+                }
+                // WGSL requires exactly one default clause even when Dream omits it.
+                out.push_str(&format!("{}    default: {{\n", p));
+                if let Some(db) = default {
+                    emit_stmts(db, out, wg, indent + 3, ctx);
+                }
+                out.push_str(&format!("{}    }}\n", p));
+                out.push_str(&format!("{}  }}\n", p));
+            } else {
+                let mut first = true;
+                for (labels, body) in cases {
+                    let conds: Vec<String> = labels
+                        .iter()
+                        .map(|l| format!("({scrutinee}) == ({})", emit_expr(l, ctx)))
+                        .collect();
+                    let kw = if first { "if" } else { "else if" };
+                    first = false;
+                    out.push_str(&format!("{}  {} ({}) {{\n", p, kw, conds.join(" || ")));
+                    emit_stmts(body, out, wg, indent + 2, ctx);
+                    out.push_str(&format!("{}  }}\n", p));
+                }
+                if let Some(db) = default {
+                    let kw = if first { "if (true)" } else { "else" };
+                    out.push_str(&format!("{}  {kw} {{\n", p));
+                    emit_stmts(db, out, wg, indent + 2, ctx);
+                    out.push_str(&format!("{}  }}\n", p));
+                }
             }
-            if let Some(db) = default {
-                out.push_str(&format!("{}else {{\n", p));
-                emit_stmts(db, out, wg, indent + 1, ctx);
-                out.push_str(&format!("{}}}\n", p));
-            }
+            out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::FunctionInvocation(name, type_args, args)
         | StatementNode::MethodInvocation(_, name, type_args, args) => {

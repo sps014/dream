@@ -77,11 +77,25 @@ let _ = await GpuRenderPass.draw_instanced(
 | Vertex buffer slots | One per leading `@vertex` struct param, in order | `@instance` on a param to step it per instance |
 | Attribute wire format | Matches the field's type | `@format("unorm8x4")` etc. to pack it smaller |
 | Clip position | Field named **`position: GpuVec4`** | or `@builtin("position")` on any `GpuVec4` field |
-| Interpolation | perspective | `@interpolate("flat"\|"linear"\|"perspective")` |
+| Interpolation | perspective | `@interpolate("flat"\|"linear"\|"perspective")`, plus an optional sampling qualifier |
 | Fragment color | Return **`GpuVec4`** | or an output struct with `@location` colors (+ optional `@builtin("frag_depth")`) |
 | Bindings | auto `@group(0)`, binding index auto-assigned per group | `@group(N)` / `@binding(N)` on resource params |
 | `GpuTexture` binding | sampled `texture_2d<f32>` | `@storage` for a writable storage texture; `@cube` for `texture_cube<f32>` |
 | `GpuBuffer<T>` binding | `read_write` storage | `@readonly` for read-only storage |
+
+`@interpolate` takes an optional second argument choosing where the varying is sampled, which
+only matters under MSAA. `"centroid"` samples inside the covered part of the fragment, which
+stops values being extrapolated past the edge of a partially covered triangle; `"sample"`
+additionally shades once per sample. For `"flat"` the second argument is `"first"` or `"either"`,
+selecting which vertex provides the value:
+
+```dream
+struct VsOut {
+    public position: GpuVec4;
+    @interpolate("perspective", "centroid") public uv: GpuVec2;
+    @interpolate("flat", "first") public material: float;
+}
+```
 
 ## Vertex buffers
 
@@ -200,8 +214,54 @@ fun fs(v: VsOut): FsOut {
 ## Builtins
 
 - Vertex: `vertex_index`, `instance_index`
-- Fragment: `frag_coord`, `front_facing`; `sample_index` / `primitive_index` when referenced
-  (the latter emits `enable primitive_index;`)
+- Fragment: `frag_coord`, `front_facing`; `sample_index` / `primitive_index` / `sample_mask` when
+  referenced (`primitive_index` emits `enable primitive_index;`)
+
+`sample_mask` is the incoming coverage mask: bit *N* is set when sample *N* of this fragment is
+covered, so `GpuMath.count_one_bits(sample_mask)` counts covered samples. Writing the mask to
+control coverage is not supported yet.
+
+## Control flow
+
+`if` / `while` / `do`-`while` / `for` / `switch` all work, including `break` and `continue`.
+Two limits come from WGSL:
+
+- **No loop labels.** `break outer;` / `continue outer;` are rejected, because WGSL's `break` and
+  `continue` always apply to the innermost loop. Use a flag local, or move the inner loop into a
+  [`@gpu` helper](#gpu-helpers) and `return` from it.
+- **`switch` subjects are evaluated once** and case labels must be constant — a literal or a
+  C-style enum member. Cases do not fall through, and a `break` inside a case body belongs to the
+  enclosing loop, not to the `switch`.
+
+C-style enums are usable in shaders; members fold to their integer value:
+
+```dream
+enum Mode { Add = 0, Mul = 1, Sub = 2 }
+
+@gpu
+fun apply(mode: int, a: float, b: float): float {
+    switch (mode) {
+        case Mode.Add: return a + b;
+        case Mode.Mul: return a * b;
+        default: return a - b;
+    }
+}
+```
+
+## Packing
+
+`GpuMath` packs normalized vectors into a 32-bit `int` and back, matching the WGSL builtins of
+the same name. These run on the CPU too, so a mesh packed on the host unpacks in a shader to the
+same bits — useful for halving the size of vertex colours and normals, or for compact G-buffers:
+
+| Pack | Unpack | Component range |
+|---|---|---|
+| `pack4x8unorm(GpuVec4)` | `unpack4x8unorm(int)` | `[0, 1]` × 4 bytes |
+| `pack4x8snorm(GpuVec4)` | `unpack4x8snorm(int)` | `[-1, 1]` × 4 bytes |
+| `pack2x16unorm(GpuVec2)` | `unpack2x16unorm(int)` | `[0, 1]` × 2 halves |
+| `pack2x16snorm(GpuVec2)` | `unpack2x16snorm(int)` | `[-1, 1]` × 2 halves |
+
+Components are clamped before scaling, and `x` occupies the low bits.
 
 ## Vector math
 

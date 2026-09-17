@@ -137,6 +137,7 @@ pub(super) fn emit_vertex(
 
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = super::helpers::build_helper_return_tys(program);
+    let enum_values = super::layout::build_enum_values(program);
     let mut scopes = vec![IndexMap::new()];
     scopes[0].insert("vertex_index".into(), "i32".into());
     scopes[0].insert("instance_index".into(), "i32".into());
@@ -153,6 +154,7 @@ pub(super) fn emit_vertex(
             scopes: RefCell::new(scopes),
             struct_fields: &struct_fields,
             helper_returns: &helper_returns,
+            enum_values: &enum_values,
             kernel: &func.name.text,
             diagnostics: RefCell::new(diagnostics),
         };

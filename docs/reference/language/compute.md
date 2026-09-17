@@ -212,8 +212,9 @@ Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z
 
 ## Language surface
 
-Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels), early
-`return`, ternary, integer `switch`, arithmetic/bitwise, `GpuBuffer` indexing / `.length`,
+Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue`, early
+`return`, ternary, integer `switch` (including over C-style enum members), arithmetic/bitwise,
+`GpuMath.pack*` / `unpack*`, `GpuBuffer` indexing / `.length`,
 unmanaged value structs, calls to **`@gpu` helpers** (and other `@compute` kernels),
 `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`.
 Shifts (`<<`, `>>`) count as arithmetic; the right operand is taken as unsigned, matching WGSL.
@@ -226,7 +227,12 @@ Texture reads from a kernel need an explicit mip level, since there are no deriv
 from: `Gpu.texture_load` fetches a texel unfiltered and `Gpu.texture_sample_level` filters at a
 level you name. See [sampling textures](shaders.md#sampling-textures) for the full set.
 
-Forbidden: bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`,
+A `switch` evaluates its subject once, and its case labels must be constants. Cases do not fall
+through, so a `break` in a case body leaves the enclosing loop rather than the `switch`.
+
+Forbidden: labelled `break`/`continue` (WGSL has no loop labels, so both always apply to the
+innermost loop — use a flag local or move the inner loop into a `@gpu` helper and `return`),
+bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`,
 union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions that are
 **not** marked `@gpu`. Calling `@gpu` / `@compute` / `@vertex` / `@fragment` from normal CPU
 code is also a compile error — helpers are WGSL-only; stages dispatch via `Compute.run` /

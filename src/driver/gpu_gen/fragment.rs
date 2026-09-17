@@ -146,8 +146,10 @@ pub(super) fn emit_fragment(
 
     let struct_fields = build_struct_field_tys(program);
     let helper_returns = super::helpers::build_helper_return_tys(program);
+    let enum_values = super::layout::build_enum_values(program);
     let uses_sample_index = body_mentions(func.body, "sample_index");
     let uses_primitive_index = body_mentions(func.body, "primitive_index");
+    let uses_sample_mask = body_mentions(func.body, "sample_mask");
     let mut scopes = vec![IndexMap::new()];
     scopes[0].insert("frag_coord".into(), "vec4<f32>".into());
     scopes[0].insert("front_facing".into(), "bool".into());
@@ -156,6 +158,9 @@ pub(super) fn emit_fragment(
     }
     if uses_primitive_index {
         scopes[0].insert("primitive_index".into(), "i32".into());
+    }
+    if uses_sample_mask {
+        scopes[0].insert("sample_mask".into(), "i32".into());
     }
     if let Some((ref vp, ref sname)) = vary_param {
         scopes[0].insert(vp.clone(), sname.clone());
@@ -170,6 +175,7 @@ pub(super) fn emit_fragment(
             scopes: RefCell::new(scopes),
             struct_fields: &struct_fields,
             helper_returns: &helper_returns,
+            enum_values: &enum_values,
             kernel: &func.name.text,
             diagnostics: RefCell::new(diagnostics),
         };
@@ -196,11 +202,14 @@ pub(super) fn emit_fragment(
     if uses_primitive_index {
         wgsl.push_str("  @builtin(primitive_index) _primitive_index: u32,\n");
     }
+    if uses_sample_mask {
+        wgsl.push_str("  @builtin(sample_mask) _sample_mask: u32,\n");
+    }
     if let Some((ref vp, ref sname)) = vary_param {
         wgsl.push_str(&format!(
             "  {}: {},\n",
             escape_wgsl_ident(vp),
-            escape_wgsl_ident(sname)
+            super::layout::interface_struct_wgsl_name(sname, true)
         ));
     }
     wgsl.push_str(&format!(") -> {return_ty_wgsl} {{\n"));
@@ -209,6 +218,10 @@ pub(super) fn emit_fragment(
     }
     if uses_primitive_index {
         wgsl.push_str("  let primitive_index = i32(_primitive_index);\n");
+    }
+    if uses_sample_mask {
+        // The incoming coverage mask: bit N is set when sample N of this fragment is covered.
+        wgsl.push_str("  let sample_mask = bitcast<i32>(_sample_mask);\n");
     }
     wgsl.push_str(&body);
     wgsl.push_str("}\n");

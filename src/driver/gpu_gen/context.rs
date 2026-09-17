@@ -21,6 +21,8 @@ pub(super) struct EmitCtx<'a> {
     pub(super) struct_fields: &'a IndexMap<String, IndexMap<String, String>>,
     /// `@gpu` helper name → WGSL return type (for unannotated `let` inference).
     pub(super) helper_returns: &'a IndexMap<String, String>,
+    /// C-style enum name → member name → value. WGSL has no enums, so members fold to literals.
+    pub(super) enum_values: &'a IndexMap<String, IndexMap<String, i32>>,
     /// Dream function name, used in GPU diagnostic messages.
     pub(super) kernel: &'a str,
     pub(super) diagnostics: RefCell<&'a mut DiagnosticBag>,
@@ -123,6 +125,16 @@ impl EmitCtx<'_> {
         } else {
             escape_wgsl_ident(name)
         }
+    }
+
+    /// The value of `Enum.Member`, when `base.member` names a C-style enum member.
+    ///
+    /// A local shadowing the enum name wins, so `let Mode = 3; Mode.x` is not mistaken for one.
+    pub(super) fn enum_member(&self, base: &str, member: &str) -> Option<i32> {
+        if self.is_local(base) {
+            return None;
+        }
+        self.enum_values.get(base)?.get(member).copied()
     }
 
     pub(super) fn lookup_struct_field(&self, struct_ty: &str, field: &str) -> Option<String> {

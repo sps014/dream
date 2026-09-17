@@ -28,12 +28,13 @@ fn kernels_json(kernels: &[GpuKernelInfo]) -> String {
     for k in kernels {
         let binds = bindings_json(&k.bindings);
         entries.push(format!(
-            "{{ \"name\": \"{}\", \"entry\": \"{}\", \"workgroup\": [{}, {}, {}], \"bindings\": [{binds}], \"source\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"entry\": \"{}\", \"workgroup\": [{}, {}, {}], \"bindings\": [{binds}], \"uniform_size\": {}, \"source\": \"{}\" }}",
             json_escape(&k.name),
             json_escape(&k.entry),
             k.workgroup.0,
             k.workgroup.1,
             k.workgroup.2,
+            k.uniform_size,
             json_escape(&k.wgsl)
         ));
     }
@@ -57,7 +58,7 @@ fn shaders_json(shaders: &[GpuShaderInfo]) -> String {
             })
             .collect();
         entries.push(format!(
-            "{{ \"name\": \"{}\", \"stage\": \"{}\", \"entry\": \"{}\", \"bindings\": [{binds}], \"vertex_layout\": [{}], \"vertex_stride\": {}, \"interface\": \"{}\", \"color_targets\": {}, \"source\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"stage\": \"{}\", \"entry\": \"{}\", \"bindings\": [{binds}], \"vertex_layout\": [{}], \"vertex_stride\": {}, \"interface\": \"{}\", \"color_targets\": {}, \"uniform_size\": {}, \"source\": \"{}\" }}",
             json_escape(&sh.name),
             sh.stage,
             json_escape(&sh.entry),
@@ -65,6 +66,7 @@ fn shaders_json(shaders: &[GpuShaderInfo]) -> String {
             sh.vertex_stride,
             json_escape(&sh.interface_ty),
             sh.color_targets,
+            sh.uniform_size,
             json_escape(&sh.wgsl)
         ));
     }

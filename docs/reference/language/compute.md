@@ -172,8 +172,11 @@ Only **top-level** `fun`s may carry `@compute`. Kernels must return `void`, cann
 
 Kernel storage buffers are **`GpuBuffer<T>`** (not bare `T[]`). Inside a kernel you can
 index them (`a[i]`) and read **`a.length`** (WGSL `arrayLength`). Scalars and unmanaged
-value structs become uniforms. The host packs dispatch extents `ex, ey, ez` into the first
-three `i32` slots of that uniform block (so a trailing `n: int` often matches the grid size).
+value structs become uniforms, laid out by WGSL's uniform rules in declaration order —
+`Uniforms.pack_i32` / `pack_f32` must match that layout. `Compute.run_1d` / `run_2d` pack
+their extents as the uniform blob, so a kernel whose only uniform is a bound (`n: int`)
+gets the grid size for free; use `run_3d` to supply uniforms yourself. The grid is also
+always readable in-kernel through `num_workgroups`.
 
 Prefix a buffer with **`@readonly`** for WGSL `var<storage, read>` instead of `read_write`:
 

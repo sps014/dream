@@ -36,15 +36,20 @@ pub fn plan_groups(binds: &[GpuBindingMeta]) -> Vec<BindGroupPlan> {
 /// The layout entry a binding needs, taken from the shape the shader declared. The emitter records
 /// the view dimension, sample type, and storage format/access alongside `kind`, so nothing here
 /// has to guess at `2d`/`rgba8unorm`/write-only defaults.
+///
+/// `uniform_size` is the declared block size, which the uniform entry needs as its
+/// `min_binding_size`: the block is a window into a shared ring reached by dynamic offset, and a
+/// window with no declared size would run to the end of the ring.
 pub fn layout_entry(
     b: &GpuBindingMeta,
     visibility: wgpu::ShaderStages,
+    uniform_size: u32,
 ) -> wgpu::BindGroupLayoutEntry {
     let ty = match b.kind.as_str() {
         "uniform" => wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
+            has_dynamic_offset: true,
+            min_binding_size: std::num::NonZeroU64::new(u64::from(uniform_size)),
         },
         "storage" => wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Storage {
@@ -117,6 +122,7 @@ pub fn create_group_layouts(
     plans: &[BindGroupPlan],
     visibility: wgpu::ShaderStages,
     label: &str,
+    uniform_size: u32,
 ) -> Vec<wgpu::BindGroupLayout> {
     let Some(max_group) = plans.iter().map(|p| p.group).max() else {
         return Vec::new();
@@ -129,7 +135,7 @@ pub fn create_group_layouts(
                 .map(|p| {
                     p.bindings
                         .iter()
-                        .map(|b| layout_entry(b, visibility))
+                        .map(|b| layout_entry(b, visibility, uniform_size))
                         .collect()
                 })
                 .unwrap_or_default();

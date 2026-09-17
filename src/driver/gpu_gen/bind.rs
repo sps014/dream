@@ -178,14 +178,16 @@ pub(super) fn sampler_binding(
 }
 
 /// Emits one WGSL resource declaration for a `@vertex` / `@fragment` parameter.
+///
+/// Uniform parameters do not emit anything on their own — they accumulate into `uniforms` as
+/// `(name, wgsl_ty)` pairs and [`finalize_uniforms`] declares the one shared block.
 pub(super) fn emit_resource_param(
     param: &ParameterNode,
     entry: &str,
     header: &mut String,
     bindings: &mut Vec<GpuBinding>,
     alloc: &mut BindingAlloc,
-    uniform_fields: &mut String,
-    has_uniform: &mut bool,
+    uniforms: &mut Vec<(String, String)>,
 ) -> Result<(), String> {
     let pname = param.name.text.clone();
     let wgsl_name = format!("{entry}_{pname}");
@@ -226,9 +228,8 @@ pub(super) fn emit_resource_param(
             ));
         }
         ResClass::Uniform { ty } => {
-            *has_uniform = true;
             alloc.note_uniform(param)?;
-            uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
+            uniforms.push((pname.clone(), ty.clone()));
             bindings.push(GpuBinding::buffer(pname, 0, 0, "uniform", ty, false, false));
         }
     }
@@ -236,17 +237,24 @@ pub(super) fn emit_resource_param(
 }
 
 /// Declares the shared uniform block and back-patches every `uniform` binding to its slot.
+///
+/// Returns the block's byte size, which the host needs to size the uniform binding window before
+/// any draw is recorded.
 pub(super) fn finalize_uniforms(
     entry: &str,
     alloc: &mut BindingAlloc,
-    uniform_fields: &str,
+    uniforms: &[(String, String)],
     header: &mut String,
     bindings: &mut [GpuBinding],
-) {
+) -> Result<u32, String> {
     let (group, binding) = alloc.uniform_slot();
     let u_struct = format!("DreamUniforms_{entry}");
     let u_var = format!("dream_uniforms_{entry}");
-    header.push_str(&format!("struct {u_struct} {{\n{uniform_fields}}}\n"));
+    let fields: String = uniforms
+        .iter()
+        .map(|(name, ty)| format!("  {}: {ty},\n", escape_wgsl_ident(name)))
+        .collect();
+    header.push_str(&format!("struct {u_struct} {{\n{fields}}}\n"));
     header.push_str(&format!(
         "@group({group}) @binding({binding}) var<uniform> {u_var}: {u_struct};\n"
     ));
@@ -256,4 +264,5 @@ pub(super) fn finalize_uniforms(
             b.binding = binding;
         }
     }
+    super::uniform_layout::block_size(uniforms)
 }

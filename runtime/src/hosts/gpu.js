@@ -14,7 +14,7 @@ function makeGpuHost(getInstance) {
   const pipelineCache = new Map();
   const renderPipelines = new Map(); // id -> { pipeline, vsMeta, fsMeta, layouts, groups }
   const bindGroups = new Map(); // id -> { pipelineId, group, bufferIds, textureIds, samplerIds }
-  const renderBgCache = new Map(); // `pipeline:group:handle:uniformSlot` -> GPUBindGroup
+  const renderBgCache = new Map(); // `pipeline:group:handle` -> GPUBindGroup
   const renderPipelineCache = new Map(); // key -> id
   let nextId = 1;
   let devicePromise = null;
@@ -766,10 +766,20 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       .map(([group, bindings]) => ({ group, bindings }));
   }
 
-  function layoutEntryForBinding(b, visibility) {
+  /// `uniformSize` is the declared block size, which the uniform entry needs as its
+  /// `minBindingSize`: the block is a window into a shared ring reached by dynamic offset, and a
+  /// window with no declared size would run to the end of the ring.
+  function layoutEntryForBinding(b, visibility, uniformSize) {
     const base = { binding: b.binding, visibility };
     if (b.kind === "uniform") {
-      return { ...base, buffer: { type: "uniform" } };
+      return {
+        ...base,
+        buffer: {
+          type: "uniform",
+          hasDynamicOffset: true,
+          minBindingSize: uniformSize | 0,
+        },
+      };
     }
     if (b.kind === "storage") {
       return {
@@ -807,14 +817,14 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
   /// Dense per-group layouts for a pipeline layout; unused group indices get an empty layout so
   /// the array stays contiguous (a shader using groups 0 and 2 still needs a slot for 1).
-  function createGroupLayouts(dev, plans, visibility) {
+  function createGroupLayouts(dev, plans, visibility, uniformSize) {
     if (!plans.length) return [];
     const maxGroup = Math.max(...plans.map((p) => p.group));
     const out = [];
     for (let g = 0; g <= maxGroup; g++) {
       const plan = plans.find((p) => p.group === g);
       const entries = plan
-        ? plan.bindings.map((b) => layoutEntryForBinding(b, visibility))
+        ? plan.bindings.map((b) => layoutEntryForBinding(b, visibility, uniformSize))
         : [];
       out.push(dev.createBindGroupLayout({ entries }));
     }
@@ -839,64 +849,75 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       }
     }
     const groups = planGroups(meta.bindings);
-    const layouts = createGroupLayouts(dev, groups, GPUShaderStage.COMPUTE);
+    const layouts = createGroupLayouts(dev, groups, GPUShaderStage.COMPUTE, meta.uniform_size | 0);
     const pipeline = await dev.createComputePipelineAsync({
       layout: dev.createPipelineLayout({ bindGroupLayouts: layouts }),
       compute: { module, entryPoint: meta.entry },
     });
-    pipe = { pipeline, layouts, groups, meta, uniformPool: [], uniformCursor: 0 };
+    pipe = { pipeline, layouts, groups, meta };
     pipelineCache.set(kernel, pipe);
     return pipe;
   }
 
-  const UNIFORM_BYTES = 256;
+  /// Bump allocator for per-draw uniform blocks, mirroring the native `uniform_ring`.
+  ///
+  /// Every `set_uniforms` needs its own storage or batched draws would all read whichever write
+  /// landed last. One buffer serves the whole frame and each draw binds a window of it at a
+  /// dynamic offset, which both lifts any cap on the block size and lets a bind group outlive the
+  /// draw that built it — it no longer depends on which slot the draw was given.
+  const UNIFORM_RING_INITIAL = 64 * 1024;
+  const uniformRing = { buffer: null, capacity: 0, cursor: 0, alignment: 256 };
 
-  function resetComputeUniformCursors() {
-    for (const pipe of pipelineCache.values()) {
-      pipe.uniformCursor = 0;
-    }
+  function uniformStride(size, dev) {
+    // A reservation is computed before `beginUniformFrame` has recorded the device alignment, so
+    // the device is consulted directly when one is at hand.
+    const align = (dev && dev.limits && dev.limits.minUniformBufferOffsetAlignment)
+      || uniformRing.alignment
+      || 256;
+    return Math.ceil(Math.max(size, 1) / align) * align;
   }
 
-  function allocComputeUniform(dev, pipe) {
-    if (!pipe.uniformPool) {
-      pipe.uniformPool = [];
-      pipe.uniformCursor = 0;
-    }
-    const slot = pipe.uniformCursor++;
-    if (slot >= pipe.uniformPool.length) {
-      pipe.uniformPool.push(dev.createBuffer({
-        size: UNIFORM_BYTES,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      }));
-    }
-    return pipe.uniformPool[slot];
+  /// Reserves `bytes` for the frame ahead. Returns whether the buffer was replaced, which
+  /// invalidates every bind group built against the old one — growing partway through a frame
+  /// would leave cached groups reading a buffer the new offsets were never written to.
+  function beginUniformFrame(dev, bytes) {
+    uniformRing.cursor = 0;
+    const limit = dev.limits && dev.limits.minUniformBufferOffsetAlignment;
+    uniformRing.alignment = limit || 256;
+    if (bytes <= uniformRing.capacity) return false;
+    let capacity = Math.max(bytes, UNIFORM_RING_INITIAL);
+    capacity = Math.pow(2, Math.ceil(Math.log2(capacity)));
+    uniformRing.buffer = dev.createBuffer({
+      size: capacity,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    uniformRing.capacity = capacity;
+    return true;
   }
 
-  /// Hands out a fresh uniform slot per `set_uniforms`, so batched draws in one submit can carry
-  /// different uniform data instead of the last write winning for all of them.
-  function allocRenderUniform(dev, rp, bytes) {
-    if (!rp.uniformPool) {
-      rp.uniformPool = [];
-      rp.uniformCursor = 0;
+  /// Writes one block and returns the dynamic offset to bind it at. Short blocks are padded up to
+  /// `size`; a block longer than the shader declares means the Dream and WGSL layouts disagree.
+  function pushUniforms(dev, bytes, size) {
+    if (bytes.byteLength > size) {
+      throw new Error(
+        `packed ${bytes.byteLength} bytes of uniforms but the shader's block is ${size} bytes`,
+      );
     }
-    const slot = rp.uniformCursor++;
-    while (rp.uniformPool.length <= slot) {
-      rp.uniformPool.push(dev.createBuffer({
-        size: UNIFORM_BYTES,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      }));
+    const stride = uniformStride(size);
+    const offset = uniformRing.cursor;
+    if (!uniformRing.buffer || offset + stride > uniformRing.capacity) {
+      throw new Error("uniform ring was not reserved for this frame");
     }
-    const padded = new Uint8Array(UNIFORM_BYTES);
-    if (bytes.byteLength > 0) {
-      padded.set(bytes.subarray(0, Math.min(bytes.byteLength, UNIFORM_BYTES)), 0);
-    }
-    dev.queue.writeBuffer(rp.uniformPool[slot], 0, padded);
-    return slot;
+    uniformRing.cursor = offset + stride;
+    const padded = new Uint8Array(size);
+    if (bytes.byteLength > 0) padded.set(bytes, 0);
+    dev.queue.writeBuffer(uniformRing.buffer, offset, padded);
+    return offset;
   }
 
   /// Resolves the resource id arrays into one bind group per `@group`. Ids are consumed
   /// positionally per kind, which is the order `GpuBindList` appends them in.
-  async function buildBindGroup(dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
+  async function buildBindGroup(dev, pipe, bufferIds, textureIds, samplerIds, uniforms) {
     const bufIds = toI32Arr(bufferIds);
     const texIds = toI32Arr(textureIds);
     const sampIds = toI32Arr(samplerIds);
@@ -904,22 +925,18 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     let textureIdx = 0;
     let samplerIdx = 0;
     const extra = toU8(uniforms);
+    const size = pipe.meta.uniform_size | 0;
+    const offsets = new Map();
     const out = [];
     for (const { group, bindings } of pipe.groups) {
       const resources = [];
       for (const bind of bindings) {
         if (bind.kind === "uniform") {
-          const ubuf = allocComputeUniform(dev, pipe);
-          const bytes = new Uint8Array(UNIFORM_BYTES);
-          const i32 = new Int32Array(bytes.buffer);
-          i32[0] = ex | 0;
-          i32[1] = ey | 0;
-          i32[2] = ez | 0;
-          if (extra.byteLength > 0) {
-            bytes.set(extra.subarray(0, Math.min(extra.byteLength, UNIFORM_BYTES - 12)), 12);
-          }
-          dev.queue.writeBuffer(ubuf, 0, bytes);
-          resources.push({ binding: bind.binding, resource: { buffer: ubuf } });
+          offsets.set(group, pushUniforms(dev, extra, size));
+          resources.push({
+            binding: bind.binding,
+            resource: { buffer: uniformRing.buffer, offset: 0, size },
+          });
         } else if (bind.kind === "storage") {
           const id = bufIds[storageIdx++] | 0;
           const b = buffers.get(id);
@@ -939,7 +956,11 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           resources.push({ binding: bind.binding, resource: textureViewFor(t, tex) });
         }
       }
-      out.push({ group, bindGroup: dev.createBindGroup({ layout: pipe.layouts[group], entries: resources }) });
+      out.push({
+        group,
+        bindGroup: dev.createBindGroup({ layout: pipe.layouts[group], entries: resources }),
+        offsets: offsets.has(group) ? [offsets.get(group)] : [],
+      });
     }
     return out;
   }
@@ -951,7 +972,9 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
   }
 
   function setBindGroups(pass, groups) {
-    for (const { group, bindGroup } of groups) pass.setBindGroup(group, bindGroup);
+    for (const { group, bindGroup, offsets } of groups) {
+      pass.setBindGroup(group, bindGroup, offsets || []);
+    }
   }
 
   function encodeDispatch(encoder, pipe, bgs, ex, ey, ez) {
@@ -979,10 +1002,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
   async function runDispatch(kernel, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms) {
     const dev = await ensureDevice();
-    resetComputeUniformCursors();
     const pipe = await getPipeline(dev, kernel);
+    beginUniformFrame(dev, uniformStride(pipe.meta.uniform_size | 0, dev));
     const bg = await buildBindGroup(
-      dev, pipe, bufferIds, textureIds, samplerIds, ex, ey, ez, uniforms,
+      dev, pipe, bufferIds, textureIds, samplerIds, uniforms,
     );
     const encoder = dev.createCommandEncoder();
     encodeDispatch(encoder, pipe, bg, ex, ey, ez);
@@ -995,10 +1018,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     kernel, bufferIds, textureIds, samplerIds, indirectId, indirectOffset,
   ) {
     const dev = await ensureDevice();
-    resetComputeUniformCursors();
     const pipe = await getPipeline(dev, kernel);
+    beginUniformFrame(dev, uniformStride(pipe.meta.uniform_size | 0, dev));
     const bg = await buildBindGroup(
-      dev, pipe, bufferIds, textureIds, samplerIds, 1, 1, 1, [],
+      dev, pipe, bufferIds, textureIds, samplerIds, [],
     );
     const encoder = dev.createCommandEncoder();
     await encodeDispatchIndirect(dev, encoder, pipe, bg, indirectId, indirectOffset);
@@ -1023,7 +1046,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
   ///
   /// A group named by `set_bind_group` uses that handle's pinned resources; the rest draw from the
   /// `set_bind_list` ids, in group order, consumed positionally per kind.
-  async function buildRenderBindGroups(dev, rp, pipelineId, explicit, list, uniformSlot) {
+  async function buildRenderBindGroups(dev, rp, pipelineId, explicit, list, uniformOffset) {
     if (!rp.groups.length) return [];
     const bufIds = list ? list.buffers : [];
     const texIds = list ? list.textures : [];
@@ -1034,6 +1057,13 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     const out = [];
     for (const { group, bindings } of rp.groups) {
       const handleId = explicit.has(group) ? explicit.get(group) : -1;
+      const hasUniform = bindings.some((b) => b.kind === "uniform");
+      if (hasUniform && uniformOffset == null) {
+        throw new Error(
+          `@group(${group}) needs a uniform block; call set_uniforms before the draw`,
+        );
+      }
+      const offsets = hasUniform ? [uniformOffset] : [];
       let pinned = null;
       if (handleId >= 0) {
         pinned = bindGroups.get(handleId);
@@ -1044,9 +1074,9 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
             `not pipeline ${pipelineId} @group(${group})`,
           );
         }
-        const cached = renderBgCache.get(`${pipelineId}:${group}:${handleId}:${uniformSlot ?? -1}`);
+        const cached = renderBgCache.get(`${pipelineId}:${group}:${handleId}`);
         if (cached) {
-          out.push({ group, bindGroup: cached });
+          out.push({ group, bindGroup: cached, offsets });
           continue;
         }
       }
@@ -1061,13 +1091,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       const entries = [];
       for (const bind of bindings) {
         if (bind.kind === "uniform") {
-          if (uniformSlot == null) {
-            throw new Error(
-              `@group(${group}) @binding(${bind.binding}) needs a uniform block; ` +
-              "call set_uniforms before the draw",
-            );
-          }
-          entries.push({ binding: bind.binding, resource: { buffer: rp.uniformPool[uniformSlot] } });
+          // The window starts at 0 and the draw's dynamic offset moves it, so one group serves
+          // every draw regardless of which slice of the ring that draw wrote.
+          entries.push({
+            binding: bind.binding,
+            resource: { buffer: uniformRing.buffer, offset: 0, size: rp.uniformSize },
+          });
         } else if (bind.kind === "storage") {
           const id = nextBuf();
           const b = buffers.get(id);
@@ -1091,9 +1120,9 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       // Only pinned handles are cached: a bind list's resources are whatever the caller passed
       // this frame, so caching them would be wrong the moment they change.
       if (handleId >= 0) {
-        renderBgCache.set(`${pipelineId}:${group}:${handleId}:${uniformSlot ?? -1}`, bindGroup);
+        renderBgCache.set(`${pipelineId}:${group}:${handleId}`, bindGroup);
       }
-      out.push({ group, bindGroup });
+      out.push({ group, bindGroup, offsets });
     }
     return out;
   }
@@ -1376,7 +1405,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     let rp = null;
     let explicit = new Map();
     let list = null;
-    let uniformSlot = null;
+    let uniformOffset = null;
     for (const rec of body) {
       switch (rec.op) {
         case "setPipeline": {
@@ -1391,10 +1420,24 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         }
         case "setBindGroup": explicit.set(rec.group, rec.id); break;
         case "setBindList": list = rec; break;
-        case "setUniforms":
+        case "setUniforms": {
           if (!rp) throw new Error("set_uniforms before set_pipeline");
-          uniformSlot = allocRenderUniform(dev, rp, rec.bytes);
+          const size = rp.uniformSize | 0;
+          // The one-draw `GpuRenderPass` helpers record `set_uniforms` unconditionally, so an
+          // empty blob against a shader that takes none is ordinary — but packed bytes with
+          // nowhere to land mean the caller and the shader disagree.
+          if (size === 0) {
+            if (toU8(rec.bytes).byteLength > 0) {
+              throw new Error(
+                `packed uniforms but pipeline ${pipelineId} declares no uniform block`,
+              );
+            }
+            uniformOffset = null;
+          } else {
+            uniformOffset = pushUniforms(dev, toU8(rec.bytes), size);
+          }
           break;
+        }
         case "setVertexBuffer": {
           const b = buffers.get(rec.buffer);
           if (!b) throw new Error(`unknown vertex GpuBuffer ${rec.buffer}`);
@@ -1424,7 +1467,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         case "drawIndirect":
         case "drawIndexedIndirect": {
           if (!rp) throw new Error("draw before set_pipeline");
-          const bgs = await buildRenderBindGroups(dev, rp, pipelineId, explicit, list, uniformSlot);
+          const bgs = await buildRenderBindGroups(dev, rp, pipelineId, explicit, list, uniformOffset);
           if (bgs.length) steps.push({ op: "bindGroups", bgs });
           if (rec.op === "drawIndirect" || rec.op === "drawIndexedIndirect") {
             const b = buffers.get(rec.buffer);
@@ -1474,13 +1517,30 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     return touched;
   }
 
+  /// Total ring space this frame's records will ask for. `setPipeline` is tracked because the
+  /// block size is the pipeline's; a `setUniforms` naming an unknown one is left for the replay to
+  /// reject.
+  function uniformBytesNeeded(records, dev) {
+    let total = 0;
+    let rp = null;
+    for (const rec of records) {
+      if (rec.op === "setPipeline") rp = renderPipelines.get(rec.id);
+      else if (rec.op === "setUniforms" && rp && (rp.uniformSize | 0) > 0) {
+        total += uniformStride(rp.uniformSize | 0, dev);
+      }
+    }
+    return total;
+  }
+
   async function submitStream(stream) {
     const bytes = toU8(stream);
     if (bytes.byteLength === 0) return 0;
     const records = decodeStream(bytes);
     const dev = await ensureDevice();
-    // Uniform pool slots are handed out per submit, so every draw in this frame gets its own.
-    for (const rp of renderPipelines.values()) rp.uniformCursor = 0;
+    // Every draw gets its own slice of the ring, so the frame's whole requirement is reserved
+    // before the first bind group pins the buffer. A reservation that outgrows the ring replaces
+    // it, stranding every cached group on the buffer it was built against.
+    if (beginUniformFrame(dev, uniformBytesNeeded(records, dev))) renderBgCache.clear();
 
     const encoder = dev.createCommandEncoder();
     const touched = [];
@@ -2282,10 +2342,22 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const format = navigator.gpu.getPreferredCanvasFormat();
         const allBinds = [...(vsMeta.bindings || []), ...(fsMeta.bindings || [])];
         const groups = planGroups(allBinds);
+        // Both stages fold their uniform parameters into one shared block, so a stage declaring
+        // none reports 0 and the other stage's size is the pipeline's.
+        const vsUniform = vsMeta.uniform_size | 0;
+        const fsUniform = fsMeta.uniform_size | 0;
+        if (vsUniform !== 0 && fsUniform !== 0 && vsUniform !== fsUniform) {
+          throw new Error(
+            `@vertex '${vs}' and @fragment '${fs}' declare different uniform blocks ` +
+            `(${vsUniform} vs ${fsUniform} bytes); the stages of one pipeline share a single block`,
+          );
+        }
+        const uniformSize = Math.max(vsUniform, fsUniform);
         const layouts = createGroupLayouts(
           dev,
           groups,
           GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          uniformSize,
         );
         const layout = layouts.length
           ? dev.createPipelineLayout({ bindGroupLayouts: layouts })
@@ -2356,7 +2428,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const pipeline = await dev.createRenderPipelineAsync(desc);
         const id = nextId++;
         renderPipelines.set(id, {
-          pipeline, vsMeta, fsMeta, layouts, groups,
+          pipeline, vsMeta, fsMeta, layouts, groups, uniformSize,
           depthEnabled: !!depthEnabled,
           sampleCount: Math.max(1, sampleCount | 0),
         });
@@ -2464,19 +2536,25 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         passes.delete(passId);
         if (ops.length === 0) return 0;
         const dev = await ensureDevice();
-        resetComputeUniformCursors();
+        // The whole batch shares one ring, so its total is reserved before any block is written.
+        let needed = 0;
+        for (const op of ops) {
+          const pipe = await getPipeline(dev, op.kernel);
+          const size = pipe.meta.uniform_size | 0;
+          if (size > 0) needed += uniformStride(size, dev);
+        }
+        beginUniformFrame(dev, needed);
         const encoder = dev.createCommandEncoder();
         for (const op of ops) {
           const pipe = await getPipeline(dev, op.kernel);
           if (op.kind === "dispatch") {
             const bg = await buildBindGroup(
-              dev, pipe, op.bufferIds, op.textureIds, op.samplerIds,
-              op.ex, op.ey, op.ez, op.uniforms,
+              dev, pipe, op.bufferIds, op.textureIds, op.samplerIds, op.uniforms,
             );
             encodeDispatch(encoder, pipe, bg, op.ex, op.ey, op.ez);
           } else {
             const bg = await buildBindGroup(
-              dev, pipe, op.bufferIds, op.textureIds, op.samplerIds, 1, 1, 1, [],
+              dev, pipe, op.bufferIds, op.textureIds, op.samplerIds, [],
             );
             await encodeDispatchIndirect(
               dev, encoder, pipe, bg, op.indirectId, op.indirectOffset,

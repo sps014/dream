@@ -33,8 +33,8 @@ pub(super) fn emit_vertex(
     let mut bindings = Vec::new();
     let mut alloc = BindingAlloc::default();
     let mut header = String::new();
-    let mut uniform_fields = String::new();
-    let mut has_uniform = false;
+    let mut uniforms: Vec<(String, String)> = Vec::new();
+    let mut uniform_size = 0u32;
     let mut vertex_param: Option<(String, String)> = None; // (param_name, struct_name)
 
     let mut param_iter = func.parameters.iter();
@@ -75,8 +75,7 @@ pub(super) fn emit_vertex(
                 &mut header,
                 &mut bindings,
                 &mut alloc,
-                &mut uniform_fields,
-                &mut has_uniform,
+                &mut uniforms,
             ) {
                 diagnostics.report_error(e, Some(first.name.position));
             }
@@ -90,21 +89,17 @@ pub(super) fn emit_vertex(
             &mut header,
             &mut bindings,
             &mut alloc,
-            &mut uniform_fields,
-            &mut has_uniform,
+            &mut uniforms,
         ) {
             diagnostics.report_error(e, Some(param.name.position));
         }
     }
 
-    if has_uniform {
-        finalize_uniforms(
-            &entry,
-            &mut alloc,
-            &uniform_fields,
-            &mut header,
-            &mut bindings,
-        );
+    if !uniforms.is_empty() {
+        match finalize_uniforms(&entry, &mut alloc, &uniforms, &mut header, &mut bindings) {
+            Ok(size) => uniform_size = size,
+            Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+        }
     }
 
     if let Some(Type::Struct(tok, None)) = &func.return_type {
@@ -205,6 +200,7 @@ pub(super) fn emit_vertex(
         vertex_stride,
         interface_ty,
         color_targets: 0,
+        uniform_size,
         wgsl,
     }
 }

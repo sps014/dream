@@ -16,6 +16,7 @@ mod stmt;
 mod texture_ty;
 mod ty;
 mod types;
+mod uniform_layout;
 mod validate;
 mod vertex;
 

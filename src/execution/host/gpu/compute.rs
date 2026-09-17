@@ -89,9 +89,9 @@ fn run(
     if !st.ready {
         return Err("GPU not initialized".into());
     }
-    reset_uniform_cursors(&mut st);
     let device = st.device.as_ref().unwrap().clone();
     let queue = st.queue.as_ref().unwrap().clone();
+    begin_uniform_frame(&mut st, &device, [kernel.to_string()]);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("dream-dispatch"),
     });
@@ -120,40 +120,30 @@ fn run(
     Ok(())
 }
 
-fn reset_uniform_cursors(st: &mut super::state::GpuState) {
-    for pipe in st.compute_pipes.values_mut() {
-        pipe.uniform_cursor = 0;
-    }
-}
-
 fn clear_compute_bg_caches(st: &mut super::state::GpuState) {
     for pipe in st.compute_pipes.values_mut() {
         pipe.bg_cache.clear();
     }
 }
 
-fn alloc_uniform_slot(
+/// Reserves ring space for every dispatch about to be encoded.
+///
+/// The whole batch is reserved before the first bind group is built: a group holds the buffer it
+/// was built from, so a ring that grew partway through would strand the groups already made.
+fn begin_uniform_frame(
     st: &mut super::state::GpuState,
     device: &wgpu::Device,
-    kernel: &str,
-) -> Result<(u32, wgpu::Buffer), String> {
-    let pipe = st
-        .compute_pipes
-        .get_mut(kernel)
-        .ok_or_else(|| format!("missing compute pipe '{kernel}'"))?;
-    let slot = pipe.uniform_cursor;
-    if slot >= pipe.uniform_pool.len() {
-        pipe.uniform_pool
-            .push(device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("dream-compute-uniform"),
-                size: 256,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
+    kernels: impl IntoIterator<Item = String>,
+) {
+    let bytes: u64 = kernels
+        .into_iter()
+        .filter_map(|k| st.compute_pipes.get(&k).map(|p| p.uniform_size))
+        .filter(|size| *size > 0)
+        .map(|size| super::uniform_ring::UniformRing::stride_for(size, device))
+        .sum();
+    if st.uniform_ring.begin_frame(device, bytes) {
+        clear_compute_bg_caches(st);
     }
-    let buf = pipe.uniform_pool[slot].clone();
-    pipe.uniform_cursor = slot + 1;
-    Ok((slot as u32, buf))
 }
 
 fn encode_op(
@@ -229,8 +219,7 @@ fn encode_op(
     let mut samplers: Vec<wgpu::Sampler> = Vec::new();
     let mut views: Vec<wgpu::TextureView> = Vec::new();
     let mut entry_plan: Vec<(u32, Vec<PlannedEntry>)> = Vec::new();
-    let mut uniform_slot: u32 = 0;
-    let mut uniform_buf: Option<wgpu::Buffer> = None;
+    let mut uniform_offset: Option<u32> = None;
 
     storage_idx = 0;
     let mut tex_idx = 0usize;
@@ -241,18 +230,12 @@ fn encode_op(
         for bind in &plan.bindings {
             match bind.kind.as_str() {
                 "uniform" => {
-                    let mut bytes = [0u8; 256];
-                    bytes[0..4].copy_from_slice(&ex.to_le_bytes());
-                    bytes[4..8].copy_from_slice(&ey.to_le_bytes());
-                    bytes[8..12].copy_from_slice(&ez.to_le_bytes());
-                    let n = uniforms.len().min(244);
-                    if n > 0 {
-                        bytes[12..12 + n].copy_from_slice(&uniforms[..n]);
-                    }
-                    let (slot, buf) = alloc_uniform_slot(st, device, kernel)?;
-                    queue.write_buffer(&buf, 0, &bytes);
-                    uniform_slot = slot;
-                    uniform_buf = Some(buf);
+                    let size = st
+                        .compute_pipes
+                        .get(kernel)
+                        .map(|p| p.uniform_size)
+                        .unwrap_or(0);
+                    uniform_offset = Some(st.uniform_ring.push(queue, uniforms, size)?);
                     entries.push((bind.binding, 0, 0));
                 }
                 "storage" => {
@@ -293,7 +276,6 @@ fn encode_op(
         buffer_ids: buffer_ids.to_vec(),
         texture_ids: texture_ids.to_vec(),
         sampler_ids: sampler_ids.to_vec(),
-        uniform_slot,
     };
 
     if !st
@@ -309,16 +291,13 @@ fn encode_op(
         let needs_ub = entry_plan
             .iter()
             .any(|(_, entries)| entries.iter().any(|(_, _, k)| *k == 0));
-        let ub_owned = if needs_ub {
-            Some(
-                uniform_buf
-                    .clone()
-                    .or_else(|| pipe.uniform_pool.first().cloned())
-                    .ok_or_else(|| format!("missing uniform buffer for '{kernel}'"))?,
-            )
-        } else {
-            None
-        };
+        let uniform_size = pipe.uniform_size;
+        // The window starts at 0 and the dispatch's dynamic offset moves it, so one bind group
+        // serves every dispatch that shares these resources.
+        let ring = st.uniform_ring.buffer();
+        if needs_ub && ring.is_none() {
+            return Err(format!("missing uniform buffer for '{kernel}'"));
+        }
         let mut bgs = Vec::new();
         for (group, entries) in &entry_plan {
             let bgl = pipe.bgls.get(*group as usize).ok_or_else(|| {
@@ -326,14 +305,20 @@ fn encode_op(
             })?;
             let bg_entries: Vec<wgpu::BindGroupEntry<'_>> = entries
                 .iter()
-                .map(|(binding, idx, kind)| wgpu::BindGroupEntry {
-                    binding: *binding,
-                    resource: match kind {
-                        0 => ub_owned.as_ref().unwrap().as_entire_binding(),
-                        1 => storage_bufs[*idx].as_entire_binding(),
-                        2 => wgpu::BindingResource::Sampler(&samplers[*idx]),
-                        _ => wgpu::BindingResource::TextureView(&views[*idx]),
-                    },
+                .filter_map(|(binding, idx, kind)| {
+                    Some(wgpu::BindGroupEntry {
+                        binding: *binding,
+                        resource: match kind {
+                            0 => wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: ring?,
+                                offset: 0,
+                                size: std::num::NonZeroU64::new(u64::from(uniform_size)),
+                            }),
+                            1 => storage_bufs[*idx].as_entire_binding(),
+                            2 => wgpu::BindingResource::Sampler(&samplers[*idx]),
+                            _ => wgpu::BindingResource::TextureView(&views[*idx]),
+                        },
+                    })
                 })
                 .collect();
             bgs.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -361,8 +346,13 @@ fn encode_op(
                 .get(&bg_key)
                 .ok_or_else(|| "missing cached bind group".to_string())?;
             pass.set_pipeline(&pipe.pipeline);
-            for (i, bg) in bgs.iter().enumerate() {
-                pass.set_bind_group(i as u32, bg, &[]);
+            for ((i, bg), (_, entries)) in bgs.iter().enumerate().zip(&entry_plan) {
+                let offsets: Vec<u32> = entries
+                    .iter()
+                    .filter(|(_, _, kind)| *kind == 0)
+                    .filter_map(|_| uniform_offset)
+                    .collect();
+                pass.set_bind_group(i as u32, bg, &offsets);
             }
             if let Some((iid, off)) = indirect {
                 let indirect_buf = st
@@ -445,6 +435,7 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         &groups,
         wgpu::ShaderStages::COMPUTE,
         "dream-compute",
+        meta.uniform_size,
     );
     let bgl_refs: Vec<&wgpu::BindGroupLayout> = bgls.iter().collect();
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -461,19 +452,12 @@ fn ensure_pipeline(kernel: &str) -> Result<(), String> {
         compilation_options: Default::default(),
         cache: None,
     });
-    let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("dream-compute-uniform"),
-        size: 256,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
     st.compute_pipes.insert(
         kernel.to_string(),
         ComputePipe {
             pipeline,
             bgls,
-            uniform_pool: vec![uniform_buf],
-            uniform_cursor: 0,
+            uniform_size: meta.uniform_size,
             bg_cache: IndexMap::new(),
         },
     );
@@ -695,6 +679,7 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
                     ..Default::default()
                 })
                 .collect(),
+            uniform_size: 0,
             source,
         });
         st.abi = Some(abi);
@@ -738,7 +723,15 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         }
         let device = st.device.as_ref().unwrap().clone();
         let queue = st.queue.as_ref().unwrap().clone();
-        reset_uniform_cursors(&mut st);
+        let batch: Vec<String> = ops
+            .iter()
+            .map(|op| match op {
+                PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => {
+                    kernel.clone()
+                }
+            })
+            .collect();
+        begin_uniform_frame(&mut st, &device, batch);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("dream-pass"),
         });

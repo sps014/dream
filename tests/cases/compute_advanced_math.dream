@@ -49,7 +49,7 @@ async fun main(): void {
         Buffer.alloc<int>(0),
         Buffer.alloc<int>(0),
         2, 1, 1,
-        Buffer.alloc<byte>(0)
+        Uniforms.pack_i32([2])
     );
     if r.is_err() {
         System.println("dispatch failed");

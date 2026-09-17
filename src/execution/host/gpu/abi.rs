@@ -20,6 +20,9 @@ pub struct GpuKernelMeta {
     pub workgroup: [u32; 3],
     #[serde(default)]
     pub bindings: Vec<GpuBindingMeta>,
+    /// Byte size of the shared uniform block, `0` when the kernel declares none.
+    #[serde(default)]
+    pub uniform_size: u32,
     #[serde(default)]
     pub source: String,
 }
@@ -41,6 +44,9 @@ pub struct GpuShaderMeta {
     pub vertex_stride: u32,
     #[serde(default = "default_color_targets")]
     pub color_targets: u32,
+    /// Byte size of the shared uniform block, `0` when the stage declares none.
+    #[serde(default)]
+    pub uniform_size: u32,
     #[serde(default)]
     pub source: String,
 }

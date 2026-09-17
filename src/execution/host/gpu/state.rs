@@ -100,17 +100,14 @@ pub struct ComputeBgKey {
     pub buffer_ids: Vec<i32>,
     pub texture_ids: Vec<i32>,
     pub sampler_ids: Vec<i32>,
-    pub uniform_slot: u32,
 }
 
 pub struct ComputePipe {
     pub pipeline: wgpu::ComputePipeline,
     /// Dense per-`@group` layouts; index `i` is `@group(i)`.
     pub bgls: Vec<wgpu::BindGroupLayout>,
-    /// Pool of 256-byte uniform buffers so batched dispatches don't clobber each other.
-    pub uniform_pool: Vec<wgpu::Buffer>,
-    /// Next pool slot to use; reset at the start of each submit/dispatch.
-    pub uniform_cursor: usize,
+    /// Byte size of the kernel's uniform block, `0` when it declares none.
+    pub uniform_size: u32,
     /// One bind group per declared `@group`, in ascending group order.
     pub bg_cache: IndexMap<ComputeBgKey, Vec<wgpu::BindGroup>>,
 }
@@ -143,10 +140,8 @@ pub struct RenderPipe {
     pub bgls: Vec<wgpu::BindGroupLayout>,
     /// Bindings declared by VS/FS, grouped by `@group` and deduped by `(group, binding)`.
     pub groups: Vec<super::binds::BindGroupPlan>,
-    /// Pool of 256-byte uniform buffers so batched draws in one submit don't clobber each other.
-    pub uniform_pool: Vec<wgpu::Buffer>,
-    /// Next pool slot; reset at the start of each submit.
-    pub uniform_cursor: usize,
+    /// Byte size of the uniform block VS/FS share, `0` when neither declares one.
+    pub uniform_size: u32,
     pub depth_enabled: bool,
     pub sample_count: u32,
 }
@@ -163,15 +158,14 @@ pub struct BindGroupEntry {
     pub sampler_ids: Vec<i32>,
 }
 
-/// Cache key for a realized render bind group. Groups with no uniform binding get
-/// `uniform_slot: None`, so their entry is stable across frames — that stability is the whole
-/// point of building a `GpuBindGroup` once.
+/// Cache key for a realized render bind group. The uniform block is reached through a dynamic
+/// offset rather than baked into the group, so an entry stays valid for every draw that uses the
+/// same resources — which is the whole point of building a `GpuBindGroup` once.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct RenderBgKey {
     pub pipeline_id: i32,
     pub group: u32,
     pub bind_group_id: i32,
-    pub uniform_slot: Option<u32>,
 }
 
 pub struct SurfaceEntry {
@@ -229,6 +223,8 @@ pub struct GpuState {
     pub surfaces: IndexMap<i32, SurfaceEntry>,
     pub render_format: wgpu::TextureFormat,
     pub blit: Option<BlitPipe>,
+    /// Per-draw uniform blocks for the frame being recorded, bound at dynamic offsets.
+    pub uniform_ring: super::uniform_ring::UniformRing,
     /// Last wgpu uncaptured error; consumed by host calls after submit.
     pub last_error: Option<String>,
 }
@@ -257,6 +253,7 @@ impl Default for GpuState {
             surfaces: IndexMap::new(),
             render_format: wgpu::TextureFormat::Bgra8Unorm,
             blit: None,
+            uniform_ring: super::uniform_ring::UniformRing::default(),
             last_error: None,
         }
     }

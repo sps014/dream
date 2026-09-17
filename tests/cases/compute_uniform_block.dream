@@ -1,0 +1,54 @@
+import system;
+import system.gpu;
+
+// Uniform parameters land at the offsets WGSL's uniform layout rules put them at, and the block
+// is not capped at any fixed size: five mat4s plus a vec4 is 336 bytes, and every field has to be
+// readable, not just the ones that fit in a small fixed blob.
+@compute
+fun wide(
+    out: GpuBuffer<float>,
+    m0: GpuMat4,
+    m1: GpuMat4,
+    m2: GpuMat4,
+    m3: GpuMat4,
+    m4: GpuMat4,
+    tint: GpuVec4
+): void {
+    let i = global_id.x;
+    out[i] = m0.c0.x + m1.c1.y + m2.c2.z + m3.c3.w + m4.c0.x + tint.w;
+}
+
+// A scalar uniform sits at offset 0, which a dispatch-dimension header would have displaced.
+@compute
+fun scale(src: GpuBuffer<float>, dst: GpuBuffer<float>, k: float): void {
+    let i = global_id.x;
+    dst[i] = src[i] * k;
+}
+
+async fun main(): Result<bool, GpuError> {
+    (await Gpu.try_init())?;
+
+    let src = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
+    let dst = GpuBuffer<float>.alloc(4);
+    let scaled = [src, dst];
+    (await Compute.run_3d("scale", scaled, 4, 1, 1, Uniforms.pack_f32([10.0])))?;
+    let s = await dst.read();
+    System.println(s[0]);
+    System.println(s[3]);
+
+    let wide_out = GpuBuffer<float>.alloc(1);
+    let fields = Buffer.alloc<float>(84);
+    for (let i = 0; i < 84; i = i + 1) { fields[i] = 0.0; }
+    fields[0] = 1.0;   // m0.c0.x
+    fields[21] = 2.0;  // m1.c1.y
+    fields[42] = 4.0;  // m2.c2.z
+    fields[63] = 8.0;  // m3.c3.w
+    fields[64] = 16.0; // m4.c0.x
+    fields[83] = 32.0; // tint.w
+    let wide_bufs = [wide_out];
+    (await Compute.run_3d("wide", wide_bufs, 1, 1, 1, Uniforms.pack_f32(fields)))?;
+    let w = await wide_out.read();
+    System.println(w[0]);
+
+    return Result.Ok(true);
+}

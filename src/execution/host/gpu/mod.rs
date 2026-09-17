@@ -16,6 +16,7 @@ pub(crate) mod render;
 mod state;
 pub(crate) mod surface;
 pub(crate) mod textures;
+pub(crate) mod uniform_ring;
 
 pub use icon::set_packaged_app_icon;
 

@@ -79,8 +79,7 @@ pub(super) fn emit_kernel(
     let mut bindings = Vec::new();
     let mut alloc = BindingAlloc::default();
     let mut header = String::new();
-    let mut uniform_fields = String::new();
-    let mut has_uniform = false;
+    let mut uniforms: Vec<(String, String)> = Vec::new();
 
     let value_structs = collect_value_struct_names(func, program);
     for sname in &value_structs {
@@ -161,12 +160,11 @@ pub(super) fn emit_kernel(
                 bindings.push(b);
             }
             ParamClass::Uniform { ty } => {
-                has_uniform = true;
                 if let Err(e) = alloc.note_uniform(param) {
                     diagnostics.report_error(e, Some(param.name.position));
                     continue;
                 }
-                uniform_fields.push_str(&format!("  {}: {ty},\n", escape_wgsl_ident(&pname)));
+                uniforms.push((pname.clone(), ty.clone()));
                 // group/binding are back-patched by `finalize_uniforms`
                 bindings.push(GpuBinding::buffer(
                     pname, 0, 0, "uniform", ty, false, false,
@@ -175,14 +173,12 @@ pub(super) fn emit_kernel(
         }
     }
 
-    if has_uniform {
-        finalize_uniforms(
-            &entry,
-            &mut alloc,
-            &uniform_fields,
-            &mut header,
-            &mut bindings,
-        );
+    let mut uniform_size = 0u32;
+    if !uniforms.is_empty() {
+        match finalize_uniforms(&entry, &mut alloc, &uniforms, &mut header, &mut bindings) {
+            Ok(size) => uniform_size = size,
+            Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+        }
     }
 
     let mut workgroup_names = Vec::new();
@@ -254,6 +250,7 @@ pub(super) fn emit_kernel(
         entry,
         workgroup,
         bindings,
+        uniform_size,
         wgsl,
     }
 }

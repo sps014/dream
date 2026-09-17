@@ -13,38 +13,33 @@ enum Slot {
     View(usize),
 }
 
-/// Allocates a uniform pool slot for `pipeline_id` and writes `uniforms` into it.
+/// Writes one draw's uniform block into the frame's ring and returns its dynamic offset.
 ///
-/// Each `SetUniforms` record takes a fresh slot so several draws in one submit can carry different
-/// uniform data — with a single buffer per pipeline the last write would win for every draw.
-pub fn alloc_uniform_slot(
+/// `None` when the pipeline declares no uniform block. The one-draw helpers in `GpuRenderPass`
+/// record `set_uniforms` unconditionally, so an empty blob against a shader that takes no uniforms
+/// is ordinary rather than a mistake — but a caller that packed real bytes meant them to land
+/// somewhere.
+pub fn push_uniforms(
     st: &mut GpuState,
-    device: &wgpu::Device,
     queue: &wgpu::Queue,
     pipeline_id: i32,
     uniforms: &[u8],
-) -> Result<u32, String> {
-    let rp = st
+) -> Result<Option<u32>, String> {
+    let size = st
         .render_pipes
-        .get_mut(&pipeline_id)
+        .get(&pipeline_id)
+        .map(|rp| rp.uniform_size)
         .ok_or_else(|| format!("unknown pipeline {pipeline_id}"))?;
-    let slot = rp.uniform_cursor;
-    if slot >= rp.uniform_pool.len() {
-        rp.uniform_pool.push(device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("dream-draw-uniform"),
-            size: 256,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        }));
+    if size == 0 {
+        if !uniforms.is_empty() {
+            return Err(format!(
+                "packed {} bytes of uniforms but pipeline {pipeline_id} declares no uniform block",
+                uniforms.len()
+            ));
+        }
+        return Ok(None);
     }
-    rp.uniform_cursor += 1;
-    let mut bytes = [0u8; 256];
-    let n = uniforms.len().min(256);
-    if n > 0 {
-        bytes[..n].copy_from_slice(&uniforms[..n]);
-    }
-    queue.write_buffer(&rp.uniform_pool[slot], 0, &bytes);
-    Ok(slot as u32)
+    st.uniform_ring.push(queue, uniforms, size).map(Some)
 }
 
 /// Resource ids supplied inline by a `set_bind_list`, spread positionally across every group the
@@ -102,6 +97,9 @@ fn arity(bindings: &[GpuBindingMeta]) -> (usize, usize, usize) {
 ///
 /// `explicit` maps a group index to a `GpuBindGroup` id. Groups without one draw from `list`, in
 /// group order, consuming ids positionally per kind — the same order `GpuBindList` appends them.
+///
+/// Each group comes back with the dynamic offsets `set_bind_group` needs: one entry for its
+/// uniform binding if it has one, empty otherwise.
 pub fn resolve(
     st: &mut GpuState,
     device: &wgpu::Device,
@@ -109,8 +107,8 @@ pub fn resolve(
     pipeline_id: i32,
     explicit: &IndexMap<u32, i32>,
     list: Option<&BindList>,
-    uniform_slot: Option<u32>,
-) -> Result<Vec<(u32, wgpu::BindGroup)>, String> {
+    uniform_offset: Option<u32>,
+) -> Result<Vec<(u32, wgpu::BindGroup, Vec<u32>)>, String> {
     let groups: Vec<(u32, Vec<GpuBindingMeta>)> = st
         .render_pipes
         .get(&pipeline_id)
@@ -132,6 +130,14 @@ pub fn resolve(
     for (group, bindings) in &groups {
         let bind_group_id = explicit.get(group).copied().unwrap_or(-1);
         let has_uniform = bindings.iter().any(|b| b.kind == "uniform");
+        let offsets = if has_uniform {
+            let offset = uniform_offset.ok_or_else(|| {
+                format!("@group({group}) needs a uniform block; call set_uniforms before the draw")
+            })?;
+            vec![offset]
+        } else {
+            Vec::new()
+        };
         let ids = if bind_group_id >= 0 {
             // A pinned handle brings its own resources; it must not consume from the list, or the
             // groups after it would shift.
@@ -143,7 +149,6 @@ pub fn resolve(
             pipeline_id,
             group: *group,
             bind_group_id,
-            uniform_slot: if has_uniform { uniform_slot } else { None },
         };
         // Only explicit `GpuBindGroup` handles are cached: their resource set is pinned for the
         // handle's lifetime, whereas a bind list's resources are whatever the caller passed this
@@ -151,7 +156,7 @@ pub fn resolve(
         let cacheable = bind_group_id >= 0;
         if cacheable {
             if let Some(bg) = st.render_bg_cache.get(&key) {
-                out.push((*group, bg.clone()));
+                out.push((*group, bg.clone(), offsets));
                 continue;
             }
         }
@@ -165,13 +170,12 @@ pub fn resolve(
                 bindings,
                 bind_group_id,
                 ids,
-                uniform_slot,
             },
         )?;
         if cacheable {
             st.render_bg_cache.insert(key, bg.clone());
         }
-        out.push((*group, bg));
+        out.push((*group, bg, offsets));
     }
     Ok(out)
 }
@@ -185,7 +189,6 @@ struct GroupRequest<'a> {
     /// `Some` when the ids were sliced out of a bind list, `None` when they come from a pinned
     /// `GpuBindGroup` handle.
     ids: Option<(Vec<i32>, Vec<i32>, Vec<i32>)>,
-    uniform_slot: Option<u32>,
 }
 
 fn build(
@@ -200,7 +203,6 @@ fn build(
         bindings,
         bind_group_id,
         ids,
-        uniform_slot,
     } = req;
     let (buffer_ids, texture_ids, sampler_ids) = match ids {
         Some(triple) => triple,
@@ -233,15 +235,7 @@ fn build(
 
     for b in bindings {
         match b.kind.as_str() {
-            "uniform" => {
-                if uniform_slot.is_none() {
-                    return Err(format!(
-                        "@group({group}) @binding({}) needs a uniform block; call set_uniforms before the draw",
-                        b.binding
-                    ));
-                }
-                slots.push((b.binding, Slot::Uniform));
-            }
+            "uniform" => slots.push((b.binding, Slot::Uniform)),
             "storage" => {
                 let id = *buffer_ids.get(buf_idx).unwrap_or(&-1);
                 buf_idx += 1;
@@ -300,17 +294,31 @@ fn build(
         .bgls
         .get(group as usize)
         .ok_or_else(|| format!("pipeline {pipeline_id} has no layout for @group({group})"))?;
-    let ub = uniform_slot.and_then(|s| rp.uniform_pool.get(s as usize));
+    let uniform_size = rp.uniform_size;
+    // The window starts at 0 and the draw's dynamic offset moves it, so one bind group serves
+    // every draw regardless of which slice of the ring that draw wrote.
+    let ring = st.uniform_ring.buffer();
+    if ring.is_none() && slots.iter().any(|(_, s)| matches!(s, Slot::Uniform)) {
+        return Err(format!(
+            "@group({group}) needs a uniform block; call set_uniforms before the draw"
+        ));
+    }
     let entries: Vec<wgpu::BindGroupEntry<'_>> = slots
         .iter()
-        .map(|(binding, slot)| wgpu::BindGroupEntry {
+        .filter_map(|(binding, slot)| {
+            Some(wgpu::BindGroupEntry {
             binding: *binding,
             resource: match slot {
-                Slot::Uniform => ub.unwrap().as_entire_binding(),
+                Slot::Uniform => wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: ring?,
+                    offset: 0,
+                    size: std::num::NonZeroU64::new(u64::from(uniform_size)),
+                }),
                 Slot::Storage(i) => storage_bufs[*i].as_entire_binding(),
                 Slot::Sampler(i) => wgpu::BindingResource::Sampler(&samplers[*i]),
                 Slot::View(i) => wgpu::BindingResource::TextureView(&views[*i]),
             },
+            })
         })
         .collect();
     Ok(device.create_bind_group(&wgpu::BindGroupDescriptor {

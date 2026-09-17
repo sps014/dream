@@ -3,16 +3,21 @@ module system.gpu;
 // High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
 public static class Compute {
     // Dispatches `kernel` over a 1D grid of size `n` (float storage buffers only).
+    //
+    // The extent is packed as the uniform blob, so a kernel whose only uniform is a bound
+    // (`fun k(..., n: int)`) receives the grid size without packing anything. Kernels needing
+    // more uniforms than the extents should use `run_3d`.
     public static async fun run_1d(
         kernel: string,
         buffers: GpuBuffer<float>[],
         n: int,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0), token);
+        return await Compute.run_3d(kernel, buffers, n, 1, 1, Uniforms.pack_i32([n]), token);
     }
 
     // Dispatches `kernel` over a 2D grid of size `w`×`h` (float storage buffers only).
+    // Like `run_1d`, the extents are packed as the uniform blob.
     public static async fun run_2d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -20,7 +25,7 @@ public static class Compute {
         h: int,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, w, h, 1, Buffer.alloc<byte>(0), token);
+        return await Compute.run_3d(kernel, buffers, w, h, 1, Uniforms.pack_i32([w, h]), token);
     }
 
     // Like `run_2d`, with a little-endian uniform blob.

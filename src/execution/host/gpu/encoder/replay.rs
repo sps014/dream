@@ -13,7 +13,8 @@ use indexmap::IndexMap;
 
 enum Step {
     Pipeline(wgpu::RenderPipeline),
-    BindGroups(Vec<(u32, wgpu::BindGroup)>),
+    /// Group index, group, and the dynamic offsets its uniform binding needs.
+    BindGroups(Vec<(u32, wgpu::BindGroup, Vec<u32>)>),
     VertexBuffer {
         slot: u32,
         buffer: wgpu::Buffer,
@@ -92,7 +93,7 @@ struct Bound {
     pipeline: i32,
     explicit: IndexMap<u32, i32>,
     list: Option<binds::BindList>,
-    uniform_slot: Option<u32>,
+    uniform_offset: Option<u32>,
 }
 
 fn plan_pass(
@@ -163,8 +164,7 @@ fn plan_pass(
                 if bound.pipeline < 0 {
                     return Err("set_uniforms before set_pipeline".into());
                 }
-                bound.uniform_slot =
-                    Some(binds::alloc_uniform_slot(st, device, queue, bound.pipeline, bytes)?);
+                bound.uniform_offset = binds::push_uniforms(st, queue, bound.pipeline, bytes)?;
             }
             Record::SetVertexBuffer { slot, buffer } => steps.push(Step::VertexBuffer {
                 slot: *slot,
@@ -209,7 +209,7 @@ fn plan_pass(
                     bound.pipeline,
                     &bound.explicit,
                     bound.list.as_ref(),
-                    bound.uniform_slot,
+                    bound.uniform_offset,
                 )?;
                 if !groups.is_empty() {
                     steps.push(Step::BindGroups(groups));
@@ -300,8 +300,8 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
         match step {
             Step::Pipeline(p) => rp.set_pipeline(p),
             Step::BindGroups(groups) => {
-                for (group, bg) in groups {
-                    rp.set_bind_group(*group, bg, &[]);
+                for (group, bg, offsets) in groups {
+                    rp.set_bind_group(*group, bg, offsets);
                 }
             }
             Step::VertexBuffer { slot, buffer } => rp.set_vertex_buffer(*slot, buffer.slice(..)),
@@ -330,6 +330,33 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
             }
         }
     }
+}
+
+/// Total uniform ring space this frame's records will ask for.
+///
+/// The ring cannot grow once planning starts — a bind group holds the buffer it was built from —
+/// so the requirement is totalled first. `set_pipeline` is tracked because the block size is the
+/// pipeline's, and a `set_uniforms` naming an unknown pipeline is left for the planner to reject.
+fn uniform_bytes_needed(st: &GpuState, device: &wgpu::Device, records: &[Record]) -> u64 {
+    let mut pipeline = -1;
+    let mut total = 0u64;
+    for rec in records {
+        match rec {
+            Record::SetPipeline(id) => pipeline = *id,
+            Record::SetUniforms(_) => {
+                if let Some(rp) = st.render_pipes.get(&pipeline) {
+                    if rp.uniform_size > 0 {
+                        total += super::super::uniform_ring::UniformRing::stride_for(
+                            rp.uniform_size,
+                            device,
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    total
 }
 
 /// Splits the flat record list into passes, planning each one as it goes.
@@ -377,9 +404,12 @@ pub fn submit(stream: &[u8]) -> Result<(), String> {
     let device = st.device.as_ref().unwrap().clone();
     let queue = st.queue.as_ref().unwrap().clone();
 
-    // Uniform pool slots are handed out per submit, so every draw in this frame gets its own.
-    for pipe in st.render_pipes.values_mut() {
-        pipe.uniform_cursor = 0;
+    // Every draw in this frame gets its own slice of the ring, so the whole frame's requirement is
+    // reserved before the first bind group pins the buffer. A reservation that outgrows the ring
+    // replaces it, stranding every cached group on the buffer it was built against.
+    let needed = uniform_bytes_needed(&st, &device, &records);
+    if st.uniform_ring.begin_frame(&device, needed) {
+        st.render_bg_cache.clear();
     }
 
     let encode = super::super::profile::Span::start();

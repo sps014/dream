@@ -30,8 +30,8 @@ pub(super) fn emit_fragment(
     let mut bindings = Vec::new();
     let mut alloc = BindingAlloc::default();
     let mut header = String::new();
-    let mut uniform_fields = String::new();
-    let mut has_uniform = false;
+    let mut uniforms: Vec<(String, String)> = Vec::new();
+    let mut uniform_size = 0u32;
     let mut vary_param: Option<(String, String)> = None;
     let mut return_ty_wgsl = "@location(0) vec4<f32>".to_string();
     let mut color_targets = 1u32;
@@ -112,8 +112,7 @@ pub(super) fn emit_fragment(
                 &mut header,
                 &mut bindings,
                 &mut alloc,
-                &mut uniform_fields,
-                &mut has_uniform,
+                &mut uniforms,
             ) {
                 diagnostics.report_error(e, Some(first.name.position));
             }
@@ -127,21 +126,17 @@ pub(super) fn emit_fragment(
             &mut header,
             &mut bindings,
             &mut alloc,
-            &mut uniform_fields,
-            &mut has_uniform,
+            &mut uniforms,
         ) {
             diagnostics.report_error(e, Some(param.name.position));
         }
     }
 
-    if has_uniform {
-        finalize_uniforms(
-            &entry,
-            &mut alloc,
-            &uniform_fields,
-            &mut header,
-            &mut bindings,
-        );
+    if !uniforms.is_empty() {
+        match finalize_uniforms(&entry, &mut alloc, &uniforms, &mut header, &mut bindings) {
+            Ok(size) => uniform_size = size,
+            Err(e) => diagnostics.report_error(e, Some(func.name.position)),
+        }
     }
 
     let struct_fields = build_struct_field_tys(program);
@@ -222,6 +217,7 @@ pub(super) fn emit_fragment(
         vertex_stride: 0,
         interface_ty,
         color_targets,
+        uniform_size,
         wgsl,
     }
 }

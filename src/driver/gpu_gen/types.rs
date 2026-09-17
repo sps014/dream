@@ -68,6 +68,9 @@ pub struct GpuKernelInfo {
     pub entry: String,
     pub workgroup: (u32, u32, u32),
     pub bindings: Vec<GpuBinding>,
+    /// Byte size of the shared uniform block, `0` when the kernel declares none. The host binds
+    /// the block as a window of exactly this size into its uniform ring.
+    pub uniform_size: u32,
     pub wgsl: String,
 }
 
@@ -86,6 +89,9 @@ pub struct GpuShaderInfo {
     pub interface_ty: String,
     /// Fragment stage: number of `@location` color targets (1 for bare `GpuVec4` return).
     pub color_targets: u32,
+    /// Byte size of the shared uniform block, `0` when the stage declares none. The host binds
+    /// the block as a window of exactly this size into its uniform ring.
+    pub uniform_size: u32,
     pub wgsl: String,
 }
 

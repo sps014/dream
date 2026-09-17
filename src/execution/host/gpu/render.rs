@@ -127,7 +127,23 @@ fn create_inner(
     all_binds.extend(fs.bindings.iter().cloned());
     let groups = super::binds::plan_groups(&all_binds);
     let visibility = wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT;
-    let bgls = super::binds::create_group_layouts(&device, &groups, visibility, "dream-render");
+    // Both stages fold their uniform parameters into one shared block, so a stage that declares no
+    // uniforms reports 0 and the other stage's size is the pipeline's.
+    let uniform_size = vs.uniform_size.max(fs.uniform_size);
+    if vs.uniform_size != 0 && fs.uniform_size != 0 && vs.uniform_size != fs.uniform_size {
+        return Err(format!(
+            "@vertex '{vs_name}' and @fragment '{fs_name}' declare different uniform blocks \
+             ({} vs {} bytes); the stages of one pipeline share a single block",
+            vs.uniform_size, fs.uniform_size
+        ));
+    }
+    let bgls = super::binds::create_group_layouts(
+        &device,
+        &groups,
+        visibility,
+        "dream-render",
+        uniform_size,
+    );
     let bgl_refs: Vec<&wgpu::BindGroupLayout> = bgls.iter().collect();
     let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("dream-render-pl"),
@@ -195,8 +211,7 @@ fn create_inner(
             build,
             bgls,
             groups,
-            uniform_pool: Vec::new(),
-            uniform_cursor: 0,
+            uniform_size,
             depth_enabled,
             sample_count,
         },

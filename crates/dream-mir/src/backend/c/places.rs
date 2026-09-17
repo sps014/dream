@@ -770,6 +770,11 @@ fn unique_move_src(rv: &crate::Rvalue) -> Option<u32> {
 }
 
 fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {
+    // Fewer than two parts never reaches `dream_concat_n`: one part lowers to the operand itself
+    // and zero to an interned literal, neither of which is a reference this store may adopt.
+    if let crate::Rvalue::Concat(parts) = rv {
+        return parts.len() >= 2;
+    }
     matches!(
         rv,
         crate::Rvalue::New { .. }
@@ -781,6 +786,9 @@ fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {
             | crate::Rvalue::ArrayLit { .. }
             | crate::Rvalue::ArrayNew { .. }
             | crate::Rvalue::ArrayRealloc { .. }
+            // `dream_concat_str_int_str` mallocs its result. The in-place `_into` variants reuse
+            // their destination, but `emit_into` only targets locals, never a slot stored here.
+            | crate::Rvalue::ConcatInt { .. }
             // `dream_from_bytes` hands back a heap box. A local or field destination copies out of
             // it and frees it in `store_from_bytes_value`, but an array element reaches the generic
             // store instead, and the box's type is not reference-counted so no scope exit covers it.

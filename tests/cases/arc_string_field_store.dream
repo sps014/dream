@@ -1,0 +1,61 @@
+// A concat result stored straight into a field is that field's to own: `dream_concat_n` mallocs,
+// so the store must adopt the `+1` instead of retaining and orphaning it (regression: one string
+// leaked per store). Binding the concat to a local first always worked, so both spellings are
+// covered here, as is the fused `"…" + int` shape that lowers to `dream_concat_str_int_str`.
+import system;
+
+class Tagged {
+    public tag: string;
+    public note: string;
+
+    public constructor(a: string, b: string) {
+        this.tag = a + "/" + b;
+        let n = a + "-" + b;
+        this.note = n;
+    }
+
+    // Reassignment has to release the old value while adopting the new one.
+    public fun retag(a: string, b: string): void {
+        this.tag = a + ":" + b;
+    }
+}
+
+class Counted {
+    public label: string;
+
+    public constructor(n: int) {
+        this.label = "n=" + n.to_string();
+    }
+}
+
+fun churn(): int {
+    let t = Tagged("x", "y");
+    t.retag("p", "q");
+    let c = Counted(t.tag.length);
+    return t.tag.length + t.note.length + c.label.length;
+}
+
+fun main(): void {
+    // Warm up so the freelist/heap reach steady state, then capture the baseline.
+    let w = 0;
+    while w < 20 {
+        churn();
+        w = w + 1;
+    }
+    let base_live = Debug.live_objects;
+
+    let i = 0;
+    while i < 100 {
+        churn();
+        i = i + 1;
+    }
+    let end_live = Debug.live_objects;
+
+    System.println("live_delta=" + (end_live - base_live).to_string());
+
+    let t = Tagged("x", "y");
+    System.println("tag=" + t.tag + " note=" + t.note);
+    t.retag("p", "q");
+    System.println("retagged=" + t.tag);
+    System.println("counted=" + Counted(7).label);
+}

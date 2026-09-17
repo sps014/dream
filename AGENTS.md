@@ -11,6 +11,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **Determinism is non-negotiable.** Two compiles of the same source must produce byte-identical `.wat`/`.wasm`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
+- **Probe the golden corpus when implementing or fixing.** After language/runtime/codegen changes, run `./scripts/probe_test.sh` (filter by case stem while iterating; full probe before calling the work done). It rebuilds `dream` then parallel-runs `tests/cases`.
 - **The guest runtime is C only.** wasm32 units live under `runtime/c/wasm32/` + shared `runtime/c/native/` (list in `runtime/modules.rs::WASM32_CORE_C`, compiled by wasi-sdk via `src/driver/c_wasm32.rs`); native helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
 
 ## What Dream is
@@ -46,7 +47,7 @@ Dream/
 │   └── vscode/                     VS Code extension
 ├── tests/                          Golden e2e, MIR pipeline, DAP tests
 ├── docs/                           learn/ + reference/ + cookbook/ + internals/
-├── scripts/dap_probe.py
+├── scripts/dap_probe.py, probe_test.sh   # golden-corpus probe (agents: run on implement/fix)
 ├── mkdocs.yml
 └── Cargo.toml
 ```
@@ -164,6 +165,11 @@ node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 cargo test --workspace
 cargo test --workspace -- --ignored
 
+# Golden-corpus probe (agents: run when implementing or fixing — rebuilds + parallel cases)
+./scripts/probe_test.sh                 # native `dream run` over tests/cases
+./scripts/probe_test.sh arithmetic      # optional case-stem filter
+./scripts/probe_test.sh --node          # wasm32 + Node (skips native-only hosts)
+
 # Focused unit tests
 cargo test -p dream-types
 cargo test -p dream-mir -- passes::
@@ -195,18 +201,19 @@ source ./use-toolchain.sh          # builds release dream / dream-lsp / dreamer
 
 You can still set VS Code settings `dream.home` / `dreamer.home` explicitly if you prefer.
 
-### Pre-commit / "done" gate — all three must pass
+### Pre-commit / "done" gate — all four must pass
 ```bash
 cargo build --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+./scripts/probe_test.sh            # when implementing or fixing: full golden corpus via native run
 ```
 
-The default test gate is the fast suite (unit tests + e2e smoke). Full golden corpus, DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
+When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-stem…>` first for a fast signal, then run the full probe before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). Full golden corpus, DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
 
 ## Testing conventions
 
-- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Default `cargo test --workspace` runs a smoke subset; the full corpus is `cargo test --workspace -- --ignored`.
+- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Default `cargo test --workspace` runs a smoke subset; the full corpus is `cargo test --workspace -- --ignored`. **Agents implementing or fixing behavior must run `./scripts/probe_test.sh`** (optionally filtered by case stem while iterating; full probe before done).
 - **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes/`relooper`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
 - **Integration test** `dream-mir`'s `hir_to_mir_to_optimized_c` exercises HIR→MIR lowering→pass pipeline→C emission in one shot — fastest signal when touching lowering/passes/emission.
 - **Determinism test** `codegen_is_deterministic` (`tests/e2e_tests.rs`) compiles the same source twice and asserts byte-identical output. Never break this.
@@ -221,7 +228,7 @@ The default test gate is the fast suite (unit tests + e2e smoke). Full golden co
 6. `crates/dream-mir/src/backend/c/`: emit if new lowering is needed. New runtime helpers: wasm32 units under `runtime/c/wasm32/` (+ shared `native/`, registered in `runtime/modules.rs::WASM32_CORE_C`); native-only helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
-9. Run the full pre-commit gate above. See `docs/internals/07-adding-a-language-feature.md` for a worked example.
+9. Run `./scripts/probe_test.sh` (and the full pre-commit gate above). See `docs/internals/07-adding-a-language-feature.md` for a worked example.
 
 ## Misc conventions
 

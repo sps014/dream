@@ -176,94 +176,9 @@ pub fn emit_c_module_for(
         .iter()
         .find(|f| f.name == crate::abi::ENTRY_FN)
     {
-        emit_guest_entry(&mut m, &cx, main, async_n);
+        super::entry::emit_guest_entry(&mut m, &cx, main, async_n);
     }
     m.finish()
-}
-
-fn emit_guest_entry(m: &mut ModuleBuilder, cx: &Cx<'_>, main: &MirFunction, async_n: usize) {
-    let mut entry = FuncBuilder::new(CTy::I32, crate::abi::GUEST_ENTRY_FN);
-    if cx.target.is_wasm32() {
-        entry.export = Some(crate::abi::ENTRY_FN.to_string());
-    }
-    entry.call("dream_runtime_init", vec![]);
-    let main_args = if main.params.is_empty() {
-        vec![]
-    } else {
-        vec![Expr::call("dream_array_new", vec![Expr::i(0), Expr::i(8)])]
-    };
-    if main.is_async {
-        entry.stmt(Stmt::decl(
-            CTy::Ptr,
-            "__mf",
-            Some(Expr::call("main_dream", main_args)),
-        ));
-        // Futures are lazy; the entry point launches async main explicitly.
-        entry.call("dream_start", vec![Expr::id("__mf")]);
-    } else {
-        entry.call("main_dream", main_args);
-    }
-    if async_n > 0 {
-        entry.call("dream_run_loop", vec![]);
-    }
-    if cx.mir.uses_defer {
-        entry.call("dream_defer_drain_all", vec![]);
-    }
-    if main.is_async && !cx.target.is_wasm32() {
-        // Wasm32 returns the Future to the JS host (`Instance.run`). Native owns it.
-        entry.call("dream_release", vec![Expr::id("__mf")]);
-    }
-    if !cx.target.is_wasm32() {
-        entry.call("dream_drop_globals", vec![]);
-    }
-    if cx.target.is_wasm32() && main.is_async {
-        entry.ret(Some(Expr::cast(CTy::I32, Expr::id("__mf"))));
-    } else {
-        entry.ret(Some(Expr::i(0)));
-    }
-    m.push_func(entry);
-    if cx.target.is_wasm32() {
-        return;
-    }
-    let mut main_fn = FuncBuilder::new(CTy::I32, "main");
-    main_fn.param(CTy::I32, "argc");
-    main_fn.param(CTy::ptr_to(CTy::CharPtr), "argv");
-    main_fn.call(
-        "dream_process_capture_args",
-        vec![Expr::id("argc"), Expr::id("argv")],
-    );
-    let rc = main_fn.temp(
-        CTy::I32,
-        Some(Expr::call(crate::abi::GUEST_ENTRY_FN, vec![])),
-    );
-    // Heap-counter leak report. Debug builds always print it so `dream run` / `-g` show
-    // retention; release builds opt in via DREAM_DEBUG_LEAKS=1. Counters themselves always
-    // update so `Debug.live_objects()` is valid in `--release` goldens.
-    let leak_report = Stmt::block(vec![
-        Stmt::call(
-            "fprintf",
-            vec![
-                Expr::id("stderr"),
-                Expr::cstr("[dream] leak check: live=%d total_allocations=%d\n"),
-                Expr::call("debug_get_live_objects", vec![]),
-                Expr::call("debug_get_total_allocations", vec![]),
-            ],
-        ),
-        Stmt::call("debug_dump_live", vec![]),
-    ]);
-    if cx.leak_checks {
-        main_fn.stmt(leak_report);
-    } else {
-        main_fn.stmt(Stmt::if_(
-            Expr::ne(
-                Expr::call("getenv", vec![Expr::cstr("DREAM_DEBUG_LEAKS")]),
-                Expr::cast(CTy::Ptr, Expr::i(0)),
-            ),
-            leak_report,
-        ));
-    }
-    main_fn.ret(Some(rc));
-    m.push_func(main_fn);
 }
 
 fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {

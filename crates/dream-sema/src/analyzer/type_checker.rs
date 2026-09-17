@@ -45,6 +45,7 @@ impl<'a> Analyzer<'a> {
                 })
             })
         })?;
+        self.hir_emit_entry_tail_return(function, diagnostics);
         self.hir_finish_function(diagnostics, errors_before);
         // Unused `let`/`const` bindings (warnings only — do not fail the compile).
         param_table

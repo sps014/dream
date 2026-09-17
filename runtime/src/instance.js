@@ -405,28 +405,36 @@ export class DreamInstance {
     if (typeof drop === "function") drop();
   }
 
-  /** Calls the exported `main`, if present. Async `main` returns a Future pointer. */
+  /**
+   * Collects `main`'s exit status, reporting a failing `Result` main's error on stderr. `fut` is
+   * the settled Future of an async `main`, or 0 for a sync one. Absent when `main` returns `void`.
+   */
+  __mainStatus(fut) {
+    const report = this.exports.__dream_main_report;
+    return typeof report === "function" ? report(fut) : 0;
+  }
+
+  /**
+   * Calls the exported `main`, if present. Async `main` returns a Future pointer. Resolves with the
+   * process exit status: 0, or `main`'s own `int` / failing `Result` status.
+   */
   run() {
     if (typeof this.exports.main !== "function") {
       throw new Error("module has no exported `main`");
     }
     const r = this.exports.main();
-    const after = () => {
+    const after = (fut) => {
+      const code = this.__mainStatus(fut);
       if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
         this.exports.free(r);
       }
       this.__dropGlobals();
+      this.exitCode = code;
+      return code;
     };
-    if (!r) {
-      after();
-      return Promise.resolve();
+    if (!r || !this.__isFutureFrame(r)) {
+      return Promise.resolve(after(0));
     }
-    if (!this.__isFutureFrame(r)) {
-      after();
-      return Promise.resolve(r);
-    }
-    return this.__awaitFuture(r).then(() => {
-      after();
-    });
+    return this.__awaitFuture(r).then(() => after(r));
   }
 }

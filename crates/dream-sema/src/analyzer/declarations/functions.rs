@@ -2,7 +2,9 @@
 //! leakage checks) and the body-analysis / pending-instantiation fixpoint passes.
 
 use super::*;
+use crate::entry::{entry_tail_return, EntryTail, ENTRY_NAME};
 use crate::function_table::FunctionTableInfo;
+use dream_hir::{HExpr, HExprKind};
 use dream_syntax::nodes::types::strip_array;
 use dream_syntax::nodes::Type;
 
@@ -16,6 +18,9 @@ impl<'a> Analyzer<'a> {
         for function in node.functions.iter() {
             diagnostics.file_path = file_path_string(&function.file_path);
             self.check_reserved_name(&function.name, "function", diagnostics);
+            if self.crate_type != CrateType::Lib && function.name.text == ENTRY_NAME {
+                self.validate_entry_return_type(function, diagnostics);
+            }
             if function.generic_parameters.is_some() {
                 if dream_abi::attributes::has_test_attr(&function.attributes) {
                     diagnostics.report_error(
@@ -131,6 +136,81 @@ impl<'a> Analyzer<'a> {
                     "'main' must be declared as 'main()' or 'main(args: string[])'".to_string(),
                     None,
                 );
+            }
+        }
+    }
+
+    /// `main`'s return value is the process exit status, so only the spellings the entry point can
+    /// act on are accepted: `void` exits 0, `int` *is* the exit code, and `Result<T, E>` reports an
+    /// `Err` on stderr and exits 1. Anything else would be silently discarded, so it is rejected.
+    fn validate_entry_return_type(
+        &mut self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let Some(ret) = function.return_type.clone() else {
+            return;
+        };
+        if matches!(ret, Type::Void | Type::Integer(_) | Type::Unknown) {
+            return;
+        }
+        let parts = Self::resolve_struct_parts(&ret);
+        if let Some((base, args)) = &parts {
+            if base == "Result" && args.len() == 2 {
+                return;
+            }
+        }
+        let mut message = format!(
+            "'main' must return void, int, or Result<T, E>, got {}",
+            self.ty_display(&ret)
+        );
+        if parts.is_some_and(|(base, _)| base == "Option") {
+            message.push_str(" (use 'ok_or' to turn an Option into a Result)");
+        }
+        diagnostics.report_error(message, Some(function.name.position));
+    }
+
+    /// Appends `main`'s implicit tail return (see [`crate::entry`]) to the body currently being
+    /// collected, so the entry point always hands the backend an explicit exit status. Callers
+    /// invoke this after the body is analyzed and before the function is finished; the HIR helpers
+    /// no-op when the function is not an emission candidate.
+    pub(in crate::analyzer) fn hir_emit_entry_tail_return(
+        &mut self,
+        function: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let Some(tail) = entry_tail_return(function) else {
+            return;
+        };
+        let Some(return_type) = function.return_type.clone() else {
+            return;
+        };
+        let target = self.type_ctx.lower(&return_type);
+        match tail {
+            EntryTail::Zero => {
+                let zero = HExpr::new(target, HExprKind::IntLit(0));
+                self.hir_return_value(Some(zero), Some(target));
+            }
+            EntryTail::OkTrue => {
+                let Some((base, args)) = Self::resolve_struct_parts(&return_type) else {
+                    return;
+                };
+                self.ensure_union_instantiated(&base, &args, &function.name.position, diagnostics);
+                let mangled = return_type.get_type();
+                let def = self.type_ctx.defs.lookup(DefKind::Union, &mangled);
+                let disc = self
+                    .union_table
+                    .get(&mangled)
+                    .and_then(|u| u.variant("Ok"))
+                    .map(|v| v.discriminant as usize);
+                let (Some(def), Some(disc)) = (def, disc) else {
+                    self.hir_fail();
+                    return;
+                };
+                let payload = HExpr::new(self.type_ctx.interner.bool(), HExprKind::BoolLit(true));
+                self.hir_set_union_new(def, disc, vec![Some(payload)], &return_type);
+                let value = self.hir_take();
+                self.hir_return_value(value, Some(target));
             }
         }
     }

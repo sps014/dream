@@ -17,7 +17,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             // `await <primary>` binds tightly to its operand so `await f() + 1` is `(await f()) + 1`.
             let await_tok = self.match_token(TokenKind::AwaitToken);
             let operand = self.parse_primary_expression()?;
-            left = ExpressionNode::Await(await_tok, self.arena.alloc(operand));
+            // The primary's postfix loop has already taken any trailing `?`, leaving `Try(call)` —
+            // but `?` propagates the awaited `Result`, not the `Future`, so `await f()?` is
+            // `(await f())?`. Rotating here keeps the natural spelling working without a special
+            // case in sema.
+            left = match operand {
+                ExpressionNode::Try(inner) => {
+                    ExpressionNode::Try(self.arena.alloc(ExpressionNode::Await(await_tok, inner)))
+                }
+                _ => ExpressionNode::Await(await_tok, self.arena.alloc(operand)),
+            };
         } else if unary_precedence != 0 && unary_precedence >= parent_precedence {
             let operator_token = self.next_token();
             let operand = self.parse_expression(unary_precedence)?;

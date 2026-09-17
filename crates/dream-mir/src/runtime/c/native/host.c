@@ -168,6 +168,20 @@ void print_string(dream_ptr s) {
     fflush(stdout);
 }
 
+void print_err_string(dream_ptr s) {
+    char *u = dream_str_utf8(s);
+    if (u) {
+        fputs(u, stderr);
+        free(u);
+    }
+    fflush(stderr);
+}
+
+void print_err_char(int32_t c) {
+    fputc(c == 10 ? '\n' : (int)c, stderr);
+    fflush(stderr);
+}
+
 static void print_float_shortest(float v) {
     char text[32];
     char *end;

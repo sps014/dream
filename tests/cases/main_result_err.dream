@@ -1,0 +1,15 @@
+// An `Err` reaching `main` is reported as `Error: <e>` on stderr and exits 1 — so this is a trap
+// case (the harness folds stderr into the failure text), not an ordinary stdout comparison.
+import system;
+
+fun parse_port(borrow text: string): Result<int, ParseError> {
+    let port = int.parse(text)?;
+    return Result.Ok(port);
+}
+
+fun main(): Result<bool, ParseError> {
+    let good = parse_port("8080")?;
+    System.println("port " + good.to_string());
+    let bad = parse_port("not-a-number")?;
+    System.println("never reached " + bad.to_string());
+}

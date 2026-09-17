@@ -9,7 +9,9 @@
 
 use super::liveness::{self, live_after_stmt};
 use super::tokens::is_owned_local;
-use super::uniqueness::{can_container_move, container_store_src, fresh_locals, mark_container_move};
+use super::uniqueness::{
+    can_container_move, container_store_src, fresh_locals, mark_container_move,
+};
 use crate::passes::MirPass;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;

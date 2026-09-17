@@ -769,7 +769,6 @@ fn unique_move_src(rv: &crate::Rvalue) -> Option<u32> {
     }
 }
 
-
 fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {
     matches!(
         rv,

@@ -23,7 +23,7 @@ System.panic("unreachable: config was never validated");
 
 ## What a panic looks like
 
-A panic prints its message to standard output, then halts the program. The automatic checks' messages are located with the failing source file, line, and declaring function, Rust-style, e.g.:
+A panic prints its message to standard error, then halts the program — diagnostics stay out of the program's own output, so piping stdout is unaffected. The automatic checks' messages are located with the failing source file, line, and declaring function, Rust-style, e.g.:
 
 ```
 panic: index out of bounds (at /path/to/program.dream:6, in main)

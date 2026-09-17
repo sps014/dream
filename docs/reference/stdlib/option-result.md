@@ -49,6 +49,50 @@ File, HTTP, GPU, and parse APIs return `Result`. In an `async` function (or any 
 
 `expr?` unwraps `Ok` or returns `Err` from the current function. The function’s return type must be a `Result`.
 
+`Option` and `Result` do not mix, exactly as in Rust: `?` on an `Option` needs the enclosing function to return a matching `Option`, and `?` on a `Result` needs a `Result` whose `E` is *the same type* — there is no `From`-based conversion. Bridge between them explicitly:
+
+```dream
+let first = first_line(text).ok_or(ParseError.invalid("empty input"))?;   // Option → Result
+let n = int.parse(text).map_err(fun(e: ParseError): ConfigError => ConfigError.from_parse(e))?;
+```
+
+## `?` in `main`
+
+`main` may return `Result<T, E>`, so `?` works at the top level. An `Err` that reaches `main` is printed to standard error as `Error: <e>` and the process exits 1:
+
+```dream
+import system;
+
+fun parse_port(borrow text: string): Result<int, ParseError> {
+    let port = int.parse(text)?;
+    if port < 1 || port > 65535 {
+        return Result.Err(ParseError.invalid("port out of range: " + port.to_string()));
+    }
+    return Result.Ok(port);
+}
+
+fun main(): Result<bool, ParseError> {
+    let port = parse_port("8080")?;
+    System.println("listening on " + port.to_string());
+
+    let bad = parse_port("not-a-number")?;   // Err: returns from main right here
+    System.println("never reached " + bad.to_string());
+}   // falling off the end of main is an implicit Result.Ok(true)
+```
+
+Dream has no unit type, so the success slot is spelled `bool`. `main` alone may fall off the end when it returns `Result<bool, E>`, which the compiler treats as `return Result.Ok(true);` — an explicit one stays legal, and any other `Result<T, E>` still requires a return on every path.
+
+`async fun main(): Result<T, E>` works the same way, and `?` binds to the awaited value, so no parentheses are needed:
+
+```dream
+async fun main(): Result<bool, IoError> {
+    let text = await File.read("config.json")?;
+    System.println(text);
+}
+```
+
+An `Option` main is rejected — bridge it with `ok_or` as above. `main(): int` is also allowed, and returns the process exit code directly, as in C; falling off the end means `return 0`.
+
 ## Errors
 
 Types that implement `Error` have `.message()` and `.code()`. Common ones: `ParseError` (bootstrap), `ArgError` (`import system;`), `IoError` (`system.io`).

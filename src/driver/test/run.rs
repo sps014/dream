@@ -158,8 +158,12 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     let cc_opt = OptLevel::from_cli(opts.release, opts.optimize);
     let bin = crate::execution::native_c::compile_native_c(&c_path, cc_opt, false)
         .map_err(|e| format!("cc '{}': {}", path.display(), e))?;
-    crate::execution::native_c::run_native_bin(&bin, &c_str, &[])
-        .map_err(|e| format!("'{}' failed: {}", path.display(), e))?;
+    // A failing assertion exits non-zero (`Assert.fail`), which is how a suite reports failure.
+    match crate::execution::native_c::run_native_bin(&bin, &c_str, &[]) {
+        Ok(0) => {}
+        Ok(code) => return Err(format!("'{}' failed (exit code {code})", path.display())),
+        Err(e) => return Err(format!("'{}' failed: {}", path.display(), e)),
+    }
     Ok(tests.len())
 }
 

@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 void dream_panic(dream_ptr msg) {
-    print_string(msg);
-    print_char(10);
+    print_err_string(msg);
+    print_err_char(10);
     abort();
 }

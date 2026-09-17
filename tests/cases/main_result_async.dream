@@ -1,0 +1,17 @@
+// An `async fun main(): Result<T, E>` propagates with `?` the same way. `await f()?` needs no
+// parentheses: `?` binds to the awaited `Result`, never to the `Future`.
+import system;
+
+async fun doubled(n: int): Result<int, string> {
+    if n < 0 {
+        return Result.Err("negative: " + n.to_string());
+    }
+    return Result.Ok(n * 2);
+}
+
+async fun main(): Result<bool, string> {
+    let a = await doubled(21)?;
+    System.println("doubled is " + a.to_string());
+    let b = await doubled(a)?;
+    System.println("again is " + b.to_string());
+}

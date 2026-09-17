@@ -283,7 +283,7 @@ pub(crate) fn method_generic_param_names(detail: &str) -> Vec<String> {
 
 /// Parameter types and return type from a method detail such as
 /// `static WebWorker.spawn(body: fun(): TOut): TOut`.
-pub(crate) fn parse_method_signature(detail: &str) -> Option<(Vec<String>, String)> {
+pub(crate) fn parse_method_signature(detail: &str) -> Option<MethodSignature> {
     let bytes = detail.as_bytes();
     let mut angle = 0i32;
     let mut start = None;
@@ -325,11 +325,58 @@ pub(crate) fn parse_method_signature(detail: &str) -> Option<(Vec<String>, Strin
             .into_iter()
             .map(|p| {
                 let ty = p.split_once(':').map(|(_, t)| t.trim()).unwrap_or(p.trim());
+                let ty = strip_param_default(ty);
                 ty.strip_prefix("borrow ").unwrap_or(ty).trim().to_string()
             })
             .collect()
     };
-    Some((params, ret))
+    let required = if inner.is_empty() {
+        0
+    } else {
+        split_comma_type_list(inner)
+            .iter()
+            .take_while(|p| !has_param_default(p))
+            .count()
+    };
+    Some(MethodSignature {
+        params,
+        required,
+        ret,
+    })
+}
+
+/// A method's parameter types plus how many of them a call must actually supply — a defaulted
+/// parameter (`token: T = …`) may be omitted, and defaults only ever come last.
+pub(crate) struct MethodSignature {
+    pub params: Vec<String>,
+    pub required: usize,
+    pub ret: String,
+}
+
+impl MethodSignature {
+    /// True when a call passing `argc` arguments can match this signature.
+    pub fn accepts_arg_count(&self, argc: usize) -> bool {
+        argc >= self.required && argc <= self.params.len()
+    }
+}
+
+fn has_param_default(param: &str) -> bool {
+    strip_param_default(param).len() != param.trim_end().len()
+}
+
+/// Drops a ` = <expr>` default off a parameter, ignoring `=` inside brackets so a default like
+/// `Map<string, int>()` cannot be mistaken for one.
+fn strip_param_default(param: &str) -> &str {
+    let mut depth = 0i32;
+    for (i, &b) in param.as_bytes().iter().enumerate() {
+        match b {
+            b'(' | b'<' | b'[' => depth += 1,
+            b')' | b'>' | b']' => depth -= 1,
+            b'=' if depth == 0 => return param[..i].trim_end(),
+            _ => {}
+        }
+    }
+    param.trim_end()
 }
 
 /// Splits `fun(a, b): ret` into `([a, b], ret)`.
@@ -585,11 +632,27 @@ pub fn enum_member_snippet(name: &str, detail: &str) -> Option<String> {
         .iter()
         .enumerate()
         .map(|(i, field)| {
-            let label = field.split(':').next().unwrap_or(field).trim();
+            let (name_part, ty_part) = match field.split_once(':') {
+                Some((n, t)) => (n.trim(), t.trim()),
+                None => ("", field.trim()),
+            };
+            // A positional payload is parsed as the synthetic `_0`/`_1`, which says nothing to the
+            // reader — show the payload type instead.
+            let label = if name_part.is_empty() || is_positional_field_name(name_part) {
+                ty_part
+            } else {
+                name_part
+            };
             format!("${{{}:{}}}", i + 1, label)
         })
         .collect();
     Some(format!("{name}({})", placeholders.join(", ")))
+}
+
+/// True for the `_0`/`_1`/… names the parser synthesizes for an unnamed union-variant payload.
+fn is_positional_field_name(name: &str) -> bool {
+    name.strip_prefix('_')
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Language keywords offered as completion proposals: every reserved word (`KEYWORDS`) plus the

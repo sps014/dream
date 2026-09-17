@@ -1103,6 +1103,8 @@ int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_INT) void print_int(int32_t v);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_STRING) void print_string(dream_ptr s);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_CHAR) void print_char(int32_t c);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_ERR_STRING) void print_err_string(dream_ptr s);
+DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_ERR_CHAR) void print_err_char(int32_t c);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_FLOAT) void print_float(float v);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_DOUBLE) void print_double(double v);
 DREAM_WASM_IMPORT(DREAM_MODULE_HOST, DREAM_SYM_TIME_NOW_NANOS) int64_t timeNowNanos(void);
@@ -1116,6 +1118,8 @@ int32_t dateLocalOffsetMinutes(int64_t epoch_millis);
 void print_int(int32_t v);
 void print_string(dream_ptr s);
 void print_char(int32_t c);
+void print_err_string(dream_ptr s);
+void print_err_char(int32_t c);
 void print_float(float v);
 void print_double(double v);
 

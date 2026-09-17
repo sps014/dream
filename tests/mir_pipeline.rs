@@ -146,9 +146,13 @@ fn hir_to_c_pipeline_emits_expected_shape() {
     assert!(c.contains('+'), "missing arithmetic:\n{}", c);
     // The loop comparison lowers to a less-than.
     assert!(c.contains('<'), "missing loop comparison:\n{}", c);
+    // Relooper shapes emit structured control flow, so the back edge is a `for (;;)` with a
+    // conditional `break` rather than a `while` or a `goto`.
+    assert!(c.contains("for (;;)"), "missing loop:\n{}", c);
+    assert!(c.contains("break;"), "missing loop exit:\n{}", c);
     assert!(
-        c.contains("while") || c.contains("goto"),
-        "missing loop:\n{}",
+        !c.contains("goto"),
+        "loop must not fall back to goto:\n{}",
         c
     );
 }

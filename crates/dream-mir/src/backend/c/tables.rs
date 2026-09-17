@@ -1,4 +1,5 @@
 use crate::abi::TAG_STRUCT_BASE;
+use crate::backend::c::entry::{entry_reports_error, ERROR_PREFIX};
 use crate::backend::c::types::c_ident;
 use crate::backend::shared::func_symbol;
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
@@ -51,6 +52,9 @@ pub(super) fn intern_strings(
     }
     for base in crate::backend::shared::panic_msgs::ALL {
         found.push(base.to_string());
+    }
+    if entry_reports_error(mir) {
+        found.push(ERROR_PREFIX.to_string());
     }
     let mut map = IndexMap::new();
     let mut n = 0usize;

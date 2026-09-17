@@ -348,6 +348,11 @@ pub const PRINT_FLOAT: &str = "print_float";
 pub const PRINT_DOUBLE: &str = "print_double";
 pub const PRINT_CHAR: &str = "print_char";
 
+/// Diagnostic stream: panics and a failing `main`'s `Error:` line. Kept off stdout so program
+/// output stays clean and pipeable.
+pub const PRINT_ERR_STRING: &str = "print_err_string";
+pub const PRINT_ERR_CHAR: &str = "print_err_char";
+
 /// `(import name, wasm value kind)` for `env` print builtins. `I32`/`F32`/`F64` as type tags.
 pub const ENV_PRINT_IMPORTS: &[(&str, PrintVal)] = &[
     (PRINT_STRING, PrintVal::I32),
@@ -401,6 +406,11 @@ pub const EXPORT_WORKER_INVOKE_RAW: &str = "__dream_worker_invoke_raw";
 /// returns to JS first (async `main` still holds a Future), so `DreamInstance.run` calls this
 /// after the Future settles.
 pub const EXPORT_DROP_GLOBALS: &str = "__dream_drop_globals";
+
+/// Wasm32 export answering `main`'s process exit status, and reporting a failing `Result` main's
+/// error on stderr. Takes the settled Future of an async `main` (null for a sync one): the entry's
+/// own return slot already means "0, or a Future pointer", so the status needs its own channel.
+pub const EXPORT_MAIN_REPORT: &str = "__dream_main_report";
 
 /// C-backend wasm32 export mapping a `dream_ft[]` dispatch index to the function-pointer value.
 /// Clang assigns `__indirect_function_table` slots independently of `dream_ft[]` order, but on

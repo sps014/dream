@@ -274,10 +274,29 @@ fn rc_golden_unique_class_no_retain() {
     "#;
     let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
     assert_eq!(user_retains(&c), 0, "unique Box should not retain:\n{}", c);
+    // The last use frees through `Box`'s own destroy tail rather than the generic `dream_release`
+    // cascade. It stays guarded by `dream_rc_last`: the intra-procedural Unique lattice proves the
+    // *local* holds the only owned reference, not that the object is unaliased, so the unguarded
+    // `destroy_Box` form was removed after it caused a use-after-free (see `can_unique_destroy`).
+    let main = c_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "main_dream")
+        .expect("main should be emitted");
     assert!(
-        c.contains("destroy_Box(b);"),
-        "unique Box should unique-destroy:\n{}",
-        c
+        main.body.contains("release_Box_into("),
+        "unique Box should destroy through its own tail:\n{}",
+        main.body
+    );
+    assert!(
+        main.body.contains("dream_rc_last("),
+        "the destroy must stay guarded by the last-reference check:\n{}",
+        main.body
+    );
+    assert_eq!(
+        count_in(&main.body, "dream_release("),
+        0,
+        "unique Box must not fall back to the generic release cascade:\n{}",
+        main.body
     );
 }
 

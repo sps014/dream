@@ -191,7 +191,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let first = self.match_token(TokenKind::IdentifierToken);
                 if self.current_token().kind != TokenKind::DotToken {
                     self.diagnostics.report_error(
-                        format!("Expected a pattern but found {}", first.kind.friendly_name()),
+                        format!(
+                            "Expected a pattern but found {}",
+                            first.kind.friendly_name()
+                        ),
                         Some(first.position),
                     );
                     return Ok(Type::Unknown);

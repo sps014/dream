@@ -124,12 +124,24 @@ fn borrow_param_reusable_after_field_store() {
 fn sink_store_skips_retain_vs_borrow() {
     // Callee stores a string field: unmarked sink transfers +1 (no retain on store);
     // `borrow` must retain into the field.
-    let sink_code = format!(
-        "{SYSTEM_STUB}
+    //
+    // The loop is padding, not part of what is under test: it pushes the constructor past the
+    // inliner's size budget. Once inlined, both spellings collapse to the same optimal code —
+    // the caller's `s` is dead at the call, so a borrow becomes a move too — and the parameter
+    // ABI is no longer observable at all.
+    let code = |param: &str| {
+        format!(
+            "{SYSTEM_STUB}
         class Box {{
             public value: string;
-            public constructor(value: string) {{
+            public n: int;
+            public constructor({param}) {{
                 this.value = value;
+                this.n = 0;
+                for (let i = 0; i < 4; i = i + 1) {{
+                    this.n = this.n + i * 3;
+                    if this.n > 100 {{ this.n = this.n - 7; }}
+                }}
             }}
         }}
         fun main(): void {{
@@ -138,39 +150,33 @@ fn sink_store_skips_retain_vs_borrow() {
             System.println(b.value);
         }}
     "
-    );
-    let borrow_code = format!(
-        "{SYSTEM_STUB}
-        class Box {{
-            public value: string;
-            public constructor(borrow value: string) {{
-                this.value = value;
-            }}
-        }}
-        fun main(): void {{
-            let s = \"hi\";
-            let b = Box(s);
-            System.println(b.value);
-        }}
-    "
-    );
-    let sink_c = emit_hir_to_module_optimized(&sink_code);
-    let borrow_c = emit_hir_to_module_optimized(&borrow_code);
+        )
+    };
+    let sink_c = emit_hir_to_module_optimized(&code("value: string"));
+    let borrow_c = emit_hir_to_module_optimized(&code("borrow value: string"));
     // Count `dream_retain(` inside the constructor body only (the module scaffold's
     // object-protocol retain is constant noise otherwise).
-    let sink_retains = c_func_body(&sink_c, "Box_constructor")
-        .matches("dream_retain(")
-        .count();
-    let borrow_retains = c_func_body(&borrow_c, "Box_constructor")
-        .matches("dream_retain(")
-        .count();
+    let sink_body = c_func_body(&sink_c, "Box_constructor");
+    let borrow_body = c_func_body(&borrow_c, "Box_constructor");
+    // Guard the premise: an inlined-away constructor would leave both bodies empty and make the
+    // retain comparison below vacuous.
     assert!(
-        sink_retains < borrow_retains,
-        "sink constructor should retain less than borrow ({} vs {})\nsink:\n{}\nborrow:\n{}",
-        sink_retains,
-        borrow_retains,
+        sink_body.contains("dream_p(this)") && borrow_body.contains("dream_p(this)"),
+        "constructor should survive inlining for the ABI to be observable\nsink:\n{}\nborrow:\n{}",
         sink_c,
         borrow_c
+    );
+    let sink_retains = sink_body.matches("dream_retain(").count();
+    let borrow_retains = borrow_body.matches("dream_retain(").count();
+    assert_eq!(
+        sink_retains, 0,
+        "sink constructor should transfer the +1, not retain:\n{}",
+        sink_body
+    );
+    assert!(
+        borrow_retains > 0,
+        "borrow constructor should retain into the field:\n{}",
+        borrow_body
     );
 }
 

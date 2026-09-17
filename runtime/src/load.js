@@ -349,11 +349,17 @@ function attachGuestStack(wasmInstance) {
 /**
  * load a module and immediately invoke its `main`.
  *
+ * A non-zero exit status (`main(): int`, or a failing `Result` main) is surfaced on Node as
+ * `process.exitCode`, and always as `mod.exitCode`.
+ *
  * @returns {Promise<DreamInstance>} the loaded instance (after `main` has run).
  */
 export async function run(source, options = {}) {
   const mod = await load(source, options);
-  await mod.run();
+  const code = await mod.run();
+  if (code && typeof process !== "undefined") {
+    process.exitCode = code;
+  }
   return mod;
 }
 

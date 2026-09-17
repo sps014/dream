@@ -250,49 +250,14 @@ impl<'a> Emitter<'a> {
             }
             Rvalue::Cast(v, from, to) => self.emit_cast(v, *from, *to),
             Rvalue::Discriminant { base, ty } => {
-                // Niche union: the discriminant is recovered from nullness — exactly one
-                // payload variant and one empty variant (guaranteed by the classification).
-                if let Some((some_disc, none_disc)) = self.cx.niche_variant_discriminants(*ty) {
-                    let p = self.operand(base);
-                    return Expr::ternary(
-                        Expr::ne(p.clone(), Expr::Null),
-                        Expr::i(some_disc as i64),
-                        Expr::i(none_disc as i64),
-                    );
-                }
-                Expr::load(CTy::I32, Expr::dream_p(self.operand(base)))
+                union_discriminant(self.cx, *ty, self.operand(base))
             }
             Rvalue::UnionField {
                 base,
                 ty,
                 variant,
                 field,
-            } => {
-                // Niche union: the payload is the value itself — identity, no offset.
-                if self.cx.interner.is_niche_union(*ty) {
-                    return self.operand(base);
-                }
-                let u = self
-                    .cx
-                    .nunion(*ty)
-                    .unwrap_or_else(|| crate::internal_error!("missing union layout for {ty:?}"));
-                let var = u
-                    .variants
-                    .iter()
-                    .find(|v| v.discriminant as usize == *variant)
-                    .unwrap_or_else(|| crate::internal_error!("missing union variant {variant}"));
-                let fld = var
-                    .fields
-                    .get(*field)
-                    .unwrap_or_else(|| crate::internal_error!("missing union field {field}"));
-                let base = self.operand(base);
-                if self.cx.interner.is_value_type(fld.ty) {
-                    Expr::cast(CTy::Ptr, Expr::ptr_add(base, Expr::i(fld.offset as i64)))
-                } else {
-                    let cast = load_cast(self.cx, fld.ty);
-                    Expr::load(cast, Expr::ptr_add(base, Expr::i(fld.offset as i64)))
-                }
-            }
+            } => union_field(self.cx, *ty, *variant, *field, self.operand(base)),
             Rvalue::IsType(o, ty) => {
                 let tag = runtime_tag(self.cx, *ty);
                 Expr::eq(
@@ -916,6 +881,57 @@ impl<'a> Emitter<'a> {
 
     pub(super) fn to_string_fn(&self, ty: dream_types::TypeId) -> String {
         to_string_fn(self.cx, ty)
+    }
+}
+
+/// Reads a union value's discriminant. A niche union carries no tag word — it is exactly one
+/// payload variant and one empty variant, so nullness recovers it.
+pub(super) fn union_discriminant(
+    cx: &super::ctx::Cx<'_>,
+    ty: dream_types::TypeId,
+    base: Expr,
+) -> Expr {
+    if let Some((some_disc, none_disc)) = cx.niche_variant_discriminants(ty) {
+        return Expr::ternary(
+            Expr::ne(base, Expr::Null),
+            Expr::i(some_disc as i64),
+            Expr::i(none_disc as i64),
+        );
+    }
+    Expr::load(CTy::I32, Expr::dream_p(base))
+}
+
+/// Reads field `field` of variant `variant` out of a union value.
+pub(super) fn union_field(
+    cx: &super::ctx::Cx<'_>,
+    ty: dream_types::TypeId,
+    variant: usize,
+    field: usize,
+    base: Expr,
+) -> Expr {
+    // Niche union: the payload is the value itself — identity, no offset.
+    if cx.interner.is_niche_union(ty) {
+        return base;
+    }
+    let u = cx
+        .nunion(ty)
+        .unwrap_or_else(|| crate::internal_error!("missing union layout for {ty:?}"));
+    let var = u
+        .variants
+        .iter()
+        .find(|v| v.discriminant as usize == variant)
+        .unwrap_or_else(|| crate::internal_error!("missing union variant {variant}"));
+    let fld = var
+        .fields
+        .get(field)
+        .unwrap_or_else(|| crate::internal_error!("missing union field {field}"));
+    if cx.interner.is_value_type(fld.ty) {
+        Expr::cast(CTy::Ptr, Expr::ptr_add(base, Expr::i(fld.offset as i64)))
+    } else {
+        Expr::load(
+            load_cast(cx, fld.ty),
+            Expr::ptr_add(base, Expr::i(fld.offset as i64)),
+        )
     }
 }
 

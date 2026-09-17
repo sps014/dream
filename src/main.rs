@@ -402,9 +402,15 @@ fn main() -> ExitCode {
                 }
                 if run_after_compile {
                     ui.step("Running", &bin.display().to_string());
-                    if let Err(e) = run_native_bin(&bin, &out_path, &program_args) {
-                        ui.error(&format!("execution failed: {e}"));
-                        return ExitCode::FAILURE;
+                    // The guest's exit status is the program's own (`main(): int`, or a failing
+                    // `Result`), so forward it instead of reporting a tool failure.
+                    match run_native_bin(&bin, &out_path, &program_args) {
+                        Ok(0) => {}
+                        Ok(code) => return ExitCode::from(code.clamp(1, 255) as u8),
+                        Err(e) => {
+                            ui.error(&format!("execution failed: {e}"));
+                            return ExitCode::FAILURE;
+                        }
                     }
                 }
             }

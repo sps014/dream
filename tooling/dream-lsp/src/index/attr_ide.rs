@@ -5,13 +5,6 @@ use super::is_ident_byte;
 use dream_abi::attributes::{find_spec, ArgKind, ArgShape, AttributeSpec, ATTRIBUTES};
 use dream_abi::intrinsics::ATTR_KEYS;
 
-/// Known `@operator("…")` symbols (mirrors `OperatorSymbol::from_attr_str` in dream-sema).
-const OPERATOR_SYMBOLS: &[&str] = &[
-    "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!", "~",
-];
-
-const CAST_KINDS: &[&str] = &["implicit", "explicit"];
-
 /// Cursor is after `@` / `@partial` writing an attribute name (not inside `(...)` args).
 pub fn attribute_name_partial(text: &str, offset: usize) -> Option<(usize, String)> {
     let bytes = text.as_bytes();
@@ -191,8 +184,6 @@ pub fn attribute_arg_completions(
 
     let keys: &[&str] = match ctx.name.as_str() {
         "intrinsic" => ATTR_KEYS,
-        "operator" => OPERATOR_SYMBOLS,
-        "cast" => CAST_KINDS,
         _ => return Vec::new(),
     };
 

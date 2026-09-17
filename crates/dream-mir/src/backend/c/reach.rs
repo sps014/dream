@@ -54,6 +54,11 @@ pub(super) fn compute(cx: &Cx<'_>) -> ProtocolReach {
             }
         }
     }
+    // The entry point renders a failing `main`'s error payload, but that call site is emitted by
+    // hand after this scan, so it has to be registered here or its converter is never defined.
+    if let Some(err_ty) = super::entry::entry_error_type(cx) {
+        classify(cx, err_ty, &mut reach);
+    }
     close_over_layouts(cx, &mut reach.to_string);
     close_over_layouts(cx, &mut reach.hash_code);
     reach

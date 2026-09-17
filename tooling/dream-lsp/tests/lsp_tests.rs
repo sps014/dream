@@ -430,8 +430,14 @@ fun f(): void {
 
 #[test]
 fn enum_member_payload_snippet() {
-    let snippet = dream_lsp::index::enum_member_snippet("Circle", "Shape.Circle(float)");
-    assert_eq!(snippet.as_deref(), Some("Circle(${1:radius})"));
+    // A named payload places the field name; a positional one has no name to show, so the
+    // placeholder falls back to the payload type.
+    let named =
+        dream_lsp::index::enum_member_snippet("Rect", "Shape.Rect(width: int, height: int)");
+    assert_eq!(named.as_deref(), Some("Rect(${1:width}, ${2:height})"));
+
+    let positional = dream_lsp::index::enum_member_snippet("Circle", "Shape.Circle(float)");
+    assert_eq!(positional.as_deref(), Some("Circle(${1:float})"));
 
     let unit = dream_lsp::index::enum_member_snippet("Red", "Color.Red = 0");
     assert_eq!(unit, None);
@@ -440,6 +446,7 @@ fn enum_member_payload_snippet() {
         r#"
 enum Shape {
     Circle(float),
+    Rect(width: int, height: int),
     Empty,
 }
 fun f(): void {
@@ -453,7 +460,12 @@ fun f(): void {
     let circle = comps.iter().find(|(n, ..)| n == "Circle").expect("Circle");
     assert_eq!(
         dream_lsp::index::enum_member_snippet(&circle.0, &circle.2).as_deref(),
-        Some("Circle(${1:radius})")
+        Some("Circle(${1:float})")
+    );
+    let rect = comps.iter().find(|(n, ..)| n == "Rect").expect("Rect");
+    assert_eq!(
+        dream_lsp::index::enum_member_snippet(&rect.0, &rect.2).as_deref(),
+        Some("Rect(${1:width}, ${2:height})")
     );
 }
 
@@ -2506,22 +2518,27 @@ static extern fun print(): void;
 }
 
 #[test]
-fn operator_arg_completions() {
+fn operator_overload_member_completions() {
+    // Operator overloads and casts are declared with the `operator` / `implicit` keyword forms, not
+    // an attribute. Both are ordinary methods to the index, under the mangled `op_add` symbol.
     let harness = TestHarness::new(
         r#"
 class Vec {
-    @operator("|")
-    public fun add(other: Vec): Vec { return other; }
+    public fun operator +(other: Vec): Vec { return other; }
+    public fun implicit(): int { return 1; }
+}
+fun f(a: Vec): void {
+    a.|
 }
 "#,
     );
     let comps = harness
         .index()
         .completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
-        comps.iter().any(|(n, ..)| n == "+" || n == "=="),
-        "expected operator symbols, got {:?}",
-        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+        names.contains(&"op_add") && names.contains(&"implicit"),
+        "expected the operator overload and cast on a Vec receiver, got {names:?}"
     );
 }
 

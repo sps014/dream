@@ -100,6 +100,8 @@
 #define DREAM_SYM_PRINT_INT "print_int"
 #define DREAM_SYM_PRINT_STRING "print_string"
 #define DREAM_SYM_PRINT_CHAR "print_char"
+#define DREAM_SYM_PRINT_ERR_STRING "print_err_string"
+#define DREAM_SYM_PRINT_ERR_CHAR "print_err_char"
 #define DREAM_SYM_PRINT_FLOAT "print_float"
 #define DREAM_SYM_PRINT_DOUBLE "print_double"
 #define DREAM_SYM_TIME_NOW_NANOS "timeNowNanos"

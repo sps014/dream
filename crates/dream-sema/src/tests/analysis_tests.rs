@@ -2274,3 +2274,82 @@ fn test_public_fn_exposes_private_enum() {
         errors
     );
 }
+
+#[test]
+fn test_main_result_bool_may_fall_off_the_end() {
+    let code = "
+        enum Result<T, E> { Ok(T), Err(E) }
+        fun main(): Result<bool, string> { }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        !errors
+            .iter()
+            .any(|m| m.contains("not all code paths return a value")),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_main_int_may_fall_off_the_end() {
+    let code = "
+        fun main(): int { }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        !errors
+            .iter()
+            .any(|m| m.contains("not all code paths return a value")),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_main_result_int_still_requires_a_return() {
+    let code = "
+        enum Result<T, E> { Ok(T), Err(E) }
+        fun main(): Result<int, string> { }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors
+            .iter()
+            .any(|m| m.contains("not all code paths return a value")),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_main_option_return_is_rejected() {
+    let code = "
+        enum Option<T> { Some(T), None }
+        fun main(): Option<int> { return Option.None; }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors.iter().any(
+            |m| m.contains("'main' must return void, int, or Result<T, E>") && m.contains("ok_or")
+        ),
+        "got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_ordinary_function_may_not_fall_off_the_end() {
+    let code = "
+        fun helper(): int { }
+        fun main(): void { }
+    ";
+    let errors = error_messages(&analyze_code(code));
+    assert!(
+        errors
+            .iter()
+            .any(|m| m.contains("not all code paths return a value")),
+        "got: {:?}",
+        errors
+    );
+}

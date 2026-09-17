@@ -1,0 +1,18 @@
+// `main`'s return value is the process exit status, so only `void`, `int`, and `Result<T, E>` have
+// a meaning. An `Option` main is rejected rather than silently discarded — `ok_or` bridges it.
+import system;
+
+fun first_positive(xs: int[]): Option<int> {
+    for (let x in xs) {
+        if x > 0 {
+            return Option.Some(x);
+        }
+    }
+    return Option.None;
+}
+
+fun main(): Option<int> {
+    let v = first_positive([1, 2, 3])?;
+    System.println(v);
+    return Option.Some(v);
+}

@@ -49,7 +49,10 @@ impl<'a> Analyzer<'a> {
                             return Ok(enum_ty);
                         }
                         diagnostics.report_error(
-                            format!("cannot use '{}.{}' as a default value", base.text, member.text),
+                            format!(
+                                "cannot use '{}.{}' as a default value",
+                                base.text, member.text
+                            ),
                             Some(member.position),
                         );
                         return Ok(Type::Unknown);

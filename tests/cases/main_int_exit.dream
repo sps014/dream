@@ -1,0 +1,11 @@
+// `main(): int` is the process exit code, as in C. Reaching the end of the body is an implicit
+// `return 0`, so the non-zero path has to be taken explicitly — which makes this a trap case.
+import system;
+
+fun main(): int {
+    System.println("checking");
+    if 1 + 1 == 2 {
+        return 3;
+    }
+    System.println("unreachable");
+}

@@ -1,3 +1,4 @@
+use crate::entry::entry_tail_return;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, SwitchArmBody, Type};
 
@@ -51,7 +52,7 @@ impl<'a, 'd> FunctionControlGraph<'a, 'd> {
 
         if flow.falls_through {
             if let Some(ret) = &self.function.return_type {
-                if ret != &Type::Void {
+                if ret != &Type::Void && entry_tail_return(self.function).is_none() {
                     self.diagnostics.report_error(
                         format!(
                             "function '{}': not all code paths return a value",

@@ -299,12 +299,13 @@ impl Builder {
 
         let mut best: Option<String> = None;
         for d in candidates {
-            let Some((formals, ret)) = parse_method_signature(&d.detail) else {
+            let Some(sig) = parse_method_signature(&d.detail) else {
                 continue;
             };
-            if formals.len() != args.len() {
+            if !sig.accepts_arg_count(args.len()) {
                 continue;
             }
+            let (formals, ret) = (sig.params, sig.ret);
             if !Self::lambda_async_compatible(&formals, args) {
                 continue;
             }
@@ -337,7 +338,7 @@ impl Builder {
                     &explicit,
                 );
                 parse_method_signature(&detail)
-                    .map(|(_, r)| r)
+                    .map(|s| s.ret)
                     .unwrap_or(ret)
             } else {
                 substitute_named_type_params(&ret, infer_params, &type_args)

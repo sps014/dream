@@ -35,8 +35,27 @@ function nodeStdoutWrite(s) {
   console.log(s);
 }
 
+/** Diagnostic stream for panics and a failing `main` — never mixed into program output. */
+function nodeStderrWrite(s) {
+  const fs = getNodeFs();
+  const fd =
+    typeof process !== "undefined" && process.stderr && typeof process.stderr.fd === "number"
+      ? process.stderr.fd
+      : 2;
+  if (fs && typeof fs.writeSync === "function") {
+    fs.writeSync(fd, s);
+    return;
+  }
+  if (typeof process !== "undefined" && process.stderr) {
+    process.stderr.write(s);
+    return;
+  }
+  console.error(s);
+}
+
 function defaultEnv(getInstance, options) {
   const writeOut = options.stdout || nodeStdoutWrite;
+  const writeErr = options.stderr || nodeStderrWrite;
   const writeLine = options.stdout
     ? (s) => options.stdout(s + "\n")
     : (s) => console.log(s);
@@ -48,6 +67,8 @@ function defaultEnv(getInstance, options) {
     print_float: (v) => writeOut(formatFloat(v)),
     print_double: (v) => writeOut(formatDouble(v)),
     print_char: (v) => writeOut(String.fromCharCode(v)),
+    print_err_string: (ptr) => writeErr(getInstance().readString(ptr)),
+    print_err_char: (v) => writeErr(String.fromCharCode(v)),
     sin: Math.sin,
     cos: Math.cos,
     tan: Math.tan,

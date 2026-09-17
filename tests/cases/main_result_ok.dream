@@ -1,0 +1,18 @@
+// `main` may return `Result<T, E>` so `?` works in it. On the success path it falls off the end,
+// which the compiler treats as `return Result.Ok(true);` (Dream has no unit type, so `bool` is the
+// "no useful value" payload).
+import system;
+
+fun half(n: int): Result<int, string> {
+    if n % 2 != 0 {
+        return Result.Err("odd: " + n.to_string());
+    }
+    return Result.Ok(n / 2);
+}
+
+fun main(): Result<bool, string> {
+    let a = half(20)?;
+    System.println("half is " + a.to_string());
+    let b = half(a)?;
+    System.println("quarter is " + b.to_string());
+}

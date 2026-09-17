@@ -481,29 +481,37 @@ class DreamInstance {
     if (typeof drop === "function") drop();
   }
 
-  /** Calls the exported `main`, if present. Async `main` returns a Future pointer. */
+  /**
+   * Collects `main`'s exit status, reporting a failing `Result` main's error on stderr. `fut` is
+   * the settled Future of an async `main`, or 0 for a sync one. Absent when `main` returns `void`.
+   */
+  __mainStatus(fut) {
+    const report = this.exports.__dream_main_report;
+    return typeof report === "function" ? report(fut) : 0;
+  }
+
+  /**
+   * Calls the exported `main`, if present. Async `main` returns a Future pointer. Resolves with the
+   * process exit status: 0, or `main`'s own `int` / failing `Result` status.
+   */
   run() {
     if (typeof this.exports.main !== "function") {
       throw new Error("module has no exported `main`");
     }
     const r = this.exports.main();
-    const after = () => {
+    const after = (fut) => {
+      const code = this.__mainStatus(fut);
       if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
         this.exports.free(r);
       }
       this.__dropGlobals();
+      this.exitCode = code;
+      return code;
     };
-    if (!r) {
-      after();
-      return Promise.resolve();
+    if (!r || !this.__isFutureFrame(r)) {
+      return Promise.resolve(after(0));
     }
-    if (!this.__isFutureFrame(r)) {
-      after();
-      return Promise.resolve(r);
-    }
-    return this.__awaitFuture(r).then(() => {
-      after();
-    });
+    return this.__awaitFuture(r).then(() => after(r));
   }
 }
 
@@ -820,8 +828,27 @@ function nodeStdoutWrite(s) {
   console.log(s);
 }
 
+/** Diagnostic stream for panics and a failing `main` — never mixed into program output. */
+function nodeStderrWrite(s) {
+  const fs = getNodeFs();
+  const fd =
+    typeof process !== "undefined" && process.stderr && typeof process.stderr.fd === "number"
+      ? process.stderr.fd
+      : 2;
+  if (fs && typeof fs.writeSync === "function") {
+    fs.writeSync(fd, s);
+    return;
+  }
+  if (typeof process !== "undefined" && process.stderr) {
+    process.stderr.write(s);
+    return;
+  }
+  console.error(s);
+}
+
 function defaultEnv(getInstance, options) {
   const writeOut = options.stdout || nodeStdoutWrite;
+  const writeErr = options.stderr || nodeStderrWrite;
   const writeLine = options.stdout
     ? (s) => options.stdout(s + "\n")
     : (s) => console.log(s);
@@ -833,6 +860,8 @@ function defaultEnv(getInstance, options) {
     print_float: (v) => writeOut(formatFloat(v)),
     print_double: (v) => writeOut(formatDouble(v)),
     print_char: (v) => writeOut(String.fromCharCode(v)),
+    print_err_string: (ptr) => writeErr(getInstance().readString(ptr)),
+    print_err_char: (v) => writeErr(String.fromCharCode(v)),
     sin: Math.sin,
     cos: Math.cos,
     tan: Math.tan,
@@ -5341,11 +5370,17 @@ function attachGuestStack(wasmInstance) {
 /**
  * load a module and immediately invoke its `main`.
  *
+ * A non-zero exit status (`main(): int`, or a failing `Result` main) is surfaced on Node as
+ * `process.exitCode`, and always as `mod.exitCode`.
+ *
  * @returns {Promise<DreamInstance>} the loaded instance (after `main` has run).
  */
 async function run(source, options = {}) {
   const mod = await load(source, options);
-  await mod.run();
+  const code = await mod.run();
+  if (code && typeof process !== "undefined") {
+    process.exitCode = code;
+  }
   return mod;
 }
 

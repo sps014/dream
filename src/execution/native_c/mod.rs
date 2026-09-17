@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 pub fn compile_and_run(c_path: &str, opt: OptLevel) -> Result<(), Box<dyn std::error::Error>> {
     let bin = compile_native_c(Path::new(c_path), opt, false)?;
-    run_native_bin(&bin, c_path, &[])
+    run_native_bin_checked(&bin, c_path)
 }
 
 pub fn compile_and_capture(
@@ -87,11 +87,15 @@ pub fn compile_and_capture_ex(
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         let stdout = String::from_utf8_lossy(&out.stdout);
-        return Err(format!(
-            "native C program failed (status {:?}): stderr={err} stdout={stdout}",
-            out.status
-        )
-        .into());
+        // The code is spelled out (not just the raw `ExitStatus`) so a trap golden can assert on a
+        // chosen exit status portably.
+        let code = match out.status.code() {
+            Some(c) => format!("exit code {c}"),
+            None => format!("status {:?}", out.status),
+        };
+        return Err(
+            format!("native C program failed ({code}): stderr={err} stdout={stdout}").into(),
+        );
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
     if let Some(live) = parse_leak_live(&stderr) {
@@ -110,19 +114,29 @@ fn parse_leak_live(stderr: &str) -> Option<i32> {
     digits.parse().ok()
 }
 
+/// Runs the guest and answers its exit status. A non-zero status is a normal outcome — `main` may
+/// return `int` or a failing `Result` — so only a crash (killed by a signal, no status at all) is
+/// an error here; callers that treat any failure as their own decide that for themselves.
 pub fn run_native_bin(
     bin: &Path,
     c_path: &str,
     extra_args: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<i32, Box<dyn std::error::Error>> {
     let mut cmd = Command::new(bin);
     apply_native_run_env(&mut cmd, c_path);
     cmd.args(extra_args);
     let status = cmd.status()?;
-    if !status.success() {
-        return Err(format!("native C program failed (status {status:?})").into());
+    status
+        .code()
+        .ok_or_else(|| format!("native C program failed (status {status:?})").into())
+}
+
+/// [`run_native_bin`], with a non-zero exit status reported as an error.
+fn run_native_bin_checked(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match run_native_bin(bin, c_path, &[])? {
+        0 => Ok(()),
+        code => Err(format!("native C program failed (exit code {code})").into()),
     }
-    Ok(())
 }
 
 pub(crate) fn apply_native_run_env(cmd: &mut Command, c_path: &str) {

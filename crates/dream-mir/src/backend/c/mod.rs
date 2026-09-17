@@ -7,6 +7,7 @@ mod calls;
 mod ctx;
 mod debugviews;
 mod emit;
+mod entry;
 mod js_marshal;
 mod localnames;
 mod module;
@@ -920,5 +921,80 @@ mod tests {
             c
         );
         assert!(!c.contains("_Thread_local"), "{}", c);
+    }
+
+    /// Builds a `main` returning `Result<bool, string>` and checks the entry point acts on it:
+    /// the `Err` arm reports on stderr, the `Result` is released, and the status reaches the
+    /// process exit code.
+    fn result_main_mir() -> (Mir, TypeInterner) {
+        let mut i = TypeInterner::new();
+        let string = i.string();
+        let boolean = i.bool();
+        let result = i.union_ty(dream_types::DefId(0), vec![boolean, string]);
+        let mut layouts = dream_hir::LayoutTable::default();
+        layouts.insert_union(
+            result,
+            dream_hir::UnionLayout {
+                name: "Result_bool_string".into(),
+                size: 12,
+                variants: vec![
+                    dream_hir::UnionVariant {
+                        name: "Ok".into(),
+                        discriminant: 0,
+                        fields: vec![dream_hir::FieldLayout {
+                            offset: 4,
+                            ty: boolean,
+                            name: "0".into(),
+                            is_weak: false,
+                            is_unowned: false,
+                        }],
+                    },
+                    dream_hir::UnionVariant {
+                        name: "Err".into(),
+                        discriminant: 1,
+                        fields: vec![dream_hir::FieldLayout {
+                            offset: 8,
+                            ty: string,
+                            name: "0".into(),
+                            is_weak: false,
+                            is_unowned: false,
+                        }],
+                    },
+                ],
+            },
+        );
+        let mut b = FunctionBuilder::new(crate::abi::ENTRY_FN, result);
+        b.terminate(Terminator::Return(Some(Operand::Const(Const::Null))));
+        let mir = Mir {
+            functions: vec![b.finish()],
+            layouts,
+            ..Default::default()
+        };
+        (mir, i)
+    }
+
+    #[test]
+    fn result_main_reports_err_and_releases() {
+        let (mir, i) = result_main_mir();
+        let c = emit_c_module(&mir, &i);
+        assert!(c.contains("print_err_string"), "{}", c);
+        assert!(c.contains("release_Result_bool_string"), "{}", c);
+        // The `Err` discriminant gates the report, and a failing `main` exits 1.
+        assert!(c.contains("__dream_main_rc"), "{}", c);
+    }
+
+    #[test]
+    fn result_main_exports_the_report_hook_on_wasm32() {
+        use super::{emit_c_module_for, CTarget};
+        let (mir, i) = result_main_mir();
+        let c = emit_c_module_for(&mir, &i, CTarget::Wasm32, false);
+        assert!(
+            c.contains(&format!(
+                "export_name(\"{}\")",
+                crate::abi::EXPORT_MAIN_REPORT
+            )),
+            "{}",
+            c
+        );
     }
 }

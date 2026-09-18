@@ -1931,6 +1931,8 @@ function makeGpuHost(getInstance) {
   let nextId = 1;
   let devicePromise = null;
   let device = null;
+  // Kept alongside the device because subgroup width is adapter information, not a device limit.
+  let gpuAdapter = null;
   let gpuAbi = null;
   let wgslSource = null;
   let blitPipeline = null;
@@ -1944,6 +1946,43 @@ function makeGpuHost(getInstance) {
   const ERR_VALIDATION = 3;
   const ERR_OTHER = 4;
   const ERR_UNSUPPORTED = 5;
+
+  // Optional WebGPU features Dream opts into whenever the adapter offers them. A shader or resource
+  // may only touch a feature the *device* asked for — reaching for an un-requested one is
+  // device-loss-grade rather than a recoverable validation error — so this list is a contract with
+  // `gpuCapabilities`. Mirrors `wanted_features` in native `src/execution/host/gpu/caps.rs`.
+  const WANTED_FEATURES = [
+    "shader-f16",
+    "subgroups",
+    "texture-compression-bc",
+    "texture-compression-etc2",
+    "texture-compression-astc",
+    "depth32float-stencil8",
+    "float32-filterable",
+  ];
+
+  // Limits raised to the adapter's own maximum. Everything else stays at the portable WebGPU
+  // default so a program developed against a large GPU still runs on a small one.
+  const RAISED_LIMITS = [
+    "maxBufferSize",
+    "maxStorageBufferBindingSize",
+    "maxComputeWorkgroupStorageSize",
+    "maxComputeInvocationsPerWorkgroup",
+    "maxComputeWorkgroupSizeX",
+    "maxComputeWorkgroupSizeY",
+    "maxComputeWorkgroupSizeZ",
+    "maxComputeWorkgroupsPerDimension",
+  ];
+
+  // Packed `gpuCapabilities` blob; see `caps.rs` for the authoritative field offsets.
+  const CAPS_BLOB_LEN = 56;
+  const CAP_SHADER_FLOAT16 = 1 << 0;
+  const CAP_SUBGROUP = 1 << 1;
+  const CAP_TEXTURE_COMPRESSION_BC = 1 << 5;
+  const CAP_TEXTURE_COMPRESSION_ETC2 = 1 << 6;
+  const CAP_TEXTURE_COMPRESSION_ASTC = 1 << 7;
+  const CAP_DEPTH32_FLOAT_STENCIL8 = 1 << 8;
+  const CAP_FLOAT32_FILTERABLE = 1 << 9;
 
   // Mirrors of the enum tables owned by `crates/dream-abi/src/gpu_format.rs`, indexed by the
   // `GpuTextureFormat` / `GpuTextureDimension` / … discriminants Dream passes as ints. Keep these
@@ -2060,7 +2099,14 @@ function makeGpuHost(getInstance) {
           ),
         ]);
         if (!adapter) throw new Error("no WebGPU adapter");
-        device = await adapter.requestDevice();
+        const requiredFeatures = WANTED_FEATURES.filter((f) => adapter.features?.has(f));
+        const requiredLimits = {};
+        for (const key of RAISED_LIMITS) {
+          const v = adapter.limits?.[key];
+          if (typeof v === "number" && Number.isFinite(v)) requiredLimits[key] = v;
+        }
+        device = await adapter.requestDevice({ requiredFeatures, requiredLimits });
+        gpuAdapter = adapter;
         return device;
       })().catch((err) => {
         devicePromise = null;
@@ -3484,6 +3530,43 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
     gpuIsAvailable: () => !!(globalThis.navigator && globalThis.navigator.gpu),
     gpuReady: () => device != null,
+    // All-zero before `gpuTryInit`, so callers see "nothing available" rather than an optimistic
+    // answer drawn from an adapter no device was ever requested from.
+    gpuCapabilities: () => {
+      const out = new Uint8Array(CAPS_BLOB_LEN);
+      if (!device) return out;
+      const has = (f) => !!device.features?.has(f);
+      let flags = 0;
+      if (has("shader-f16")) flags |= CAP_SHADER_FLOAT16;
+      if (has("subgroups")) flags |= CAP_SUBGROUP;
+      if (has("texture-compression-bc")) flags |= CAP_TEXTURE_COMPRESSION_BC;
+      if (has("texture-compression-etc2")) flags |= CAP_TEXTURE_COMPRESSION_ETC2;
+      if (has("texture-compression-astc")) flags |= CAP_TEXTURE_COMPRESSION_ASTC;
+      if (has("depth32float-stencil8")) flags |= CAP_DEPTH32_FLOAT_STENCIL8;
+      if (has("float32-filterable")) flags |= CAP_FLOAT32_FILTERABLE;
+      // No subgroup-barrier or cooperative-matrix bit: WebGPU exposes no counterpart to the native
+      // `SUBGROUP_BARRIER` feature, and subgroup-matrix tiles remain a pre-standard extension.
+      const lim = device.limits || {};
+      const u32 = (v) => (Number.isFinite(v) ? v >>> 0 : 0);
+      const u64 = (v) => (Number.isFinite(v) && v > 0 ? BigInt(Math.floor(v)) : 0n);
+      const dv = new DataView(out.buffer);
+      dv.setUint32(0, flags >>> 0, true);
+      dv.setUint32(4, 0, true);
+      dv.setBigUint64(8, u64(lim.maxBufferSize), true);
+      dv.setBigUint64(16, u64(lim.maxStorageBufferBindingSize), true);
+      dv.setUint32(24, u32(lim.maxComputeWorkgroupStorageSize), true);
+      dv.setUint32(28, u32(lim.maxComputeInvocationsPerWorkgroup), true);
+      dv.setUint32(32, u32(lim.maxComputeWorkgroupSizeX), true);
+      dv.setUint32(36, u32(lim.maxComputeWorkgroupSizeY), true);
+      dv.setUint32(40, u32(lim.maxComputeWorkgroupSizeZ), true);
+      dv.setUint32(44, u32(lim.maxComputeWorkgroupsPerDimension), true);
+      // Subgroup width lives on the adapter info in the subgroups proposal, and on the device
+      // limits in earlier drafts; zero when the host reports it in neither place.
+      const info = gpuAdapter?.info || {};
+      dv.setUint32(48, u32(info.subgroupMinSize ?? lim.minSubgroupSize), true);
+      dv.setUint32(52, u32(info.subgroupMaxSize ?? lim.maxSubgroupSize), true);
+      return out;
+    },
     gpuLastError: () => {
       const msg = lastError;
       lastError = "";

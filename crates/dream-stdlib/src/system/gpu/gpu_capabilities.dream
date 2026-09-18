@@ -1,0 +1,92 @@
+module system.gpu;
+
+// The optional features and raised limits the GPU device was actually created with.
+//
+// WebGPU only lets a shader or resource touch a feature the *device* opted into at creation time;
+// reaching for an un-requested one is device-loss-grade rather than a recoverable validation
+// error. These flags are therefore the authoritative answer to "may I use this?", not merely
+// "does the hardware have it?" — gate on them rather than probing and recovering.
+public struct GpuCapabilities {
+    // Half-precision (`f16`) arithmetic and storage in shaders.
+    public shader_float16: bool;
+    // Subgroup (wave / warp / SIMD-group) intrinsics.
+    public subgroup: bool;
+    // `subgroupBarrier`. Native-only today: WebGPU exposes no counterpart.
+    public subgroup_barrier: bool;
+    // Cooperative ("subgroup") matrix tiles accumulating in `float16`.
+    public tile_float16: bool;
+    // Cooperative matrix tiles accumulating in `float`.
+    public tile_float: bool;
+    // Square cooperative-matrix tile width, `8` or `16`; `0` when tiles are unavailable.
+    public tile_n: int;
+    // BC ("DXT"/S3TC) texture formats — desktop GPUs. `GpuTexture.create` with a `Bc*` format
+    // fails with `GpuError.unsupported` unless this is set.
+    public texture_compression_bc: bool;
+    // ETC2 texture formats — mobile GPUs.
+    public texture_compression_etc2: bool;
+    // ASTC texture formats — mobile GPUs.
+    public texture_compression_astc: bool;
+    // The combined `depth32float-stencil8` format.
+    public depth32_float_stencil8: bool;
+    // Linear filtering of 32-bit float textures.
+    public float32_filterable: bool;
+    // Largest single buffer allocation.
+    public max_buffer_bytes: long;
+    // Largest range bindable to one storage-buffer slot.
+    public max_storage_binding_bytes: long;
+    // `var<workgroup>` bytes available to one compute workgroup.
+    public max_workgroup_storage_bytes: int;
+    // Invocations in one workgroup, i.e. the product of the three `@workgroup_size` dimensions.
+    public max_invocations_per_workgroup: int;
+    // Per-dimension ceiling on `@workgroup_size`.
+    public max_workgroup_size_x: int;
+    public max_workgroup_size_y: int;
+    public max_workgroup_size_z: int;
+    // Per-dimension ceiling on the workgroup count of a single dispatch.
+    public max_workgroups_per_dimension: int;
+    // Subgroup width range; both `0` unless `subgroup` is set.
+    public min_subgroup_size: int;
+    public max_subgroup_size: int;
+
+    // Decodes the packed host blob. See native `src/execution/host/gpu/caps.rs` for the
+    // authoritative field offsets, mirrored by JS `gpuCapabilities` in `runtime/src/hosts/gpu.js`.
+    internal static fun decode(buf: byte[]): GpuCapabilities {
+        let c = GpuCapabilities();
+        // A short blob means no device yet; leaving every field zeroed reports "nothing available".
+        if buf.length < 56 { return c; }
+        let flags = GpuInputCodec.read_i32(buf, 0);
+        c.shader_float16 = (flags & 1) != 0;
+        c.subgroup = (flags & 2) != 0;
+        c.subgroup_barrier = (flags & 4) != 0;
+        c.tile_float16 = (flags & 8) != 0;
+        c.tile_float = (flags & 16) != 0;
+        c.texture_compression_bc = (flags & 32) != 0;
+        c.texture_compression_etc2 = (flags & 64) != 0;
+        c.texture_compression_astc = (flags & 128) != 0;
+        c.depth32_float_stencil8 = (flags & 256) != 0;
+        c.float32_filterable = (flags & 512) != 0;
+        c.tile_n = GpuInputCodec.read_i32(buf, 4);
+        c.max_buffer_bytes = GpuCapabilities.read_i64(buf, 8);
+        c.max_storage_binding_bytes = GpuCapabilities.read_i64(buf, 16);
+        c.max_workgroup_storage_bytes = GpuInputCodec.read_i32(buf, 24);
+        c.max_invocations_per_workgroup = GpuInputCodec.read_i32(buf, 28);
+        c.max_workgroup_size_x = GpuInputCodec.read_i32(buf, 32);
+        c.max_workgroup_size_y = GpuInputCodec.read_i32(buf, 36);
+        c.max_workgroup_size_z = GpuInputCodec.read_i32(buf, 40);
+        c.max_workgroups_per_dimension = GpuInputCodec.read_i32(buf, 44);
+        c.min_subgroup_size = GpuInputCodec.read_i32(buf, 48);
+        c.max_subgroup_size = GpuInputCodec.read_i32(buf, 52);
+        return c;
+    }
+
+    // Reads a little-endian i64 at byte `off`.
+    static fun read_i64(buf: byte[], off: int): long {
+        let slice = Buffer.alloc<byte>(8);
+        let i = 0;
+        while i < 8 {
+            slice[i] = buf[off + i];
+            i = i + 1;
+        }
+        return Bytes.to<long>(slice);
+    }
+}

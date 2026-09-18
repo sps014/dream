@@ -1,0 +1,48 @@
+// `Gpu.capabilities()` reports the optional features and raised limits the device was created
+// with. Dream now opts into the features the adapter offers instead of requesting an empty set,
+// which is what makes BC/ETC2/ASTC texture formats reachable at all, and raises the buffer and
+// compute-workgroup limits to the adapter maximum.
+//
+// Only the WebGPU guaranteed floors are asserted here: the real values are machine-dependent, so
+// a test pinning them would report the CI GPU rather than a contract.
+import system;
+import system.gpu;
+
+async fun main(): void {
+    // Capabilities describe the negotiated device, not the raw adapter, so there is nothing to
+    // report before `try_init` succeeds.
+    let pre = Gpu.capabilities();
+    System.println("pre_max_buffer=" + pre.max_buffer_bytes.to_string());
+    System.println("pre_subgroup=" + pre.subgroup.to_int().to_string());
+
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+    let c = Gpu.capabilities();
+
+    System.println("buffer_ok=" + (c.max_buffer_bytes >= 268435456L).to_int().to_string());
+    System.println("storage_ok=" + (c.max_storage_binding_bytes >= 134217728L).to_int().to_string());
+    System.println("wg_storage_ok=" + (c.max_workgroup_storage_bytes >= 16384).to_int().to_string());
+    System.println("invocations_ok=" + (c.max_invocations_per_workgroup >= 256).to_int().to_string());
+    System.println("wg_x_ok=" + (c.max_workgroup_size_x >= 256).to_int().to_string());
+    System.println("wg_z_ok=" + (c.max_workgroup_size_z >= 64).to_int().to_string());
+    System.println("dispatch_ok=" + (c.max_workgroups_per_dimension >= 65535).to_int().to_string());
+
+    // Cooperative-matrix tiles are reserved in the packed layout but no backend emits them yet,
+    // so a caller gating on these still takes the scalar path.
+    System.println("tile_n=" + c.tile_n.to_string());
+    System.println("tile_float=" + c.tile_float.to_int().to_string());
+    System.println("tile_float16=" + c.tile_float16.to_int().to_string());
+
+    // A subgroup width is only meaningful when the subgroup feature was actually granted.
+    let width_known = c.min_subgroup_size > 0 || c.max_subgroup_size > 0;
+    System.println("subgroup_width_consistent=" + (c.subgroup || !width_known).to_int().to_string());
+
+    // The point of reporting a feature is that it predicts what the device will accept. A BC
+    // texture must create exactly when the flag says so — before the device opted in, the format
+    // was rejected on every adapter regardless of hardware.
+    let bc = GpuTexture.create(GpuTextureDesc.d2(64, 64, GpuTextureFormat.Bc7RgbaUnorm));
+    System.println("bc_matches_flag=" + (bc.is_ok() == c.texture_compression_bc).to_int().to_string());
+}

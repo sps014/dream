@@ -5,7 +5,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use crate::execution::host::gpu::{
-    attach_abi_from_wat_path, buffers, compute, device, error, render, surface, textures,
+    attach_abi_from_wat_path, buffers, caps, compute, device, error, render, surface, textures,
 };
 use std::sync::{Mutex, Once};
 
@@ -162,6 +162,11 @@ fn alloc_i32s(xs: &[i32]) -> usize {
 #[no_mangle]
 pub extern "C" fn gpuIsAvailable() -> i32 {
     i32::from(device::is_available())
+}
+
+#[no_mangle]
+pub extern "C" fn gpuCapabilities() -> usize {
+    alloc_bytes(&caps::encode())
 }
 
 #[no_mangle]

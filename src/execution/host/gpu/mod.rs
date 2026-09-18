@@ -3,6 +3,7 @@
 mod abi;
 pub(crate) mod binds;
 pub(crate) mod buffers;
+pub(crate) mod caps;
 pub(crate) mod compute;
 pub(crate) mod device;
 pub(crate) mod encoder;

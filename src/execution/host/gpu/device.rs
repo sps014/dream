@@ -36,8 +36,8 @@ pub fn try_init() -> i32 {
     let (device, queue) = match pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
             label: Some("dream-gpu"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default(),
+            required_features: super::caps::requested_features(&adapter),
+            required_limits: super::caps::requested_limits(&adapter),
             memory_hints: wgpu::MemoryHints::default(),
         },
         None,

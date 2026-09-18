@@ -1,0 +1,14 @@
+pre_max_buffer=0
+pre_subgroup=0
+buffer_ok=1
+storage_ok=1
+wg_storage_ok=1
+invocations_ok=1
+wg_x_ok=1
+wg_z_ok=1
+dispatch_ok=1
+tile_n=0
+tile_float=0
+tile_float16=0
+subgroup_width_consistent=1
+bc_matches_flag=1

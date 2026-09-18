@@ -11,6 +11,10 @@ public static class Gpu {
     @runtime("gpuReady")
     static extern fun ready_host(): bool;
 
+    @web @native
+    @runtime("gpuCapabilities")
+    static extern fun capabilities_host(): byte[];
+
     @runtime("gpuFrame")
     static extern async fun frame_host(): void;
 
@@ -25,6 +29,13 @@ public static class Gpu {
     // True after a successful `try_init`.
     public static get ready(): bool {
         return Gpu.ready_host();
+    }
+
+    // Optional features and limits the device was created with. Everything reads as unavailable
+    // (`false` / `0`) until `try_init` succeeds, since capabilities are a property of the device
+    // Dream negotiated, not of the raw adapter.
+    public static fun capabilities(): GpuCapabilities {
+        return GpuCapabilities.decode(Gpu.capabilities_host());
     }
 
     // Initializes the GPU device; returns `Err` with a host error code on failure.

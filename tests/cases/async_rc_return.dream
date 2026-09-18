@@ -4,18 +4,18 @@
 
 import system;
 async fun greet(name: string): string {
-    await Time.sleep(0);
+    Time.sleep(0).await;
     let msg = "Hello, " + name + "!";
     return msg;
 }
 
 async fun run(): void {
-    let g = await greet("World");
+    let g = greet("World").await;
     System.println(g);
 }
 
 async fun main(): void {
     let base = Debug.live_objects;
-    await run();
+    run().await;
     System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

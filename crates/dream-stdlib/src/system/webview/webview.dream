@@ -407,7 +407,7 @@ public class WebView {
             if closed != 0 {
                 return;
             }
-            await Time.delay(0);
+            Time.delay(0).await;
         }
     }
 
@@ -424,7 +424,7 @@ public class WebView {
     @native
     public async fun eval(js: string, token: Option<CancellationToken> = Option.None): Result<string, WebViewError> {
         CancellationToken.rejected(token, WebViewError.cancelled())?;
-        let raw = await WebView.host_eval(this.id, js);
+        let raw = WebView.host_eval(this.id, js).await;
         let reader = WebViewWireReader(raw);
         let code = int.parse(reader.read_line()).unwrap_or(1);
         let payload = Encoding.utf8_decode(reader.read_remaining_bytes());

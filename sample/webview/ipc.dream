@@ -65,7 +65,7 @@ async fun main() {
                 },
             }
 
-            await view.run();
+            view.run().await;
         },
         Err(e) => System.println(e.message()),
     }

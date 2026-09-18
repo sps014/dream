@@ -33,7 +33,7 @@ fun advanced_gpu_calc(
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -43,21 +43,21 @@ async fun main(): void {
     let atomics = GpuBuffer<int>.from([9999, -9999, 0, 0]);
     let out = GpuBuffer<float>.alloc(2);
 
-    let r = await Compute.run_resources(
+    let r = Compute.run_resources(
         "advanced_gpu_calc",
         [data.id, atomics.id, out.id],
         Buffer.alloc<int>(0),
         Buffer.alloc<int>(0),
         2, 1, 1,
         Uniforms.pack_i32([2])
-    );
+    ).await;
     if r.is_err() {
         System.println("dispatch failed");
         return;
     }
 
-    let res = await out.read();
-    let stats = await atomics.read();
+    let res = out.read().await;
+    let stats = atomics.read().await;
 
     System.println((int)res[0]);
     System.println((int)res[1]);

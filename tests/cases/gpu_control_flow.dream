@@ -90,33 +90,33 @@ fun switches(out: GpuBuffer<int>): void {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
 
     let a = GpuBuffer<int>.from([0, 0, 0, 0]);
-    let ra = await Compute.run_resources(
-        "loops", [a.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0));
+    let ra = Compute.run_resources(
+        "loops", [a.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0)).await;
     if ra.is_err() {
         System.println("loops failed: " + ra.unwrap_err().message());
         return;
     }
-    let va = await a.read();
+    let va = a.read().await;
     System.println("for_sum=" + va[0].to_string());
     System.println("do_n=" + va[1].to_string());
     System.println("do_seen=" + va[2].to_string());
     System.println("while_acc=" + va[3].to_string());
 
     let b = GpuBuffer<int>.from([0, 0, 0, 0, 0]);
-    let rb = await Compute.run_resources(
-        "switches", [b.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0));
+    let rb = Compute.run_resources(
+        "switches", [b.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0)).await;
     if rb.is_err() {
         System.println("switches failed: " + rb.unwrap_err().message());
         return;
     }
-    let vb = await b.read();
+    let vb = b.read().await;
     System.println("enum=" + vb[0].to_string());
     System.println("call_subject=" + vb[1].to_string());
     System.println("break_in_case=" + vb[2].to_string());

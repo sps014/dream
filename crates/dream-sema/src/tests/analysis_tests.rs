@@ -237,11 +237,11 @@ fn test_analyze_async_await_valid() {
     // Calling an async fun yields `Future<T>`; awaiting it (at a statement position) yields `T`.
     let code = "
         async fun delay(): void { }
-        async fun work(n: int): int { await delay(); return n * 2; }
+        async fun work(n: int): int { delay().await; return n * 2; }
         async fun main(): void {
             let h = work(3);
-            let v = await h;
-            let w = await work(4);
+            let v = h.await;
+            let w = work(4).await;
         }
     ";
     let diagnostics = analyze_code(code);
@@ -250,7 +250,7 @@ fn test_analyze_async_await_valid() {
 
 #[test]
 fn test_analyze_await_outside_async() {
-    let code = "async fun delay(): int { return 1; } fun main(): void { let x = await delay(); }";
+    let code = "async fun delay(): int { return 1; } fun main(): void { let x = delay().await; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
     assert!(diagnostics.diagnostics.iter().any(|d| d
@@ -264,8 +264,8 @@ fn test_analyze_await_in_unconditional_subexpression_allowed() {
     // pass, so it type-checks cleanly.
     let code = "
         async fun delay(): void { }
-        async fun work(n: int): int { await delay(); return n; }
-        async fun main(): void { let x = await work(1) + 1; let y = x; }
+        async fun work(n: int): int { delay().await; return n; }
+        async fun main(): void { let x = work(1).await + 1; let y = x; }
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
@@ -277,8 +277,8 @@ fn test_analyze_await_in_conditional_position_allowed() {
     // transform lowers the whole body to a CFG state machine, so it type-checks cleanly.
     let code = "
         async fun delay(): void { }
-        async fun work(n: int): int { await delay(); return n; }
-        async fun main(): void { let c = true; let x = c ? await work(1) : await work(2); let y = x; }
+        async fun work(n: int): int { delay().await; return n; }
+        async fun main(): void { let c = true; let x = c ? work(1).await : work(2).await; let y = x; }
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
@@ -292,8 +292,8 @@ fn test_analyze_await_in_loop_and_branch_allowed() {
         async fun main(): void {
             let sum = 0;
             let i = 0;
-            while (i < 3) { sum = sum + await step(i); i = i + 1; }
-            if (sum > 0) { let last = await step(sum); sum = last; }
+            while (i < 3) { sum = sum + step(i).await; i = i + 1; }
+            if (sum > 0) { let last = step(sum).await; sum = last; }
         }
     ";
     let diagnostics = analyze_code(code);
@@ -302,7 +302,7 @@ fn test_analyze_await_in_loop_and_branch_allowed() {
 
 #[test]
 fn test_analyze_await_non_future_rejected() {
-    let code = "async fun main(): void { let x = await 5; }";
+    let code = "async fun main(): void { let x = 5.await; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
 }
@@ -1150,7 +1150,7 @@ fn test_async_interface_method_ok() {
         class Remote : Fetcher {
             public async fun fetch(): int { return 1; }
         }
-        async fun run(f: Fetcher): int { return await f.fetch(); }
+        async fun run(f: Fetcher): int { return f.fetch().await; }
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
@@ -1520,7 +1520,7 @@ fn test_js_await_promise() {
     let code = format!(
         "{JS_STUB}
         async fun main(): void {{
-            let user = await js.global.fetchUser(42);
+            let user = js.global.fetchUser(42).await;
             let name: string = switch (user) {{
                 Some(u) => u.name.to_str(),
                 None => \"\",

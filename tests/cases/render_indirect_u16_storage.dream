@@ -39,7 +39,7 @@ fun tri_fs(v: VsOut): GpuVec4 {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -73,7 +73,7 @@ async fun main(): void {
     // base_vertex, first_instance.
     let args = GpuBuffer<int>.from([12, 1, 0, 0, 0]);
 
-    let made = await GpuRenderPipeline.create("tri_vs", "tri_fs");
+    let made = GpuRenderPipeline.create("tri_vs", "tri_fs").await;
     if made.is_err() { System.println("pipeline failed"); return; }
     let pipeline = made.unwrap();
     let target = GpuTexture.rgba8(2, 1);
@@ -86,10 +86,10 @@ async fun main(): void {
     pass.set_index_buffer(indices, GpuIndexFormat.Uint16);
     pass.draw_indexed_indirect(args, 0);
     pass.end();
-    let sent = await enc.submit();
+    let sent = enc.submit().await;
     if sent.is_err() { System.println("submit failed"); return; }
 
-    let px = await target.read_rgba();
+    let px = target.read_rgba().await;
     System.println("left=" + ((int)px[0]).to_string() + "," + ((int)px[1]).to_string() + "," + ((int)px[2]).to_string());
     System.println("right=" + ((int)px[4]).to_string() + "," + ((int)px[5]).to_string() + "," + ((int)px[6]).to_string());
 }

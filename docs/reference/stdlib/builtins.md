@@ -48,7 +48,7 @@ fun main() {
 
 ## Timing
 
-`await Time.delay(ms)` / `await Time.sleep(ms)` need an `async` function. `Time.nano_time()` is a monotonic clock. `Stopwatch` times a span — also on [DateTime](datetime.md).
+`Time.delay(ms).await` / `Time.sleep(ms).await` need an `async` function. `Time.nano_time()` is a monotonic clock. `Stopwatch` times a span — also on [DateTime](datetime.md).
 
 ## Other
 

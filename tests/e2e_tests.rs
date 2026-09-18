@@ -445,7 +445,7 @@ fn run_wasm_js_case(dream_file: &Path) {
         format!(
             "import {{ run }} from {js};\n\
              const timer = setTimeout(() => {{ console.error('wasm/js e2e timeout'); process.exit(2); }}, 25000);\n\
-             await run({wasm}, {{ stdout: (s) => process.stdout.write(s) }});\n\
+             run({wasm}, {{ stdout: (s) => process.stdout.write(s) }}).await;\n\
              clearTimeout(timer);\n",
             js = js_string(&file_url(&dream_js)),
             wasm = js_string(wasm_path.to_str().unwrap()),

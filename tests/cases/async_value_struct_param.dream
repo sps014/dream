@@ -14,13 +14,13 @@ struct Point {
 }
 
 async fun shift(p: Point): Point {
-    await Time.sleep(1);
+    Time.sleep(1).await;
     return Point(p.x + 1, p.y + 1);
 }
 
 async fun main(): void {
-    let a = await shift(Point(1, 2));
-    let b = await shift(Point(3, 4));
+    let a = shift(Point(1, 2)).await;
+    let b = shift(Point(3, 4)).await;
     System.println("" + a.x + "," + a.y);
     System.println("" + b.x + "," + b.y);
 }

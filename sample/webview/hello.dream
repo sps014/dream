@@ -7,7 +7,7 @@ async fun main() {
                 Ok(_) => {},
                 Err(e) => System.println(e.message()),
             }
-            await view.run();
+            view.run().await;
         },
         Err(e) => System.println(e.message()),
     }

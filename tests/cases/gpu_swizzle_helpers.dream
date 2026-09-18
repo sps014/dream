@@ -55,11 +55,11 @@ async fun main(): Result<bool, GpuError> {
     System.println("cpu rgb.z=" + milli(v.rgb.z));
     System.println("cpu xxxx.w=" + milli(v.xxxx.w));
 
-    (await Gpu.try_init())?;
+    (Gpu.try_init().await)?;
     let out = GpuBuffer<float>.alloc(8);
     let bufs = [out];
-    (await Compute.run_3d("k", bufs, 1, 1, 1, Buffer.alloc<byte>(0)))?;
-    let r = await out.read();
+    (Compute.run_3d("k", bufs, 1, 1, 1, Buffer.alloc<byte>(0)).await)?;
+    let r = out.read().await;
     for (let i = 0; i < 8; i = i + 1) {
         System.println("gpu[" + i.to_string() + "]=" + milli(r[i]));
     }

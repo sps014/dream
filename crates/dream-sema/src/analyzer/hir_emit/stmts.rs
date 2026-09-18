@@ -12,7 +12,7 @@ enum BoxKind {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Appends `await e;` at statement position. `settled` is the type the awaited future resolves
+    /// Appends `e.await;` at statement position. `settled` is the type the awaited future resolves
     /// to, which MIR needs to bind (and release) the discarded result.
     pub(in crate::analyzer) fn hir_await_stmt(&mut self, value: Option<HExpr>, settled: &Type) {
         if !self.active() {

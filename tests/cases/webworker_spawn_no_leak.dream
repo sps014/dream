@@ -7,12 +7,12 @@ fun work(): int {
 }
 
 async fun main(): void {
-    let _ = await WebWorker.spawn(() => work());
-    let _ = await WebWorker.spawn(() => work());
+    let _ = WebWorker.spawn(() => work()).await;
+    let _ = WebWorker.spawn(() => work()).await;
     let base = Debug.live_objects;
     let i = 0;
     while i < 20 {
-        let _ = await WebWorker.spawn(() => work());
+        let _ = WebWorker.spawn(() => work()).await;
         i = i + 1;
     }
     System.println((Debug.live_objects - base).to_string());

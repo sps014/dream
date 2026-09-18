@@ -8,7 +8,7 @@ public class GpuRenderPass {
     @web @native
     public static async fun blit(surface: GpuSurface, source: GpuTexture, token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let code = await Gpu.render_blit(surface.id, source.id);
+        let code = Gpu.render_blit(surface.id, source.id).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "blit failed"));
     }
@@ -45,7 +45,7 @@ public class GpuRenderPass {
             },
         }
         pass.end();
-        return await enc.submit(token);
+        return enc.submit(token).await;
     }
 
     static fun surface_target(
@@ -72,7 +72,7 @@ public class GpuRenderPass {
         vertex_count: int,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await GpuRenderPass.draw_ex(
+        return GpuRenderPass.draw_ex(
             surface,
             pipeline,
             vertices,
@@ -81,7 +81,7 @@ public class GpuRenderPass {
             GpuVec4.of(0.0, 0.0, 0.0, 1.0),
             Option.None,
             token
-        );
+        ).await;
     }
 
     // Like `draw`, with shader uniforms (`Uniforms.pack` / `pack_f32`) and a clear color.
@@ -98,7 +98,7 @@ public class GpuRenderPass {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_depth: Option<GpuTexture> = Option.None;
-        return await GpuRenderPass.draw_instanced(
+        return GpuRenderPass.draw_instanced(
             surface,
             pipeline,
             vertices,
@@ -110,7 +110,7 @@ public class GpuRenderPass {
             GpuLoadOp.Clear,
             binds,
             token
-        );
+        ).await;
     }
 
     // Draw with instancing, optional depth attachment, and load-op control.
@@ -129,7 +129,7 @@ public class GpuRenderPass {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_indices: Option<GpuBuffer<int>> = Option.None;
-        return await GpuRenderPass.submit_one(
+        return GpuRenderPass.submit_one(
             GpuRenderPass.surface_target(surface, clear, depth, load_op),
             pipeline,
             vertices,
@@ -139,7 +139,7 @@ public class GpuRenderPass {
             uniforms,
             binds,
             token
-        );
+        ).await;
     }
 
     // Clears the surface and draws indexed geometry (indices are `int` → WebGPU `uint32`).
@@ -152,7 +152,7 @@ public class GpuRenderPass {
         index_count: int,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await GpuRenderPass.draw_indexed_ex(
+        return GpuRenderPass.draw_indexed_ex(
             surface,
             pipeline,
             vertices,
@@ -162,7 +162,7 @@ public class GpuRenderPass {
             GpuVec4.of(0.0, 0.0, 0.0, 1.0),
             Option.None,
             token
-        );
+        ).await;
     }
 
     // Like `draw_indexed`, with uniforms, clear color, and shader resource bindings.
@@ -179,7 +179,7 @@ public class GpuRenderPass {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         let no_depth: Option<GpuTexture> = Option.None;
-        return await GpuRenderPass.draw_indexed_instanced(
+        return GpuRenderPass.draw_indexed_instanced(
             surface,
             pipeline,
             vertices,
@@ -192,7 +192,7 @@ public class GpuRenderPass {
             GpuLoadOp.Clear,
             binds,
             token
-        );
+        ).await;
     }
 
     // Indexed draw with instancing, optional depth, and load-op control.
@@ -211,7 +211,7 @@ public class GpuRenderPass {
         binds: Option<GpuBindList> = Option.None,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await GpuRenderPass.submit_one(
+        return GpuRenderPass.submit_one(
             GpuRenderPass.surface_target(surface, clear, depth, load_op),
             pipeline,
             vertices,
@@ -221,7 +221,7 @@ public class GpuRenderPass {
             uniforms,
             binds,
             token
-        );
+        ).await;
     }
 
     // Draws into an offscreen color texture (optional depth), not the swapchain.
@@ -246,7 +246,7 @@ public class GpuRenderPass {
             None => {},
         }
         let no_indices: Option<GpuBuffer<int>> = Option.None;
-        return await GpuRenderPass.submit_one(
+        return GpuRenderPass.submit_one(
             target,
             pipeline,
             vertices,
@@ -256,6 +256,6 @@ public class GpuRenderPass {
             uniforms,
             binds,
             token
-        );
+        ).await;
     }
 }

@@ -6,20 +6,20 @@
 
 import system;
 async fun greet(name: string): string {
-    await Time.sleep(0);
+    Time.sleep(0).await;
     let msg = "Hello, " + name + "!";
     return msg;
 }
 
 async fun echo(value: string): string {
     let prefix = "echo: ";
-    await Time.sleep(0);
+    Time.sleep(0).await;
     return prefix + value;
 }
 
 async fun main(): void {
-    let g = await greet("World");
+    let g = greet("World").await;
     System.println(g);
-    let e = await echo("dream");
+    let e = echo("dream").await;
     System.println(e);
 }

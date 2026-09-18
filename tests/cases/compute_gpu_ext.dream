@@ -11,18 +11,18 @@ fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
 }
 
 async fun main(): void {
-    let _ = await Gpu.try_init();
+    let _ = Gpu.try_init().await;
     let a = GpuBuffer<float>.from([1.0, 2.0, 3.0]);
     let out = GpuBuffer<float>.alloc(3);
-    let _r = await Compute.run_1d("scale", [a, out], 3);
+    let _r = Compute.run_1d("scale", [a, out], 3).await;
     a.copy_to(out, 0, 0, 3);
-    let ra = await out.read();
+    let ra = out.read().await;
     System.println((int)ra[0]);
     System.println((int)ra[2]);
 
     let pass = ComputePass.begin();
     pass.dispatch("scale", [a, out], 3, 1, 1);
-    let _s = await pass.submit();
+    let _s = pass.submit().await;
 
     let args = GpuDispatchIndirect();
     args.x = 1;

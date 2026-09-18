@@ -4,9 +4,9 @@ import system.webapi;
 
 @websocket("/ws")
 async fun echo(ws: ServerWebSocket): void {
-    switch (await ws.receive()) {
+    switch (ws.receive().await) {
         Ok(WebSocketMessage.Text(t)) => {
-            let _ = await ws.send_text(t);
+            let _ = ws.send_text(t).await;
         },
         Ok(_) => { },
         Err(_) => { }
@@ -15,12 +15,12 @@ async fun echo(ws: ServerWebSocket): void {
 }
 
 async fun main(): void {
-    let port = await WebApp.listen("127.0.0.1", 0);
+    let port = WebApp.listen("127.0.0.1", 0).await;
     let url = "ws://127.0.0.1:" + port.to_string() + "/ws";
-    switch (await WebSocket.connect(url)) {
+    switch (WebSocket.connect(url).await) {
         Ok(client) => {
-            let _ = await client.send_text("ping");
-            switch (await client.receive()) {
+            let _ = client.send_text("ping").await;
+            switch (client.receive().await) {
                 Ok(WebSocketMessage.Text(t)) => System.println(t),
                 Ok(_) => System.println("other"),
                 Err(e) => System.println(e.message()),
@@ -30,5 +30,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

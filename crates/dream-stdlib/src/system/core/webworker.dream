@@ -2,7 +2,7 @@ module system.core;
 
 // Real OS-parallel workers with a shared heap.
 //
-// `await WebWorker.spawn(() => n * n)` starts a body on its own OS thread (native c)
+// `WebWorker.spawn(() => n * n).await` starts a body on its own OS thread (native c)
 // or Web Worker (browser/Node). There is no spawn message and no `join()`: `spawn` is `async`
 // and *is* the wait. Overlap work by saving the Future and awaiting later.
 //
@@ -10,7 +10,7 @@ module system.core;
 // Ordinary classes / arrays / `List` are a compile error.
 //
 //   async fun main(): void {
-//       let square = await WebWorker.spawn(() => 6 * 6);
+//       let square = WebWorker.spawn(() => 6 * 6).await;
 //       System.println(square.to_string());
 //   }
 public class WebWorker {
@@ -44,7 +44,7 @@ public class WebWorker {
         let id = WebWorker.spawn_host(WebWorker.funcidx(wrapped), WebWorker.env(wrapped));
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, "");
-        let wire = await WebWorker.recv_host(id);
+        let wire = WebWorker.recv_host(id).await;
         CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
@@ -54,12 +54,12 @@ public class WebWorker {
     public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut {
         CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
-            return Bytes.toWire<TOut>(await body());
+            return Bytes.toWire<TOut>(body().await);
         };
         let id = WebWorker.spawn_host(WebWorker.funcidx_async(wrapped), WebWorker.env_async(wrapped));
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, "");
-        let wire = await WebWorker.recv_host(id);
+        let wire = WebWorker.recv_host(id).await;
         CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
@@ -76,7 +76,7 @@ public class WebWorker {
         let id = WebWorker.spawn_host(WebWorker.funcidx(wrapped), WebWorker.env(wrapped));
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, Bytes.toWire<T>(input));
-        let wire = await WebWorker.recv_host(id);
+        let wire = WebWorker.recv_host(id).await;
         CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
@@ -90,12 +90,12 @@ public class WebWorker {
     ): TOut {
         CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (raw: string) => {
-            return Bytes.toWire<TOut>(await body(Bytes.fromWire<T>(raw)));
+            return Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)).await);
         };
         let id = WebWorker.spawn_host(WebWorker.funcidx_async(wrapped), WebWorker.env_async(wrapped));
         let session = WorkerSession(id, wrapped);
         WebWorker.post_host(id, Bytes.toWire<T>(input));
-        let wire = await WebWorker.recv_host(id);
+        let wire = WebWorker.recv_host(id).await;
         CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
@@ -112,7 +112,7 @@ public class WebWorker {
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
             CancellationToken.throw_if_opt(token);
-            results[i] = await futures[i];
+            results[i] = futures[i].await;
         }
         return results;
     }
@@ -127,13 +127,13 @@ public class WebWorker {
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
             CancellationToken.throw_if_opt(token);
-            results[i] = await futures[i];
+            results[i] = futures[i].await;
         }
         return results;
     }
 }
 
-// Owns the spawn-time funcbox and terminates the worker when dropped (await done or Future cancel).
+// Owns the spawn-time funcbox and terminates the worker when dropped (after `.await` or Future cancel).
 class WorkerSession {
     id: int;
     sync_body: fun(string): string;
@@ -153,7 +153,7 @@ class WorkerSession {
         WebWorker.terminate_host(this.id);
     }
 
-    // After `await recv`: last-use `del` (terminate) must not run in the pre-await poll block.
+    // After `recv_host(...).await`: last-use `del` (terminate) must not run in the pre-await poll block.
     public fun hold() {
         this.id = this.id;
     }

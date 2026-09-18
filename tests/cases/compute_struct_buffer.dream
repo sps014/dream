@@ -40,7 +40,7 @@ fun make_vec2(x: float, y: float): Vec2 {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -49,20 +49,20 @@ async fun main(): void {
     // Float: `Compute.run_1d` takes `GpuBuffer<float>[]`.
     let fa = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
     let fout = GpuBuffer<float>.alloc(4);
-    let fr = await Compute.run_1d("double_float", [fa, fout], 4);
+    let fr = Compute.run_1d("double_float", [fa, fout], 4).await;
     if fr.is_err() {
         System.println("float dispatch failed");
         return;
     }
     // Native host stages buffers but does not run WGSL — round-trip `fa` proves write/read.
-    let fvals = await fa.read();
+    let fvals = fa.read().await;
     System.println((int)fvals[0]);
     System.println((int)fvals[3]);
 
     // Int (non-float): use resource ids.
     let ia = GpuBuffer<int>.from([10, 20, 30, 40]);
     let iout = GpuBuffer<int>.alloc(4);
-    let ir = await Compute.run_resources(
+    let ir = Compute.run_resources(
         "double_int",
         [ia.id, iout.id],
         Buffer.alloc<int>(0),
@@ -71,12 +71,12 @@ async fun main(): void {
         1,
         1,
         Buffer.alloc<byte>(0)
-    );
+    ).await;
     if ir.is_err() {
         System.println("int dispatch failed");
         return;
     }
-    let ivals = await ia.read();
+    let ivals = ia.read().await;
     System.println(ivals[0]);
     System.println(ivals[3]);
 
@@ -88,7 +88,7 @@ async fun main(): void {
         make_vec2(4.0, 40.0),
     ]);
     let vout = GpuBuffer<Vec2>.alloc(4);
-    let vr = await Compute.run_resources(
+    let vr = Compute.run_resources(
         "double_vec2",
         [va.id, vout.id],
         Buffer.alloc<int>(0),
@@ -97,12 +97,12 @@ async fun main(): void {
         1,
         1,
         Buffer.alloc<byte>(0)
-    );
+    ).await;
     if vr.is_err() {
         System.println("vec2 dispatch failed");
         return;
     }
-    let vvals = await va.read();
+    let vvals = va.read().await;
     System.println((int)vvals[0].x);
     System.println((int)vvals[0].y);
     System.println((int)vvals[3].x);

@@ -150,7 +150,7 @@ Discard a value without binding a name using `_` (like a pattern wildcard):
 ```dream
 let _ = sideEffect();
 let (_, y) = pair;
-let _ = await fetch();
+let _ = fetch().await;
 ```
 
 Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` when the value is intentionally ignored.

@@ -67,11 +67,11 @@ async fun main(): Result<bool, GpuError> {
         System.println("cpu[" + i.to_string() + "]=" + milli(cpu[i]));
     }
 
-    (await Gpu.try_init())?;
+    (Gpu.try_init().await)?;
     let out = GpuBuffer<float>.alloc(10);
     let bufs = [out];
-    (await Compute.run_3d("invert", bufs, 1, 1, 1, Buffer.alloc<byte>(0)))?;
-    let gpu = await out.read();
+    (Compute.run_3d("invert", bufs, 1, 1, 1, Buffer.alloc<byte>(0)).await)?;
+    let gpu = out.read().await;
     for (let i = 0; i < 10; i = i + 1) {
         System.println("gpu[" + i.to_string() + "]=" + milli(gpu[i]));
     }

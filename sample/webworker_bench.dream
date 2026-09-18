@@ -39,7 +39,7 @@ async fun main(): void {
     }
     let c = 0;
     while c < tasks {
-        await workers[c];
+        workers[c].await;
         c = c + 1;
     }
     let par_end = Time.nano_time();

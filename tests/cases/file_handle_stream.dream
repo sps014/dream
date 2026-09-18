@@ -5,7 +5,7 @@ import system.io;
 async fun main(): void {
     let path = "dream_file_handle_e2e.tmp";
 
-    await File.write(path, "Dream\nrocks\n");
+    File.write(path, "Dream\nrocks\n").await;
 
     // FileStream via File.open (OS-backed; no whole-file preload).
     let stream = File.open(path).unwrap();
@@ -24,15 +24,15 @@ async fun main(): void {
     data[2] = (byte)67;
     writer.write(data);
     writer.close();
-    let echoed = await File.read(write_path);
+    let echoed = File.read(write_path).await;
     System.println(echoed.unwrap_or(""));
 
     // Async variants still work.
-    let reader = (await FileHandle.open_async(path, "r")).unwrap();
-    let chunk = await reader.read_async(5);
+    let reader = (FileHandle.open_async(path, "r").await).unwrap();
+    let chunk = reader.read_async(5).await;
     System.println(chunk.unwrap_or(Buffer.alloc<byte>(0)).length);
     reader.close();
 
-    await File.delete(path);
-    await File.delete(write_path);
+    File.delete(path).await;
+    File.delete(write_path).await;
 }

@@ -50,7 +50,7 @@ fun use_math(m: GpuMat4, v: GpuVec4): GpuVec4 {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;

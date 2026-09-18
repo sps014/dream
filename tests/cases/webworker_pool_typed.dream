@@ -4,7 +4,7 @@ fun square(n: int): int {
 }
 
 async fun bump(n: int): int {
-    await Time.sleep(1);
+    Time.sleep(1).await;
     return n + 1;
 }
 
@@ -13,8 +13,8 @@ async fun main(): void {
     let a = pool.dispatch(() => square(3));
     let b = pool.dispatch(() => square(4));
     let c = pool.dispatch_async(() => bump(5));
-    System.println((await a).to_string());
-    System.println((await b).to_string());
-    System.println((await c).to_string());
+    System.println((a.await).to_string());
+    System.println((b.await).to_string());
+    System.println((c.await).to_string());
     pool.shutdown();
 }

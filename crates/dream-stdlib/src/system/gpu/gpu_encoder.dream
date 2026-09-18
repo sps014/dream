@@ -12,7 +12,7 @@ module system.gpu;
 //     pass.draw(meshes[i].count, 1, 0, 0);
 // }
 // pass.end();
-// (await enc.submit())?;
+// (enc.submit().await)?;
 // ```
 public class GpuEncoder {
     _s: GpuCmdStream;
@@ -48,7 +48,7 @@ public class GpuEncoder {
     public async fun submit(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
         let payload = this._s.bytes();
-        let code = await Gpu.encoder_submit(payload);
+        let code = Gpu.encoder_submit(payload).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "encoder submit failed"));
     }

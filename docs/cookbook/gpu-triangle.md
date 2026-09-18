@@ -39,7 +39,7 @@ fun make_vert(x: float, y: float, r: float, g: float, b: float): Vertex {
 }
 
 async fun main(): void {
-    if (await Gpu.try_init()).is_err() {
+    if (Gpu.try_init().await).is_err() {
         System.println("WebGPU unavailable");
         return;
     }
@@ -49,7 +49,7 @@ async fun main(): void {
     let surface = surface_r.unwrap_or(GpuSurface());
 
     let desc = GpuRenderPipelineDesc.defaults();
-    let pipe_r = await GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc);
+    let pipe_r = GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc).await;
     if pipe_r.is_err() { return; }
     let pipe = pipe_r.unwrap_or(GpuRenderPipeline());
 
@@ -60,9 +60,9 @@ async fun main(): void {
     ]);
 
     while !surface.close_requested {
-        let _ = await GpuRenderPass.draw(surface, pipe, verts, 3);
-        let _ = await surface.present();
-        await Gpu.frame();
+        let _ = GpuRenderPass.draw(surface, pipe, verts, 3).await;
+        let _ = surface.present().await;
+        Gpu.frame().await;
     }
 }
 ```

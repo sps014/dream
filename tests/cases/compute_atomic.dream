@@ -14,14 +14,14 @@ fun hist(data: GpuBuffer<int>, bins: GpuBuffer<int>, n: int): void {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
     let data = GpuBuffer<int>.from([0, 1, 0, 2, 1]);
     let bins = GpuBuffer<int>.from([0, 0, 0]);
-    let r = await Compute.run_resources(
+    let r = Compute.run_resources(
         "hist",
         [data.id, bins.id],
         Buffer.alloc<int>(0),
@@ -30,12 +30,12 @@ async fun main(): void {
         1,
         1,
         Uniforms.pack_i32([5])
-    );
+    ).await;
     if r.is_err() {
         System.println("dispatch failed");
         return;
     }
-    let rb = await bins.read();
+    let rb = bins.read().await;
     System.println(rb[0]);
     System.println(bins.length);
 }

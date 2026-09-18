@@ -9,9 +9,9 @@ import system;
 import system.net;
 
 async fun main(): void {
-    switch (await TcpClient.connect("127.0.0.1", 9000)) {
+    switch (TcpClient.connect("127.0.0.1", 9000).await) {
         Ok(client) => {
-            await client.send_text("ping");
+            client.send_text("ping").await;
             client.close();
         },
         Err(e) => System.println(e.code()),

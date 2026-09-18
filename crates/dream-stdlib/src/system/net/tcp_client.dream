@@ -34,14 +34,14 @@ public class TcpClient {
     // Opens a TCP connection to `host:port` with no connect timeout.
     @native @node
     public static async fun connect(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<TcpClient, NetError> {
-        return await TcpClient.connect_timeout(host, port, 0, token);
+        return TcpClient.connect_timeout(host, port, 0, token).await;
     }
 
     // Opens a TCP connection with a connect timeout in milliseconds (`0` = none).
     @native @node
     public static async fun connect_timeout(host: string, port: int, timeout_ms: int, token: Option<CancellationToken> = Option.None): Result<TcpClient, NetError> {
         CancellationToken.rejected(token, NetError.cancelled())?;
-        let wire = await TcpClient.tcp_connect(host, port, timeout_ms);
+        let wire = TcpClient.tcp_connect(host, port, timeout_ms).await;
         let reader = NetWireReader(wire);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
         if handle < 0 {
@@ -61,7 +61,7 @@ public class TcpClient {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await TcpClient.tcp_send(this.handle, data);
+        let wire = TcpClient.tcp_send(this.handle, data).await;
         return this.parse_int_result(wire);
     }
 
@@ -72,7 +72,7 @@ public class TcpClient {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await TcpClient.tcp_send_text(this.handle, text);
+        let wire = TcpClient.tcp_send_text(this.handle, text).await;
         return this.parse_int_result(wire);
     }
 
@@ -93,7 +93,7 @@ public class TcpClient {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await TcpClient.tcp_receive(this.handle, max_bytes);
+        let wire = TcpClient.tcp_receive(this.handle, max_bytes).await;
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
         if tag == "data" {

@@ -44,11 +44,11 @@ fn await_in_control_flow_is_clean() {
 async fun ready(): bool { return true; }\n\
 async fun main(): void {\n\
     let flag = true;\n\
-    if (flag) { let a = await g(1); }\n\
+    if (flag) { let a = g(1).await; }\n\
     let i = 0;\n\
-    while (i < 3) { let b = await g(i); i = i + 1; }\n\
-    let c = flag ? await g(2) : await g(3);\n\
-    let d = flag && await ready();\n\
+    while (i < 3) { let b = g(i).await; i = i + 1; }\n\
+    let c = flag ? g(2).await : g(3).await;\n\
+    let d = flag && ready().await;\n\
 }\n|";
     let harness = TestHarness::new(src);
     let diagnostics = harness.diagnostics();
@@ -64,7 +64,7 @@ fn await_outside_async_is_flagged() {
     // The one remaining placement rule: awaiting in a non-async function is still an error.
     let src = "async fun g(): int { return 1; }\n\
 fun main(): void {\n\
-    let x = await g();\n\
+    let x = g().await;\n\
 }\n|";
     let harness = TestHarness::new(src);
     let diagnostics = harness.diagnostics();

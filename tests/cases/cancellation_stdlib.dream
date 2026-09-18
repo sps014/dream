@@ -9,22 +9,22 @@ async fun main(): void {
     let tok = src.token;
     let opt = Option.Some(tok);
 
-    switch (await File.read("missing.txt", opt)) {
+    switch (File.read("missing.txt", opt).await) {
         Ok(t) => System.println(t),
         Err(e) => System.println(e.code()),
     }
 
-    switch (await HttpClient().get("http://127.0.0.1:1/", opt)) {
+    switch (HttpClient().get("http://127.0.0.1:1/", opt).await) {
         Ok(r) => System.println(r.status),
         Err(e) => System.println(e.code()),
     }
 
     let client = HttpClient().with_cancellation(tok);
-    switch (await client.get("http://127.0.0.1:1/")) {
+    switch (client.get("http://127.0.0.1:1/").await) {
         Ok(r) => System.println(r.status),
         Err(e) => System.println(e.code()),
     }
 
-    let port = await WebApp.listen("127.0.0.1", 0, opt);
+    let port = WebApp.listen("127.0.0.1", 0, opt).await;
     System.println(port);
 }

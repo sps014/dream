@@ -8,7 +8,7 @@ import system.net;
 
 async fun main(): void {
     let api = HttpClient("https://api.example.com");
-    switch (await api.get("/health")) {
+    switch (api.get("/health").await) {
         Ok(res) => System.println(res.status),
         Err(e) => System.println(e.message()),
     }
@@ -27,15 +27,15 @@ Native uses the host HTTP client (reqwest in `libdream`); browser and Node use `
 | `with_http_version(1 or 2)` | native only |
 | `with_cookie_jar(jar)` | cookies |
 | `with_cancellation(token)` | client-wide default token when a per-call token is omitted |
-| `await text(path)` / `get_bytes(path)` | GET, body as string / bytes; optional last `token` |
-| `await get` / `get_with` / `get_json` | full response; optional last `token` |
-| `await post` / `post_with` / `post_json` / `post_form(path, Map<string,string>)` | POST; `_json` sends `application/json`, `_form` sends percent-encoded `application/x-www-form-urlencoded` |
-| `await put` / `put_with` / `put_json` / `patch` / `patch_with` / `patch_json` | PUT/PATCH; `_json` variants send `application/json` |
-| `await delete` / `delete_with` / `head` | DELETE/HEAD |
-| `await request(method, path, body, headers)` | custom |
-| `await post_bytes` / `put_bytes` / `request_bytes` | binary body |
-| `await post_multipart(path, form)` | multipart |
-| `await get_stream` / `request_stream` | chunked body |
+| `text(path).await` / `get_bytes(path)` | GET, body as string / bytes; optional last `token` |
+| `get.await` / `get_with` / `get_json` | full response; optional last `token` |
+| `post.await` / `post_with` / `post_json` / `post_form(path, Map<string,string>)` | POST; `_json` sends `application/json`, `_form` sends percent-encoded `application/x-www-form-urlencoded` |
+| `put.await` / `put_with` / `put_json` / `patch` / `patch_with` / `patch_json` | PUT/PATCH; `_json` variants send `application/json` |
+| `delete.await` / `delete_with` / `head` | DELETE/HEAD |
+| `request(method, path, body, headers).await` | custom |
+| `post_bytes.await` / `put_bytes` / `request_bytes` | binary body |
+| `post_multipart(path, form).await` | multipart |
+| `get_stream.await` / `request_stream` | chunked body |
 
 Per-call headers override client defaults from `set_header` on a name collision; all other defaults are always sent. Every request method accepts `token: Option<CancellationToken> = None`; cancelled calls return `HttpError` with code `ECANCELLED` without hitting the network.
 

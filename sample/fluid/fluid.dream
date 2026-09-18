@@ -221,7 +221,7 @@ fun splat_uniforms(
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("WebGPU unavailable — fluid needs Gpu.try_init");
         return;
@@ -341,7 +341,7 @@ async fun main(): void {
         pass.dispatch_uniforms("decay_field", [vy_tmp], n, n, 1, vel_decay_u);
         let paint = GpuBindList.begin().buffer(dens_tmp).buffer(vx_tmp).buffer(vy_tmp).texture(tex);
         pass.dispatch_bind("paint", paint, n, n, 1, empty_u);
-        let sub = await pass.submit();
+        let sub = pass.submit().await;
         if sub.is_err() {
             System.println("ComputePass.submit failed");
             return;
@@ -358,11 +358,11 @@ async fun main(): void {
         dens = dens_tmp;
         dens_tmp = swap_d;
 
-        let bl = await GpuRenderPass.blit(surface, tex);
+        let bl = GpuRenderPass.blit(surface, tex).await;
         if bl.is_err() { return; }
-        let pr = await surface.present();
+        let pr = surface.present().await;
         if pr.is_err() { return; }
         app.frame = app.frame + 1;
-        await Gpu.frame();
+        Gpu.frame().await;
     }
 }

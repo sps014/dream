@@ -5,7 +5,7 @@ import system;
 
 async fun main(): void {
     let s = 42.to_string();
-    let t = await WebWorker.spawn(() => s + "!");
+    let t = WebWorker.spawn(() => s + "!").await;
     System.println(s);
     System.println(t);
 }

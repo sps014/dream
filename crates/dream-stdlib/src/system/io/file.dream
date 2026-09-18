@@ -214,7 +214,7 @@ public static class File {
 
     // Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
     public static async fun list_paths(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError> {
-        let got = await File.list(path, token);
+        let got = File.list(path, token).await;
         if got.is_err() {
             return got;
         }
@@ -230,7 +230,7 @@ public static class File {
 
     // Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.
     public static async fun read_lines(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError> {
-        let got = await File.read(path, token);
+        let got = File.read(path, token).await;
         if got.is_err() {
             return Result.Err(got.unwrap_err());
         }
@@ -261,7 +261,7 @@ public static class File {
             sb.append_char('\n');
             i = i + 1;
         }
-        return await File.write(path, sb.build(), token);
+        return File.write(path, sb.build(), token).await;
     }
 
     // Cheap synchronous predicates (no async overhead).

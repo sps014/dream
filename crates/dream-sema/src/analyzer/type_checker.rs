@@ -317,7 +317,7 @@ impl<'a> Analyzer<'a> {
                     .analyze_expression(future_expr, parent_function, symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
                 let value = self.hir_take();
-                // `await <jsExpr>;` (discarding the `Option<js>` result): desugar the same way.
+                // `<jsExpr>.await;` (discarding the `Option<js>` result): desugar the same way.
                 if self.is_js_type(&fut) {
                     let fut_hir = self.desugar_js_await(value);
                     self.hir_await_stmt(fut_hir, &Self::option_js_type());

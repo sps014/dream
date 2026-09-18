@@ -1775,7 +1775,7 @@ fn test_hir_emission_async_await() {
     // call carries a `Future` return type.
     let code = "
         async fun delay(): void { }
-        async fun work(n: int): int { await delay(); return n; }
+        async fun work(n: int): int { delay().await; return n; }
     ";
     let (c, count) = emit_hir_to_c(code);
     assert_eq!(count, 2, "both async functions should be emitted:\n{}", c);
@@ -1790,8 +1790,8 @@ fn test_hir_emission_async_await() {
 fn test_async_emits_scheduler_runtime_and_poll() {
     let code = format!(
         "{ASYNC_STUB}
-        async fun delay(): void {{ await Time.sleep(0); }}
-        async fun main(): void {{ await delay(); }}"
+        async fun delay(): void {{ Time.sleep(0).await; }}
+        async fun main(): void {{ delay().await; }}"
     );
     let c = emit_hir_to_module(&code);
     assert!(c.contains("dream_run_loop"), "scheduler missing:\n{}", c);
@@ -1815,11 +1815,11 @@ fn exec_async_sleep_and_await() {
     let code = format!(
         "{ASYNC_STUB}
         async fun get(): int {{
-            await Time.sleep(0);
+            Time.sleep(0).await;
             return 42;
         }}
         async fun main(): void {{
-            let v = await get();
+            let v = get().await;
             System.print(v);
         }}"
     );

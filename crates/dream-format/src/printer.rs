@@ -1,7 +1,7 @@
 use crate::generics::detect_type_arg_regions;
 use crate::layout::Layout;
 use crate::line_index::LineIndex;
-use crate::spacing::{is_decl_starter, needs_space};
+use crate::spacing::{is_decl_starter, is_try_question_mark, needs_space};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 
@@ -145,6 +145,9 @@ impl Printer {
                 self.prev_kind.unwrap_or(TokenKind::EndOfFileToken),
                 kind,
             );
+            if kind == TokenKind::QuestionMarkToken && is_try_question_mark(tokens, i) {
+                space = false;
+            }
             let in_type_args = matches!(self.ctxs.last(), Some(Ctx::TypeArgs));
             if in_type_args {
                 // Inside generic arguments `<`/`>` delimit a type list, not comparisons.

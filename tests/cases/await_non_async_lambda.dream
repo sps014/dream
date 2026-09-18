@@ -3,6 +3,6 @@
 import system;
 async fun work(): int { return 1; }
 async fun outer() {
-    let g = () => await work();
+    let g = () => work().await;
 }
 fun main() { }

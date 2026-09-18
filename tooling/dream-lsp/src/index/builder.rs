@@ -240,8 +240,8 @@ impl Builder {
             }
             ExpressionNode::Parenthesized(_, inner) => self.infer_type_with(inner, scope, extras),
             ExpressionNode::Await(_, inner) => {
-                // `await` unwraps `Future<T>` → `T`. Async call inference wraps declared returns
-                // as `Future<T>`, so bare `f()` and `await f()` stay distinct for member completion.
+                // `.await` unwraps `Future<T>` → `T`. Async call inference wraps declared returns
+                // as `Future<T>`, so bare `f()` and `f().await` stay distinct for member completion.
                 let inner_ty = self.infer_type_with(inner, scope, extras)?;
                 let unwrapped = inner_ty
                     .strip_prefix("Future<")

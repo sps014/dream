@@ -1,7 +1,7 @@
 import system;
 import system.process;
 async fun main(): void {
-    let ok = await Process.run("echo", ["hello", "world"]);
+    let ok = Process.run("echo", ["hello", "world"]).await;
     switch (ok) {
         Ok(out) => {
             System.println(out.success);
@@ -10,7 +10,7 @@ async fun main(): void {
         Err(e) => System.println("unexpected error: " + e.message()),
     }
 
-    let missing = await Process.run("dream-process-run-basic-missing-binary", []);
+    let missing = Process.run("dream-process-run-basic-missing-binary", []).await;
     switch (missing) {
         Ok(out) => System.println("unexpected success"),
         Err(e) => System.println(e.code()),

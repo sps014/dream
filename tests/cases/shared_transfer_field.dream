@@ -34,7 +34,7 @@ async fun main(): void {
         }
         return 0;
     });
-    await producer;
+    producer.await;
 
     System.println(q.count);
 
@@ -49,6 +49,6 @@ async fun main(): void {
         }
         return 0;
     });
-    await consumer;
+    consumer.await;
     System.println(q.count);
 }

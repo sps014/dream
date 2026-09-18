@@ -4,27 +4,27 @@ import system.io;
 
 async fun main(): void {
     let root = "dream_file_dir_e2e";
-    switch (await File.create_dir(root)) {
+    switch (File.create_dir(root).await) {
         Ok(_) => System.println(File.is_dir(root)),
         Err(e) => System.println(e.message()),
     }
 
-    switch (await File.create_dir_all(root + "/nested/leaf")) {
+    switch (File.create_dir_all(root + "/nested/leaf").await) {
         Ok(_) => System.println(File.is_dir(root + "/nested/leaf")),
         Err(e) => System.println(e.message()),
     }
 
     let marker = Buffer.alloc<byte>(1);
     marker[0] = (byte)1;
-    await File.write_bytes(root + "/a.bin", marker);
+    File.write_bytes(root + "/a.bin", marker).await;
 
-    let names = (await File.list(root)).unwrap_or(Buffer.alloc<string>(0));
+    let names = (File.list(root).await).unwrap_or(Buffer.alloc<string>(0));
     System.println(names.length);
     System.println(names.get(0));
     System.println(names.get(1));
 
-    await File.delete(root + "/a.bin");
-    await File.delete(root + "/nested/leaf");
-    await File.delete(root + "/nested");
-    await File.delete(root);
+    File.delete(root + "/a.bin").await;
+    File.delete(root + "/nested/leaf").await;
+    File.delete(root + "/nested").await;
+    File.delete(root).await;
 }

@@ -21,7 +21,7 @@ public class WebWorkerPool {
         this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker.funcidx(wrapped);
         let env = WebWorker.env(wrapped);
-        let wire = await WebWorkerPool.dispatch_host(id, funcidx, env, "");
+        let wire = WebWorkerPool.dispatch_host(id, funcidx, env, "").await;
         CancellationToken.throw_if_opt(token);
         return Bytes.fromWire<TOut>(wire);
     }
@@ -29,13 +29,13 @@ public class WebWorkerPool {
     public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut {
         CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
-            return Bytes.toWire<TOut>(await body());
+            return Bytes.toWire<TOut>(body().await);
         };
         let id = this.ids[this.next];
         this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker.funcidx_async(wrapped);
         let env = WebWorker.env_async(wrapped);
-        let wire = await WebWorkerPool.dispatch_host(id, funcidx, env, "");
+        let wire = WebWorkerPool.dispatch_host(id, funcidx, env, "").await;
         CancellationToken.throw_if_opt(token);
         return Bytes.fromWire<TOut>(wire);
     }

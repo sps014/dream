@@ -1,4 +1,4 @@
-// Real parallel WebWorkers. Capture-only spawn; await the Future.
+// Real parallel WebWorkers. Capture-only spawn; then `.await` the Future.
 
 import system;
 fun shout(msg: string): string {
@@ -10,11 +10,11 @@ fun twice(msg: string): string {
 }
 
 async fun main(): void {
-    System.println(await WebWorker.spawn(() => shout("hello")));
-    System.println(await WebWorker.spawn(() => shout("world")));
+    System.println(WebWorker.spawn(() => shout("hello")).await);
+    System.println(WebWorker.spawn(() => shout("world")).await);
 
     let a = WebWorker.spawn(() => shout("A"));
     let b = WebWorker.spawn(() => twice("B"));
-    System.println(await a);
-    System.println(await b);
+    System.println(a.await);
+    System.println(b.await);
 }

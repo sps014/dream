@@ -1,8 +1,8 @@
 import system;
 async fun main(): void {
     let n = 21;
-    System.println((await WebWorker.spawn_async(async () => {
-        await Time.sleep(1);
+    System.println((WebWorker.spawn_async(async () => {
+        Time.sleep(1).await;
         return n * 2;
-    })).to_string());
+    }).await).to_string());
 }

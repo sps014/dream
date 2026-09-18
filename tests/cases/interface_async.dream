@@ -11,7 +11,7 @@ class Remote : Fetcher {
     public base: int;
     public constructor(base: int) { this.base = base; }
     public async fun fetch(): int {
-        await Time.sleep(10);
+        Time.sleep(10).await;
         return this.base + 1;
     }
 }
@@ -26,14 +26,14 @@ class Cached : Fetcher {
 
 // Interface-typed receiver: the concrete async implementation is chosen at runtime.
 async fun run(f: Fetcher): void {
-    let v = await f.fetch();
+    let v = f.fetch().await;
     System.println(v);
 }
 
 async fun main(): void {
     let r = Remote(41);
-    await run(r);
+    run(r).await;
 
     let c = Cached(99);
-    await run(c);
+    run(c).await;
 }

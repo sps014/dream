@@ -62,7 +62,7 @@ fun tri_fs(v: VsOut): GpuVec4 {
 }
 
 let desc = GpuRenderPipelineDesc.defaults();
-let pipe = await GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc);
+let pipe = GpuRenderPipeline.create_ex("tri_vs", "tri_fs", desc).await;
 ```
 
 A field named `position: GpuVec4` is still accepted as sugar for `@builtin("position")`.

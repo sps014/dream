@@ -670,8 +670,8 @@ impl<'a> Analyzer<'a> {
         )
     }
 
-    /// `await <jsExpr>` -> `await js.await_promise(<jsExpr>)`. Builds the async wrapper call whose result is
-    /// `Future<Option<js>>` (so the enclosing `await` unwraps it to `Option<js>` - `Some` on resolve,
+    /// `<jsExpr>.await` -> `js.await_promise(<jsExpr>).await`. Builds the async wrapper call whose result is
+    /// `Future<Option<js>>` (so the enclosing `.await` unwraps it to `Option<js>` - `Some` on resolve,
     /// `None` on rejection), letting a JS Promise be awaited natively. Returns the
     /// `Future<Option<js>>`-typed call HIR (to hand to `hir_set_await`), or `None` if the inner
     /// expression was not representable.

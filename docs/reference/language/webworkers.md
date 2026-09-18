@@ -4,7 +4,7 @@
 
 Dream's [`async`/`await`](async.md) is a *single-threaded* scheduler: tasks interleave at `await` points but never run at the same instant. When you need more than one core — CPU-bound work or parallel pipelines — use a **`WebWorker`**.
 
-`await WebWorker.spawn(() => …)` starts a body on its own OS thread (native) or Web Worker (browser) and waits for the result — the same shape as C# `Task.Run` / Swift `Task { }`. There is no spawn message and no `join()`. Each worker has its own **private heap slab** (ordinary `new`, strings, lists: non-atomic ARC, no alloc lock) plus **private globals**. `@shared class` instances, `Lock` / `Semaphore`, and `CancellationToken` live on a **shared subheap** in the same address space (native process / wasm `SharedArrayBuffer`) so pointers and `lock` still work across workers.
+`WebWorker.spawn(() => …).await` starts a body on its own OS thread (native) or Web Worker (browser) and waits for the result — the same shape as C# `Task.Run` / Swift `Task { }`. There is no spawn message and no `join()`. Each worker has its own **private heap slab** (ordinary `new`, strings, lists: non-atomic ARC, no alloc lock) plus **private globals**. `@shared class` instances, `Lock` / `Semaphore`, and `CancellationToken` live on a **shared subheap** in the same address space (native process / wasm `SharedArrayBuffer`) so pointers and `lock` still work across workers.
 
 Captures and the body's return type must be **`shared`** (Dream's Sendable analogue): a blittable value, `string`, a value struct of `shared` fields, or an `@shared class`. Ordinary classes, arrays, and `List` may **move** into the worker (exclusive ownership; the sender cannot use the binding afterwards). Capturing them by shared reference is a compile error.
 
@@ -20,8 +20,8 @@ Spawn **publishes** the captured environment: `dream_publish` sets `TAG_SHARED` 
 │      Owner instance        │            │      Worker instance       │
 │      private heap slab     │            │      private heap slab     │
 │                            │            │                            │
-│  await WebWorker.spawn(    │── env ────►│       body(): TOut         │
-│        () => body)         │  captures  │    (starts immediately)    │
+│  WebWorker.spawn(      │── env ────►│       body(): TOut         │
+│        () => body).await│  captures  │    (starts immediately)    │
 │                            │            │                            │
 │                            │◄─ result ──│                            │
 │                            │ wire copy  │                            │
@@ -36,7 +36,7 @@ Spawn **publishes** the captured environment: `dream_publish` sets `TAG_SHARED` 
 ```
 
 - **The worker body is a function value** — a top-level function or a lambda. Its function-table index is portable across every instance of the module.
-- **Captures must be `shared` or moved.** Overlap work by not awaiting yet: `let a = WebWorker.spawn(...); let b = WebWorker.spawn(...); await a; await b;`.
+- **Captures must be `shared` or moved.** Overlap work by not awaiting yet: `let a = WebWorker.spawn(...); let b = WebWorker.spawn(...); a.await; b.await;`.
 
 ## API
 
@@ -62,10 +62,10 @@ fun greet(name: string): string {
 
 async fun main(): void {
     let name = "dream";
-    System.println(await WebWorker.spawn(() => greet(name)));   // hello, dream!
+    System.println(WebWorker.spawn(() => greet(name)).await);   // hello, dream!
 
     let n = 6;
-    System.println((await WebWorker.spawn(() => n * n)).to_string()); // 36
+    System.println((WebWorker.spawn(() => n * n).await).to_string()); // 36
 }
 ```
 
@@ -85,9 +85,9 @@ async fun main(): void {
     let w2 = WebWorker.spawn(() => work("beta"));
     let w3 = WebWorker.spawn(() => work("gamma"));
 
-    System.println(await w1);   // ALPHA
-    System.println(await w2);   // BETA
-    System.println(await w3);   // GAMMA
+    System.println(w1.await);   // ALPHA
+    System.println(w2.await);   // BETA
+    System.println(w3.await);   // GAMMA
 }
 ```
 
@@ -105,7 +105,7 @@ fun square(x: string): string {
 
 async fun main(): void {
     let items = ["1", "2", "3", "4", "5"];
-    let results = await WebWorker.map(items, square);
+    let results = WebWorker.map(items, square).await;
     for (let r in results) {
         System.println(r);   // 1, 4, 9, 16, 25
     }
@@ -131,7 +131,7 @@ async fun main(): void {
     let nums = [1, 2, 3];
     let r = WebWorker.spawn(() => nums.length);   // nums moves into the worker
     // System.println(nums.length);               // error: use of 'nums' after move
-    System.println(await r);                      // 3
+    System.println(r.await);                      // 3
 }
 ```
 
@@ -154,8 +154,8 @@ async fun main(): void {
     let a = WebWorker.spawn(() => { counter.increment(); return 0; });
     let b = WebWorker.spawn(() => { counter.increment(); return 0; });
 
-    await a;
-    await b;
+    a.await;
+    b.await;
 
     System.println(counter.value);   // 2
 }
@@ -177,7 +177,7 @@ let w = WebWorker.spawn(() => {
     return 0;
 });
 src.cancel();
-let _ = await w;
+let _ = w.await;
 ```
 
 **Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the worker immediately. The browser terminates the worker; native `dream run` detaches the OS thread if the body is still running. Hard abort does **not** run Dream `finally` and may abandon that worker's private slab — prefer the token when `@shared` state must stay consistent. A worker that has already finished its body is joined and its env is released (`Debug.live_objects` stays flat across repeated `spawn`).
@@ -190,10 +190,10 @@ A worker body may `await` via `spawn_async` (named `async fun` or `async` lambda
 async fun main(): void {
     let n = 6;
     let squarer = WebWorker.spawn_async(async () => {
-        await Time.sleep(1);
+        Time.sleep(1).await;
         return n * n;
     });
-    System.println((await squarer).to_string()); // 36
+    System.println((squarer.await).to_string()); // 36
 }
 ```
 
@@ -205,7 +205,7 @@ For many short jobs over time, a `WebWorkerPool` keeps a fixed set of threads an
 async fun main(): void {
     let pool = WebWorkerPool(4);
     let a = pool.dispatch(() => 3 * 3);
-    System.println((await a).to_string()); // 9
+    System.println((a.await).to_string()); // 9
     pool.shutdown();
 }
 ```

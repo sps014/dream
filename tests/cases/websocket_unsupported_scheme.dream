@@ -4,7 +4,7 @@ import system.net;
 async fun main(): void {
     // Unknown schemes still resolve `Err(EUNSUPPORTED)`. `wss://` is supported on the native host
     // (TLS via tungstenite + native-tls); only non-ws schemes get `-2`.
-    let result = await WebSocket.connect("ftp://example.invalid");
+    let result = WebSocket.connect("ftp://example.invalid").await;
     switch (result) {
         Ok(ws) => {
             System.println("unexpected success");

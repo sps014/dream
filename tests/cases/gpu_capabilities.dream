@@ -15,7 +15,7 @@ async fun main(): void {
     System.println("pre_max_buffer=" + pre.max_buffer_bytes.to_string());
     System.println("pre_subgroup=" + pre.subgroup.to_int().to_string());
 
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;

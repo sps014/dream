@@ -1,13 +1,13 @@
 import system;
 async fun apply_async(f: fun(int): Future<int>, v: int): int {
-    return await f(v);
+    return f(v).await;
 }
 
 async fun main(): void {
     let twice: fun(int): Future<int> = async (x) => {
-        await Time.sleep(1);
+        Time.sleep(1).await;
         return x * 2;
     };
-    System.println(await twice(21));
-    System.println(await apply_async(async (n) => n + 100, 1));
+    System.println(twice(21).await);
+    System.println(apply_async(async (n) => n + 100, 1).await);
 }

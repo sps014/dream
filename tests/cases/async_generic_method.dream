@@ -6,17 +6,17 @@ class Cell<T> {
     public constructor(value: T) { this.value = value; }
 
     public async fun get(): T {
-        await Time.sleep(10);
+        Time.sleep(10).await;
         return this.value;
     }
 }
 
 async fun main(): void {
     let a = Cell<int>(42);
-    let ra = await a.get();
+    let ra = a.get().await;
     System.println(ra);
 
     let b = Cell<string>("hello");
-    let rb = await b.get();
+    let rb = b.get().await;
     System.println(rb);
 }

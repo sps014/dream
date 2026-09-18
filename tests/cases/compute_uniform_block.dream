@@ -26,13 +26,13 @@ fun scale(src: GpuBuffer<float>, dst: GpuBuffer<float>, k: float): void {
 }
 
 async fun main(): Result<bool, GpuError> {
-    (await Gpu.try_init())?;
+    (Gpu.try_init().await)?;
 
     let src = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
     let dst = GpuBuffer<float>.alloc(4);
     let scaled = [src, dst];
-    (await Compute.run_3d("scale", scaled, 4, 1, 1, Uniforms.pack_f32([10.0])))?;
-    let s = await dst.read();
+    (Compute.run_3d("scale", scaled, 4, 1, 1, Uniforms.pack_f32([10.0])).await)?;
+    let s = dst.read().await;
     System.println(s[0]);
     System.println(s[3]);
 
@@ -46,8 +46,8 @@ async fun main(): Result<bool, GpuError> {
     fields[64] = 16.0; // m4.c0.x
     fields[83] = 32.0; // tint.w
     let wide_bufs = [wide_out];
-    (await Compute.run_3d("wide", wide_bufs, 1, 1, 1, Uniforms.pack_f32(fields)))?;
-    let w = await wide_out.read();
+    (Compute.run_3d("wide", wide_bufs, 1, 1, 1, Uniforms.pack_f32(fields)).await)?;
+    let w = wide_out.read().await;
     System.println(w[0]);
 
     return Result.Ok(true);

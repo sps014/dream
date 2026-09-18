@@ -10,6 +10,6 @@ async fun work(n: int): int {
 async fun main(): void {
     let f = work(21);
     System.println("created");
-    let v = await f;
+    let v = f.await;
     System.println("got " + v.to_string());
 }

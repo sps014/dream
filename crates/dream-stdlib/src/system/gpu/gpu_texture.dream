@@ -84,7 +84,7 @@ public class GpuTexture {
         token: Option<CancellationToken> = Option.None
     ): Result<GpuTexture, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let packed = await Gpu.texture_from_image_bytes(data);
+        let packed = Gpu.texture_from_image_bytes(data).await;
         if packed.length >= 3 {
             let d = GpuTextureDesc.d2(packed[1], packed[2], GpuTextureFormat.Rgba8Unorm);
             return Result.Ok(GpuTexture.wrap(packed[0], d));
@@ -117,7 +117,7 @@ public class GpuTexture {
     // Uploads a full-texture RGBA8 pixel buffer.
     public async fun write_rgba(pixels: byte[], token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let code = await Gpu.texture_write_rgba(this.id, pixels, 0, 0, this.width, this.height);
+        let code = Gpu.texture_write_rgba(this.id, pixels, 0, 0, this.width, this.height).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "texture write failed"));
     }
@@ -132,7 +132,7 @@ public class GpuTexture {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let code = await Gpu.texture_write_rgba(this.id, pixels, x, y, w, h);
+        let code = Gpu.texture_write_rgba(this.id, pixels, x, y, w, h).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "texture write_at failed"));
     }
@@ -140,7 +140,7 @@ public class GpuTexture {
     // Downloads the full texture as RGBA8 bytes.
     public async fun read_rgba(token: Option<CancellationToken> = Option.None): byte[] {
         CancellationToken.throw_if_opt(token);
-        return await Gpu.texture_read_rgba(this.id);
+        return Gpu.texture_read_rgba(this.id).await;
     }
 
     // GPU-side copy from a tightly packed RGBA8 buffer (bytes = width×height×4 for a full copy).

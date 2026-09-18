@@ -1,7 +1,7 @@
 import system;
 
 async fun sleeper(): int {
-    await Time.sleep(10000);
+    Time.sleep(10000).await;
     return 1;
 }
 

@@ -1,6 +1,6 @@
 import system;
 fun notAsync(): void {
-    let x = await Time.sleep(10);
+    let x = Time.sleep(10).await;
 }
 
 fun main(): void {

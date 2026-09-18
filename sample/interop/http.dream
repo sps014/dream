@@ -13,13 +13,13 @@ async fun main(): void {
     let api = HttpClient("https://example.com").set_header("Accept", "application/json");
 
     // Simple text body.
-    switch (await api.text("/hello")) {
+    switch (api.text("/hello").await) {
         Ok(body) => System.println(body),
         Err(e) => System.println(e.message()),
     }
 
     // Richer GET response: status + JSON body + a header.
-    switch (await api.get("/user")) {
+    switch (api.get("/user").await) {
         Ok(res) => {
             System.println(res.status);
             System.println(res.header("content-type"));
@@ -32,7 +32,7 @@ async fun main(): void {
     }
 
     // POST a JSON body (any verb is available: get/post/put/patch/delete/head, or `request`).
-    switch (await api.post("/user", "{\"name\":\"Grace\"}")) {
+    switch (api.post("/user", "{\"name\":\"Grace\"}").await) {
         Ok(created) => {
             System.println(created.status);
             System.println(created.text());
@@ -41,9 +41,9 @@ async fun main(): void {
     }
 
     // Binary round-trip: the body is byte-exact in both directions.
-    switch (await api.get("/blob")) {
+    switch (api.get("/blob").await) {
         Ok(bin) => {
-            switch (await api.post_bytes("/upload", bin.bytes())) {
+            switch (api.post_bytes("/upload", bin.bytes()).await) {
                 Ok(echoed) => System.println(echoed.status),
                 Err(e) => System.println(e.message()),
             }

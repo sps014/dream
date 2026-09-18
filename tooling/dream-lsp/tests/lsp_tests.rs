@@ -556,7 +556,7 @@ fun f(o: Option<Point>): void {
 #[test]
 fn result_inferred_from_gpu_try_init_member_completions() {
     let harness = TestHarness::new(
-        "import system.gpu;\nasync fun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",
+        "import system.gpu;\nasync fun main(): void {\n    let a = Gpu.try_init().await;\n    a.|\n}\n",
     );
     let comps = harness
         .index()
@@ -564,7 +564,7 @@ fn result_inferred_from_gpu_try_init_member_completions() {
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"is_ok") && names.contains(&"unwrap_or") && names.contains(&"and_then"),
-        "expected Result instance methods on a. after await Gpu.try_init, got {names:?}"
+        "expected Result instance methods on a. after Gpu.try_init.await, got {names:?}"
     );
 }
 
@@ -1567,13 +1567,13 @@ fun main(): void {
 #[test]
 fn parameter_inlay_hint_anchors_before_await_argument() {
     use dream_lsp::index::{Index, InlayKind};
-    // `print(await f())` must place the hint before `await`, not after it
-    // (regression: `await value: f()`).
+    // `take(fetch().await)` must place the hint before `fetch`, not on `.await`
+    // (regression: `take(fetch().value: await)`).
     let src = "
 async fun fetch(): int { return 1; }
 fun take(value: int): void { }
 async fun main(): void {
-    take(await fetch());
+    take(fetch().await);
 }
 ";
     let index = Index::build(None, src);
@@ -1584,8 +1584,8 @@ async fun main(): void {
         .expect("expected a `value:` parameter hint");
     let after = &src[hint.offset..];
     assert!(
-        after.starts_with("await"),
-        "hint should be anchored at `await`, but source after offset is {:?}",
+        after.starts_with("fetch"),
+        "hint should be anchored at `fetch`, but source after offset is {:?}",
         &after[..after.len().min(12)]
     );
 }
@@ -1593,13 +1593,13 @@ async fun main(): void {
 #[test]
 fn parameter_inlay_hint_anchors_before_parenthesized_argument() {
     use dream_lsp::index::{Index, InlayKind};
-    // `print((await f())[0])` must place the hint before `(`, not inside the parens
-    // (regression: `(value:await …)[0]`).
+    // `print((f().await)[0])` must place the hint before `(`, not inside the parens
+    // (regression: `(value: …)[0]`).
     let src = r#"
 async fun fetch(): int[] { return [1]; }
 fun take(value: string): void { }
 async fun main(): void {
-    take((await fetch())[0] + ",");
+    take((fetch().await)[0] + ",");
 }
 "#;
     let index = Index::build(None, src);
@@ -1742,11 +1742,11 @@ fn await_call_infers_unwrapped_type() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
 async fun delayedDouble(n: int): int {
-    await sleep(100);
+    sleep(100).await;
     return n * 2;
 }
 async fun main(): void {
-    let a = await delayedDouble(10);
+    let a = delayedDouble(10).await;
 }
 ";
     let index = Index::build(None, src);
@@ -1758,7 +1758,7 @@ async fun main(): void {
         .collect();
     assert!(
         labels.contains(&": int"),
-        "`let a = await delayedDouble(10)` should show `: int`, not unknown; got {:?}",
+        "`let a = delayedDouble(10).await` should show `: int`, not unknown; got {:?}",
         labels
     );
 }
@@ -1766,14 +1766,14 @@ async fun main(): void {
 #[test]
 fn await_in_branch_infers_unwrapped_type() {
     // `await` inside a branch/loop body is a supported suspend point, and the LSP walks into those
-    // bodies, so `let a = await g(...)` there still infers the unwrapped awaited type.
+    // bodies, so `let a = g(...).await` there still infers the unwrapped awaited type.
     use dream_lsp::index::{Index, InlayKind};
     let src = "
 async fun g(n: int): int { return n; }
 async fun main(): void {
     let ready = true;
     if (ready) {
-        let a = await g(10);
+        let a = g(10).await;
     }
 }
 ";
@@ -1786,7 +1786,7 @@ async fun main(): void {
         .collect();
     assert!(
         labels.contains(&": int"),
-        "`let a = await g(10)` inside a branch should show `: int`; got {:?}",
+        "`let a = g(10).await` inside a branch should show `: int`; got {:?}",
         labels
     );
 }

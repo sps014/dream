@@ -235,25 +235,25 @@ async fun run_browser(n: int): void {
         }
         let paint = GpuBindList.begin().buffer(u).buffer(v).texture(tex);
         pass.dispatch_bind("rd_paint", paint, n, n, 1, empty_u);
-        let sub = await pass.submit();
+        let sub = pass.submit().await;
         if sub.is_err() {
             System.println("ComputePass.submit failed");
             return;
         }
 
-        let bl = await GpuRenderPass.blit(surface, tex);
+        let bl = GpuRenderPass.blit(surface, tex).await;
         if bl.is_err() { return; }
-        let pr = await surface.present();
+        let pr = surface.present().await;
         if pr.is_err() { return; }
-        await Gpu.frame();
+        Gpu.frame().await;
     }
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("WebGPU unavailable — open life.html in a browser");
         return;
     }
-    await run_browser(768);
+    run_browser(768).await;
 }

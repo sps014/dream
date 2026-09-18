@@ -7,8 +7,8 @@ async fun main(): void {
     let path = "scratch_file_io.txt";
 
     // Write, then append more text.
-    await File.write(path, "Dream\n");
-    await File.append(path, "rocks\n");
+    File.write(path, "Dream\n").await;
+    File.append(path, "rocks\n").await;
 
     // Metadata (synchronous predicates). `size` is an `Option<long>` (`None` if absent).
     if File.exists(path) {
@@ -17,7 +17,7 @@ async fun main(): void {
     }
 
     // Read the whole thing. `read` resolves with a `Result<string, IoError>`.
-    let text = await File.read(path);
+    let text = File.read(path).await;
     System.print(text.unwrap_or(""));
 
     // Buffered, seekable streaming. `open` returns a `Result<FileStream, IoError>`.
@@ -34,17 +34,17 @@ async fun main(): void {
     // Raw byte round-trip: read 5 bytes, write them to a second file.
     let head = File.open(path).unwrap();
     let bytes = head.read_bytes(5);     // ['D','r','e','a','m']
-    await File.write_bytes("scratch_head.bin", bytes);
-    let echoed = await File.read("scratch_head.bin");
+    File.write_bytes("scratch_head.bin", bytes).await;
+    let echoed = File.read("scratch_head.bin").await;
     System.print("bytes -> ");
     System.println(echoed.unwrap_or(""));   // "Dream"
 
     // List the current directory. `list` resolves with a `Result<string[], IoError>`.
-    let entries = (await File.list(".")).unwrap_or(Buffer.alloc<string>(0));
+    let entries = (File.list(".").await).unwrap_or(Buffer.alloc<string>(0));
     System.print("entries: ");
     System.println(entries.length);
 
     // Clean up.
-    await File.delete(path);
-    await File.delete("scratch_head.bin");
+    File.delete(path).await;
+    File.delete("scratch_head.bin").await;
 }

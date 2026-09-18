@@ -1,6 +1,6 @@
 import system;
 async fun fetchLike(url: string): string {
-    await Time.sleep(1);
+    Time.sleep(1).await;
     return "resp:" + url;
 }
 
@@ -8,7 +8,7 @@ async fun main(): void {
     let pool = WebWorkerPool(2);
     let a = pool.dispatch_async(() => fetchLike("x"));
     let b = pool.dispatch_async(() => fetchLike("y"));
-    System.println(await a);
-    System.println(await b);
+    System.println(a.await);
+    System.println(b.await);
     pool.shutdown();
 }

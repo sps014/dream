@@ -64,11 +64,11 @@ async fun main(): Result<bool, GpuError> {
     let n = GpuMat3.normal_matrix(GpuMat4.scaling(GpuVec3.of(2.0, 1.0, 1.0)));
     System.println("normal00=" + milli(n.c0.x));
 
-    (await Gpu.try_init())?;
+    (Gpu.try_init().await)?;
     let out = GpuBuffer<float>.alloc(7);
     let bufs = [out];
-    (await Compute.run_3d("xform", bufs, 1, 1, 1, Buffer.alloc<byte>(0)))?;
-    let gpu = await out.read();
+    (Compute.run_3d("xform", bufs, 1, 1, 1, Buffer.alloc<byte>(0)).await)?;
+    let gpu = out.read().await;
     System.println("gpu_p00=" + milli(gpu[0]));
     System.println("gpu_p11=" + milli(gpu[1]));
     System.println("gpu_tx=" + milli(gpu[4]) + "," + milli(gpu[5]) + "," + milli(gpu[6]));

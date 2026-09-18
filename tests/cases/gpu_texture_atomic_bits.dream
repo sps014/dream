@@ -90,7 +90,7 @@ fun shadow_cs(
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -99,20 +99,20 @@ async fun main(): void {
     let no_uniforms = Buffer.alloc<byte>(0);
 
     let bo = GpuBuffer<int>.from([0, 0, 0, 0, 0]);
-    let rb = await Compute.run_resources(
-        "bits", [bo.id], none_i, none_i, 1, 1, 1, no_uniforms);
+    let rb = Compute.run_resources(
+        "bits", [bo.id], none_i, none_i, 1, 1, 1, no_uniforms).await;
     if rb.is_err() { System.println("bits dispatch failed"); return; }
-    let br = await bo.read();
+    let br = bo.read().await;
     for (let i = 0; i < 5; i = i + 1) {
         System.println("bits[" + i.to_string() + "]=" + br[i].to_string());
     }
 
     let buf = GpuBuffer<int>.from([7]);
     let co = GpuBuffer<int>.from([0, 0, 0, 0]);
-    let rc = await Compute.run_resources(
-        "cas", [buf.id, co.id], none_i, none_i, 1, 1, 1, no_uniforms);
+    let rc = Compute.run_resources(
+        "cas", [buf.id, co.id], none_i, none_i, 1, 1, 1, no_uniforms).await;
     if rc.is_err() { System.println("cas dispatch failed"); return; }
-    let cr = await co.read();
+    let cr = co.read().await;
     for (let i = 0; i < 4; i = i + 1) {
         System.println("cas[" + i.to_string() + "]=" + cr[i].to_string());
     }
@@ -121,15 +121,15 @@ async fun main(): void {
     let px = Buffer.alloc<byte>(8);
     px[0] = (byte)255; px[1] = (byte)0; px[2] = (byte)0;   px[3] = (byte)255;
     px[4] = (byte)0;   px[5] = (byte)0; px[6] = (byte)255; px[7] = (byte)255;
-    let w = await t.write_rgba(px);
+    let w = t.write_rgba(px).await;
     if w.is_err() { System.println("texture write failed"); return; }
     let samp = GpuSampler.create(GpuSamplerDesc.nearest());
 
     let out = GpuBuffer<float>.from([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
-    let rt = await Compute.run_resources(
-        "tex", [out.id], [t.id], [samp.id], 1, 1, 1, no_uniforms);
+    let rt = Compute.run_resources(
+        "tex", [out.id], [t.id], [samp.id], 1, 1, 1, no_uniforms).await;
     if rt.is_err() { System.println("tex dispatch failed"); return; }
-    let v = await out.read();
+    let v = out.read().await;
     for (let i = 0; i < 8; i = i + 1) {
         System.println("tex[" + i.to_string() + "]=" + ((int)(v[i] * 100.0 + 0.5)).to_string());
     }

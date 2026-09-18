@@ -25,5 +25,5 @@ fun fs(v: Other): GpuVec4 {
 }
 
 async fun main(): void {
-    let _ = await GpuRenderPipeline.create("vs", "fs");
+    let _ = GpuRenderPipeline.create("vs", "fs").await;
 }

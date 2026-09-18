@@ -25,7 +25,7 @@ public class ServerWebSocket {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await WebApp.host_ws_send(this.handle, 0, Encoding.utf8_encode(text));
+        let wire = WebApp.host_ws_send(this.handle, 0, Encoding.utf8_encode(text)).await;
         return this.parse_send_result(wire);
     }
 
@@ -34,7 +34,7 @@ public class ServerWebSocket {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await WebApp.host_ws_send(this.handle, 1, data);
+        let wire = WebApp.host_ws_send(this.handle, 1, data).await;
         return this.parse_send_result(wire);
     }
 
@@ -52,7 +52,7 @@ public class ServerWebSocket {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await WebApp.host_ws_receive(this.handle);
+        let wire = WebApp.host_ws_receive(this.handle).await;
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
         if tag == "text" {

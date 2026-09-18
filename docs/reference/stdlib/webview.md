@@ -14,7 +14,7 @@ async fun main(): void {
     switch (WebView.create("Hello", 1024, 768)) {
         Ok(view) => {
             view.load_url("https://example.com");
-            await view.run();
+            view.run().await;
         },
         Err(e) => System.println(e.message()),
     }
@@ -25,10 +25,10 @@ async fun main(): void {
 | --- | --- |
 | `WebView.create(title, width, height)` | open a window |
 | `load_url` / `load_html` / `load_file` | set the document |
-| `await run()` | event loop until closed; optional `token` |
+| `run().await` | event loop until closed; optional `token` |
 | `close()` | close the window |
 | `close_requested()` | true after the user asked to close |
-| `await eval(js)` | run JavaScript, get a string; optional `token` |
+| `eval(js).await` | run JavaScript, get a string; optional `token` |
 
 Typed IPC uses `@json` types and `window.Dream` on the page (`on` / `serve` / `emit`). There is also a raw bytes path.
 

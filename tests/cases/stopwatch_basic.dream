@@ -31,14 +31,14 @@ async fun main() {
     // Counted empty loops are DCE'd by optimizing backends; sleep is observable work.
     sw.reset();
     sw.start();
-    await Time.sleep(1);
+    Time.sleep(1).await;
     sw.stop();
     
     let acc1 = sw.elapsed_nanos;
     System.println(acc1 > 0L);
     
     sw.start();
-    await Time.sleep(1);
+    Time.sleep(1).await;
     sw.stop();
     
     let acc2 = sw.elapsed_nanos;

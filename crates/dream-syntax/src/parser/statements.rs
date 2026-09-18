@@ -211,6 +211,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 ExpressionNode::MethodCall(obj, member, generic_args, params) => Ok(
                     StatementNode::MethodInvocation(obj, member, generic_args, params),
                 ),
+                // `f().await;` discards the resolved value as `AwaitStmt` (inner is not wrapped in `Await`).
+                ExpressionNode::Await(_, inner) => Ok(StatementNode::AwaitStmt(inner.clone())),
                 other => Ok(StatementNode::ExpressionStatement(other)),
             }
         } else {
@@ -315,15 +317,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let ty = self.parse_type()?;
                 self.match_token(TokenKind::SemicolonToken);
                 Ok(StatementNode::WorkgroupDecl(name, ty, size))
-            }
-            // `await <future-expr>;` as a statement, discarding the resolved value.
-            TokenKind::AwaitToken => {
-                let expr = self.parse_expression(0)?;
-                self.match_token(TokenKind::SemicolonToken);
-                match expr {
-                    ExpressionNode::Await(_, inner) => Ok(StatementNode::AwaitStmt(inner.clone())),
-                    other => Ok(StatementNode::AwaitStmt(other)),
-                }
             }
             // A loop label: `name: while (...) { ... }` (also `for`/`do`).
             TokenKind::IdentifierToken if self.peek_token(1).kind == TokenKind::ColonToken => {

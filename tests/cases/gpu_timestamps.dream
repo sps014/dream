@@ -45,7 +45,7 @@ fun stamps_ok(stamps: long[]): bool {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -66,7 +66,7 @@ async fun main(): void {
     let buf = GpuBuffer<float>.from([0.0, 0.0, 0.0, 0.0]);
     let pass = ComputePass.begin_timed(qs, 0, 1);
     pass.dispatch("ts_nop", [buf], 4, 1, 1);
-    let sub = await pass.submit();
+    let sub = pass.submit().await;
     if sub.is_err() {
         System.println("timed=0");
         System.println("encoder_ok=0");
@@ -85,7 +85,7 @@ async fun main(): void {
         let enc = GpuEncoder.begin();
         enc.write_timestamp(qs_e, 0);
         enc.write_timestamp(qs_e, 1);
-        let esub = await enc.submit();
+        let esub = enc.submit().await;
         encoder_ok = esub.is_ok() && stamps_ok(qs_e.read());
         qs_e.destroy();
     }
@@ -98,7 +98,7 @@ async fun main(): void {
         ipass.write_timestamp(qs_i, 0);
         ipass.dispatch("ts_nop", [buf], 4, 1, 1);
         ipass.write_timestamp(qs_i, 1);
-        let isub = await ipass.submit();
+        let isub = ipass.submit().await;
         inside_ok = isub.is_ok() && stamps_ok(qs_i.read());
         qs_i.destroy();
     }
@@ -109,7 +109,7 @@ async fun main(): void {
         make_vert(3.0, -1.0),
         make_vert(-1.0, 3.0),
     ]);
-    let pipe_r = await GpuRenderPipeline.create_ex("ts_vs", "ts_fs", GpuRenderPipelineDesc.defaults());
+    let pipe_r = GpuRenderPipeline.create_ex("ts_vs", "ts_fs", GpuRenderPipelineDesc.defaults()).await;
     if pipe_r.is_err() {
         System.println("render_ok=0");
         return;
@@ -125,7 +125,7 @@ async fun main(): void {
     rpass.set_vertex_buffer(0, verts);
     rpass.draw(3, 1, 0, 0);
     rpass.end();
-    let rsub = await renc.submit();
+    let rsub = renc.submit().await;
     System.println("render_ok=" + (rsub.is_ok() && stamps_ok(qs_r.read())).to_int().to_string());
     qs_r.destroy();
 }

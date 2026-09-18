@@ -4,7 +4,7 @@ import system.text;
 import system.net;
 async fun main(): void {
     let http = HttpClient();
-    switch (await http.get("https://example.com")) {
+    switch (http.get("https://example.com").await) {
         Ok(res) => {
             System.println("status:");
             System.println(res.status);

@@ -6,55 +6,68 @@ Dream has cooperative concurrency with `async`/`await`. The execution model is *
 
 ## Declaring and awaiting
 
-Prefix a function with `async`. Its declared return type `T` becomes `Future<T>` at the call site. `await e` suspends the current task until `e`'s future resolves, then yields its value:
+Prefix a function with `async`. Its declared return type `T` becomes `Future<T>` at the call site. `e.await` suspends the current task until `e`'s future resolves, then yields its value:
 
 ```dream
 import system;
 
 async fun fetchData(): string {
-    await Time.sleep(100);   // suspends this task; the event loop keeps running
+    Time.sleep(100).await;   // suspends this task; the event loop keeps running
     return "data";
 }
 
 async fun main(): void {
-    let x = await fetchData();   // x : string
+    let x = fetchData().await;   // x : string
     System.println(x);
 }
 ```
 
-`await f()` is just the call composed with `await`: `f()` produces a `Future<T>`, and `await` suspends on it to get `T`. The only rule is that `await` outside an `async` function is an error.
+`f().await` is just the call composed with `.await`: `f()` produces a `Future<T>`, and `.await` suspends on it to get `T`. The only rule is that `.await` outside an `async` function is an error.
 
-### Where `await` is allowed
+### Where `.await` is allowed
 
-`await` may appear in any expression or statement position inside an `async` function — including conditionally evaluated ones:
+`.await` may appear in any expression or statement position inside an `async` function — including conditionally evaluated ones:
 
 ```dream
-let x = await e;                // bind the result
-let y = await f() + 1;          // in an operand
-process(await a(), await b());  // several awaits in call arguments
+let x = e.await;                  // bind the result
+let y = f().await + 1;            // in an operand
+process(a().await, b().await);    // several awaits in call arguments
 
-if retry { data = await fetch(url); }         // in a branch
-while i < n { sum += await g(i); i += 1; }    // suspends each iteration
-let y = cond ? await a() : await b();           // in a ternary arm
-let z = flag && await ready();                  // right side of && / || / ??
+if retry { data = fetch(url).await; }           // in a branch
+while i < n { sum += g(i).await; i += 1; }      // suspends each iteration
+let y = cond ? a().await : b().await;           // in a ternary arm
+let z = flag && ready().await;                  // right side of && / || / ??
 ```
+
+### Awaiting a `Result`
+
+Because `.await` is a postfix step, a trailing `?` applies to the awaited value rather than to the future, so propagating an error out of an async call needs no parentheses:
+
+```dream
+async fun load(url: string): Result<string, string> {
+    let body = fetch(url).await?;   // await the future, then propagate its Err
+    return Result.Ok(body.trim());
+}
+```
+
+Chaining works the same way — `.await` is an ordinary link in a postfix chain, so `parse(src).await.value` and `rows().await[0]` are both fine.
 
 ## Running work concurrently
 
-`await` starts the future it awaits, so a plain `let x = await work();` runs alone. To run several futures concurrently, hand them to a combinator (which starts every member) or launch them explicitly:
+`.await` starts the future it awaits, so a plain `let x = work().await;` runs alone. To run several futures concurrently, hand them to a combinator (which starts every member) or launch them explicitly:
 
 ```dream
 import system;
 
 async fun work(id: int): int {
-    await Time.sleep(50);
+    Time.sleep(50).await;
     return id * id;
 }
 
 async fun main(): void {
     let a = work(2);                         // constructed, not yet running
     let b = work(3);                         // constructed, not yet running
-    let results = await Promise.all([a, b]); // starts both -> they run concurrently -> [4, 9]
+    let results = Promise.all([a, b]).await; // starts both -> they run concurrently -> [4, 9]
     System.println(results[0] + ", " + results[1]);
 }
 ```
@@ -66,7 +79,7 @@ async fun main(): void {
 ```dream
 let f = logLater();     // nothing runs yet
 Promise.start(f);       // launches it; result is discarded
-await Time.sleep(10);   // give it a chance to run
+Time.sleep(10).await;   // give it a chance to run
 ```
 
 A future that is neither started nor awaited never executes — dropping it just releases its captured state. `Promise.cancel(f)` before the first start means it never will.
@@ -82,7 +95,7 @@ Static methods on the built-in `Promise` class, over `Future<T>[]`:
 | `Promise.race` | `Promise.race(xs: Future<T>[]): Future<T>` | the first future settles |
 
 ```dream
-let first = await Promise.any([work(10), work(20)]);
+let first = Promise.any([work(10), work(20)]).await;
 ```
 
 `Time.sleep(ms: int, token: Option<CancellationToken> = None): Future<void>` is an awaitable timer backed by the runtime's timer queue (a virtual clock natively, `setTimeout` in the browser). With a token, sleep is sliced so cancellation is observed without changing the host timer ABI. It composes with the combinators like any other future.
@@ -115,14 +128,14 @@ import system.net;
 class Downloader {
     url: string;
     async fun fetch(): string {
-        let body = await HttpClient().text(this.url);
+        let body = HttpClient().text(this.url).await;
         return body;
     }
 }
 
 async fun main(): void {
     let d = Downloader("https://example.com");
-    let body = await d.fetch();   // d.fetch() : Future<string>
+    let body = d.fetch().await;   // d.fetch() : Future<string>
     System.println(body);
 }
 ```
@@ -142,7 +155,7 @@ An `extern async fun` bridges to a host function that returns a Promise. Like ev
 extern async fun getUser(id: int): string;
 
 async fun main(): void {
-    let name = await getUser(42);
+    let name = getUser(42).await;
     System.println("user = " + name);
 }
 ```

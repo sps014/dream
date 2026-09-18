@@ -53,13 +53,13 @@ fun img_fs(
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
 
-    let empty = await GpuTexture.from_image_bytes(Buffer.alloc<byte>(0));
+    let empty = GpuTexture.from_image_bytes(Buffer.alloc<byte>(0)).await;
     System.println("empty=" + empty.unwrap_err().code());
 
     let junk = Buffer.alloc<byte>(4);
@@ -67,10 +67,10 @@ async fun main(): void {
     junk[1] = (byte)1;
     junk[2] = (byte)2;
     junk[3] = (byte)3;
-    let bad = await GpuTexture.from_image_bytes(junk);
+    let bad = GpuTexture.from_image_bytes(junk).await;
     System.println("junk=" + bad.unwrap_err().code());
 
-    let tex_r = await GpuTexture.from_image_bytes(png_2x2());
+    let tex_r = GpuTexture.from_image_bytes(png_2x2()).await;
     if tex_r.is_err() {
         System.println("png failed: " + tex_r.unwrap_err().message());
         return;
@@ -79,7 +79,7 @@ async fun main(): void {
     System.println("w=" + tex.width.to_string());
     System.println("h=" + tex.height.to_string());
 
-    let px = await tex.read_rgba();
+    let px = tex.read_rgba().await;
     System.println("r0=" + ((int)px[0]).to_string());
     System.println("g0=" + ((int)px[1]).to_string());
     System.println("b0=" + ((int)px[2]).to_string());
@@ -96,14 +96,14 @@ async fun main(): void {
         make_vert(-1.0, 3.0),
     ]);
     let desc = GpuRenderPipelineDesc.defaults();
-    let pipe_r = await GpuRenderPipeline.create_ex("img_vs", "img_fs", desc);
+    let pipe_r = GpuRenderPipeline.create_ex("img_vs", "img_fs", desc).await;
     if pipe_r.is_err() {
         System.println("pipeline create failed");
         return;
     }
     let target = GpuTexture.rgba8(1, 1);
     let no_depth: Option<GpuTexture> = Option.None;
-    let drawn = await GpuRenderPass.draw_to(
+    let drawn = GpuRenderPass.draw_to(
         target,
         no_depth,
         pipe_r.unwrap(),
@@ -114,11 +114,11 @@ async fun main(): void {
         GpuVec4.of(0.0, 0.0, 0.0, 1.0),
         GpuLoadOp.Clear,
         Option.Some(binds)
-    );
+    ).await;
     if drawn.is_err() {
         System.println("draw failed");
         return;
     }
-    let out = await target.read_rgba();
+    let out = target.read_rgba().await;
     System.println("sample_r=" + ((int)out[0]).to_string());
 }

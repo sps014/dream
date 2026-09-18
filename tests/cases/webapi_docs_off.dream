@@ -9,16 +9,16 @@ fun health(): string {
 
 async fun main(): void {
     let opts = WebAppOptions("T", "1", "", "/openapi.json");
-    let port = await WebApp.listen_with("127.0.0.1", 0, opts);
+    let port = WebApp.listen_with("127.0.0.1", 0, opts).await;
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
-    switch (await client.get("/docs")) {
+    switch (client.get("/docs").await) {
         Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
-    switch (await client.get("/openapi.json")) {
+    switch (client.get("/openapi.json").await) {
         Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

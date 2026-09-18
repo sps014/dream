@@ -1,9 +1,9 @@
 import system;
 async fun computeInt(): int {
-    await Time.sleep(1);
+    Time.sleep(1).await;
     return 21 * 2;
 }
 
 async fun main(): void {
-    System.println((await WebWorker.spawn_async(computeInt)).to_string());
+    System.println((WebWorker.spawn_async(computeInt).await).to_string());
 }

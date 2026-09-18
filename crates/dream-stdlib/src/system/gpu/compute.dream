@@ -13,7 +13,7 @@ public static class Compute {
         n: int,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, n, 1, 1, Uniforms.pack_i32([n]), token);
+        return Compute.run_3d(kernel, buffers, n, 1, 1, Uniforms.pack_i32([n]), token).await;
     }
 
     // Dispatches `kernel` over a 2D grid of size `w`×`h` (float storage buffers only).
@@ -25,7 +25,7 @@ public static class Compute {
         h: int,
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, w, h, 1, Uniforms.pack_i32([w, h]), token);
+        return Compute.run_3d(kernel, buffers, w, h, 1, Uniforms.pack_i32([w, h]), token).await;
     }
 
     // Like `run_2d`, with a little-endian uniform blob.
@@ -37,7 +37,7 @@ public static class Compute {
         uniforms: byte[],
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms, token);
+        return Compute.run_3d(kernel, buffers, w, h, 1, uniforms, token).await;
     }
 
     // Dispatches `kernel` over a 3D grid with optional uniforms (float storage buffers only).
@@ -55,7 +55,7 @@ public static class Compute {
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
         }
-        let code = await Gpu.dispatch(
+        let code = Gpu.dispatch(
             kernel,
             ids,
             Buffer.alloc<int>(0),
@@ -64,7 +64,7 @@ public static class Compute {
             sy,
             sz,
             uniforms
-        );
+        ).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
     }
@@ -79,7 +79,7 @@ public static class Compute {
         uniforms: byte[],
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
-        return await Compute.run_resources(
+        return Compute.run_resources(
             kernel,
             resources.buffer_ids(),
             resources.texture_ids(),
@@ -89,7 +89,7 @@ public static class Compute {
             sz,
             uniforms,
             token
-        );
+        ).await;
     }
 
     // Dispatches with explicit buffer / texture / sampler resource ids (ABI binding order).
@@ -105,7 +105,7 @@ public static class Compute {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let code = await Gpu.dispatch(
+        let code = Gpu.dispatch(
             kernel,
             buffer_ids,
             texture_ids,
@@ -114,7 +114,7 @@ public static class Compute {
             sy,
             sz,
             uniforms
-        );
+        ).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
     }
@@ -131,14 +131,14 @@ public static class Compute {
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
         }
-        let code = await Gpu.dispatch_indirect(
+        let code = Gpu.dispatch_indirect(
             kernel,
             ids,
             Buffer.alloc<int>(0),
             Buffer.alloc<int>(0),
             args.id,
             0
-        );
+        ).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "indirect dispatch failed: " + kernel));
     }
@@ -151,14 +151,14 @@ public static class Compute {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let code = await Gpu.dispatch_indirect(
+        let code = Gpu.dispatch_indirect(
             kernel,
             resources.buffer_ids(),
             resources.texture_ids(),
             resources.sampler_ids(),
             args.id,
             0
-        );
+        ).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "indirect dispatch failed: " + kernel));
     }
@@ -177,7 +177,7 @@ public static class Compute {
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
         }
-        let code = await Gpu.dispatch_shader(shader.id, ids, wx, wy, wz);
+        let code = Gpu.dispatch_shader(shader.id, ids, wx, wy, wz).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "shader dispatch failed"));
     }

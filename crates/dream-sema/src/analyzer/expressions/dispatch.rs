@@ -796,7 +796,7 @@ impl<'a> Analyzer<'a> {
                     return Ok(Type::Unknown);
                 }
                 // Awaiting a dynamic `js` value treats it as a JS Promise: desugar to
-                // `await js.await_promise(inner)`, whose async bridge yields `Future<js>` and resolves to
+                // `js.await_promise(inner).await`, whose async bridge yields `Future<js>` and resolves to
                 // the awaited value as another `js`.
                 if self.is_js_type(&fut) {
                     let fut_hir = self.desugar_js_await(inner_hir);

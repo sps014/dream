@@ -27,8 +27,8 @@ async fun main(): void {
         return 0;
     });
 
-    await a;
-    await b;
+    a.await;
+    b.await;
 
     System.println(counter.value);
 }

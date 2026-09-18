@@ -12,8 +12,8 @@ async fun main(): void {
     let opts = WebAppOptions();
     opts.tls_cert_path = cert;
     opts.tls_key_path = key;
-    let port = await WebApp.listen_with("127.0.0.1", 0, opts);
+    let port = WebApp.listen_with("127.0.0.1", 0, opts).await;
     System.println(port > 0);
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

@@ -6,11 +6,11 @@ async fun main(): void {
     let offset = 3;
     let prefix = "result=";
 
-    System.println(await WebWorker.spawn(() => {
+    System.println(WebWorker.spawn(() => {
         let result = scale + offset;
         if result == 6 {
             return prefix + "ok";
         }
         return prefix + "bad";
-    }));
+    }).await);
 }

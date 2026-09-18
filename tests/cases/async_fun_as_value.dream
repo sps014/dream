@@ -1,15 +1,15 @@
 import system;
 async fun delayed_triple(n: int): int {
-    await Time.sleep(1);
+    Time.sleep(1).await;
     return n * 3;
 }
 
 async fun run(f: fun(int): Future<int>, v: int): int {
-    return await f(v);
+    return f(v).await;
 }
 
 async fun main(): void {
     let f: fun(int): Future<int> = delayed_triple;
-    System.println(await f(7));
-    System.println(await run(delayed_triple, 4));
+    System.println(f(7).await);
+    System.println(run(delayed_triple, 4).await);
 }

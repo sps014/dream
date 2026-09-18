@@ -1,13 +1,13 @@
 import system;
 async fun tick(): void {
-    await Time.sleep(1);
+    Time.sleep(1).await;
 }
 
 async fun work(): string {
-    await tick();
+    tick().await;
     return "hi!";
 }
 
 async fun main(): void {
-    System.println(await WebWorker.spawn_async(work));
+    System.println(WebWorker.spawn_async(work).await);
 }

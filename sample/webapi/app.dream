@@ -34,5 +34,5 @@ class ItemsApi {
 async fun main(): void {
     WebApp.use(CORS(CorsOptions()));
     System.println("listening on :8080  (docs: http://127.0.0.1:8080/docs  redoc: /redoc)");
-    await WebApp.run("127.0.0.1", 8080);
+    WebApp.run("127.0.0.1", 8080).await;
 }

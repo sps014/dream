@@ -56,7 +56,7 @@ public class HttpStreamResponse {
             this.close();
             return Result.Err(HttpError.cancelled());
         }
-        let wire = await HttpStreamResponse.host_read_chunk(this.handle, max_bytes);
+        let wire = HttpStreamResponse.host_read_chunk(this.handle, max_bytes).await;
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
         if tag == "data" {
@@ -76,7 +76,7 @@ public class HttpStreamResponse {
         let going = true;
         let error: Option<HttpError> = Option.None;
         while going {
-            let chunk = await this.read_chunk(65536, token);
+            let chunk = this.read_chunk(65536, token).await;
             switch (chunk) {
                 Ok(opt) => {
                     switch (opt) {

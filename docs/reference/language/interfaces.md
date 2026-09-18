@@ -209,13 +209,13 @@ interface Fetcher {
 class Remote : Fetcher {
     public base: int;
     public async fun fetch(): int {
-        await Time.sleep(10);
+        Time.sleep(10).await;
         return this.base + 1;
     }
 }
 
 async fun run(f: Fetcher): void {
-    let v = await f.fetch();   // dynamic dispatch; await the Future<int>
+    let v = f.fetch().await;   // dynamic dispatch; await the Future<int>
     println(v);
 }
 ```

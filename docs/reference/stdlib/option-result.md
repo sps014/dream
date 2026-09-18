@@ -88,7 +88,7 @@ Dream has no unit type, so the success slot is spelled `bool`. `main` alone may 
 
 ```dream
 async fun main(): Result<bool, IoError> {
-    let text = await File.read("config.json")?;
+    let text = File.read("config.json").await?;
     System.println(text);
 }
 ```

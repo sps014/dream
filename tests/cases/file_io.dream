@@ -4,9 +4,9 @@ import system;
 import system.io;
 async fun main(): void {
     let path = "dream_file_io_e2e.tmp";
-    await File.write(path, "hello\n");
-    await File.append(path, "dream");
-    let text = await File.read(path);
+    File.write(path, "hello\n").await;
+    File.append(path, "dream").await;
+    let text = File.read(path).await;
     System.print(text.unwrap_or(""));
-    await File.delete(path);
+    File.delete(path).await;
 }

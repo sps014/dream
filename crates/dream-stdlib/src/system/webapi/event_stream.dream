@@ -47,11 +47,11 @@ public class EventStream {
         if bytes.length > 65536 {
             return;
         }
-        let _ = await WebApp.host_write_chunk(this.req_id, bytes);
+        let _ = WebApp.host_write_chunk(this.req_id, bytes).await;
     }
 
     public async fun send_data(data: string, token: Option<CancellationToken> = Option.None): void {
-        await this.send("", data, token);
+        this.send("", data, token).await;
     }
 
     public fun end(): void {

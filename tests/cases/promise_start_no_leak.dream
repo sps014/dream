@@ -16,7 +16,7 @@ class Tracked {
 
 async fun work(): void {
     let t = Tracked(1);
-    await Time.sleep(0);
+    Time.sleep(0).await;
 }
 
 async fun kick(): void {
@@ -24,9 +24,9 @@ async fun kick(): void {
 }
 
 async fun main(): void {
-    await Time.sleep(0);
+    Time.sleep(0).await;
     let base = Debug.live_objects;
-    await kick();
-    await Time.sleep(10);
+    kick().await;
+    Time.sleep(10).await;
     System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

@@ -32,13 +32,13 @@ public class WebSocket {
 
     // Opens a WebSocket connection to `url` with no connect timeout.
     public static async fun connect(url: string, token: Option<CancellationToken> = Option.None): Result<WebSocket, NetError> {
-        return await WebSocket.connect_timeout(url, 0, token);
+        return WebSocket.connect_timeout(url, 0, token).await;
     }
 
     // Opens a WebSocket connection with a connect timeout in milliseconds (`0` = none).
     public static async fun connect_timeout(url: string, timeout_ms: int, token: Option<CancellationToken> = Option.None): Result<WebSocket, NetError> {
         CancellationToken.rejected(token, NetError.cancelled())?;
-        let wire = await WebSocket.ws_connect(url, timeout_ms);
+        let wire = WebSocket.ws_connect(url, timeout_ms).await;
         let reader = NetWireReader(wire);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
         if handle < 0 {
@@ -57,7 +57,7 @@ public class WebSocket {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await WebSocket.ws_send_text(this.handle, text);
+        let wire = WebSocket.ws_send_text(this.handle, text).await;
         return this.parse_send_result(wire);
     }
 
@@ -67,7 +67,7 @@ public class WebSocket {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await WebSocket.ws_send_binary(this.handle, data);
+        let wire = WebSocket.ws_send_binary(this.handle, data).await;
         return this.parse_send_result(wire);
     }
 
@@ -87,7 +87,7 @@ public class WebSocket {
         if this.is_closed {
             return Result.Err(NetError.closed("connection closed"));
         }
-        let wire = await WebSocket.ws_receive(this.handle);
+        let wire = WebSocket.ws_receive(this.handle).await;
         let reader = NetWireReader(wire);
         let tag = reader.read_line();
         if tag == "text" {

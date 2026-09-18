@@ -7,21 +7,21 @@ class Worker {
     }
 
     public async fun compute(n: int): int {
-        await Time.sleep(10);
+        Time.sleep(10).await;
         return this.base + n;
     }
 
     public async fun twice(n: int): int {
-        let once = await this.compute(n);
+        let once = this.compute(n).await;
         return once + once;
     }
 }
 
 async fun main(): void {
     let w = Worker(100);
-    let r = await w.compute(5);
+    let r = w.compute(5).await;
     System.println(r);
 
-    let t = await w.twice(1);
+    let t = w.twice(1).await;
     System.println(t);
 }

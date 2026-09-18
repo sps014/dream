@@ -1,17 +1,17 @@
 import system;
 import system.process;
 async fun main(): void {
-    let spawned = await Process.spawn("cat", []);
+    let spawned = Process.spawn("cat", []).await;
     switch (spawned) {
         Ok(child) => {
             child.write_stdin_text("line1\n");
             child.write_stdin_text("line2\n");
-            let l1 = await child.read_stdout_line();
+            let l1 = child.read_stdout_line().await;
             System.println(l1.unwrap_or("NONE"));
-            let l2 = await child.read_stdout_line();
+            let l2 = child.read_stdout_line().await;
             System.println(l2.unwrap_or("NONE"));
             child.kill();
-            let code = await child.wait();
+            let code = child.wait().await;
             System.println(code != 0);
         },
         Err(e) => System.println("spawn failed: " + e.message()),

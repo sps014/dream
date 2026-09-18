@@ -423,7 +423,7 @@ impl Lowerer<'_> {
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);
             }
-            // A bare `await e;` in a coroutine suspends on the future and discards its result. A
+            // A bare `e.await;` in a coroutine suspends on the future and discards its result. A
             // discarded result that is an owned reference still binds a dest: the future's drop glue
             // deliberately skips its result slot (an awaiter is expected to move the value out), so
             // leaving `dest` empty strands that `+1`. With a dest, RC releases it at scope exit.

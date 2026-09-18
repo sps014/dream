@@ -9,11 +9,11 @@ fun health(): string {
 
 async fun main(): void {
     WebApp.use(CORS(CorsOptions()));
-    let port = await WebApp.listen("127.0.0.1", 0);
+    let port = WebApp.listen("127.0.0.1", 0).await;
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
     let h = HttpHeaders();
     h.set("Origin", "http://example.com");
-    switch (await client.get_with("/health", h)) {
+    switch (client.get_with("/health", h).await) {
         Ok(r) => {
             System.println(r.status);
             System.println(r.header("access-control-allow-origin"));
@@ -25,7 +25,7 @@ async fun main(): void {
     pre.set("Origin", "http://example.com");
     pre.set("Access-Control-Request-Method", "POST");
     pre.set("Access-Control-Request-Headers", "content-type");
-    switch (await client.request("OPTIONS", "/health", "", pre)) {
+    switch (client.request("OPTIONS", "/health", "", pre).await) {
         Ok(r) => {
             System.println(r.status);
             System.println(r.header("access-control-allow-origin"));
@@ -35,5 +35,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

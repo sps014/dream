@@ -209,8 +209,28 @@ fn idempotency_over_all_fixtures() {
         "let m:Map<string,int>=Map.new<string,int>();",
         "// header\nfun main(): void { let x = 1; /* mid */ let y = 2; }\n// tail\n",
         "class A{fun m():int[]{return [];}}\nstruct P<T>{x:T}",
+        "async fun f():void{let c=g().await?;let d=g().await[0];g().await;}",
+        "fun f():void{let a=g()?;let t=c?x:y;}",
     ];
     for input in fixtures {
         assert_idempotent(input);
     }
+}
+
+#[test]
+fn postfix_await_binds_tight() {
+    let out = format(
+        "async fun f():void{let b=g().await;let c=g().await?;let d=g().await[0];let e=g().await+1;}",
+    );
+    assert!(out.contains("let b = g().await;"), "got:\n{}", out);
+    assert!(out.contains("let c = g().await?;"), "got:\n{}", out);
+    assert!(out.contains("let d = g().await[0];"), "got:\n{}", out);
+    assert!(out.contains("let e = g().await + 1;"), "got:\n{}", out);
+}
+
+#[test]
+fn try_question_mark_hugs_its_operand_but_ternary_does_not() {
+    let out = format("fun f():void{let a=g()?;let t=c?x:y;}");
+    assert!(out.contains("let a = g()?;"), "got:\n{}", out);
+    assert!(out.contains("let t = c ?"), "got:\n{}", out);
 }

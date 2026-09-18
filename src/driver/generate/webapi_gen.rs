@@ -796,7 +796,7 @@ fn emit_handler_body(s: &mut String, r: &Route, i: usize, acc: &ProgramAccumulat
             s.push_str(&format!("            __uses.push(Middleware({u}));\n"));
         }
         s.push_str(
-            "            return await WebApp.run_local_middleware(ctx, __uses, 0, __leaf);\n",
+            "            return WebApp.run_local_middleware(ctx, __uses, 0, __leaf).await;\n",
         );
     }
 }
@@ -980,7 +980,7 @@ fn emit_extractors(s: &mut String, r: &Route, i: usize, acc: &ProgramAccumulator
     }
     let call_args = args.join(", ");
     let call = if r.is_async {
-        format!("await {}({call_args})", r.fn_name)
+        format!("{}({call_args}).await", r.fn_name)
     } else {
         format!("{}({call_args})", r.fn_name)
     };
@@ -1072,7 +1072,7 @@ fn emit_dep_call(
     }
     let args = dep_args.join(", ");
     let call = if dep_fn.map(|f| f.is_async).unwrap_or(true) {
-        format!("await {dep}({args})")
+        format!("{dep}({args}).await")
     } else {
         format!("{dep}({args})")
     };

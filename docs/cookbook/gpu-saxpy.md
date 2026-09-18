@@ -15,7 +15,7 @@ fun saxpy(x: GpuBuffer<float>, y: GpuBuffer<float>, out: GpuBuffer<float>, n: in
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -24,13 +24,13 @@ async fun main(): void {
     let x = GpuBuffer.from([1.0, 2.0, 3.0, 4.0]);
     let y = GpuBuffer.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
-    let r = await Compute.run_1d("saxpy", [x, y, out], 4);
+    let r = Compute.run_1d("saxpy", [x, y, out], 4).await;
     if r.is_err() {
         System.println("dispatch failed");
         return;
     }
 
-    let vals = await out.read();
+    let vals = out.read().await;
     System.println((int)vals[0]);   // 12
     System.println((int)vals[1]);   // 24
     System.println((int)vals[2]);   // 36

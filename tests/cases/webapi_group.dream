@@ -11,16 +11,16 @@ class Items {
 }
 
 async fun main(): void {
-    let port = await WebApp.listen("127.0.0.1", 0);
+    let port = WebApp.listen("127.0.0.1", 0).await;
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
-    switch (await client.get("/api/items")) {
+    switch (client.get("/api/items").await) {
         Ok(r) => System.println(r.text()),
         Err(e) => System.println(e.message()),
     }
-    switch (await client.get("/openapi.json")) {
+    switch (client.get("/openapi.json").await) {
         Ok(r) => System.println(r.text().contains("/api/items")),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

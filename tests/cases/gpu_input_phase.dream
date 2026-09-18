@@ -8,7 +8,7 @@ async fun main(): void {
     let high: int = GpuPowerPreference.HighPerformance;
     System.println("power=" + def.to_string() + "," + low.to_string() + "," + high.to_string());
 
-    let init = await Gpu.try_init(GpuPowerPreference.HighPerformance);
+    let init = Gpu.try_init(GpuPowerPreference.HighPerformance).await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;

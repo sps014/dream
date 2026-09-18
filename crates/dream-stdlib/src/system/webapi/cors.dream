@@ -38,18 +38,18 @@ public class Cors {
     public async fun invoke(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
         let origin = ctx.incoming.header("Origin").unwrap_or(string.empty);
         if origin.is_empty() {
-            return await next.call();
+            return next.call().await;
         }
         if !Cors.origin_ok(this.opts, origin) {
             if Cors.is_preflight(ctx) {
                 return HttpOutgoing.empty(400);
             }
-            return await next.call();
+            return next.call().await;
         }
         if Cors.is_preflight(ctx) {
             return this.preflight(ctx, origin);
         }
-        let res = await next.call();
+        let res = next.call().await;
         this.apply_simple(res, origin);
         return res;
     }
@@ -129,6 +129,6 @@ public class Cors {
 // `WebApp.use(CORS(CorsOptions()))` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
 public fun CORS(opts: CorsOptions): Middleware {
     return Middleware(async (borrow ctx: RequestContext, borrow next: Next) => {
-        return await Cors(opts).invoke(ctx, next);
+        return Cors(opts).invoke(ctx, next).await;
     });
 }

@@ -24,7 +24,7 @@ fun get_item(id: int): Item {
 
 async fun main(): void {
     WebApp.use(CORS(CorsOptions()));
-    await WebApp.run("127.0.0.1", 8080);
+    WebApp.run("127.0.0.1", 8080).await;
 }
 ```
 

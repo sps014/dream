@@ -5,7 +5,7 @@ import system.json;
 
 async fun main(): void {
     let api = HttpClient("https://jsonplaceholder.typicode.com");
-    switch (await api.get("/posts/1")) {
+    switch (api.get("/posts/1").await) {
         Ok(r) => {
             System.println(r.status);
             switch (r.json()) {

@@ -6,9 +6,9 @@ module system.gpu;
 // into a host object at load time instead of being rebuilt on every draw.
 //
 // ```dream
-// let material = (await GpuBindGroup.create(
+// let material = (GpuBindGroup.create(
 //     pipe, 1, GpuBindList.begin().texture(albedo).sampler(linear)
-// ))?;
+// ).await)?;
 // pass.set_bind_group(1, material);
 // ```
 //
@@ -39,13 +39,13 @@ public class GpuBindGroup {
         token: Option<CancellationToken> = Option.None
     ): Result<GpuBindGroup, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let id = await Gpu.bind_group_create(
+        let id = Gpu.bind_group_create(
             pipeline.id,
             group,
             binds.buffer_ids(),
             binds.texture_ids(),
             binds.sampler_ids()
-        );
+        ).await;
         if id < 0 {
             return Result.Err(GpuError.from_code(0 - id, "bind group create failed"));
         }

@@ -34,9 +34,9 @@ let pass = ComputePass.begin();
 pass.dispatch_uniforms("splat", [dens, vx, vy], n, n, 1, splat_u);
 pass.dispatch("advect", [vx, vx_tmp, vx, vy], n, n, 1);
 pass.dispatch("advect", [vy, vy_tmp, vx, vy], n, n, 1);
-let _ = await pass.submit();
+let _ = pass.submit().await;
 // … project / jacobi / dye / decay / paint in further passes …
-await GpuRenderPass.blit(surface, tex);
+GpuRenderPass.blit(surface, tex).await;
 ```
 
 ## Build

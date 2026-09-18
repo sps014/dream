@@ -649,7 +649,7 @@ fn test_parse_async_lambda_expr_body() {
 #[test]
 fn test_parse_async_lambda_block_body() {
     let code =
-        "async fun f(): void { let g = async (x: int) => { await Time.sleep(1); return x; }; }";
+        "async fun f(): void { let g = async (x: int) => { Time.sleep(1).await; return x; }; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
@@ -1184,9 +1184,9 @@ fn test_parse_static_class_modifier() {
 
 #[test]
 fn test_parse_async_function_and_await() {
-    // `async fun` sets `is_async`; `await e;` is an `AwaitStmt` and `let x = await e;` carries an
+    // `async fun` sets `is_async`; `e.await;` is an `AwaitStmt` and `let x = e.await;` carries an
     // `Await` initializer.
-    let code = "async fun f(): int { await sleep(1); let x = await f(); return x; }";
+    let code = "async fun f(): int { sleep(1).await; let x = f().await; return x; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
@@ -1198,6 +1198,67 @@ fn test_parse_async_function_and_await() {
         &func.body[1],
         StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _)
     ));
+}
+
+#[test]
+fn test_parse_prefix_await_is_rejected() {
+    let code = "async fun f(): int { await sleep(1); return 0; }";
+    let arena = bumpalo::Bump::new();
+    let (_program, diagnostics) = parse_code(code, &arena);
+    assert!(
+        diagnostics.has_errors(),
+        "prefix await must not parse"
+    );
+}
+
+#[test]
+fn test_parse_postfix_await() {
+    // `e.await` produces an `Await` node, and `e.await;` normalizes to `AwaitStmt`.
+    let code = "async fun f(): int { g().await; let x = g().await; return x; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    assert!(matches!(&func.body[0], StatementNode::AwaitStmt(_)));
+    assert!(matches!(
+        &func.body[1],
+        StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _)
+    ));
+}
+
+#[test]
+fn test_parse_postfix_await_chains() {
+    // `?` after `.await` propagates the awaited `Result`, so `g().await?` is `(g().await)?` —
+    // the postfix chain yields that ordering directly. `.await` also chains into further member
+    // access, indexing, and binary operators without parentheses.
+    let code = "async fun f(): int { \
+        let a = g().await?; \
+        let b = g().await.len(); \
+        let c = g().await[0]; \
+        let d = g().await + 1; \
+        let e = int.parse(\"5\").await; \
+        return 0; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let body = &program.functions[0].body;
+    let init = |i: usize| match &body[i] {
+        StatementNode::Declaration(_, _, e, _) => e,
+        other => panic!("expected declaration, got {:?}", other),
+    };
+    assert!(matches!(init(0), ExpressionNode::Try(inner) if matches!(**inner, ExpressionNode::Await(_, _))));
+    assert!(
+        matches!(init(1), ExpressionNode::MethodCall(recv, ..) if matches!(**recv, ExpressionNode::Await(_, _)))
+    );
+    assert!(
+        matches!(init(2), ExpressionNode::IndexAccess(recv, _) if matches!(**recv, ExpressionNode::Await(_, _)))
+    );
+    assert!(
+        matches!(init(3), ExpressionNode::Binary(lhs, ..) if matches!(**lhs, ExpressionNode::Await(_, _)))
+    );
+    assert!(matches!(init(4), ExpressionNode::Await(_, _)));
 }
 
 #[test]
@@ -1279,8 +1340,8 @@ fn fuzz_random_token_soup_never_panics() {
         "type",
         "constructor",
         "del",
-        "await",
-        "true",
+        "",
+        ".awaittrue",
         "false",
         "is",
         "int",
@@ -1343,7 +1404,7 @@ fn fuzz_truncated_valid_programs_never_panic() {
         "extend int { public fun doubled(): int { return this * 2; } }",
         "const LIMIT: int = 5; let counter: int = LIMIT * 2;",
         "@json class User { public name: string; public age: int; }",
-        "async fun g(): int { await sleep(1); return await h(); }",
+        "async fun g(): int { sleep(1).await; return h().await; }",
     ];
     for s in samples {
         // Every byte prefix (a "file cut off mid-token") must still parse without panicking.

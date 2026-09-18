@@ -43,19 +43,19 @@ async fun main(): void {
     System.println("cpu_roundtrip=" + host[4].to_string() + "," + host[5].to_string() + ","
         + host[6].to_string() + "," + host[7].to_string());
 
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
     }
     let out = GpuBuffer<int>.from([0, 0, 0, 0, 0, 0, 0, 0]);
-    let r = await Compute.run_resources(
-        "pack", [out.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0));
+    let r = Compute.run_resources(
+        "pack", [out.id], Buffer.alloc<int>(0), Buffer.alloc<int>(0), 1, 1, 1, Buffer.alloc<byte>(0)).await;
     if r.is_err() {
         System.println("dispatch failed: " + r.unwrap_err().message());
         return;
     }
-    let v = await out.read();
+    let v = out.read().await;
 
     let same = true;
     for (let i = 0; i < 8; i = i + 1) {

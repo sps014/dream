@@ -49,22 +49,22 @@ fun tri_fs(v: VsOut): GpuVec4 {
 Host (browser):
 
 ```dream
-let pipe = await GpuRenderPipeline.create("tri_vs", "tri_fs");
+let pipe = GpuRenderPipeline.create("tri_vs", "tri_fs").await;
 let verts = GpuBuffer<Vertex>.vertex_from([/* … */]);
-let _ = await GpuRenderPass.draw(surface, pipe, verts, 3);
-let _ = await surface.present();
+let _ = GpuRenderPass.draw(surface, pipe, verts, 3).await;
+let _ = surface.present().await;
 ```
 
 Depth-tested mesh with blending / cull:
 
 ```dream
 let desc = GpuRenderPipelineDesc.mesh();
-let pipe = await GpuRenderPipeline.create_ex("vs", "fs", desc);
+let pipe = GpuRenderPipeline.create_ex("vs", "fs", desc).await;
 let depth = GpuTexture.depth24(width, height);
-let _ = await GpuRenderPass.draw_instanced(
+let _ = GpuRenderPass.draw_instanced(
     surface, pipe, verts, vertex_count, instance_count,
     uniforms, clear, Option.Some(depth), GpuLoadOp.Clear
-);
+).await;
 ```
 
 ## Attributes
@@ -150,9 +150,9 @@ order the shader declares them (ascending group, then binding, separately per ki
 
 ```dream
 let binds = GpuBindList.begin().texture(albedo).sampler(samp);
-let _ = await GpuRenderPass.draw_ex(
+let _ = GpuRenderPass.draw_ex(
     surface, pipe, verts, 3, uniforms, clear, Option.Some(binds)
-);
+).await;
 ```
 
 ## Sampling textures

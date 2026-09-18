@@ -21,7 +21,7 @@ fun add_one(buf: GpuBuffer<float>, n: int): void {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -35,7 +35,7 @@ async fun main(): void {
     let pass = ComputePass.begin();
     pass.dispatch("double_it", [src, dst], 4, 1, 1);
     pass.dispatch("add_one", [dst], 4, 1, 1);
-    let sub = await pass.submit();
+    let sub = pass.submit().await;
     if sub.is_err() {
         System.println("submit failed");
         return;
@@ -46,7 +46,7 @@ async fun main(): void {
     indirect.y = 1;
     indirect.z = 1;
     let args = indirect.to_buffer();
-    let _ = await Compute.dispatch_indirect("add_one", [dst], args);
+    let _ = Compute.dispatch_indirect("add_one", [dst], args).await;
 
     let samp = GpuSampler.linear();
     let tex = GpuTexture.rgba8(2, 2);

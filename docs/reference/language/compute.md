@@ -24,14 +24,14 @@ fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int)
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() { return; }
     let a = GpuBuffer.from([1.0, 2.0, 3.0]);
     let b = GpuBuffer.from([10.0, 20.0, 30.0]);
     let out = GpuBuffer<float>.alloc(3);
-    let r = await Compute.run_1d("add", [a, b, out], 3);
+    let r = Compute.run_1d("add", [a, b, out], 3).await;
     if r.is_err() { return; }
-    let vals = await out.read();
+    let vals = out.read().await;
     System.println((int)vals[0]); // 11 when a GPU adapter is available
 }
 ```
@@ -54,13 +54,13 @@ fun saxpy(x: GpuBuffer<float>, y: GpuBuffer<float>, out: GpuBuffer<float>, n: in
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() { return; }
     let x = GpuBuffer.from([1.0, 2.0, 3.0, 4.0]);
     let y = GpuBuffer.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
-    let _ = await Compute.run_1d("saxpy", [x, y, out], 4);
-    let vals = await out.read();
+    let _ = Compute.run_1d("saxpy", [x, y, out], 4).await;
+    let vals = out.read().await;
     System.println((int)vals[0]); // browser: 12
 }
 ```
@@ -112,8 +112,8 @@ pass.dispatch_resources(
     n, n, 1,
     Buffer.alloc<byte>(0)
 );
-let _ = await pass.submit();
-await GpuRenderPass.blit(surface, tex);
+let _ = pass.submit().await;
+GpuRenderPass.blit(surface, tex).await;
 ```
 
 ```bash
@@ -147,7 +147,7 @@ fun advect(
 let pass = ComputePass.begin();
 pass.dispatch("advect", [vx, vx_tmp, vx, vy], n, n, 1);
 pass.dispatch("advect", [vy, vy_tmp, vx, vy], n, n, 1);
-let _ = await pass.submit();
+let _ = pass.submit().await;
 ```
 
 ```bash
@@ -275,7 +275,7 @@ Prefer **`ComputePass`** to batch several dispatches into one `queue.submit`:
 let pass = ComputePass.begin();
 pass.dispatch("advect", [src, dst, vx, vy], n, n, 1);
 pass.dispatch("divergence", [vx, vy, div], n, n, 1);
-let _ = await pass.submit();
+let _ = pass.submit().await;
 ```
 
 For GPU-written workgroup counts, pack three i32s with `GpuDispatchIndirect` and call
@@ -285,7 +285,7 @@ For GPU-written workgroup counts, pack three i32s with `GpuDispatchIndirect` and
 
 ```dream
 let shader = GpuShader.from_wgsl(WGSL_SOURCE, "main");
-let r = await Compute.run_shader(shader, [buf], 64, 1, 1);
+let r = Compute.run_shader(shader, [buf], 64, 1, 1).await;
 ```
 
 ## Samples

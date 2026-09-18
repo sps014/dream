@@ -8,6 +8,6 @@ async fun work(): void {
 async fun main(): void {
     let f = work();
     Promise.cancel(f);
-    await Time.sleep(5);
+    Time.sleep(5).await;
     System.println("cancelled before start");
 }

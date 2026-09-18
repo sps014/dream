@@ -9,7 +9,7 @@ shared class Cell {
 async fun work(): int { return 1; }
 async fun f(c: Cell): int {
     lock (c) {
-        return await work();
+        return work().await;
     }
 }
 fun main() { }

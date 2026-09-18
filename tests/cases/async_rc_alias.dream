@@ -19,18 +19,18 @@ class Tracked {
 async fun use_alias(t: Tracked): int {
     let a = t;
     let b = a;
-    await Time.sleep(0);
+    Time.sleep(0).await;
     return a.id + b.id;
 }
 
 async fun run(): void {
     let t = Tracked(3);
-    let n = await use_alias(t);
+    let n = use_alias(t).await;
     System.println(n);
 }
 
 async fun main(): void {
     let base = Debug.live_objects;
-    await run();
+    run().await;
     System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

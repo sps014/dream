@@ -14,6 +14,6 @@ async fun main(): void {
     let (_, _) = (1, 2);
     let (_, y) = (3, 4);
     System.println(y);
-    let _ = await tick();
-    await tick();
+    let _ = tick().await;
+    tick().await;
 }

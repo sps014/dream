@@ -198,15 +198,15 @@ extend js {
     @js("Dream", "jsAwait")
     static extern async fun await_raw(borrow target: js): js;
 
-    // The awaited result the compiler actually targets: `await <jsExpr>` desugars to
-    // `await js.await_promise(<jsExpr>)`, which yields `Option<js>` - `Some(value)` when the Promise
+    // The awaited result the compiler actually targets: `<jsExpr>.await` desugars to
+    // `js.await_promise(<jsExpr>).await`, which yields `Option<js>` - `Some(value)` when the Promise
     // resolved, `None` when it rejected (or resolved with `null`/`undefined`). So a JS Promise reads
     // natively while still forcing the caller to handle failure:
-    //   let r = await js.global.fetch("/api");   // r: Option<js>
+    //   let r = js.global.fetch("/api").await;   // r: Option<js>
     @node @web
     static async fun await_promise(borrow target: js, token: Option<CancellationToken> = Option.None): Option<js> {
         CancellationToken.throw_if_opt(token);
-        let v = await js.await_raw(target);
+        let v = js.await_raw(target).await;
         CancellationToken.throw_if_opt(token);
         if v.is_null() {
             return Option.None;

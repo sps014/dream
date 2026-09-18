@@ -11,21 +11,21 @@ public static class Time {
     // Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for
     // wall-clock animation pacing in the browser.
     public static async fun sleep(ms: int, token: Option<CancellationToken> = Option.None): void {
-        await Time.wait_ms(ms, token, true);
+        Time.wait_ms(ms, token, true).await;
     }
 
     // Wall-clock delay (`setTimeout` in the browser; real sleep natively).
     public static async fun delay(ms: int, token: Option<CancellationToken> = Option.None): void {
-        await Time.wait_ms(ms, token, false);
+        Time.wait_ms(ms, token, false).await;
     }
 
     static async fun wait_ms(ms: int, token: Option<CancellationToken>, virtual_clock: bool): void {
         CancellationToken.throw_if_opt(token);
         if token.is_none() {
             if virtual_clock {
-                await Time.sleep_host(ms);
+                Time.sleep_host(ms).await;
             } else {
-                await Time.delay_host(ms);
+                Time.delay_host(ms).await;
             }
             return;
         }
@@ -37,9 +37,9 @@ public static class Time {
                 slice = 16;
             }
             if virtual_clock {
-                await Time.sleep_host(slice);
+                Time.sleep_host(slice).await;
             } else {
-                await Time.delay_host(slice);
+                Time.delay_host(slice).await;
             }
             remaining = remaining - slice;
         }

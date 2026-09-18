@@ -1,13 +1,13 @@
 import system;
 async fun delayedDouble(n: int): int {
-    await Time.sleep(100);
+    Time.sleep(100).await;
     return n * 2;
 }
 
 async fun main(): void {
     System.println("start");
-    let a = await delayedDouble(10);
-    let b = await delayedDouble(a);
+    let a = delayedDouble(10).await;
+    let b = delayedDouble(a).await;
     System.println("result = " + b);
     System.println("done");
 }

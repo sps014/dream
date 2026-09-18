@@ -54,8 +54,8 @@ pub enum StatementNode<'a> {
     Continue(Option<String>),
     /// An expression used as a statement, typically missing an assignment or call.
     ExpressionStatement(ExpressionNode<'a>),
-    /// `await <future-expr>;` used as a statement, discarding the resolved value. The inner
-    /// expression produces the `Future` to await (it is NOT wrapped in `ExpressionNode::Await`).
+    /// `<future-expr>.await;` used as a statement, discarding the resolved value. The inner
+    /// expression produces the `Future` (it is NOT wrapped in `ExpressionNode::Await`).
     AwaitStmt(ExpressionNode<'a>),
     /// `for (let element in iterable) { body }`. Iterates the elements of an array. The two
     /// `String` fields are unique synthetic local names (index counter and array temp) generated

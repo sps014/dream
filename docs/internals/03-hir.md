@@ -62,7 +62,7 @@ A `ref` parameter (`fun f(ref x: int)`) needs no dedicated HIR shape: it is boxe
 | `If / While / For / Foreach` | structured control flow (typed parts) |
 | `Switch { scrutinee, arms, default }` | both C-style and pattern-matching forms; arms are `HArm { pattern, body }` |
 | `Break / Continue (Option<label>)` | |
-| `Await(HExpr)` | the only legal `await` *statement* position |
+| `Await(HExpr)` | `.await` used as a value |
 
 Pattern-matching `switch` lowering (analyzer):
 

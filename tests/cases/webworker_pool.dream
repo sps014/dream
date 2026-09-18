@@ -10,9 +10,9 @@ async fun main(): void {
     let b = pool.dispatch(() => square("4"));
     let c = pool.dispatch(() => square("5"));
     let d = pool.dispatch(() => square("6"));
-    System.println(await a);
-    System.println(await b);
-    System.println(await c);
-    System.println(await d);
+    System.println(a.await);
+    System.println(b.await);
+    System.println(c.await);
+    System.println(d.await);
     pool.shutdown();
 }

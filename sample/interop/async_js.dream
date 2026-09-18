@@ -13,8 +13,8 @@ async fun main(): void {
 
     // `await` on a `js` yields `Option<js>`: `Some(value)` on resolve, `None` on rejection - so
     // failure is impossible to ignore. Awaits may appear in any control-flow position.
-    let user = await js.global.fetchUser(42);
-    let res = await js.global.fetchUser(7);
+    let user = js.global.fetchUser(42).await;
+    let res = js.global.fetchUser(7).await;
 
     switch (user) {
         Some(u) => {

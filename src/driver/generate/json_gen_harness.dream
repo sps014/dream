@@ -106,7 +106,7 @@ fun types_from_json(arr: JsonValue): List<GenType> {
 
 async fun main(): void {
     let path = System.env_or("DREAM_JSON_GEN_SNAPSHOT", "");
-    let text_res = await File.read(path);
+    let text_res = File.read(path).await;
     switch (text_res) {
         Ok(text) => {
             let parsed = Json.parse(text);

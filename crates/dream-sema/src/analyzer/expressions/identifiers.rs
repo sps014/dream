@@ -55,7 +55,7 @@ impl<'a> Analyzer<'a> {
                     // A boxed `fun(...)` value is invoked through synchronous `call_indirect`. An
                     // `async fun`'s constructor returns an untagged `Future` frame pointer, so boxing
                     // it as `fun(...): Future<T>` matches the WASM result and lets the caller
-                    // `await f(...)` like a direct async call. Worker bodies use the same shape
+                    // `f(...).await` like a direct async call. Worker bodies use the same shape
                     // (`spawn_async` / `map_async` / `dispatch_async`).
                     if sig.is_async {
                         let params = sig

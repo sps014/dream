@@ -9,8 +9,8 @@ import system;
 import system.io;
 
 async fun main(): void {
-    await File.write("notes.txt", "hello\n");
-    let text = (await File.read("notes.txt")).unwrap_or("");
+    File.write("notes.txt", "hello\n").await;
+    let text = (File.read("notes.txt").await).unwrap_or("");
     System.println(text);
 }
 ```
@@ -24,16 +24,16 @@ async fun main(): void {
 
 | Call | Meaning |
 | --- | --- |
-| `await File.write` / `append` | UTF-8 text |
-| `await File.read` / `read_bytes` / `read_lines` | whole file |
-| `await File.write_bytes` / `write_lines` | binary / lines |
-| `await File.copy` / `rename` | copy a file; same-volume move |
-| `await File.delete` | remove a file |
-| `await File.remove_dir` / `remove_dir_all` | empty dir / recursive |
-| `await File.create_dir` / `create_dir_all` | directories |
-| `await File.list(path)` / `list_paths` | names, or joined paths |
+| `File.write.await` / `append` | UTF-8 text |
+| `File.read.await` / `read_bytes` / `read_lines` | whole file |
+| `File.write_bytes.await` / `write_lines` | binary / lines |
+| `File.copy.await` / `rename` | copy a file; same-volume move |
+| `File.delete.await` | remove a file |
+| `File.remove_dir.await` / `remove_dir_all` | empty dir / recursive |
+| `File.create_dir.await` / `create_dir_all` | directories |
+| `File.list(path).await` / `list_paths` | names, or joined paths |
 | `File.exists` / `size` / `is_dir` / `is_file` / `stat` | sync probes |
-| `File.open` / `await File.open_async` | a `FileStream` |
+| `File.open` / `File.open_async.await` | a `FileStream` |
 
 `File.stat` returns `FileStats` (`size`, `mtime_millis` / `ctime_millis` / `atime_millis`, `mode`, `kind`) with `is_file` / `is_dir` / `is_symlink`. With `import system;`, `modified()` / `created()` yield `DateTime`.
 

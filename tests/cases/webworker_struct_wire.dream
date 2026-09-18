@@ -15,6 +15,6 @@ fun shift(p: Point): Point {
 
 async fun main(): void {
     let p = Point(1, 2);
-    let r = await WebWorker.spawn(() => shift(p));
+    let r = WebWorker.spawn(() => shift(p)).await;
     System.println("" + r.x + "," + r.y);
 }

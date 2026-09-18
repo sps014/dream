@@ -83,9 +83,8 @@ pub enum ExpressionNode<'a> {
         &'a ExpressionNode<'a>,
         &'a ExpressionNode<'a>,
     ),
-    /// `await <future-expr>`: suspends the enclosing `async` function until the awaited
-    /// `Future<T>` resolves, then yields its `T`. The `SyntaxToken` is the `await` keyword (needed
-    /// for the true start offset — e.g. parameter-name inlay hints before `await …` arguments).
+    /// `<future-expr>.await`: suspends the enclosing `async` function until the awaited
+    /// `Future<T>` resolves, then yields its `T`. The `SyntaxToken` is the `await` keyword.
     Await(SyntaxToken, &'a ExpressionNode<'a>),
     /// `switch (subject) { pattern [if guard] => body, ... }` in its pattern-matching form. Used
     /// both as an expression (every arm yields a value of a common type) and, when wrapped in an
@@ -264,8 +263,8 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::MapLiteral(open, _)
             | ExpressionNode::Cast(open, _, _)
             | ExpressionNode::Switch(open, _, _)
-            | ExpressionNode::RefArgument(open, _)
-            | ExpressionNode::Await(open, _) => Some(open.position),
+            | ExpressionNode::RefArgument(open, _) => Some(open.position),
+            ExpressionNode::Await(_, inner) => inner.start_position(),
             ExpressionNode::Try(inner) | ExpressionNode::IsExpression(inner, _, _) => {
                 inner.start_position()
             }

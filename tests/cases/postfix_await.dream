@@ -1,0 +1,33 @@
+// Rust-style postfix `.await`: a trailing `?` applies to the awaited `Result` —
+// `doubled(21).await?` needs no parentheses. `.await` also chains into further member access
+// and binary operators.
+import system;
+
+async fun doubled(n: int): Result<int, string> {
+    if n < 0 {
+        return Result.Err("negative: " + n.to_string());
+    }
+    return Result.Ok(n * 2);
+}
+
+async fun name(n: int): string {
+    Time.sleep(1).await;
+    return "item" + n.to_string();
+}
+
+async fun main(): Result<bool, string> {
+    let a = doubled(21).await?;
+    System.println("doubled is " + a.to_string());
+
+    if name(1).await.is_empty() {
+        return Result.Err("empty name");
+    }
+    System.println("name is not empty");
+
+    let sum = doubled(1).await? + 1;
+    System.println("sum is " + sum.to_string());
+
+    // Same spelling as the earlier `.await?` — chaining another async Result.
+    let b = doubled(a).await?;
+    System.println("again is " + b.to_string());
+}

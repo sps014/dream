@@ -347,7 +347,7 @@ fun make_vert(x: float, y: float): Vertex {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("WebGPU unavailable — elevated needs Gpu.try_init");
         return;
@@ -366,7 +366,7 @@ async fun main(): void {
     if h < 1 { h = 720; }
 
     let desc = GpuRenderPipelineDesc.defaults();
-    let pipe_r = await GpuRenderPipeline.create_ex("elev_vs", "elev_fs", desc);
+    let pipe_r = GpuRenderPipeline.create_ex("elev_vs", "elev_fs", desc).await;
     if pipe_r.is_err() {
         System.println("GpuRenderPipeline.create_ex failed");
         return;
@@ -397,8 +397,8 @@ async fun main(): void {
         let now: long = Time.nano_time();
         let t: float = (float)(now - t0) / 1000000000.0;
         let uniforms = Uniforms.pack_f32([t, rw, rh]);
-        let _ = await GpuRenderPass.draw_ex(surface, pipe, verts, 3, uniforms, sky);
-        let _ = await surface.present();
-        await Gpu.frame();
+        let _ = GpuRenderPass.draw_ex(surface, pipe, verts, 3, uniforms, sky).await;
+        let _ = surface.present().await;
+        Gpu.frame().await;
     }
 }

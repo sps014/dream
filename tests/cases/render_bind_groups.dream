@@ -38,7 +38,7 @@ fun tint_fs(
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -51,7 +51,7 @@ async fun main(): void {
     pixels[1] = (byte)255;
     pixels[2] = (byte)0;
     pixels[3] = (byte)255;
-    let wrote = await albedo.write_rgba(pixels);
+    let wrote = albedo.write_rgba(pixels).await;
     if wrote.is_err() {
         System.println("texture write failed");
         return;
@@ -65,7 +65,7 @@ async fun main(): void {
     ]);
 
     let desc = GpuRenderPipelineDesc.defaults();
-    let pipe_r = await GpuRenderPipeline.create_ex("tint_vs", "tint_fs", desc);
+    let pipe_r = GpuRenderPipeline.create_ex("tint_vs", "tint_fs", desc).await;
     if pipe_r.is_err() {
         System.println("pipeline create failed");
         return;
@@ -75,7 +75,7 @@ async fun main(): void {
     let target = GpuTexture.rgba8(4, 4);
     let no_depth: Option<GpuTexture> = Option.None;
     let binds = GpuBindList.begin().texture(albedo).sampler(samp);
-    let drawn = await GpuRenderPass.draw_to(
+    let drawn = GpuRenderPass.draw_to(
         target,
         no_depth,
         pipe,
@@ -86,13 +86,13 @@ async fun main(): void {
         GpuVec4.of(0.0, 0.0, 0.0, 1.0),
         GpuLoadOp.Clear,
         Option.Some(binds)
-    );
+    ).await;
     if drawn.is_err() {
         System.println("draw_to failed");
         return;
     }
 
-    let out = await target.read_rgba();
+    let out = target.read_rgba().await;
     System.println("r=" + ((int)out[0]).to_string());
     System.println("g=" + ((int)out[1]).to_string());
     System.println("b=" + ((int)out[2]).to_string());

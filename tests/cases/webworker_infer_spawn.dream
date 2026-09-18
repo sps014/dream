@@ -6,13 +6,13 @@ fun shout(msg: string): string {
 }
 
 async fun main(): void {
-    System.println(await WebWorker.spawn(() => shout("hello")));
+    System.println(WebWorker.spawn(() => shout("hello")).await);
 
     let n = 6;
-    System.println((await WebWorker.spawn(() => n * n)).to_string());
+    System.println((WebWorker.spawn(() => n * n).await).to_string());
 
     let items = ["1", "2"];
-    let results = await WebWorker.map(items, shout);
+    let results = WebWorker.map(items, shout).await;
     for (let r in results) {
         System.println(r);
     }

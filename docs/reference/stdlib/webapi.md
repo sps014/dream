@@ -15,7 +15,7 @@ fun health(): string {
 }
 
 async fun main(): void {
-    await WebApp.run("127.0.0.1", 8080);
+    WebApp.run("127.0.0.1", 8080).await;
 }
 ```
 
@@ -61,7 +61,7 @@ Stdlib auth helpers: `BearerToken`, `ApiKeyHeader`, `BasicAuth` — pass them to
 
 ## Streaming and WebSocket
 
-Return `EventStream` from a `@get` handler and `await stream.send(event, data)` for SSE (`text/event-stream`). A cancelled token (argument or the server token) makes `send` return without writing.
+Return `EventStream` from a `@get` handler and `stream.send(event, data).await` for SSE (`text/event-stream`). A cancelled token (argument or the server token) makes `send` return without writing.
 
 `@websocket("/ws") async fun echo(ws: ServerWebSocket): void` upgrades after middleware (CORS/auth can still reject the handshake). Frame types are `system.net` `WebSocketMessage`; the client is `WebSocket.connect("ws://...")`. `send_text` / `send_binary` / `receive` take an optional token and return `NetError.cancelled()` when it has fired.
 

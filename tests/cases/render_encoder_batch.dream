@@ -42,7 +42,7 @@ fun batch_fs(
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -54,7 +54,7 @@ async fun main(): void {
     pixels[1] = (byte)255;
     pixels[2] = (byte)255;
     pixels[3] = (byte)255;
-    let wrote = await albedo.write_rgba(pixels);
+    let wrote = albedo.write_rgba(pixels).await;
     if wrote.is_err() {
         System.println("texture write failed");
         return;
@@ -68,18 +68,18 @@ async fun main(): void {
     ]);
 
     let desc = GpuRenderPipelineDesc.defaults();
-    let pipe_r = await GpuRenderPipeline.create_ex("batch_vs", "batch_fs", desc);
+    let pipe_r = GpuRenderPipeline.create_ex("batch_vs", "batch_fs", desc).await;
     if pipe_r.is_err() {
         System.println("pipeline create failed");
         return;
     }
     let pipe = pipe_r.unwrap();
 
-    let material_r = await GpuBindGroup.create(
+    let material_r = GpuBindGroup.create(
         pipe,
         1,
         GpuBindList.begin().texture(albedo).sampler(samp)
-    );
+    ).await;
     if material_r.is_err() {
         System.println("bind group create failed");
         return;
@@ -105,13 +105,13 @@ async fun main(): void {
     pass.draw(3, 1, 0, 0);
     pass.end();
 
-    let submitted = await enc.submit();
+    let submitted = enc.submit().await;
     if submitted.is_err() {
         System.println("submit failed");
         return;
     }
 
-    let out = await target.read_rgba();
+    let out = target.read_rgba().await;
     System.println("left=" + ((int)out[0]).to_string() + "," + ((int)out[1]).to_string() + "," + ((int)out[2]).to_string());
     // Pixel (2, 0) starts 8 bytes in.
     System.println("right=" + ((int)out[8]).to_string() + "," + ((int)out[9]).to_string() + "," + ((int)out[10]).to_string());

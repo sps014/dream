@@ -1,7 +1,7 @@
 import system;
 async fun tick(): void {
     defer {
-        await Time.sleep(1);
+        Time.sleep(1).await;
     }
 }
 

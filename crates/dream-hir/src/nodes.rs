@@ -99,7 +99,7 @@ pub enum HStmt {
     },
     Break(Option<String>),
     Continue(Option<String>),
-    /// `await e;` at statement position (the only legal await position). `settled` is the type the
+    /// `e.await;` at statement position. `settled` is the type the
     /// future resolves to; the result is discarded, but MIR still binds it so RC can release it.
     Await {
         future: HExpr,
@@ -327,7 +327,7 @@ pub enum HExprKind {
         then_expr: Box<HExpr>,
         else_expr: Box<HExpr>,
     },
-    /// `await e` used as a value (only valid in the limited await positions; carries the awaited
+    /// `e.await` used as a value (carries the awaited
     /// future's inner type as `ty`).
     Await(Box<HExpr>),
     /// An enum member reference resolved to its integer value.

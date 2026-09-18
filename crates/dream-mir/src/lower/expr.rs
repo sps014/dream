@@ -275,10 +275,10 @@ impl Lowerer<'_> {
         }
     }
 
-    /// Lowers `await e` (in a coroutine) to a suspend point: the future `e` is evaluated in the
+    /// Lowers `e.await` (in a coroutine) to a suspend point: the future `e` is evaluated in the
     /// current block, which ends with a [`Terminator::Await`] parking the task; lowering continues in
     /// a fresh `resume` block where the settled result is bound to `dest`. Returns the `dest` read, so
-    /// callers see `await e` as an ordinary value — hence awaits compose in any sub-expression.
+    /// callers see `e.await` as an ordinary value — hence awaits compose in any sub-expression.
     fn lower_await(&mut self, await_expr: &HExpr) -> Operand {
         let HExprKind::Await(inner) = &await_expr.kind else {
             unreachable!("lower_await on non-await expression");

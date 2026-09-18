@@ -11,6 +11,6 @@ async fun main(): void {
     let f = work();
     System.println("created");
     Promise.start(f);
-    await Time.sleep(10);
+    Time.sleep(10).await;
     System.println("done");
 }

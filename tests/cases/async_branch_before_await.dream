@@ -6,23 +6,23 @@ import system;
 async fun g(n: int): int { return n; }
 
 async fun pick(early: bool): int {
-    if early { return 99; }          // explicit return in a branch before the await
-    let y = await g(5);
+    if early { return 99; }          // explicit return in a branch before the suspend
+    let y = g(5).await;
     return y + 1;
 }
 
 async fun run(): int {
     let sum = 0;
     let i = 0;
-    while i < 4 { sum = sum + i; i = i + 1; }   // loop before the await
-    let a = await g(1);
+    while i < 4 { sum = sum + i; i = i + 1; }   // loop before the suspend
+    let a = g(1).await;
     if a == 1 { a = a + 10; }                   // branch between two awaits
-    let b = await g(2);
+    let b = g(2).await;
     return sum + a + b;
 }
 
 async fun main(): void {
-    System.println(await pick(true));    // 99
-    System.println(await pick(false));   // 6
-    System.println(await run());         // 6 + 11 + 2 = 19
+    System.println(pick(true).await);    // 99
+    System.println(pick(false).await);   // 6
+    System.println(run().await);         // 6 + 11 + 2 = 19
 }

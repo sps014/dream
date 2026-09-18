@@ -13,21 +13,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Result<ExpressionNode<'a>, Error> {
         let mut left;
         let unary_precedence = self.current_token().kind.get_unary_precedence();
-        if self.current_token().kind == TokenKind::AwaitToken {
-            // `await <primary>` binds tightly to its operand so `await f() + 1` is `(await f()) + 1`.
-            let await_tok = self.match_token(TokenKind::AwaitToken);
-            let operand = self.parse_primary_expression()?;
-            // The primary's postfix loop has already taken any trailing `?`, leaving `Try(call)` —
-            // but `?` propagates the awaited `Result`, not the `Future`, so `await f()?` is
-            // `(await f())?`. Rotating here keeps the natural spelling working without a special
-            // case in sema.
-            left = match operand {
-                ExpressionNode::Try(inner) => {
-                    ExpressionNode::Try(self.arena.alloc(ExpressionNode::Await(await_tok, inner)))
-                }
-                _ => ExpressionNode::Await(await_tok, self.arena.alloc(operand)),
-            };
-        } else if unary_precedence != 0 && unary_precedence >= parent_precedence {
+        if unary_precedence != 0 && unary_precedence >= parent_precedence {
             let operator_token = self.next_token();
             let operand = self.parse_expression(unary_precedence)?;
             if matches!(
@@ -177,7 +163,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             && self.peek_token(1).kind == TokenKind::DotToken
         {
             let mut expr = ExpressionNode::Identifier(self.next_token());
-            while self.current_token().kind == TokenKind::DotToken {
+            while self.current_token().kind == TokenKind::DotToken
+                && self.peek_token(1).kind != TokenKind::AwaitToken
+            {
                 expr = self.parse_member_access_step(expr)?;
             }
             return self.parse_postfix_chain(expr);
@@ -477,6 +465,15 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 self.match_token(TokenKind::CloseParenthesisToken);
                 expr = ExpressionNode::Call(self.arena.alloc(expr), None, arguments);
+            } else if self.current_token().kind == TokenKind::DotToken
+                && self.peek_token(1).kind == TokenKind::AwaitToken
+            {
+                // `expr.await` — taking it here (rather than in `parse_member_access_step`) both
+                // keeps `await` a reserved keyword rather than a member name, and lets the trailing
+                // `?` below apply to the awaited value, so `f().await?` is `(f().await)?`.
+                self.match_token(TokenKind::DotToken);
+                let await_tok = self.match_token(TokenKind::AwaitToken);
+                expr = ExpressionNode::Await(await_tok, self.arena.alloc(expr));
             } else if self.current_token().kind == TokenKind::DotToken {
                 expr = self.parse_member_access_step(expr)?;
             } else if self.current_token().kind == TokenKind::QuestionMarkToken

@@ -14,19 +14,19 @@ public static class Promise {
     // Waits for all promises in the array to resolve.
     public static async fun all<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T[] {
         CancellationToken.throw_if_opt(token);
-        return await Promise.all_host(promises);
+        return Promise.all_host(promises).await;
     }
 
     // Waits for any promise in the array to resolve.
     public static async fun any<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T {
         CancellationToken.throw_if_opt(token);
-        return await Promise.any_host(promises);
+        return Promise.any_host(promises).await;
     }
 
     // Returns the first promise to resolve or reject.
     public static async fun race<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T {
         CancellationToken.throw_if_opt(token);
-        return await Promise.race_host(promises);
+        return Promise.race_host(promises).await;
     }
 
     // Cancels a future (marks it cancelled and unlinks pending timers). Best-effort for

@@ -89,7 +89,7 @@ public class GenContext {
         if path.is_empty() {
             return Result.Err("snapshot path is empty");
         }
-        let text_res = await File.read(path, token);
+        let text_res = File.read(path, token).await;
         if CancellationToken.is_cancelled_opt(token) {
             return Result.Err("ECANCELLED");
         }

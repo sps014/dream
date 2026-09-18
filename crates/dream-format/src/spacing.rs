@@ -1,4 +1,33 @@
+use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
+
+/// Whether the `?` at `q` is try-propagation (`expr?`, binds tight) rather than the start of a
+/// ternary (`cond ? a : b`, spaced). Mirrors the parser's `is_try_propagation_question_mark`:
+/// ternary only when a matching `:` follows at bracket depth 0.
+pub(super) fn is_try_question_mark(tokens: &[SyntaxToken], q: usize) -> bool {
+    let mut depth: i32 = 0;
+    for token in &tokens[q + 1..] {
+        match token.kind {
+            TokenKind::QuestionMarkToken if depth == 0 => return true,
+            TokenKind::EndOfFileToken | TokenKind::SemicolonToken => return true,
+            TokenKind::CommaToken if depth == 0 => return true,
+            TokenKind::ColonToken if depth == 0 => return false,
+            TokenKind::OpenParenthesisToken
+            | TokenKind::OpenBracketToken
+            | TokenKind::CurlyOpenBracketToken => depth += 1,
+            TokenKind::CloseParenthesisToken
+            | TokenKind::CloseBracketToken
+            | TokenKind::CurlyCloseBracketToken => {
+                depth -= 1;
+                if depth < 0 {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
 
 /// Tokens that begin a top-level declaration (used to insert the blank line separating decls).
 pub(super) fn is_decl_starter(kind: TokenKind) -> bool {
@@ -70,7 +99,6 @@ fn is_prefix_unary(kind: TokenKind) -> bool {
             | TokenKind::TildeToken
             | TokenKind::PlusPlusToken
             | TokenKind::MinusMinusToken
-            | TokenKind::AwaitToken
             | TokenKind::RefToken
             | TokenKind::BorrowToken
     )
@@ -93,7 +121,6 @@ pub(super) fn is_keyword_needing_space(kind: TokenKind) -> bool {
             | TokenKind::ConstToken
             | TokenKind::FunToken
             | TokenKind::AsyncToken
-            | TokenKind::AwaitToken
             | TokenKind::StaticToken
             | TokenKind::ImportToken
             | TokenKind::AsToken
@@ -138,7 +165,9 @@ fn is_word_like(kind: TokenKind) -> bool {
 fn ends_operand(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken
+        TokenKind::CloseParenthesisToken
+            | TokenKind::CloseBracketToken
+            | TokenKind::AwaitToken
     ) || is_word_like(kind)
 }
 
@@ -146,6 +175,14 @@ fn ends_operand(kind: TokenKind) -> bool {
 ///
 /// `before_prev` is the token before `prev`, needed only for the signed-literal rule.
 pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: TokenKind) -> bool {
+    // `expr.await` is postfix, so its `await` ends an operand instead of introducing one — it
+    // spaces like a `)` (`x.await + 1`, `x.await[0]`).
+    let prev = if prev == TokenKind::AwaitToken && before_prev == Some(TokenKind::DotToken) {
+        TokenKind::CloseParenthesisToken
+    } else {
+        prev
+    };
+
     // Never space before closers / separators / postfix.
     if matches!(
         cur,
@@ -211,12 +248,9 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
         return true;
     }
 
-    // Prefix unary: `!x` `~x` `++x` `--x`; space only after word-like unaries (`await x`).
+    // Prefix unary: `!x` `~x` `++x` `--x`; space only after word-like unaries (`ref x`).
     if is_prefix_unary(prev) {
-        return matches!(
-            prev,
-            TokenKind::AwaitToken | TokenKind::RefToken | TokenKind::BorrowToken
-        );
+        return matches!(prev, TokenKind::RefToken | TokenKind::BorrowToken);
     }
 
     // Space after `,` `:` `;` (`;` usually already newline'd).

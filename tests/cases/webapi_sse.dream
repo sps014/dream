@@ -5,15 +5,15 @@ import system.webapi;
 @get("/events")
 async fun events(req: HttpIncoming): EventStream {
     let s = EventStream(req);
-    await s.send("tick", "{\"n\":1}");
-    await s.send("tick", "{\"n\":2}");
+    s.send("tick", "{\"n\":1}").await;
+    s.send("tick", "{\"n\":2}").await;
     return s;
 }
 
 async fun main(): void {
-    let port = await WebApp.listen("127.0.0.1", 0);
+    let port = WebApp.listen("127.0.0.1", 0).await;
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
-    switch (await client.get("/events")) {
+    switch (client.get("/events").await) {
         Ok(r) => {
             let t = r.text();
             System.println(t.contains("event: tick"));
@@ -23,5 +23,5 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

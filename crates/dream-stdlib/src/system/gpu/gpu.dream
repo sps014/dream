@@ -54,17 +54,17 @@ public static class Gpu {
     // Initializes the GPU device; returns `Err` with a host error code on failure.
     // Picks a high-performance adapter when the host offers a choice.
     public static async fun try_init(): Result<bool, GpuError> {
-        return await Gpu.try_init(GpuPowerPreference.HighPerformance, Option.None);
+        return Gpu.try_init(GpuPowerPreference.HighPerformance, Option.None).await;
     }
 
     // Like `try_init()`, with a cancellation token.
     public static async fun try_init(token: Option<CancellationToken>): Result<bool, GpuError> {
-        return await Gpu.try_init(GpuPowerPreference.HighPerformance, token);
+        return Gpu.try_init(GpuPowerPreference.HighPerformance, token).await;
     }
 
     // Like `try_init()`, requesting `power` (ignored if a device is already alive).
     public static async fun try_init(power: GpuPowerPreference): Result<bool, GpuError> {
-        return await Gpu.try_init(power, Option.None);
+        return Gpu.try_init(power, Option.None).await;
     }
 
     // Like `try_init(power)`, with a cancellation token.
@@ -74,7 +74,7 @@ public static class Gpu {
     ): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
         let p: int = power;
-        let code = await Gpu.try_init_host(p);
+        let code = Gpu.try_init_host(p).await;
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "Gpu.try_init failed"));
     }
@@ -82,14 +82,14 @@ public static class Gpu {
     // Yields until the next presentation/frame tick.
     public static async fun frame(token: Option<CancellationToken> = Option.None): void {
         CancellationToken.throw_if_opt(token);
-        await Gpu.frame_host();
+        Gpu.frame_host().await;
     }
 
     // Host monotonic clock in nanoseconds (not a GPU timestamp). GPU pass timing is
     // `GpuQuerySet` + `ComputePass.begin_timed`.
     public static async fun timestamp(token: Option<CancellationToken> = Option.None): long {
         CancellationToken.throw_if_opt(token);
-        return await Gpu.timestamp_host();
+        return Gpu.timestamp_host().await;
     }
 
     // Nanoseconds per GPU timestamp tick. `1` when no device is alive.

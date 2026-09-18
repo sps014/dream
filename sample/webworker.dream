@@ -18,12 +18,12 @@ fun work(input: string): string {
 }
 
 async fun main(): void {
-    System.println(await WebWorker.spawn(() => greet("dream")));
+    System.println(WebWorker.spawn(() => greet("dream")).await);
 
     let w1 = WebWorker.spawn(() => work("alpha"));
     let w2 = WebWorker.spawn(() => work("beta"));
     let w3 = WebWorker.spawn(() => work("gamma"));
-    System.println(await w1);
-    System.println(await w2);
-    System.println(await w3);
+    System.println(w1.await);
+    System.println(w2.await);
+    System.println(w3.await);
 }

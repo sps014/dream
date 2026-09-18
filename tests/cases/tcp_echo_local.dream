@@ -4,13 +4,13 @@ import system.net;
 
 async fun main(): void {
     let port = int.parse(System.env_or("DREAM_E2E_TCP_PORT", "0")).unwrap_or(0);
-    switch (await TcpClient.connect("127.0.0.1", port)) {
+    switch (TcpClient.connect("127.0.0.1", port).await) {
         Ok(client) => {
-            switch (await client.send_text("ping")) {
+            switch (client.send_text("ping").await) {
                 Ok(n) => System.println(n),
                 Err(e) => System.println(e.message()),
             }
-            switch (await client.receive(16)) {
+            switch (client.receive(16).await) {
                 Ok(data) => System.println(data.length),
                 Err(e) => System.println(e.message()),
             }

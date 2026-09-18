@@ -1,8 +1,8 @@
 import system;
 async fun main(): void {
     let msg = "hi";
-    System.println(await WebWorker.spawn_async(async () => {
-        await Time.sleep(1);
+    System.println(WebWorker.spawn_async(async () => {
+        Time.sleep(1).await;
         return msg + "!";
-    }));
+    }).await);
 }

@@ -17,26 +17,26 @@ async fun require_auth(borrow ctx: RequestContext, borrow next: Next): HttpOutgo
     if ctx.incoming.header("Authorization").is_none() {
         return HttpOutgoing.from_status(HttpStatus.unauthorized());
     }
-    return await next.call();
+    return next.call().await;
 }
 
 async fun main(): void {
-    let port = await WebApp.listen("127.0.0.1", 0);
+    let port = WebApp.listen("127.0.0.1", 0).await;
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
-    switch (await client.get("/open")) {
+    switch (client.get("/open").await) {
         Ok(r) => System.println(r.text()),
         Err(e) => System.println(e.message()),
     }
-    switch (await client.get("/secret")) {
+    switch (client.get("/secret").await) {
         Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     let h = HttpHeaders();
     h.set("Authorization", "Bearer x");
-    switch (await client.get_with("/secret", h)) {
+    switch (client.get_with("/secret", h).await) {
         Ok(r) => System.println(r.text()),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

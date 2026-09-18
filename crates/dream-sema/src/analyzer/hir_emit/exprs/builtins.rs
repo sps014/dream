@@ -467,7 +467,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Records `await e` used as a value (carrying the awaited future's inner type).
+    /// Records `e.await` used as a value (carrying the awaited future's inner type).
     pub(in crate::analyzer) fn hir_set_await(&mut self, inner: Option<HExpr>, inner_ty: &Type) {
         if !self.active() {
             self.hir.last = None;

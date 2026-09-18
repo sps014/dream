@@ -361,10 +361,10 @@ Prefix an arrow lambda with `async` to allow `await` in its body. An async lambd
 ```dream
 async fun main(): void {
     let twice: fun(int): Future<int> = async (x) => {
-        await Time.sleep(1);
+        Time.sleep(1).await;
         return x * 2;
     };
-    let n = await twice(21);   // twice(21) : Future<int>
+    let n = twice(21).await;   // twice(21) : Future<int>
     println(n);                // 42
 }
 ```

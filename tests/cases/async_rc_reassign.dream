@@ -17,18 +17,18 @@ class Tracked {
 
 async fun swap(): int {
     let t = Tracked(1);
-    await Time.sleep(0);
+    Time.sleep(0).await;
     t = Tracked(2);
-    await Time.sleep(0);
+    Time.sleep(0).await;
     return t.id;
 }
 
 async fun run(): void {
-    System.println(await swap());
+    System.println(swap().await);
 }
 
 async fun main(): void {
     let base = Debug.live_objects;
-    await run();
+    run().await;
     System.println("live_delta=" + (Debug.live_objects - base).to_string());
 }

@@ -130,7 +130,7 @@ when the Promise rejected or resolved with `null`/`undefined`:
 
 ```dream
 async fun load(): void {
-    let resp = await js.global.fetch("/api");
+    let resp = js.global.fetch("/api").await;
     switch (resp) {
         Some(r) => {
             let ok: bool = r.ok;

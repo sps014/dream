@@ -8,7 +8,7 @@ fun square(x: string): string {
 
 async fun main(): void {
     let items = ["1", "2", "3", "4", "5"];
-    let results = await WebWorker.map(items, square);
+    let results = WebWorker.map(items, square).await;
     for (let r in results) {
         System.println(r);
     }

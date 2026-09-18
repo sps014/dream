@@ -31,11 +31,11 @@ public class Next {
 
     public async fun call(): HttpOutgoing {
         let step = this.step;
-        return await step();
+        return step().await;
     }
 }
 
-// One onion layer: `invoke` may short-circuit or `await next.call()`.
+// One onion layer: `invoke` may short-circuit or `next.call().await`.
 public class Middleware {
     handler: fun(RequestContext, Next): Future<HttpOutgoing>;
 
@@ -45,6 +45,6 @@ public class Middleware {
 
     public async fun invoke(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
         let handler = this.handler;
-        return await handler(ctx, next);
+        return handler(ctx, next).await;
     }
 }

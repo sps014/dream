@@ -13,7 +13,7 @@ struct Point {
 
 async fun main(): void {
     let nums = [1, 2, 3, 4, 5];
-    let doubled = await WebWorker.map(nums, (n) => n * 2);
+    let doubled = WebWorker.map(nums, (n) => n * 2).await;
     let s1 = "";
     for (let i = 0; i < doubled.length; i = i + 1) {
         s1 = s1 + doubled[i] + " ";
@@ -21,7 +21,7 @@ async fun main(): void {
     System.println(s1.trim());
 
     let points = [Point(1, 2), Point(3, 4)];
-    let shifted = await WebWorker.map(points, (p) => Point(p.x + 1, p.y + 1));
+    let shifted = WebWorker.map(points, (p) => Point(p.x + 1, p.y + 1)).await;
     let s2 = "";
     for (let i = 0; i < shifted.length; i = i + 1) {
         s2 = s2 + shifted[i].x + "," + shifted[i].y + " ";

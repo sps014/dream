@@ -11,7 +11,7 @@ fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int)
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -19,12 +19,12 @@ async fun main(): void {
     let a = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
     let b = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
     let out = GpuBuffer<float>.alloc(4);
-    let r = await Compute.run_1d("add", [a, b, out], 4);
+    let r = Compute.run_1d("add", [a, b, out], 4).await;
     if r.is_err() {
         System.println("dispatch failed");
         return;
     }
-    let vals = await out.read();
+    let vals = out.read().await;
     System.println((int)vals[0]);
     System.println((int)vals[1]);
     System.println((int)vals[2]);

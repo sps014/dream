@@ -428,11 +428,11 @@ public class WebApp {
             if !options.redoc_url.is_empty() && incoming.method == "GET" && incoming.path == options.redoc_url {
                 return HttpOutgoing.html(WebApp.redoc_html(options.title, options.openapi_url), 200);
             }
-            let out = await WebApp.generated_dispatch(ctx);
+            let out = WebApp.generated_dispatch(ctx).await;
             let _ = incoming.req_id;
             return out;
         };
-        let res = await WebApp.run_middleware(ctx, 0, leaf);
+        let res = WebApp.run_middleware(ctx, 0, leaf).await;
         WebApp.send_outgoing(req.req_id, res);
     }
 
@@ -442,13 +442,13 @@ public class WebApp {
         leaf: fun(): Future<HttpOutgoing>
     ): HttpOutgoing {
         if index >= webapi_middlewares.length {
-            return await leaf();
+            return leaf().await;
         }
         let mw = webapi_middlewares.get(index);
         let next = Next(async () => {
-            return await WebApp.run_middleware(ctx, index + 1, leaf);
+            return WebApp.run_middleware(ctx, index + 1, leaf).await;
         });
-        return await mw.invoke(ctx, next);
+        return mw.invoke(ctx, next).await;
     }
 
     public static async fun run_local_middleware(
@@ -458,13 +458,13 @@ public class WebApp {
         leaf: fun(): Future<HttpOutgoing>
     ): HttpOutgoing {
         if index >= chain.length {
-            return await leaf();
+            return leaf().await;
         }
         let mw = chain.get(index);
         let next = Next(async () => {
-            return await WebApp.run_local_middleware(ctx, chain, index + 1, leaf);
+            return WebApp.run_local_middleware(ctx, chain, index + 1, leaf).await;
         });
-        return await mw.invoke(ctx, next);
+        return mw.invoke(ctx, next).await;
     }
 
     static fun spawn_handle(parsed: Option<HttpIncoming>, borrow options: WebAppOptions): void {
@@ -482,7 +482,7 @@ public class WebApp {
                 WebApp.shutdown();
                 return;
             }
-            let wire = await WebApp.host_accept(server);
+            let wire = WebApp.host_accept(server).await;
             if WebApp.wire_starts(wire, "shutdown") {
                 return;
             }
@@ -501,7 +501,7 @@ public class WebApp {
                 WebApp.shutdown();
                 return;
             }
-            await Time.sleep(16);
+            Time.sleep(16).await;
         }
     }
 
@@ -510,7 +510,7 @@ public class WebApp {
     }
 
     public static async fun listen(host: string, port: int, token: Option<CancellationToken> = Option.None): int {
-        return await WebApp.listen_with(host, port, WebAppOptions(), token);
+        return WebApp.listen_with(host, port, WebAppOptions(), token).await;
     }
 
     @native
@@ -546,14 +546,14 @@ public class WebApp {
 
     @native
     public static async fun run(host: string, port: int, token: Option<CancellationToken> = Option.None): void {
-        let _ = await WebApp.listen(host, port, token);
-        await WebApp.wait(token);
+        let _ = WebApp.listen(host, port, token).await;
+        WebApp.wait(token).await;
     }
 
     @native
     public static async fun run_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): void {
-        let _ = await WebApp.listen_with(host, port, options, token);
-        await WebApp.wait(token);
+        let _ = WebApp.listen_with(host, port, options, token).await;
+        WebApp.wait(token).await;
     }
 
     @native
@@ -574,7 +574,7 @@ public class WebApp {
             }
         }
         if webapi_server_handle != 0 {
-            let _ = await WebApp.host_wait(webapi_server_handle);
+            let _ = WebApp.host_wait(webapi_server_handle).await;
         }
     }
 

@@ -9,7 +9,7 @@ async fun main(): void {
     System.println("from_code=" + GpuError.from_code(6, "reset").code());
     System.println("validation=" + GpuError.validation("bad bind").code());
 
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;

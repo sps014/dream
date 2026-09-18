@@ -46,7 +46,7 @@ fun mask_fs(v: VsOut, @group(0) @binding(0) keep: float): FsOut {
 }
 
 async fun main(): void {
-    let init = await Gpu.try_init();
+    let init = Gpu.try_init().await;
     if init.is_err() {
         System.println("gpu unavailable");
         return;
@@ -59,7 +59,7 @@ async fun main(): void {
     ]);
 
     let desc = GpuRenderPipelineDesc.defaults();
-    let pipe_r = await GpuRenderPipeline.create_ex("mask_vs", "mask_fs", desc);
+    let pipe_r = GpuRenderPipeline.create_ex("mask_vs", "mask_fs", desc).await;
     if pipe_r.is_err() {
         System.println("pipeline create failed: " + pipe_r.unwrap_err().message());
         return;
@@ -78,12 +78,12 @@ async fun main(): void {
     pass.draw(3, 1, 0, 0);
     pass.end();
 
-    let submitted = await enc.submit();
+    let submitted = enc.submit().await;
     if submitted.is_err() {
         System.println("submit failed: " + submitted.unwrap_err().message());
         return;
     }
-    let masked = await target.read_rgba();
+    let masked = target.read_rgba().await;
     System.println("masked_out=" + ((int)masked[0]).to_string() + ","
         + ((int)masked[1]).to_string() + "," + ((int)masked[2]).to_string());
 
@@ -98,12 +98,12 @@ async fun main(): void {
     pass2.draw(3, 1, 0, 0);
     pass2.end();
 
-    let submitted2 = await enc2.submit();
+    let submitted2 = enc2.submit().await;
     if submitted2.is_err() {
         System.println("second submit failed: " + submitted2.unwrap_err().message());
         return;
     }
-    let kept = await target.read_rgba();
+    let kept = target.read_rgba().await;
     System.println("kept=" + ((int)kept[0]).to_string() + ","
         + ((int)kept[1]).to_string() + "," + ((int)kept[2]).to_string());
 }

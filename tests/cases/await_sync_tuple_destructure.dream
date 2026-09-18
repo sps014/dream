@@ -3,7 +3,7 @@
 import system;
 async fun work(): int { return 1; }
 fun f() {
-    let (a, b) = (await work(), 1);
+    let (a, b) = (work().await, 1);
     System.println(a + b);
 }
 fun main() { }

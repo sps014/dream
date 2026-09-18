@@ -1,12 +1,12 @@
 import system;
 async fun fetchLike(url: string): string {
-    await Time.sleep(1);
+    Time.sleep(1).await;
     return "resp:" + url;
 }
 
 async fun main(): void {
     let urls = ["a", "b", "c"];
-    let results = await WebWorker.map_async(urls, fetchLike);
+    let results = WebWorker.map_async(urls, fetchLike).await;
     for (let r in results) {
         System.println(r);
     }

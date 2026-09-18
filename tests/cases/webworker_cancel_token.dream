@@ -15,6 +15,6 @@ async fun main(): void {
         return n;
     });
     src.cancel();
-    let n = await w;
+    let n = w.await;
     System.println(n > 0 || tok.is_cancelled);
 }

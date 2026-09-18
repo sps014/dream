@@ -13,12 +13,12 @@ async fun deny(borrow ctx: RequestContext, borrow next: Next): HttpOutgoing {
 }
 
 async fun main(): void {
-    let port = await WebApp.listen("127.0.0.1", 0);
+    let port = WebApp.listen("127.0.0.1", 0).await;
     let client = HttpClient("http://127.0.0.1:" + port.to_string());
-    switch (await client.get("/secret")) {
+    switch (client.get("/secret").await) {
         Ok(r) => System.println(r.status),
         Err(e) => System.println(e.message()),
     }
     WebApp.shutdown();
-    await WebApp.wait();
+    WebApp.wait().await;
 }

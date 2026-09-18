@@ -118,9 +118,10 @@ fn run_context_body(
 
     let c_path_str = c_path.to_string_lossy().into_owned();
     let snap_arg = snap_file.to_string_lossy().into_owned();
+    // Same trade-off as the `@json` harness: generator run time is negligible next to `cc` time.
     let output = crate::execution::native_c::compile_and_capture_ex(
         &c_path_str,
-        crate::driver::wasm_opt::OptLevel::O3,
+        crate::driver::wasm_opt::OptLevel::O0,
         &[],
         &[snap_arg.as_str()],
         None,

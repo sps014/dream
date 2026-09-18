@@ -168,6 +168,16 @@ pub fn native_rt_cache_root() -> PathBuf {
     user_dream_dir().join("cache").join("native-rt")
 }
 
+/// Root for compiled source-generator harnesses. Harness fingerprints already cover the compiler
+/// internals that shape the emitted C, so the artifact is per-toolchain, not per-project — caching
+/// it per user keeps the ~10s cold build off every new project's first compile.
+pub fn generator_cache_root() -> PathBuf {
+    if Path::new("Cargo.toml").is_file() && Path::new("target").is_dir() {
+        return PathBuf::from("target/generators");
+    }
+    user_dream_dir().join("cache").join("generators")
+}
+
 fn find_on_path(name: &str) -> Option<PathBuf> {
     let path_var = std::env::var_os("PATH")?;
     let exe_name = if cfg!(windows) && !name.ends_with(".exe") && !name.contains('/') {

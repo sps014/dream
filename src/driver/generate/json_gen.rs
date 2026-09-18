@@ -889,9 +889,12 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     let snap_path = write_unique_snapshot(&c_path, snapshot)?;
 
     std::env::set_var(SNAPSHOT_ENV, snap_path.as_os_str());
+    // The harness is a throwaway code generator that runs for milliseconds on one small snapshot,
+    // so `cc` time dominates end to end: `-O3 -march=native` on its ~2 MB translation unit costs
+    // ~110s cold versus ~10s at `-O0`.
     let output = crate::execution::native_c::compile_and_capture(
         &c_path,
-        crate::driver::wasm_opt::OptLevel::O3,
+        crate::driver::wasm_opt::OptLevel::O0,
     );
     std::env::remove_var(SNAPSHOT_ENV);
     let _ = std::fs::remove_file(&snap_path);
@@ -1105,8 +1108,7 @@ fn cached_harness_c() -> Result<String, String> {
             dream_mir::abi::STRING_UNITS_OFFSET
         ),
     ]);
-    let entry = super::current_entry_file();
-    let dir = super::manifest::harness_cache_dir(entry.as_deref(), "json-gen-harness", fingerprint);
+    let dir = super::manifest::harness_cache_dir("json-gen-harness", fingerprint);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
     let lock_path = dir.join(".lock");

@@ -1,0 +1,9 @@
+// Importing `system.webapi` without declaring any route still pulls in the generated dispatch
+// and the `Middleware` layout, whose only field is layout-less — that field converts through
+// `dream_object_to_string`, so the protocol routers must be emitted.
+import system;
+import system.webapi;
+
+fun main() {
+    System.println("no routes here");
+}

@@ -4,6 +4,8 @@ pub mod abi;
 mod cc;
 pub mod webview;
 
+pub use cc::generator_cache_root;
+
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};
 use dream_mir::backend::c::{native_runtime_include_dir, native_runtime_units};

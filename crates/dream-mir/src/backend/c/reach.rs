@@ -59,8 +59,10 @@ pub(super) fn compute(cx: &Cx<'_>) -> ProtocolReach {
     if let Some(err_ty) = super::entry::entry_error_type(cx) {
         classify(cx, err_ty, &mut reach);
     }
-    close_over_layouts(cx, &mut reach.to_string);
-    close_over_layouts(cx, &mut reach.hash_code);
+    let mut dynamic = reach.dynamic;
+    close_over_layouts(cx, &mut reach.to_string, &mut dynamic);
+    close_over_layouts(cx, &mut reach.hash_code, &mut dynamic);
+    reach.dynamic = dynamic;
     reach
 }
 
@@ -102,8 +104,10 @@ fn has_local_hash(cx: &Cx<'_>, ty: TypeId) -> bool {
 }
 
 /// A referenced layout pulls in its fields' own protocol references (a struct's
-/// `to_string` calls each field's converter; an array's calls its element's).
-fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>) {
+/// `to_string` calls each field's converter; an array's calls its element's). A field with no
+/// layout of its own converts through the router, so it makes the whole module dynamic even when
+/// no MIR statement named such a type directly.
+fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>, dynamic: &mut bool) {
     let mut work: Vec<TypeId> = set.iter().copied().collect();
     while let Some(ty) = work.pop() {
         let mut deps: Vec<TypeId> = Vec::new();
@@ -126,10 +130,16 @@ fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>) {
                 TyKind::Array(e) => *e,
                 _ => d,
             };
-            if (cx.nstruct(dep_key).is_some() || cx.nunion(dep_key).is_some())
-                && set.insert(dep_key)
-            {
-                work.push(d);
+            if cx.nstruct(dep_key).is_some() || cx.nunion(dep_key).is_some() {
+                if set.insert(dep_key) {
+                    work.push(d);
+                }
+            } else if !matches!(
+                cx.interner.kind(dep_key),
+                TyKind::Prim(_) | TyKind::Void | TyKind::Enum(_) | TyKind::Array(_)
+            ) {
+                // Mirrors the layout-less fallback in `rvalue::to_string_fn` / `hash_code_of`.
+                *dynamic = true;
             }
         }
     }

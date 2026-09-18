@@ -19,17 +19,12 @@ pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
     None
 }
 
-/// Cache directory for a generator harness: `target/generators/<kind>-<fingerprint>` when a
-/// project root is known, otherwise the system temp dir.
+/// Cache directory for a generator harness, keyed only by kind + fingerprint so every project on
+/// the machine shares one compiled harness.
 #[cfg(feature = "native")]
-pub fn harness_cache_dir(entry_file: Option<&str>, kind: &str, fingerprint: u64) -> PathBuf {
-    let name = format!("dream-{kind}-{fingerprint:x}");
-    if let Some(entry) = entry_file {
-        if let Some(root) = find_project_root(entry) {
-            return root.join("target").join("generators").join(name);
-        }
-    }
-    std::env::temp_dir().join(name)
+pub fn harness_cache_dir(kind: &str, fingerprint: u64) -> PathBuf {
+    crate::execution::native_c::generator_cache_root()
+        .join(format!("dream-{kind}-{fingerprint:x}"))
 }
 
 /// Walks from `entry_file`'s directory upward looking for `dream.toml`; returns generator paths

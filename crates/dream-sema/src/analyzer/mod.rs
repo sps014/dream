@@ -913,6 +913,20 @@ impl<'a> Analyzer<'a> {
         primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
     }
 
+    /// Interns a JSON writer/reader so HIR can name it. LSP skips `@json` generators, so the
+    /// real adapter is absent even for encodable types; a stub DefId keeps `main` emittable
+    /// instead of falling through to the generic "no code was generated" diagnostic.
+    pub(in crate::analyzer) fn ensure_json_callee(&mut self, name: &str) {
+        if self
+            .type_ctx
+            .defs
+            .lookup(DefKind::Function, name)
+            .is_none()
+        {
+            self.type_ctx.register(DefKind::Function, name, vec![]);
+        }
+    }
+
     /// True when `@json` derive (or a built-in JSON leaf / collection of those) can encode `ty`.
     /// Used by `Json.serialize` so analysis without the generator (LSP) still accepts
     /// `Map<string, string>` and still rejects `object`.

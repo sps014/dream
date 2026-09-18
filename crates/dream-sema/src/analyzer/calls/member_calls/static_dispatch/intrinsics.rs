@@ -611,6 +611,7 @@ impl<'a> Analyzer<'a> {
                         return Ok(string_ty);
                     }
                 }
+                self.ensure_json_callee(&write_call);
                 self.hir_set_call(&write_call, vec![value, Some(sb_read)], &Type::Void);
                 let write_hir = self.hir_take();
                 self.hir_expr_stmt(write_hir);
@@ -678,20 +679,36 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
 
+            let t_ty_id = self.type_ctx.lower(&t_type);
+            if struct_name != "JsonValue" && !self.json_type_encodable(t_ty_id) {
+                diagnostics.report_error(
+                    format!(
+                        "'{}' cannot be deserialized from JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
+                        self.ty_display(&t_type),
+                    ),
+                    Some(method.position),
+                );
+                self.hir_fail();
+                self.hir_none();
+                return Ok(result_ty);
+            }
+
             if struct_name == "JsonValue" {
                 self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &result_ty);
                 return Ok(result_ty);
             }
 
             if typed_parser {
-                self.hir_set_call(
-                    &method_fn(&struct_name, "from_json_parser_text"),
-                    vec![text],
-                    &result_ty,
-                );
+                let parser = method_fn(&struct_name, "from_json_parser_text");
+                self.ensure_json_callee(&parser);
+                self.hir_set_call(&parser, vec![text], &result_ty);
                 return Ok(result_ty);
             }
 
+            self.ensure_json_callee(&from_json_call);
+            if is_union {
+                self.ensure_json_callee(&method_fn(&struct_name, "__json_check_variant"));
+            }
             self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &parse_result_ty);
             let parse_hir = self.hir_take();
 
@@ -877,8 +894,22 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_last(value);
                 return Ok(t_type);
             }
+            let t_ty_id = self.type_ctx.lower(&t_type);
+            if !self.json_type_encodable(t_ty_id) {
+                diagnostics.report_error(
+                    format!(
+                        "'{}' cannot be converted from JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
+                        self.ty_display(&t_type),
+                    ),
+                    Some(method.position),
+                );
+                self.hir_fail();
+                self.hir_none();
+                return Ok(t_type);
+            }
             let from_json_call = json_collection_de_fn(&struct_name)
                 .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
+            self.ensure_json_callee(&from_json_call);
             self.hir_set_call(&from_json_call, vec![value], &t_type);
             return Ok(t_type);
         }

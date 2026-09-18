@@ -173,10 +173,8 @@ fun main() {
 "#;
     let diags = analyze_document(None, src).diagnostics;
     assert!(
-        !diags
-            .iter()
-            .any(|d| d.message.contains("cannot be serialized to JSON")),
-        "false unserializable diagnostic: {:?}",
+        diags.iter().all(|d| d.severity != "error"),
+        "string map serialize must type-check in LSP: {:?}",
         diags.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
 }
@@ -198,6 +196,27 @@ fun main() {
             .iter()
             .any(|d| d.message.contains("'Map<string, object>' cannot be serialized to JSON")),
         "expected object-map serialize error, got {:?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn json_deserialize_string_jsonvalue_map_is_encodable_without_generator() {
+    let src = r#"
+import system;
+import system.json;
+
+fun main() {
+    let t: Map<string, string> = { "a": "b" };
+    let jsonData = Json.serialize(t);
+    let parsedData = Json.deserialize<Map<string, JsonValue>>(jsonData).unwrap();
+    System.println(Json.serialize(parsedData));
+}
+"#;
+    let diags = analyze_document(None, src).diagnostics;
+    assert!(
+        diags.iter().all(|d| d.severity != "error"),
+        "Map<string, JsonValue> round-trip must type-check in LSP: {:?}",
         diags.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
 }

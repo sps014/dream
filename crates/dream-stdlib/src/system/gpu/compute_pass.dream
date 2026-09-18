@@ -7,7 +7,15 @@ public class ComputePass {
     // Starts a new empty pass (no GPU work until `submit`).
     public static fun begin(): ComputePass {
         let p = ComputePass();
-        p._id = Gpu.pass_begin();
+        p._id = Gpu.pass_begin(0 - 1, 0 - 1, 0 - 1);
+        return p;
+    }
+
+    // Like `begin()`, writing GPU timestamps at `begin_index` / `end_index` of `queries`.
+    // Pass `-1` for an index to skip that write. Requires `timestamp_query`.
+    public static fun begin_timed(queries: GpuQuerySet, begin_index: int, end_index: int): ComputePass {
+        let p = ComputePass();
+        p._id = Gpu.pass_begin(queries.id, begin_index, end_index);
         return p;
     }
 

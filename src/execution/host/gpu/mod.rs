@@ -13,6 +13,7 @@ mod gamepad;
 mod icon;
 mod input;
 pub(crate) mod profile;
+pub(crate) mod queries;
 pub(crate) mod render;
 mod state;
 pub(crate) mod surface;

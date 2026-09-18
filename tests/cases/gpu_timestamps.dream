@@ -1,0 +1,43 @@
+// GPU timestamp queries: creating a query set matches `Gpu.capabilities().timestamp_query`.
+// When the feature is present, a timed compute pass yields two nanosecond stamps (end >= begin).
+import system;
+import system.gpu;
+
+@compute(64)
+fun ts_nop(out: GpuBuffer<float>, n: int): void {
+    let i = global_id.x;
+    if i < n {
+        out[i] = out[i] + 1.0;
+    }
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+    let c = Gpu.capabilities();
+    let created = GpuQuerySet.timestamps(2);
+    System.println("create_matches=" + (created.is_ok() == c.timestamp_query).to_int().to_string());
+    System.println("period_pos=" + (Gpu.timestamp_period() > 0.0).to_int().to_string());
+
+    if created.is_err() {
+        System.println("timed=0");
+        return;
+    }
+    let qs = created.unwrap();
+    let buf = GpuBuffer<float>.from([0.0, 0.0, 0.0, 0.0]);
+    let pass = ComputePass.begin_timed(qs, 0, 1);
+    pass.dispatch("ts_nop", [buf], 4, 1, 1);
+    let sub = await pass.submit();
+    if sub.is_err() {
+        System.println("timed=0");
+        return;
+    }
+    let stamps = qs.read();
+    System.println("n=" + stamps.length.to_string());
+    let ordered = stamps.length >= 2 && stamps[1] >= stamps[0];
+    System.println("timed=" + ordered.to_int().to_string());
+    qs.destroy();
+}

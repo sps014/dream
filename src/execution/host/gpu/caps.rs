@@ -21,6 +21,8 @@ fn wanted_features() -> wgpu::Features {
         | wgpu::Features::TEXTURE_COMPRESSION_ASTC
         | wgpu::Features::DEPTH32FLOAT_STENCIL8
         | wgpu::Features::FLOAT32_FILTERABLE
+        | wgpu::Features::TIMESTAMP_QUERY
+        | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
 }
 
 /// The subset of [`wanted_features`] this adapter can actually grant.
@@ -74,6 +76,8 @@ const FLAG_TEXTURE_COMPRESSION_ETC2: u32 = 1 << 6;
 const FLAG_TEXTURE_COMPRESSION_ASTC: u32 = 1 << 7;
 const FLAG_DEPTH32_FLOAT_STENCIL8: u32 = 1 << 8;
 const FLAG_FLOAT32_FILTERABLE: u32 = 1 << 9;
+const FLAG_TIMESTAMP_QUERY: u32 = 1 << 10;
+const FLAG_TIMESTAMP_QUERY_INSIDE_ENCODERS: u32 = 1 << 11;
 
 /// Byte length of the packed blob. A decoder that sees fewer bytes reports nothing as available.
 pub const BLOB_LEN: usize = 56;
@@ -120,6 +124,11 @@ pub fn encode() -> Vec<u8> {
             wgpu::Features::DEPTH32FLOAT_STENCIL8,
         ),
         (FLAG_FLOAT32_FILTERABLE, wgpu::Features::FLOAT32_FILTERABLE),
+        (FLAG_TIMESTAMP_QUERY, wgpu::Features::TIMESTAMP_QUERY),
+        (
+            FLAG_TIMESTAMP_QUERY_INSIDE_ENCODERS,
+            wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
+        ),
     ] {
         if features.contains(feature) {
             flags |= flag;
@@ -238,6 +247,11 @@ mod tests {
                 wgpu::Features::DEPTH32FLOAT_STENCIL8,
             ),
             (FLAG_FLOAT32_FILTERABLE, wgpu::Features::FLOAT32_FILTERABLE),
+            (FLAG_TIMESTAMP_QUERY, wgpu::Features::TIMESTAMP_QUERY),
+            (
+                FLAG_TIMESTAMP_QUERY_INSIDE_ENCODERS,
+                wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
+            ),
         ] {
             assert!(
                 wanted.contains(feature),

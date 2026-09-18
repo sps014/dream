@@ -1922,7 +1922,8 @@ function makeGpuHost(getInstance) {
   const textures = new Map(); // id -> { texture, width, height, cpu, storage }
   const samplers = new Map(); // id -> { sampler, filter }
   const surfaces = new Map();
-  const passes = new Map(); // id -> { ops: [...] }
+  const querySets = new Map();
+  const passes = new Map(); // id -> { ops, querySet, tsBegin, tsEnd }
   const pipelineCache = new Map();
   const renderPipelines = new Map(); // id -> { pipeline, vsMeta, fsMeta, layouts, groups }
   const bindGroups = new Map(); // id -> { pipelineId, group, bufferIds, textureIds, samplerIds }
@@ -1962,6 +1963,8 @@ function makeGpuHost(getInstance) {
     "texture-compression-astc",
     "depth32float-stencil8",
     "float32-filterable",
+    "timestamp-query",
+    "timestamp-query-inside-encoders",
   ];
 
   // Limits raised to the adapter's own maximum. Everything else stays at the portable WebGPU
@@ -1986,6 +1989,8 @@ function makeGpuHost(getInstance) {
   const CAP_TEXTURE_COMPRESSION_ASTC = 1 << 7;
   const CAP_DEPTH32_FLOAT_STENCIL8 = 1 << 8;
   const CAP_FLOAT32_FILTERABLE = 1 << 9;
+  const CAP_TIMESTAMP_QUERY = 1 << 10;
+  const CAP_TIMESTAMP_QUERY_INSIDE_ENCODERS = 1 << 11;
 
   // Mirrors of the enum tables owned by `crates/dream-abi/src/gpu_format.rs`, indexed by the
   // `GpuTextureFormat` / `GpuTextureDimension` / … discriminants Dream passes as ints. Keep these
@@ -3105,26 +3110,34 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     }
   }
 
-  function encodeDispatch(encoder, pipe, bgs, ex, ey, ez) {
+  function encodeDispatchInto(pass, pipe, bgs, ex, ey, ez) {
     const wg = pipe.meta.workgroup || [64, 1, 1];
     const gx = Math.max(1, Math.ceil((ex | 0) / (wg[0] || 64)));
     const gy = Math.max(1, Math.ceil((ey | 0) / (wg[1] || 1)));
     const gz = Math.max(1, Math.ceil((ez | 0) / (wg[2] || 1)));
-    const pass = encoder.beginComputePass();
     pass.setPipeline(pipe.pipeline);
     setBindGroups(pass, bgs);
     pass.dispatchWorkgroups(gx, gy, gz);
+  }
+
+  function encodeDispatch(encoder, pipe, bgs, ex, ey, ez) {
+    const pass = encoder.beginComputePass();
+    encodeDispatchInto(pass, pipe, bgs, ex, ey, ez);
     pass.end();
   }
 
-  async function encodeDispatchIndirect(dev, encoder, pipe, bgs, indirectId, offset) {
+  async function encodeDispatchIndirectInto(dev, pass, pipe, bgs, indirectId, offset) {
     const b = buffers.get(indirectId);
     if (!b) throw new Error(`missing indirect buffer ${indirectId}`);
     const gpuBuf = await ensureGpuBuffer(dev, b);
-    const pass = encoder.beginComputePass();
     pass.setPipeline(pipe.pipeline);
     setBindGroups(pass, bgs);
     pass.dispatchWorkgroupsIndirect(gpuBuf, Math.max(0, offset | 0));
+  }
+
+  async function encodeDispatchIndirect(dev, encoder, pipe, bgs, indirectId, offset) {
+    const pass = encoder.beginComputePass();
+    await encodeDispatchIndirectInto(dev, pass, pipe, bgs, indirectId, offset);
     pass.end();
   }
 
@@ -3720,6 +3733,8 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       if (has("texture-compression-astc")) flags |= CAP_TEXTURE_COMPRESSION_ASTC;
       if (has("depth32float-stencil8")) flags |= CAP_DEPTH32_FLOAT_STENCIL8;
       if (has("float32-filterable")) flags |= CAP_FLOAT32_FILTERABLE;
+      if (has("timestamp-query")) flags |= CAP_TIMESTAMP_QUERY;
+      if (has("timestamp-query-inside-encoders")) flags |= CAP_TIMESTAMP_QUERY_INSIDE_ENCODERS;
       // No subgroup-barrier or cooperative-matrix bit: WebGPU exposes no counterpart to the native
       // `SUBGROUP_BARRIER` feature, and subgroup-matrix tiles remain a pre-standard extension.
       const lim = device.limits || {};
@@ -4837,9 +4852,14 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       }
     },
 
-    gpuPassBegin: () => {
+    gpuPassBegin: (querySet, tsBegin, tsEnd) => {
       const id = nextId++;
-      passes.set(id, { ops: [] });
+      passes.set(id, {
+        ops: [],
+        querySet: querySet | 0,
+        tsBegin: tsBegin | 0,
+        tsEnd: tsEnd | 0,
+      });
       return id;
     },
     gpuPassDispatch: (
@@ -4879,10 +4899,11 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const p = passes.get(passId);
         if (!p) throw new Error(`unknown ComputePass ${passId}`);
         const ops = p.ops;
+        const qsId = p.querySet | 0;
+        const timed = qsId >= 0;
         passes.delete(passId);
-        if (ops.length === 0) return 0;
+        if (ops.length === 0 && !timed) return 0;
         const dev = await ensureDevice();
-        // The whole batch shares one ring, so its total is reserved before any block is written.
         let needed = 0;
         for (const op of ops) {
           const pipe = await getPipeline(dev, op.kernel);
@@ -4891,21 +4912,35 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         }
         beginUniformFrame(dev, needed);
         const encoder = dev.createCommandEncoder();
+        const qs = timed ? querySets.get(qsId) : null;
+        const tsWrites = qs && qs.querySet
+          ? {
+            querySet: qs.querySet,
+            beginningOfPassWriteIndex: p.tsBegin >= 0 ? p.tsBegin | 0 : undefined,
+            endingOfPassWriteIndex: p.tsEnd >= 0 ? p.tsEnd | 0 : undefined,
+          }
+          : undefined;
+        const cpass = encoder.beginComputePass(tsWrites ? { timestampWrites: tsWrites } : {});
         for (const op of ops) {
           const pipe = await getPipeline(dev, op.kernel);
           if (op.kind === "dispatch") {
             const bg = await buildBindGroup(
               dev, pipe, op.bufferIds, op.textureIds, op.samplerIds, op.uniforms,
             );
-            encodeDispatch(encoder, pipe, bg, op.ex, op.ey, op.ez);
+            encodeDispatchInto(cpass, pipe, bg, op.ex, op.ey, op.ez);
           } else {
             const bg = await buildBindGroup(
               dev, pipe, op.bufferIds, op.textureIds, op.samplerIds, [],
             );
-            await encodeDispatchIndirect(
-              dev, encoder, pipe, bg, op.indirectId, op.indirectOffset,
+            await encodeDispatchIndirectInto(
+              dev, cpass, pipe, bg, op.indirectId, op.indirectOffset,
             );
           }
+        }
+        cpass.end();
+        if (qs && qs.querySet && qs.resolve && qs.readback) {
+          encoder.resolveQuerySet(qs.querySet, 0, qs.count, qs.resolve, 0);
+          encoder.copyBufferToBuffer(qs.resolve, 0, qs.readback, 0, qs.count * 8);
         }
         dev.queue.submit([encoder.finish()]);
         await dev.queue.onSubmittedWorkDone();
@@ -4914,6 +4949,51 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         console.error("Dream gpuPassSubmit:", e);
         return classifyErr(e);
       }
+    },
+    gpuQuerySetCreateTimestamps: (count) => {
+      if (!device || !device.features?.has("timestamp-query")) {
+        lastError = "timestamp-query is not available on this device";
+        return -ERR_UNSUPPORTED;
+      }
+      const n = Math.max(1, count | 0);
+      const querySet = device.createQuerySet({ type: "timestamp", count: n });
+      const bytes = n * 8;
+      const resolve = device.createBuffer({
+        size: bytes,
+        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+      });
+      const readback = device.createBuffer({
+        size: bytes,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      });
+      const id = nextId++;
+      querySets.set(id, { querySet, count: n, resolve, readback });
+      return id;
+    },
+    gpuQuerySetDestroy: (id) => {
+      const qs = querySets.get(id);
+      if (!qs) return;
+      qs.querySet?.destroy?.();
+      qs.resolve?.destroy?.();
+      qs.readback?.destroy?.();
+      querySets.delete(id);
+    },
+    gpuQuerySetRead: async (id) => {
+      const qs = querySets.get(id);
+      if (!qs || !qs.readback) return [];
+      await qs.readback.mapAsync(GPUMapMode.READ);
+      const src = new BigUint64Array(qs.readback.getMappedRange().slice(0));
+      qs.readback.unmap();
+      const period = device?.queue?.getTimestampPeriod ? device.queue.getTimestampPeriod() : 1;
+      const out = [];
+      for (let i = 0; i < src.length; i++) {
+        out.push(BigInt(Math.round(Number(src[i]) * period)));
+      }
+      return out;
+    },
+    gpuTimestampPeriod: () => {
+      if (device?.queue?.getTimestampPeriod) return device.queue.getTimestampPeriod();
+      return 1;
     },
   };
 

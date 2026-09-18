@@ -30,6 +30,10 @@ public struct GpuCapabilities {
     public depth32_float_stencil8: bool;
     // Linear filtering of 32-bit float textures.
     public float32_filterable: bool;
+    // GPU timestamp queries (`timestampWrites` / `resolveQuerySet`).
+    public timestamp_query: bool;
+    // `writeTimestamp` on a command encoder between passes (native wgpu / some browsers).
+    public timestamp_query_inside_encoders: bool;
     // Largest single buffer allocation.
     public max_buffer_bytes: long;
     // Largest range bindable to one storage-buffer slot.
@@ -65,6 +69,8 @@ public struct GpuCapabilities {
         c.texture_compression_astc = (flags & 128) != 0;
         c.depth32_float_stencil8 = (flags & 256) != 0;
         c.float32_filterable = (flags & 512) != 0;
+        c.timestamp_query = (flags & 1024) != 0;
+        c.timestamp_query_inside_encoders = (flags & 2048) != 0;
         c.tile_n = GpuInputCodec.read_i32(buf, 4);
         c.max_buffer_bytes = GpuCapabilities.read_i64(buf, 8);
         c.max_storage_binding_bytes = GpuCapabilities.read_i64(buf, 16);

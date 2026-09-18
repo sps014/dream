@@ -85,10 +85,17 @@ public static class Gpu {
         await Gpu.frame_host();
     }
 
-    // High-resolution GPU timestamp in nanoseconds (host-defined epoch).
+    // Host monotonic clock in nanoseconds (not a GPU timestamp). GPU pass timing is
+    // `GpuQuerySet` + `ComputePass.begin_timed`.
     public static async fun timestamp(token: Option<CancellationToken> = Option.None): long {
         CancellationToken.throw_if_opt(token);
         return await Gpu.timestamp_host();
+    }
+
+    // Nanoseconds per GPU timestamp tick. `1` when no device is alive.
+    @web @native
+    public static fun timestamp_period(): float {
+        return Gpu.timestamp_period_host();
     }
 
     @runtime("gpuBufferAllocBytes")
@@ -406,8 +413,24 @@ public static class Gpu {
     @runtime("gpuBufferAllocVertexBytes")
     static extern fun buffer_alloc_vertex_bytes(n: int): int;
 
+    @web @native
+    @runtime("gpuTimestampPeriod")
+    static extern fun timestamp_period_host(): float;
+
+    @web @native
+    @runtime("gpuQuerySetCreateTimestamps")
+    static extern fun query_set_create_timestamps(count: int): int;
+
+    @web @native
+    @runtime("gpuQuerySetDestroy")
+    static extern fun query_set_destroy(id: int): void;
+
+    @web @native
+    @runtime("gpuQuerySetRead")
+    static extern fun query_set_read(id: int): long[];
+
     @runtime("gpuPassBegin")
-    static extern fun pass_begin(): int;
+    static extern fun pass_begin(query_set: int, ts_begin: int, ts_end: int): int;
 
     @runtime("gpuPassDispatch")
     static extern fun pass_dispatch(

@@ -28,7 +28,8 @@ async fun main(): void {
 | `Gpu.ready` | init succeeded (false after device-lost until `try_init` again) |
 | `Gpu.check()` | pending uncaptured error or device-lost, else `Ok` |
 | `await Gpu.frame()` | wait a display frame |
-| `await Gpu.timestamp()` | GPU timestamp |
+| `await Gpu.timestamp()` | host monotonic clock (CPU), not GPU |
+| `Gpu.timestamp_period()` | nanoseconds per GPU timestamp tick |
 | `Gpu.capabilities()` | optional features and limits the device got |
 
 ## Capabilities
@@ -56,7 +57,9 @@ let tile = caps.max_invocations_per_workgroup;
 | `min_subgroup_size`, `max_subgroup_size` | subgroup width range, `0` when unreported |
 | `tile_float16`, `tile_float`, `tile_n` | cooperative-matrix tiles; reserved, always off today |
 | `texture_compression_bc` / `_etc2` / `_astc` | compressed format families (BC desktop, ETC2/ASTC mobile) |
-| `depth32_float_stencil8`, `float32_filterable` | the matching optional formats |
+| `float32_filterable` | linear filtering of 32-bit float textures |
+| `timestamp_query` | GPU timestamp query sets (`ComputePass.begin_timed`) |
+| `timestamp_query_inside_encoders` | encoder `writeTimestamp` between passes |
 | `max_buffer_bytes`, `max_storage_binding_bytes` | allocation and storage-binding ceilings |
 | `max_workgroup_storage_bytes` | `var<workgroup>` bytes per workgroup |
 | `max_invocations_per_workgroup`, `max_workgroup_size_x/y/z` | `@workgroup_size` ceilings |
@@ -83,7 +86,7 @@ Swapchain drawable size is CSS/logical pixels unless `GpuSurfaceDesc.max_pixel_r
 
 ## Textures, surfaces, draw
 
-`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
+`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`. GPU pass timing: `GpuQuerySet.timestamps(n)` then `ComputePass.begin_timed(qs, 0, 1)` and `qs.read()` after submit.
 
 Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
 

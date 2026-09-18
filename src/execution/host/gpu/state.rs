@@ -93,6 +93,33 @@ pub enum PassOp {
     },
 }
 
+pub struct ComputePassEntry {
+    pub ops: Vec<PassOp>,
+    /// `-1` means no timestamp writes.
+    pub query_set: i32,
+    pub ts_begin: i32,
+    pub ts_end: i32,
+}
+
+impl Default for ComputePassEntry {
+    fn default() -> Self {
+        Self {
+            ops: Vec::new(),
+            query_set: -1,
+            ts_begin: -1,
+            ts_end: -1,
+        }
+    }
+}
+
+pub struct QuerySetEntry {
+    pub gpu: Option<wgpu::QuerySet>,
+    pub count: u32,
+    pub resolve: Option<wgpu::Buffer>,
+    pub readback: Option<wgpu::Buffer>,
+    pub last_ns: Vec<i64>,
+}
+
 /// Cache key for compute bind groups (resource ids + which uniform pool slot).
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ComputeBgKey {
@@ -232,7 +259,8 @@ pub struct GpuState {
     pub textures: IndexMap<i32, TexEntry>,
     pub samplers: IndexMap<i32, SampEntry>,
     pub shaders: IndexMap<i32, RawShader>,
-    pub passes: IndexMap<i32, Vec<PassOp>>,
+    pub passes: IndexMap<i32, ComputePassEntry>,
+    pub query_sets: IndexMap<i32, QuerySetEntry>,
     pub compute_pipes: IndexMap<String, ComputePipe>,
     pub render_pipes: IndexMap<i32, RenderPipe>,
     pub bind_groups: IndexMap<i32, BindGroupEntry>,
@@ -264,6 +292,7 @@ impl Default for GpuState {
             samplers: IndexMap::new(),
             shaders: IndexMap::new(),
             passes: IndexMap::new(),
+            query_sets: IndexMap::new(),
             compute_pipes: IndexMap::new(),
             render_pipes: IndexMap::new(),
             bind_groups: IndexMap::new(),
@@ -336,6 +365,11 @@ impl GpuState {
         }
         for samp in self.samplers.values_mut() {
             samp.gpu = None;
+        }
+        for qs in self.query_sets.values_mut() {
+            qs.gpu = None;
+            qs.resolve = None;
+            qs.readback = None;
         }
         for surf in self.surfaces.values_mut() {
             surf.color = None;

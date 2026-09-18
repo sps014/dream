@@ -1,0 +1,44 @@
+module system.gpu;
+
+// GPU timestamp query set. Requires `Gpu.capabilities().timestamp_query`.
+// Write begin/end stamps by passing the set to `ComputePass.begin_timed`, then `read()` after
+// `submit`. Values are nanoseconds (`tick * Gpu.timestamp_period()`).
+public struct GpuQuerySet {
+    _id: int;
+    _count: int;
+
+    public get id(): int {
+        return this._id;
+    }
+
+    public get count(): int {
+        return this._count;
+    }
+
+    // Allocates `count` timestamp slots. Fails with `unsupported` when the device did not opt
+    // into `timestamp-query`.
+    @web @native
+    public static fun timestamps(count: int): Result<GpuQuerySet, GpuError> {
+        let id = Gpu.query_set_create_timestamps(count);
+        if id < 0 {
+            return Result.Err(GpuError.from_code(0 - id, "GpuQuerySet.timestamps failed"));
+        }
+        let q = GpuQuerySet();
+        q._id = id;
+        q._count = count;
+        if q._count < 1 { q._count = 1; }
+        return Result.Ok(q);
+    }
+
+    // Maps the last resolved timestamps (nanoseconds). Call after the submit that wrote them.
+    @web @native
+    public fun read(): long[] {
+        return Gpu.query_set_read(this.id);
+    }
+
+    @web @native
+    public fun destroy(): void {
+        Gpu.query_set_destroy(this.id);
+        this._id = -1;
+    }
+}

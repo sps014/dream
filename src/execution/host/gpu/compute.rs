@@ -6,7 +6,7 @@
 use super::buffers::ensure_gpu_buffer;
 use super::error::{classify_err, drain_uncaptured};
 use super::formats;
-use super::state::{lock_state, ComputePipe, PassOp};
+use super::state::{lock_state, ComputePassEntry, ComputePipe, PassOp};
 use super::textures::texture_usage;
 use indexmap::IndexMap;
 
@@ -588,10 +588,18 @@ pub(crate) fn ensure_texture(
     Ok(())
 }
 
-pub fn pass_begin() -> i32 {
+pub fn pass_begin(query_set: i32, ts_begin: i32, ts_end: i32) -> i32 {
     let mut st = lock_state();
     let id = st.alloc_id();
-    st.passes.insert(id, Vec::new());
+    st.passes.insert(
+        id,
+        ComputePassEntry {
+            ops: Vec::new(),
+            query_set,
+            ts_begin,
+            ts_end,
+        },
+    );
     id
 }
 
@@ -607,8 +615,8 @@ pub fn pass_dispatch(
     uniforms: Vec<u8>,
 ) {
     let mut st = lock_state();
-    if let Some(ops) = st.passes.get_mut(&pass_id) {
-        ops.push(PassOp::Dispatch {
+    if let Some(entry) = st.passes.get_mut(&pass_id) {
+        entry.ops.push(PassOp::Dispatch {
             kernel,
             buffer_ids,
             texture_ids,
@@ -631,8 +639,8 @@ pub fn pass_dispatch_indirect(
     offset: i32,
 ) {
     let mut st = lock_state();
-    if let Some(ops) = st.passes.get_mut(&pass_id) {
-        ops.push(PassOp::DispatchIndirect {
+    if let Some(entry) = st.passes.get_mut(&pass_id) {
+        entry.ops.push(PassOp::DispatchIndirect {
             kernel,
             buffer_ids,
             texture_ids,
@@ -698,14 +706,15 @@ pub fn dispatch_shader(shader_id: i32, buffer_ids: &[i32], wx: i32, wy: i32, wz:
 }
 
 pub fn pass_submit(pass_id: i32) -> i32 {
-    let ops = {
+    let entry = {
         let mut st = lock_state();
         st.passes.swap_remove(&pass_id).unwrap_or_default()
     };
-    if ops.is_empty() {
+    let timed = entry.query_set >= 0;
+    if entry.ops.is_empty() && !timed {
         return 0;
     }
-    for op in &ops {
+    for op in &entry.ops {
         let kernel = match op {
             PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => kernel,
         };
@@ -723,7 +732,18 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         }
         let device = st.device.as_ref().unwrap().clone();
         let queue = st.queue.as_ref().unwrap().clone();
-        let batch: Vec<String> = ops
+        let ts_set = if timed {
+            Some(
+                st.query_sets
+                    .get(&entry.query_set)
+                    .and_then(|q| q.gpu.clone())
+                    .ok_or_else(|| format!("unknown query set {}", entry.query_set))?,
+            )
+        } else {
+            None
+        };
+        let batch: Vec<String> = entry
+            .ops
             .iter()
             .map(|op| match op {
                 PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => {
@@ -736,11 +756,14 @@ pub fn pass_submit(pass_id: i32) -> i32 {
             label: Some("dream-pass"),
         });
         {
+            let writes = ts_set.as_ref().and_then(|qs| {
+                super::queries::compute_timestamp_writes(qs, entry.ts_begin, entry.ts_end)
+            });
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("dream-batched-cpass"),
-                timestamp_writes: None,
+                timestamp_writes: writes,
             });
-            for op in ops {
+            for op in entry.ops {
                 match op {
                     PassOp::Dispatch {
                         kernel,
@@ -791,6 +814,11 @@ pub fn pass_submit(pass_id: i32) -> i32 {
                         Some((indirect_id, offset)),
                     )?,
                 }
+            }
+        }
+        if timed {
+            if let Some(qs_entry) = st.query_sets.get(&entry.query_set) {
+                super::queries::encode_resolve(&mut encoder, qs_entry)?;
             }
         }
         queue.submit(Some(encoder.finish()));

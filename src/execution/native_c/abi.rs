@@ -144,6 +144,25 @@ pub(super) fn alloc_bytes(bytes: &[u8]) -> usize {
     }
 }
 
+fn alloc_i64s(xs: &[i64]) -> usize {
+    let alloc = GUEST.lock().ok().and_then(|g| g.array_new);
+    let Some(alloc) = alloc else {
+        return 0;
+    };
+    unsafe {
+        let p = alloc(xs.len() as i32, 8);
+        if p == 0 {
+            return 0;
+        }
+        std::ptr::copy_nonoverlapping(
+            xs.as_ptr().cast::<u8>(),
+            (p as *mut u8).add(4),
+            xs.len() * 8,
+        );
+        p
+    }
+}
+
 fn alloc_i32s(xs: &[i32]) -> usize {
     let alloc = GUEST.lock().ok().and_then(|g| g.array_new);
     let Some(alloc) = alloc else {
@@ -445,8 +464,8 @@ pub extern "C" fn gpuTextureDestroy(id: i32) {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuPassBegin() -> i32 {
-    compute::pass_begin()
+pub extern "C" fn gpuPassBegin(query_set: i32, ts_begin: i32, ts_end: i32) -> i32 {
+    compute::pass_begin(query_set, ts_begin, ts_end)
 }
 
 #[no_mangle]
@@ -477,6 +496,26 @@ pub unsafe extern "C" fn gpuPassDispatch(
 #[no_mangle]
 pub extern "C" fn gpuPassSubmit(pass: i32) -> i32 {
     compute::pass_submit(pass)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuQuerySetCreateTimestamps(count: i32) -> i32 {
+    crate::execution::host::gpu::queries::create_timestamps(count)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuQuerySetDestroy(id: i32) {
+    crate::execution::host::gpu::queries::destroy(id);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuQuerySetRead(id: i32) -> usize {
+    alloc_i64s(&crate::execution::host::gpu::queries::read(id))
+}
+
+#[no_mangle]
+pub extern "C" fn gpuTimestampPeriod() -> f32 {
+    crate::execution::host::gpu::queries::period()
 }
 
 #[no_mangle]

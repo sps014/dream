@@ -73,6 +73,9 @@ public static class JsonGenerator {
         if ftype == "char" {
             return "'\\0'";
         }
+        if ftype == "JsonValue" {
+            return "JsonValue.none()";
+        }
         if ftype.starts_with("List<") && ftype.ends_with(">") {
             let inner = ftype.substring(5, ftype.length - 1);
             return "List<" + inner + ">()";
@@ -111,6 +114,10 @@ public static class JsonGenerator {
         if elem_type == "long" {
             return "JsonValue.number((double)" + access + ")";
         }
+        // A dynamic value is already in the target representation, so it passes straight through.
+        if elem_type == "JsonValue" {
+            return access;
+        }
         if JsonGenerator.name_in(json_names, elem_type) {
             return access + ".to_json()";
         }
@@ -136,6 +143,10 @@ public static class JsonGenerator {
         if elem_type == "long" {
             return "(long)" + jexpr + ".as_double().unwrap_or(0.0d)";
         }
+        // The parsed tree is already the value being asked for; keep the node as-is.
+        if elem_type == "JsonValue" {
+            return jexpr;
+        }
         if JsonGenerator.name_in(json_names, elem_type) {
             return elem_type + ".from_json(" + jexpr + ")";
         }
@@ -148,6 +159,9 @@ public static class JsonGenerator {
             return true;
         }
         if elem_type == "double" || elem_type == "float" || elem_type == "bool" || elem_type == "string" {
+            return true;
+        }
+        if elem_type == "JsonValue" {
             return true;
         }
         return JsonGenerator.name_in(json_names, elem_type);
@@ -183,6 +197,10 @@ public static class JsonGenerator {
         }
         if elem_type == "string" {
             cb.line("Json.write_string(" + sb + ", " + access + ");");
+            return true;
+        }
+        if elem_type == "JsonValue" {
+            cb.line("Json.write_value(" + sb + ", " + access + ");");
             return true;
         }
         if JsonGenerator.name_in(json_names, elem_type) {
@@ -782,6 +800,10 @@ public static class JsonGenerator {
         }
         if elem_type == "string" {
             return "p.parse_string()";
+        }
+        // A dynamic value keeps whatever the parser produces, with no per-field decoding.
+        if elem_type == "JsonValue" {
+            return "p.parse_value()";
         }
         if JsonGenerator.name_in(json_names, elem_type) {
             return elem_type + ".from_json_parser(p)";

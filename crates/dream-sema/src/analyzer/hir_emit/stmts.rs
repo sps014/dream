@@ -189,7 +189,7 @@ impl<'a> Analyzer<'a> {
     /// Inserts an implicit boxing cast when a primitive `value` is stored into an `object`-typed
     /// slot (`let o: object = 42`), so the backend boxes it rather than storing a raw scalar. All
     /// other conversions (reference→object, numeric widening) are left to the backend / call sites.
-    fn coerce_to(&mut self, value: HExpr, target: TypeId) -> HExpr {
+    pub(in crate::analyzer) fn coerce_to(&mut self, value: HExpr, target: TypeId) -> HExpr {
         use dream_types::TyKind;
         // Snapshot the kinds so the interner borrow does not outlive the branches below that need
         // `&mut self` (the `js` box/unbox helpers).

@@ -1,0 +1,21 @@
+// An array literal in an array-typed context takes that element type rather than its first
+// element's, so heterogeneous `object` collections build from a literal and box their scalars.
+import system;
+
+fun main() {
+    let mixed: object[] = [1, "s", true];
+    System.println(mixed[0].to_string() + "," + mixed[1].to_string() + "," + mixed[2].to_string());
+
+    let strings: object[] = ["a", "b"];
+    System.println(strings.length.to_string());
+
+    let list: List<object> = [1, "two"];
+    System.println(list.length.to_string());
+
+    let map: Map<string, object> = { "a": 1, "b": "s" };
+    System.println(map.length.to_string());
+
+    // Numeric widening through the same path still applies.
+    let widened: double[] = [1.0, 2.0];
+    System.println(widened[1].to_string());
+}

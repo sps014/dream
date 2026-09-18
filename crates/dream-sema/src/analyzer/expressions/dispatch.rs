@@ -160,7 +160,7 @@ impl<'a> Analyzer<'a> {
                 }
 
                 let saved_expected = self.current_expected_type.take();
-                self.current_expected_type = expected_elem;
+                self.current_expected_type = expected_elem.clone();
                 let first_type = self.analyze_expression(
                     &elements[0],
                     parent_function,
@@ -169,16 +169,29 @@ impl<'a> Analyzer<'a> {
                 )?;
                 let mut elem_hirs = vec![self.hir_take()];
 
+                // An array-typed context fixes the element type, so `let xs: object[] = ["a"]` is
+                // an `object[]` rather than a `string[]` that then fails to convert — arrays are
+                // not covariant, so taking the first element's type would strand the literal.
+                // Without such a context the first element sets it, and later elements must match.
+                let elem_ty = match &expected_elem {
+                    Some(expected) => {
+                        let span = elements[0].position().unwrap_or(open.position);
+                        self.compare_data_type(expected, &first_type, &span, diagnostics)?;
+                        expected.clone()
+                    }
+                    None => first_type,
+                };
+
                 for elem in elements.iter().skip(1) {
                     let element_type =
                         self.analyze_expression(elem, parent_function, symbol_table, diagnostics)?;
                     elem_hirs.push(self.hir_take());
                     let span = elem.position().unwrap_or(open.position);
-                    self.compare_data_type(&first_type, &element_type, &span, diagnostics)?;
+                    self.compare_data_type(&elem_ty, &element_type, &span, diagnostics)?;
                 }
                 self.current_expected_type = saved_expected;
 
-                let array_type = Type::Array(Box::new(first_type));
+                let array_type = Type::Array(Box::new(elem_ty));
                 self.hir_set_array_lit(elem_hirs, &array_type);
                 Ok(array_type)
             }

@@ -1,0 +1,9 @@
+// `object` has no compile-time JSON encoding, so the generator emits no writer for this map. The
+// call must be diagnosed by name rather than failing later as a missing backend symbol.
+import system;
+import system.json;
+
+fun main() {
+    let data: Map<string, object> = { "key": "value" };
+    System.println(Json.serialize(data));
+}

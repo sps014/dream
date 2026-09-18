@@ -346,7 +346,7 @@ fn collection_fn_suffix(mangled: &str) -> String {
 fn json_elem_supported(name: &str, jsonable: &HashSet<String>) -> bool {
     matches!(
         name,
-        "int" | "long" | "string" | "bool" | "double" | "float"
+        "int" | "long" | "string" | "bool" | "double" | "float" | "JsonValue"
     ) || jsonable.contains(name)
 }
 

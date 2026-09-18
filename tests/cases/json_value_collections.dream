@@ -1,0 +1,32 @@
+// `JsonValue` is the escape hatch for heterogeneous / unknown JSON: it carries its own shape, so
+// collections and `@json` fields holding one pass it straight through instead of decoding per type.
+import system;
+import system.json;
+
+@json
+class Envelope {
+    public id: int;
+    public payload: JsonValue;
+
+    public constructor(id: int, payload: JsonValue) {
+        this.id = id;
+        this.payload = payload;
+    }
+}
+
+fun main() {
+    let items: List<JsonValue> = [JsonValue.from_int(1), JsonValue.from_string("x")];
+    System.println(Json.serialize(items));
+
+    let map: Map<string, JsonValue> = { "n": JsonValue.from_int(42) };
+    System.println(Json.serialize(map));
+
+    let back = Json.deserialize<Map<string, JsonValue>>("{\"a\":7}").unwrap();
+    System.println(Json.serialize(back));
+
+    // A nested tree survives a round trip through a typed `@json` field untouched.
+    let raw = Json.deserialize<JsonValue>("{\"deep\":{\"n\":[1,2]}}").unwrap();
+    let text = Json.serialize(Envelope(9, raw));
+    System.println(text);
+    System.println(Json.serialize(Json.deserialize<Envelope>(text).unwrap()));
+}

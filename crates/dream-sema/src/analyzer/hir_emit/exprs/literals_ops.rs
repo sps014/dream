@@ -263,6 +263,13 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         };
+        // Each element enters a slot of the declared element type, so it needs the same implicit
+        // conversion a typed `let` or `arr[i] = v` gets — notably boxing a primitive into an
+        // `object[]`, which would otherwise store a raw scalar where a tagged pointer is expected.
+        let collected = collected
+            .into_iter()
+            .map(|e| self.coerce_to(e, elem_ty))
+            .collect();
         let ty = self.type_ctx.lower(result_ty);
         self.hir.last = Some(HExpr::new(
             ty,

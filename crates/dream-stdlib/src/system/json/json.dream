@@ -63,6 +63,12 @@ public static class Json {
         sb.append("null");
     }
 
+    // Appends an already-built dynamic value as compact JSON text. Generated `write_json` methods
+    // use this for `JsonValue` fields and collection elements, which carry their own shape.
+    public static fun write_value(borrow sb: StringBuilder, borrow v: JsonValue): void {
+        Json._json_stringify_into(sb, v);
+    }
+
     public static fun write_int(borrow sb: StringBuilder, n: int): void {
         sb.append_int(n);
     }

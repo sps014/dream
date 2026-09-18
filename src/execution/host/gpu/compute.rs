@@ -651,6 +651,13 @@ pub fn pass_dispatch_indirect(
     }
 }
 
+pub fn pass_write_timestamp(pass_id: i32, query_set: i32, index: i32) {
+    let mut st = lock_state();
+    if let Some(entry) = st.passes.get_mut(&pass_id) {
+        entry.ops.push(PassOp::WriteTimestamp { query_set, index });
+    }
+}
+
 pub fn shader_from_wgsl(source: String, entry: String) -> i32 {
     let mut st = lock_state();
     let id = st.alloc_id();
@@ -715,13 +722,15 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         return 0;
     }
     for op in &entry.ops {
-        let kernel = match op {
-            PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => kernel,
-        };
-        if let Err(e) = ensure_pipeline(kernel) {
-            eprintln!("Dream gpuPassSubmit: {e}");
-            lock_state().set_last_error(e.clone());
-            return classify_err(&e);
+        match op {
+            PassOp::WriteTimestamp { .. } => {}
+            PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => {
+                if let Err(e) = ensure_pipeline(kernel) {
+                    eprintln!("Dream gpuPassSubmit: {e}");
+                    lock_state().set_last_error(e.clone());
+                    return classify_err(&e);
+                }
+            }
         }
     }
 
@@ -745,16 +754,28 @@ pub fn pass_submit(pass_id: i32) -> i32 {
         let batch: Vec<String> = entry
             .ops
             .iter()
-            .map(|op| match op {
+            .filter_map(|op| match op {
                 PassOp::Dispatch { kernel, .. } | PassOp::DispatchIndirect { kernel, .. } => {
-                    kernel.clone()
+                    Some(kernel.clone())
                 }
+                PassOp::WriteTimestamp { .. } => None,
             })
             .collect();
         begin_uniform_frame(&mut st, &device, batch);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("dream-pass"),
         });
+        let mut resolve_ids = Vec::new();
+        if timed {
+            resolve_ids.push(entry.query_set);
+        }
+        for op in &entry.ops {
+            if let PassOp::WriteTimestamp { query_set, .. } = op {
+                if !resolve_ids.contains(query_set) {
+                    resolve_ids.push(*query_set);
+                }
+            }
+        }
         {
             let writes = ts_set.as_ref().and_then(|qs| {
                 super::queries::compute_timestamp_writes(qs, entry.ts_begin, entry.ts_end)
@@ -813,11 +834,27 @@ pub fn pass_submit(pass_id: i32) -> i32 {
                         &[],
                         Some((indirect_id, offset)),
                     )?,
+                    PassOp::WriteTimestamp { query_set, index } => {
+                        if !device
+                            .features()
+                            .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+                        {
+                            return Err(
+                                "timestamp-query-inside-passes is not available on this device"
+                                    .into(),
+                            );
+                        }
+                        if index < 0 {
+                            return Err("write_timestamp index must be >= 0".into());
+                        }
+                        let qs = super::queries::gpu_query_set(&st, query_set)?;
+                        cpass.write_timestamp(&qs, index as u32);
+                    }
                 }
             }
         }
-        if timed {
-            if let Some(qs_entry) = st.query_sets.get(&entry.query_set) {
+        for id in resolve_ids {
+            if let Some(qs_entry) = st.query_sets.get(&id) {
                 super::queries::encode_resolve(&mut encoder, qs_entry)?;
             }
         }

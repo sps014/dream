@@ -456,6 +456,10 @@ public static class Gpu {
         indirect_offset: int
     ): void;
 
+    @web @native
+    @runtime("gpuPassWriteTimestamp")
+    static extern fun pass_write_timestamp(pass_id: int, query_set: int, index: int): void;
+
     @runtime("gpuPassSubmit")
     static extern async fun pass_submit(pass_id: int): int;
 

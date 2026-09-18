@@ -60,6 +60,7 @@ let tile = caps.max_invocations_per_workgroup;
 | `float32_filterable` | linear filtering of 32-bit float textures |
 | `timestamp_query` | GPU timestamp query sets (`ComputePass.begin_timed`, `GpuRenderTarget.timestamps`) |
 | `timestamp_query_inside_encoders` | `GpuEncoder.write_timestamp` between passes |
+| `timestamp_query_inside_passes` | `write_timestamp` inside an open compute or render pass |
 | `max_buffer_bytes`, `max_storage_binding_bytes` | allocation and storage-binding ceilings |
 | `max_workgroup_storage_bytes` | `var<workgroup>` bytes per workgroup |
 | `max_invocations_per_workgroup`, `max_workgroup_size_x/y/z` | `@workgroup_size` ceilings |
@@ -86,7 +87,7 @@ Swapchain drawable size is CSS/logical pixels unless `GpuSurfaceDesc.max_pixel_r
 
 ## Textures, surfaces, draw
 
-`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`. GPU pass timing: `GpuQuerySet.timestamps(n)` then `ComputePass.begin_timed(qs, 0, 1)`, `GpuRenderTarget.timestamps(qs, 0, 1)`, or `GpuEncoder.write_timestamp(qs, i)` (needs `timestamp_query_inside_encoders`); `qs.read()` after submit.
+`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`. GPU pass timing: `GpuQuerySet.timestamps(n)` then `ComputePass.begin_timed(qs, 0, 1)`, `GpuRenderTarget.timestamps(qs, 0, 1)`, `GpuEncoder.write_timestamp(qs, i)` (`timestamp_query_inside_encoders`), or `pass.write_timestamp(qs, i)` (`timestamp_query_inside_passes`); `qs.read()` after submit.
 
 Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
 

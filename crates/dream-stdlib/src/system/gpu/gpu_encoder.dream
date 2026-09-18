@@ -192,6 +192,14 @@ public class GpuRenderPassEncoder {
         return this;
     }
 
+    // Writes a GPU timestamp inside this pass. Requires `timestamp_query_inside_passes`.
+    public fun write_timestamp(queries: GpuQuerySet, index: int): GpuRenderPassEncoder {
+        this._s.op(GpuCmdOp.WriteTimestamp);
+        this._s.i32(queries.id);
+        this._s.i32(index);
+        return this;
+    }
+
     public fun end(): void {
         this._s.op(GpuCmdOp.EndPass);
     }

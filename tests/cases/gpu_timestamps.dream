@@ -58,6 +58,7 @@ async fun main(): void {
     if created.is_err() {
         System.println("timed=0");
         System.println("encoder_ok=0");
+        System.println("inside_ok=0");
         System.println("render_ok=0");
         return;
     }
@@ -69,6 +70,7 @@ async fun main(): void {
     if sub.is_err() {
         System.println("timed=0");
         System.println("encoder_ok=0");
+        System.println("inside_ok=0");
         System.println("render_ok=0");
         return;
     }
@@ -88,6 +90,19 @@ async fun main(): void {
         qs_e.destroy();
     }
     System.println("encoder_ok=" + encoder_ok.to_int().to_string());
+
+    let inside_ok = !c.timestamp_query_inside_passes;
+    if c.timestamp_query_inside_passes {
+        let qs_i = GpuQuerySet.timestamps(2).unwrap();
+        let ipass = ComputePass.begin();
+        ipass.write_timestamp(qs_i, 0);
+        ipass.dispatch("ts_nop", [buf], 4, 1, 1);
+        ipass.write_timestamp(qs_i, 1);
+        let isub = await ipass.submit();
+        inside_ok = isub.is_ok() && stamps_ok(qs_i.read());
+        qs_i.destroy();
+    }
+    System.println("inside_ok=" + inside_ok.to_int().to_string());
 
     let verts = GpuBuffer<Vertex>.vertex_from([
         make_vert(-1.0, -1.0),

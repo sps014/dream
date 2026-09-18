@@ -54,6 +54,10 @@ enum Step {
         buffer: wgpu::Buffer,
         offset: u64,
     },
+    WriteTimestamp {
+        query_set: wgpu::QuerySet,
+        index: u32,
+    },
 }
 
 struct Pass {
@@ -230,8 +234,22 @@ fn plan_pass(
             Record::BeginPass(_) | Record::EndPass => {
                 return Err("nested render passes are not supported".into())
             }
-            Record::WriteTimestamp { .. } => {
-                return Err("write_timestamp inside a render pass".into())
+            Record::WriteTimestamp { query_set, index } => {
+                if !device
+                    .features()
+                    .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+                {
+                    return Err(
+                        "timestamp-query-inside-passes is not available on this device".into(),
+                    );
+                }
+                if *index < 0 {
+                    return Err("write_timestamp index must be >= 0".into());
+                }
+                steps.push(Step::WriteTimestamp {
+                    query_set: super::super::queries::gpu_query_set(st, *query_set)?,
+                    index: *index as u32,
+                });
             }
         }
     }
@@ -356,6 +374,7 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
             Step::DrawIndexedIndirect { buffer, offset } => {
                 rp.draw_indexed_indirect(buffer, *offset)
             }
+            Step::WriteTimestamp { query_set, index } => rp.write_timestamp(query_set, *index),
         }
     }
 }
@@ -430,6 +449,11 @@ fn plan_all(
                     if matches!(inner, Record::EndPass) {
                         closed = true;
                         break;
+                    }
+                    if let Record::WriteTimestamp { query_set, .. } = &inner {
+                        if *query_set >= 0 && !resolve_ids.contains(query_set) {
+                            resolve_ids.push(*query_set);
+                        }
                     }
                     body.push(inner);
                 }

@@ -139,6 +139,11 @@ public class ComputePass {
         );
     }
 
+    // Writes a GPU timestamp inside this pass. Requires `timestamp_query_inside_passes`.
+    public fun write_timestamp(queries: GpuQuerySet, index: int): void {
+        Gpu.pass_write_timestamp(this._id, queries.id, index);
+    }
+
     // Submits all recorded dispatches in one queue submit.
     public async fun submit(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;

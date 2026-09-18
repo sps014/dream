@@ -53,6 +53,7 @@ function makeGpuHost(getInstance) {
     "float32-filterable",
     "timestamp-query",
     "timestamp-query-inside-encoders",
+    "timestamp-query-inside-passes",
   ];
 
   // Limits raised to the adapter's own maximum. Everything else stays at the portable WebGPU
@@ -79,6 +80,7 @@ function makeGpuHost(getInstance) {
   const CAP_FLOAT32_FILTERABLE = 1 << 9;
   const CAP_TIMESTAMP_QUERY = 1 << 10;
   const CAP_TIMESTAMP_QUERY_INSIDE_ENCODERS = 1 << 11;
+  const CAP_TIMESTAMP_QUERY_INSIDE_PASSES = 1 << 12;
 
   // Mirrors of the enum tables owned by `crates/dream-abi/src/gpu_format.rs`, indexed by the
   // `GpuTextureFormat` / `GpuTextureDimension` / … discriminants Dream passes as ints. Keep these
@@ -1727,6 +1729,16 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           }
           break;
         }
+        case "writeTimestamp": {
+          if (!dev.features?.has("timestamp-query-inside-passes")) {
+            throw new Error("timestamp-query-inside-passes is not available on this device");
+          }
+          const qs = querySets.get(rec.querySet);
+          if (!qs?.querySet) throw new Error(`unknown query set ${rec.querySet}`);
+          if ((rec.index | 0) < 0) throw new Error("write_timestamp index must be >= 0");
+          steps.push({ op: "writeTimestamp", querySet: qs.querySet, index: rec.index | 0 });
+          break;
+        }
         default: throw new Error(`unexpected command '${rec.op}' inside a render pass`);
       }
     }
@@ -1756,6 +1768,11 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           break;
         case "drawIndirect": pass.drawIndirect(step.buffer, step.offset); break;
         case "drawIndexedIndirect": pass.drawIndexedIndirect(step.buffer, step.offset); break;
+        case "writeTimestamp": pass.writeTimestamp(step.querySet, step.index); break;
+        default: {
+          const _exhaustive = step.op;
+          throw new Error(`unexpected render step '${_exhaustive}'`);
+        }
       }
     }
     pass.end();
@@ -1818,6 +1835,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       while (i < records.length) {
         const inner = records[i++];
         if (inner.op === "endPass") { closed = true; break; }
+        if (inner.op === "writeTimestamp") noteResolve(inner.querySet | 0);
         body.push(inner);
       }
       if (!closed) throw new Error("render pass was never ended");
@@ -1863,6 +1881,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       if (has("float32-filterable")) flags |= CAP_FLOAT32_FILTERABLE;
       if (has("timestamp-query")) flags |= CAP_TIMESTAMP_QUERY;
       if (has("timestamp-query-inside-encoders")) flags |= CAP_TIMESTAMP_QUERY_INSIDE_ENCODERS;
+      if (has("timestamp-query-inside-passes")) flags |= CAP_TIMESTAMP_QUERY_INSIDE_PASSES;
       // No subgroup-barrier or cooperative-matrix bit: WebGPU exposes no counterpart to the native
       // `SUBGROUP_BARRIER` feature, and subgroup-matrix tiles remain a pre-standard extension.
       const lim = device.limits || {};
@@ -3022,6 +3041,15 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         indirectOffset: indirectOffset | 0,
       });
     },
+    gpuPassWriteTimestamp: (passId, querySet, index) => {
+      const p = passes.get(passId);
+      if (!p) throw new Error(`unknown ComputePass ${passId}`);
+      p.ops.push({
+        kind: "writeTimestamp",
+        querySet: querySet | 0,
+        index: index | 0,
+      });
+    },
     gpuPassSubmit: async (passId) => {
       try {
         const p = passes.get(passId);
@@ -3034,6 +3062,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         const dev = await ensureDevice();
         let needed = 0;
         for (const op of ops) {
+          if (op.kind === "writeTimestamp") continue;
           const pipe = await getPipeline(dev, op.kernel);
           const size = pipe.meta.uniform_size | 0;
           if (size > 0) needed += uniformStride(size, dev);
@@ -3050,6 +3079,16 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           : undefined;
         const cpass = encoder.beginComputePass(tsWrites ? { timestampWrites: tsWrites } : {});
         for (const op of ops) {
+          if (op.kind === "writeTimestamp") {
+            if (!dev.features?.has("timestamp-query-inside-passes")) {
+              throw new Error("timestamp-query-inside-passes is not available on this device");
+            }
+            const wqs = querySets.get(op.querySet);
+            if (!wqs?.querySet) throw new Error(`unknown query set ${op.querySet}`);
+            if ((op.index | 0) < 0) throw new Error("write_timestamp index must be >= 0");
+            cpass.writeTimestamp(wqs.querySet, op.index | 0);
+            continue;
+          }
           const pipe = await getPipeline(dev, op.kernel);
           if (op.kind === "dispatch") {
             const bg = await buildBindGroup(
@@ -3066,9 +3105,20 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           }
         }
         cpass.end();
-        if (qs && qs.querySet && qs.resolve && qs.readback) {
-          encoder.resolveQuerySet(qs.querySet, 0, qs.count, qs.resolve, 0);
-          encoder.copyBufferToBuffer(qs.resolve, 0, qs.readback, 0, qs.count * 8);
+        const resolveIds = [];
+        const noteQs = (id) => {
+          if (id >= 0 && !resolveIds.includes(id)) resolveIds.push(id);
+        };
+        if (timed) noteQs(qsId);
+        for (const op of ops) {
+          if (op.kind === "writeTimestamp") noteQs(op.querySet | 0);
+        }
+        for (const id of resolveIds) {
+          const rqs = querySets.get(id);
+          if (rqs?.querySet && rqs.resolve && rqs.readback) {
+            encoder.resolveQuerySet(rqs.querySet, 0, rqs.count, rqs.resolve, 0);
+            encoder.copyBufferToBuffer(rqs.resolve, 0, rqs.readback, 0, rqs.count * 8);
+          }
         }
         dev.queue.submit([encoder.finish()]);
         await dev.queue.onSubmittedWorkDone();

@@ -91,6 +91,10 @@ pub enum PassOp {
         indirect_id: i32,
         offset: i32,
     },
+    WriteTimestamp {
+        query_set: i32,
+        index: i32,
+    },
 }
 
 pub struct ComputePassEntry {

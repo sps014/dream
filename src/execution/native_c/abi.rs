@@ -723,6 +723,11 @@ pub unsafe extern "C" fn gpuPassDispatchIndirect(
 }
 
 #[no_mangle]
+pub extern "C" fn gpuPassWriteTimestamp(pass: i32, query_set: i32, index: i32) {
+    compute::pass_write_timestamp(pass, query_set, index);
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn gpuEncoderSubmit(stream: usize) -> i32 {
     crate::execution::host::gpu::encoder::submit(&read_bytes(stream))
 }

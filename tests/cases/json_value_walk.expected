@@ -1,0 +1,13 @@
+object
+name=string:ada
+tags=array
+tags[0]=number:1
+tags[1]=number:2
+on=bool:true
+meta=object
+meta.id=number:9
+true
+true
+true
+9
+{"tags":[1,2],"on":true,"meta":{"id":9},"name":"ada"}

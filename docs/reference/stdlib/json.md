@@ -56,56 +56,55 @@ switch (r.json()) {
 
 ### Read one field
 
-Every `as_*` returns `Option`: missing keys and wrong types become `None`, they do not panic. Prefer `get` over `at` (`at` panics if the key is missing).
+`get_str` / `get_int` / `get_bool` look up a key and decode it. Missing keys and wrong types are `None`. `get_str_or` / `get_int_or` supply a fallback. Prefer these over `get` + `unwrap_or(JsonValue.none())` + `as_*` — that path allocates a dummy node on every miss. `at(key)` panics if the key is absent.
 
 ```dream
-let name = v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
-let n = v.get("count").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
+let name = v.get_str_or("name", "");
+let n = v.get_int_or("count", 0);
 if v.has("error") {
-    System.println(v.get_or("error", JsonValue.none()).as_string().unwrap_or(""));
+    System.println(v.get_str_or("error", ""));
 }
 ```
 
-### Walk an object (the dict)
+`is_*` / `kind()` are an integer tag check. `as_bool` / `as_int` / `as_double` wrap a scalar in `Option`. `as_string` clones the string. `as_map` / `as_array` return the existing container.
 
-`is_object()` is true for `{...}`. Keys stay in insertion order. Values are still `JsonValue`, so nested objects and arrays walk the same way.
+### Walk with `kind()`
 
 ```dream
-if v.is_object() {
-    let i = 0;
-    while i < v.length {
-        let key = v.key_at(i).unwrap_or("");
-        let child = v.value_at(i).unwrap_or(JsonValue.none());
-        System.println(key + " = " + Json.serialize(child));
-        i = i + 1;
-    }
+switch (v.kind()) {
+    case JsonKind.Object:
+        let i = 0;
+        while i < v.length {                 // insertion order
+            let key = v.key_at(i).unwrap_or("");
+            let child = v.value_at(i).unwrap_or(JsonValue.none());
+            System.println(key + " = " + Json.serialize(child));
+            i = i + 1;
+        }
+    case JsonKind.Array:
+        switch (v.as_array()) {
+            Some(items) => {
+                for (let item in items) {
+                    System.println(Json.serialize(item));
+                }
+            },
+            None => {}
+        }
+    default:
 }
 
-// Same data as a Map, if you want Map APIs:
 let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
 ```
 
-`Json.serialize(dict)` round-trips that map.
-
-### Walk an array
-
-```dream
-if v.is_array() {
-    let i = 0;
-    while i < v.length {
-        let item = v.at(i).unwrap_or(JsonValue.none());
-        System.println(Json.serialize(item));
-        i = i + 1;
-    }
-}
-```
+`Json.serialize(dict)` round-trips that map. Iterating `as_map()` is unordered; `key_at` / `value_at` follow JSON key order.
 
 ### Nested values
 
 ```dream
-let nested = v.get("meta").unwrap_or(JsonValue.none());
-if nested.is_object() {
-    System.println(nested.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0));
+switch (v.get("meta")) {
+    Some(meta) => {
+        System.println(meta.get_int_or("id", 0));
+    },
+    None => {}
 }
 ```
 
@@ -129,9 +128,9 @@ System.println(Json.serialize(mixed));   // {"n":42,"s":"text"}
 
 | Kind | Test | Read | Build |
 | --- | --- | --- | --- |
-| object `{...}` | `is_object` | `get` / `get_or` / `has` / `keys` / `key_at` / `value_at` / `as_map` | `JsonValue.dict()`, then `set` |
-| array `[...]` | `is_array` | `at(index)` / `as_array` / `.length` | `JsonValue.array()`, then `push` |
-| string / number / bool / null | `is_null` | `as_string` / `as_int` / `as_double` / `as_bool` | `from_string` / `from_int` / `number` / `boolean` / `none` |
+| object `{...}` | `kind()` / `is_object` | `get_str` / `get_int` / `get` / `has` / `key_at` / `as_map` | `JsonValue.dict()`, then `set` |
+| array `[...]` | `kind()` / `is_array` | `at(index)` / `as_array` / `.length` | `JsonValue.array()`, then `push` |
+| string / number / bool / null | `kind()` / `is_null` | `str_or` / `int_or` / `as_string` / `as_int` / `as_double` / `as_bool` | `from_string` / `from_int` / `number` / `boolean` / `none` |
 
 ## `GenResult`
 

@@ -1,0 +1,83 @@
+// Parse unseen JSON into a JsonValue tree and walk it with `kind()` / `get_*`.
+// Values stay JsonValue — this is the string-keyed mixed dict, not Map<string, object>.
+import system;
+import system.json;
+
+fun describe(borrow v: JsonValue): string {
+    switch (v.kind()) {
+        case JsonKind.Null: return "null";
+        case JsonKind.Object: return "object";
+        case JsonKind.Array: return "array";
+        case JsonKind.Bool: return "bool:" + v.bool_or(false).to_string();
+        case JsonKind.String: return "string:" + v.str_or("");
+        case JsonKind.Number: return "number:" + v.int_or(0).to_string();
+        default: return "unknown";
+    }
+}
+
+fun walk(path: string, borrow v: JsonValue): void {
+    if path.length == 0 {
+        System.println(describe(v));
+    } else {
+        System.println(path + "=" + describe(v));
+    }
+    switch (v.kind()) {
+        case JsonKind.Object:
+            let i = 0;
+            while i < v.length {
+                let key = v.key_at(i).unwrap_or("");
+                let child = v.value_at(i).unwrap_or(JsonValue.none());
+                let next = key;
+                if path.length > 0 {
+                    next = path + "." + key;
+                }
+                walk(next, child);
+                i = i + 1;
+            }
+        case JsonKind.Array:
+            switch (v.as_array()) {
+                Some(items) => {
+                    let i = 0;
+                    for (let item in items) {
+                        let idx = "[" + i.to_string() + "]";
+                        let next = idx;
+                        if path.length > 0 {
+                            next = path + idx;
+                        }
+                        walk(next, item);
+                        i = i + 1;
+                    }
+                },
+                None => {}
+            }
+        default:
+    }
+}
+
+fun main() {
+    let text = "{\"name\":\"ada\",\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9}}";
+    switch (Json.deserialize<JsonValue>(text)) {
+        Ok(v) => {
+            walk("", v);
+
+            System.println(v.get("missing").is_none());
+            System.println(v.get_int("name").is_none());
+            System.println(v.get_str_or("name", "") == "ada");
+
+            switch (v.get("meta")) {
+                Some(meta) => {
+                    System.println(meta.get_int_or("id", 0));
+                },
+                None => {
+                    System.println(-1);
+                },
+            }
+
+            let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
+            System.println(Json.serialize(dict));
+        },
+        Err(e) => {
+            System.println(e.message());
+        },
+    }
+}

@@ -1,5 +1,15 @@
 module system.json;
 
+// Discriminant for `JsonValue.kind()`. Prefer this over the raw `kind_of()` integer.
+public enum JsonKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
+    Object,
+}
+
 // Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are
 // acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check.
 //
@@ -96,9 +106,29 @@ public class JsonValue {
         );
     }
 
-    // The kind of JSON value.
+    // The kind of JSON value as a raw discriminant (`0` null … `5` object).
     public fun kind_of(): int {
         return this.kind;
+    }
+
+    // The kind of JSON value, for `switch (v.kind()) { case JsonKind.Object: … }`.
+    public fun kind(): JsonKind {
+        if this.kind == 1 {
+            return JsonKind.Bool;
+        }
+        if this.kind == 2 {
+            return JsonKind.Number;
+        }
+        if this.kind == 3 {
+            return JsonKind.String;
+        }
+        if this.kind == 4 {
+            return JsonKind.Array;
+        }
+        if this.kind == 5 {
+            return JsonKind.Object;
+        }
+        return JsonKind.Null;
     }
 
     // True if the value is null.
@@ -160,6 +190,63 @@ public class JsonValue {
             return Option.None;
         }
         return this.obj_map;
+    }
+
+    public fun str_or(fallback: string): string {
+        return this.as_string().unwrap_or(fallback);
+    }
+
+    public fun int_or(fallback: int): int {
+        return this.as_int().unwrap_or(fallback);
+    }
+
+    public fun bool_or(fallback: bool): bool {
+        return this.as_bool().unwrap_or(fallback);
+    }
+
+    public fun double_or(fallback: double): double {
+        return this.as_double().unwrap_or(fallback);
+    }
+
+    public fun get_str(borrow key: string): Option<string> {
+        switch (this.get(key)) {
+            Some(v) => {
+                return v.as_string();
+            },
+            None => {
+                return Option.None;
+            },
+        }
+    }
+
+    public fun get_int(borrow key: string): Option<int> {
+        switch (this.get(key)) {
+            Some(v) => {
+                return v.as_int();
+            },
+            None => {
+                return Option.None;
+            },
+        }
+    }
+
+    public fun get_bool(borrow key: string): Option<bool> {
+        switch (this.get(key)) {
+            Some(v) => {
+                return v.as_bool();
+            },
+            None => {
+                return Option.None;
+            },
+        }
+    }
+
+    public fun get_str_or(borrow key: string, fallback: string): string {
+        return this.get_str(key).unwrap_or(fallback);
+    }
+
+    public fun get_int_or(borrow key: string, fallback: int): int {
+        return this.get_int(key).unwrap_or(fallback);
     }
 
     public fun get_or(borrow key: string, fallback: JsonValue): JsonValue {

@@ -4,6 +4,9 @@
 //!   f32 x, y, dx, dy; i32 buttons, down, inside, pointer_id
 //!   (dx/dy cleared after each read)
 //!
+//! Multi-pointer (`gpuSurfacePointers`): u32 count LE, then `count` × 32-byte records
+//!   (same layout as the primary latch; per-record dx/dy cleared on read)
+//!
 //! Mods (`gpuSurfaceMods`): 4 bytes — shift, ctrl, alt, meta as 0/1
 //!
 //! Events (`gpuSurfacePollEvents`): u32 count LE, then tagged payloads:
@@ -19,6 +22,7 @@
 //!   12 Focus / 13 Blur / 14 Close: (no payload)
 //!   15 GamepadConnected / 16 GamepadDisconnected: i32 pad
 //!   17 GamepadButtonDown / 18 GamepadButtonUp: i32 pad, u8 button
+//!   19 GamepadAxis: i32 pad, u8 axis, f32 value
 //! Strings: u32 utf8_len LE + utf8 bytes.
 //!
 //! Gamepad button ids (keep in sync with `GamepadButton` in stdlib):
@@ -49,6 +53,7 @@ pub const TAG_GAMEPAD_CONNECTED: u8 = 15;
 pub const TAG_GAMEPAD_DISCONNECTED: u8 = 16;
 pub const TAG_GAMEPAD_BUTTON_DOWN: u8 = 17;
 pub const TAG_GAMEPAD_BUTTON_UP: u8 = 18;
+pub const TAG_GAMEPAD_AXIS: u8 = 19;
 
 pub const BTN_UNKNOWN: u8 = 0;
 pub const BTN_SOUTH: u8 = 1;
@@ -155,12 +160,27 @@ pub enum InputEvent {
         pad: i32,
         button: u8,
     },
+    GamepadAxis {
+        pad: i32,
+        axis: u8,
+        value: f32,
+    },
 }
 
 #[derive(Clone, Default)]
 pub struct PadState {
     pub buttons_down: IndexSet<u8>,
     pub axes: [f32; AXIS_COUNT],
+}
+
+#[derive(Clone, Default)]
+pub struct TrackedPointer {
+    pub x: f32,
+    pub y: f32,
+    pub dx: f32,
+    pub dy: f32,
+    pub buttons: i32,
+    pub inside: bool,
 }
 
 #[derive(Clone)]
@@ -181,6 +201,8 @@ pub struct InputState {
     pub keys_down: IndexSet<String>,
     /// Connected pads keyed by stable host index (sorted via BTreeMap).
     pub pads: BTreeMap<i32, PadState>,
+    /// Active pointers keyed by host pointer id (mouse is 0).
+    pub pointers: BTreeMap<i32, TrackedPointer>,
     queue: VecDeque<InputEvent>,
 }
 
@@ -202,6 +224,7 @@ impl Default for InputState {
             close_requested: false,
             keys_down: IndexSet::new(),
             pads: BTreeMap::new(),
+            pointers: BTreeMap::new(),
             queue: VecDeque::new(),
         }
     }
@@ -216,16 +239,54 @@ impl InputState {
     }
 
     pub fn set_pointer_pos(&mut self, x: f32, y: f32) {
-        self.dx += x - self.x;
-        self.dy += y - self.y;
+        self.set_pointer_pos_ex(x, y, true);
+    }
+
+    pub fn set_pointer_pos_ex(&mut self, x: f32, y: f32, accumulate_delta: bool) {
+        if accumulate_delta {
+            self.dx += x - self.x;
+            self.dy += y - self.y;
+        }
         self.x = x;
         self.y = y;
+    }
+
+    fn track_pointer(&mut self, pointer_id: i32, x: f32, y: f32, accumulate_delta: bool) {
+        let entry = self.pointers.entry(pointer_id).or_default();
+        if accumulate_delta {
+            entry.dx += x - entry.x;
+            entry.dy += y - entry.y;
+        }
+        entry.x = x;
+        entry.y = y;
+    }
+
+    fn pointer_entry(&mut self, pointer_id: i32) -> &mut TrackedPointer {
+        self.pointers.entry(pointer_id).or_default()
+    }
+
+    pub fn add_relative_delta(&mut self, dx: f32, dy: f32) {
+        self.dx += dx;
+        self.dy += dy;
+        let id = if self.pointer_id >= 0 {
+            self.pointer_id
+        } else {
+            0
+        };
+        let entry = self.pointer_entry(id);
+        entry.dx += dx;
+        entry.dy += dy;
     }
 
     pub fn pointer_down(&mut self, x: f32, y: f32, button: i32, pointer_id: i32) {
         self.set_pointer_pos(x, y);
         self.buttons |= 1 << button.clamp(0, 31);
         self.pointer_id = pointer_id;
+        self.track_pointer(pointer_id, x, y, true);
+        let bit = 1 << button.clamp(0, 31);
+        let p = self.pointer_entry(pointer_id);
+        p.buttons |= bit;
+        p.inside = true;
         self.push(InputEvent::PointerDown {
             x,
             y,
@@ -237,6 +298,17 @@ impl InputState {
     pub fn pointer_up(&mut self, x: f32, y: f32, button: i32, pointer_id: i32) {
         self.set_pointer_pos(x, y);
         self.buttons &= !(1 << button.clamp(0, 31));
+        self.track_pointer(pointer_id, x, y, true);
+        let bit = 1 << button.clamp(0, 31);
+        let drop_finger = if let Some(p) = self.pointers.get_mut(&pointer_id) {
+            p.buttons &= !bit;
+            p.buttons == 0 && pointer_id != 0
+        } else {
+            false
+        };
+        if drop_finger {
+            self.pointers.remove(&pointer_id);
+        }
         self.push(InputEvent::PointerUp {
             x,
             y,
@@ -246,8 +318,17 @@ impl InputState {
     }
 
     pub fn pointer_move(&mut self, x: f32, y: f32, pointer_id: i32) {
-        self.set_pointer_pos(x, y);
+        self.pointer_move_ex(x, y, pointer_id, true);
+    }
+
+    pub fn pointer_move_abs(&mut self, x: f32, y: f32, pointer_id: i32) {
+        self.pointer_move_ex(x, y, pointer_id, false);
+    }
+
+    fn pointer_move_ex(&mut self, x: f32, y: f32, pointer_id: i32, accumulate_delta: bool) {
+        self.set_pointer_pos_ex(x, y, accumulate_delta);
         self.pointer_id = pointer_id;
+        self.track_pointer(pointer_id, x, y, accumulate_delta);
         self.push(InputEvent::PointerMove { x, y, pointer_id });
     }
 
@@ -255,17 +336,22 @@ impl InputState {
         self.inside = true;
         self.set_pointer_pos(x, y);
         self.pointer_id = pointer_id;
+        self.track_pointer(pointer_id, x, y, true);
+        self.pointer_entry(pointer_id).inside = true;
         self.push(InputEvent::PointerEnter { x, y, pointer_id });
     }
 
     pub fn pointer_leave(&mut self, x: f32, y: f32, pointer_id: i32) {
         self.inside = false;
         self.set_pointer_pos(x, y);
+        self.track_pointer(pointer_id, x, y, true);
+        self.pointers.remove(&pointer_id);
         self.push(InputEvent::PointerLeave { x, y, pointer_id });
     }
 
     pub fn pointer_cancel(&mut self, pointer_id: i32) {
         self.buttons = 0;
+        self.pointers.remove(&pointer_id);
         self.push(InputEvent::PointerCancel { pointer_id });
     }
 
@@ -354,7 +440,16 @@ impl InputState {
         if axis >= AXIS_COUNT {
             return;
         }
-        self.pads.entry(pad).or_default().axes[axis] = value;
+        let entry = self.pads.entry(pad).or_default();
+        let prev = entry.axes[axis];
+        entry.axes[axis] = value;
+        if (value - prev).abs() > 1e-4 {
+            self.push(InputEvent::GamepadAxis {
+                pad,
+                axis: axis as u8,
+                value,
+            });
+        }
     }
 
     pub fn pack_pointer_and_clear_delta(&mut self) -> Vec<u8> {
@@ -369,6 +464,27 @@ impl InputState {
         out.extend_from_slice(&self.pointer_id.to_le_bytes());
         self.dx = 0.0;
         self.dy = 0.0;
+        out
+    }
+
+    pub fn pack_pointers_and_clear_deltas(&mut self) -> Vec<u8> {
+        let ids: Vec<i32> = self.pointers.keys().copied().collect();
+        let count = ids.len() as u32;
+        let mut out = Vec::with_capacity(4 + ids.len() * 32);
+        out.extend_from_slice(&count.to_le_bytes());
+        for id in ids {
+            let p = self.pointers.get_mut(&id).expect("pointer id from keys");
+            out.extend_from_slice(&p.x.to_le_bytes());
+            out.extend_from_slice(&p.y.to_le_bytes());
+            out.extend_from_slice(&p.dx.to_le_bytes());
+            out.extend_from_slice(&p.dy.to_le_bytes());
+            out.extend_from_slice(&p.buttons.to_le_bytes());
+            out.extend_from_slice(&(i32::from(p.buttons != 0)).to_le_bytes());
+            out.extend_from_slice(&(i32::from(p.inside)).to_le_bytes());
+            out.extend_from_slice(&id.to_le_bytes());
+            p.dx = 0.0;
+            p.dy = 0.0;
+        }
         out
     }
 
@@ -534,6 +650,12 @@ fn pack_event(out: &mut Vec<u8>, ev: &InputEvent) {
             out.extend_from_slice(&pad.to_le_bytes());
             out.push(*button);
         }
+        InputEvent::GamepadAxis { pad, axis, value } => {
+            out.push(TAG_GAMEPAD_AXIS);
+            out.extend_from_slice(&pad.to_le_bytes());
+            out.push(*axis);
+            out.extend_from_slice(&value.to_le_bytes());
+        }
     }
 }
 
@@ -553,6 +675,31 @@ mod tests {
         assert_eq!(bytes[4], TAG_GAMEPAD_CONNECTED);
         assert_eq!(bytes[9], TAG_GAMEPAD_BUTTON_DOWN);
         assert_eq!(bytes[14], BTN_SOUTH);
+    }
+
+    #[test]
+    fn packs_gamepad_axis_events_on_change() {
+        let mut input = InputState::default();
+        input.gamepad_set_axis(0, AXIS_LEFT_STICK_X, 0.5);
+        input.gamepad_set_axis(0, AXIS_LEFT_STICK_X, 0.5);
+        let bytes = input.drain_events_packed();
+        let count = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(count, 1);
+        assert_eq!(bytes[4], TAG_GAMEPAD_AXIS);
+        assert_eq!(bytes[9], AXIS_LEFT_STICK_X as u8);
+    }
+
+    #[test]
+    fn packs_multiple_pointers() {
+        let mut input = InputState::default();
+        input.pointer_down(1.0, 2.0, 0, 7);
+        input.pointer_down(3.0, 4.0, 0, 8);
+        let bytes = input.pack_pointers_and_clear_deltas();
+        let count = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(count, 2);
+        let id0 = i32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]);
+        let id1 = i32::from_le_bytes([bytes[64], bytes[65], bytes[66], bytes[67]]);
+        assert_eq!((id0, id1), (7, 8));
     }
 
     #[test]

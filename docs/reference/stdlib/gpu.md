@@ -23,7 +23,8 @@ async fun main(): void {
 | Call | Meaning |
 | --- | --- |
 | `Gpu.is_available` | adapter present? |
-| `await Gpu.try_init()` | request device (call once) |
+| `await Gpu.try_init()` | request device (high-performance adapter) |
+| `await Gpu.try_init(GpuPowerPreference.LowPower)` | same, preferring battery-friendly GPUs |
 | `Gpu.ready` | init succeeded (false after device-lost until `try_init` again) |
 | `Gpu.check()` | pending uncaptured error or device-lost, else `Ok` |
 | `await Gpu.frame()` | wait a display frame |
@@ -68,6 +69,10 @@ small one. Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching fla
 
 `GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter. Async GPU methods take an optional last `token`; cancelled `Result` calls return `GpuError` `ECANCELLED`. A lost device (`DEVICE_LOST`) is distinct from `VALIDATION`: recover with `await Gpu.try_init()` and recreate GPU resources. `Gpu.check()` drains a pending lost / uncaptured event without waiting for the next submit.
 
+`Gpu.try_init(GpuPowerPreference.LowPower)` (or `Default`) is only consulted when no device is alive yet; after a loss, a different preference re-picks the adapter. `try_init()` keeps high-performance.
+
+Swapchain drawable size is CSS/logical pixels unless `GpuSurfaceDesc.max_pixel_ratio` is greater than `1`: then `width`/`height` become `client × min(devicePixelRatio, max_pixel_ratio)` (typical game clamp is `2`). Read the used scale with `surface.pixel_ratio` and the uncapped window/DPR with `surface.scale_factor`. `request_pointer_lock()` feeds relative `dx`/`dy` for FPS cameras; `request_fullscreen()` is borderless. Both need a user gesture in the browser. `pointers()` is the multi-touch list (`pointer()` stays the primary latch). Gamepad sticks still poll via `gamepad_axis`; `poll_events` also yields `GamepadAxis` when a value changes.
+
 ## Buffers
 
 `GpuBuffer<T>.alloc(n)`, `.from(data)`, `.vertex_from(data)`. Then `.length`, `write` / `write_at`, `await read` / `read_at`, `copy_to`. `GpuSwap<T>` is a front/back pair (`swap()`).
@@ -78,7 +83,7 @@ small one. Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching fla
 
 ## Textures, surfaces, draw
 
-`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`), `present()`, input helpers, `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
+`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
 
 Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
 

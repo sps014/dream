@@ -6,7 +6,7 @@ public static class Gpu {
     static extern fun is_available_host(): bool;
 
     @runtime("gpuTryInit")
-    static extern async fun try_init_host(): int;
+    static extern async fun try_init_host(power: int): int;
 
     @runtime("gpuReady")
     static extern fun ready_host(): bool;
@@ -52,9 +52,29 @@ public static class Gpu {
     }
 
     // Initializes the GPU device; returns `Err` with a host error code on failure.
-    public static async fun try_init(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {
+    // Picks a high-performance adapter when the host offers a choice.
+    public static async fun try_init(): Result<bool, GpuError> {
+        return await Gpu.try_init(GpuPowerPreference.HighPerformance, Option.None);
+    }
+
+    // Like `try_init()`, with a cancellation token.
+    public static async fun try_init(token: Option<CancellationToken>): Result<bool, GpuError> {
+        return await Gpu.try_init(GpuPowerPreference.HighPerformance, token);
+    }
+
+    // Like `try_init()`, requesting `power` (ignored if a device is already alive).
+    public static async fun try_init(power: GpuPowerPreference): Result<bool, GpuError> {
+        return await Gpu.try_init(power, Option.None);
+    }
+
+    // Like `try_init(power)`, with a cancellation token.
+    public static async fun try_init(
+        power: GpuPowerPreference,
+        token: Option<CancellationToken>
+    ): Result<bool, GpuError> {
         CancellationToken.rejected(token, GpuError.cancelled())?;
-        let code = await Gpu.try_init_host();
+        let p: int = power;
+        let code = await Gpu.try_init_host(p);
         if code == 0 { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "Gpu.try_init failed"));
     }
@@ -217,7 +237,8 @@ public static class Gpu {
         height: int,
         present_mode: int,
         alpha_mode: int,
-        color_space: int
+        color_space: int,
+        max_pixel_ratio: float
     ): void;
 
     @web @native
@@ -227,6 +248,42 @@ public static class Gpu {
     @web @native
     @runtime("gpuSurfacePointer")
     static extern fun surface_pointer(id: int): byte[];
+
+    @web @native
+    @runtime("gpuSurfacePointers")
+    static extern fun surface_pointers(id: int): byte[];
+
+    @web @native
+    @runtime("gpuSurfacePixelRatio")
+    static extern fun surface_pixel_ratio(id: int): float;
+
+    @web @native
+    @runtime("gpuSurfaceScaleFactor")
+    static extern fun surface_scale_factor(id: int): float;
+
+    @web @native
+    @runtime("gpuSurfaceRequestPointerLock")
+    static extern fun surface_request_pointer_lock(id: int): void;
+
+    @web @native
+    @runtime("gpuSurfaceExitPointerLock")
+    static extern fun surface_exit_pointer_lock(id: int): void;
+
+    @web @native
+    @runtime("gpuSurfacePointerLocked")
+    static extern fun surface_pointer_locked(id: int): bool;
+
+    @web @native
+    @runtime("gpuSurfaceRequestFullscreen")
+    static extern fun surface_request_fullscreen(id: int): void;
+
+    @web @native
+    @runtime("gpuSurfaceExitFullscreen")
+    static extern fun surface_exit_fullscreen(id: int): void;
+
+    @web @native
+    @runtime("gpuSurfaceFullscreen")
+    static extern fun surface_fullscreen(id: int): bool;
 
     @web @native
     @runtime("gpuSurfaceMods")

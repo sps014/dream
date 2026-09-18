@@ -38,20 +38,28 @@ public class GpuSurface {
     // Sets the window client size (logical) and rebuilds the drawable swapchain.
     @web @native
     public fun configure(width: int, height: int): void {
-        Gpu.surface_configure(this.id, width, height, 2, 1, 0);
+        Gpu.surface_configure(this.id, width, height, 2, 1, 0, 1.0);
     }
 
-    // Like `configure(w, h)`, with present mode, alpha, and color space.
+    // Like `configure(w, h)`, with present mode, alpha, color space, and a pixel-ratio clamp.
     @web @native
     public fun configure(desc: GpuSurfaceDesc): void {
         let present: int = desc.present_mode;
         let alpha: int = desc.alpha_mode;
         let space: int = desc.color_space;
-        Gpu.surface_configure(this.id, desc.width, desc.height, present, alpha, space);
+        Gpu.surface_configure(
+            this.id,
+            desc.width,
+            desc.height,
+            present,
+            alpha,
+            space,
+            desc.max_pixel_ratio
+        );
     }
 
-    // Drawable width in pixels (`canvas.width` on web; create/configure size on native —
-    // not Retina physical, so fragment cost matches the browser).
+    // Drawable width in pixels (`canvas.width` on web). Equals the client size when
+    // `max_pixel_ratio` is `1`; otherwise `client × min(DPR, max_pixel_ratio)`.
     @web @native
     public get width(): int {
         return Gpu.surface_width(this.id);
@@ -76,6 +84,58 @@ public class GpuSurface {
     @web @native
     public fun pointer(): GpuPointer {
         return GpuInputCodec.decode_pointer(Gpu.surface_pointer(this.id));
+    }
+
+    // Every currently tracked pointer (mouse, pen, extra fingers). Clears per-pointer `dx`/`dy`.
+    // Prefer this over `pointer()` for pinch / look-plus-move; don't mix both in one frame if
+    // you need the primary deltas.
+    @web @native
+    public fun pointers(): GpuPointer[] {
+        return GpuInputCodec.decode_pointers(Gpu.surface_pointers(this.id));
+    }
+
+    // Backing-store scale actually used (`width / client`, 1 when HiDPI is clamped off).
+    @web @native
+    public get pixel_ratio(): float {
+        return Gpu.surface_pixel_ratio(this.id);
+    }
+
+    // Raw window scale / `devicePixelRatio` (uncapped).
+    @web @native
+    public get scale_factor(): float {
+        return Gpu.surface_scale_factor(this.id);
+    }
+
+    // Hide the cursor and report relative `dx`/`dy` (FPS cameras). Needs a user gesture on the web.
+    @web @native
+    public fun request_pointer_lock(): void {
+        Gpu.surface_request_pointer_lock(this.id);
+    }
+
+    @web @native
+    public fun exit_pointer_lock(): void {
+        Gpu.surface_exit_pointer_lock(this.id);
+    }
+
+    @web @native
+    public get pointer_locked(): bool {
+        return Gpu.surface_pointer_locked(this.id);
+    }
+
+    // Borderless fullscreen. Needs a user gesture on the web.
+    @web @native
+    public fun request_fullscreen(): void {
+        Gpu.surface_request_fullscreen(this.id);
+    }
+
+    @web @native
+    public fun exit_fullscreen(): void {
+        Gpu.surface_exit_fullscreen(this.id);
+    }
+
+    @web @native
+    public get fullscreen(): bool {
+        return Gpu.surface_fullscreen(this.id);
     }
 
     // Latched modifier keys.

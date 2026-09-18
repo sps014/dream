@@ -62,6 +62,37 @@ internal static class GpuInputCodec {
         return p;
     }
 
+    // Decodes a packed multi-pointer latch (`u32 count` + `count` × 32-byte `GpuPointer` records).
+    public static fun decode_pointers(buf: byte[]): GpuPointer[] {
+        if buf.length < 4 {
+            return Buffer.alloc<GpuPointer>(0);
+        }
+        let count = GpuInputCodec.read_i32(buf, 0);
+        if count < 0 { count = 0; }
+        let out = Buffer.alloc<GpuPointer>(count);
+        let i = 0;
+        while i < count {
+            let off = 4 + i * 32;
+            if off + 32 > buf.length { break; }
+            let slice = Buffer.alloc<byte>(32);
+            let j = 0;
+            while j < 32 {
+                slice[j] = buf[off + j];
+                j = j + 1;
+            }
+            out[i] = GpuInputCodec.decode_pointer(slice);
+            i = i + 1;
+        }
+        if i == count { return out; }
+        let trimmed = Buffer.alloc<GpuPointer>(i);
+        let k = 0;
+        while k < i {
+            trimmed[k] = out[k];
+            k = k + 1;
+        }
+        return trimmed;
+    }
+
     // Decodes a packed modifier latch blob into `GpuMods`.
     public static fun decode_mods(buf: byte[]): GpuMods {
         let m = GpuMods();
@@ -169,6 +200,12 @@ internal static class GpuInputCodec {
                 let bid = (int)buf[off] & 255;
                 off = off + 1;
                 out[i] = GpuInputEvent.GamepadButtonUp(pad, gamepad_button_from_id(bid));
+            } else if (tag == 19) {
+                let pad = GpuInputCodec.read_i32(buf, off); off = off + 4;
+                let aid = (int)buf[off] & 255;
+                off = off + 1;
+                let value = GpuInputCodec.read_f32(buf, off); off = off + 4;
+                out[i] = GpuInputEvent.GamepadAxis(pad, gamepad_axis_from_id(aid), value);
             } else {
                 break;
             }

@@ -199,6 +199,13 @@ pub struct SurfaceEntry {
     pub present_mode: wgpu::PresentMode,
     pub alpha_mode: wgpu::CompositeAlphaMode,
     pub color_space: i32,
+    /// Cap on drawable / client scale. `<= 1` keeps a 1:1 swapchain.
+    pub max_pixel_ratio: f32,
+    /// Uncapped window / `devicePixelRatio` scale last seen.
+    pub scale_factor: f32,
+    /// Drawable / client scale actually used.
+    pub pixel_ratio: f32,
+    pub pointer_locked: bool,
 }
 
 pub struct BlitPipe {
@@ -237,6 +244,7 @@ pub struct GpuState {
     pub uniform_ring: super::uniform_ring::UniformRing,
     /// Last wgpu uncaptured error; consumed by host calls after submit.
     pub last_error: Option<String>,
+    pub power_preference: wgpu::PowerPreference,
 }
 
 impl Default for GpuState {
@@ -265,6 +273,7 @@ impl Default for GpuState {
             blit: None,
             uniform_ring: super::uniform_ring::UniformRing::default(),
             last_error: None,
+            power_preference: wgpu::PowerPreference::HighPerformance,
         }
     }
 }

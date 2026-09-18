@@ -13,7 +13,12 @@ pub fn is_available() -> bool {
     adapter.is_some()
 }
 
-pub fn try_init() -> i32 {
+pub fn try_init(power: i32) -> i32 {
+    let pref = match power {
+        1 => wgpu::PowerPreference::LowPower,
+        0 => wgpu::PowerPreference::None,
+        _ => wgpu::PowerPreference::HighPerformance,
+    };
     let mut st = lock_state();
     if let Some(msg) = drain_lost() {
         st.drop_gpu_device();
@@ -28,10 +33,14 @@ pub fn try_init() -> i32 {
             ..Default::default()
         }));
     }
+    if st.adapter.is_some() && st.power_preference != pref {
+        st.adapter = None;
+    }
+    st.power_preference = pref;
     if st.adapter.is_none() {
         let instance = st.instance.as_ref().unwrap();
         let adapter = match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: pref,
             compatible_surface: None,
             force_fallback_adapter: false,
         })) {

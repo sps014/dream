@@ -29,6 +29,7 @@ function makeGpuHost(getInstance) {
 
   let lastError = "";
   let deviceLost = false;
+  let powerCode = 2;
 
   const ERR_UNAVAILABLE = 1;
   const ERR_TIMEOUT = 2;
@@ -183,8 +184,11 @@ function makeGpuHost(getInstance) {
         if (!globalThis.navigator?.gpu) {
           throw new Error("WebGPU is not available in this environment");
         }
+        const adapterOpts = {};
+        if ((powerCode | 0) === 1) adapterOpts.powerPreference = "low-power";
+        else if ((powerCode | 0) === 2) adapterOpts.powerPreference = "high-performance";
         const adapter = await Promise.race([
-          navigator.gpu.requestAdapter(),
+          navigator.gpu.requestAdapter(adapterOpts),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error("WebGPU requestAdapter timed out")), 8000),
           ),
@@ -275,6 +279,7 @@ function makeGpuHost(getInstance) {
       keysDown: new Set(),
       pads: new Map(),
       knownPads: new Set(),
+      pointers: new Map(),
       queue: [],
     };
   }
@@ -375,14 +380,23 @@ function makeGpuHost(getInstance) {
         }
       }
       const axes = gp.axes || [];
-      state.axes[0] = applyDeadzone(axes[0] || 0);
-      state.axes[1] = applyDeadzone(axes[1] || 0);
-      state.axes[2] = applyDeadzone(axes[2] || 0);
-      state.axes[3] = applyDeadzone(axes[3] || 0);
       const lt = buttons[6];
       const rt = buttons[7];
-      state.axes[4] = lt && lt.value != null ? Math.max(0, Math.min(1, lt.value)) : 0;
-      state.axes[5] = rt && rt.value != null ? Math.max(0, Math.min(1, rt.value)) : 0;
+      const nextAxes = [
+        applyDeadzone(axes[0] || 0),
+        applyDeadzone(axes[1] || 0),
+        applyDeadzone(axes[2] || 0),
+        applyDeadzone(axes[3] || 0),
+        lt && lt.value != null ? Math.max(0, Math.min(1, lt.value)) : 0,
+        rt && rt.value != null ? Math.max(0, Math.min(1, rt.value)) : 0,
+      ];
+      for (let ai = 0; ai < nextAxes.length; ai++) {
+        const v = nextAxes[ai];
+        if (Math.abs(v - (state.axes[ai] || 0)) > 1e-4) {
+          pushEvent(input, { tag: 19, pad, axis: ai, value: v });
+        }
+        state.axes[ai] = v;
+      }
     }
     for (const pad of [...input.knownPads]) {
       if (!seen.has(pad)) {
@@ -405,26 +419,66 @@ function makeGpuHost(getInstance) {
     input.y = y;
   }
 
-  // Match native `reconfigure_surface`: drawable = CSS/client pixels, not DPR.
-  // Setting canvas.width retriggers ResizeObserver; skip when size is unchanged.
+  function ensureTracked(input, pid) {
+    if (!input.pointers.has(pid)) {
+      input.pointers.set(pid, {
+        x: input.x,
+        y: input.y,
+        dx: 0,
+        dy: 0,
+        buttons: 0,
+        inside: false,
+      });
+    }
+    return input.pointers.get(pid);
+  }
+
+  function trackPointerPos(input, pid, x, y, accumulate) {
+    const p = ensureTracked(input, pid);
+    if (accumulate) {
+      p.dx += x - p.x;
+      p.dy += y - p.y;
+    }
+    p.x = x;
+    p.y = y;
+    return p;
+  }
+
+  function effectivePixelRatio(surface) {
+    const max = surface.maxPixelRatio != null ? Number(surface.maxPixelRatio) : 1;
+    const dpr = globalThis.devicePixelRatio || 1;
+    if (!(max > 1)) return 1;
+    return Math.min(Math.max(1, dpr), max);
+  }
+
+  // Drawable follows CSS/client pixels unless `maxPixelRatio` opts into a clamped HiDPI store.
   function syncSurfaceClientSize(surface) {
     const canvas = surface.canvas;
     if (!canvas) return false;
     const cw = canvas.clientWidth | 0;
     const ch = canvas.clientHeight | 0;
     if (cw < 1 || ch < 1) return false;
+    const ratio = effectivePixelRatio(surface);
+    const dw = Math.max(1, Math.round(cw * ratio));
+    const dh = Math.max(1, Math.round(ch * ratio));
     if (
-      cw === surface.width &&
-      ch === surface.height &&
-      canvas.width === cw &&
-      canvas.height === ch
+      cw === surface.clientWidth &&
+      ch === surface.clientHeight &&
+      dw === surface.width &&
+      dh === surface.height &&
+      canvas.width === dw &&
+      canvas.height === dh
     ) {
       return false;
     }
-    surface.width = cw;
-    surface.height = ch;
-    canvas.width = cw;
-    canvas.height = ch;
+    surface.clientWidth = cw;
+    surface.clientHeight = ch;
+    surface.width = dw;
+    surface.height = dh;
+    surface.pixelRatio = ratio;
+    surface.scaleFactor = globalThis.devicePixelRatio || 1;
+    canvas.width = dw;
+    canvas.height = dh;
     surface.configured = false;
     return true;
   }
@@ -473,20 +527,54 @@ function makeGpuHost(getInstance) {
     return out;
   }
 
+  function packPointerRecord(view, o, rec) {
+    o = writeF32(view, o, rec.x);
+    o = writeF32(view, o, rec.y);
+    o = writeF32(view, o, rec.dx);
+    o = writeF32(view, o, rec.dy);
+    o = writeI32(view, o, rec.buttons);
+    o = writeI32(view, o, rec.buttons !== 0 ? 1 : 0);
+    o = writeI32(view, o, rec.inside ? 1 : 0);
+    writeI32(view, o, rec.pointerId | 0);
+  }
+
   function packPointer(input) {
     const buf = new ArrayBuffer(32);
     const view = new DataView(buf);
-    let o = 0;
-    o = writeF32(view, o, input.x);
-    o = writeF32(view, o, input.y);
-    o = writeF32(view, o, input.dx);
-    o = writeF32(view, o, input.dy);
-    o = writeI32(view, o, input.buttons);
-    o = writeI32(view, o, input.buttons !== 0 ? 1 : 0);
-    o = writeI32(view, o, input.inside ? 1 : 0);
-    writeI32(view, o, input.pointerId | 0);
+    packPointerRecord(view, 0, {
+      x: input.x,
+      y: input.y,
+      dx: input.dx,
+      dy: input.dy,
+      buttons: input.buttons,
+      inside: input.inside,
+      pointerId: input.pointerId,
+    });
     input.dx = 0;
     input.dy = 0;
+    return new Uint8Array(buf);
+  }
+
+  function packPointers(input) {
+    const ids = [...input.pointers.keys()].sort((a, b) => a - b);
+    const buf = new ArrayBuffer(4 + ids.length * 32);
+    const view = new DataView(buf);
+    let o = writeI32(view, 0, ids.length);
+    for (const id of ids) {
+      const p = input.pointers.get(id);
+      packPointerRecord(view, o, {
+        x: p.x,
+        y: p.y,
+        dx: p.dx,
+        dy: p.dy,
+        buttons: p.buttons,
+        inside: p.inside,
+        pointerId: id,
+      });
+      p.dx = 0;
+      p.dy = 0;
+      o += 32;
+    }
     return new Uint8Array(buf);
   }
 
@@ -557,6 +645,11 @@ function makeGpuHost(getInstance) {
           appendI32(chunks, ev.pad);
           chunks.push(new Uint8Array([ev.button | 0]));
           break;
+        case 19:
+          appendI32(chunks, ev.pad);
+          chunks.push(new Uint8Array([ev.axis | 0]));
+          appendF32(chunks, ev.value);
+          break;
         default:
           break;
       }
@@ -574,10 +667,16 @@ function makeGpuHost(getInstance) {
       const { x, y } = canvasPointerPos(canvas, ev.clientX, ev.clientY);
       const pid = ev.pointerId != null ? ev.pointerId | 0 : 0;
       const button = ev.button != null ? ev.button | 0 : 0;
+      const locked = !!surface.pointerLocked;
+      const mx = ev.movementX || 0;
+      const my = ev.movementY || 0;
       if (type === "down") {
         setPointerPos(input, x, y);
         input.buttons |= 1 << Math.max(0, Math.min(31, button));
         input.pointerId = pid;
+        const p = trackPointerPos(input, pid, x, y, true);
+        p.buttons |= 1 << Math.max(0, Math.min(31, button));
+        p.inside = true;
         pushEvent(input, { tag: 0, x, y, button, pointerId: pid });
         try {
           canvas.setPointerCapture?.(pid);
@@ -585,22 +684,43 @@ function makeGpuHost(getInstance) {
       } else if (type === "up") {
         setPointerPos(input, x, y);
         input.buttons &= ~(1 << Math.max(0, Math.min(31, button)));
+        const p = trackPointerPos(input, pid, x, y, true);
+        p.buttons &= ~(1 << Math.max(0, Math.min(31, button)));
+        if (p.buttons === 0 && pid !== 0) input.pointers.delete(pid);
         pushEvent(input, { tag: 1, x, y, button, pointerId: pid });
       } else if (type === "move") {
-        setPointerPos(input, x, y);
+        if (locked) {
+          input.dx += mx;
+          input.dy += my;
+          input.x = x;
+          input.y = y;
+          const p = ensureTracked(input, pid);
+          p.dx += mx;
+          p.dy += my;
+          p.x = x;
+          p.y = y;
+        } else {
+          setPointerPos(input, x, y);
+          trackPointerPos(input, pid, x, y, true);
+        }
         input.pointerId = pid;
         pushEvent(input, { tag: 2, x, y, pointerId: pid });
       } else if (type === "enter") {
         input.inside = true;
         setPointerPos(input, x, y);
         input.pointerId = pid;
+        const p = trackPointerPos(input, pid, x, y, true);
+        p.inside = true;
         pushEvent(input, { tag: 3, x, y, pointerId: pid });
       } else if (type === "leave") {
         input.inside = false;
         setPointerPos(input, x, y);
+        trackPointerPos(input, pid, x, y, true);
+        input.pointers.delete(pid);
         pushEvent(input, { tag: 4, x, y, pointerId: pid });
       } else if (type === "cancel") {
         input.buttons = 0;
+        input.pointers.delete(pid);
         pushEvent(input, { tag: 5, pointerId: pid });
       }
     };
@@ -657,12 +777,27 @@ function makeGpuHost(getInstance) {
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => {
         if (syncSurfaceClientSize(surface)) {
-          pushEvent(input, { tag: 10, width: surface.width, height: surface.height });
+          pushEvent(input, { tag: 10, width: surface.clientWidth, height: surface.clientHeight });
         }
         const dpr = globalThis.devicePixelRatio || 1;
+        surface.scaleFactor = dpr;
         pushEvent(input, { tag: 11, scale: dpr });
       });
       ro.observe(canvas);
+    }
+
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      const onLockChange = () => {
+        const locked = !!(document.pointerLockElement === canvas);
+        surface.pointerLocked = locked;
+      };
+      const onFsChange = () => {
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        surface.fullscreen = fsEl === canvas;
+      };
+      document.addEventListener("pointerlockchange", onLockChange);
+      document.addEventListener("fullscreenchange", onFsChange);
+      document.addEventListener("webkitfullscreenchange", onFsChange);
     }
   }
 
@@ -1701,12 +1836,18 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       lastError = "";
       return msg;
     },
-    gpuTryInit: async () => {
+    gpuTryInit: async (power) => {
       try {
         if (deviceLost) {
           deviceLost = false;
           lastError = "";
         }
+        const next = power | 0;
+        if (next !== powerCode && !device) {
+          devicePromise = null;
+          gpuAdapter = null;
+        }
+        powerCode = next;
         await ensureDevice();
         return 0;
       } catch (e) {
@@ -2376,6 +2517,13 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         context: null,
         width: w,
         height: h,
+        clientWidth: w,
+        clientHeight: h,
+        maxPixelRatio: 1,
+        pixelRatio: 1,
+        scaleFactor: globalThis.devicePixelRatio || 1,
+        pointerLocked: false,
+        fullscreen: false,
         configured: false,
         lastTexture: null,
         input: makeInputState(),
@@ -2388,17 +2536,19 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       syncSurfaceClientSize(surface);
       return id;
     },
-    gpuSurfaceConfigure: (id, width, height, presentMode, alphaMode, colorSpace) => {
+    gpuSurfaceConfigure: (id, width, height, presentMode, alphaMode, colorSpace, maxPixelRatio) => {
       const s = surfaces.get(id);
       if (!s) throw new Error(`unknown GpuSurface ${id}`);
-      s.width = Math.max(1, width | 0);
-      s.height = Math.max(1, height | 0);
-      s.canvas.width = s.width;
-      s.canvas.height = s.height;
+      s.clientWidth = Math.max(1, width | 0);
+      s.clientHeight = Math.max(1, height | 0);
+      s.maxPixelRatio = Number(maxPixelRatio) > 1 ? Number(maxPixelRatio) : 1;
+      s.canvas.style.width = `${s.clientWidth}px`;
+      s.canvas.style.height = `${s.clientHeight}px`;
       s.presentMode = presentMode | 0;
       s.alphaMode = (alphaMode | 0) === 2 ? "premultiplied" : "opaque";
       s.colorSpace = (colorSpace | 0) === 1 ? "display-p3" : "srgb";
       s.configured = false;
+      syncSurfaceClientSize(s);
     },
     gpuSurfacePresent: async (id) => {
       return surfaces.has(id) ? 0 : ERR_OTHER;
@@ -2407,6 +2557,77 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       const s = surfaces.get(id);
       if (!s || !s.input) return new Uint8Array(32);
       return packPointer(s.input);
+    },
+    gpuSurfacePointers: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.input) return new Uint8Array(4);
+      return packPointers(s.input);
+    },
+    gpuSurfacePixelRatio: (id) => {
+      const s = surfaces.get(id);
+      return s ? Number(s.pixelRatio) || 1 : 1;
+    },
+    gpuSurfaceScaleFactor: (id) => {
+      const s = surfaces.get(id);
+      if (!s) return 1;
+      return Number(s.scaleFactor) || globalThis.devicePixelRatio || 1;
+    },
+    gpuSurfaceRequestPointerLock: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.canvas || typeof s.canvas.requestPointerLock !== "function") return;
+      const p = s.canvas.requestPointerLock({ unadjustedMovement: true });
+      if (p && typeof p.catch === "function") {
+        p.catch(() => s.canvas.requestPointerLock());
+      }
+    },
+    gpuSurfaceExitPointerLock: (id) => {
+      const s = surfaces.get(id);
+      if (!s) return;
+      if (typeof document !== "undefined" && document.exitPointerLock) {
+        document.exitPointerLock();
+      }
+      s.pointerLocked = false;
+    },
+    gpuSurfacePointerLocked: (id) => {
+      const s = surfaces.get(id);
+      if (!s) return false;
+      if (typeof document !== "undefined") {
+        s.pointerLocked = document.pointerLockElement === s.canvas;
+      }
+      return !!s.pointerLocked;
+    },
+    gpuSurfaceRequestFullscreen: (id) => {
+      const s = surfaces.get(id);
+      if (!s || !s.canvas) return;
+      const el = s.canvas;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (typeof req === "function") {
+        try {
+          const p = req.call(el);
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        } catch (_) {}
+      }
+    },
+    gpuSurfaceExitFullscreen: (id) => {
+      const s = surfaces.get(id);
+      if (!s) return;
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (typeof exit === "function") {
+        try {
+          const p = exit.call(document);
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        } catch (_) {}
+      }
+      s.fullscreen = false;
+    },
+    gpuSurfaceFullscreen: (id) => {
+      const s = surfaces.get(id);
+      if (!s) return false;
+      if (typeof document !== "undefined") {
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        s.fullscreen = fsEl === s.canvas;
+      }
+      return !!s.fullscreen;
     },
     gpuSurfaceMods: (id) => {
       const s = surfaces.get(id);

@@ -40,4 +40,6 @@ public enum GpuInputEvent {
     GamepadButtonDown(pad: int, button: GamepadButton),
     // Gamepad button released.
     GamepadButtonUp(pad: int, button: GamepadButton),
+    // Analog axis changed after host deadzone (`GamepadAxis` wire id).
+    GamepadAxis(pad: int, axis: GamepadAxis, value: float),
 }

@@ -1,0 +1,26 @@
+// Phase 6: power preference, pixel-ratio clamp on GpuSurfaceDesc, gamepad axis wire ids.
+import system;
+import system.gpu;
+
+async fun main(): void {
+    let def: int = GpuPowerPreference.Default;
+    let low: int = GpuPowerPreference.LowPower;
+    let high: int = GpuPowerPreference.HighPerformance;
+    System.println("power=" + def.to_string() + "," + low.to_string() + "," + high.to_string());
+
+    let init = await Gpu.try_init(GpuPowerPreference.HighPerformance);
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+    System.println("ready=" + Gpu.ready.to_int().to_string());
+
+    let d = GpuSurfaceDesc.of(128, 64);
+    System.println("clamp1=" + (d.max_pixel_ratio >= 1.0 && d.max_pixel_ratio < 1.5).to_int().to_string());
+    d.max_pixel_ratio = 2.0;
+    System.println("clamp2=" + (d.max_pixel_ratio >= 1.5).to_int().to_string());
+
+    let axis: int = GamepadAxis.RightTrigger;
+    System.println("axis=" + axis.to_string());
+    System.println("axis_id=" + gamepad_axis_id(GamepadAxis.LeftStickY).to_string());
+}

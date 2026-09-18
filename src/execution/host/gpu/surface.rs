@@ -10,7 +10,7 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
-use winit::window::{Window, WindowId};
+use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
 
 thread_local! {
     // EventLoop is !Send/!Sync — keep it thread-local (dream run is single-threaded).
@@ -98,6 +98,22 @@ impl ApplicationHandler for PumpApp {
     ) {
         dispatch_window_event(window_id, event);
     }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        if let winit::event::DeviceEvent::MouseMotion { delta } = event {
+            let mut st = lock_state();
+            for surf in st.surfaces.values_mut() {
+                if surf.pointer_locked {
+                    surf.input.add_relative_delta(delta.0 as f32, delta.1 as f32);
+                }
+            }
+        }
+    }
 }
 
 fn map_cursor_to_surface(surf: &SurfaceEntry, physical_x: f64, physical_y: f64) -> (f32, f32) {
@@ -122,6 +138,42 @@ fn client_size_from_window(window: &Window, physical: winit::dpi::PhysicalSize<u
         (logical.width.round() as u32).max(1),
         (logical.height.round() as u32).max(1),
     )
+}
+
+fn effective_pixel_ratio(raw_scale: f64, max_pixel_ratio: f32) -> f32 {
+    if max_pixel_ratio <= 1.0 {
+        1.0
+    } else {
+        (raw_scale as f32).clamp(1.0, max_pixel_ratio)
+    }
+}
+
+fn drawable_extent(client_w: u32, client_h: u32, ratio: f32) -> (u32, u32) {
+    (
+        ((f64::from(client_w) * f64::from(ratio)).round() as u32).max(1),
+        ((f64::from(client_h) * f64::from(ratio)).round() as u32).max(1),
+    )
+}
+
+fn sync_drawable_from_client(st: &mut super::state::GpuState, id: i32) {
+    let (cw, ch, max_ratio, raw) = {
+        let Some(surf) = st.surfaces.get(&id) else {
+            return;
+        };
+        let raw = surf
+            .window
+            .as_ref()
+            .map(|w| w.scale_factor())
+            .unwrap_or(f64::from(surf.scale_factor.max(1.0)));
+        (surf.client_width, surf.client_height, surf.max_pixel_ratio, raw)
+    };
+    let ratio = effective_pixel_ratio(raw, max_ratio);
+    if let Some(surf) = st.surfaces.get_mut(&id) {
+        surf.scale_factor = raw as f32;
+        surf.pixel_ratio = ratio;
+    }
+    let (dw, dh) = drawable_extent(cw, ch, ratio);
+    reconfigure_surface(st, id, dw, dh);
 }
 
 fn reconfigure_surface(st: &mut super::state::GpuState, id: i32, width: u32, height: u32) {
@@ -179,13 +231,21 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
         WindowEvent::Focused(true) => st.surfaces.get_mut(&sid).unwrap().input.focus(),
         WindowEvent::Focused(false) => st.surfaces.get_mut(&sid).unwrap().input.blur(),
         WindowEvent::CursorMoved { position, .. } => {
-            let surf = st.surfaces.get(&sid).unwrap();
-            let (x, y) = map_cursor_to_surface(surf, position.x, position.y);
-            st.surfaces
-                .get_mut(&sid)
-                .unwrap()
-                .input
-                .pointer_move(x, y, 0);
+            let locked = st
+                .surfaces
+                .get(&sid)
+                .map(|s| s.pointer_locked)
+                .unwrap_or(false);
+            let (x, y) = {
+                let surf = st.surfaces.get(&sid).unwrap();
+                map_cursor_to_surface(surf, position.x, position.y)
+            };
+            let input = &mut st.surfaces.get_mut(&sid).unwrap().input;
+            if locked {
+                input.pointer_move_abs(x, y, 0);
+            } else {
+                input.pointer_move(x, y, 0);
+            }
         }
         WindowEvent::CursorEntered { .. } => {
             let (x, y) = {
@@ -285,8 +345,7 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 surf.client_height = ch;
                 surf.input.resize(cw as i32, ch as i32);
             }
-            // Keep drawable at logical/create size (web parity), not Retina physical.
-            reconfigure_surface(&mut st, sid, cw, ch);
+            sync_drawable_from_client(&mut st, sid);
         }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             st.surfaces
@@ -309,7 +368,7 @@ fn dispatch_window_event(window_id: WindowId, event: WindowEvent) {
                 surf.client_height = client.1;
                 surf.input.resize(client.0 as i32, client.1 as i32);
             }
-            reconfigure_surface(&mut st, sid, client.0.max(1), client.1.max(1));
+            sync_drawable_from_client(&mut st, sid);
         }
         WindowEvent::Touch(touch) => {
             use winit::event::TouchPhase;
@@ -431,8 +490,9 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
     let client_h = h;
     let present_mode = wgpu::PresentMode::Fifo;
     let alpha_mode = wgpu::CompositeAlphaMode::Opaque;
-    // Match web canvas backing store: use the requested create size, not Retina physical
-    // pixels. Ocean at 2560×1440 was ~14 FPS (acquire ~49ms); 1280×720 matches browser work.
+    let scale = window.scale_factor() as f32;
+    // Default 1:1 backing store (web canvas CSS pixels). `configure(GpuSurfaceDesc)` can raise
+    // `max_pixel_ratio` for HiDPI up to a clamp.
     let config = surface_config(format, client_w, client_h, present_mode, alpha_mode);
     surface.configure(&device, &config);
 
@@ -457,6 +517,10 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
             present_mode,
             alpha_mode,
             color_space: 0,
+            max_pixel_ratio: 1.0,
+            scale_factor: scale,
+            pixel_ratio: 1.0,
+            pointer_locked: false,
         },
     );
     id
@@ -490,6 +554,7 @@ pub fn configure(
     present_mode: i32,
     alpha_mode: i32,
     color_space: i32,
+    max_pixel_ratio: f32,
 ) {
     let mut st = lock_state();
     if st.surfaces.get(&id).is_none() {
@@ -499,17 +564,23 @@ pub fn configure(
     let ch = height.max(1) as u32;
     let pm = present_mode_from_code(present_mode);
     let am = alpha_mode_from_code(alpha_mode);
+    let max_ratio = if max_pixel_ratio > 1.0 {
+        max_pixel_ratio
+    } else {
+        1.0
+    };
     if let Some(surf) = st.surfaces.get_mut(&id) {
         surf.client_width = cw;
         surf.client_height = ch;
         surf.present_mode = pm;
         surf.alpha_mode = am;
         surf.color_space = color_space;
+        surf.max_pixel_ratio = max_ratio;
     }
     if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.clone()) {
         let _ = window.request_inner_size(winit::dpi::LogicalSize::new(cw as f64, ch as f64));
     }
-    reconfigure_surface(&mut st, id, cw, ch);
+    sync_drawable_from_client(&mut st, id);
 }
 
 pub fn width(id: i32) -> i32 {
@@ -934,6 +1005,93 @@ pub fn pointer_bytes(id: i32) -> Vec<u8> {
         .unwrap_or_else(|| vec![0u8; 32])
 }
 
+pub fn pointers_bytes(id: i32) -> Vec<u8> {
+    let mut st = lock_state();
+    st.surfaces
+        .get_mut(&id)
+        .map(|s| s.input.pack_pointers_and_clear_deltas())
+        .unwrap_or_else(|| vec![0u8; 4])
+}
+
+pub fn pixel_ratio(id: i32) -> f32 {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.pixel_ratio)
+        .unwrap_or(1.0)
+}
+
+pub fn scale_factor(id: i32) -> f32 {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| {
+            s.window
+                .as_ref()
+                .map(|w| w.scale_factor() as f32)
+                .unwrap_or(s.scale_factor)
+        })
+        .unwrap_or(1.0)
+}
+
+pub fn request_pointer_lock(id: i32) {
+    let mut st = lock_state();
+    let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.clone()) else {
+        return;
+    };
+    let ok = window
+        .set_cursor_grab(CursorGrabMode::Locked)
+        .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined))
+        .is_ok();
+    if ok {
+        window.set_cursor_visible(false);
+    }
+    if let Some(surf) = st.surfaces.get_mut(&id) {
+        surf.pointer_locked = ok;
+    }
+}
+
+pub fn exit_pointer_lock(id: i32) {
+    let mut st = lock_state();
+    if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.clone()) {
+        let _ = window.set_cursor_grab(CursorGrabMode::None);
+        window.set_cursor_visible(true);
+    }
+    if let Some(surf) = st.surfaces.get_mut(&id) {
+        surf.pointer_locked = false;
+    }
+}
+
+pub fn pointer_locked(id: i32) -> bool {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .map(|s| s.pointer_locked)
+        .unwrap_or(false)
+}
+
+pub fn request_fullscreen(id: i32) {
+    let st = lock_state();
+    if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.as_ref()) {
+        window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+    }
+}
+
+pub fn exit_fullscreen(id: i32) {
+    let st = lock_state();
+    if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.as_ref()) {
+        window.set_fullscreen(None);
+    }
+}
+
+pub fn fullscreen(id: i32) -> bool {
+    let st = lock_state();
+    st.surfaces
+        .get(&id)
+        .and_then(|s| s.window.as_ref())
+        .is_some_and(|w| w.fullscreen().is_some())
+}
+
 pub fn mods_bytes(id: i32) -> Vec<u8> {
     let st = lock_state();
     st.surfaces
@@ -1029,5 +1187,13 @@ mod tests {
         assert_eq!(alpha_mode_from_code(0), wgpu::CompositeAlphaMode::Auto);
         assert_eq!(alpha_mode_from_code(1), wgpu::CompositeAlphaMode::Opaque);
         assert_eq!(alpha_mode_from_code(2), wgpu::CompositeAlphaMode::PreMultiplied);
+    }
+
+    #[test]
+    fn pixel_ratio_clamp_keeps_1_to_1_by_default() {
+        assert_eq!(effective_pixel_ratio(3.0, 1.0), 1.0);
+        assert_eq!(effective_pixel_ratio(3.0, 2.0), 2.0);
+        assert_eq!(effective_pixel_ratio(1.5, 2.0), 1.5);
+        assert_eq!(drawable_extent(100, 50, 2.0), (200, 100));
     }
 }

@@ -185,9 +185,9 @@ pub extern "C" fn gpuCheck() -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuTryInit() -> i32 {
+pub extern "C" fn gpuTryInit(power: i32) -> i32 {
     ensure_abi();
-    device::try_init()
+    device::try_init(power)
 }
 
 #[no_mangle]
@@ -305,8 +305,17 @@ pub extern "C" fn gpuSurfaceConfigure(
     present_mode: i32,
     alpha_mode: i32,
     color_space: i32,
+    max_pixel_ratio: f32,
 ) {
-    surface::configure(id, w, h, present_mode, alpha_mode, color_space);
+    surface::configure(
+        id,
+        w,
+        h,
+        present_mode,
+        alpha_mode,
+        color_space,
+        max_pixel_ratio,
+    );
 }
 
 #[no_mangle]
@@ -478,6 +487,51 @@ pub unsafe extern "C" fn gpuSurfaceFromCanvas(id: usize) -> i32 {
 #[no_mangle]
 pub extern "C" fn gpuSurfacePointer(id: i32) -> usize {
     alloc_bytes(&surface::pointer_bytes(id))
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfacePointers(id: i32) -> usize {
+    alloc_bytes(&surface::pointers_bytes(id))
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfacePixelRatio(id: i32) -> f32 {
+    surface::pixel_ratio(id)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfaceScaleFactor(id: i32) -> f32 {
+    surface::scale_factor(id)
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfaceRequestPointerLock(id: i32) {
+    surface::request_pointer_lock(id);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfaceExitPointerLock(id: i32) {
+    surface::exit_pointer_lock(id);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfacePointerLocked(id: i32) -> i32 {
+    i32::from(surface::pointer_locked(id))
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfaceRequestFullscreen(id: i32) {
+    surface::request_fullscreen(id);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfaceExitFullscreen(id: i32) {
+    surface::exit_fullscreen(id);
+}
+
+#[no_mangle]
+pub extern "C" fn gpuSurfaceFullscreen(id: i32) -> i32 {
+    i32::from(surface::fullscreen(id))
 }
 
 #[no_mangle]

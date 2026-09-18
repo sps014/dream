@@ -184,3 +184,14 @@ public enum GpuColorSpace {
     Srgb = 0,
     DisplayP3 = 1,
 }
+
+// Adapter pick for `Gpu.try_init`. Only applied when a device is not already alive; after
+// device-lost, a different preference re-requests the adapter.
+public enum GpuPowerPreference {
+    // Let the host pick (WebGPU omits `powerPreference`; native `PowerPreference::None`).
+    Default = 0,
+    // Prefer integrated / battery-friendly GPUs.
+    LowPower = 1,
+    // Prefer discrete GPUs — the `try_init()` default.
+    HighPerformance = 2,
+}

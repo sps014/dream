@@ -7,8 +7,12 @@ public struct GpuSurfaceDesc {
     public present_mode: GpuPresentMode;
     public alpha_mode: GpuAlphaMode;
     public color_space: GpuColorSpace;
+    // Cap on backing-store / drawable scale versus CSS (web) or logical (native) size.
+    // `1` keeps today's 1:1 swapchain (cheap on phones). `2` is a typical game clamp:
+    // drawable = client × min(devicePixelRatio, 2). Values `<= 1` mean 1:1.
+    public max_pixel_ratio: float;
 
-    // `width`×`height` with vsync (`Fifo`), opaque compositing, sRGB.
+    // `width`×`height` with vsync (`Fifo`), opaque compositing, sRGB, 1:1 pixels.
     public static fun of(width: int, height: int): GpuSurfaceDesc {
         let d = GpuSurfaceDesc();
         d.width = width;
@@ -16,6 +20,7 @@ public struct GpuSurfaceDesc {
         d.present_mode = GpuPresentMode.Fifo;
         d.alpha_mode = GpuAlphaMode.Opaque;
         d.color_space = GpuColorSpace.Srgb;
+        d.max_pixel_ratio = 1.0;
         return d;
     }
 }

@@ -90,7 +90,7 @@ winit = { version = "0.30", optional = true }
 # Published toolchains keep `webview` on; the installer installs WebKitGTK runtime libs on Linux.
 wry = { version = "0.53", optional = true }
 gilrs = { version = "0.11", optional = true }
-image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 tungstenite = { version = "0.24", optional = true, default-features = false, features = ["handshake", "native-tls"] }
 oxc_minifier = "0.146"

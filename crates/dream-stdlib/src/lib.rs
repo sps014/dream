@@ -522,6 +522,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 "<std>/system/gpu/gpu_math_vec.dream",
                 include_str!("system/gpu/gpu_math_vec.dream"),
             ),
+            (
+                "<std>/system/gpu/gpu_math_transform.dream",
+                include_str!("system/gpu/gpu_math_transform.dream"),
+            ),
         ],
     },
     StdPackage {

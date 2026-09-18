@@ -76,6 +76,26 @@ public class GpuTexture {
         return GpuTexture.wrap(GpuTexture.allocate(d), d);
     }
 
+    // Decodes PNG or JPEG bytes into a new RGBA8 2D texture. The alpha channel is kept
+    // straight (not premultiplied). Fails with `GpuError.unsupported` for an unknown codec or an
+    // image larger than 8192 on an edge, and `GpuError.validation` for empty input.
+    public static async fun from_image_bytes(
+        data: byte[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<GpuTexture, GpuError> {
+        CancellationToken.rejected(token, GpuError.cancelled())?;
+        let packed = await Gpu.texture_from_image_bytes(data);
+        if packed.length >= 3 {
+            let d = GpuTextureDesc.d2(packed[1], packed[2], GpuTextureFormat.Rgba8Unorm);
+            return Result.Ok(GpuTexture.wrap(packed[0], d));
+        }
+        let code = 4;
+        if packed.length == 1 && packed[0] < 0 {
+            code = 0 - packed[0];
+        }
+        return Result.Err(GpuError.from_code(code, "GpuTexture.from_image_bytes failed"));
+    }
+
     // Depth attachment texture (`depth24plus`) for mesh pipelines.
     public static fun depth24(width: int, height: int): GpuTexture {
         let d = GpuTextureDesc.d2(width, height, GpuTextureFormat.Depth24Plus);

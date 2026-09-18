@@ -1,0 +1,76 @@
+// Camera / TRS builders and quaternions. CPU and a compute kernel run the same perspective ×
+// look_at product so a helper that failed to lower would disagree with GpuMat4.perspective.
+import system;
+import system.gpu;
+
+fun milli(x: float): string {
+    if x < 0.0 {
+        return "-" + ((int)(0.0 - x * 1000.0 + 0.5)).to_string();
+    }
+    return ((int)(x * 1000.0 + 0.5)).to_string();
+}
+
+fun view_proj(): GpuMat4 {
+    let p = GpuMat4.perspective(GpuMath.radians(90.0), 1.0, 0.1, 100.0);
+    let v = GpuMat4.look_at(
+        GpuVec3.of(0.0, 0.0, 3.0),
+        GpuVec3.of(0.0, 0.0, 0.0),
+        GpuVec3.of(0.0, 1.0, 0.0)
+    );
+    return GpuMath.mul(p, v);
+}
+
+@compute
+fun xform(out: GpuBuffer<float>): void {
+    if global_id.x != 0 { return; }
+    let p = GpuMat4.perspective(GpuMath.radians(90.0), 1.0, 0.1, 100.0);
+    let v = GpuMat4.look_at(
+        GpuVec3.of(0.0, 0.0, 3.0),
+        GpuVec3.of(0.0, 0.0, 0.0),
+        GpuVec3.of(0.0, 1.0, 0.0)
+    );
+    let m = GpuMath.mul(p, v);
+    let t = GpuMath.mul(
+        GpuMat4.translation(GpuVec3.of(1.0, 2.0, 3.0)),
+        GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+    );
+    out[0] = m.c0.x;
+    out[1] = m.c1.y;
+    out[2] = m.c2.z;
+    out[3] = m.c3.w;
+    out[4] = t.x;
+    out[5] = t.y;
+    out[6] = t.z;
+}
+
+async fun main(): Result<bool, GpuError> {
+    let m = view_proj();
+    System.println("p00=" + milli(m.c0.x));
+    System.println("p11=" + milli(m.c1.y));
+    System.println("p22=" + milli(m.c2.z));
+    System.println("p32=" + milli(m.c3.z));
+
+    let o = GpuMat4.ortho(-1.0, 1.0, -1.0, 1.0, 0.0, 1.0);
+    System.println("ortho00=" + milli(o.c0.x));
+    System.println("ortho22=" + milli(o.c2.z));
+
+    let moved = GpuMat4.translation(GpuVec3.of(1.0, 2.0, 3.0)).mul(GpuVec4.of(0.0, 0.0, 0.0, 1.0));
+    System.println("tx=" + milli(moved.x) + "," + milli(moved.y) + "," + milli(moved.z));
+
+    let q = GpuQuat.from_axis_angle(GpuVec3.of(0.0, 1.0, 0.0), GpuMath.radians(90.0));
+    let r = q.rotate(GpuVec3.of(1.0, 0.0, 0.0));
+    System.println("quat_x=" + milli(r.x) + "," + milli(r.z));
+
+    let n = GpuMat3.normal_matrix(GpuMat4.scaling(GpuVec3.of(2.0, 1.0, 1.0)));
+    System.println("normal00=" + milli(n.c0.x));
+
+    (await Gpu.try_init())?;
+    let out = GpuBuffer<float>.alloc(7);
+    let bufs = [out];
+    (await Compute.run_3d("xform", bufs, 1, 1, 1, Buffer.alloc<byte>(0)))?;
+    let gpu = await out.read();
+    System.println("gpu_p00=" + milli(gpu[0]));
+    System.println("gpu_p11=" + milli(gpu[1]));
+    System.println("gpu_tx=" + milli(gpu[4]) + "," + milli(gpu[5]) + "," + milli(gpu[6]));
+    return Result.Ok(true);
+}

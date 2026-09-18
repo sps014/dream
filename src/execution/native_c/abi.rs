@@ -525,6 +525,11 @@ pub unsafe extern "C" fn gpuDispatchShader(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn gpuTextureFromImageBytes(pixels: usize) -> usize {
+    alloc_i32s(&textures::from_image_bytes(read_bytes(pixels)))
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn gpuTextureWriteRgba(
     id: i32,
     pixels: usize,

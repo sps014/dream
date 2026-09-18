@@ -1,0 +1,124 @@
+// PNG decode into an RGBA8 texture. The 2x2 PNG is embedded so the case does not depend on the
+// working directory; a garbage payload must fail rather than allocate a blank texture.
+import system;
+import system.gpu;
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public uv: GpuVec2;
+}
+
+fun png_2x2(): byte[] {
+    let b = [
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+        0, 0, 0, 2, 0, 0, 0, 2, 8, 6, 0, 0, 0, 114, 182, 13, 36,
+        0, 0, 0, 19, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240, 31,
+        12, 129, 52, 8, 52, 0, 0, 73, 73, 9, 120, 40, 160, 219, 119,
+        0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+    ];
+    let out = Buffer.alloc<byte>(b.length);
+    let i = 0;
+    while i < b.length {
+        out[i] = (byte)b[i];
+        i = i + 1;
+    }
+    return out;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+@vertex
+fun img_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.uv = GpuVec2.of(v.pos.x * 0.5 + 0.5, 0.5 - v.pos.y * 0.5);
+    return o;
+}
+
+@fragment
+fun img_fs(
+    v: VsOut,
+    @group(0) @binding(0) albedo: GpuTexture,
+    @group(0) @binding(1) samp: GpuSampler
+): GpuVec4 {
+    return Gpu.texture_sample(albedo, samp, v.uv.x, v.uv.y);
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    let empty = await GpuTexture.from_image_bytes(Buffer.alloc<byte>(0));
+    System.println("empty=" + empty.unwrap_err().code());
+
+    let junk = Buffer.alloc<byte>(4);
+    junk[0] = (byte)0;
+    junk[1] = (byte)1;
+    junk[2] = (byte)2;
+    junk[3] = (byte)3;
+    let bad = await GpuTexture.from_image_bytes(junk);
+    System.println("junk=" + bad.unwrap_err().code());
+
+    let tex_r = await GpuTexture.from_image_bytes(png_2x2());
+    if tex_r.is_err() {
+        System.println("png failed: " + tex_r.unwrap_err().message());
+        return;
+    }
+    let tex = tex_r.unwrap();
+    System.println("w=" + tex.width.to_string());
+    System.println("h=" + tex.height.to_string());
+
+    let px = await tex.read_rgba();
+    System.println("r0=" + ((int)px[0]).to_string());
+    System.println("g0=" + ((int)px[1]).to_string());
+    System.println("b0=" + ((int)px[2]).to_string());
+    System.println("a0=" + ((int)px[3]).to_string());
+    System.println("g1=" + ((int)px[5]).to_string());
+    System.println("b2=" + ((int)px[10]).to_string());
+    System.println("a3=" + ((int)px[15]).to_string());
+
+    let samp = GpuSampler.create(GpuSamplerDesc.nearest());
+    let binds = GpuBindList.begin().texture(tex).sampler(samp);
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
+    ]);
+    let desc = GpuRenderPipelineDesc.defaults();
+    let pipe_r = await GpuRenderPipeline.create_ex("img_vs", "img_fs", desc);
+    if pipe_r.is_err() {
+        System.println("pipeline create failed");
+        return;
+    }
+    let target = GpuTexture.rgba8(1, 1);
+    let no_depth: Option<GpuTexture> = Option.None;
+    let drawn = await GpuRenderPass.draw_to(
+        target,
+        no_depth,
+        pipe_r.unwrap(),
+        verts,
+        3,
+        1,
+        Buffer.alloc<byte>(0),
+        GpuVec4.of(0.0, 0.0, 0.0, 1.0),
+        GpuLoadOp.Clear,
+        Option.Some(binds)
+    );
+    if drawn.is_err() {
+        System.println("draw failed");
+        return;
+    }
+    let out = await target.read_rgba();
+    System.println("sample_r=" + ((int)out[0]).to_string());
+}

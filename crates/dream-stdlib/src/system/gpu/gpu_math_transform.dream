@@ -1,0 +1,195 @@
+module system.gpu;
+
+// Camera / TRS builders for `GpuMat4`, plus a CPU-side quaternion. Matrices are column-major,
+// right-handed, Y-up, with clip Z in `[0, 1]` — the WebGPU convention. The same `GpuMat4`
+// methods lower into shaders as ordinary helpers (they are not WGSL builtins).
+extend GpuMat4 {
+    // Perspective projection. `fov_y` is the vertical field of view in radians; `near` / `far`
+    // are positive distances. Degenerate inputs (non-positive fov/aspect, `near == far`) return
+    // the identity so a bad camera does not produce NaNs that poison a whole frame.
+    public static fun perspective(fov_y: float, aspect: float, near: float, far: float): GpuMat4 {
+        if fov_y <= 0.0 || aspect <= 0.0 || near == far {
+            return GpuMat4.identity();
+        }
+        let f = 1.0 / GpuMath.tan(fov_y * 0.5);
+        let d = near - far;
+        return GpuMat4.of(
+            GpuVec4.of(f / aspect, 0.0, 0.0, 0.0),
+            GpuVec4.of(0.0, f, 0.0, 0.0),
+            GpuVec4.of(0.0, 0.0, far / d, -1.0),
+            GpuVec4.of(0.0, 0.0, (near * far) / d, 0.0)
+        );
+    }
+
+    // Orthographic projection mapping `left..right`, `bottom..top`, `near..far` into clip space.
+    public static fun ortho(
+        left: float,
+        right: float,
+        bottom: float,
+        top: float,
+        near: float,
+        far: float
+    ): GpuMat4 {
+        let w = right - left;
+        let h = top - bottom;
+        let d = far - near;
+        if w == 0.0 || h == 0.0 || d == 0.0 {
+            return GpuMat4.identity();
+        }
+        return GpuMat4.of(
+            GpuVec4.of(2.0 / w, 0.0, 0.0, 0.0),
+            GpuVec4.of(0.0, 2.0 / h, 0.0, 0.0),
+            GpuVec4.of(0.0, 0.0, -1.0 / d, 0.0),
+            GpuVec4.of(-(right + left) / w, -(top + bottom) / h, -near / d, 1.0)
+        );
+    }
+
+    // View matrix looking from `eye` at `center`, with world-up `up`. Right-handed: the camera
+    // looks down −Z in view space.
+    public static fun look_at(eye: GpuVec3, center: GpuVec3, up: GpuVec3): GpuMat4 {
+        let f = GpuMath.normalize(center - eye);
+        let s = GpuMath.normalize(GpuMath.cross(f, up));
+        let u = GpuMath.cross(s, f);
+        return GpuMat4.of(
+            GpuVec4.of(s.x, u.x, -f.x, 0.0),
+            GpuVec4.of(s.y, u.y, -f.y, 0.0),
+            GpuVec4.of(s.z, u.z, -f.z, 0.0),
+            GpuVec4.of(
+                0.0 - GpuMath.dot(s, eye),
+                0.0 - GpuMath.dot(u, eye),
+                GpuMath.dot(f, eye),
+                1.0
+            )
+        );
+    }
+
+    // Translation by `t`.
+    public static fun translation(t: GpuVec3): GpuMat4 {
+        return GpuMat4.of(
+            GpuVec4.of(1.0, 0.0, 0.0, 0.0),
+            GpuVec4.of(0.0, 1.0, 0.0, 0.0),
+            GpuVec4.of(0.0, 0.0, 1.0, 0.0),
+            GpuVec4.of(t.x, t.y, t.z, 1.0)
+        );
+    }
+
+    // Rotation of `radians` about unit `axis` (Rodrigues). A near-zero axis returns identity.
+    public static fun rotation(axis: GpuVec3, radians: float): GpuMat4 {
+        let a = GpuMath.normalize(axis);
+        let c = GpuMath.cos(radians);
+        let s = GpuMath.sin(radians);
+        let t = 1.0 - c;
+        return GpuMat4.of(
+            GpuVec4.of(t * a.x * a.x + c, t * a.x * a.y + s * a.z, t * a.x * a.z - s * a.y, 0.0),
+            GpuVec4.of(t * a.x * a.y - s * a.z, t * a.y * a.y + c, t * a.y * a.z + s * a.x, 0.0),
+            GpuVec4.of(t * a.x * a.z + s * a.y, t * a.y * a.z - s * a.x, t * a.z * a.z + c, 0.0),
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+
+    // Non-uniform scale.
+    public static fun scaling(s: GpuVec3): GpuMat4 {
+        return GpuMat4.of(
+            GpuVec4.of(s.x, 0.0, 0.0, 0.0),
+            GpuVec4.of(0.0, s.y, 0.0, 0.0),
+            GpuVec4.of(0.0, 0.0, s.z, 0.0),
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+}
+
+extend GpuMat3 {
+    // Inverse-transpose of the upper-left 3×3 of `m`, for transforming normals. Singular input
+    // returns identity.
+    public static fun normal_matrix(m: GpuMat4): GpuMat3 {
+        let a = GpuMat3.of(
+            GpuVec3.of(m.c0.x, m.c0.y, m.c0.z),
+            GpuVec3.of(m.c1.x, m.c1.y, m.c1.z),
+            GpuVec3.of(m.c2.x, m.c2.y, m.c2.z)
+        );
+        return GpuMath.transpose(GpuMath.inverse(a));
+    }
+}
+
+// Unit quaternion for 3D rotation. CPU-side (camera, animation); converting to a `GpuMat4` is
+// the path into a shader. Stored as `(x, y, z, w)` with `w` the real part.
+public struct GpuQuat {
+    public x: float;
+    public y: float;
+    public z: float;
+    public w: float;
+
+    public static fun xyzw(x: float, y: float, z: float, w: float): GpuQuat {
+        let q = GpuQuat();
+        q.x = x;
+        q.y = y;
+        q.z = z;
+        q.w = w;
+        return q;
+    }
+
+    public static fun identity(): GpuQuat {
+        return GpuQuat.xyzw(0.0, 0.0, 0.0, 1.0);
+    }
+
+    // Rotation of `radians` about `axis`.
+    public static fun from_axis_angle(axis: GpuVec3, radians: float): GpuQuat {
+        let a = GpuMath.normalize(axis);
+        let h = radians * 0.5;
+        let s = GpuMath.sin(h);
+        return GpuQuat.xyzw(a.x * s, a.y * s, a.z * s, GpuMath.cos(h));
+    }
+
+    public fun mul(other: GpuQuat): GpuQuat {
+        return GpuQuat.xyzw(
+            this.w * other.x + this.x * other.w + this.y * other.z - this.z * other.y,
+            this.w * other.y - this.x * other.z + this.y * other.w + this.z * other.x,
+            this.w * other.z + this.x * other.y - this.y * other.x + this.z * other.w,
+            this.w * other.w - this.x * other.x - this.y * other.y - this.z * other.z
+        );
+    }
+
+    public fun conjugate(): GpuQuat {
+        return GpuQuat.xyzw(0.0 - this.x, 0.0 - this.y, 0.0 - this.z, this.w);
+    }
+
+    public fun length(): float {
+        return GpuMath.sqrt(this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w);
+    }
+
+    public fun normalize(): GpuQuat {
+        let len = this.length();
+        if len < 0.000001 { return GpuQuat.identity(); }
+        return GpuQuat.xyzw(this.x / len, this.y / len, this.z / len, this.w / len);
+    }
+
+    // Rotate a vector by this quaternion.
+    public fun rotate(v: GpuVec3): GpuVec3 {
+        let qv = GpuVec3.of(this.x, this.y, this.z);
+        let uv = GpuMath.cross(qv, v);
+        let uuv = GpuMath.cross(qv, uv);
+        return v + (uv * (2.0 * this.w)) + (uuv * 2.0);
+    }
+
+    public fun to_mat4(): GpuMat4 {
+        let x = this.x;
+        let y = this.y;
+        let z = this.z;
+        let w = this.w;
+        let xx = x * x;
+        let yy = y * y;
+        let zz = z * z;
+        let xy = x * y;
+        let xz = x * z;
+        let yz = y * z;
+        let wx = w * x;
+        let wy = w * y;
+        let wz = w * z;
+        return GpuMat4.of(
+            GpuVec4.of(1.0 - 2.0 * (yy + zz), 2.0 * (xy + wz), 2.0 * (xz - wy), 0.0),
+            GpuVec4.of(2.0 * (xy - wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz + wx), 0.0),
+            GpuVec4.of(2.0 * (xz + wy), 2.0 * (yz - wx), 1.0 - 2.0 * (xx + yy), 0.0),
+            GpuVec4.of(0.0, 0.0, 0.0, 1.0)
+        );
+    }
+}

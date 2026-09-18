@@ -713,3 +713,102 @@ pub fn texture_copy_to_buffer(
         dst.dirty_cpu = true;
     }
 }
+
+/// Largest edge length `from_image_bytes` will allocate. Matches the portable WebGPU
+/// `maxTextureDimension2D` default, so a decode that succeeds here still creates on a weak device.
+const MAX_IMAGE_EDGE: u32 = 8192;
+
+/// Decodes PNG or JPEG bytes into tightly packed RGBA8. Rejects empty input, unknown codecs, and
+/// images larger than [`MAX_IMAGE_EDGE`] on either side.
+pub(crate) fn decode_rgba(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
+    if bytes.is_empty() {
+        return Err("validation: image bytes are empty".into());
+    }
+    let img = image::load_from_memory(bytes)
+        .map_err(|e| format!("unsupported: could not decode image ({e})"))?
+        .into_rgba8();
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return Err("validation: decoded image has zero size".into());
+    }
+    if w > MAX_IMAGE_EDGE || h > MAX_IMAGE_EDGE {
+        return Err(format!(
+            "unsupported: image {w}x{h} exceeds {MAX_IMAGE_EDGE} on an edge"
+        ));
+    }
+    Ok((w, h, img.into_raw()))
+}
+
+/// Creates an RGBA8 2D texture from PNG or JPEG bytes. Returns `[id, width, height]`, or an empty
+/// vec after recording a last-error when decode or allocation fails.
+pub fn from_image_bytes(bytes: Vec<u8>) -> Vec<i32> {
+    let (w, h, pixels) = match decode_rgba(&bytes) {
+        Ok(decoded) => decoded,
+        Err(e) => {
+            let mut st = lock_state();
+            st.set_last_error(e.clone());
+            return vec![-classify_err(&e)];
+        }
+    };
+    // `GpuTextureFormat.Rgba8Unorm` / `GpuTextureDimension.D2` / `GpuTextureViewDimension.D2`.
+    let id = texture_create(2, 1, w as i32, h as i32, 1, 1, 1, -1, 1);
+    if id < 0 {
+        return vec![id];
+    }
+    let code = texture_write_rgba(id, pixels, 0, 0, w as i32, h as i32);
+    if code != 0 {
+        return vec![-code];
+    }
+    vec![id, w as i32, h as i32]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{ImageBuffer, Rgba};
+    use std::io::Cursor;
+
+    fn png_solid(r: u8, g: u8, b: u8, a: u8) -> Vec<u8> {
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_pixel(2, 1, Rgba([r, g, b, a]));
+        let mut out = Vec::new();
+        img.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    fn jpeg_solid(r: u8, g: u8, b: u8) -> Vec<u8> {
+        let img: ImageBuffer<image::Rgb<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(1, 1, image::Rgb([r, g, b]));
+        let mut out = Vec::new();
+        img.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Jpeg)
+            .unwrap();
+        out
+    }
+
+    #[test]
+    fn decode_png_keeps_rgba() {
+        let (w, h, px) = decode_rgba(&png_solid(10, 20, 30, 40)).unwrap();
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(px, vec![10, 20, 30, 40, 10, 20, 30, 40]);
+    }
+
+    #[test]
+    fn decode_jpeg_is_opaque() {
+        let (w, h, px) = decode_rgba(&jpeg_solid(255, 0, 0)).unwrap();
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(px[3], 255);
+        assert!(px[0] > 200, "jpeg red channel drifted too far: {:?}", px);
+    }
+
+    #[test]
+    fn decode_rejects_garbage() {
+        let err = decode_rgba(&[0, 1, 2, 3]).unwrap_err();
+        assert!(err.contains("unsupported"), "{}", err);
+    }
+
+    #[test]
+    fn decode_rejects_empty() {
+        let err = decode_rgba(&[]).unwrap_err();
+        assert!(err.contains("empty"), "{}", err);
+    }
+}

@@ -3832,6 +3832,80 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
       });
       return id;
     },
+    gpuTextureFromImageBytes: async (pixels) => {
+      try {
+        const src = toU8(pixels);
+        if (!src || src.length === 0) {
+          return [-classifyErr(new Error("validation: image bytes are empty"))];
+        }
+        if (typeof createImageBitmap !== "function") {
+          return [-classifyErr(new Error("unsupported: createImageBitmap is not available"))];
+        }
+        const blob = new Blob([src]);
+        const bitmap = await createImageBitmap(blob);
+        const w = bitmap.width | 0;
+        const h = bitmap.height | 0;
+        if (w <= 0 || h <= 0) {
+          bitmap.close?.();
+          return [-classifyErr(new Error("validation: decoded image has zero size"))];
+        }
+        if (w > 8192 || h > 8192) {
+          bitmap.close?.();
+          return [-classifyErr(new Error(`unsupported: image ${w}x${h} exceeds 8192 on an edge`))];
+        }
+        let rgba = null;
+        if (typeof OffscreenCanvas !== "undefined") {
+          const canvas = new OffscreenCanvas(w, h);
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(bitmap, 0, 0);
+            rgba = ctx.getImageData(0, 0, w, h).data;
+          }
+        }
+        const id = nextId++;
+        textures.set(id, {
+          texture: null,
+          width: w,
+          height: h,
+          cpu: rgba ? new Uint8Array(rgba) : new Uint8Array(w * h * 4),
+          storage: false,
+          format: "rgba8unorm",
+          spec: TEXTURE_FORMATS[2],
+          depth: false,
+          dimension: "2d",
+          viewDimension: "2d",
+          depth_or_layers: 1,
+          mip_levels: 1,
+          sample_count: 1,
+        });
+        const t = textures.get(id);
+        const dev = await ensureDevice();
+        await ensureTexture(dev, t, false);
+        if (dev.queue.copyExternalImageToTexture) {
+          dev.queue.copyExternalImageToTexture(
+            { source: bitmap },
+            { texture: t.texture },
+            [w, h],
+          );
+        } else if (t.cpu) {
+          dev.queue.writeTexture(
+            { texture: t.texture },
+            t.cpu,
+            { bytesPerRow: w * 4 },
+            [w, h],
+          );
+        }
+        bitmap.close?.();
+        return [id, w, h];
+      } catch (e) {
+        const msg = String(e && e.message ? e.message : e);
+        if (!/unsupported|validation/i.test(msg)) {
+          lastError = `unsupported: could not decode image (${msg})`;
+          return [-ERR_UNSUPPORTED];
+        }
+        return [-classifyErr(e)];
+      }
+    },
     gpuTextureWriteRgba: async (id, pixels, x, y, w, h) => {
       try {
         const t = textures.get(id);

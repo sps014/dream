@@ -240,6 +240,8 @@ fn maybe_add(name: &str, out: &mut IndexSet<String>) {
 }
 
 /// `@gpu` free-function name → WGSL return type.
+/// `@gpu` free-function name → WGSL return type, plus stdlib GPU math methods that shaders
+/// are allowed to call even without an explicit `@gpu` attribute (`GpuMat4.perspective`, …).
 pub(super) fn build_helper_return_tys(program: &ProgramNode<'_>) -> IndexMap<String, String> {
     use super::ty::dream_ty_to_wgsl;
     let mut map = IndexMap::new();
@@ -249,6 +251,12 @@ pub(super) fn build_helper_return_tys(program: &ProgramNode<'_>) -> IndexMap<Str
         }
         if let Some(ret) = &f.return_type {
             map.insert(f.name.text.clone(), dream_ty_to_wgsl(ret));
+        }
+    }
+    for func in iter_gpu_stdlib_methods(program) {
+        if let Some(ret) = &func.return_type {
+            map.entry(func.name.text.clone())
+                .or_insert_with(|| dream_ty_to_wgsl(ret));
         }
     }
     map
@@ -509,8 +517,35 @@ fn emit_one_helper(
 }
 
 fn find_helper<'a>(program: &'a ProgramNode<'a>, name: &str) -> Option<&'a FunctionNode<'a>> {
-    program
+    if let Some(f) = program
         .functions
         .iter()
         .find(|f| f.name.text == name && dream_abi::attributes::has_gpu_helper_attr(&f.attributes))
+    {
+        return Some(f);
+    }
+    iter_gpu_stdlib_methods(program).find(|f| f.name.text == name)
+}
+
+/// Static methods on the GPU math / matrix types. Shaders may call these without `@gpu`
+/// (see `check_compute_call`); the emitter still needs the body to produce WGSL.
+fn iter_gpu_stdlib_methods<'a>(
+    program: &'a ProgramNode<'a>,
+) -> impl Iterator<Item = &'a FunctionNode<'a>> {
+    const HOSTS: &[&str] = &[
+        "GpuMath", "GpuMat2", "GpuMat3", "GpuMat4", "GpuQuat", "GpuVec2", "GpuVec3", "GpuVec4",
+    ];
+    program
+        .structs
+        .iter()
+        .filter(move |s| HOSTS.contains(&s.name.text.as_str()))
+        .flat_map(|s| s.methods.iter())
+        .chain(
+            program
+                .extends
+                .iter()
+                .filter(move |e| HOSTS.contains(&e.target.text.as_str()))
+                .flat_map(|e| e.methods.iter()),
+        )
+        .filter(|f| !BUILTIN_CALLS.contains(&f.name.text.as_str()))
 }

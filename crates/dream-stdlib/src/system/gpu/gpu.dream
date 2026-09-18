@@ -147,6 +147,12 @@ public static class Gpu {
         view_dimension: int
     ): int;
 
+    // Decodes PNG or JPEG bytes into a new RGBA8 texture. Empty result means failure; the
+    // host last-error holds the reason. Success is `[id, width, height]`.
+    @web @native
+    @runtime("gpuTextureFromImageBytes")
+    static extern async fun texture_from_image_bytes(borrow data: byte[]): int[];
+
     @runtime("gpuTextureWriteRgba")
     static extern async fun texture_write_rgba(
         id: int,

@@ -77,7 +77,7 @@ small one. Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching fla
 
 ## Textures, surfaces, draw
 
-`GpuTexture.rgba8` (and depth / float / cube variants), `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `present()`, input helpers, `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
+`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `present()`, input helpers, `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
 
 Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
 
@@ -97,6 +97,12 @@ same operators work in `@compute` / `@vertex` / `@fragment` and on the CPU:
 | `GpuVecN.splat(s)` | `vecN(s)` |
 | `GpuMatN.of(c0, …)` | `matNxN(c0, …)` column-major |
 | `GpuMatN.identity()` | identity matrix |
+| `GpuMat4.perspective(fov_y, aspect, near, far)` | WebGPU clip Z in `[0, 1]`, `fov_y` in radians |
+| `GpuMat4.ortho(l, r, b, t, near, far)` | orthographic projection |
+| `GpuMat4.look_at(eye, center, up)` | right-handed view matrix |
+| `GpuMat4.translation` / `rotation` / `scaling` | TRS builders |
+| `GpuMat3.normal_matrix(m)` | inverse-transpose of `m`'s upper 3×3 |
+| `GpuQuat.xyzw` / `from_axis_angle` / `rotate` / `to_mat4` | CPU-side rotation (turn into a matrix for shaders) |
 
 `GpuMath` overloads (same names as the scalar builtins):
 
